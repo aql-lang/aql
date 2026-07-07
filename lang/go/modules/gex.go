@@ -52,7 +52,7 @@ func gexCompile(spec string) (*regexp.Regexp, error) {
 	if re, ok := gexCache[spec]; ok {
 		return re, nil
 	}
-	re, err := regexp.Compile(gexSpecToRegexp(spec))
+	re, err := regexpCompile(gexSpecToRegexp(spec))
 	if err != nil {
 		return nil, err
 	}

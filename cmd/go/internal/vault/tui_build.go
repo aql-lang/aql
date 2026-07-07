@@ -1030,11 +1030,11 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 		}
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp("verify --prune complete", func() error {
-				if _, okv := m.ctl.verifyText(true); !okv {
-					// verify exits non-zero when it had to repair; that is not a
-					// failure of the operation itself.
-					return nil
-				}
+				// verify --prune exits non-zero when it had to repair; that is
+				// not a failure of the operation itself, and its report is shown
+				// by the pager reload, so the exit status is intentionally
+				// ignored here (both arms of the old guard returned nil).
+				_, _ = m.ctl.verifyText(true)
 				return nil
 			})
 		})

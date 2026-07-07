@@ -46,6 +46,19 @@ type ReadOnlyFormat interface {
 // surface a clean message.
 var errReadOnlyFormat = errors.New("format is read-only")
 
+// csvConfigure seams csvpkg.Csv for decodeDelimited's plugin-configuration
+// error arm (design/TEST-SEAMS.10.md). The constant options never fail in
+// practice, but the third-party plugin owns that guarantee, not this
+// package.
+var csvConfigure = csvpkg.Csv
+
+// jsonicDecodeValue seams jsonicToValue for the conversion-failure arms of
+// JSONFormat.Decode / JsonicFormat.Decode (design/TEST-SEAMS.10.md). A
+// default jsonic parse only yields nil/bool/float64/string/list/map — all
+// convertible — but the parser owns that output-shape guarantee, not this
+// package.
+var jsonicDecodeValue = jsonicToValue
+
 // IsReadOnlyFormatErr reports whether err is (or wraps) the read-only
 // sentinel returned by a parser-backed format's Encode.
 func IsReadOnlyFormatErr(err error) bool {
@@ -103,7 +116,7 @@ func (f *JSONFormat) Decode(content string) ([]Value, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid json: %w", err)
 	}
-	v, err := jsonicToValue(result)
+	v, err := jsonicDecodeValue(result)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +152,7 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 	if result == nil {
 		return []Value{NewTypeLiteral(TNone)}, nil
 	}
-	v, err := jsonicToValue(result)
+	v, err := jsonicDecodeValue(result)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +270,7 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	// + header:false yields raw rows ([]any of []any), matching the previous
 	// CsvOptions{Object:false, Header:false, Field:{Separation:sep}}.
 	j := parser.SafeMake()
-	if err := csvpkg.Csv(j, map[string]any{
+	if err := csvConfigure(j, map[string]any{
 		"object": false,
 		"header": false,
 		// number/value coercion OFF: keep field text literal, matching the
@@ -282,15 +295,22 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 		return nil, fmt.Errorf("csv: %w", err)
 	}
 	records, _ := parsed.([]any)
+	return []Value{convertDelimitedRecords(records)}, nil
+}
 
+// convertDelimitedRecords converts the parsed row-of-rows shape into the
+// table value decodeDelimited returns: the first row is the header, each
+// later row a record keyed by those headers. A missing/empty header or an
+// empty record set yields an empty list; a non-slice data row is skipped.
+func convertDelimitedRecords(records []any) Value {
 	if len(records) == 0 {
-		return []Value{NewList([]Value{})}, nil
+		return NewList([]Value{})
 	}
 
 	// First row is the header.
 	headerRow, ok := records[0].([]any)
 	if !ok || len(headerRow) == 0 {
-		return []Value{NewList([]Value{})}, nil
+		return NewList([]Value{})
 	}
 
 	columns := make([]string, len(headerRow))
@@ -315,20 +335,7 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 		om := NewOrderedMap()
 		for i, col := range columns {
 			if i < len(arr) {
-				switch v := arr[i].(type) {
-				case string:
-					om.Set(col, NewString(v))
-				case float64:
-					if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
-						om.Set(col, NewInteger(int64(v)))
-					} else {
-						om.Set(col, NewFloat(v))
-					}
-				case bool:
-					om.Set(col, NewBoolean(v))
-				default:
-					om.Set(col, NewString(fmt.Sprintf("%v", v)))
-				}
+				om.Set(col, delimitedCellValue(arr[i]))
 			} else {
 				om.Set(col, NewString(""))
 			}
@@ -337,10 +344,31 @@ func decodeDelimited(content string, sep string) ([]Value, error) {
 	}
 
 	// Return a table value: list with TableData holding both schema and rows.
-	return []Value{NewValueRaw(TList, TableData{
+	return NewValueRaw(TList, TableData{
 		Record: recType,
 		Rows:   rows,
-	})}, nil
+	})
+}
+
+// delimitedCellValue converts one parsed CSV/TSV cell to its Value. The
+// decoder parses with number/value coercion off, so cells are normally
+// strings (or, rarely, a jsonic-shaped structural that degrades to its
+// display string); the numeric/boolean arms keep the conversion total
+// should a decoder configuration ever re-enable coercion.
+func delimitedCellValue(cell any) Value {
+	switch v := cell.(type) {
+	case string:
+		return NewString(v)
+	case float64:
+		if v == float64(int64(v)) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return NewInteger(int64(v))
+		}
+		return NewFloat(v)
+	case bool:
+		return NewBoolean(v)
+	default:
+		return NewString(fmt.Sprintf("%v", v))
+	}
 }
 
 // TableData is re-exported by aliases.go (defined in aqleng).

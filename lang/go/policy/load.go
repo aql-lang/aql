@@ -3,7 +3,6 @@ package policy
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +51,7 @@ func LoadFile(path string) (Policy, error) {
 func LoadInline(src string) (Policy, error) {
 	switch {
 	case src == "@-":
-		data, err := io.ReadAll(os.Stdin)
+		data, err := readAllStdin()
 		if err != nil {
 			return nil, fmt.Errorf("policy: read stdin: %w", err)
 		}
@@ -122,7 +121,7 @@ func parseProfile(data []byte, sourceName string) (*Profile, error) {
 	// Convert the parsed any → JSON → Profile to reuse encoding/json's
 	// struct tag handling. The Profile shape is plain enough that
 	// this round-trip is a single allocation each side.
-	canon, err := json.Marshal(raw)
+	canon, err := jsonMarshal(raw)
 	if err != nil {
 		return nil, fmt.Errorf("policy: %s: marshal: %w", sourceName, err)
 	}
@@ -185,7 +184,7 @@ func expandTilde(path string) string {
 	if path == "" || path[0] != '~' {
 		return path
 	}
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err != nil {
 		return path
 	}

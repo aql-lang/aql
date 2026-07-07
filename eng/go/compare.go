@@ -246,6 +246,60 @@ func lowestCommonAncestor(a, b *Type) *Type {
 //     equal), keeping those on the callers' identity paths,
 //     unchanged.
 //
+// scalarFamilyEqual is the ONE scalar-leaf equality both ExactEqual (eq)
+// and DeepEqual (deq) dispatch through: the four by-value families
+// (Number/String/Boolean/Atom) followed by the semantic-equality walk for
+// every other scalar type (Bytes, the Time family, …). handled=false
+// means a and b are not a scalar-leaf pair and the caller proceeds to its
+// own identity (eq) or structural (deq) clauses. Callers must dispatch
+// None and DepScalar payloads BEFORE calling (DepScalar would otherwise
+// route into AsNumber and silently compare zero values).
+//
+// Sharing one implementation is what keeps eq and deq from drifting on a
+// leaf: the exact-int64 arm below was originally added to eq only, so two
+// distinct large Integers (> 2^53) compared deq-equal through the float64
+// projection until the copies were unified.
+func scalarFamilyEqual(a, b Value) (equal, handled bool) {
+	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		// An arbitrary-precision operand is compared exactly via apd
+		// (cross-leaf magnitude: 1 == 0d1 == 1.0). A NaN/non-finite Float
+		// fails toRatExact, so it is never equal — preserving nan≠nan.
+		if numIsBig(a) || numIsBig(b) {
+			ar, aok := toRatExact(a)
+			br, bok := toRatExact(b)
+			return aok && bok && ar.Cmp(br) == 0, true
+		}
+		// Two int64-backed Integers compare EXACTLY as int64; the float64
+		// projection below rounds magnitudes above 2^53 and would report
+		// distinct large integers as equal. A Float on either side keeps
+		// the float comparison (cross-leaf magnitude: 1 == 1.0).
+		if a.Parent.ConformsTo(TInteger) && b.Parent.ConformsTo(TInteger) {
+			ai, _ := AsInteger(a)
+			bi, _ := AsInteger(b)
+			return ai == bi, true
+		}
+		af, _ := AsNumber(a)
+		bf, _ := AsNumber(b)
+		return af == bf, true
+	}
+	if a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString) {
+		as, _ := AsString(a)
+		bs, _ := AsString(b)
+		return as == bs, true
+	}
+	if a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean) {
+		ab, _ := AsBoolean(a)
+		bb, _ := AsBoolean(b)
+		return ab == bb, true
+	}
+	if a.Parent.ConformsTo(TAtom) && b.Parent.ConformsTo(TAtom) {
+		aa, _ := AsAtom(a)
+		ba, _ := AsAtom(b)
+		return aa == ba, true
+	}
+	return scalarSemanticEqual(a, b)
+}
+
 // Callers must have dispatched the by-value scalar families
 // (Number/String/Boolean/Atom) and DepScalar payloads before calling,
 // so those never reach here.
@@ -291,49 +345,10 @@ func ExactEqual(a, b Value) bool {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
-	// Scalars: compare by value.
-	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
-		// An arbitrary-precision operand is compared exactly via apd
-		// (cross-leaf magnitude: 1 == 0d1 == 1.0). A NaN/non-finite Float
-		// fails toDecimalExact, so it is never equal — preserving nan≠nan.
-		if numIsBig(a) || numIsBig(b) {
-			ar, aok := toRatExact(a)
-			br, bok := toRatExact(b)
-			return aok && bok && ar.Cmp(br) == 0
-		}
-		// Two int64-backed Integers compare EXACTLY as int64; the float64
-		// projection below rounds magnitudes above 2^53 and would report
-		// distinct large integers as equal. A Float on either side keeps
-		// the float comparison (cross-leaf magnitude: 1 == 1.0).
-		if a.Parent.ConformsTo(TInteger) && b.Parent.ConformsTo(TInteger) {
-			ai, _ := AsInteger(a)
-			bi, _ := AsInteger(b)
-			return ai == bi
-		}
-		_as9, _ := AsNumber(a)
-		_as8, _ := AsNumber(b)
-		return _as9 == _as8
-	}
-	if a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString) {
-		_as11, _ := AsString(a)
-		_as10, _ := AsString(b)
-		return _as11 == _as10
-	}
-	if a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean) {
-		_as13, _ := AsBoolean(a)
-		_as12, _ := AsBoolean(b)
-		return _as13 == _as12
-	}
-	if a.Parent.ConformsTo(TAtom) && b.Parent.ConformsTo(TAtom) {
-		_as15, _ := AsAtom(a)
-		_as14, _ := AsAtom(b)
-		return _as15 == _as14
-	}
-
-	// Other scalar value-types (Bytes, the Time family, …) compare by
-	// their type's semantic equality — see scalarSemanticEqual (shared
-	// with DeepEqual so eq and deq agree on every scalar leaf).
-	if equal, handled := scalarSemanticEqual(a, b); handled {
+	// Scalars: compare by value — one shared implementation with
+	// DeepEqual (scalarFamilyEqual) so eq and deq can never drift on a
+	// scalar leaf.
+	if equal, handled := scalarFamilyEqual(a, b); handled {
 		return equal
 	}
 
@@ -439,41 +454,15 @@ func DeepEqual(a, b Value) bool {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
-	// Scalars.
-	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
-		if numIsBig(a) || numIsBig(b) {
-			ar, aok := toRatExact(a)
-			br, bok := toRatExact(b)
-			return aok && bok && ar.Cmp(br) == 0
-		}
-		_as17, _ := AsNumber(a)
-		_as16, _ := AsNumber(b)
-		return _as17 == _as16
-	}
-	if a.Parent.ConformsTo(TString) && b.Parent.ConformsTo(TString) {
-		_as19, _ := AsString(a)
-		_as18, _ := AsString(b)
-		return _as19 == _as18
-	}
-	if a.Parent.ConformsTo(TBoolean) && b.Parent.ConformsTo(TBoolean) {
-		_as21, _ := AsBoolean(a)
-		_as20, _ := AsBoolean(b)
-		return _as21 == _as20
-	}
-	if a.Parent.ConformsTo(TAtom) && b.Parent.ConformsTo(TAtom) {
-		_as23, _ := AsAtom(a)
-		_as22, _ := AsAtom(b)
-		return _as23 == _as22
-	}
-
-	// Other scalar value-types (Bytes, the Time family, …) compare by
-	// their type's semantic equality, exactly as eq does — deq must
-	// never disagree with eq on a scalar leaf (there is no identity /
-	// structural distinction to draw for an immutable scalar). Without
-	// this clause every scalar outside the four by-value families fell
-	// through to the final `return false`, so two content-equal Bytes
-	// were eq-equal but deq-unequal — including nested inside a List.
-	if equal, handled := scalarSemanticEqual(a, b); handled {
+	// Scalars — the same shared leaf comparison eq uses
+	// (scalarFamilyEqual): deq must never disagree with eq on a scalar
+	// leaf (there is no identity / structural distinction to draw for an
+	// immutable scalar). Sharing one implementation also gives deq the
+	// exact int64 comparison for large Integers — the float64 projection
+	// this path used before 2026-07 rounds magnitudes above 2^53 and
+	// reported distinct large integers as deq-equal while eq correctly
+	// said false.
+	if equal, handled := scalarFamilyEqual(a, b); handled {
 		return equal
 	}
 
@@ -613,49 +602,32 @@ func isNaNValue(v Value) bool {
 	return err == nil && math.IsNaN(f)
 }
 
-func LtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if numericUnordered(args[0], args[1]) {
-		return []Value{NewBoolean(false)}, nil
+// relationalHandler builds the handler for one ordering word: the IEEE
+// *unordered* rule first (NaN on either side → false, see
+// numericUnordered), then the family-restricted orderedCompare with
+// keep() mapping the three-way result onto the word's truth condition.
+// The four words are the same function with one comparator swapped —
+// building them from one factory keeps the NaN rule and the arg order
+// (args[1] vs args[0], the `a OP b` reading convention) from drifting.
+func relationalHandler(op string, keep func(int) bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		if numericUnordered(args[0], args[1]) {
+			return []Value{NewBoolean(false)}, nil
+		}
+		cmp, err := orderedCompare(op, args[1], args[0])
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewBoolean(keep(cmp))}, nil
 	}
-	cmp, err := orderedCompare("lt", args[1], args[0])
-	if err != nil {
-		return nil, err
-	}
-	return []Value{NewBoolean(cmp < 0)}, nil
 }
 
-func GtHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if numericUnordered(args[0], args[1]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	cmp, err := orderedCompare("gt", args[1], args[0])
-	if err != nil {
-		return nil, err
-	}
-	return []Value{NewBoolean(cmp > 0)}, nil
-}
-
-func LteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if numericUnordered(args[0], args[1]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	cmp, err := orderedCompare("lte", args[1], args[0])
-	if err != nil {
-		return nil, err
-	}
-	return []Value{NewBoolean(cmp <= 0)}, nil
-}
-
-func GteHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if numericUnordered(args[0], args[1]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	cmp, err := orderedCompare("gte", args[1], args[0])
-	if err != nil {
-		return nil, err
-	}
-	return []Value{NewBoolean(cmp >= 0)}, nil
-}
+var (
+	LtHandler  = relationalHandler("lt", func(c int) bool { return c < 0 })
+	GtHandler  = relationalHandler("gt", func(c int) bool { return c > 0 })
+	LteHandler = relationalHandler("lte", func(c int) bool { return c <= 0 })
+	GteHandler = relationalHandler("gte", func(c int) bool { return c >= 0 })
+)
 
 // CmpHandler implements `cmp` — a three-way comparison restricted to
 // same-family operands. `a b cmp` returns -1 when a sorts before b, 0

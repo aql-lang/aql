@@ -88,12 +88,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		w, err := zw.Create(f)
+		w, err := zipCreate(zw, f)
 		if err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		if _, err := w.Write(data); err != nil {
+		if _, err := zipWriteEntry(w, data); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}

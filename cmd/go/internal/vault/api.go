@@ -59,10 +59,10 @@ func WriteSecret(homeDir, alias, value, source string, stdin io.Reader, stdout i
 	if err := requireScopeNS(sess, OpWrite, ns); err != nil {
 		return err
 	}
-	if err := writeSecret(homeDir, sess, name, ns, value); err != nil {
+	if err := w8writeSecret(homeDir, sess, name, ns, value); err != nil {
 		return err
 	}
-	if err := mutateStore(homeDir, func(st *Store) error {
+	if err := w8mutateStore(homeDir, func(st *Store) error {
 		st.UpsertAlias(Alias{Name: name, Namespace: ns, Source: source})
 		return nil
 	}); err != nil {

@@ -13,7 +13,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 )
 
 // cliVersion is the aql build version string, injected by the main package
@@ -59,7 +58,7 @@ func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stde
 	m.theme = mode
 	m.detectedDark = detectedDark
 	prog := tea.NewProgram(m, tea.WithInput(stdin), tea.WithOutput(stdout), tea.WithAltScreen())
-	if _, err := prog.Run(); err != nil {
+	if _, err := t7runProgram(prog); err != nil {
 		fmt.Fprintf(stderr, "tui: %s\n", err)
 		return 1
 	}
@@ -82,11 +81,11 @@ func resolveLaunchVault(homeDir string) (folder, suffix string, ok bool) {
 // which bubbletea requires.
 func interactiveTTY(stdin io.Reader, stdout io.Writer) bool {
 	in, ok := stdin.(*os.File)
-	if !ok || !term.IsTerminal(int(in.Fd())) {
+	if !ok || !t7isTerminal(int(in.Fd())) {
 		return false
 	}
 	out, ok := stdout.(*os.File)
-	if !ok || !term.IsTerminal(int(out.Fd())) {
+	if !ok || !t7isTerminal(int(out.Fd())) {
 		return false
 	}
 	return true

@@ -37,17 +37,25 @@ type Calc struct {
 	stack    []eng.Value
 }
 
+// Test seams (design/TEST-SEAMS.10.md): registry construction and the
+// registration-error read cannot fail on a healthy build, so tests
+// swap these to drive New's error arms.
+var (
+	newRegistry = eng.NewRegistry
+	registryErr = (*eng.Registry).Err
+)
+
 // New constructs a Calc with a fresh registry and the calculator
 // vocabulary installed. out is where `print` and `show` write; pass
 // nil to discard (useful when the caller only cares about the
 // returned stack).
 func New(out io.Writer) (*Calc, error) {
-	r, err := eng.NewRegistry()
+	r, err := newRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("calc: registry: %w", err)
 	}
 	RegisterWords(r, out)
-	if err := r.Err(); err != nil {
+	if err := registryErr(r); err != nil {
 		return nil, fmt.Errorf("calc: word registration: %w", err)
 	}
 	r.SetParseFunc(parser.Parse)

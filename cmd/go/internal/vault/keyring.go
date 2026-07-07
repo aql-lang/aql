@@ -22,8 +22,6 @@ package vault
 import (
 	"bytes"
 	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -98,7 +96,7 @@ func selectKeyring(backend string, folder, passphrase string) (keyring, error) {
 	}
 	switch backend {
 	case BackendKeychain:
-		if runtime.GOOS != "darwin" {
+		if p7goosName != "darwin" {
 			return nil, fmt.Errorf("vault: keychain backend requires macOS, got %s", runtime.GOOS)
 		}
 		if _, err := exec.LookPath("security"); err != nil {
@@ -111,7 +109,7 @@ func selectKeyring(backend string, folder, passphrase string) (keyring, error) {
 		}
 		return &secretService{}, nil
 	case BackendWinCred:
-		if runtime.GOOS != "windows" {
+		if p7goosName != "windows" {
 			return nil, fmt.Errorf("vault: wincred backend requires windows, got %s", runtime.GOOS)
 		}
 		if _, err := exec.LookPath("powershell"); err != nil {
@@ -133,7 +131,7 @@ func selectKeyring(backend string, folder, passphrase string) (keyring, error) {
 // autoBackend returns the preferred host backend for the current
 // platform, or BackendFile if no host backend is available.
 func autoBackend() string {
-	switch runtime.GOOS {
+	switch p7goosName {
 	case "darwin":
 		if _, err := exec.LookPath("security"); err == nil {
 			return BackendKeychain
@@ -673,14 +671,14 @@ func (f *envelopeFileKeyring) saveFile(ekf *envelopeKeyringFile) error {
 		ekf.Entries = map[string]string{}
 	}
 	if ekf.KeyringID == "" {
-		id, err := randomID()
+		id, err := p7randomID()
 		if err != nil {
 			return err
 		}
 		ekf.KeyringID = id
 	}
 	ekf.Generation++
-	body, err := json.Marshal(ekf)
+	body, err := jsonMarshal(ekf)
 	if err != nil {
 		return err
 	}
@@ -803,10 +801,10 @@ const (
 // byte is authenticated and cannot be downgraded by tampering.
 func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
 	salt := make([]byte, keyringSaltLen)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := randRead(salt); err != nil {
 		return nil, err
 	}
-	key, err := scryptKey(passphrase, salt)
+	key, err := p7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -814,12 +812,12 @@ func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := gcmFromBlock(block)
 	if err != nil {
 		return nil, err
 	}
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := randRead(nonce); err != nil {
 		return nil, err
 	}
 	header := append([]byte(keyringMagic), byte(keyringFormat))
@@ -888,7 +886,7 @@ func decryptLegacy(blob []byte, passphrase string) ([]byte, error) {
 // aesGCMOpen derives the scrypt key and opens the GCM ciphertext,
 // mapping any authentication failure to a single non-revealing error.
 func aesGCMOpen(passphrase string, salt, nonce, ct, aad []byte) ([]byte, error) {
-	key, err := scryptKey(passphrase, salt)
+	key, err := p7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -896,7 +894,7 @@ func aesGCMOpen(passphrase string, salt, nonce, ct, aad []byte) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := gcmFromBlock(block)
 	if err != nil {
 		return nil, err
 	}
@@ -958,7 +956,7 @@ func (k *onePasswordKeyring) Set(alias, value string) error {
 	// so the credential value never appears on this process's — or
 	// op's — argv, where a same-user `ps` could read it. The label
 	// "credential" matches what Get reads back.
-	blob, err := json.Marshal(opItemTemplate{
+	blob, err := jsonMarshal(opItemTemplate{
 		Title:    k.itemTitle(alias),
 		Category: "API_CREDENTIAL",
 		Fields:   []opField{{ID: "credential", Type: "CONCEALED", Label: "credential", Value: value}},

@@ -16,11 +16,12 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	if aerr != nil {
 		return nil, r.AqlError("push_error", aerr.Error(), "push")
 	}
+	// ReadList.Slice always allocates (make), so it never returns nil — a
+	// "list == nil" guard here would be dead (design/TEST-SEAMS.10.md,
+	// ADR-005). A non-concrete List arg yields an empty slice and pushes
+	// onto it, matching the pre-existing behaviour of the dead guard.
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
-	if list == nil {
-		return nil, r.AqlError("push_error", "push: expected concrete list", "push")
-	}
 
 	result := make([]Value, len(list)+1)
 	copy(result, list)
@@ -59,11 +60,10 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	if aerr != nil {
 		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
 	}
+	// Dead "list == nil" guard removed: ReadList.Slice always allocates
+	// (design/TEST-SEAMS.10.md, ADR-005). See pushHandler.
 	_lst, _ := AsList(args[1])
 	list := _lst.Slice()
-	if list == nil {
-		return nil, r.AqlError("unshift_error", "unshift: expected concrete list", "unshift")
-	}
 
 	result := make([]Value, len(list)+1)
 	result[0] = newElem

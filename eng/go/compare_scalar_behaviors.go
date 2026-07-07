@@ -77,20 +77,40 @@ func litVsLitOrder(a, b Value) int {
 	return compareTypes(&a, &b)
 }
 
-func (numberCompareBehavior) Compare(a, b Value) (int, error) {
-	// DepScalar values share a numeric Parent (Integer, Float,
-	// Number) with concrete scalars but carry a DepScalarInfo payload
-	// rather than a number — they have no numeric ordering. Signal
-	// "I don't apply" so CompareValues falls through to the lattice
-	// + structural compare (which tie-breaks on canonical form).
+// scalarCmpPrologue is the shared preamble every per-family scalar
+// Comparer opens with, in the load-bearing order:
+//
+//  1. DepScalar opt-out — DepScalar values share a scalar Parent with
+//     concrete values but carry a DepScalarInfo payload rather than a
+//     scalar; they have no family ordering. ErrNoComparer signals
+//     "I don't apply" so CompareValues falls through to the lattice +
+//     structural compare (which tie-breaks on canonical form).
+//  2. Type-literal-first — a bare type literal sorts strictly below
+//     every concrete inhabitant of the same family.
+//  3. Literal-vs-literal — two bare literals order by lattice node
+//     (Rank → depth → name → ID), since the value-payload compare
+//     would tie on zeros.
+//
+// done=true means the prologue settled the comparison (result/err are
+// final); done=false hands over to the family's own value comparison.
+// Keeping the sequence in ONE place stops the per-family copies from
+// drifting (a missed DepScalar guard silently compares zero values).
+func scalarCmpPrologue(a, b Value) (result int, done bool, err error) {
 	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, ErrNoComparer
+		return 0, true, ErrNoComparer
 	}
 	if c, ok := litVsConcreteOrder(a, b); ok {
-		return c, nil
+		return c, true, nil
 	}
 	if a.Data == nil && b.Data == nil {
-		return litVsLitOrder(a, b), nil
+		return litVsLitOrder(a, b), true, nil
+	}
+	return 0, false, nil
+}
+
+func (numberCompareBehavior) Compare(a, b Value) (int, error) {
+	if c, done, err := scalarCmpPrologue(a, b); done {
+		return c, err
 	}
 	// Arbitrary-precision operand on either side: compare EXACTLY via
 	// apd.Decimal so cross-leaf magnitude equality holds (1 == 0d1 == 1.0
@@ -246,14 +266,8 @@ func nonFiniteRank(v Value) (int, bool) {
 type stringCompareBehavior struct{ defaultBehavior }
 
 func (stringCompareBehavior) Compare(a, b Value) (int, error) {
-	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, ErrNoComparer
-	}
-	if c, ok := litVsConcreteOrder(a, b); ok {
-		return c, nil
-	}
-	if a.Data == nil && b.Data == nil {
-		return litVsLitOrder(a, b), nil
+	if c, done, err := scalarCmpPrologue(a, b); done {
+		return c, err
 	}
 	as, _ := AsString(a)
 	bs, _ := AsString(b)
@@ -264,14 +278,8 @@ func (stringCompareBehavior) Compare(a, b Value) (int, error) {
 type booleanCompareBehavior struct{ defaultBehavior }
 
 func (booleanCompareBehavior) Compare(a, b Value) (int, error) {
-	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, ErrNoComparer
-	}
-	if c, ok := litVsConcreteOrder(a, b); ok {
-		return c, nil
-	}
-	if a.Data == nil && b.Data == nil {
-		return litVsLitOrder(a, b), nil
+	if c, done, err := scalarCmpPrologue(a, b); done {
+		return c, err
 	}
 	ab, _ := AsBoolean(a)
 	bb, _ := AsBoolean(b)
@@ -289,14 +297,8 @@ func (booleanCompareBehavior) Compare(a, b Value) (int, error) {
 type atomCompareBehavior struct{ defaultBehavior }
 
 func (atomCompareBehavior) Compare(a, b Value) (int, error) {
-	if a.IsDepScalar() || b.IsDepScalar() {
-		return 0, ErrNoComparer
-	}
-	if c, ok := litVsConcreteOrder(a, b); ok {
-		return c, nil
-	}
-	if a.Data == nil && b.Data == nil {
-		return litVsLitOrder(a, b), nil
+	if c, done, err := scalarCmpPrologue(a, b); done {
+		return c, err
 	}
 	as, _ := AsAtom(a)
 	bs, _ := AsAtom(b)
@@ -310,11 +312,12 @@ func (atomCompareBehavior) Compare(a, b Value) (int, error) {
 type wordCompareBehavior struct{ defaultBehavior }
 
 func (wordCompareBehavior) Compare(a, b Value) (int, error) {
-	if c, ok := litVsConcreteOrder(a, b); ok {
-		return c, nil
-	}
-	if a.Data == nil && b.Data == nil {
-		return litVsLitOrder(a, b), nil
+	// The DepScalar arm of the prologue is unreachable for Word-family
+	// pairs (DepScalar payloads carry scalar Parents, never Word), so
+	// sharing the full prologue is a no-op there and keeps the five
+	// family Comparers uniform.
+	if c, done, err := scalarCmpPrologue(a, b); done {
+		return c, err
 	}
 	return strings.Compare(a.String(), b.String()), nil
 }

@@ -51,9 +51,19 @@ func TraceColorize(v Value) string {
 		// lattice node), not its parent (which is the supertype).
 		return cCyan + typeNodeOf(v).String() + cReset
 	case v.Parent.ConformsTo(TString):
-		return cGreen + fmt.Sprintf("%q", v.Data) + cReset
+		// Unwrap via the accessor: v.Data is the sealed StrPayload
+		// struct, and %q on the struct renders `{"x"}` not `"x"`.
+		s, err := AsString(v)
+		if err != nil {
+			return cGreen + v.String() + cReset
+		}
+		return cGreen + fmt.Sprintf("%q", s) + cReset
 	case v.Parent.ConformsTo(TInteger):
-		return cBlue + fmt.Sprintf("%d", v.Data) + cReset
+		n, err := AsInteger(v)
+		if err != nil {
+			return cBlue + v.String() + cReset
+		}
+		return cBlue + fmt.Sprintf("%d", n) + cReset
 	case v.Parent.ConformsTo(TBoolean):
 		_as0, _ := AsBoolean(v)
 		if _as0 {

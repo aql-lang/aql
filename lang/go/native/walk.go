@@ -27,7 +27,7 @@ func walkHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 			pathStr := strings.Join(path, ".")
 			leaf.Set("path", NewString(pathStr))
 
-			v, err := anyToValue(val)
+			v, err := w9WalkAnyToValue(val)
 			if err != nil {
 				v = NewString(fmt.Sprintf("%v", val))
 			}
@@ -64,7 +64,7 @@ func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any
 		pathStr := strings.Join(path, ".")
 		leaf.Set("path", NewString(pathStr))
 
-		v, err := anyToValue(val)
+		v, err := w9WalkAnyToValue(val)
 		if err != nil {
 			v = NewString(fmt.Sprintf("%v", val))
 		}
@@ -108,7 +108,7 @@ func walkBeforeHandler(args []Value, ctx map[string]Value, stack []Value, r *Reg
 		return nil, fmt.Errorf("walk: before callback error: %w", callErr)
 	}
 
-	resultVal, err := anyToValue(result)
+	resultVal, err := w9WalkAnyToValue(result)
 	if err != nil {
 		return nil, fmt.Errorf("walk: error converting result: %w", err)
 	}
@@ -133,7 +133,7 @@ func walkBeforeAfterHandler(args []Value, ctx map[string]Value, stack []Value, r
 		return nil, fmt.Errorf("walk: callback error: %w", callErr)
 	}
 
-	resultVal, err := anyToValue(result)
+	resultVal, err := w9WalkAnyToValue(result)
 	if err != nil {
 		return nil, fmt.Errorf("walk: error converting result: %w", err)
 	}

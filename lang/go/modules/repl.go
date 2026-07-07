@@ -37,7 +37,7 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, fmt.Errorf("repl: parse preamble: %w", replParseErr)
 	}
 
-	modReg, err := native.DefaultRegistry()
+	modReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, fmt.Errorf("repl: init: %w", err)
 	}

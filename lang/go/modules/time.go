@@ -9,7 +9,7 @@ import (
 
 // BuildTimeModule creates the "aql:time-util" native module.
 func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -31,10 +31,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range asyncNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(asyncNatives, subReg)
 
 	// Construction — numeric and IANA-zone only. ISO 8601 date /
 	// datetime / instant / time-of-day / duration string parsing
@@ -42,93 +39,93 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// `today`, `today-utc`, `unix`, `unix-ms`, `unix-ns`, the
 	// numeric duration constructors (`years`, `months`, `days`,
 	// `hours`, `minutes`, `seconds`, …), or `cal-dur` directly.
-	exports.Set("tz", makeTimeFnDef("time-tz", []native.FnParam{{Type: native.TString}}, []*native.Type{tt.Timezone}, subReg))
-	exports.Set("unix", makeTimeFnDef("time-unix", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
-	exports.Set("unix-ms", makeTimeFnDef("time-unix-ms", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
-	exports.Set("unix-ns", makeTimeFnDef("time-unix-ns", []native.FnParam{{Type: native.TInteger}}, []*native.Type{native.TInstant}, subReg))
+	exports.Set("tz", makeTypedFnDef("time-tz", subReg, tt.Timezone, native.TString))
+	exports.Set("unix", makeTypedFnDef("time-unix", subReg, native.TInstant, native.TInteger))
+	exports.Set("unix-ms", makeTypedFnDef("time-unix-ms", subReg, native.TInstant, native.TInteger))
+	exports.Set("unix-ns", makeTypedFnDef("time-unix-ns", subReg, native.TInstant, native.TInteger))
 
 	// Current time
-	exports.Set("now-local", makeTimeFnDef("time-now-local", []native.FnParam{}, []*native.Type{native.TDateTime}, subReg))
-	exports.Set("today", makeTimeFnDef("time-today", []native.FnParam{}, []*native.Type{native.TDate}, subReg))
-	exports.Set("today-utc", makeTimeFnDef("time-today-utc", []native.FnParam{}, []*native.Type{native.TDate}, subReg))
+	exports.Set("now-local", makeTypedFnDef("time-now-local", subReg, native.TDateTime))
+	exports.Set("today", makeTypedFnDef("time-today", subReg, native.TDate))
+	exports.Set("today-utc", makeTypedFnDef("time-today-utc", subReg, native.TDate))
 
 	// Extraction (Date -> Integer)
 	for _, name := range []string{"year", "month", "day", "weekday", "year-day", "iso-week", "quarter", "days-in-month", "days-in-year"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TInteger, native.TDate))
 	}
 	for _, name := range []string{"weekday-name", "month-name"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TString, native.TDate))
 	}
-	exports.Set("is-leap-year", makeTimeFnDef("is-leap-year", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("is-leap-year", makeTypedFnDef("is-leap-year", subReg, native.TBoolean, native.TDate))
 
 	// Extraction from Instant
-	exports.Set("to-unix", makeTimeFnDef("to-unix", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
-	exports.Set("to-unix-ms", makeTimeFnDef("to-unix-ms", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TInteger}, subReg))
+	exports.Set("to-unix", makeTypedFnDef("to-unix", subReg, native.TInteger, native.TInstant))
+	exports.Set("to-unix-ms", makeTypedFnDef("to-unix-ms", subReg, native.TInteger, native.TInstant))
 
 	// Comparison (Date Date -> Boolean)
 	for _, name := range []string{"is-before", "is-after", "is-equal"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TBoolean, native.TDate, native.TDate))
 	}
 
 	// Formatting
-	exports.Set("to-string", makeTimeFnDef("to-string", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
+	exports.Set("to-string", makeTypedFnDef("to-string", subReg, native.TString, native.TDate))
 	// Params match the inner native's Args (sig order: top-first).
 	// stack `date layout`: Params[0]=layout (top, String), Params[1]=date (deeper, Date).
-	exports.Set("format", makeTimeFnDef("format", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TString}, subReg))
-	exports.Set("to-iso", makeTimeFnDef("to-iso", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TString}, subReg))
+	exports.Set("format", makeTypedFnDef("format", subReg, native.TString, native.TString, native.TDate))
+	exports.Set("to-iso", makeTypedFnDef("to-iso", subReg, native.TString, native.TDate))
 
 	// Duration construction
 	for _, name := range []string{"years", "months", "weeks", "days"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}}, []*native.Type{tt.CalendarDuration}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, tt.CalendarDuration, native.TInteger))
 	}
 	for _, name := range []string{"hours", "minutes", "seconds", "ms", "us", "ns"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TNumber}}, []*native.Type{tt.ClockDuration}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, tt.ClockDuration, native.TNumber))
 	}
-	exports.Set("cal-dur", makeTimeFnDef("cal-dur", []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TInteger}}, []*native.Type{tt.CalendarDuration}, subReg))
+	exports.Set("cal-dur", makeTypedFnDef("cal-dur", subReg, tt.CalendarDuration, native.TInteger, native.TInteger, native.TInteger))
 	// ISO 8601 duration string parsing (`"P1Y2M3D" duration`)
 	// removed as a feature. Use cal-dur or the years/months/days
 	// constructors directly.
 
 	// Duration extraction
 	for _, name := range []string{"total-hours", "total-minutes", "total-seconds", "total-ms"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.ClockDuration}}, []*native.Type{native.TFloat}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TFloat, tt.ClockDuration))
 	}
 	for _, name := range []string{"dur-years", "dur-months", "dur-days"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: tt.CalendarDuration}}, []*native.Type{native.TInteger}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TInteger, tt.CalendarDuration))
 	}
-	exports.Set("dur-sign", makeTimeFnDef("dur-sign", []native.FnParam{{Type: tt.CalendarDuration}}, []*native.Type{native.TInteger}, subReg))
+	exports.Set("dur-sign", makeTypedFnDef("dur-sign", subReg, native.TInteger, tt.CalendarDuration))
 
 	// Arithmetic
-	exports.Set("until", makeTimeFnDef("until", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalendarDuration}, subReg))
-	exports.Set("since", makeTimeFnDef("since", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{tt.CalendarDuration}, subReg))
-	exports.Set("diff", makeTimeFnDef("diff", []native.FnParam{{Type: native.TInstant}, {Type: native.TInstant}}, []*native.Type{tt.ClockDuration}, subReg))
-	exports.Set("elapsed", makeTimeFnDef("elapsed", []native.FnParam{{Type: native.TInstant}}, []*native.Type{tt.ClockDuration}, subReg))
+	exports.Set("until", makeTypedFnDef("until", subReg, tt.CalendarDuration, native.TDate, native.TDate))
+	exports.Set("since", makeTypedFnDef("since", subReg, tt.CalendarDuration, native.TDate, native.TDate))
+	exports.Set("diff", makeTypedFnDef("diff", subReg, tt.ClockDuration, native.TInstant, native.TInstant))
+	exports.Set("elapsed", makeTypedFnDef("elapsed", subReg, tt.ClockDuration, native.TInstant))
 
 	// Comparison extended
-	exports.Set("compare", makeTimeFnDef("time-compare", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TInteger}, subReg))
-	exports.Set("is-between", makeTimeFnDef("is-between", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TBoolean}, subReg))
-	exports.Set("earliest", makeTimeFnDef("earliest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
-	exports.Set("latest", makeTimeFnDef("latest", []native.FnParam{{Type: native.TDate}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("compare", makeTypedFnDef("time-compare", subReg, native.TInteger, native.TDate, native.TDate))
+	exports.Set("is-between", makeTypedFnDef("is-between", subReg, native.TBoolean, native.TDate, native.TDate, native.TDate))
+	exports.Set("earliest", makeTypedFnDef("earliest", subReg, native.TDate, native.TDate, native.TDate))
+	exports.Set("latest", makeTypedFnDef("latest", subReg, native.TDate, native.TDate, native.TDate))
 
 	// Conversion
-	exports.Set("to-date", makeTimeFnDef("to-date", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{native.TDate}, subReg))
-	exports.Set("to-time-of-day", makeTimeFnDef("to-time-of-day", []native.FnParam{{Type: native.TDateTime}}, []*native.Type{tt.TimeOfDay}, subReg))
-	exports.Set("to-datetime", makeTimeFnDef("to-datetime", []native.FnParam{{Type: native.TDate}}, []*native.Type{native.TDateTime}, subReg))
+	exports.Set("to-date", makeTypedFnDef("to-date", subReg, native.TDate, native.TDateTime))
+	exports.Set("to-time-of-day", makeTypedFnDef("to-time-of-day", subReg, tt.TimeOfDay, native.TDateTime))
+	exports.Set("to-datetime", makeTypedFnDef("to-datetime", subReg, native.TDateTime, native.TDate))
 	// Wrapper Params match the inner native Args (sig order, top-first).
-	exports.Set("to-instant", makeTimeFnDef("to-instant", []native.FnParam{{Type: tt.Timezone}, {Type: native.TDateTime}}, []*native.Type{native.TInstant}, subReg))
-	exports.Set("to-local", makeTimeFnDef("to-local", []native.FnParam{{Type: tt.Timezone}, {Type: native.TInstant}}, []*native.Type{native.TDateTime}, subReg))
-	exports.Set("to-utc", makeTimeFnDef("to-utc", []native.FnParam{{Type: native.TInstant}}, []*native.Type{native.TDateTime}, subReg))
+	exports.Set("to-instant", makeTypedFnDef("to-instant", subReg, native.TInstant, tt.Timezone, native.TDateTime))
+	exports.Set("to-local", makeTypedFnDef("to-local", subReg, native.TDateTime, tt.Timezone, native.TInstant))
+	exports.Set("to-utc", makeTypedFnDef("to-utc", subReg, native.TDateTime, native.TInstant))
 
 	// Rounding
-	exports.Set("start-of", makeTimeFnDef("start-of", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
-	exports.Set("end-of", makeTimeFnDef("end-of", []native.FnParam{{Type: native.TString}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
+	exports.Set("start-of", makeTypedFnDef("start-of", subReg, native.TDate, native.TString, native.TDate))
+	exports.Set("end-of", makeTypedFnDef("end-of", subReg, native.TDate, native.TString, native.TDate))
 
 	// Timezone
-	exports.Set("tz-utc", makeTimeFnDef("tz-utc", []native.FnParam{}, []*native.Type{tt.Timezone}, subReg))
-	exports.Set("tz-local", makeTimeFnDef("tz-local", []native.FnParam{}, []*native.Type{tt.Timezone}, subReg))
-	exports.Set("tz-name", makeTimeFnDef("tz-name", []native.FnParam{{Type: tt.Timezone}}, []*native.Type{native.TString}, subReg))
-	exports.Set("tz-offset", makeTimeFnDef("tz-offset", []native.FnParam{{Type: tt.Timezone}, {Type: native.TInstant}}, []*native.Type{native.TString}, subReg))
-	exports.Set("is-dst", makeTimeFnDef("is-dst", []native.FnParam{{Type: tt.Timezone}, {Type: native.TInstant}}, []*native.Type{native.TBoolean}, subReg))
+	exports.Set("tz-utc", makeTypedFnDef("tz-utc", subReg, tt.Timezone))
+	exports.Set("tz-local", makeTypedFnDef("tz-local", subReg, tt.Timezone))
+	exports.Set("tz-name", makeTypedFnDef("tz-name", subReg, native.TString, tt.Timezone))
+	exports.Set("tz-offset", makeTypedFnDef("tz-offset", subReg, native.TString, tt.Timezone, native.TInstant))
+	exports.Set("is-dst", makeTypedFnDef("is-dst", subReg, native.TBoolean, tt.Timezone, native.TInstant))
 
 	// Parsing — removed as a feature. parse-date / parse-datetime
 	// (layout-based) and auto-date (auto-format-detecting) are gone.
@@ -136,7 +133,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Wrapper Params match inner native Args (sig order, top-first):
 	// stack `date n add-days` → top=n (Integer)=sig[0], deeper=date (Date)=sig[1].
 	for _, name := range []string{"add-days", "add-months", "add-years"} {
-		exports.Set(name, makeTimeFnDef(name, []native.FnParam{{Type: native.TInteger}, {Type: native.TDate}}, []*native.Type{native.TDate}, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TDate, native.TInteger, native.TDate))
 	}
 
 	// The module-owned temporal types, exported as type literals so the
@@ -159,29 +156,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(ext.Extends, native.NewFnDef(ext))
 	}
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"TimeUtil": exports},
-	}
-	return desc, nil
-}
-
-// makeTimeFnDef creates a FnDef value with the given params, returns, and word name.
-func makeTimeFnDef(wordName string, params []native.FnParam, returns []*native.Type, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  params,
-				Returns: returns,
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
+	return moduleDesc(parent, "TimeUtil", subReg, exports), nil
 }
 
 // --- helpers ---

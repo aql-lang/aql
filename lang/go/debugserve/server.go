@@ -89,7 +89,7 @@ func (s *Server) ListenAndServe(ctx context.Context, bind string, allowPublic bo
 	if !allowPublic && !isLoopback(bind) {
 		return fmt.Errorf("debugserve: refusing non-loopback bind %q without allowPublic", bind)
 	}
-	ln, err := net.Listen("tcp", bind)
+	ln, err := netListen("tcp", bind)
 	if err != nil {
 		return fmt.Errorf("debugserve: listen %s: %w", bind, err)
 	}

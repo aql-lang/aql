@@ -323,7 +323,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	if err := withVaultLock(homeDir, func() error {
 		// Re-check under the lock so two concurrent inits can't both
 		// create a store (the early check above is best-effort).
-		if existing, _ := LoadStore(homeDir); existing != nil && !*force {
+		if existing, _ := c7loadStore(homeDir); existing != nil && !*force {
 			return fmt.Errorf("vault already initialized at %s (use --force to reinitialize)", StorePath(homeDir))
 		}
 		return SaveStore(homeDir, &Store{
@@ -501,7 +501,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	if err := writeSecret(homeDir, sess, alias, ns, value); err != nil {
+	if err := w8writeSecret(homeDir, sess, alias, ns, value); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -967,7 +967,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -981,7 +981,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		if a, _ := s.FindAlias(alias); a == nil {
 			return fmt.Errorf("no alias named %q", alias)
 		}
-		_, tk, err := s.NewCapability(alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
+		_, tk, err := c7newCapability(s, alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
 		if err != nil {
 			return err
 		}
@@ -1193,7 +1193,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1

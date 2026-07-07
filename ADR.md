@@ -615,3 +615,103 @@ parsing principle, which holds either way.
 - Reading a discriminator field and switching on its value (e.g. a `type`
   enum String) is explicitly **not** secondary parsing; it is the normal way
   a handler interprets data.
+
+---
+
+## ADR-008 — 100% Go unit test coverage (of reachable code) at all times {#adr-008}
+
+**Status:** Accepted · **Date:** 2026-07-07
+
+### Decision
+
+The Go implementation maintains **100% unit-test statement coverage of
+every reachable statement, at all times**. The gate is:
+
+```bash
+make cover-gate     # fails below 100% of reachable statements
+```
+
+which runs every module's tests with `-coverpkg` spanning the whole repo,
+merges the per-module profiles block-by-block (a statement counts as
+covered when **any** suite reaches it — lang's tests legitimately exercise
+the eng kernel, the spec corpus exercises both), and fails the build
+below the floor (`test/go/covergate`).
+
+To make every statement reachable, the codebase **admits mocking seams**,
+modeled on the virtual FileOps capability:
+
+- **Capabilities / narrow interfaces** for subsystems (file I/O,
+  keyrings, clocks, SDK hosts).
+- **Unexported function-variable seams** for single OS/stdlib edges whose
+  failure or platform arm is otherwise unreachable — `osExit`,
+  `readPassword`, `goosName`, `randRead`, marshal and constructor seams.
+  The default is always the real implementation; tests swap and restore.
+- **Extract-run mains**: `func main() { osExit(run(...)) }`, so even
+  `main` bodies are covered.
+
+The conventions, naming rules, and restore discipline are in
+`design/TEST-SEAMS.10.md`.
+
+**The one exclusion — a reviewed allowlist.** A block that no test can
+reach falls into exactly one of two dispositions:
+
+1. **Truly dead** (a tautological comparison, a shadowed branch, a
+   `return` after a loop that always returns) — **removed** at source
+   under ADR-005, never allowlisted.
+2. **A defensive error-propagation or safety arm** whose guarded call
+   cannot fail today but defends against a future change, an external
+   library, or data corruption — **kept and allowlisted**. Deleting it to
+   win a coverage number would silently drop a real error if that call
+   ever started failing.
+
+The allowlist is `test/go/covergate/allowlist.tsv`: one cover-profile
+block key per line with a one-line reason. `covergate` keeps it honest —
+the gate **fails** if an allowlisted block becomes covered (graduate it:
+cover it and drop the entry) or goes stale (remove it). Adding an entry
+is a reviewed act requiring a proof of unreachability. The policy and the
+category breakdown are in `design/COVERAGE-ALLOWLIST.10.md`.
+
+This applies to the Go implementation only, for now. The TypeScript
+engine port (`eng/ts`) keeps its row-for-row spec-parity gate instead.
+
+### Context
+
+The 2026-07 quality program took repo-wide coverage from 78.5% to 100% of
+reachable statements, and found shipped bugs in the *uncovered* slices of
+the tree — a `deq`/`eq` large-integer divergence, a broken generator
+tool, a TUI mutation that could never succeed, a trace renderer printing
+sealed payload structs, a doc-example evaluator writing to the real
+filesystem, and a `valueToAny` nil-dereference on a typed-map descriptor.
+Every one lived in code no test reached. The remaining uncovered tail was
+not "unimportant code" — it was precisely the OS edges, error arms, and
+platform branches where bugs hide longest, unreachable only because the
+code offered no seam to fake the OS, the terminal, or a constructor
+failure.
+
+Partial floors (90%, 95%) invite ratchet erosion: every new uncovered
+statement is individually defensible and collectively regressive. A 100%
+floor removes the judgment call — if a statement can't be tested, the
+code must be reshaped until it can (a design pressure toward smaller,
+injectable units, the same pressure that produced FileOps) — with the
+single, audited escape valve of the allowlist for guards that are
+genuinely unreachable yet genuinely defensive.
+
+### Consequences
+
+- `make cover-gate` joins the pre-commit checklist alongside
+  `make fmt && make vet && make lint && make test`. A change that adds an
+  uncovered, reachable statement fails the gate; the fix is a test, a
+  seam, or a simpler shape.
+- New code is written seam-first: OS calls, process exits, platform
+  switches, and fallible constructors go behind the documented seam
+  shapes from the start.
+- Truly-dead branches are removed (ADR-005), not tolerated as "safety".
+  Genuinely-unreachable *defensive* guards (error propagation, crypto
+  defense-in-depth) may be allowlisted with a proof — but the list can
+  only shrink or move deliberately, because the gate rejects a stale or
+  now-covered entry.
+- The gate measures the merged cross-suite profile, not per-package
+  self-coverage, so integration-style suites (the TSV spec corpus, the
+  compiled/interpreted differential) count toward the floor — testing
+  effort goes where it verifies behaviour, not where a per-package ratio
+  demands duplication.

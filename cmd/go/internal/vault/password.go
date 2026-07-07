@@ -181,7 +181,7 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 
 	migrated := false
 	if err := withVaultLock(homeDir, func() error {
-		st, err := LoadStore(homeDir)
+		st, err := p7loadStore(homeDir)
 		if err != nil {
 			return err
 		}
@@ -872,7 +872,7 @@ func runPasswordAssign(args []string, homeDir string, stdin io.Reader, stdout, s
 	}
 
 	if err := withVaultLock(homeDir, func() error {
-		st, err := LoadStore(homeDir)
+		st, err := p7loadStore(homeDir)
 		if err != nil {
 			return err
 		}
@@ -963,7 +963,7 @@ func runPasswordSet(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if err := withVaultLock(homeDir, func() error {
-		st, err := LoadStore(homeDir)
+		st, err := p7loadStore(homeDir)
 		if err != nil {
 			return err
 		}

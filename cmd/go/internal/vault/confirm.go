@@ -26,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"golang.org/x/term"
 )
 
 // errAborted is returned when the user declines a confirmation prompt.
@@ -40,7 +39,7 @@ const (
 // stdinIsTTY reports whether r is an interactive terminal.
 func stdinIsTTY(r io.Reader) bool {
 	f, ok := r.(*os.File)
-	return ok && term.IsTerminal(int(f.Fd()))
+	return ok && isTerminal(int(f.Fd()))
 }
 
 // confirmDestructive gates a destructive operation per the policy above.

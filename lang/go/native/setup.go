@@ -39,7 +39,7 @@ func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*
 	if err := TypeInitError(); err != nil {
 		return nil, err
 	}
-	r, err := NewRegistry()
+	r, err := newEngRegistry()
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*
 	SetHostExtensions(r, DefaultExtensions())
 
 	// Default SQLite store.
-	sqlStore, err := NewSQLiteStore()
+	sqlStore, err := newSQLiteStoreFn()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize SQLite store: %w", err)
 	}

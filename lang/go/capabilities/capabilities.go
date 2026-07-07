@@ -162,10 +162,10 @@ func NewMem() *MemFileOps {
 }
 
 func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
-	resolved, err := m.ResolvePath(path)
-	if err != nil {
-		return nil, err
-	}
+	// MemFileOps.ResolvePath never fails (both of its arms return a nil
+	// error), so there is no error to propagate here or in WriteFile /
+	// MkdirAll — see design/TEST-SEAMS.10.md on provably-dead guards.
+	resolved, _ := m.ResolvePath(path)
 	data, ok := m.Files[resolved]
 	if !ok {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
@@ -174,10 +174,7 @@ func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
 }
 
 func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
-	resolved, err := m.ResolvePath(path)
-	if err != nil {
-		return err
-	}
+	resolved, _ := m.ResolvePath(path) // never fails — see ReadFile
 	m.Files[resolved] = make([]byte, len(data))
 	copy(m.Files[resolved], data)
 	return nil
@@ -185,10 +182,7 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 
 // MkdirAll records a directory path. Idempotent.
 func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
-	resolved, err := m.ResolvePath(path)
-	if err != nil {
-		return err
-	}
+	resolved, _ := m.ResolvePath(path) // never fails — see ReadFile
 	m.Dirs[resolved] = true
 	// Also record parent dirs.
 	for d := filepath.Dir(resolved); d != resolved && d != "." && d != "/"; d = filepath.Dir(d) {

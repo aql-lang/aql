@@ -1,0 +1,191 @@
+package eng
+
+import "testing"
+
+// W9 callable_words.go coverage for the directly-callable helpers of the
+// check-mode closure machinery: compileClosureBody's inactive-recorder
+// decline, mutableInstanceRef, lambdaHookCompatible's shape gates,
+// emptyContainerConst, and bodyToksHaveSentinel.
+
+func TestW9CompileClosureBodyInactive(t *testing.T) {
+	r := newTestRegistry(t)
+	// A fresh registry has the inactive (no-op) recorder, so es is a typed-nil
+	// *EmitState and StartFnCompile declines.
+	unit, ok := compileClosureBody(r, "w", 1, false, false,
+		[]Value{NewWord("x")}, []Value{NewInteger(1)}, nil, nil, ClosureInValue, SrcPos{})
+	if ok || unit != -1 {
+		t.Errorf("inactive recorder should decline: unit=%d ok=%v", unit, ok)
+	}
+}
+
+func TestW9MutableInstanceRef(t *testing.T) {
+	// A flex node is a mutable instance.
+	if !mutableInstanceRef(NewFlexList(nil)) {
+		t.Error("a flex list is a mutable instance ref")
+	}
+	// A value with a nil Parent but a concrete payload is not (and is not a
+	// bare type node, so it reaches the p==nil guard).
+	if mutableInstanceRef(Value{Data: IntPayload{N: 1}}) {
+		t.Error("a nil-Parent concrete value is not a mutable instance ref")
+	}
+	// A bare type node is excluded.
+	if mutableInstanceRef(NewTypeLiteral(TInteger)) {
+		t.Error("a bare type node is not a mutable instance ref")
+	}
+}
+
+func TestW9LambdaHookCompatible(t *testing.T) {
+	body := AQL([]Value{NewWord("x")})
+
+	// No own sig (empty) → decline.
+	if _, ok := lambdaHookCompatible(&FnDefInfo{}, nil, ClosureInValue); ok {
+		t.Error("a sig-less fn should decline")
+	}
+	// An own sig with an empty body → decline.
+	if _, ok := lambdaHookCompatible(&FnDefInfo{Signatures: []Signature{{}}}, nil, ClosureInValue); ok {
+		t.Error("an empty-body sig should decline")
+	}
+	// More than one own sig → decline.
+	two := &FnDefInfo{Signatures: []Signature{
+		{Params: []FnParam{{Name: "a"}}, Impl: body},
+		{Params: []FnParam{{Name: "b"}}, Impl: body},
+	}}
+	if _, ok := lambdaHookCompatible(two, []Value{NewInteger(1)}, ClosureInValue); ok {
+		t.Error("a multi-overload fn should decline")
+	}
+	// A body carrying a flow-control sentinel → decline.
+	sentinel := &FnDefInfo{Signatures: []Signature{{
+		Params: []FnParam{{Name: "a"}}, Impl: AQL([]Value{NewWord("break")}),
+	}}}
+	if _, ok := lambdaHookCompatible(sentinel, []Value{NewInteger(1)}, ClosureInValue); ok {
+		t.Error("a sentinel body should decline")
+	}
+	// Param / input arity mismatch → decline.
+	arity := &FnDefInfo{Signatures: []Signature{{
+		Params: []FnParam{{Name: "a"}, {Name: "b"}}, Impl: body,
+	}}}
+	if _, ok := lambdaHookCompatible(arity, []Value{NewInteger(1)}, ClosureInValue); ok {
+		t.Error("an arity mismatch should decline")
+	}
+	// A nil-typed param is skipped; the compatible lambda is returned.
+	okFd := &FnDefInfo{Signatures: []Signature{{
+		Params: []FnParam{{Name: "a"}}, Impl: body, // Type nil
+	}}}
+	if _, ok := lambdaHookCompatible(okFd, []Value{NewInteger(1)}, ClosureInValue); !ok {
+		t.Error("a nil-typed param should be skipped and the lambda accepted")
+	}
+}
+
+func TestW9EmptyContainerConst(t *testing.T) {
+	// Non-concrete → false.
+	if emptyContainerConst(NewCarrier(TList)) {
+		t.Error("a carrier is not an empty container const")
+	}
+	// A non-nil empty list / empty map → true.
+	if !emptyContainerConst(NewList([]Value{})) {
+		t.Error("an empty list is an empty container const")
+	}
+	if !emptyContainerConst(NewMap(NewOrderedMap())) {
+		t.Error("an empty map is an empty container const")
+	}
+	// A concrete non-container → false.
+	if emptyContainerConst(NewInteger(1)) {
+		t.Error("an integer is not an empty container const")
+	}
+	// A non-empty list → false.
+	if emptyContainerConst(NewList([]Value{NewInteger(1)})) {
+		t.Error("a non-empty list is not an empty container const")
+	}
+}
+
+func TestW9RecordClosureDispatchInactive(t *testing.T) {
+	r := newTestRegistry(t)
+	// The inactive recorder is not a *EmitState → the whole path declines.
+	if recordClosureDispatch(r, "w", CallableSpec{}, nil, nil, nil, nil, nil, nil, ClosureInValue, nil, nil, SrcPos{}) {
+		t.Error("an inactive recorder should decline the closure dispatch")
+	}
+}
+
+func TestW9LambdaCallbackInputs(t *testing.T) {
+	r := newTestRegistry(t)
+
+	// LambdaSharesTokenShape with a nil Inputs func → decline.
+	if _, _, ok := lambdaCallbackInputs(r, "w", CallableSpec{LambdaSharesTokenShape: true}, nil); ok {
+		t.Error("a nil Inputs func should decline")
+	}
+	// LambdaSharesTokenShape with an Inputs func that returns nil → decline.
+	nilIns := CallableSpec{LambdaSharesTokenShape: true, Inputs: func(_ []Value) []Value { return nil }}
+	if _, _, ok := lambdaCallbackInputs(r, "w", nilIns, nil); ok {
+		t.Error("an Inputs func returning nil should decline")
+	}
+	// LambdaSharesTokenShape with a non-nil Inputs → accepted.
+	okIns := CallableSpec{LambdaSharesTokenShape: true, Inputs: func(_ []Value) []Value { return []Value{NewCarrier(TInteger)} }}
+	if _, _, ok := lambdaCallbackInputs(r, "w", okIns, nil); !ok {
+		t.Error("a non-nil Inputs func should be accepted")
+	}
+	// Non-shared shape whose data operand is past the end of args → decline.
+	if _, _, ok := lambdaCallbackInputs(r, "w", CallableSpec{BodyPos: 5}, []Value{NewInteger(1)}); ok {
+		t.Error("a body position past the operand end should decline")
+	}
+}
+
+func TestW9BodyToksHaveSentinel(t *testing.T) {
+	if !bodyToksHaveSentinel([]Value{NewWord("break")}) {
+		t.Error("a break token is a sentinel")
+	}
+	if bodyToksHaveSentinel([]Value{NewWord("plain")}) {
+		t.Error("a plain word is not a sentinel")
+	}
+}
+
+func TestW9KeyValCarrierRegistered(t *testing.T) {
+	r := newTestRegistry(t)
+	// Register a Node/Map/KeyVal type in this registry's (dynamic) table so
+	// keyValCarrier tags the carrier with it (the language-layer registration
+	// the function looks up).
+	kv := r.Types.MintType("KeyVal", TMap)
+	r.Types.bypath = map[string]*Type{"Node/Map/KeyVal": kv}
+	out := keyValCarrier(r, TInteger)
+	if !out.Parent.Equal(kv) {
+		t.Errorf("keyValCarrier should tag with the registered KeyVal type, got %v", out.Parent)
+	}
+}
+
+func TestW9EmptyFlexHookOperand(t *testing.T) {
+	newES := func() (*EmitState, Value) {
+		es := NewEmitState()
+		v := NewCarrier(TFlexList)
+		v.ID = "w9flex"
+		es.producedBy[v.ID] = producer{seq: es.seq, idx: 0}
+		return es, v
+	}
+
+	// Empty top-level frame → no producing event → decline.
+	es, v := newES()
+	if es.emptyFlexHookOperand(v) {
+		t.Error("an empty frame should decline")
+	}
+
+	// A last event that is NOT the flex construction → decline.
+	es, v = newES()
+	es.frames[0] = []emitEvent{{seq: es.seq, kind: evCall, call: emitCall{word: "notflex"}}}
+	if es.emptyFlexHookOperand(v) {
+		t.Error("a non-flex last event should decline")
+	}
+
+	// A matching flex event but a nil registry → decline (cannot verify sig).
+	es, v = newES()
+	es.frames[0] = []emitEvent{{seq: es.seq, kind: evCall, call: emitCall{word: "flex"}}}
+	es.reg = nil
+	if es.emptyFlexHookOperand(v) {
+		t.Error("a nil registry should decline")
+	}
+
+	// A matching flex event but the registry has no `flex` word → decline.
+	es, v = newES()
+	es.frames[0] = []emitEvent{{seq: es.seq, kind: evCall, call: emitCall{word: "flex"}}}
+	es.reg = newTestRegistry(t)
+	if es.emptyFlexHookOperand(v) {
+		t.Error("a registry with no flex word should decline")
+	}
+}

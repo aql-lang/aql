@@ -48,31 +48,30 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Construct a sub-registry for the module's words. Module exports
 	// are dispatched through this sub-registry; the parent's policy
 	// is consulted for module.call gating elsewhere.
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newModuleRegistry(vmNatives(parent))
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	natives := vmNatives(parent)
-	for _, n := range natives {
-		subReg.RegisterNativeFunc(n)
-	}
+	// vm-run-with takes code + policy map. Its wrapper uses TAny params
+	// (rather than the underlying TString + TMap signature) because the
+	// dotted-form dispatch via `Vm.run-with` matches against the FnDef's
+	// own signature, and we want the dotted form to dispatch against
+	// any-typed args (the native validates types itself). It is the one
+	// stack-only wrapper (BarrierPos 0).
+	runWithSig := typeSig([]*native.Type{native.TAny, native.TAny}, native.TAny)
+	runWithSig.stackOnly = true
 
 	exports := native.NewOrderedMap()
-	exports.Set("run", makeRunFnDef("vm-run", subReg))
-	exports.Set("run-with", makeRunWithFnDef("vm-run-with", subReg))
-	exports.Set("run-sandbox", makeRunFnDef("vm-run-sandbox", subReg))
-	exports.Set("run-compute", makeRunFnDef("vm-run-compute", subReg))
-	exports.Set("parse", makeRunFnDef("vm-parse", subReg))
-	exports.Set("check", makeRunFnDef("vm-check", subReg))
-	exports.Set("compile", makeRunFnDef("vm-compile", subReg))
+	exports.Set("run", makeTypedFnDef("vm-run", subReg, native.TAny, native.TString))
+	exports.Set("run-with", makeWrapFnDef("vm-run-with", subReg, runWithSig))
+	exports.Set("run-sandbox", makeTypedFnDef("vm-run-sandbox", subReg, native.TAny, native.TString))
+	exports.Set("run-compute", makeTypedFnDef("vm-run-compute", subReg, native.TAny, native.TString))
+	exports.Set("parse", makeTypedFnDef("vm-parse", subReg, native.TAny, native.TString))
+	exports.Set("check", makeTypedFnDef("vm-check", subReg, native.TAny, native.TString))
+	exports.Set("compile", makeTypedFnDef("vm-compile", subReg, native.TAny, native.TString))
 
-	modID := parent.Modules.NextID()
-	return native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Vm": exports},
-	}, nil
+	return moduleDesc(parent, "Vm", subReg, exports), nil
 }
 
 // vmNatives builds the NativeFunc slice for the vm module. Defined
@@ -89,7 +88,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("sandbox")
+					pol, err := s7aPolicyLoad("sandbox")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run: load sandbox: %w", err)
 					}
@@ -108,7 +107,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("sandbox")
+					pol, err := s7aPolicyLoad("sandbox")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run-sandbox: %w", err)
 					}
@@ -127,7 +126,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					pol, err := policy.Load("compute")
+					pol, err := s7aPolicyLoad("compute")
 					if err != nil {
 						return nil, fmt.Errorf("running Vm.run-compute: %w", err)
 					}
@@ -309,7 +308,7 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 // marked ready. Shared by run / check / compile so the three stay
 // configured identically — only what they DO with the registry differs.
 func newSubEngineRegistry(parent *native.Registry, pol policy.Policy) (*native.Registry, error) {
-	subReg, err := native.DefaultRegistryWithPolicy(pol)
+	subReg, err := newDefaultRegistryWithPolicy(pol)
 	if err != nil {
 		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
 	}
@@ -501,56 +500,14 @@ func policyFromMapValue(v native.Value) (policy.Policy, error) {
 	if !native.IsConcrete(v) {
 		return nil, fmt.Errorf("policy map cannot be a type literal or carrier")
 	}
-	m, err := native.RequireConcreteMap(v, "Vm.run-with policy")
-	if err != nil {
+	if _, err := native.RequireConcreteMap(v, "Vm.run-with policy"); err != nil {
 		return nil, err
 	}
-	// Convert the AQL map to a generic map[string]any for the
-	// policy loader. We use AQL's value-to-any conversion path,
-	// which already handles maps, lists, strings, numbers, bools.
-	raw := native.ValueToAny(v)
-	asMap, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("policy map: expected map, got %T (size=%d)", raw, m.Len())
-	}
+	// Convert the AQL map to a generic map[string]any for the policy loader.
+	// RequireConcreteMap has already established that v is a concrete map
+	// backed by an OrderedMap payload, so native.ValueToAny always yields a
+	// map[string]any here (see native.valueToAny's TMap arm) — the assertion
+	// cannot fail, so no unreachable error arm is left to guard (ADR-005).
+	asMap, _ := native.ValueToAny(v).(map[string]any)
 	return policy.FromMap(asMap)
-}
-
-// makeRunFnDef creates a FnDef wrapper for a single-arg vm-run word.
-func makeRunFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:     []native.FnParam{{Type: native.TString}},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeRunWithFnDef creates a FnDef wrapper for vm-run-with (code +
-// policy map). The FnDef's params take the call's stack args by
-// position and pass them through to the native vm-run-with.
-//
-// The body uses TAny params (rather than the underlying TString +
-// TMap signature) because the dotted-form dispatch via `Vm.run-with`
-// matches against the FnDef's own signature, and we want the dotted
-// form to dispatch against any-typed args (the native validates
-// types itself).
-func makeRunWithFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params: []native.FnParam{
-				{Type: native.TAny},
-				{Type: native.TAny},
-			},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: 0,
-		}},
-		Registry: subReg,
-	})
 }

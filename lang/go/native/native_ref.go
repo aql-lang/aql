@@ -231,11 +231,11 @@ func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 		return nil, fmt.Errorf("force-arity: name %s is not bound", name)
 	}
 	if !eng.IsFunctionRef(v) {
+		// reg is provably non-nil here: ResolveRef only returns ok for a
+		// non-nil registry, so a resolved-but-non-fn binding cannot occur
+		// with reg == nil (design/TEST-SEAMS.10.md dead-guard removal).
 		detail := "force-arity requires a function word: " + name + " is bound to " + v.Parent.String()
-		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, name)
-		}
-		return nil, fmt.Errorf("%s", detail)
+		return nil, reg.AqlError("illegal_ref", detail, name)
 	}
 	return forceArityHandler([]Value{args[0], v}, nil, nil, reg)
 }
@@ -276,11 +276,10 @@ func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, re
 		return nil, fmt.Errorf("%s: name %s is not bound", word, name)
 	}
 	if !eng.IsFunctionRef(v) {
+		// reg is provably non-nil here (ResolveRef only returns ok for a
+		// non-nil registry); the former reg==nil arm was dead.
 		detail := word + " requires a function word: " + name + " is bound to " + v.Parent.String()
-		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, name)
-		}
-		return nil, fmt.Errorf("%s", detail)
+		return nil, reg.AqlError("illegal_ref", detail, name)
 	}
 	return rebarrierResult(wrap, v, word, reg)
 }
@@ -307,11 +306,10 @@ func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 		return nil, fmt.Errorf("usurp: name %s is not bound", name)
 	}
 	if !eng.IsFunctionRef(v) {
+		// reg is provably non-nil here (ResolveRef only returns ok for a
+		// non-nil registry); the former reg==nil arm was dead.
 		detail := "usurp requires a function word: " + name + " is bound to " + v.Parent.String()
-		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, name)
-		}
-		return nil, fmt.Errorf("%s", detail)
+		return nil, reg.AqlError("illegal_ref", detail, name)
 	}
 	return usurpHandler([]Value{v}, nil, nil, reg)
 }
@@ -339,11 +337,10 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 	// its rule: only function words may be referenced. A non-fn binding
 	// (plain value, type body) is rejected so both surfaces behave alike.
 	if !eng.IsFunctionRef(v) {
+		// reg is provably non-nil here (ResolveRef only returns ok for a
+		// non-nil registry); the former reg==nil arm was dead.
 		detail := "ref requires a function word: " + name + " is bound to " + v.Parent.String()
-		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, name)
-		}
-		return nil, fmt.Errorf("%s", detail)
+		return nil, reg.AqlError("illegal_ref", detail, name)
 	}
 	return []Value{v}, nil
 }

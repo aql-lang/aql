@@ -13,6 +13,11 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 )
 
+// osRemoveAll is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive Run's removal-failure arm, which cannot be forced via directory
+// permissions when the suite runs as root.
+var osRemoveAll = os.RemoveAll
+
 type cmd struct{}
 
 // New returns the clean subcommand.
@@ -44,7 +49,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		path := filepath.Join(aqlDir, e.Name())
-		if err := os.RemoveAll(path); err != nil {
+		if err := osRemoveAll(path); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}

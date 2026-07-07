@@ -22,8 +22,15 @@ import (
 	"github.com/aql-lang/aql/calc/go"
 )
 
+// Test seams (design/TEST-SEAMS.10.md): osExit lets tests observe
+// main's exit code; newCalc drives run's constructor-failure arm.
+var (
+	osExit  = os.Exit
+	newCalc = calc.New
+)
+
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	osExit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 // run is the testable entry point. It parses args from the supplied
@@ -45,7 +52,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		return 2
 	}
 
-	c, err := calc.New(out)
+	c, err := newCalc(out)
 	if err != nil {
 		fmt.Fprintf(errOut, "calc: %s\n", err)
 		return 1

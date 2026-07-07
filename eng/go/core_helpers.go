@@ -1435,11 +1435,11 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	// Walk each ctxStack entry's prototype chain to see if it passes
 	// through the original root, and if so, create a new ctxStack entry
 	// that uses the COW'd store.
-	origRoot := current.Prototype
-	if origRoot == nil {
-		origRoot = store
-	}
-	r.Contexts.UpdateChain(origRoot, current)
+	// current's prototype is never nil here: current is either the
+	// initial COW layer (prototype = the store argument) or the last
+	// loop's newParent (prototype = a parent the loop condition proved
+	// non-nil).
+	r.Contexts.UpdateChain(current.Prototype, current)
 }
 
 // IsHostTypeBody reports whether v is a constructed type produced by a

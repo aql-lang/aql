@@ -36,7 +36,7 @@ import (
 // framework — register / kinds — folds in the built-in emit kinds from
 // native.EmitKinds(), and folds in any host-registered emitters.
 func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -103,20 +103,16 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: native.TAny}, {Type: native.TMap}},
 	}, []*native.Type{native.TString}, nil, subReg))
 
-	// ---- built-in emit kinds ------------------------------------------
+	// ---- built-in emit kinds + host-registered emitters -----------------
 	// The canonical walk-based emitter family (json, jsonic, yaml, csv, tsv,
 	// toml, ini, xml) ships in the box, so `import "aql:emitlang"` then
-	// `emit <kind> <data>` works with no host registration.
-	for _, spec := range builtinEmitSpecs() {
-		if err := installHostEmitter(exports, subReg, spec); err != nil {
-			return native.ModuleDesc{}, err
-		}
-	}
-
-	// ---- host-registered emitters -------------------------------------
+	// `emit <kind> <data>` works with no host registration; any
+	// host-registered emitters follow. One merged loop (built-ins first,
+	// exactly the previous install order) keeps a single coverable
+	// install-error arm — see design/TEST-SEAMS.10.md.
 	state := emitLangHostStateFor(parent, true)
 	state.mu.Lock()
-	for _, spec := range state.specs {
+	for _, spec := range append(builtinEmitSpecs(), state.specs...) {
 		if err := installHostEmitter(exports, subReg, spec); err != nil {
 			state.mu.Unlock()
 			return native.ModuleDesc{}, err

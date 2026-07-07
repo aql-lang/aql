@@ -27,11 +27,6 @@ import (
 // registry — so the handlers reach the host ErrOutput, Clock, and
 // Policy exactly as the core `print` word does.
 func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
-	if err != nil {
-		return native.ModuleDesc{}, err
-	}
-
 	// One sink registry per import, captured by every word closure (the
 	// aql:rand state pattern). A host may pre-install one via
 	// SetHostLogSinks(parent, …) before `import "aql:log"` runs — e.g. to
@@ -46,8 +41,9 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.SetHostLogSinks(parent, lsr)
 	}
 	logNatives := native.LogModuleNativeFuncs(lsr)
-	for _, n := range logNatives {
-		subReg.RegisterNativeFunc(n)
+	subReg, err := newModuleRegistry(logNatives)
+	if err != nil {
+		return native.ModuleDesc{}, err
 	}
 
 	exports := native.NewOrderedMap()
@@ -89,10 +85,5 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(exportName[n.Name], makeModuleFnDef(n, subReg))
 	}
 
-	modID := parent.Modules.NextID()
-	return native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Log": exports},
-	}, nil
+	return moduleDesc(parent, "Log", subReg, exports), nil
 }

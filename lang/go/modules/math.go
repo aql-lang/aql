@@ -16,18 +16,15 @@ import (
 // The basic arithmetic operations (add, sub, mul, div, mod, pow) remain
 // built-in and do not require this module.
 func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
-	// Create an isolated sub-registry for the module's Go words.
-	subReg, err := native.DefaultRegistry()
+	// Create an isolated sub-registry with the module's Go words.
+	subReg, err := newModuleRegistry(MathNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	// Register all math words into the sub-registry.
-	for _, n := range MathNatives {
-		subReg.RegisterNativeFunc(n)
-	}
-
-	// Build the export map with FnDef wrappers.
+	// Build the export map with FnDef wrappers. The wrappers declare the
+	// Number facade; the inner natives carry the per-leaf Integer/Float
+	// overloads that dispatch actually consults.
 	exports := native.NewOrderedMap()
 
 	// Unary operations: [Number] -> [Number]
@@ -37,124 +34,27 @@ func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 		"sqrt", "cbrt", "exp", "log", "log2", "log10", "logb",
 		"sin", "cos", "tan", "asin", "acos", "atan",
 	} {
-		exports.Set(name, makeUnaryFnDef(name, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TNumber, native.TNumber))
 	}
 
 	// Binary operations: [Number, Number] -> [Number]
 	for _, name := range []string{"min", "max", "atan2", "hypot", "remainder", "copysign", "nextafter", "scalb"} {
-		exports.Set(name, makeBinaryFnDef(name, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TNumber, native.TNumber, native.TNumber))
 	}
 
 	// Ternary operations: [Number, Number, Number] -> [Number]
-	exports.Set("fma", makeTernaryFnDef("fma", subReg))
+	exports.Set("fma", makeTypedFnDef("fma", subReg, native.TNumber, native.TNumber, native.TNumber, native.TNumber))
 
 	// IEEE-754 classifier predicates: [Number] -> [Boolean].
 	for _, name := range []string{"is-nan", "is-inf", "is-finite", "signbit"} {
-		exports.Set(name, makeUnaryPredFnDef(name, subReg))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TBoolean, native.TNumber))
 	}
 
 	// Constants: [] -> [Float]
-	exports.Set("pi", makeConstFnDef("math-pi", subReg))
-	exports.Set("e", makeConstFnDef("math-e", subReg))
+	exports.Set("pi", makeTypedFnDef("math-pi", subReg, native.TFloat))
+	exports.Set("e", makeTypedFnDef("math-e", subReg, native.TFloat))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"MathUtil": exports},
-	}
-	return desc, nil
-}
-
-// makeUnaryFnDef creates a FnDef value that wraps a unary math word.
-// Uses unnamed params so args are pushed directly onto the stack.
-func makeUnaryFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  []native.FnParam{{Type: native.TNumber}},
-				Returns: []*native.Type{native.TNumber},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-// makeUnaryPredFnDef wraps a unary math predicate word: [Number] ->
-// [Boolean] (the IEEE classifiers is-nan / is-inf / is-finite / signbit).
-func makeUnaryPredFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  []native.FnParam{{Type: native.TNumber}},
-				Returns: []*native.Type{native.TBoolean},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-// makeBinaryFnDef creates a FnDef value that wraps a binary math word.
-// Uses unnamed params so args are pushed directly onto the stack.
-func makeBinaryFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params: []native.FnParam{
-					{Type: native.TNumber},
-					{Type: native.TNumber},
-				},
-				Returns: []*native.Type{native.TNumber},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-// makeTernaryFnDef creates a FnDef value that wraps a ternary math word
-// ([Number, Number, Number] -> [Number]) — used for fma.
-func makeTernaryFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params: []native.FnParam{
-					{Type: native.TNumber},
-					{Type: native.TNumber},
-					{Type: native.TNumber},
-				},
-				Returns: []*native.Type{native.TNumber},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-// makeConstFnDef creates a FnDef value that wraps a zero-arg constant word.
-func makeConstFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  []native.FnParam{},
-				Returns: []*native.Type{native.TFloat},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
+	return moduleDesc(parent, "MathUtil", subReg, exports), nil
 }
 
 // MathNatives is the consolidated NativeFunc slice for the math module's

@@ -60,13 +60,13 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 
 		item := NewOrderedMap()
 
-		keyVal, err := anyToValue(pair[0])
+		keyVal, err := structConvert(pair[0])
 		if err != nil {
 			keyVal = NewString(fmt.Sprintf("%v", pair[0]))
 		}
 		item.Set("key", keyVal)
 
-		valVal, err := anyToValue(pair[1])
+		valVal, err := structConvert(pair[1])
 		if err != nil {
 			valVal = NewString(fmt.Sprintf("%v", pair[1]))
 		}
@@ -89,7 +89,7 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 		return nil, fmt.Errorf("filter: callback error: %w", callErr)
 	}
 
-	val, err := anyToValue(result)
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}

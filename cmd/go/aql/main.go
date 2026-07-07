@@ -13,6 +13,11 @@ package main
 
 import aql "github.com/aql-lang/aql/cmd/go"
 
+// runCLI is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// observe the dispatch to aql.Run without running the real CLI, which
+// would exit the test process.
+var runCLI = aql.Run
+
 func main() {
-	aql.Run()
+	runCLI()
 }

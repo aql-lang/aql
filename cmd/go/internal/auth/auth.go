@@ -58,6 +58,24 @@ type ClientUser struct {
 	TokenVault string `json:"token_vault,omitempty"`
 }
 
+// jsonMarshalIndent is a test seam (design/TEST-SEAMS.10.md); tests swap
+// it to drive the marshal-failure arms of saveUsers/saveTokens, which are
+// unreachable with the plain string-field User/TokenInfo shapes.
+var jsonMarshalIndent = json.MarshalIndent
+
+// randRead is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive GenerateToken's error arm — crypto/rand.Read does not fail on a
+// healthy host.
+var randRead = rand.Read
+
+// isTerminal is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive ReadPassword's TTY arm, which needs a real terminal otherwise.
+var isTerminal = term.IsTerminal
+
+// readPassword is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive ReadPassword's TTY arm without a terminal attached.
+var readPassword = term.ReadPassword
+
 // NewUserStore creates a UserStore backed by the given directory.
 func NewUserStore(registryDir string) *UserStore {
 	return &UserStore{dir: registryDir}
@@ -89,7 +107,7 @@ func (s *UserStore) LoadUsers() (map[string]*User, error) {
 }
 
 func (s *UserStore) saveUsers(users map[string]*User) error {
-	data, err := json.MarshalIndent(users, "", "  ")
+	data, err := jsonMarshalIndent(users, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -114,7 +132,7 @@ func (s *UserStore) LoadTokens() (map[string]*TokenInfo, error) {
 }
 
 func (s *UserStore) saveTokens(tokens map[string]*TokenInfo) error {
-	data, err := json.MarshalIndent(tokens, "", "  ")
+	data, err := jsonMarshalIndent(tokens, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -223,7 +241,7 @@ func CheckPassword(hash, password string) error {
 // GenerateToken creates a cryptographically random hex token (64 characters).
 func GenerateToken() (string, error) {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
@@ -255,8 +273,8 @@ func (ir *InputReader) ReadLine(prompt string, w io.Writer) (string, error) {
 // reader is a terminal, echoing is suppressed via golang.org/x/term.
 func (ir *InputReader) ReadPassword(prompt string, w io.Writer) (string, error) {
 	fmt.Fprint(w, prompt)
-	if f, ok := ir.raw.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-		pw, err := term.ReadPassword(int(f.Fd()))
+	if f, ok := ir.raw.(*os.File); ok && isTerminal(int(f.Fd())) {
+		pw, err := readPassword(int(f.Fd()))
 		fmt.Fprintln(w)
 		if err != nil {
 			return "", err

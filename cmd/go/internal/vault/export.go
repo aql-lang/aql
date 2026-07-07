@@ -3,8 +3,6 @@ package vault
 import (
 	"bytes"
 	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,8 +10,6 @@ import (
 	"io"
 	"os"
 	"time"
-
-	"golang.org/x/term"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
@@ -122,7 +118,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	defer sess.Close()
-	if err := requireScope(sess, OpRead); err != nil {
+	if err := c7requireScope(sess, OpRead); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
@@ -149,7 +145,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 
-	plain, err := json.Marshal(bundle)
+	plain, err := jsonMarshal(bundle)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -376,10 +372,10 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 // bundle envelope.
 func sealExport(plain []byte, passphrase string) ([]byte, error) {
 	salt := make([]byte, keyringSaltLen)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := randRead(salt); err != nil {
 		return nil, err
 	}
-	key, err := scryptKey(passphrase, salt)
+	key, err := c7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -387,12 +383,12 @@ func sealExport(plain []byte, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := gcmFromBlock(block)
 	if err != nil {
 		return nil, err
 	}
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := randRead(nonce); err != nil {
 		return nil, err
 	}
 	header := append([]byte(exportMagic), byte(exportEnvelopeFormat))
@@ -427,7 +423,7 @@ func openExport(blob []byte, passphrase string) ([]byte, error) {
 	salt := blob[off : off+keyringSaltLen]
 	nonce := blob[off+keyringSaltLen : off+keyringSaltLen+keyringNonceLen]
 	ct := blob[off+keyringSaltLen+keyringNonceLen:]
-	key, err := scryptKey(passphrase, salt)
+	key, err := c7scryptKey(passphrase, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +431,7 @@ func openExport(blob []byte, passphrase string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	gcm, err := cipher.NewGCM(block)
+	gcm, err := gcmFromBlock(block)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +447,7 @@ func openExport(blob []byte, passphrase string) ([]byte, error) {
 // exporter can refuse to dump a binary bundle onto it.
 func isTerminalWriter(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
+		return isTerminal(int(f.Fd()))
 	}
 	return false
 }

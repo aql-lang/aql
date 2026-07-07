@@ -196,17 +196,10 @@ func jsonicToValue(v any) (Value, error) {
 }
 
 // sortedMapKeys returns map keys in sorted order for deterministic output.
+// Thin alias for the shared sortedAnyMapKeys (transform.go), kept for the
+// file-local callers.
 func sortedMapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
-		}
-	}
-	return keys
+	return sortedAnyMapKeys(m)
 }
 
 // valueToJsonic converts an AQL Value to a compact json/jsonic-compatible

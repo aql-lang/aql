@@ -184,7 +184,7 @@ func InstallTimeExports(r *native.Registry) error {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
 			if ext, ok := native.IsWordExtension(v); ok {
-				if err := native.TransplantExtension(r, ext, "aql:time-util"); err != nil {
+				if err := transplantExtension(r, ext, "aql:time-util"); err != nil {
 					return err
 				}
 			}
@@ -208,7 +208,7 @@ func InstallMatrixExports(r *native.Registry) error {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
 			if ext, ok := native.IsWordExtension(v); ok {
-				if err := native.TransplantExtension(r, ext, "aql:matrix-util"); err != nil {
+				if err := transplantExtension(r, ext, "aql:matrix-util"); err != nil {
 					return err
 				}
 			}

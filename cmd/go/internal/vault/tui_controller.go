@@ -246,7 +246,7 @@ func (c *tuiController) alias(name string) (Alias, bool) {
 // copyToClipboard sets the OS clipboard to text (non-secret helper text),
 // returning the clipboard tool's label.
 func (c *tuiController) copyToClipboard(text string) (string, error) {
-	clip, err := detectClipboard(hostClipEnv())
+	clip, err := t7detectClipboard(hostClipEnv())
 	if err != nil {
 		return "", err
 	}
@@ -480,7 +480,11 @@ func (c *tuiController) passwordAdd(name, scope, namespaces, newPass string) err
 }
 
 func (c *tuiController) passwordRemove(name string) error {
-	out, errb, code := c.run("", "password", "rm", name)
+	// --yes: the TUI form already ran its own typed confirmation
+	// (buildPasswordRemoveForm), same as the rm/rotate/restore
+	// mutations — without it the CLI's non-interactive confirm gate
+	// refuses every removal.
+	out, errb, code := c.run("", "password", "rm", "--yes", name)
 	if code != 0 {
 		return cmdErr(errb, out)
 	}

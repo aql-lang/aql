@@ -46,6 +46,28 @@ import (
 // with `-ldflags "-X github.com/aql-lang/aql/cmd/go.Version=x.y.z"`.
 var Version = "0.1.0-dev"
 
+// osExit is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// observe exit codes without killing the process.
+var osExit = os.Exit
+
+// readBuildInfo is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive versionString's VCS-stamp arms, which the test binary's own
+// build info cannot reach deterministically.
+var readBuildInfo = debug.ReadBuildInfo
+
+// osExecutable is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive runEmbedded's self-path error arm.
+var osExecutable = os.Executable
+
+// readEmbeddedPayload is a test seam (design/TEST-SEAMS.10.md); tests
+// swap it to drive runEmbedded's corrupt-payload and embedded-program
+// arms without building a payload-carrying executable.
+var readEmbeddedPayload = buildrt.ReadEmbeddedPayload
+
+// buildrtMain is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to observe the embedded-program dispatch without executing a program.
+var buildrtMain = buildrt.Main
+
 // versionString returns the CLI version, augmenting the dev default
 // with the VCS stamp the Go toolchain already embeds (decision DX
 // report finding 8): a from-source build reports
@@ -57,7 +79,7 @@ func versionString() string {
 	if Version != "0.1.0-dev" {
 		return Version
 	}
-	bi, ok := debug.ReadBuildInfo()
+	bi, ok := readBuildInfo()
 	if !ok {
 		return Version
 	}
@@ -91,14 +113,14 @@ func Run() {
 	// exit before any CLI dispatch — this executable IS the program, not the
 	// aql CLI.
 	if code, embedded := runEmbedded(); embedded {
-		os.Exit(code)
+		osExit(code)
 	}
 
 	// Publish the version (with VCS stamp for dev builds) to the api
 	// package so the /v1/server endpoint can report it without an
 	// import cycle.
 	api.SetSupervisorVersion(versionString())
-	os.Exit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	osExit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 // runEmbedded checks whether this executable has a program payload appended by
@@ -108,11 +130,11 @@ func Run() {
 // (exit non-zero) so a corrupt built binary fails loudly rather than silently
 // behaving as the CLI.
 func runEmbedded() (code int, embedded bool) {
-	exe, err := os.Executable()
+	exe, err := osExecutable()
 	if err != nil {
 		return 0, false
 	}
-	cfg, ok, err := buildrt.ReadEmbeddedPayload(exe)
+	cfg, ok, err := readEmbeddedPayload(exe)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return 1, true
@@ -120,7 +142,7 @@ func runEmbedded() (code int, embedded bool) {
 	if !ok {
 		return 0, false
 	}
-	return buildrt.Main(cfg, os.Args[1:], os.Stdin, os.Stdout, os.Stderr), true
+	return buildrtMain(cfg, os.Args[1:], os.Stdin, os.Stdout, os.Stderr), true
 }
 
 // execute resolves args[0] to a Command and runs it. If args[0]

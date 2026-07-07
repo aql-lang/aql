@@ -1,4 +1,4 @@
-.PHONY: all build install test test-ts vet fmt lint vuln clean cover cover-html cover-html-open \
+.PHONY: all build install test test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
@@ -122,6 +122,29 @@ vuln:
 	  echo "==> vuln $$m"; \
 	  ( cd $$m && govulncheck ./... ); \
 	done
+
+# ---- performance baseline ----------------------------------------------
+#
+# Run the performance-baseline benchmark suites: kernel primitives
+# (eng/go), parser shapes (eng/go/parser), dispatch shapes + interpreter
+# vs compiled + word families + check/compile cost (lang/go). Compare
+# before/after an engine change with benchstat:
+#
+#   make bench > after.txt     # (and once on the base commit > before.txt)
+#   benchstat before.txt after.txt
+#
+# BENCH_TIME tunes -benchtime (default 1s per benchmark). The
+# deterministic regression *gates* (allocation ceilings) run in the
+# normal `make test`: TestCompiledAllocCeilings and TestInterpAllocCeilings
+# in lang/go.
+BENCH_TIME ?= 1s
+bench:
+	@echo "==> bench eng/go (kernel primitives)"
+	cd eng/go && go test -run '^$$' -bench 'BenchmarkKernel|BenchmarkTape' -benchmem -benchtime $(BENCH_TIME) .
+	@echo "==> bench eng/go/parser (parse shapes)"
+	cd eng/go && go test -run '^$$' -bench 'BenchmarkParse' -benchmem -benchtime $(BENCH_TIME) ./parser/
+	@echo "==> bench lang/go (dispatch, exec, words, check, compile)"
+	cd lang/go && go test -run '^$$' -bench 'BenchmarkBytecodeBaseline|BenchmarkStage6|BenchmarkParens|BenchmarkPerf' -benchmem -benchtime $(BENCH_TIME) .
 
 # ---- TypeScript engine port (eng/ts) -----------------------------------
 #
@@ -268,6 +291,28 @@ tags:
 # variants render one report per module under $(COVER_DIR)/html/.
 
 COVER_DIR := coverage
+
+# cover-gate enforces ADR-008: 100% Go unit coverage of all reachable
+# statements, at all times. Every module's tests run with -coverpkg
+# spanning the whole repo (so a statement counts as covered when ANY
+# suite reaches it — lang's tests legitimately cover eng, the spec corpus
+# covers both), the per-module profiles are merged block-by-block by
+# test/go/covergate, and the gate fails below GATE_FLOOR. The sole
+# exclusion is covergate/allowlist.tsv — provably-unreachable defensive
+# guards, each with a reason; the gate fails if an entry becomes covered
+# (graduate it) or goes stale. Seam conventions for reaching the hard
+# edges are in design/TEST-SEAMS.10.md; the allowlist policy is in
+# design/COVERAGE-ALLOWLIST.10.md and ADR-008.
+GATE_FLOOR ?= 100
+GATE_PKGS := github.com/aql-lang/aql/...
+cover-gate:
+	@mkdir -p $(COVER_DIR)
+	@set -e; for m in $(MODULES); do \
+	  echo "==> cover-gate $$m"; \
+	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
+	  ( cd $$m && go test -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
+	done
+	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -allow ./covergate/allowlist.tsv $(abspath $(COVER_DIR))/*.xout
 
 cover:
 	@mkdir -p $(COVER_DIR)

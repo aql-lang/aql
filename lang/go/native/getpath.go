@@ -19,7 +19,7 @@ func getpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 
 	result := voxgigstruct.GetPath(path, data)
 
-	val, err := anyToValue(result)
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("getpath: %w", err)
 	}
