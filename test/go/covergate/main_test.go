@@ -38,7 +38,7 @@ func TestMergeAndTally(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mergeProfiles: %v", err)
 	}
-	perModule, all := tallyModules(blocks)
+	perModule, all, _ := tallyModules(blocks, nil)
 	if got := perModule["eng/go"]; got.covered != 5 || got.total != 5 {
 		t.Errorf("eng/go tally = %+v, want 5/5 (second profile covers the gap)", got)
 	}
@@ -129,6 +129,107 @@ func TestRunUsageErrors(t *testing.T) {
 	}
 	if code := run([]string{filepath.Join(t.TempDir(), "absent.out")}, &out, &errb); code != 2 {
 		t.Errorf("run(absent) = %d, want 2 (unreadable profile)", code)
+	}
+}
+
+func TestLoadAllowlist(t *testing.T) {
+	path := writeProfile(t, "allow.tsv", strings.Join([]string{
+		"# a comment",
+		"",
+		"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2\treason: provably dead",
+		"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2",
+	}, "\n")+"\n")
+	allow, err := loadAllowlist(path)
+	if err != nil {
+		t.Fatalf("loadAllowlist: %v", err)
+	}
+	if len(allow) != 2 {
+		t.Fatalf("allowlist has %d entries, want 2: %v", len(allow), allow)
+	}
+	if _, ok := allow["github.com/aql-lang/aql/eng/go/a.go:3.1,4.2"]; !ok {
+		t.Error("reason-suffixed key not parsed to its bare block key")
+	}
+	if _, err := loadAllowlist(filepath.Join(t.TempDir(), "absent.tsv")); err == nil {
+		t.Error("missing allowlist file: want error, got none")
+	}
+}
+
+func TestAllowlistExcludes(t *testing.T) {
+	blocks, err := mergeProfiles([]string{
+		writeProfile(t, "a.out", profA),
+		writeProfile(t, "b.out", profB),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Exclude lang/go's uncovered block; the remaining tree is fully
+	// covered, so the excluded 5 statements leave 6/6.
+	allow := map[string]struct{}{"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2": {}}
+	perModule, all, ex := tallyModules(blocks, allow)
+	if _, ok := perModule["lang/go"]; ok {
+		t.Errorf("allowlisted lang/go block still tallied: %+v", perModule["lang/go"])
+	}
+	if all.covered != 6 || all.total != 6 {
+		t.Errorf("tally with allowlist = %+v, want 6/6", all)
+	}
+	if ex.stmts != 5 {
+		t.Errorf("excluded stmts = %d, want 5", ex.stmts)
+	}
+
+	// An allowlisted block that is actually covered is reported for removal.
+	covered := map[string]struct{}{"github.com/aql-lang/aql/eng/go/a.go:1.1,2.2": {}}
+	if _, _, ex := tallyModules(blocks, covered); len(ex.nowCovered) != 1 {
+		t.Errorf("nowCovered = %v, want the covered a.go block", ex.nowCovered)
+	}
+	// A stale allowlist entry (no matching profiled block) is reported.
+	stale := map[string]struct{}{"github.com/aql-lang/aql/eng/go/gone.go:9.9,9.9": {}}
+	if _, _, ex := tallyModules(blocks, stale); len(ex.stale) != 1 {
+		t.Errorf("stale = %v, want the gone.go entry", ex.stale)
+	}
+}
+
+func TestRunWithAllowlist(t *testing.T) {
+	partial := writeProfile(t, "part.out", profA) // has one uncovered lang/go block
+	var out, errb bytes.Buffer
+
+	// Allowlisting every uncovered block lets the gate pass at 100%.
+	allow := writeProfile(t, "ok.tsv",
+		"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2\tdead\n"+
+			"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2\tdead\n")
+	if code := run([]string{"-allow", allow, partial}, &out, &errb); code != 0 {
+		t.Fatalf("run with allowlist = %d, want 0; stderr %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "allowlisted") {
+		t.Errorf("pass output missing allowlist note: %q", out.String())
+	}
+
+	// A now-covered allowlist entry fails the gate (must be graduated).
+	out.Reset()
+	errb.Reset()
+	nowCov := writeProfile(t, "cov.tsv", "github.com/aql-lang/aql/eng/go/a.go:1.1,2.2\n")
+	if code := run([]string{"-allow", nowCov, partial}, &out, &errb); code != 1 {
+		t.Fatalf("run with now-covered allowlist = %d, want 1", code)
+	}
+	if !strings.Contains(errb.String(), "now covered") {
+		t.Errorf("stderr = %q, want now-covered notice", errb.String())
+	}
+
+	// A stale allowlist entry fails the gate.
+	out.Reset()
+	errb.Reset()
+	stale := writeProfile(t, "stale.tsv", "github.com/aql-lang/aql/eng/go/gone.go:1.1,2.2\n")
+	if code := run([]string{"-allow", stale, partial}, &out, &errb); code != 1 {
+		t.Fatalf("run with stale allowlist = %d, want 1", code)
+	}
+	if !strings.Contains(errb.String(), "stale") {
+		t.Errorf("stderr = %q, want stale notice", errb.String())
+	}
+
+	// An unreadable allowlist file is a usage error.
+	out.Reset()
+	errb.Reset()
+	if code := run([]string{"-allow", filepath.Join(t.TempDir(), "absent.tsv"), partial}, &out, &errb); code != 2 {
+		t.Errorf("run with missing allowlist = %d, want 2", code)
 	}
 }
 
