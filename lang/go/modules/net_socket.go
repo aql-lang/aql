@@ -628,6 +628,10 @@ func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 	return []native.Value{native.NewMap(m)}, nil
 }
 
+// netNoReturns is the check-mode shape of the statement-form socket
+// words (send-bytes / shutdown / close): they produce no values.
+func netNoReturns(_ []native.Value, _ *native.Registry) []native.Value { return nil }
+
 // socketNatives lists the Tier-1 words BuildNetModule registers.
 func socketNatives() []native.NativeFunc {
 	T := func(ts ...*native.Type) []*native.Type { return ts }
@@ -658,13 +662,16 @@ func socketNatives() []native.NativeFunc {
 			{Args: T(TSocket, native.TBytes), Impl: native.Go(recvUntilHandler), Returns: T(native.TBytes), BarrierPos: -1},
 		}},
 		{Name: "send-bytes", Signatures: []native.Signature{
-			{Args: T(native.TBytes, TSocket), Impl: native.Go(sendBytesHandler), Returns: T(), BarrierPos: -1},
+			{Args: T(native.TBytes, TSocket), Impl: native.Go(sendBytesHandler), Returns: T(),
+				ReturnsFn: netNoReturns, BarrierPos: -1},
 		}},
 		{Name: "shutdown", Signatures: []native.Signature{
-			{Args: T(TSocket, native.TString), Impl: native.Go(shutdownHandler), Returns: T(), BarrierPos: -1},
+			{Args: T(TSocket, native.TString), Impl: native.Go(shutdownHandler), Returns: T(),
+				ReturnsFn: netNoReturns, BarrierPos: -1},
 		}},
 		{Name: "close", Signatures: []native.Signature{
-			{Args: T(native.TAny), Impl: native.Go(closeHandler), Returns: T(), BarrierPos: -1},
+			{Args: T(native.TAny), Impl: native.Go(closeHandler), Returns: T(),
+				ReturnsFn: netNoReturns, BarrierPos: -1},
 		}},
 		{Name: "peer", Signatures: []native.Signature{
 			{Args: T(TSocket), Impl: native.Go(peerHandler), Returns: T(native.TMap), BarrierPos: -1},

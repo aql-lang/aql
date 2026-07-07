@@ -184,7 +184,12 @@ func TestCompiledCoverage(t *testing.T) {
 	//   2  M6 dynamic-scope tier (recursion 71/72)
 	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier 80,
 	//      word-splice 115) — the entire error allowlist
-	const refusalGate = 11
+	//   3  aql:repl endpoint round-trips (module-repl 16/17/18): AQL-implemented
+	//      module fns (Repl.eval / Repl.connect) invoked over dynamic Endpoint
+	//      values land on the fn-value-call boundary / Stage-3 auto-dispatch /
+	//      convert-scheduling tiers — the same frontiers as the container
+	//      auto-dispatch rows above, reached through a network-module fn value
+	const refusalGate = 14
 	const islandGate = 0 // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)

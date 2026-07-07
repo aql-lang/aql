@@ -134,6 +134,48 @@ UDP, reconnection policy, HTTP/2, distribution.
 - **P6 — docs + final sweep**: describe/help coverage, design-doc status
   notes, full pre-commit checklist, push.
 
+## 3b. Outcome (implemented — status as of the landing commits)
+
+Every phase landed and is verified by tests:
+
+- **P1 processes** — `eng/go/process.go` (ProcessRuntime on Registry,
+  bounded mailboxes, name registry) + `native_process.go`
+  (spawn/self/send/receive/register/whereis/unregister, `Ideal/Pid`
+  5007). Worked example (PROCESSES §10 counter) passes end to end.
+- **P2 services** — `native_service.go` (`Ideal/Service` 5008;
+  service/add/call/send/state-of/wrap, prior stacks, mutex-serialized
+  dispatch). Additional divergences found necessary during
+  implementation: `state-of` (not `state` — params can't shadow
+  builtins); state is a **flex map** (the only in-place-mutable
+  container); `send` returns nothing (statement form); replies
+  normalize to the handler's last value; messages are deep-copied at
+  the process boundary rather than shared zero-copy (plain Map/List
+  ARE mutated in place by flex-adjacent code paths today).
+- **P3/P4 aql:net** — `modules/net_socket.go` (Socket 5009 / Listener
+  5010, listen/accept/connect-raw/serve-raw, passive recv* with
+  deadlines, closed/timeout/transport vocabulary, policy gating) and
+  `modules/net_codec.go` (codec-as-Map extension point; built-in
+  lines/json-lines/http codecs as Go-backed Function values;
+  listen-over-service session loops; the `:param` router; Endpoint =
+  Service + synchronous remote transport with per-call timeouts;
+  `req.body-json`).
+- **P5 apps** — `aql:repl` (native module implemented as an AQL
+  preamble, `modules/repl.go`); `design/examples/apps/`:
+  `todo-api.aql`, `mini-redis.aql` (custom AQL codec),
+  `mini-s3.aql` + `mini-s3-client.aql` (Tier-1 streaming + resumable
+  upload/download). All driven over real loopback sockets by
+  `lang/go/test/apps_test.go`, `modules/net_test.go`,
+  `modules/repl_test.go`, `test/process_service_test.go`,
+  `eng/go/process_test.go`.
+
+Engine/tooling limitations discovered while building the apps (see
+`design/examples/apps/README.0.md` for the full list): `break` cannot
+cross an fn-body `for`; a trailing map literal referencing fn locals
+evaluates after teardown; consecutive statement-form module dot-calls
+without `;` can strand a parked wrapper (pre-existing, reproducible
+with `IO.printstr` twice); `filter` predicates receive `{key value}`
+entries. These are candidate fixes for follow-on engine work.
+
 ## 4. Follow-ups this plan leaves open
 
 Supervision (`aql:serve`), active mode, `aql:stream`, TLS, websocket/jsonrpc
