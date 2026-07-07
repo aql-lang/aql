@@ -125,6 +125,47 @@ func TestNetRecvTimeoutRaises(t *testing.T) {
 	}
 }
 
+// An accept deadline on an idle listener raises `timeout` — accept is
+// never allowed to block a runner forever when {within} is given.
+func TestNetAcceptTimeoutRaises(t *testing.T) {
+	_, err := runNetSteps(t, []string{
+		`import "aql:net"`,
+		`def ln (Net.listen {tcp: 0})`,
+		`Net.accept ln {within: 60}`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "timeout") {
+		t.Fatalf("idle listener must raise timeout, got %v", err)
+	}
+}
+
+// accept with {within} still yields a pending connection, and the deadline
+// is cleared afterwards: a second dial + plain accept on the SAME listener
+// must not inherit the expired deadline.
+func TestNetAcceptWithinAcceptsPending(t *testing.T) {
+	out, err := runNetSteps(t, []string{
+		`import "aql:net"`,
+		`def ln (Net.listen {tcp: 0})`,
+		`def lna (Net.addr ln)`,
+		`def port lna.port`,
+		// The dial parks in the kernel backlog before accept runs.
+		`def s1 (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String port)])})`,
+		`def c1 (Net.accept ln {within: 5000})`,
+		// Second round: the {within} above must not linger on the listener.
+		`def s2 (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String port)])})`,
+		`def c2 (Net.accept ln)`,
+		`Net.send-bytes (convert Bytes "y") s2;`,
+		`def got (convert String (Net.recv-bytes c2 1 {within: 5000}))`,
+		`Net.close s1; Net.close c1; Net.close s2; Net.close c2; Net.close ln;`,
+		`got`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := lastString(t, out); got != "y" {
+		t.Errorf("second-round reply = %q, want %q", got, "y")
+	}
+}
+
 // Reading from a peer-closed socket raises `closed`.
 func TestNetRecvClosedRaises(t *testing.T) {
 	_, err := runNetSteps(t, []string{

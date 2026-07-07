@@ -322,6 +322,22 @@ func acceptHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if !ok {
 		return nil, r.AqlError("net_error", "accept: expected a Listener, got "+args[0].Parent.String(), "accept")
 	}
+	within, has, dErr := recvDeadline(args, 1)
+	if dErr != nil {
+		return nil, r.AqlError("net_error", "accept: "+dErr.Error(), "accept")
+	}
+	if has {
+		dl, canDeadline := nl.ln.(interface{ SetDeadline(time.Time) error })
+		if !canDeadline {
+			return nil, r.AqlError("net_error", "accept: this Listener does not support {within: ms}", "accept")
+		}
+		if sErr := dl.SetDeadline(time.Now().Add(within)); sErr != nil {
+			return nil, mapNetErr(r, "accept", sErr)
+		}
+		// Clear the deadline once this accept resolves so later accepts on
+		// the same Listener block indefinitely again (the documented default).
+		defer func() { _ = dl.SetDeadline(time.Time{}) }()
+	}
 	conn, err := nl.ln.Accept()
 	if err != nil {
 		return nil, mapNetErr(r, "accept", err)
@@ -640,6 +656,7 @@ func socketNatives() []native.NativeFunc {
 			{Args: T(native.TMap), Impl: native.Go(listenHandler), Returns: T(TListener), BarrierPos: -1},
 		}},
 		{Name: "accept", Signatures: []native.Signature{
+			{Args: T(TListener, native.TMap), Impl: native.Go(acceptHandler), Returns: T(TSocket), BarrierPos: -1},
 			{Args: T(TListener), Impl: native.Go(acceptHandler), Returns: T(TSocket), BarrierPos: -1},
 		}},
 		{Name: "connect-raw", Signatures: []native.Signature{

@@ -49,8 +49,12 @@ import "aql:net" canon Net.Socket	'Socket'	Net.Socket is the connection-handle t
 import "aql:net" canon Net.Listener	'Listener'	Net.Listener is the listen-socket type literal
 # listener identity: a bound listener IS a Net.Listener
 import "aql:net" def l (Net.listen {tcp: 0}) def ok (l is Net.Listener) Net.close l; ok	true	a bound listener is a Net.Listener
-# accept: a spawned client dials in; accept yields the server-side Socket
-import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) spawn [ def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) Net.send-bytes (convert Bytes "x") s ] drop def c (Net.accept l) def g (convert String (Net.recv-bytes c 1 {within: 5000})) Net.close c; Net.close l; g	'x'	Net.accept blocks for the next connection and Net.recv-bytes reads exactly n
+# accept: dial from this thread first — the kernel backlog holds the pending
+# connection, so the subsequent accept is deterministic (no spawn race); the
+# {within} deadline is belt-and-braces so the row can never hang the runner
+import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def c (Net.accept l {within: 5000}) Net.send-bytes (convert Bytes "x") s; def g (convert String (Net.recv-bytes c 1 {within: 5000})) Net.close s; Net.close c; Net.close l; g	'x'	Net.accept yields the pending connection and Net.recv-bytes reads exactly n
+# negative — accept honours {within}: an idle listener raises `timeout`
+import "aql:net" def l (Net.listen {tcp: 0}) def code (do [ Net.accept l {within: 60} ] error [ dot code ]) Net.close l; code eq timeout/q	true	Net.accept with {within: ms} times out instead of blocking forever
 # serve-raw echo over connect-raw: recv-until frames a line, send-bytes replies
 import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.send-bytes (Net.recv-until c (convert Bytes "\n") {within: 5000}) c ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) Net.send-bytes (convert Bytes "ping\n") s; def r (convert String (Net.recv-bytes s 4 {within: 5000})) Net.close s; Net.close l; r	'ping'	serve-raw accept-loop + connect-raw dial + recv-until framing round-trip
 # peer / shutdown / recv deadline: a silent peer raises `timeout`

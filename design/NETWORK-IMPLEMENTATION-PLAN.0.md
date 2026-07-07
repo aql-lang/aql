@@ -168,6 +168,31 @@ Every phase landed and is verified by tests:
   `modules/repl_test.go`, `test/process_service_test.go`,
   `eng/go/process_test.go`.
 
+Post-landing hardening (same branch):
+
+- **`Net.accept` gained `{within: ms}`** — accept was the last unbounded
+  blocking net word (an accept row racing a spawned dialer hung the
+  compiled-differential harness for 19 minutes). The spec row now dials
+  from the main thread first (the kernel backlog makes the subsequent
+  accept deterministic) and passes `{within}` belt-and-braces; the
+  deadline clears after each accept so later accepts block indefinitely
+  again (pinned by `TestNetAcceptWithinAcceptsPending`).
+- **`repl-close` declares `[]` returns** — its body (`Net.close h`)
+  produces nothing; the `[Any]` declaration diverged under the compiled
+  VM's return-arity check.
+- **Compiled-subset refusal: foreign fn bodies that construct fn
+  values** (`eng/go/core_helpers.go::bodyConstructsFn`). A
+  module-preamble fn unit executes against the *dispatching* registry
+  in the VM, so a lambda constructed inside it (aql:repl's served
+  handler) escapes with body tokens that no longer resolve
+  module-private words (`repl-eval-line`). Only the interpreter's
+  foreign-wrapper dispatch (`execFnDefLiteral`) runs such bodies in
+  module scope, so the emitter now refuses them and the row falls back
+  to full interpretation — the documented aql:repl endpoint tier in
+  `test/go/langspec/compiled_coverage_test.go`. `tryNativeFnApply`
+  (vm.go) equally declines foreign AQL-bodied sigs so the fn-value
+  fast path can never run a module body against the wrong registry.
+
 Engine/tooling limitations discovered while building the apps (see
 `design/examples/apps/README.0.md` for the full list): `break` cannot
 cross an fn-body `for`; a trailing map literal referencing fn locals

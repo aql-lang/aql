@@ -8,7 +8,7 @@ func init() {
 
 		// Tier-1 low-level sockets (net_socket.go).
 		"listen":      "Bind a listening socket ({tcp: port}); with a codec and a Service, expose the service on the wire.",
-		"accept":      "Block for the next connection on a Listener; returns a Socket.",
+		"accept":      "Block for the next connection on a Listener; returns a Socket. {within: ms} bounds the wait.",
 		"connect-raw": "Dial a raw connection ({tcp: \"host:port\"}); returns a Socket.",
 		"serve-raw":   "Accept-loop sugar: one recovered handler invocation per connection, each on its own fork.",
 		"recv":        "Read up to n bytes from a Socket (n=0: whatever arrives); {within: ms} deadline.",

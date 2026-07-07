@@ -158,7 +158,7 @@ def repl-eval fn [[ep:Any src:String] [String] [
 
 # Close a REPL server or endpoint (re-exported so callers need no
 # separate aql:net import for teardown).
-def repl-close fn [[h:Any] [Any] [ Net.close h ]]
+def repl-close fn [[h:Any] [] [ Net.close h ]]
 
 export "Repl" {
   serve:   repl-serve/r
