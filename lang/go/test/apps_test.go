@@ -126,3 +126,96 @@ func TestAppTodoAPI(t *testing.T) {
 		t.Errorf("stats = %s, want a hits count from the wrap middleware", parts[7])
 	}
 }
+
+// The mini-redis server (mini-redis.aql): the common Redis commands
+// over a custom AQL codec (inline commands in, RESP-flavoured lines
+// out) — the NETWORK-SERVERS.0.md §6.6 custom-protocol story as a
+// real app. The client side is plain Net.lines.
+func TestAppMiniRedis(t *testing.T) {
+	out, err := runAppSteps(t, []string{"mini-redis.aql"}, []string{
+		`import "/apps/mini-redis.aql"`,
+		`import "aql:net"`,
+		`def ln (MiniRedis.serve {port: 0})`,
+		`def lna (Net.addr ln)`,
+		`def port lna.port`,
+		`def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String port)]))`,
+		`def r-ping (MiniRedis.cmd ep "PING")`,
+		`def r-set (MiniRedis.cmd ep "SET greeting hello world")`,
+		`def r-get (MiniRedis.cmd ep "GET greeting")`,
+		`def r-exists (MiniRedis.cmd ep "EXISTS greeting")`,
+		`def r-incr1 (MiniRedis.cmd ep "INCR counter")`,
+		`def r-incr2 (MiniRedis.cmd ep "INCR counter")`,
+		`def r-keys (MiniRedis.cmd ep "KEYS *")`,
+		`def r-del (MiniRedis.cmd ep "DEL greeting")`,
+		`def r-get2 (MiniRedis.cmd ep "GET greeting")`,
+		`def r-keys2 (MiniRedis.cmd ep "KEYS *")`,
+		`MiniRedis.cmd ep "RPUSH mylist a" drop`,
+		`MiniRedis.cmd ep "RPUSH mylist b" drop`,
+		`def r-lpush (MiniRedis.cmd ep "LPUSH mylist z")`,
+		`def r-lrange (MiniRedis.cmd ep "LRANGE mylist 0 -1")`,
+		`def r-llen (MiniRedis.cmd ep "LLEN mylist")`,
+		`MiniRedis.cmd ep "HSET h f1 v1" drop`,
+		`def r-hget (MiniRedis.cmd ep "HGET h f1")`,
+		`def r-hmiss (MiniRedis.cmd ep "HGET h nope")`,
+		`def r-expire (MiniRedis.cmd ep "EXPIRE counter 100")`,
+		`def r-ttl (MiniRedis.cmd ep "TTL counter")`,
+		`def r-ttl-none (MiniRedis.cmd ep "TTL mylist")`,
+		// lazy expiry: EXPIRE 0 lapses immediately
+		`MiniRedis.cmd ep "EXPIRE counter 0" drop`,
+		`def r-lapsed (MiniRedis.cmd ep "GET counter")`,
+		`def r-bogus (MiniRedis.cmd ep "BOGUS x")`,
+		`Net.close ep;`,
+		`Net.close ln;`,
+		`join "|" [r-ping r-set r-get r-exists r-incr1 r-incr2 r-keys r-del r-get2 r-keys2
+		           r-lpush r-lrange r-llen r-hget r-hmiss r-expire r-ttl r-ttl-none r-bogus r-lapsed]`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	got := appLastString(t, out)
+	parts := strings.Split(got, "|")
+	want := []struct {
+		i    int
+		name string
+		val  string
+	}{
+		{0, "PING", "+PONG"},
+		{1, "SET", "+OK"},
+		{2, "GET", "hello world"},
+		{3, "EXISTS", ":1"},
+		{4, "INCR", ":1"},
+		{5, "INCR again", ":2"},
+		{7, "DEL", ":1"},
+		{8, "GET after DEL", "$-1"},
+		{9, "KEYS after DEL", "counter"},
+		{10, "LPUSH", ":3"},
+		{11, "LRANGE 0 -1", "z a b"},
+		{12, "LLEN", ":3"},
+		{13, "HGET", "v1"},
+		{14, "HGET miss", "$-1"},
+		{15, "EXPIRE", ":1"},
+	}
+	if len(parts) != 20 {
+		t.Fatalf("expected 20 replies, got %d: %q", len(parts), got)
+	}
+	for _, w := range want {
+		if parts[w.i] != w.val {
+			t.Errorf("%s = %q, want %q", w.name, parts[w.i], w.val)
+		}
+	}
+	if !strings.Contains(parts[6], "greeting") || !strings.Contains(parts[6], "counter") {
+		t.Errorf("KEYS = %q, want both keys", parts[6])
+	}
+	if parts[16] != ":99" && parts[16] != ":100" {
+		t.Errorf("TTL = %q, want :99 or :100 (seconds remaining)", parts[16])
+	}
+	if parts[17] != ":-2" {
+		t.Errorf("TTL of a non-string key = %q, want :-2", parts[17])
+	}
+	if !strings.Contains(parts[18], "-ERR") || !strings.Contains(parts[18], "BOGUS") {
+		t.Errorf("unknown command = %q, want -ERR naming it", parts[18])
+	}
+	if parts[19] != "$-1" {
+		t.Errorf("GET after EXPIRE 0 = %q, want $-1 (lazy expiry)", parts[19])
+	}
+}

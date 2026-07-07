@@ -23,7 +23,8 @@ import "aql:net"
 # and lists filter them out.
 def live-todos fn [[st:Any] [List] [
   def entries (vals st.todos)
-  filter ([t:Any] => [ (t eq None) not ]) entries
+  # filter's predicate receives {key value} entry maps
+  filter ([t:Any] => [ (t.value eq None) not ]) entries
 ]]
 
 def todo-serve fn [[opts:Map] [Any] [
