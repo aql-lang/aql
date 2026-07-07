@@ -228,13 +228,10 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) {
 	cl, ok := body.Data.(ClosurePayload)
 	if !ok {
-		toks := bodyTokens(body)
-		input := make([]Value, len(inputs)+len(toks))
-		copy(input, inputs)
-		copy(input[len(inputs):], toks)
-		// Pooled, mirroring InvokeBody's no-Invoker branch (never the island
-		// engine — see vmContext.islandEng's non-reentrancy contract).
-		return RunPooled(vc.r, input)
+		// Pooled + resolved inputs, mirroring InvokeBody's no-Invoker branch
+		// (never the island engine — see vmContext.islandEng's
+		// non-reentrancy contract).
+		return RunResolved(vc.r, inputs, bodyTokens(body))
 	}
 	fn := &vc.p.Fns[cl.Unit]
 	locals := make([]Value, fn.NLocals)

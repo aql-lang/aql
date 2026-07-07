@@ -357,12 +357,15 @@ param compiled to a unit that misses the runtime frame auto-dispatch
 (returns 0 values where the interpreter returns the dispatch result) —
 independent of the flip (reproduced on the unflipped tree). Fixed for
 the fn-unit analysis path with a refusal guard in
-`carrier.go::runFnBodyOnce` (new documented tier, refusal gate
-11 → 14, see design/P7-ENDGAME.10.md). **Open residual:** the
-MODULE-fn unit path does not route through this guard, so a module fn
-of that shape with an EMPTY body still compiles unsoundly (the shape
-was kept out of the spec corpus; value rows for it live in the Go
-tests, which run interpreted).
+`carrier.go::runFnBodyOnce` (new documented tier, see
+design/P7-ENDGAME.10.md). **Follow-up landed:** the auto-dispatch
+itself was subsequently judged a language-design defect and removed —
+arguments are now inert on placement across every dispatch path
+(design/ARG-SEMANTICS-UNIFICATION.0.md §7, which also records the
+CallAQL residual-trim and the flow-control frame-unwind fixes that
+completed it). The guard stays with an updated justification (unnamed
+args flowing to residuals are still unmodelled by unit lowering;
+refusal gate at 17).
 
 **R3 — `inner` via `InvokeBody`.** The five raw `New(reg).Run` sites
 in `innerHandler` now use the seam, matching `outer` — compiled

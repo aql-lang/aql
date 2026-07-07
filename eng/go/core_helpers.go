@@ -304,6 +304,12 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				unnamedCount++
 			}
 		}
+		// Stamp the resolved-argument span on the frame open so the step
+		// loop skips the unnamed args — they enter as stack data and are
+		// never re-stepped (arguments are inert; FrameOpenInfo.ArgSpan).
+		if unnamedCount > 0 {
+			result[0] = NewFrameOpenSpan(meta, unnamedCount)
+		}
 		// Snapshot DefStacks lengths after installing named params
 		// so we can clean up any defs created during body execution
 		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).

@@ -53,6 +53,13 @@ type Engine struct {
 	// container eval runs in-frame at its own recordable site.
 	elemEvalRecordable bool
 	reuseTape          bool // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
+	// startAt is a one-shot start offset for the next Run: the leading
+	// startAt input values are RESOLVED arguments (a callback's inputs, a
+	// fn call's unnamed args) and enter as stack data below the pointer,
+	// never re-stepped — the sub-engine twin of FrameOpenInfo.ArgSpan
+	// (arguments are inert; design/ARG-SEMANTICS-UNIFICATION.0.md).
+	// Consumed (zeroed) by Run so it cannot leak into a later reuse.
+	startAt int
 	// voidGroups records the candidate consumers of paren groups that
 	// resolved to ZERO values in the current statement: the pending
 	// word names sitting below such a group when it closed. A
@@ -832,7 +839,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	} else {
 		e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
 	}
-	e.pointer = 0
+	e.pointer = e.consumeStartAt()
 
 	// stepLimit is always set by the constructors (New / NewTop); the
 	// defensive check that used to substitute a default if the field
@@ -903,7 +910,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.pointer++
 
 		case IsOpenParen(val):
-			e.pointer++
+			e.stepPastOpenParen(val)
 
 		case IsCloseParen(val):
 			if err := e.stepCloseParen(); err != nil {
@@ -5073,6 +5080,12 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			unnamedCount++
 		}
 	}
+	// Stamp the resolved-argument span on the frame open so the step
+	// loop skips the unnamed args (arguments are inert —
+	// FrameOpenInfo.ArgSpan; same stamp as buildFnBodyHandler).
+	if unnamedCount > 0 {
+		tokens[0] = NewFrameOpenSpan(fnValueFrameMeta, unnamedCount)
+	}
 	// Snapshot AFTER captures+params so the tail's DefCleanup tears
 	// down only body-local defs — the same placement as
 	// buildFnBodyHandler. (This tail historically omitted the
@@ -5605,6 +5618,11 @@ func (e *Engine) handleLoopBreak() bool {
 					continue
 				}
 
+				// Unwind any fn frame the break is escaping — its cleanup
+				// tail is about to be discarded with the loop region and
+				// would otherwise leak the per-call stacks (fn_frame.go).
+				e.unwindLiveFrames(markIdx, i)
+
 				// Uninstall iterator, splice in accumulated results.
 				UninstallDef(info.Cont.Registry, info.Cont.IterName)
 				delete(e.marks, info.To)
@@ -5641,6 +5659,11 @@ func (e *Engine) handleLoopContinue() bool {
 					continue
 				}
 
+				// Unwind any fn frame the continue is escaping — its cleanup
+				// tail is about to be discarded with the iteration region and
+				// would otherwise leak the per-call stacks (fn_frame.go).
+				e.unwindLiveFrames(markIdx, i)
+
 				// Remove values between mark and move (discard partial results).
 				if i-markIdx > 1 {
 					e.tape.Splice(markIdx+1, i-markIdx-1)
@@ -5674,6 +5697,33 @@ func (e *Engine) stepOpenParen() error {
 	e.tape.Set(e.pointer, NewOpenParen())
 	e.pointer++
 	return nil
+}
+
+// consumeStartAt resolves the one-shot resolved-argument prefix for the
+// Run that is starting: the leading startAt input values are call-site-
+// resolved arguments, so stepping starts after them and they enter as
+// stack data (see the startAt field doc). Zeroes the field so it cannot
+// leak into a later reuse of a pooled engine.
+func (e *Engine) consumeStartAt() int {
+	start := 0
+	if e.startAt > 0 && e.startAt <= e.tape.Len() {
+		start = e.startAt
+	}
+	e.startAt = 0
+	return start
+}
+
+// stepPastOpenParen advances the pointer over an open paren at the
+// pointer. A fn frame's open paren carries the span of unnamed arguments
+// spliced at the frame head; they were resolved at the call site, so the
+// pointer skips them and they enter as stack data, never re-stepped — a
+// Function value or __SP marker argument must not fire on placement
+// (arguments are inert; design/ARG-SEMANTICS-UNIFICATION.0.md).
+func (e *Engine) stepPastOpenParen(val Value) {
+	e.pointer++
+	if info, ok := val.Data.(FrameOpenInfo); ok && info.ArgSpan > 0 {
+		e.pointer += info.ArgSpan
+	}
 }
 
 // stepCloseParen handles the ")" word. It resolves any pending forwards

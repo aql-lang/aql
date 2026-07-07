@@ -1460,6 +1460,10 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			tokens = append(tokens, args[i])
 		}
 	}
+	// The unnamed-arg prefix assembled above is call-site-resolved data;
+	// stepping starts after it (arguments are inert — the sub-engine twin
+	// of FrameOpenInfo.ArgSpan; design/ARG-SEMANTICS-UNIFICATION.0.md).
+	unnamedCount := len(tokens)
 	body := make([]Value, len(sig.body()))
 	copy(body, sig.body())
 	tokens = append(tokens, body...)
@@ -1471,6 +1475,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
+	sub.startAt = unnamedCount
 	result, err := sub.Run(tokens)
 
 	// Cleanup: pop args stack, undef named params + captures, then
@@ -1513,6 +1518,29 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 		// a fn-call / import boundary and broke *AqlError type
 		// assertions downstream (decision DX report finding 4).
 		return nil, err
+	}
+
+	// Mirror the frame collapse's unnamed-arg DISCARD (stepCloseParen's
+	// ReturnCheck handling): residuals beyond the declared return count
+	// are unconsumed unnamed args sitting at the bottom of the scope —
+	// call-scoped data, trimmed up to unnamedCount. Leaking them into the
+	// caller's stream would let a resolved fn-value argument re-step and
+	// fire there (the inert-arguments invariant,
+	// design/ARG-SEMANTICS-UNIFICATION.0.md). Trim ONLY — this path has
+	// never enforced return count/type (guard predicates signal failure
+	// via a None residual, lambdas auto-declare [Any] over side-effect
+	// bodies), so the frame path's validation errors are deliberately not
+	// mirrored here; that asymmetry is pre-existing and documented.
+	// Undeclared returns keep the historical flow-through (the residual
+	// IS the return), matching the frame path, which emits no ReturnCheck
+	// in that case.
+	if len(sig.Returns) > 0 && unnamedCount > 0 {
+		if extra := len(result) - len(sig.Returns); extra > 0 {
+			if extra > unnamedCount {
+				extra = unnamedCount
+			}
+			result = result[extra:]
+		}
 	}
 	return result, nil
 }

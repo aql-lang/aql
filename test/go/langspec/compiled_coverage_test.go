@@ -180,19 +180,23 @@ func TestCompiledCoverage(t *testing.T) {
 	// dynamic-scope decision, the three proof-held error rows); it moves UP
 	// only with a new named tier documented in the endgame record.
 	//   4  container auto-dispatch guard (module-log 72/73, module-rand 14/15)
-	//   3  unnamed fn-value param auto-dispatch guard (module-fnvalue-boundary
-	//      break/continue/raise rows) — the VALUE twin of the container tier: a fn
-	//      whose UNNAMED param is Function/FnDef auto-dispatches the raw value
-	//      on its body frame at run time, which the unit model cannot express;
-	//      the guard (carrier.go::runFnBodyOnce) was added when the
-	//      module-fnvalue-boundary rows exposed the shape compiling to a
-	//      0-return unit (design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md §7). Sound
-	//      refusals, same disposition as the container tier.
+	//   6  unnamed fn-value param guard (the module-fnvalue-boundary rows) —
+	//      a fn whose UNNAMED param is Function/FnDef refuses compilation
+	//      (carrier.go::runFnBodyOnce). Originally the VALUE twin of the
+	//      container auto-dispatch tier (the shape compiled to a 0-return
+	//      unit while the interpreter auto-fired the value); under the
+	//      arguments-are-inert unification
+	//      (design/ARG-SEMANTICS-UNIFICATION.0.md) the interpreter no longer
+	//      auto-fires, but the unit model still binds unnamed params to
+	//      slots without pushing them, so an unnamed arg FLOWING to the
+	//      residual (args.N reads, the trim discipline) still diverges —
+	//      the guard stays as a sound refusal until unnamed-param lowering
+	//      models the frame flow. Same disposition as the container tier.
 	//   2  G5 flex path-shape typing (flex 88/95)
 	//   2  M6 dynamic-scope tier (recursion 71/72)
 	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier 80,
 	//      word-splice 115) — the entire error allowlist
-	const refusalGate = 14 // was 11 — +3 unnamed fn-value param auto-dispatch tier (above)
+	const refusalGate = 17 // was 11 — +6 unnamed fn-value param tier (above)
 	const islandGate = 0   // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)

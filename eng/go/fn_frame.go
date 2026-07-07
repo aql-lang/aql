@@ -77,15 +77,33 @@ var fnValueFrameMeta = &FnFrameMeta{Name: "<fn>"}
 // FrameOpenInfo is the payload on a fn frame's open paren. The token
 // remains an ordinary OpenParen for every structural purpose (IsOpenParen
 // is Parent-based, rendering is "(", collapse removes it like any paren);
-// the payload only adds provenance: which fn overload opened this frame.
+// the payload adds provenance — which fn overload opened this frame —
+// and the frame's resolved-argument span.
 type FrameOpenInfo struct {
 	Meta *FnFrameMeta
+	// ArgSpan is the number of unnamed-argument values spliced at the
+	// frame head, immediately after this paren. They were RESOLVED at
+	// the call site (forward collection / auto-eval), so the step loop
+	// skips the pointer past them — they enter the frame as stack data,
+	// exactly like a named binding, and are never re-stepped. Without
+	// the skip, an argument with active step semantics (a Function
+	// value, an __SP marker) fires on PLACEMENT, making its behaviour
+	// depend on which siblings happen to sit beside it — the
+	// named/unnamed asymmetry of design/ARG-SEMANTICS-UNIFICATION.0.md.
+	ArgSpan int
 }
 
 // NewFrameOpen creates the open paren of a spliced fn-body frame,
 // carrying the splicing overload's identity.
 func NewFrameOpen(meta *FnFrameMeta) Value {
 	return NewValueRaw(TOpenParen, FrameOpenInfo{Meta: meta})
+}
+
+// NewFrameOpenSpan is NewFrameOpen with the frame's resolved-argument
+// span: the count of unnamed args the builder splices directly after
+// the paren, which the step loop skips (see FrameOpenInfo.ArgSpan).
+func NewFrameOpenSpan(meta *FnFrameMeta, argSpan int) Value {
+	return NewValueRaw(TOpenParen, FrameOpenInfo{Meta: meta, ArgSpan: argSpan})
 }
 
 // IsFrameOpen reports whether v is a fn frame's open paren (as opposed
@@ -170,4 +188,90 @@ func PopFrameArgs(r *Registry) error {
 	}
 	r.PopFnBaseline()
 	return nil
+}
+
+// unwindLiveFrames executes the cleanup tails of fn frames that are OPEN
+// inside the tape region [from, to) — their frame-open paren already
+// stepped (below the pointer) but their synthesized tail not yet reached —
+// before a flow-control rewrite (break/continue) discards the region.
+// Without this, a break/continue escaping a spliced fn body discards the
+// frame's `__DC __pa undef…` tail unexecuted, LEAKING the per-call Args
+// list, FnBaseline, and param/capture bindings: the enclosing loop's next
+// iteration then reads the dead callee's `args` and bindings (found via
+// the module-fnvalue-boundary continue row — the callee's leaked args
+// list shadowed the caller's for the rest of the loop).
+//
+// Frames unwind innermost-first so the per-call stacks pop in the same
+// LIFO order normal tail execution produces.
+func (e *Engine) unwindLiveFrames(from, to int) {
+	if to > e.tape.Len() {
+		to = e.tape.Len()
+	}
+	var opens []int
+	for i := from; i < to && i < e.pointer; i++ {
+		if !IsFrameOpen(e.tape.At(i)) {
+			continue
+		}
+		// Live iff the frame's matching close paren is at/after the
+		// pointer — the tail between them has not executed.
+		depth := 0
+		closed := -1
+		for j := i; j < to; j++ {
+			v := e.tape.At(j)
+			if IsOpenParen(v) {
+				depth++
+			} else if IsCloseParen(v) {
+				depth--
+				if depth == 0 {
+					closed = j
+					break
+				}
+			}
+		}
+		if closed < 0 || closed >= e.pointer {
+			opens = append(opens, i)
+		}
+	}
+	for k := len(opens) - 1; k >= 0; k-- {
+		e.unwindFrameTail(opens[k], to)
+	}
+}
+
+// unwindFrameTail replays the canonical cleanup tail of the frame opened
+// at openIdx: the __DC marker (body-local def truncation), the __pa word
+// (Args + FnBaseline pop), and the force-forward `undef name` pairs
+// (capture/param teardown), exactly as AppendFrameTail laid them out.
+// Only DIRECT children of the frame paren are executed (depth 1) — a
+// nested live frame's tail is unwound by its own unwindLiveFrames entry,
+// innermost-first. The __DC anchor is unambiguous: DefCleanupInfo is a
+// machine-generated payload no user source can produce, and the tail's
+// undef words carry ForceForward, distinguishing them from user-written
+// undef tokens in the (skipped) body region. The ReturnCheck, if any, is
+// deliberately NOT executed — an aborted body has no returns to check.
+func (e *Engine) unwindFrameTail(openIdx, to int) {
+	depth := 0
+	for j := openIdx; j < to; j++ {
+		v := e.tape.At(j)
+		switch {
+		case IsOpenParen(v):
+			depth++
+		case IsCloseParen(v):
+			depth--
+			if depth == 0 {
+				return
+			}
+		case depth == 1 && IsDefCleanup(v):
+			e.stepDefCleanup(v)
+		case depth == 1 && IsWord(v):
+			w, _ := AsWord(v)
+			switch {
+			case w.Name == "__pa":
+				_ = PopFrameArgs(e.registry)
+			case w.Name == "undef" && w.ForceForward && j+1 < to && IsWord(e.tape.At(j+1)):
+				nw, _ := AsWord(e.tape.At(j + 1))
+				UninstallDef(e.registry, nw.Name)
+				j++
+			}
+		}
+	}
 }

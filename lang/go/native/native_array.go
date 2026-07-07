@@ -1907,10 +1907,7 @@ func listDepth(v Value) int {
 // pushed and the body's top-of-stack result replaces it.
 func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Value, error) {
 	if depth == 0 {
-		input := make([]Value, len(bodySlice)+1)
-		input[0] = cell
-		copy(input[1:], bodySlice)
-		res, err := RunPooled(reg, input)
+		res, err := RunResolved(reg, []Value{cell}, bodySlice)
 		if err != nil {
 			return nil, fmt.Errorf("eachrank: %w", err)
 		}

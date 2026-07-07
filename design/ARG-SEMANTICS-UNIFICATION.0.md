@@ -1,6 +1,10 @@
 # Argument Semantics Unification — named and unnamed params must mean the same thing
 
-**Status:** Investigation + proposal (not an ADR). Follow-on to
+**Status:** IMPLEMENTED (July 2026, this branch) — see §7 for the
+outcome record, including two discoveries the implementation made that
+the investigation below did not predict: the CallAQL residual leak and
+the flow-control frame-unwind bug. Originally an investigation +
+proposal (not an ADR). Follow-on to
 design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md §7, where the unnamed-Function-param
 auto-dispatch surfaced as a compile-refusal tier. This note argues the
 runtime behaviour itself is the defect, states the invariant that should
@@ -143,3 +147,72 @@ generalises the defect instead of removing it.
    §7 to confirm.
 5. Sweep for out-of-tree reliance on implicit frame apply before landing
    (this is a semantics change and deserves a line in the release notes).
+
+## 7. Outcome record (implemented July 2026)
+
+U1 landed exactly as proposed at the placement layer, and the corpus
+surfaced two consequences the proposal missed — both fixed:
+
+**Placement (as designed).**
+
+- Spliced frames: `FrameOpenInfo.ArgSpan` carries the unnamed-arg span;
+  the step loop's open-paren case skips it (engine.go). Stamped by
+  `buildFnBodyHandler` and `execFnDefSig`'s splice branch. The main-loop
+  `stepOpenParen` worry from §4 was unfounded — frames step through the
+  plain `IsOpenParen` case (`pointer++`), which never touches the
+  payload; `stepOpenParen` is the separate `"("`-word handler.
+- Sub-engine runs: `Engine.startAt` (one-shot, consumed by Run) starts
+  stepping after the resolved inputs. Set by `CallAQL`
+  (unnamed-arg prefix) and by the new `RunResolved(r, inputs, tokens)`
+  pooled helper, which `InvokeBody`, the VM's `invokeClosure` raw
+  branch, map-iteration quotation bodies, `eachrank`, `case` blocks and
+  the fn log sink all use.
+
+**Discovery 1 — the residual leak (CallAQL trim).** Making placement
+inert leaves an unconsumed unnamed arg at the BOTTOM of the callee's
+residual. The frame path already handles this (the ReturnCheck collapse
+validates declared returns from the top and discards bottom extras up
+to `UnnamedCount`); `CallAQL` had no such discipline — a leftover
+fn-value arg flowed back into the caller's stream, where RESULTS
+legitimately re-step, and fired there instead. Fix: `CallAQL` now
+mirrors the frame's DISCARD (trim residuals beyond `len(sig.Returns)`
+from the bottom, capped at the unnamed count) — trim only, no new
+errors. A full validate+count mirror was tried and reverted: guard
+predicates signal failure via a `None` residual, lambdas auto-declare
+`[Any]` over side-effect bodies, and module fns have never been
+return-count-checked (`L.two 5` under declared `[Integer]` returning
+two values flows both out — a pre-existing frame-vs-CallAQL asymmetry
+this work leaves documented, not changed).
+
+**Discovery 2 — flow control leaked live frames.** With value dispatch
+splicing frames on the loop's own tape (the R2 flip), a `break`/
+`continue` escaping a spliced body let `handleLoopBreak`/`Continue`
+discard the region INCLUDING the frame's un-executed cleanup tail —
+leaking the per-call Args list, FnBaseline, and param bindings. A step
+trace showed the next iteration's `args.0` reading the DEAD CALLEE's
+args list. This bug pre-dated the unification for named dispatch too
+(silently — the loop usually ended before the leak was observable).
+Fix: `unwindLiveFrames` (fn_frame.go) replays each open frame's
+canonical tail (`__DC`, `__pa`, force-forward `undef` pairs,
+innermost-first) before the flow rewrite discards the region. Pinned by
+`TestFlowUnwindKeepsPerCallStacksBalanced` (args-stack + binding
+balance after break/continue) and the boundary rows.
+
+**Resulting parity (all pinned).** Value-dispatched and named calls now
+agree on every probed observable: application result, module-scope
+resolution, `args.N`, def cleanup, raise, and — new with the unwind —
+`break` (terminates the enclosing loop, `1`) and `continue` (skips the
+iteration, `0`). A lone unnamed `Function` arg stays data; a sibling
+can no longer trigger it; explicit `args.N` application fires exactly
+once. Rows: `lang/spec/module-fnvalue-boundary.tsv`; Go pins:
+`lang/go/native/args_inert_test.go`,
+`lang/go/native/fnvalue_sameregistry_test.go`.
+
+**Compiler status.** The `runFnBodyOnce` refusal guard STAYS (comment
+updated): the unit model binds unnamed params to slots without pushing
+them, so an unnamed arg *flowing to the residual* still diverges from
+the interpreter — the guard's reason changed from "auto-dispatch" to
+"frame flow", the refusal is equally sound (gate at 17, tier documented
+in compiled_coverage_test.go / design/P7-ENDGAME.10.md). Closing it
+means modelling unnamed-param frame flow in unit lowering — a Stage-3+
+work item, not part of this change.

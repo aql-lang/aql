@@ -426,6 +426,7 @@ var (
 	New                       = eng.New
 	RunPooled                 = eng.RunPooled
 	RunPooledTop              = eng.RunPooledTop
+	RunResolved               = eng.RunResolved
 	InvokeBody                = eng.InvokeBody
 	ConvertIdealToMap         = eng.ConvertIdealToMap
 	ConvertIdealToList        = eng.ConvertIdealToList

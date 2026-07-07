@@ -20,15 +20,12 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	if r.Invoker != nil {
 		return r.Invoker(body, inputs)
 	}
-	toks := bodyTokens(body)
-	input := make([]Value, len(inputs)+len(toks))
-	copy(input, inputs)
-	copy(input[len(inputs):], toks)
-	// Pooled: identical semantics to New(r).Run(input), but the engine and
-	// its tape are reused across invocations — the fresh-spawn tape floor
-	// (~164KB zeroed per call) dominated per-element cost in hot loops.
-	// See engine_pool.go.
-	return RunPooled(r, input)
+	// Pooled + resolved: the engine and its tape are reused across
+	// invocations (the fresh-spawn tape floor, ~164KB zeroed per call,
+	// dominated per-element cost in hot loops — see engine_pool.go), and
+	// the inputs enter as resolved stack data rather than being
+	// re-stepped (arguments are inert; RunResolved).
+	return RunResolved(r, inputs, bodyTokens(body))
 }
 
 // bodyTokens returns the executable token sequence for a code body: a concrete

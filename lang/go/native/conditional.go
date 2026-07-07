@@ -337,10 +337,8 @@ func runCaseBody(r *Registry, v Value, body Value) ([]Value, error) {
 	if !isCodeBody(body) {
 		return []Value{body}, nil
 	}
-	sub := New(r)
 	lst, _ := AsList(body)
-	input := make([]Value, 0, 1+lst.Len())
-	input = append(input, v)
-	input = append(input, lst.Slice()...)
-	return sub.Run(input)
+	// The captured value is a resolved input: it enters as stack data the
+	// block consumes, never re-stepped (arguments are inert; RunResolved).
+	return RunResolved(r, []Value{v}, lst.Slice())
 }

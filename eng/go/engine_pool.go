@@ -74,6 +74,7 @@ func (r *Registry) releaseEngine(e *Engine) {
 	e.recorder = nil
 	e.source = ""
 	e.elemEvalRecordable = false
+	e.startAt = 0
 	r.enginePool = append(r.enginePool, e)
 }
 
@@ -106,9 +107,27 @@ func RunPooledTop(r *Registry, tokens []Value) ([]Value, error) {
 	return runPooled(r, tokens, true)
 }
 
+// RunResolved executes `inputs… tokens…` on a pooled engine with the
+// inputs entering as RESOLVED stack data: stepping starts at the first
+// token, so an input with active step semantics (a Function value, an
+// __SP marker) cannot fire on placement. This is the seam every
+// callback-style body run uses — arguments are inert
+// (design/ARG-SEMANTICS-UNIFICATION.0.md); only the body acts on them.
+func RunResolved(r *Registry, inputs, tokens []Value) ([]Value, error) {
+	input := make([]Value, len(inputs)+len(tokens))
+	copy(input, inputs)
+	copy(input[len(inputs):], tokens)
+	return runPooledAt(r, input, len(inputs), false)
+}
+
 func runPooled(r *Registry, tokens []Value, top bool) ([]Value, error) {
+	return runPooledAt(r, tokens, 0, top)
+}
+
+func runPooledAt(r *Registry, tokens []Value, startAt int, top bool) ([]Value, error) {
 	e := r.acquireEngine()
 	e.isTop = top
+	e.startAt = startAt
 	res, err := e.Run(tokens)
 	if len(res) > 0 {
 		res = append([]Value(nil), res...)

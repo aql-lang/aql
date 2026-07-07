@@ -36,6 +36,14 @@ together when you touch one of these sites.
 | Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
 | Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
 
+A `break`/`continue` escaping a live spliced frame discards the
+frame's tail before it executes; the flow resolvers therefore run
+`unwindLiveFrames` (`fn_frame.go`) over the discarded region, which
+replays each open frame's canonical tail (`__DC`, `__pa`, the
+force-forward `undef` pairs, innermost-first) so all three stacks
+stay balanced. Without it the dead callee's args list shadows the
+caller's `args` for the rest of the loop.
+
 The baseline is what closure-capture detection consults at fn-
 construction time: an inner-fn body Word whose `Defs.Depth(name) >
 TopFnBaseline()[name]` lives inside an enclosing fn (param or
@@ -70,7 +78,12 @@ Concretely:
 - Body-token push (unnamed params via CallAQL / InstallFnDef /
   execFnDefSig): appends `args[0]…args[N-1]` in order, no
   reversal. Body frame contains `args[0]` at the bottom and
-  `args[N-1]` on top.
+  `args[N-1]` on top. **Arguments enter the frame RESOLVED** — the
+  step region starts after them (`FrameOpenInfo.ArgSpan` on spliced
+  frames, `Engine.startAt` on sub-engine runs), so an argument with
+  active step semantics (a Function value, an `__SP` marker) is
+  inert data exactly like a named binding; it acts only where the
+  body uses it. See design/ARG-SEMANTICS-UNIFICATION.0.md.
 
 There is **no exception path**. Anything that looks like a
 "reordering" elsewhere is either:
