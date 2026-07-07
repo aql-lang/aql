@@ -169,10 +169,10 @@ func TestForkConcurrentStartsWithEmptyPool(t *testing.T) {
 
 func TestRunPooledDropsGrownTape(t *testing.T) {
 	r := poolTestRegistry(t)
-	// A program longer than maxPooledTapeEntries forces a tape whose
+	// A program longer than pooledTapeMaxEntries forces a tape whose
 	// capacity exceeds the parking threshold; the engine must be dropped,
 	// not pinned in the pool.
-	big := make([]Value, maxPooledTapeEntries+100)
+	big := make([]Value, pooledTapeMaxEntries+100)
 	for i := range big {
 		big[i] = NewInteger(int64(i))
 	}

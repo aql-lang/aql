@@ -1,0 +1,71 @@
+package native
+
+import (
+	"testing"
+
+	"github.com/aql-lang/aql/eng/go/parser"
+)
+
+// Shared helpers for the *_seam5_test.go coverage suites
+// (design/TEST-SEAMS.10.md). Every seam5 test file drives handlers
+// either directly (crafted args) or through these three entry points.
+
+// seam5Reg returns a fresh default registry with the parser installed.
+func seam5Reg(t *testing.T) *Registry {
+	t.Helper()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetParseFunc(parser.Parse)
+	return r
+}
+
+// seam5Run parses and runs src on r, returning the residual stack.
+func seam5Run(r *Registry, src string) ([]Value, error) {
+	toks, err := parser.Parse(src)
+	if err != nil {
+		return nil, err
+	}
+	r.Source = src
+	e := NewTop(r)
+	e.SetSource(src)
+	return e.Run(toks)
+}
+
+// seam5Check runs src in plain check mode (static analysis pass, no
+// emission recorder), mirroring lang.(*AQL).Check's setup.
+func seam5Check(r *Registry, src string) ([]Value, error) {
+	toks, err := parser.Parse(src)
+	if err != nil {
+		return nil, err
+	}
+	r.Source = src
+	defer r.Check.Begin()()
+	ResetParseDeferredKinds(r)
+	ResetModuleExportGrowth(r)
+	e := NewTop(r)
+	e.SetSource(src)
+	return e.Run(toks)
+}
+
+// seam5CompileCheck runs src with the bytecode emission recorder active,
+// mirroring lang.(*AQL).CompileCheck's setup, so recorder-only arms in
+// native handlers are drivable from this package.
+func seam5CompileCheck(r *Registry, src string) ([]Value, error) {
+	toks, err := parser.Parse(src)
+	if err != nil {
+		return nil, err
+	}
+	r.Source = src
+	defer r.Check.Begin()()
+	ResetParseDeferredKinds(r)
+	ResetModuleExportGrowth(r)
+	r.Check.Emit = NewEmitState()
+	r.Check.Compiling = true
+	r.Check.FnSummaries = nil
+	r.Check.FnInflight = nil
+	e := NewTop(r)
+	e.SetSource(src)
+	return e.Run(toks)
+}

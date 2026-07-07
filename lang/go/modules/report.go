@@ -18,40 +18,19 @@ import (
 //	some-table  Report.table  print
 //	some-value  Report.value  print
 func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newModuleRegistry(reportNatives())
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	for _, n := range reportNatives() {
-		subReg.RegisterNativeFunc(n)
-	}
-
+	// Every report word renders Any -> String.
 	exports := native.NewOrderedMap()
-	exports.Set("value", makeReportFnDef("report-value", subReg))
-	exports.Set("record", makeReportFnDef("report-record", subReg))
-	exports.Set("table", makeReportFnDef("report-table", subReg))
-	exports.Set("list", makeReportFnDef("report-list", subReg))
+	exports.Set("value", makeTypedFnDef("report-value", subReg, native.TString, native.TAny))
+	exports.Set("record", makeTypedFnDef("report-record", subReg, native.TString, native.TAny))
+	exports.Set("table", makeTypedFnDef("report-table", subReg, native.TString, native.TAny))
+	exports.Set("list", makeTypedFnDef("report-list", subReg, native.TString, native.TAny))
 
-	modID := parent.Modules.NextID()
-	return native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Report": exports},
-	}, nil
-}
-
-func makeReportFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:     []native.FnParam{{Type: native.TAny}},
-			Returns:    []*native.Type{native.TString},
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
+	return moduleDesc(parent, "Report", subReg, exports), nil
 }
 
 func reportNatives() []native.NativeFunc {

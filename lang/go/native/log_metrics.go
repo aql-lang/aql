@@ -89,7 +89,7 @@ func renderMeasurement(m Measurement) string {
 // OrderedMap with a "name" / "kind" field and a single method — `add`
 // for a counter, `record` for a gauge or histogram.
 func buildInstrumentInstance(st *instrumentState) (*OrderedMap, error) {
-	subReg, err := DefaultRegistry()
+	subReg, err := newSubRegistry()
 	if err != nil {
 		return nil, err
 	}

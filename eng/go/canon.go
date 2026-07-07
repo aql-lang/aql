@@ -156,12 +156,7 @@ func CanonValue(v Value) string {
 		if err != nil || m == nil {
 			return v.String()
 		}
-		parts := make([]string, m.Len())
-		for i, k := range m.Keys() {
-			val, _ := m.Get(k)
-			parts[i] = k + ":" + canonChild(val)
-		}
-		return "(flex {" + strings.Join(parts, " ") + "})"
+		return "(flex {" + joinEntries(m, canonChild) + "})"
 	case v.Parent.ConformsTo(TList) && v.Data != nil:
 		lst, _ := AsList(v)
 		parts := make([]string, lst.Len())
@@ -178,12 +173,7 @@ func CanonValue(v Value) string {
 		if err != nil || m == nil {
 			return v.String()
 		}
-		parts := make([]string, m.Len())
-		for i, k := range m.Keys() {
-			val, _ := m.Get(k)
-			parts[i] = k + ":" + canonChild(val)
-		}
-		return "{" + strings.Join(parts, " ") + "}"
+		return "{" + joinEntries(m, canonChild) + "}"
 	case IsReach(v):
 		return canonReach(v)
 	case isFnDefValue(v):

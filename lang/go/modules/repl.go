@@ -1,0 +1,169 @@
+package modules
+
+import (
+	"fmt"
+	"sync"
+
+	"github.com/aql-lang/aql/lang/go/native"
+)
+
+// BuildReplModule creates the "aql:repl" native module — a socket REPL
+// server and client whose implementation is WRITTEN IN AQL (the
+// replAQLPreamble below), following the aql:test hybrid pattern. It is
+// the first verification app of the networking stack
+// (design/NETWORK-IMPLEMENTATION-PLAN.0.md §1.5): a service over the
+// `lines` codec whose handler evaluates each received line and replies
+// with the rendered result.
+//
+//	import "aql:repl"
+//	def ln (Repl.serve {port: 4004})            # server: evaluate lines
+//	def ep (Repl.connect "127.0.0.1:4004")      # client: an Endpoint
+//	Repl.eval ep "def x 21 x mul 2"             # → "42"
+//
+// Evaluation uses Vm.run (a fresh sandboxed sub-engine per line), so
+// the session replays its accumulated history each line to give the
+// illusion of persistent definitions — `def x 5` on line 1 is visible
+// to `x` on line 2. `Repl.eval ep "/reset"` clears the history. This
+// is a deliberately basic REPL: one shared session per server, pure
+// sandboxed evaluation (no I/O or network inside evaluated code).
+func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
+	if parent.ParseFunc == nil {
+		return native.ModuleDesc{}, fmt.Errorf("repl: parser not configured")
+	}
+	replParseOnce.Do(func() {
+		replParsed, replParseErr = parent.ParseFunc(replAQLPreamble)
+	})
+	if replParseErr != nil {
+		return native.ModuleDesc{}, fmt.Errorf("repl: parse preamble: %w", replParseErr)
+	}
+
+	modReg, err := newDefaultRegistry()
+	if err != nil {
+		return native.ModuleDesc{}, fmt.Errorf("repl: init: %w", err)
+	}
+	modReg.Output = parent.Output
+	modReg.ErrOutput = parent.ErrOutput
+	modReg.Input = parent.Input
+	modReg.ParseFunc = parent.ParseFunc
+	modReg.BaseDir = parent.BaseDir
+	modReg.Modules.InheritConfig(parent.Modules)
+	if modReg.Modules.InitFunc != nil {
+		modReg.Modules.InitFunc(modReg)
+	} else {
+		native.Register(modReg)
+	}
+
+	// Collect `export "Repl" {…}` from the preamble (the aql:test-style
+	// local exporter; see modules/test.go for why RunModuleBody cannot
+	// be reused directly).
+	exports := map[string]*native.OrderedMap{}
+	modReg.Defs.Delete("export")
+	modReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "export",
+		Signatures: []native.Signature{
+			{
+				Args: []*native.Type{native.TAtom, native.TMap},
+				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					name, _ := eargs[0].AsConcreteAtom()
+					return resolveExport(modReg, exports, name, eargs[1])
+				}),
+				Returns: []*native.Type{}, BarrierPos: -1,
+			},
+			{
+				Args: []*native.Type{native.TString, native.TMap},
+				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					name, _ := eargs[0].AsConcreteString()
+					return resolveExport(modReg, exports, name, eargs[1])
+				}),
+				Returns: []*native.Type{}, BarrierPos: -1,
+			},
+		},
+	})
+
+	tokens := append([]native.Value(nil), replParsed...)
+	sub := native.New(modReg)
+	if _, err := sub.Run(tokens); err != nil {
+		return native.ModuleDesc{}, fmt.Errorf("repl: run preamble: %w", err)
+	}
+
+	return native.ModuleDesc{
+		ID:      parent.Modules.NextID(),
+		Exports: exports,
+	}, nil
+}
+
+var (
+	replParseOnce sync.Once
+	replParsed    []native.Value
+	replParseErr  error
+)
+
+// replAQLPreamble is the module's implementation — plain AQL over the
+// aql:net codec tier and the core service words.
+const replAQLPreamble = `
+
+import "aql:net"
+import "aql:vm"
+
+# ============================================================
+# aql:repl — a socket REPL, written in AQL.
+#
+# The server is a service over the lines codec: each received line is
+# AQL source, evaluated in a sandboxed sub-engine (Vm.run) against the
+# session's accumulated history, and the rendered result (canon) is
+# the reply line. Errors reply as "error: <message>" instead of
+# killing the connection.
+# ============================================================
+
+# Render a caught evaluation error as the reply line.
+def repl-format-err fn [[m:Any] [String] [ join "" ["error: " m] ]]
+
+# Evaluate one line against the session history carried in the service
+# state; on success the line joins the history (the replay model that
+# makes defs persist across sandboxed one-shot evaluations).
+def repl-eval-line fn [[st:Any line:String] [String] [
+  if (line eq "/reset") [
+    st set history ""
+    "ok: session reset"
+  ] [
+    def src (if (st.history eq "") [ line ] [ join "\n" [st.history line] ])
+    do [
+      def out (canon (Vm.run src))
+      st set history src
+      out
+    ] error [
+      dot message
+      repl-format-err
+    ]
+  ]
+]]
+
+# Start a REPL server: returns the Listener (close it to stop).
+def repl-serve fn [[opts:Map] [Any] [
+  def svc (service {history: ""})
+  add {} ([req:Map state:Any] => [ def line req.line  repl-eval-line state line ]) svc
+  Net.listen {tcp: opts.port codec: Net.lines} svc
+]]
+
+# Dial a REPL server: returns an Endpoint.
+def repl-connect fn [[addr:String] [Any] [
+  Net.connect {tcp: addr codec: Net.lines}
+]]
+
+# Evaluate one source line remotely; returns the reply text.
+def repl-eval fn [[ep:Any src:String] [String] [
+  def reply (call {line: src} ep {timeout: 10000})
+  reply.line
+]]
+
+# Close a REPL server or endpoint (re-exported so callers need no
+# separate aql:net import for teardown).
+def repl-close fn [[h:Any] [] [ Net.close h ]]
+
+export "Repl" {
+  serve:   repl-serve/r
+  connect: repl-connect/r
+  eval:    repl-eval/r
+  close:   repl-close/r
+}
+`

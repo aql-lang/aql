@@ -20,7 +20,7 @@ import (
 // registry — so Net.fetch reaches the host network policy and Net.prepare /
 // Net.direct reach the host API SDKs, exactly as the former core words did.
 func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -29,25 +29,26 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.Types.AdoptSeqFrom(parent.Types)
 	ft := native.MintFetchTypes(subReg)
 	netNatives := native.NetModuleNatives(ft)
+	netNatives = append(netNatives, socketNatives()...) // Tier-1 sockets (net_socket.go)
+	netNatives = append(netNatives, codecNatives()...)  // Tier-2 codecs + listen/connect (net_codec.go)
 	for _, n := range netNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range netNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(netNatives, subReg)
 	// The module-owned Fetch types, exported as type literals —
 	// `resp is Net.Response` — mirroring IO.StreamKind.
 	exports.Set("Fetch", native.NewTypeLiteral(ft.Fetch))
 	exports.Set("Request", native.NewTypeLiteral(ft.Request))
 	exports.Set("Response", native.NewTypeLiteral(ft.Response))
+	// The global socket handle types, as literals for `x is Net.Socket`.
+	exports.Set("Socket", native.NewTypeLiteral(TSocket))
+	exports.Set("Listener", native.NewTypeLiteral(TListener))
+	// Built-in codec values (plain {decode encode} maps whose functions
+	// carry Go handlers): `listen {tcp: 8080 codec: Net.http} svc`.
+	exports.Set("lines", makeLinesCodec())
+	exports.Set("json-lines", makeJSONLinesCodec())
+	exports.Set("http", makeHTTPCodec())
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Net": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "Net", subReg, exports), nil
 }

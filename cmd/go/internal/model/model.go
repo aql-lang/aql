@@ -9,7 +9,6 @@
 package model
 
 import (
-	"encoding/json"
 	"flag"
 	stdfmt "fmt"
 	"io"
@@ -86,7 +85,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if *printModel {
-			data, err := json.MarshalIndent(m.Build().Model, "", "  ")
+			data, err := jsonMarshalIndent(m.Build().Model, "", "  ")
 			if err != nil {
 				stdfmt.Fprintf(stderr, "error: %s\n", err)
 				return 1

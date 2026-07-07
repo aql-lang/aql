@@ -3,6 +3,7 @@ package native
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // arrayNatives (core) and ArrayModuleNatives (the aql:array module)
@@ -504,6 +505,42 @@ var arrayNatives, ArrayModuleNatives = func() (core, module []NativeFunc) {
 	return core, module
 }()
 
+// ---- shared arg guards ----
+
+// arrayWordErrCode derives an array word's pinned error code:
+// "<word>_error" with hyphens underscored (insert-at → insert_at_error).
+func arrayWordErrCode(word string) string {
+	return strings.ReplaceAll(word, "-", "_") + "_error"
+}
+
+// requireListArg guards the recurring concrete-list-arg pattern shared by
+// the array handlers: when v is a type literal or carrier it raises the
+// word's own pinned error — code "<word>_error", detail
+// "<word>: expected <what>" — then unwraps the list. The codes and details
+// are pinned by the langspec ERROR rows, so this reproduces the historical
+// hand-rolled format exactly; it deliberately does NOT delegate to eng's
+// RequireConcreteList, whose message format differs.
+func requireListArg(r *Registry, v Value, word, what string) (ReadList, error) {
+	if !IsConcrete(v) {
+		return ReadList{}, r.AqlError(arrayWordErrCode(word), word+": expected "+what, word)
+	}
+	list, _ := AsList(v)
+	return list, nil
+}
+
+// requireConcreteArgs is the multi-value variant of requireListArg for the
+// handlers that guard several args behind one combined error (e.g. each's
+// "each: expected concrete lists" over body and data). Same pinned
+// code/detail format; no unwrapping.
+func requireConcreteArgs(r *Registry, word, what string, vals ...Value) error {
+	for _, v := range vals {
+		if !IsConcrete(v) {
+			return r.AqlError(arrayWordErrCode(word), word+": expected "+what, word)
+		}
+	}
+	return nil
+}
+
 // ---- shared ReturnsFn helpers ----
 
 func returnsCarrierTypedListInteger(_ []Value, _ *Registry) []Value {
@@ -596,8 +633,8 @@ func buildRange(start, stop, step int64, r *Registry) ([]Value, error) {
 // ---- shape ----
 
 func shapeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("shape_error", "shape: expected concrete list", "shape")
+	if _, err := requireListArg(r, args[0], "shape", "concrete list"); err != nil {
+		return nil, err
 	}
 	dims := computeShape(args[0])
 	elems := make([]Value, len(dims))
@@ -635,8 +672,8 @@ func computeShape(v Value) []int {
 // ---- rank ----
 
 func rankHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("rank_error", "rank: expected concrete list", "rank")
+	if _, err := requireListArg(r, args[0], "rank", "concrete list"); err != nil {
+		return nil, err
 	}
 	dims := computeShape(args[0])
 	return []Value{NewInteger(int64(len(dims)))}, nil
@@ -651,13 +688,13 @@ func rankHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 const maxArrayElems = 1 << 24
 
 func reshapeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("reshape_error", "reshape: expected concrete shape list", "reshape")
+	shapeList, err := requireListArg(r, args[0], "reshape", "concrete shape list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("reshape_error", "reshape: expected concrete data list", "reshape")
+	if _, err := requireListArg(r, args[1], "reshape", "concrete data list"); err != nil {
+		return nil, err
 	}
-	shapeList, _ := AsList(args[0])
 	dims := make([]int, shapeList.Len())
 	for i := 0; i < shapeList.Len(); i++ {
 		_as1, _ := AsInteger(shapeList.Get(i))
@@ -739,10 +776,10 @@ func buildNested(flat []Value, dims []int) Value {
 // ---- transpose ----
 
 func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("transpose_error", "transpose: expected concrete list", "transpose")
+	outer, err := requireListArg(r, args[0], "transpose", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	outer, _ := AsList(args[0])
 	if outer.Len() == 0 {
 		return []Value{NewList(nil)}, nil
 	}
@@ -775,10 +812,10 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 // ---- reverse ----
 
 func reverseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("reverse_error", "reverse: expected concrete list", "reverse")
+	list, err := requireListArg(r, args[0], "reverse", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	n := list.Len()
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
@@ -790,12 +827,12 @@ func reverseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // ---- take ----
 
 func takeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("take_error", "take: expected concrete list", "take")
+	list, err := requireListArg(r, args[1], "take", "concrete list")
+	if err != nil {
+		return nil, err
 	}
 	_as2, _ := args[0].AsConcreteInteger()
 	n := int(_as2)
-	list, _ := AsList(args[1])
 	length := list.Len()
 	var start, end int
 	if n >= 0 {
@@ -822,12 +859,12 @@ func takeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 // ---- shed ----
 
 func shedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("shed_error", "shed: expected concrete list", "shed")
+	list, err := requireListArg(r, args[1], "shed", "concrete list")
+	if err != nil {
+		return nil, err
 	}
 	_as3, _ := args[0].AsConcreteInteger()
 	n := int(_as3)
-	list, _ := AsList(args[1])
 	length := list.Len()
 	var start, end int
 	if n >= 0 {
@@ -854,10 +891,10 @@ func shedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 // ---- where ----
 
 func whereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("where_error", "where: expected concrete list", "where")
+	list, err := requireListArg(r, args[0], "where", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
@@ -874,10 +911,10 @@ func whereHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 // ---- unique ----
 
 func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("unique_error", "unique: expected concrete list", "unique")
+	list, err := requireListArg(r, args[0], "unique", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	seen := make(map[string]bool)
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
@@ -897,10 +934,10 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // ---- grade ----
 
 func gradeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("grade_error", "grade: expected concrete list", "grade")
+	list, err := requireListArg(r, args[0], "grade", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	n := list.Len()
 	indices := make([]int, n)
 	for i := 0; i < n; i++ {
@@ -939,14 +976,14 @@ func arrCompareValues(a, b Value) int {
 // ---- at ----
 
 func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("at_error", "at: expected concrete indices list", "at")
+	indices, err := requireListArg(r, args[0], "at", "concrete indices list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("at_error", "at: expected concrete data list", "at")
+	data, err := requireListArg(r, args[1], "at", "concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	indices, _ := AsList(args[0])
-	data, _ := AsList(args[1])
 	dataLen := data.Len()
 	result := make([]Value, indices.Len())
 	for i := 0; i < indices.Len(); i++ {
@@ -972,10 +1009,10 @@ func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, r.AqlError("insert_at_error", "insert-at: expected a concrete Integer index", "insert-at")
 	}
-	if !IsConcrete(args[2]) {
-		return nil, r.AqlError("insert_at_error", "insert-at: expected a concrete data list", "insert-at")
+	data, err := requireListArg(r, args[2], "insert-at", "a concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	data, _ := AsList(args[2])
 	idx := int(_idx)
 	n := data.Len()
 	if idx < 0 || idx > n {
@@ -1000,10 +1037,10 @@ func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, r.AqlError("remove_at_error", "remove-at: expected a concrete Integer index", "remove-at")
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("remove_at_error", "remove-at: expected a concrete data list", "remove-at")
+	data, err := requireListArg(r, args[1], "remove-at", "a concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	data, _ := AsList(args[1])
 	idx := int(_idx)
 	n := data.Len()
 	if n == 0 {
@@ -1025,14 +1062,14 @@ func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // ---- sortby ----
 
 func sortbyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("sortby_error", "sortby: expected concrete keys list", "sortby")
+	keys, err := requireListArg(r, args[0], "sortby", "concrete keys list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("sortby_error", "sortby: expected concrete data list", "sortby")
+	data, err := requireListArg(r, args[1], "sortby", "concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	keys, _ := AsList(args[0])
-	data, _ := AsList(args[1])
 	if keys.Len() != data.Len() {
 		return nil, fmt.Errorf("sortby: keys length %d does not match data length %d", keys.Len(), data.Len())
 	}
@@ -1054,14 +1091,14 @@ func sortbyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // ---- member ----
 
 func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("member_error", "member: expected concrete needles list", "member")
+	needles, err := requireListArg(r, args[0], "member", "concrete needles list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("member_error", "member: expected concrete haystack list", "member")
+	haystack, err := requireListArg(r, args[1], "member", "concrete haystack list")
+	if err != nil {
+		return nil, err
 	}
-	needles, _ := AsList(args[0])
-	haystack, _ := AsList(args[1])
 	haystackSet := make(map[string]bool, haystack.Len())
 	for i := 0; i < haystack.Len(); i++ {
 		haystackSet[haystack.Get(i).String()] = true
@@ -1080,14 +1117,14 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // -1 when absent. Vectorised lookup — returns a list of indices, one per
 // needle. The first match wins for duplicate haystack entries.
 func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("indices_error", "indices: expected concrete needles list", "indices")
+	needles, err := requireListArg(r, args[0], "indices", "concrete needles list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("indices_error", "indices: expected concrete haystack list", "indices")
+	haystack, err := requireListArg(r, args[1], "indices", "concrete haystack list")
+	if err != nil {
+		return nil, err
 	}
-	needles, _ := AsList(args[0])
-	haystack, _ := AsList(args[1])
 	haystackLen := haystack.Len()
 	indexMap := make(map[string]int, haystackLen)
 	for i := 0; i < haystackLen; i++ {
@@ -1111,14 +1148,14 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // ---- group ----
 
 func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("group_error", "group: expected concrete keys list", "group")
+	keys, err := requireListArg(r, args[0], "group", "concrete keys list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("group_error", "group: expected concrete values list", "group")
+	values, err := requireListArg(r, args[1], "group", "concrete values list")
+	if err != nil {
+		return nil, err
 	}
-	keys, _ := AsList(args[0])
-	values, _ := AsList(args[1])
 	if keys.Len() != values.Len() {
 		return nil, fmt.Errorf("group: keys length %d does not match values length %d", keys.Len(), values.Len())
 	}
@@ -1139,10 +1176,10 @@ func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 }
 
 func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("group_error", "group: expected concrete list", "group")
+	list, err := requireListArg(r, args[0], "group", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	om := NewOrderedMap()
 	groups := make(map[string][]Value)
 	order := make([]string, 0)
@@ -1162,14 +1199,14 @@ func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // ---- replicate ----
 
 func replicateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("replicate_error", "replicate: expected concrete counts list", "replicate")
+	counts, err := requireListArg(r, args[0], "replicate", "concrete counts list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("replicate_error", "replicate: expected concrete data list", "replicate")
+	data, err := requireListArg(r, args[1], "replicate", "concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	counts, _ := AsList(args[0])
-	data, _ := AsList(args[1])
 	if counts.Len() != data.Len() {
 		return nil, fmt.Errorf("replicate: counts length %d does not match data length %d", counts.Len(), data.Len())
 	}
@@ -1194,14 +1231,14 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 // ---- expand ----
 
 func expandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("expand_error", "expand: expected concrete mask list", "expand")
+	mask, err := requireListArg(r, args[0], "expand", "concrete mask list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("expand_error", "expand: expected concrete data list", "expand")
+	data, err := requireListArg(r, args[1], "expand", "concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	mask, _ := AsList(args[0])
-	data, _ := AsList(args[1])
 	result := make([]Value, mask.Len())
 	dataIdx := 0
 	for i := 0; i < mask.Len(); i++ {
@@ -1221,12 +1258,12 @@ func expandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // ---- window ----
 
 func windowHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("window_error", "window: expected concrete list", "window")
+	list, err := requireListArg(r, args[1], "window", "concrete list")
+	if err != nil {
+		return nil, err
 	}
 	_as6, _ := args[0].AsConcreteInteger()
 	size := int(_as6)
-	list, _ := AsList(args[1])
 	length := list.Len()
 	if size <= 0 {
 		return nil, r.AqlError("window_error", fmt.Sprintf("window: size must be positive, got %d", size), "window")
@@ -1256,10 +1293,10 @@ func windowReturnsFn(args []Value, _ *Registry) []Value {
 // ---- pairs ----
 
 func pairsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("pairs_error", "pairs: expected concrete list", "pairs")
+	list, err := requireListArg(r, args[0], "pairs", "concrete list")
+	if err != nil {
+		return nil, err
 	}
-	list, _ := AsList(args[0])
 	length := list.Len()
 	if length < 2 {
 		return []Value{NewList([]Value{})}, nil
@@ -1297,8 +1334,8 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if collIsConcreteMap(args[1]) {
 		return eachMapHandler(args, nil, nil, reg)
 	}
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-		return nil, reg.AqlError("each_error", "each: expected concrete lists", "each")
+	if err := requireConcreteArgs(reg, "each", "concrete lists", args[0], args[1]); err != nil {
+		return nil, err
 	}
 	dataList, _ := AsList(args[1])
 
@@ -1325,10 +1362,10 @@ func eachReachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 	if err != nil {
 		return nil, fmt.Errorf("each: %w", err)
 	}
-	if !IsConcrete(args[1]) {
-		return nil, reg.AqlError("each_error", "each: expected a concrete data list", "each")
+	data, err := requireListArg(reg, args[1], "each", "a concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	data, _ := AsList(args[1])
 	results := make([]Value, data.Len())
 	for i := 0; i < data.Len(); i++ {
 		v, err := ApplyReach(reg, info, data.Get(i))
@@ -1348,10 +1385,10 @@ func sortbyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	if err != nil {
 		return nil, fmt.Errorf("sortby: %w", err)
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("sortby_error", "sortby: expected a concrete data list", "sortby")
+	data, err := requireListArg(r, args[1], "sortby", "a concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	data, _ := AsList(args[1])
 	n := data.Len()
 	keys := make([]Value, n)
 	for i := 0; i < n; i++ {
@@ -1379,8 +1416,8 @@ func sortbyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 // discarding each body result and producing nothing. Unlike eachHandler
 // it does NOT error when the body leaves the stack empty.
 func forEachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-		return nil, reg.AqlError("for_each_error", "for-each: expected concrete lists", "for-each")
+	if err := requireConcreteArgs(reg, "for-each", "concrete lists", args[0], args[1]); err != nil {
+		return nil, err
 	}
 	dataList, _ := AsList(args[1])
 
@@ -1535,8 +1572,8 @@ func foldWithInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regis
 	if collIsConcreteMap(args[1]) {
 		return foldMapInitHandler(args, nil, nil, reg)
 	}
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
+	if err := requireConcreteArgs(reg, "fold", "concrete lists", args[0], args[1]); err != nil {
+		return nil, err
 	}
 	dataList, _ := AsList(args[1])
 	init := args[2]
@@ -1560,8 +1597,8 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	if collIsConcreteMap(args[1]) {
 		return foldMapNoInitHandler(args, nil, nil, reg)
 	}
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-		return nil, reg.AqlError("fold_error", "fold: expected concrete lists", "fold")
+	if err := requireConcreteArgs(reg, "fold", "concrete lists", args[0], args[1]); err != nil {
+		return nil, err
 	}
 	dataList, _ := AsList(args[1])
 	if dataList.Len() == 0 {
@@ -1639,8 +1676,8 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 	if collIsConcreteMap(args[1]) {
 		return scanMapHandler(args, nil, nil, reg)
 	}
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-		return nil, reg.AqlError("scan_error", "scan: expected concrete lists", "scan")
+	if err := requireConcreteArgs(reg, "scan", "concrete lists", args[0], args[1]); err != nil {
+		return nil, err
 	}
 	dataList, _ := AsList(args[1])
 	if dataList.Len() == 0 {
@@ -1692,8 +1729,8 @@ func scanReturnsFn(args []Value, r *Registry) []Value {
 // ---- outer ----
 
 func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) {
-		return nil, reg.AqlError("outer_error", "outer: expected concrete lists", "outer")
+	if err := requireConcreteArgs(reg, "outer", "concrete lists", args[0], args[1], args[2]); err != nil {
+		return nil, err
 	}
 	left, _ := AsList(args[1])
 	right, _ := AsList(args[2])
@@ -1735,8 +1772,8 @@ func outerReturnsFn(args []Value, r *Registry) []Value {
 // ---- inner ----
 
 func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) || !IsConcrete(args[3]) {
-		return nil, reg.AqlError("inner_error", "inner: expected concrete lists", "inner")
+	if err := requireConcreteArgs(reg, "inner", "concrete lists", args[0], args[1], args[2], args[3]); err != nil {
+		return nil, err
 	}
 	left, _ := AsList(args[2])
 	right, _ := AsList(args[3])
@@ -1836,14 +1873,14 @@ func innerReturnsFn(args []Value, r *Registry) []Value {
 // Sig is [mask, data] (mask top-of-stack), matching replicate's
 // counts-first order.
 func compressHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("compress_error", "compress: expected concrete mask list", "compress")
+	mask, err := requireListArg(r, args[0], "compress", "concrete mask list")
+	if err != nil {
+		return nil, err
 	}
-	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("compress_error", "compress: expected concrete data list", "compress")
+	data, err := requireListArg(r, args[1], "compress", "concrete data list")
+	if err != nil {
+		return nil, err
 	}
-	mask, _ := AsList(args[0])
-	data, _ := AsList(args[1])
 	if mask.Len() != data.Len() {
 		return nil, fmt.Errorf("compress: mask length %d does not match data length %d", mask.Len(), data.Len())
 	}
@@ -1870,8 +1907,8 @@ func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	if depth < 0 {
 		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: negative rank %d", depth), "eachrank")
 	}
-	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
-		return nil, reg.AqlError("eachrank_error", "eachrank: expected concrete body and data lists", "eachrank")
+	if err := requireConcreteArgs(reg, "eachrank", "concrete body and data lists", args[1], args[2]); err != nil {
+		return nil, err
 	}
 	_lst, _ := AsList(args[1])
 	bodySlice := _lst.Slice()
@@ -1945,8 +1982,8 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	if axis != 0 && axis != 1 {
 		return nil, reg.AqlError("foldaxis_error", fmt.Sprintf("foldaxis: axis must be 0 or 1, got %d", axis), "foldaxis")
 	}
-	if !IsConcrete(args[1]) || !IsConcrete(args[2]) {
-		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected concrete body and data lists", "foldaxis")
+	if err := requireConcreteArgs(reg, "foldaxis", "concrete body and data lists", args[1], args[2]); err != nil {
+		return nil, err
 	}
 	rows, _ := AsList(args[2])
 	if rows.Len() == 0 {

@@ -60,7 +60,7 @@ func miniCompiledPattern(src string) (*regexp.Regexp, error) {
 
 // BuildMiniLangModule creates the "aql:minilang" native module.
 func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -610,25 +610,15 @@ func installHostMiniLang(exports *native.OrderedMap, subReg *native.Registry, sp
 }
 
 // wrapMiniFnDef builds the module FnDef wrapper for an inner native —
-// the wrapRandFnDef pattern, generalised to multiple overloads. Every
-// FnSig is a trivial delegation (Body=[Word(inner)]) with BarrierPos -1
-// (CRITICAL — see lang/go/CLAUDE.md "Module FnDef Wrappers").
+// the shared makeWrapFnDef trivial-delegation shape, spelled for the
+// mini-language builders' multi-overload tables (every overload shares
+// one returns tuple and one QuoteArgs map).
 func wrapMiniFnDef(wordName string, overloads [][]native.FnParam, returns []*native.Type, quoteArgs map[int]bool, subReg *native.Registry) native.Value {
-	sigs := make([]native.FnSig, 0, len(overloads))
-	for _, params := range overloads {
-		sigs = append(sigs, native.FnSig{
-			Params:     params,
-			Returns:    returns,
-			Impl:       native.AQL([]native.Value{native.NewWord(wordName)}),
-			BarrierPos: -1,
-			QuoteArgs:  quoteArgs,
-		})
+	sigs := make([]wrapSig, len(overloads))
+	for i, params := range overloads {
+		sigs[i] = wrapSig{params: params, returns: returns, quoteArgs: quoteArgs}
 	}
-	return native.NewFnDef(native.FnDefInfo{
-		Name:       wordName,
-		Signatures: sigs,
-		Registry:   subReg,
-	})
+	return makeWrapFnDef(wordName, subReg, sigs...)
 }
 
 // miniOptInt reads an Integer option from an opts map, returning def

@@ -31,11 +31,12 @@ func (s *server) buildFormattingEdits(src string) []TextEdit {
 // end position past EOL for any non-ASCII content and some clients
 // reject the edit).
 func wholeDocumentRange(src string) Range {
+	// strings.Split always returns at least one element (even for an
+	// empty string it returns [""]), so lastIdx is never negative — no
+	// clamping guard needed here (see design/TEST-SEAMS.10.md, ADR-005:
+	// an untestable defensive branch is dead code).
 	lines := strings.Split(src, "\n")
 	lastIdx := len(lines) - 1
-	if lastIdx < 0 {
-		lastIdx = 0
-	}
 	lastLen := 0
 	if lastIdx < len(lines) {
 		lastLen = utf16Len(lines[lastIdx])

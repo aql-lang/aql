@@ -152,3 +152,63 @@ func TestFnValueCrossRegistryStillCallAQL(t *testing.T) {
 		t.Error("captured registry's private def leaked into the executing registry")
 	}
 }
+
+// The three result-splice arms of execFnDefSig's CROSS-registry branch
+// (engine.go): after the flip they are exercised only by cross-registry
+// values, so pin each arm directly — the contiguous-indices walk with a
+// structural cell interleaved (a mark skipped by arg collection but
+// copied down by the splice), the 0-arg dispatch, and the forward-form
+// fallback where no stack indices back the args.
+func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
+	mk := func(t *testing.T) (*Registry, *Registry) {
+		t.Helper()
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		other, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r, other
+	}
+
+	t.Run("stack indices with interleaved mark", func(t *testing.T) {
+		r, other := mk(t)
+		helper := sameRegistryAnonFnValue(t, other, "xr1", typedFnBody("x", "Integer", "Integer",
+			NewWord("x"), NewWord("mul"), NewInteger(2)))
+		// [12, mark, helper]: arg collection skips the mark; the splice's
+		// copy-down walk must carry it over the consumed positions.
+		res := runAQL(t, r, []Value{NewInteger(12), NewMark("xrm1"), helper, NewEnd()})
+		if n, _ := AsInteger(res[len(res)-1]); n != 24 {
+			t.Fatalf("stack-form cross-registry dispatch = %d, want 24", n)
+		}
+	})
+
+	t.Run("zero-arg value", func(t *testing.T) {
+		r, other := mk(t)
+		zero := sameRegistryAnonFnValue(t, other, "xr0", NewList([]Value{
+			NewList(nil), NewList([]Value{NewWord("Integer")}), NewList([]Value{NewInteger(30)}),
+		}))
+		fd := zero.Data.(FnDefInfo)
+		fd.Name = "xr0named" // 0-arg dispatch requires a NAMED value (anonymous stays data)
+		fd.Anonymous = false
+		res := runAQL(t, r, []Value{NewFunction(fd), NewEnd()})
+		if len(res) == 0 {
+			t.Fatal("no residual from 0-arg cross-registry dispatch")
+		}
+		if n, _ := AsInteger(res[len(res)-1]); n != 30 {
+			t.Fatalf("0-arg cross-registry dispatch = %d, want 30", n)
+		}
+	})
+
+	t.Run("forward form without stack indices", func(t *testing.T) {
+		r, other := mk(t)
+		helper := sameRegistryAnonFnValue(t, other, "xrf", typedFnBody("x", "Integer", "Integer",
+			NewWord("x"), NewWord("add"), NewInteger(1)))
+		res := runAQL(t, r, []Value{NewOpenParen(), helper, NewCloseParen(), NewInteger(41), NewEnd()})
+		if n, _ := AsInteger(res[len(res)-1]); n != 42 {
+			t.Fatalf("forward-form cross-registry dispatch = %d, want 42", n)
+		}
+	})
+}

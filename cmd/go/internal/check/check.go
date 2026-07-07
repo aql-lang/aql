@@ -19,6 +19,16 @@ import (
 	lang "github.com/aql-lang/aql/lang/go"
 )
 
+// langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive the init-error arms of Emit/Run/Preflight — lang.New only fails
+// on registry construction errors that no Options value can provoke.
+var langNew = lang.New
+
+// jsonMarshalIndent is a test seam (design/TEST-SEAMS.10.md); tests swap
+// it to drive Run's marshal-error arm, which is unreachable with the
+// plain CheckResult shape.
+var jsonMarshalIndent = json.MarshalIndent
+
 type cmd struct{}
 
 // New returns the check subcommand.
@@ -97,7 +107,7 @@ done:
 // the emitter cannot lower the program (debug/tooling surface —
 // design/aql-bytecode-plan.0.md, Stage 1 gate and the DX section).
 func Emit(stdout, stderr io.Writer, source string) error {
-	a, err := lang.New()
+	a, err := langNew()
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
@@ -158,7 +168,7 @@ func atPos(row, col int) string {
 // to advisory: Run returns nil as long as the underlying analysis
 // completes.
 func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict bool) error {
-	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
+	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
@@ -168,7 +178,7 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 	}
 	res, err := a.Check(source)
 	if jsonOut {
-		out, jerr := json.MarshalIndent(res, "", "  ")
+		out, jerr := jsonMarshalIndent(res, "", "  ")
 		if jerr != nil {
 			return fmt.Errorf("json marshal: %s", jerr)
 		}
@@ -223,7 +233,7 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
 // caller aborts before executing. Unlike Run it prints no summary or
 // result-stack line — stdout is left entirely for the program.
 func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bool) error {
-	a, err := lang.New(lang.Options{Registry: registry, Seed: seed})
+	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}

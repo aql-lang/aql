@@ -39,6 +39,24 @@ type discoveryFile struct {
 // Tests swap it; production uses os.TempDir.
 var tempDirFunc = os.TempDir
 
+// jsonMarshal is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive writeDiscoveryFile's marshal-failure arm, which is unreachable
+// with the plain string/int discoveryFile shape.
+var jsonMarshal = json.Marshal
+
+// fileChmod is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive writeDiscoveryFile's chmod-failure arm, which cannot be forced
+// via file permissions when the suite runs as root (uid 0 ignores modes).
+var fileChmod = (*os.File).Chmod
+
+// fileWrite is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive writeDiscoveryFile's write-failure arm (same root-only reason).
+var fileWrite = (*os.File).Write
+
+// fileClose is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive writeDiscoveryFile's close-failure arm (same root-only reason).
+var fileClose = (*os.File).Close
+
 // DefaultDiscoveryPath returns the standard location: $TMPDIR/aql-api.json.
 func DefaultDiscoveryPath() string {
 	return filepath.Join(tempDirFunc(), "aql-api.json")
@@ -52,7 +70,7 @@ func (s *Server) writeDiscoveryFile() error {
 	path := DefaultDiscoveryPath()
 	s.discoverPath = path
 
-	body, err := json.Marshal(discoveryFile{
+	body, err := jsonMarshal(discoveryFile{
 		URL:   "http://" + s.Addr(),
 		Token: s.token,
 		PID:   os.Getpid(),
@@ -70,17 +88,17 @@ func (s *Server) writeDiscoveryFile() error {
 		return err
 	}
 	tmp := f.Name()
-	if err := f.Chmod(0600); err != nil {
+	if err := fileChmod(f, 0600); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
 		return err
 	}
-	if _, err := f.Write(body); err != nil {
+	if _, err := fileWrite(f, body); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if err := fileClose(f); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}

@@ -18,6 +18,21 @@ import (
 // dependency graph through the module's existing replace directives.
 const cmdGoModulePath = "github.com/aql-lang/aql/cmd/go"
 
+// osMkdirTemp is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive buildNative's create-build-dir failure arm, which cannot be
+// forced via directory permissions when the suite runs as root.
+var osMkdirTemp = os.MkdirTemp
+
+// jsonMarshal is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive buildNative's encode-config failure arm, which is unreachable
+// with the plain buildrt.Config shape.
+var jsonMarshal = json.Marshal
+
+// osWriteFile is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive buildNative's write-failure arms for config.json and main.go
+// (unreachable via permissions as root).
+var osWriteFile = os.WriteFile
+
 // buildNative produces the binary via the Go toolchain: write a tiny main.go
 // (mainTemplate) plus the baked config.json into a temp package inside the
 // cmd/go module tree, then `go build` it. Reuses the module's replace graph so
@@ -40,7 +55,7 @@ func buildNative(cfg buildrt.Config, outPath string, keep bool, stdout, stderr i
 	// The temp package lives inside the module tree (required for the internal
 	// import) but is dot-prefixed so `go build ./...` / `go test ./...` over
 	// the module skip it.
-	tmpDir, err := os.MkdirTemp(moduleDir, ".aqlbuild-")
+	tmpDir, err := osMkdirTemp(moduleDir, ".aqlbuild-")
 	if err != nil {
 		return fmt.Errorf("create build dir: %w", err)
 	}
@@ -50,14 +65,14 @@ func buildNative(cfg buildrt.Config, outPath string, keep bool, stdout, stderr i
 		defer os.RemoveAll(tmpDir)
 	}
 
-	configJSON, err := json.Marshal(cfg)
+	configJSON, err := jsonMarshal(cfg)
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "config.json"), configJSON, 0o644); err != nil {
+	if err := osWriteFile(filepath.Join(tmpDir, "config.json"), configJSON, 0o644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainTemplate), 0o644); err != nil {
+	if err := osWriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainTemplate), 0o644); err != nil {
 		return err
 	}
 

@@ -207,11 +207,73 @@ type Registry struct {
 	// shared backing array.
 	debugEngines []*Engine
 
-	// enginePool parks reusable sub-engines for RunPooled (engine_pool.go).
-	// Per-execution, single-goroutine state like debugEngines: ForkConcurrent
-	// resets it to nil so a fork never aliases the parent's parked engines
-	// (each holds a *Registry back-pointer to the pool's owner).
+	// Procs is the BEAM-style process runtime (see process.go): the pid
+	// table, named-process registry, and root cancellation scope. It is a
+	// POINTER created by NewRegistry, so ForkConcurrent's shallow copy
+	// shares one runtime across every fork — the whole engine tree sees
+	// one process table (PROCESSES.0.md §2). No goroutines start until
+	// the first spawn.
+	Procs *ProcessRuntime
+
+	// Proc identifies the process THIS registry's goroutine runs as: set
+	// on the fork by `spawn` before the goroutine starts, and lazily set
+	// on a top-level registry the first time `self`/`receive` runs there
+	// (the implicit main process, so a top-level program can converse
+	// with the actors it spawns — PROCESSES.0.md §10). Nil until then.
+	Proc *Process
+
+	// enginePool holds idle reusable sub-engines for the interpreter's
+	// body/element evaluation seams (InvokeBody, autoEvalList, paren and
+	// interp-hole evaluation). Each pooled engine has reuseTape set, so a
+	// hot loop reloads one tape in place instead of allocating a fresh
+	// ~DefaultTapeInitialFloor-entry tape per body invocation — the same
+	// reuse the VM's island engine already proved sound. Reentrancy is
+	// safe by construction: a nested sub-run POPS a different engine (or
+	// creates one) while its parent's engine is mid-Run and not in the
+	// pool. A plain slice is safe for the same reason debugEngines is:
+	// per-execution state, reset by ForkConcurrent so forks never share
+	// the parent's engines (a pooled engine pins its creating registry).
 	enginePool []*Engine
+}
+
+// Engine-pool bounds. An engine whose tape grew past pooledTapeMaxEntries
+// is dropped rather than pooled so a one-off giant body does not pin its
+// buffer for the rest of the run; the pool itself is capped so pathological
+// nesting cannot accumulate engines without bound.
+const (
+	maxPooledEngines     = 16
+	pooledTapeMaxEntries = 4096
+)
+
+// takeSubEngine pops an idle reusable sub-engine from the pool, creating
+// one (with reuseTape set) when the pool is empty. Pair with putSubEngine
+// after the engine's Run returns; results must be copied out first —
+// Run's result slice aliases the engine's tape, which the next Reload
+// overwrites.
+func (r *Registry) takeSubEngine() *Engine {
+	if n := len(r.enginePool); n > 0 {
+		e := r.enginePool[n-1]
+		r.enginePool[n-1] = nil
+		r.enginePool = r.enginePool[:n-1]
+		return e
+	}
+	e := New(r)
+	e.reuseTape = true
+	return e
+}
+
+// putSubEngine returns an idle sub-engine to the pool. Engines whose tape
+// grew beyond the pooling bound are dropped (GC'd) instead, and per-call
+// configuration is cleared so nothing leaks into the next use.
+func (r *Registry) putSubEngine(e *Engine) {
+	if e == nil || len(r.enginePool) >= maxPooledEngines {
+		return
+	}
+	if e.tape != nil && e.tape.capEntries() > pooledTapeMaxEntries {
+		return
+	}
+	e.elemEvalRecordable = false
+	r.enginePool = append(r.enginePool, e)
 }
 
 // enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation
@@ -724,7 +786,7 @@ func NewRegistry() (*Registry, error) {
 	// builtin type table (a malformed builtinDecls or an unknown
 	// well-known path). These are init-time programmer errors that used
 	// to panic; per ADR-005 they are reported here instead.
-	if err := BuiltinInitError(); err != nil {
+	if err := builtinInitError(); err != nil {
 		return nil, err
 	}
 	r := &Registry{
@@ -748,6 +810,7 @@ func NewRegistry() (*Registry, error) {
 		// recorder calls are always safe (CheckState.Recorder() covers
 		// registries constructed without NewRegistry).
 		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
+		Procs: NewProcessRuntime(),
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A

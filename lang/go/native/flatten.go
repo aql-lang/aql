@@ -14,7 +14,7 @@ import (
 func flattenDefaultHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	data := valueToAny(args[0])
 	result := voxgigstruct.Flatten(data)
-	val, err := anyToValue(result)
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("flatten: %w", err)
 	}
@@ -43,7 +43,7 @@ func flattenDepthHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 		d = fullFlattenDepth
 	}
 	result := voxgigstruct.Flatten(data, d)
-	val, err := anyToValue(result)
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("flatten: %w", err)
 	}

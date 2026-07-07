@@ -98,6 +98,9 @@ func TestModuleExportCoverage(t *testing.T) {
 	// AQL-implemented modules (report/test) parse their source via the
 	// registry's ParseFunc — mirror lang.New's wiring so Resolve works.
 	reg.SetParseFunc(parser.Parse)
+	// aql:repl's AQL preamble imports aql:net / aql:vm — wire the
+	// native-module resolver as production does.
+	modules.InstallResolver(reg)
 
 	var qualified []string // every "Namespace.word" the modules export
 	names := modules.Names()

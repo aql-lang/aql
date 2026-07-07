@@ -134,7 +134,7 @@ func saveVaultIndex(homeDir string, idx *vaultIndex) error {
 	if err := os.MkdirAll(homeAQLDir(homeDir), 0700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(idx, "", "  ")
+	data, err := t7jsonMarshalIndent(idx, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -432,11 +432,10 @@ func runVaultsList(args []string, homeDir string, stdout, stderr io.Writer) int 
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	vs, err := enumerateVaults(homeDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
-	}
+	// enumerateVaults never returns an error — a corrupt index is treated as
+	// empty and only filesystem-discovered vaults are surfaced — so there is
+	// nothing to guard here (unreachable guard removed, ADR-005 / TEST-SEAMS.10).
+	vs, _ := enumerateVaults(homeDir)
 	if len(vs) == 0 {
 		fmt.Fprintln(stdout, "vault: no vaults found (run `aql vault init`)")
 		return 0

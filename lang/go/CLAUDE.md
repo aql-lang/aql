@@ -123,13 +123,20 @@ cd lang/go && go test ./test/ -run "TestFactorialTypeScaling" -v
 repo root:
 
 ```bash
-make fmt && make vet && make lint && make test
+make fmt && make vet && make lint && make test && make cover-gate
 ```
 
 `make lint` runs `golangci-lint` (configured via `.golangci.yml`)
 and catches ineffassign / unused / shadowed-variable issues that
 `go vet` and the test suite both miss. Skipping it lets a clean-
 locally commit fail CI; the cost of running it is a few seconds.
+
+`make cover-gate` enforces **ADR-008**: 100% unit-test coverage of every
+reachable Go statement, measured across the merged cross-suite profile.
+The sole exclusion is the reviewed, proof-carrying allowlist
+`test/go/covergate/allowlist.tsv` (provably-unreachable defensive guards);
+the gate fails if an allowlisted block becomes covered or goes stale. See
+`design/COVERAGE-ALLOWLIST.10.md` and `design/TEST-SEAMS.10.md`.
 
 ## Test discipline — always pair positive with negative
 

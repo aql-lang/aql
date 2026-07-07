@@ -185,7 +185,7 @@ func mergeOpts(base, over map[string]any) map[string]any {
 // generic data — map[string]any / []any / scalars — via encoding/json, so the
 // shared converter can handle it uniformly.
 func jsonRoundTrip(v any) (any, error) {
-	b, err := json.Marshal(v)
+	b, err := jsonMarshal(v)
 	if err != nil {
 		return nil, err
 	}

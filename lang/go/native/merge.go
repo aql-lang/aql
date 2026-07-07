@@ -17,7 +17,7 @@ func mergeHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 
 	result := voxgigstruct.Merge([]any{a, b})
 
-	val, err := anyToValue(result)
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("merge: %w", err)
 	}

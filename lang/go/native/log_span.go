@@ -177,7 +177,7 @@ func cloneOrderedMap(m *OrderedMap) *OrderedMap {
 // the trace/span ids and name as fields, plus the method closures
 // (set-attr / add-event / record-error / end), all sharing st.
 func buildSpanInstance(st *spanState, lsr *LogSinkRegistry) (*OrderedMap, error) {
-	subReg, err := DefaultRegistry()
+	subReg, err := newSubRegistry()
 	if err != nil {
 		return nil, err
 	}

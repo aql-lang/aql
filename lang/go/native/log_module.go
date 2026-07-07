@@ -1,7 +1,6 @@
 package native
 
 import (
-	"encoding/json"
 	golog "log"
 	"sync"
 	"time"
@@ -496,7 +495,7 @@ func renderJSON(rec LogRecord) string {
 	if rec.SpanID != "" {
 		obj["span-id"] = rec.SpanID
 	}
-	bs, err := json.Marshal(obj)
+	bs, err := jsonMarshal(obj)
 	if err != nil {
 		return renderText(rec)
 	}

@@ -24,7 +24,7 @@ import (
 // IO.stdout/IO.trace/IO.printstr reach the host Output writer, exactly as the
 // former core words did.
 func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -43,17 +43,8 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range ioNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(ioNatives, subReg)
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"IO": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "IO", subReg, exports), nil
 }

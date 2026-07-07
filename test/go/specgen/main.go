@@ -78,6 +78,24 @@ import (
 	"github.com/aql-lang/aql/test/go/specrunner"
 )
 
+// Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
+// the tool's exit arms without killing the test process, to drive the
+// single-CPU worker floor, the instance-construction failures, and the
+// compiled-divergence branches (reachable otherwise only via a genuine
+// compiler bug).
+var (
+	osExit      = os.Exit
+	numCPU      = runtime.NumCPU
+	langNew     = func() (*lang.AQL, error) { return lang.New() }
+	runCompiled = (*lang.AQL).RunCompiled
+	// newNativeRegistry / compileCheck: the registry constructor cannot
+	// fail on a healthy build, and CompileCheck can never return a
+	// Program alongside a check error (the checker runs first) — the
+	// seams make those arms drivable.
+	newNativeRegistry = native.DefaultRegistry
+	compileCheck      = (*lang.AQL).CompileCheck
+)
+
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
 // ranges over. Each entry is ONE syntactic element; "up to N elements"
 // means every sequence of 1..N of these joined by spaces (N defaults to
@@ -124,7 +142,7 @@ func run(input string) ([]eng.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := native.DefaultRegistry()
+	reg, err := newNativeRegistry()
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +227,7 @@ func main() {
 	if *frontier {
 		if *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
 			fmt.Fprintln(os.Stderr, "specgen -frontier requires -passing, -check-out, -compile-out and -runtime-out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extractFrontier(*passing, *checkOut, *compileOut, *runtimeOut, *max)
 		return
@@ -218,7 +236,7 @@ func main() {
 	if *extend5 {
 		if *passing == "" || *len123 == "" || *passOut == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
 			fmt.Fprintln(os.Stderr, "specgen -extend5 requires -passing, -len123, -pass-out, -check-out, -compile-out and -runtime-out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extendFive(*passing, *len123, *passOut, *checkOut, *compileOut, *runtimeOut, *mismatchOut)
 		return
@@ -227,7 +245,7 @@ func main() {
 	if *extract {
 		if *in == "" || *out == "" {
 			fmt.Fprintln(os.Stderr, "specgen -extract requires both -in and -out")
-			os.Exit(2)
+			osExit(2)
 		}
 		extractPassing(*in, *out, *max)
 		return
@@ -238,7 +256,7 @@ func main() {
 		f, err := os.Create(*out)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "specgen: create %s: %v\n", *out, err)
-			os.Exit(1)
+			osExit(1)
 		}
 		defer f.Close()
 		w = bufio.NewWriter(f)
@@ -452,14 +470,14 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	rows, err := readDataRows(inPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extract: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	pass := make([]bool, len(rows))
 	var next int64 = -1
 	var checked, kept, scanned int64
 
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -468,11 +486,11 @@ func extractPassing(inPath, outPath string, maxLen int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ai, err1 := lang.New()
-			ac, err2 := lang.New()
+			ai, err1 := langNew()
+			ac, err2 := langNew()
 			if err1 != nil || err2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extract: lang.New: %v %v\n", err1, err2)
-				os.Exit(1)
+				osExit(1)
 			}
 			ai.SetClock(specClock)
 			ac.SetClock(specClock)
@@ -502,7 +520,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 					continue
 				}
 				// 3. compile → accepted AND result matches the interpreter
-				gotC, wasCompiled, errC := ac.RunCompiled(r.input)
+				gotC, wasCompiled, errC := runCompiled(ac, r.input)
 				if !wasCompiled || errC != nil {
 					continue
 				}
@@ -519,7 +537,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 	f, err := os.Create(outPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extract: create %s: %v\n", outPath, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -598,7 +616,7 @@ const (
 // check-stage failure can never also be `compiled`. The caller asserts
 // that (the "checker runs first" confirmation) on the returned bool.
 func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
-	prog, reason, res, err := a.CompileCheck(src)
+	prog, reason, res, err := compileCheck(a, src)
 	compiled := prog != nil
 	if err != nil {
 		return classCheck, sanitizeNote(reason), compiled // parse error / check run error
@@ -673,7 +691,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 	passing, err := readInputSet(passingPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// 1. Collect the frontier: fails, immediate prefix passes.
@@ -698,7 +716,7 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 	notes := make([]string, len(cands))
 	var checkFirstViolations int64
 	var idx int64 = -1
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -707,10 +725,10 @@ func extractFrontier(passingPath, checkOut, compileOut, runtimeOut string, max i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a, e := lang.New()
+			a, e := langNew()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -frontier: lang.New: %v\n", e)
-				os.Exit(1)
+				osExit(1)
 			}
 			a.SetClock(specClock)
 			for {
@@ -783,7 +801,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -frontier: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -903,13 +921,13 @@ func hasErrorDiag(res lang.CheckResult) bool {
 // does not compile in isolation), so a reused-instance artifact can never
 // be mistaken for a compiler bug.
 func freshDivergence(s string) (string, bool) {
-	a, err := lang.New()
+	a, err := langNew()
 	if err != nil {
 		return "", false
 	}
 	a.SetClock(specClock)
 	gotI, errI := a.Run(s)
-	gotC, wasC, errC := a.RunCompiled(s)
+	gotC, wasC, errC := runCompiled(a, s)
 	if !wasC {
 		return "", false
 	}
@@ -925,16 +943,31 @@ func freshDivergence(s string) (string, bool) {
 	return "", false
 }
 
+// canonOf renders one input's canonical (eng.Canon) value via a reused
+// native registry — the same recipe as the full matrix — or "" when the
+// input does not parse or does not run cleanly.
+func canonOf(reg *eng.Registry, s string) string {
+	values, perr := parser.Parse(s)
+	if perr != nil {
+		return ""
+	}
+	out, rerr := native.NewTop(reg).Run(values)
+	if rerr != nil {
+		return ""
+	}
+	return eng.Canon(out)
+}
+
 func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, runtimeOut, mismatchOut string) {
 	passingRows, err := readDataRows(passingPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 	short, err := readInputSet(len123PassingPath) // length-1..3 passing
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: %v\n", err)
-		os.Exit(1)
+		osExit(1)
 	}
 
 	// Length-4 passing roots = full passing minus the length-1..3 passing.
@@ -958,7 +991,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 	var idx int64 = -1
 	var nPass, nCheck, nCompile, nRuntime, nMismatch int64
 
-	workers := runtime.NumCPU()
+	workers := numCPU()
 	if workers < 1 {
 		workers = 1
 	}
@@ -967,34 +1000,23 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			la, e := lang.New()
+			la, e := langNew()
 			if e != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: lang.New: %v\n", e)
-				os.Exit(1)
+				osExit(1)
 			}
 			la.SetClock(specClock)
 			// A reused native registry produces the canonical (eng.Canon)
 			// value for passing rows — same recipe as the full matrix.
-			reg, e2 := native.DefaultRegistry()
+			reg, e2 := newNativeRegistry()
 			if e2 != nil {
 				fmt.Fprintf(os.Stderr, "specgen -extend5: registry: %v\n", e2)
-				os.Exit(1)
+				osExit(1)
 			}
 			specrunner.RegisterQFixtures(reg)
 			reg.SetParseFunc(parser.Parse)
 			modules.InstallResolver(reg)
 			native.SetHostClock(reg, specClock)
-			canonOf := func(s string) string {
-				values, perr := parser.Parse(s)
-				if perr != nil {
-					return ""
-				}
-				out, rerr := native.NewTop(reg).Run(values)
-				if rerr != nil {
-					return ""
-				}
-				return eng.Canon(out)
-			}
 
 			for {
 				k := int(atomic.AddInt64(&idx, 1))
@@ -1020,7 +1042,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 						atomic.AddInt64(&nRuntime, 1)
 						continue
 					}
-					gotC, wasC, errC := la.RunCompiled(s)
+					gotC, wasC, errC := runCompiled(la, s)
 					if !wasC || errC != nil || renderAny(gotC) != renderAny(gotI) {
 						// Divergence on the reused instance — re-verify on a
 						// FRESH lang (matching the langspec differential gate)
@@ -1033,7 +1055,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 							continue
 						}
 					}
-					classes[k], expects[k] = fivePass, canonOf(s)
+					classes[k], expects[k] = fivePass, canonOf(reg, s)
 					atomic.AddInt64(&nPass, 1)
 				}
 			}
@@ -1066,7 +1088,7 @@ func writeLen5Pass(path string, cands []string, classes []fiveClass, expects []s
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)
@@ -1097,7 +1119,7 @@ func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes
 	f, err := os.Create(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specgen -extend5: create %s: %v\n", path, err)
-		os.Exit(1)
+		osExit(1)
 	}
 	defer f.Close()
 	w := bufio.NewWriter(f)

@@ -57,6 +57,17 @@ func init() {
 // recv) must hand newBytes a fresh copy.
 func newBytes(b []byte) Value { return eng.NewExtension(TBytes, b) }
 
+// NewBytesValue wraps an OWNED []byte as a Bytes value without copying —
+// same contract as newBytes (the caller must never retain or mutate the
+// slice). Exported for the aql:net socket words, whose recv path hands
+// over freshly-read buffers (the copy-on-ingest boundary newBytes's doc
+// anticipates).
+func NewBytesValue(b []byte) Value { return newBytes(b) }
+
+// AsBytesValue unwraps a Bytes value's backing slice (shared, not
+// copied); ok=false when v is not a concrete Bytes. Exported for aql:net.
+func AsBytesValue(v Value) ([]byte, bool) { return asBytes(v) }
+
 // asBytes extracts the backing slice of a Bytes value.
 func asBytes(v Value) ([]byte, bool) {
 	if v.Parent == nil || !v.Parent.ConformsTo(TBytes) {

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 )
@@ -51,10 +52,12 @@ func (s *store) genID() string {
 	return fmt.Sprintf("gen%04d", s.nextID-1)
 }
 
-func main() {
-	s := newStore()
+// newMux builds the API handler over s. Extracted from main so tests can
+// drive the exact production routes through httptest.
+func newMux(s *store) *http.ServeMux {
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/api/planet", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/planet", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -87,7 +90,7 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/api/planet/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/planet/", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -200,6 +203,20 @@ func main() {
 		}
 	})
 
+	return mux
+}
+
+// Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
+// the exit path without opening a socket.
+var (
+	osExit      = os.Exit
+	listenServe = http.ListenAndServe
+)
+
+func main() {
 	log.Println("solardemo server listening on :8901")
-	log.Fatal(http.ListenAndServe(":8901", nil))
+	if err := listenServe(":8901", newMux(newStore())); err != nil {
+		log.Print(err)
+		osExit(1)
+	}
 }

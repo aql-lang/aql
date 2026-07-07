@@ -27,13 +27,9 @@ const sign63Mask = 0x7FFFFFFFFFFFFFFF
 //
 // See design/BINARY-OPERATIONS.10.md.
 func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newModuleRegistry(binaryModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
-	}
-
-	for _, n := range binaryModuleNatives {
-		subReg.RegisterNativeFunc(n)
 	}
 	// The core bitwise operators (band/bor/bxor/bnot/bsl/bsr/busr) moved into
 	// this module; register them in the sub-registry and export them too.
@@ -41,39 +37,36 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range native.BitwiseModuleNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(native.BitwiseModuleNatives, subReg)
 
 	// Unary Integer -> Integer.
 	for _, name := range []string{"popcount", "clz", "ctz", "bitlen", "mask", "reverse", "swap"} {
-		exports.Set(name, makeBinUnaryFnDef(name, subReg, native.TInteger))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TInteger, native.TInteger))
 	}
 
 	// Unary Integer -> Boolean.
-	exports.Set("parity", makeBinUnaryFnDef("parity", subReg, native.TBoolean))
+	exports.Set("parity", makeTypedFnDef("parity", subReg, native.TBoolean, native.TInteger))
 
 	// Binary Integer Integer -> Integer.
 	for _, name := range []string{"rotl", "rotr", "set", "clear", "toggle"} {
-		exports.Set(name, makeBinBinaryFnDef(name, subReg, native.TInteger))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TInteger, native.TInteger, native.TInteger))
 	}
 
 	// Binary Integer Integer -> Boolean.
-	exports.Set("test", makeBinBinaryFnDef("test", subReg, native.TBoolean))
+	exports.Set("test", makeTypedFnDef("test", subReg, native.TBoolean, native.TInteger, native.TInteger))
 
 	// Ternary Integer Integer Integer -> Integer.
-	exports.Set("extract", makeBinTernaryFnDef("extract", subReg))
+	exports.Set("extract", makeTypedFnDef("extract", subReg, native.TInteger, native.TInteger, native.TInteger, native.TInteger))
 
 	// Quaternary Integer Integer Integer Integer -> Integer.
-	exports.Set("insert", makeBinQuaternaryFnDef("insert", subReg))
+	exports.Set("insert", makeTypedFnDef("insert", subReg, native.TInteger, native.TInteger, native.TInteger, native.TInteger, native.TInteger))
 
 	// Character codes: String -> Integer (`ord`) and Integer -> String
 	// (`chr`). These replace the O(95) printable-ASCII alphabet trick that
 	// every char-code-needing AQL library otherwise has to roll by hand.
 	// See §9.8 in the DX report.
-	exports.Set("ord", makeBinFnDef1("ord", subReg, native.TString, native.TInteger))
-	exports.Set("chr", makeBinFnDef1("chr", subReg, native.TInteger, native.TString))
+	exports.Set("ord", makeTypedFnDef("ord", subReg, native.TInteger, native.TString))
+	exports.Set("chr", makeTypedFnDef("chr", subReg, native.TString, native.TInteger))
 
 	// Non-cryptographic string hashes: String -> Integer. FNV-1a, the
 	// standard library's hash/fnv. `fnv32` returns the full 32-bit hash
@@ -81,8 +74,8 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// with its sign bit cleared (non-negative, see sign63Mask) so it is
 	// directly usable as `hash mod m` in bloom/sketch/dedup libraries.
 	// See §9.9 in the DX report.
-	exports.Set("fnv32", makeBinFnDef1("fnv32", subReg, native.TString, native.TInteger))
-	exports.Set("fnv64", makeBinFnDef1("fnv64", subReg, native.TString, native.TInteger))
+	exports.Set("fnv32", makeTypedFnDef("fnv32", subReg, native.TInteger, native.TString))
+	exports.Set("fnv64", makeTypedFnDef("fnv64", subReg, native.TInteger, native.TString))
 
 	// Binary-safe text encodings: String -> String. base64 (RFC 4648
 	// standard alphabet, padded) and hex (lowercase). `*-encode` maps the
@@ -92,108 +85,12 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// and the canonical way to carry binary data through text channels —
 	// API tokens, content addressing, embedding bytes in JSON.
 	// See design/BATTERIES-INCLUDED-REPORT.5.md (Phase 1, encoding).
-	exports.Set("base64-encode", makeBinFnDef1("base64-encode", subReg, native.TString, native.TString))
-	exports.Set("base64-decode", makeBinFnDef1("base64-decode", subReg, native.TString, native.TString))
-	exports.Set("hex-encode", makeBinFnDef1("hex-encode", subReg, native.TString, native.TString))
-	exports.Set("hex-decode", makeBinFnDef1("hex-decode", subReg, native.TString, native.TString))
+	exports.Set("base64-encode", makeTypedFnDef("base64-encode", subReg, native.TString, native.TString))
+	exports.Set("base64-decode", makeTypedFnDef("base64-decode", subReg, native.TString, native.TString))
+	exports.Set("hex-encode", makeTypedFnDef("hex-encode", subReg, native.TString, native.TString))
+	exports.Set("hex-decode", makeTypedFnDef("hex-decode", subReg, native.TString, native.TString))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"BinUtil": exports},
-	}
-	return desc, nil
-}
-
-func makeBinUnaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  []native.FnParam{{Type: native.TInteger}},
-				Returns: []*native.Type{returnType},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-// makeBinFnDef1 builds a one-parameter module wrapper whose param and
-// return types may differ (e.g. ord: String -> Integer). makeBinUnaryFnDef
-// is the Integer -> returnType special case.
-func makeBinFnDef1(wordName string, subReg *native.Registry, paramType, returnType *native.Type) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params:  []native.FnParam{{Type: paramType}},
-				Returns: []*native.Type{returnType},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-func makeBinBinaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params: []native.FnParam{
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-				},
-				Returns: []*native.Type{returnType},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-func makeBinTernaryFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params: []native.FnParam{
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-				},
-				Returns: []*native.Type{native.TInteger},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
-}
-
-func makeBinQuaternaryFnDef(wordName string, subReg *native.Registry) native.Value {
-	fnDef := native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{
-			{
-				Params: []native.FnParam{
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-					{Type: native.TInteger},
-				},
-				Returns: []*native.Type{native.TInteger},
-				Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-			},
-		},
-		Registry: subReg,
-	}
-	return native.NewFnDef(fnDef)
+	return moduleDesc(parent, "BinUtil", subReg, exports), nil
 }
 
 // ---- handlers ----

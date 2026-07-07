@@ -25,7 +25,7 @@ type loggerState struct {
 // fresh sub-registry holds the natives, and the exported FnDef wrappers
 // carry that sub-registry so dot-access dispatch finds them.
 func buildLoggerInstance(st *loggerState) (*OrderedMap, error) {
-	subReg, err := DefaultRegistry()
+	subReg, err := newSubRegistry()
 	if err != nil {
 		return nil, err
 	}

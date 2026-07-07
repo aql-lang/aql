@@ -832,13 +832,16 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// up a fresh tape every execution. Falls back to a fresh tape when
 	// the existing buffer is too small. Per-run scratch state is cleared
 	// so nothing leaks across reuses.
-	if e.reuseTape && e.tape != nil && e.tape.Reload(prog) {
-		e.marks = nil
-		e.voidGroups = nil
-		e.traceNote = ""
-	} else {
+	if !(e.reuseTape && e.tape != nil && e.tape.Reload(prog)) {
 		e.tape = NewTapeWith(prog, e.registry.TapeConfig, e.tapeWarn)
 	}
+	// Per-run scratch state is cleared on EVERY entry (not only the
+	// Reload branch) so a reused engine whose previous tape was too
+	// small for this program — the fresh-tape fallback above — cannot
+	// leak marks/void-group state from its prior run.
+	e.marks = nil
+	e.voidGroups = nil
+	e.traceNote = ""
 	e.pointer = e.consumeStartAt()
 
 	// stepLimit is always set by the constructors (New / NewTop); the
@@ -3392,11 +3395,9 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	if elems.Len() == 0 {
 		return val, nil
 	}
-	sub := New(e.registry)
-	sub.elemEvalRecordable = e.isTop || consumed || e.elemEvalRecordable
 	input := make([]Value, elems.Len())
 	copy(input, elems.Slice())
-	result, err := sub.Run(input)
+	result, err := runPooledSub(e.registry, input, e.isTop || consumed || e.elemEvalRecordable)
 	if err != nil {
 		return Value{}, err
 	}
@@ -3486,8 +3487,7 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, ho
 			buf.WriteString(part.Lit)
 			continue
 		}
-		sub := New(e.registry)
-		result, runErr := sub.Run(part.Expr)
+		result, runErr := runPooledSub(e.registry, part.Expr, false)
 		if runErr != nil {
 			return "", dynamic, nil, false, runErr
 		}
@@ -3650,8 +3650,7 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
 			}
 			cren = append(cren, child)
 		case XmlCrenExpr:
-			sub := New(e.registry)
-			results, err := sub.Run(c.Expr)
+			results, err := runPooledSub(e.registry, c.Expr, false)
 			if err != nil {
 				return Value{}, false, err
 			}
@@ -3732,8 +3731,7 @@ func expandReach(info ReachInfo) []Value {
 // receiverless-reach-as-Function higher-order behaviour.
 func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
 	toks := lowerReach(ReachInfo{Receiver: []Value{recv}, Segments: info.Segments})
-	sub := New(r)
-	res, err := sub.Run(expandParenExpr(toks))
+	res, err := runPooledSub(r, expandParenExpr(toks), false)
 	if err != nil {
 		return Value{}, err
 	}
@@ -3749,8 +3747,7 @@ func ApplyReach(r *Registry, info ReachInfo, recv Value) (Value, error) {
 // shares the registry (defs leak) and propagates errors (a paren is not an
 // error boundary, unlike `do`).
 func (e *Engine) evalParenExprResults(items []Value) ([]Value, error) {
-	sub := New(e.registry)
-	return sub.Run(expandParenExpr(items))
+	return runPooledSub(e.registry, expandParenExpr(items), false)
 }
 
 // autoEvalMap evaluates each value in a plain map using a sub-engine.
@@ -3787,8 +3784,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// Computed key: evaluate the key text as AQL code to get
 		// the actual string key. E.g., {[a]:1} with def a 'x' → {x:1}
 		if ckSet[key] {
-			sub := New(e.registry)
-			keyResult, err := sub.Run([]Value{NewWord(key)})
+			keyResult, err := runPooledSub(e.registry, []Value{NewWord(key)}, false)
 			if err != nil {
 				return Value{}, fmt.Errorf("computed key [%s]: %w", key, err)
 			}
@@ -3912,10 +3908,9 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			}
 		}
 
-		// Evaluate each value in a sub-engine.
-		sub := New(e.registry)
-		sub.elemEvalRecordable = e.isTop || consumed || e.elemEvalRecordable
-		result, err := sub.Run([]Value{v})
+		// Evaluate each value in a pooled sub-engine.
+		result, err := runPooledSub(e.registry, []Value{v},
+			e.isTop || consumed || e.elemEvalRecordable)
 		if err != nil {
 			return Value{}, err
 		}
@@ -4146,7 +4141,7 @@ func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
-	res, err := New(r).Run(append([]Value(nil), items...))
+	res, err := runPooledSub(r, append([]Value(nil), items...), false)
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 || !IsConcrete(res[0]) {
@@ -4979,7 +4974,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		args[i].Undefined = false
 	}
 
-	if capturedReg != nil && capturedReg != e.registry {
+	if capturedReg != nil && (capturedReg != e.registry || e.registry.Lookup("__pa") == nil) {
 		// Execute in the captured module's registry via CallAQL.
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
@@ -4990,7 +4985,11 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// frame path a named fn call does — one fewer sub-engine per call,
 		// and flow-control/def-cleanup semantics identical to named
 		// dispatch (the TCO-STAGED Stage-5 residual flip; boundary rows in
-		// lang/spec/module-fnvalue-boundary.tsv).
+		// lang/spec/module-fnvalue-boundary.tsv). Gated on the frame
+		// protocol being EXECUTABLE: the splice tail's `__pa` word is
+		// registered by the language layer, so a bare kernel registry (an
+		// eng-only embedder, the kernel test harnesses) keeps the CallAQL
+		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
 		if valIdx < e.tape.Len() {
 			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {

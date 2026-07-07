@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native/help"
 )
 
@@ -43,7 +44,7 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		// program, and MUST be fully hermetic — it fires from OnRegisterHook on
 		// EVERY fn registration, INCLUDING the program's own `def f fn […]` DURING
 		// compilation, so any trace it leaves contaminates that very program's
-		// compile. Three leak channels are closed:
+		// compile. Six leak channels are closed:
 		//   1. EmitState (recording + interned consts + RememberOriginal) — swap in
 		//      a FRESH throwaway EmitState (IsolateEmit), not just Suspend: Suspend
 		//      keeps the SAME EmitState, so the example's consts (e.g. a generated
@@ -59,6 +60,18 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		//      the step ceiling — would otherwise burn the real program's shared
 		//      budget and short-circuit its later statements (e.g. a subsequent
 		//      `macroexpand (recursive-macro …)` never gets reached).
+		//   5. Filesystem — swap the active FileOps for a FRESH seeded
+		//      in-memory implementation for this one evaluation (and restore
+		//      after). Without this, registering the io words (read/write/
+		//      folder — e.g. a test helper installing them bare, or a host
+		//      registering fs words) evaluated their generated examples
+		//      against the registry's REAL FileOps: `write 'd' 'e'` created
+		//      a file named d in the process's cwd. A fresh seed per expr
+		//      also keeps results order-independent; the seed matches
+		//      genhelp and the help-example validation test, so dynamic and
+		//      precomputed results agree.
+		//   6. Input — an example of a reading word (stdin) must consume an
+		//      empty hermetic reader, never the process's stdin.
 		// Real construction-time body checking is a first-class pass
 		// (checkFnBodyAtConstruction), so suppressing the eval's diagnostics is sound.
 		defer r.Check.IsolateEmit()()
@@ -67,6 +80,27 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		defer r.Check.TruncateDiagnostics(diagBase)
 		defsSnap := r.Defs.Snapshot()
 		defer r.Defs.Restore(defsSnap)
+
+		prevOps, hadOps, _ := r.Capabilities.Get(CapFileOps)
+		prevMem, hadMem, _ := r.Capabilities.Get(CapMemFileOps)
+		mem := capabilities.NewMem()
+		for _, name := range []string{"a", "b", "c", "d", "e"} {
+			mem.Files[name] = []byte("file-" + name + "-content")
+		}
+		_ = r.Capabilities.Set(CapFileOps, capabilities.FileOps(mem))
+		_ = r.Capabilities.Set(CapMemFileOps, capabilities.FileOps(mem))
+		restoreCap := func(key string, prev any, had bool) {
+			if had {
+				_ = r.Capabilities.Set(key, prev)
+			} else {
+				_, _ = r.Capabilities.Delete(key)
+			}
+		}
+		defer restoreCap(CapFileOps, prevOps, hadOps)
+		defer restoreCap(CapMemFileOps, prevMem, hadMem)
+		savedIn := r.Input
+		r.Input = strings.NewReader("")
+		defer func() { r.Input = savedIn }()
 
 		eng := NewTop(r)
 		result, err := eng.Run(vals)

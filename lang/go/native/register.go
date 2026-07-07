@@ -160,6 +160,17 @@ func Register(r *Registry) {
 	for _, n := range patrunNatives {
 		r.RegisterNativeFunc(n)
 	}
+	// BEAM-style processes (spawn / self / send / receive / register /
+	// whereis / unregister). Registered after patrunNatives — `receive`
+	// routes clauses through the same trie.
+	for _, n := range processNatives {
+		r.RegisterNativeFunc(n)
+	}
+	// In-process services (service / add / call / send / state / wrap).
+	// After processNatives so the `send` Service overload appends.
+	for _, n := range serviceNatives {
+		r.RegisterNativeFunc(n)
+	}
 	r.Modules.InitFunc = func(child *Registry) {
 		for _, n := range Natives {
 			child.RegisterNativeFunc(n)

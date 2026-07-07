@@ -17,7 +17,9 @@ func selectorHandler(args []Value, ctx map[string]Value, stack []Value, r *Regis
 
 	result := voxgigstruct.Select(children, query)
 
-	val, err := anyToValue(result)
+	// Route convert-back through the shared structConvert seam
+	// (design/TEST-SEAMS.10.md) so the failure arm is drivable.
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("selector: %w", err)
 	}

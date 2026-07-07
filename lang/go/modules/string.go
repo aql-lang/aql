@@ -17,24 +17,5 @@ import (
 // `indexof` keeps its List overload here too, so StringUtil.indexof covers
 // both the string and list-membership forms.
 func BuildStringModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
-	if err != nil {
-		return native.ModuleDesc{}, err
-	}
-	for _, n := range native.StringModuleNatives {
-		subReg.RegisterNativeFunc(n)
-	}
-
-	exports := native.NewOrderedMap()
-	for _, n := range native.StringModuleNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
-
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"StringUtil": exports},
-	}
-	return desc, nil
+	return buildDelegatingModule(parent, "StringUtil", native.StringModuleNatives)
 }
