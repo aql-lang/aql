@@ -153,12 +153,13 @@ func TestFnValueCrossRegistryStillCallAQL(t *testing.T) {
 	}
 }
 
-// The three result-splice arms of execFnDefSig's CROSS-registry branch
-// (engine.go): after the flip they are exercised only by cross-registry
-// values, so pin each arm directly — the contiguous-indices walk with a
-// structural cell interleaved (a mark skipped by arg collection but
-// copied down by the splice), the 0-arg dispatch, and the forward-form
-// fallback where no stack indices back the args.
+// Cross-registry fn-value dispatch shapes: stack form with a structural
+// cell interleaved among the operands, a 0-arg named value, and forward
+// form. (These route through the compiled-value dispatch path, not
+// execFnDefSig's CallAQL splice arms — those arms are allowlisted as
+// defensive residue; see test/go/covergate/allowlist.tsv.) The pins are
+// behavioural: each shape must produce the callee's result with the
+// callee's names resolved in the CAPTURED registry.
 func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
 	mk := func(t *testing.T) (*Registry, *Registry) {
 		t.Helper()
