@@ -53,6 +53,11 @@ func (r *Registry) ForkConcurrent() *Registry {
 	// capacity), sibling forks would each append into the SHARED backing array,
 	// a data race. Reset alongside Args/FnBaselines for the same reason.
 	fork.debugEngines = nil
+	// enginePool parks reusable sub-engines whose registry back-pointer is
+	// the POOL OWNER. The fork must start with an empty pool: an inherited
+	// slice header would hand out engines still bound to the parent (and
+	// race the parent's own acquire/release).
+	fork.enginePool = nil
 	fork.FlowCtrl = FlowNone
 	fork.pendingGen = nil
 	fork.macroCache = nil

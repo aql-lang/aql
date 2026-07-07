@@ -118,12 +118,12 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 }
 
 // runQuotationBody pushes `pushed` (deepest first), then the body tokens, runs a
-// fresh sub-engine, and returns the residual top of stack.
+// pooled sub-engine, and returns the residual top of stack.
 func runQuotationBody(reg *Registry, tokens []Value, pushed []Value) (Value, bool, error) {
 	input := make([]Value, 0, len(pushed)+len(tokens))
 	input = append(input, pushed...)
 	input = append(input, tokens...)
-	res, err := New(reg).Run(input)
+	res, err := RunPooled(reg, input)
 	if err != nil {
 		return Value{}, false, err
 	}

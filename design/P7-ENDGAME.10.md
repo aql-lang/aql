@@ -70,6 +70,7 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 | M6 dynamic-scope tier | recursion 71/72 | Maintainer tiering decision — dynamic-scope frames are the one semantics the unit model cannot honestly claim. |
 | Sound non-definite error rows | convert-ideal 30, forward-barrier 80, word-splice 115 | The entire error allowlist: each has a written feasibility proof that the dispatch may succeed at runtime. |
 | Compute-frontier island | error.tsv 25 | The single `OpFallback` span. |
+| Unnamed fn-value param auto-dispatch guard (miscompile-E) | module-fnvalue-boundary raise/break/continue rows | **Sound refusals** (added July 2026 with the execFnDefSig same-registry splice flip — design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md §7). The VALUE twin of the container auto-dispatch tier: a fn whose UNNAMED param is Function/FnDef auto-dispatches the raw value on its body frame at run time; the analysis sees an inert carrier, so lowering strands the operands (found compiling to a 0-return unit). Guard in `carrier.go::runFnBodyOnce`; refusal gate 11 → 14. Known residual: the MODULE-fn unit path does not route through this guard — a module fn of this shape with an EMPTY body still compiles unsoundly (kept out of the spec corpus; recorded in the review doc §7). |
 
 **The unbounded whole-program fallback in `RunCompiled` stays**, by
 design: with 11 documented-tier refusals live it is the mechanism

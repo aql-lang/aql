@@ -206,6 +206,12 @@ type Registry struct {
 	// concurrent goroutine pushes onto its own stack and never the parent's
 	// shared backing array.
 	debugEngines []*Engine
+
+	// enginePool parks reusable sub-engines for RunPooled (engine_pool.go).
+	// Per-execution, single-goroutine state like debugEngines: ForkConcurrent
+	// resets it to nil so a fork never aliases the parent's parked engines
+	// (each holds a *Registry back-pointer to the pool's owner).
+	enginePool []*Engine
 }
 
 // enterInterpRun / exitInterpRun bracket one interpreter Engine.Run activation

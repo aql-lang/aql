@@ -308,3 +308,93 @@ check engines, macro expansion), and error-trapping (test runner, help
 examples) use the sub-engine *because* it is not the main tape. For
 these, the sub-engine is the cheap implementation of a semantic
 boundary, and cells would have to re-invent it.
+
+---
+
+## 7. Outcome record (implemented July 2026, this branch)
+
+R1–R3 were implemented; R4/R5 are standing decisions (no conversion —
+the callback words keep the `InvokeBody` seam, the isolation sites keep
+their sub-engines).
+
+**R1 — engine pool (`eng/go/engine_pool.go`).** `Registry.enginePool`
+parks up to 8 reusable engines (`reuseTape` + `Tape.Reload`); acquire
+POPS so nested bodies get distinct engines; `ForkConcurrent` starts
+with an empty pool (a parked engine back-points to the pool's owner);
+engines whose tape grew past 4096 entries are dropped, not pinned.
+`RunPooled` **copies the residual out before release** — `Run`'s
+return aliases the tape backing array under `TakeAll`'s
+ownership-transfer contract, and a later `Reload` would clobber a
+retained slice (the one real hazard found during implementation; the
+copy is a handful of Values against the ~164KB spawn it replaces).
+Converted sites: `InvokeBody`'s no-Invoker branch (every higher-order
+code body), the VM `invokeClosure` raw-token branch, map `each`/`fold`
+quotation bodies, `eachrank`, `Rand.list-of`/`map-from` interpreter
+paths, the fn log sink, and the four `behave` bodies (via
+`RunPooledTop`, preserving their NewTop flow/panic semantics — New and
+NewTop share one step limit, so top-ness is the only delta). Pinned by
+`engine_pool_test.go` (parity with fresh runs, reuse, nesting,
+error-path release, isTop reset, fork isolation, grown-tape drop,
+residual non-clobber).
+
+**R2 — same-registry `execFnDefSig` flip (`engine.go`).**
+`capturedReg == e.registry` now falls through to the main-tape frame
+splice; only genuinely cross-registry values take `CallAQL`. Empirical
+boundary work (instrumented sweeps): the branch is reached from source
+ONLY by an **anonymous** fn in a module export map value-dispatched
+back inside its own module — named module fns resolve through their
+registered body-runner handler (already splicing) even as values. Every
+observable probe (result, module-scope resolution, args.N, def
+cleanup, raise, break/continue flow errors) is **identical pre/post
+flip**; the boundary rows pin that invariance
+(`lang/spec/module-fnvalue-boundary.tsv` + the value twins in
+`lang/go/native/fnvalue_sameregistry_test.go`, including the
+cross-registry negative).
+
+**Found and guarded: a pre-existing compile unsoundness.** The new
+boundary rows exposed that a fn with an UNNAMED `Function`/`FnDef`
+param compiled to a unit that misses the runtime frame auto-dispatch
+(returns 0 values where the interpreter returns the dispatch result) —
+independent of the flip (reproduced on the unflipped tree). Fixed for
+the fn-unit analysis path with a refusal guard in
+`carrier.go::runFnBodyOnce` (new documented tier, refusal gate
+11 → 14, see design/P7-ENDGAME.10.md). **Open residual:** the
+MODULE-fn unit path does not route through this guard, so a module fn
+of that shape with an EMPTY body still compiles unsoundly (the shape
+was kept out of the spec corpus; value rows for it live in the Go
+tests, which run interpreted).
+
+**R3 — `inner` via `InvokeBody`.** The five raw `New(reg).Run` sites
+in `innerHandler` now use the seam, matching `outer` — compiled
+closures run VM-native, interpreter bodies get the pool for free.
+
+### Measured results (Intel Xeon 2.8GHz, 4 vCPU)
+
+Micro (committed benchmark `eng/go/engine_pool_bench_test.go`,
+one-literal program = pure spawn overhead, 200k iterations):
+
+| | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| `BenchmarkSubEngineFresh` | 91 864 | 188 771 | 6 |
+| `BenchmarkSubEnginePooled` | 9 321 | 304 | 3 |
+| improvement | **9.9×** | **620×** | 2× |
+
+Macro (CLI wall-clock, `aql do`, before = commit 12fd523, after =
+this change set):
+
+| Program | Before | After | Δ |
+|---|---:|---:|---:|
+| `(iota 100000) each [1 add]` | 6.38 s | 1.72 s | **3.7×** |
+| `(iota 200000) each [1 add]` | 10.46 s | 3.33 s | **3.1×** |
+| `inner [mul] [add] (iota 20000) (iota 20000)` | 4.28 s | 0.70 s | **6.1×** |
+| `for 200000 [def s (s add i)]` (mark/move path, unchanged) | 6.58 s | 7.15 s | noise |
+
+Allocation churn for the 200k `each` drops from ~38 GB
+(200 001 × 189 KB) to ~60 MB of pooled-run overhead — the "reduce
+resource usage" goal of the original review, delivered without
+touching the semantics the sub-engine encodes.
+
+Full verification: `make fmt && make vet && make lint && make test`
+green, including the langspec gates (differential, compiled coverage
+at the new documented tier, check-accuracy ratchet at the new pinned
+floor) and the full TSV spec corpus.

@@ -424,6 +424,8 @@ var (
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
+	RunPooled                 = eng.RunPooled
+	RunPooledTop              = eng.RunPooledTop
 	InvokeBody                = eng.InvokeBody
 	ConvertIdealToMap         = eng.ConvertIdealToMap
 	ConvertIdealToList        = eng.ConvertIdealToList

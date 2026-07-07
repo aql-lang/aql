@@ -4972,10 +4972,18 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		args[i].Undefined = false
 	}
 
-	if capturedReg != nil {
+	if capturedReg != nil && capturedReg != e.registry {
 		// Execute in the captured module's registry via CallAQL.
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
+		//
+		// Same-registry values fall through to the splice branch below: a
+		// module-fn VALUE applied inside its own module (a callback passed
+		// back in) needs no registry hop, so it takes the same main-tape
+		// frame path a named fn call does — one fewer sub-engine per call,
+		// and flow-control/def-cleanup semantics identical to named
+		// dispatch (the TCO-STAGED Stage-5 residual flip; boundary rows in
+		// lang/spec/module-fnvalue-boundary.tsv).
 		var captures []CapturedBinding
 		if valIdx < e.tape.Len() {
 			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {

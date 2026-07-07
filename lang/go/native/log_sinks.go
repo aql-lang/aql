@@ -197,8 +197,7 @@ func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) 
 		name: name,
 		min:  min,
 		emit: func(r *Registry, rec LogRecord) error {
-			sub := New(r)
-			if _, err := sub.Run([]Value{rec.toMap(), fn}); err != nil {
+			if _, err := RunPooled(r, []Value{rec.toMap(), fn}); err != nil {
 				return fmt.Errorf("log sink %q: %w", name, err)
 			}
 			return nil

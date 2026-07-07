@@ -1,0 +1,35 @@
+# AQL Language Specification: module fn-VALUE application boundary
+# Format: input<TAB>expected<TAB>description
+#
+# Boundary rows for a module-captured Function VALUE applied inside its
+# own module — the execFnDefSig same-registry dispatch class routed onto
+# the main-tape splice branch (the TCO-STAGED Stage-5 residual flip; see
+# design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md R2). The shape needs VALUE
+# dispatch, so the callee is an ANONYMOUS fn in the export map (a named
+# module fn resolves through its registered body-runner handler instead)
+# and the caller takes it via an UNNAMED Function param, splicing the raw
+# value onto the body frame. Every row pins behaviour that held on BOTH
+# sides of the flip — the def-cleanup / error / flow boundary must not
+# move.
+#
+# The VALUE-result twins (application result, module-scope resolution,
+# args.N, composition) live in lang/go/native/fnvalue_sameregistry_test.go
+# rather than here: a module fn with an UNNAMED Function param currently
+# COMPILES to a unit that misses the runtime auto-dispatch (the
+# interpreter returns the dispatch result; the compiled unit returns 0
+# values), so value rows of this shape would trip the compiled
+# differential on a pre-existing compiler gap, not on the boundary under
+# test. Top-level fns of the same shape now REFUSE compilation (the
+# "unnamed fn-value param auto-dispatches on the body frame" guard in
+# eng/go/carrier.go::runFnBodyOnce); extending that refusal to the
+# module-fn unit path is the open follow-up recorded in
+# design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md §7.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the frame tears down — nothing leaks
+import module [def useanon fn [[Function Integer] [Integer] []] export "L" {useanon: useanon/r, lk: (fn [[x:Integer] [Integer] [def tmpz 7 x add tmpz]])}] end L.useanon L.lk 1 end tmpz	ERROR:undefined_word	a body-local def is torn down by the frame tail — it must NOT leak past the call
+#
+# §2  errors and flow control cross (or refuse to cross) the boundary unchanged
+import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1	ERROR:bang	a raise inside the value-dispatched body propagates out as the same error (the args body makes the caller REFUSE compilation via the unnamed-fn-value guard, so the row runs interpreted; the raise fires on the frame auto-dispatch)
+import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk	ERROR:break outside loop	a break in a value-dispatched body does not escape the module-call boundary
+import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/r, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp	ERROR:continue outside loop	a continue in a value-dispatched body does not escape the module-call boundary

@@ -1738,10 +1738,6 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	if !IsConcrete(args[0]) || !IsConcrete(args[1]) || !IsConcrete(args[2]) || !IsConcrete(args[3]) {
 		return nil, reg.AqlError("inner_error", "inner: expected concrete lists", "inner")
 	}
-	_lst, _ := AsList(args[0])
-	pairOp := _lst.Slice()
-	_lst2, _ := AsList(args[1])
-	aggOp := _lst2.Slice()
 	left, _ := AsList(args[2])
 	right, _ := AsList(args[3])
 
@@ -1750,15 +1746,12 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		if left.Len() != right.Len() {
 			return nil, reg.AqlError("inner_error", "inner: vectors must have same length", "inner")
 		}
-		// Apply pair-op to each pair
+		// Apply pair-op to each pair. InvokeBody is the single body-running
+		// seam (as in `outer`): under the VM it drives the compiled closure,
+		// under the interpreter it runs a pooled sub-engine.
 		paired := make([]Value, left.Len())
 		for i := 0; i < left.Len(); i++ {
-			input := make([]Value, len(pairOp)+2)
-			input[0] = left.Get(i)
-			input[1] = right.Get(i)
-			copy(input[2:], pairOp)
-			sub := New(reg)
-			res, err := sub.Run(input)
+			res, err := InvokeBody(reg, args[0], []Value{left.Get(i), right.Get(i)})
 			if err != nil {
 				return nil, fmt.Errorf("inner: pair %d: %w", i, err)
 			}
@@ -1770,12 +1763,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		// Fold with agg-op
 		acc := paired[0]
 		for i := 1; i < len(paired); i++ {
-			input := make([]Value, len(aggOp)+2)
-			input[0] = acc
-			input[1] = paired[i]
-			copy(input[2:], aggOp)
-			sub := New(reg)
-			res, err := sub.Run(input)
+			res, err := InvokeBody(reg, args[1], []Value{acc, paired[i]})
 			if err != nil {
 				return nil, fmt.Errorf("inner: fold %d: %w", i, err)
 			}
@@ -1801,15 +1789,10 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 			if leftRow.Len() != len(rightCol) {
 				return nil, reg.AqlError("inner_error", "inner: dimension mismatch", "inner")
 			}
-			// Pair then fold
+			// Pair then fold, through the same InvokeBody seam as the 1D case.
 			paired := make([]Value, leftRow.Len())
 			for k := 0; k < leftRow.Len(); k++ {
-				input := make([]Value, len(pairOp)+2)
-				input[0] = leftRow.Get(k)
-				input[1] = rightCol[k]
-				copy(input[2:], pairOp)
-				sub := New(reg)
-				res, err := sub.Run(input)
+				res, err := InvokeBody(reg, args[0], []Value{leftRow.Get(k), rightCol[k]})
 				if err != nil {
 					return nil, err
 				}
@@ -1820,12 +1803,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 			}
 			acc := paired[0]
 			for k := 1; k < len(paired); k++ {
-				input := make([]Value, len(aggOp)+2)
-				input[0] = acc
-				input[1] = paired[k]
-				copy(input[2:], aggOp)
-				sub := New(reg)
-				res, err := sub.Run(input)
+				res, err := InvokeBody(reg, args[1], []Value{acc, paired[k]})
 				if err != nil {
 					return nil, err
 				}
@@ -1932,8 +1910,7 @@ func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Va
 		input := make([]Value, len(bodySlice)+1)
 		input[0] = cell
 		copy(input[1:], bodySlice)
-		sub := New(reg)
-		res, err := sub.Run(input)
+		res, err := RunPooled(reg, input)
 		if err != nil {
 			return nil, fmt.Errorf("eachrank: %w", err)
 		}

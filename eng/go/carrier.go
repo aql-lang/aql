@@ -3470,6 +3470,23 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 		if i < len(paramNames) && paramNames[i] != "" {
 			r.Defs.Push(paramNames[i], arg)
 		} else {
+			// An unnamed FN-VALUE param is a runtime auto-dispatch the
+			// compiled model cannot express: the interpreter steps the raw
+			// Function/FnDef on the body frame and dispatches it against the
+			// neighbouring frame values (execFnDefLiteral), but the analysis
+			// sees only an inert carrier, so the lowered unit strands the
+			// operands and returns the wrong residual (found by the
+			// module-fnvalue-boundary.tsv differential: `fn [[Function
+			// Integer] [Integer] []]` compiled to a 0-return unit where the
+			// interpreter returns the dispatch result). Refuse so the
+			// program falls back — the value twin of the "fn value read
+			// from a container auto-dispatches" tier.
+			if arg.Parent != nil &&
+				(arg.Parent.ConformsTo(TFunction) || arg.Parent.ConformsTo(TFnDef)) {
+				if es := r.Check.Recorder(); es.active() {
+					es.MarkUncompilable("unnamed fn-value param auto-dispatches on the body frame (Stage 3)")
+				}
+			}
 			input = append(input, arg)
 			hasUnnamed = true
 		}
