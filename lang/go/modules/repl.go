@@ -61,14 +61,8 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "export",
 		Signatures: []native.Signature{
-			{
-				Args: []*native.Type{native.TAtom, native.TMap},
-				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					name, _ := eargs[0].AsConcreteAtom()
-					return resolveExport(modReg, exports, name, eargs[1])
-				}),
-				Returns: []*native.Type{}, BarrierPos: -1,
-			},
+			// The preamble's exporter is always the String form
+			// (`export "Repl" {…}`); no Atom overload is needed.
 			{
 				Args: []*native.Type{native.TString, native.TMap},
 				Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
