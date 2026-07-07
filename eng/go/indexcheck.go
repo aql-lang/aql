@@ -128,20 +128,18 @@ func indexProvablyOOB(idx Value, n int) (string, bool) {
 }
 
 // emitIndexOOB records an index_out_of_range diagnostic stamped with
-// the offending index value's source position (when known). Silent
-// inside an error-catching body (CaughtBodyDepth): the consuming word's
-// runtime error is trapped by the enclosing `do`, so the provable OOB is
-// not a program error there.
+// the offending index value's source position (when known). A
+// RuntimeMirror: the consuming word errors at runtime on exactly this
+// index, and the recording model is unaffected — inside an error-catching
+// `do` body AddDiagnostic re-attributes it to a caught info finding.
 func emitIndexOOB(r *Registry, word, detail string, pos SrcPos) {
-	if r.Check.CaughtBodyDepth > 0 {
-		return
-	}
 	r.Check.AddDiagnostic(CheckDiagnostic{
-		Code:   "index_out_of_range",
-		Detail: word + ": " + detail,
-		Word:   word,
-		Row:    pos.Row,
-		Col:    pos.Col,
+		Code:          "index_out_of_range",
+		Detail:        word + ": " + detail,
+		Word:          word,
+		Row:           pos.Row,
+		Col:           pos.Col,
+		RuntimeMirror: true,
 	})
 }
 

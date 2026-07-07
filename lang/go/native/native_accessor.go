@@ -213,10 +213,7 @@ func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
 // runtime. Everything non-concrete keeps getNodeReturns' gradual result.
 func getrNodeReturns(args []Value, r *Registry) []Value {
 	out := getNodeReturns(args, r)
-	// Plain check only (!Compiling): the compile pass keeps its
-	// diagnostic-free contract for guaranteed-error rows (they compile
-	// and raise identically at run time — the trap/RET discipline).
-	if r == nil || !r.Check.IsActive() || r.Check.Compiling || len(args) != 2 ||
+	if r == nil || !r.Check.IsActive() || len(args) != 2 ||
 		!IsConcrete(args[0]) || !IsConcrete(args[1]) {
 		return out
 	}
@@ -244,7 +241,7 @@ func getrNodeReturns(args []Value, r *Registry) []Value {
 // result unchanged.
 func getrObjectReturns(args []Value, r *Registry) []Value {
 	out := getObjectReturns(args, r)
-	if r == nil || !r.Check.IsActive() || r.Check.Compiling || len(args) != 2 ||
+	if r == nil || !r.Check.IsActive() || len(args) != 2 ||
 		!IsConcrete(args[0]) || args[1].Parent == nil {
 		return out
 	}
@@ -270,7 +267,7 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 // maybe-miss) stays silent; the residual model stays empty either way
 // (the sig never produces a value).
 func getrNoneReturns(args []Value, r *Registry) []Value {
-	if r != nil && r.Check.IsActive() && !r.Check.Compiling && len(args) == 2 &&
+	if r != nil && r.Check.IsActive() && len(args) == 2 &&
 		eng.IsNoneShape(args[1]) && !args[1].Dynamic {
 		eng.CheckAddUniqueDiagnostic(r, "not_found",
 			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos)

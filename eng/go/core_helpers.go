@@ -507,11 +507,12 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unna
 				name, len(declared))
 			if !hasCheckDiagnostic(r, "type_error", detail) {
 				r.Check.AddDiagnostic(CheckDiagnostic{
-					Code:   "type_error",
-					Detail: detail,
-					Word:   name,
-					Row:    pos.Row,
-					Col:    pos.Col,
+					Code:          "type_error",
+					Detail:        detail,
+					Word:          name,
+					Row:           pos.Row,
+					Col:           pos.Col,
+					RuntimeMirror: true,
 				})
 			}
 		}
@@ -537,24 +538,25 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unna
 		return
 	}
 	extra := len(stk) - len(declared)
-	// The count mirror is PLAIN-check only (!Compiling): the compile pass
-	// deliberately COMPILES a count-mismatched body and lets the VM RET
-	// raise the byte-identical error (emit.go — TestEmitP5MultiResult pins
-	// it), so a diagnostic there would flip the row to a "check
-	// diagnostics" refusal. And only an exactly-known count flags: a
-	// DYNAMIC value in the residual marks a modelling seam (a mid-body
-	// `apply`, a gradual branch join) where the static count can diverge
-	// from the runtime one — skip, like the variadic/fn-value shapes.
-	if extra > unnamedCount && !r.Check.Compiling &&
+	// The count mirror flags only an exactly-known count: a DYNAMIC value
+	// in the residual marks a modelling seam (a mid-body `apply`, a
+	// gradual branch join) where the static count can diverge from the
+	// runtime one — skip, like the variadic/fn-value shapes. It is a
+	// RuntimeMirror: the compile pass deliberately COMPILES the
+	// count-mismatched body and lets the VM RET raise the byte-identical
+	// error (emit.go — TestEmitP5MultiResult pins it), so the refusal
+	// loop skips mirror diagnostics.
+	if extra > unnamedCount &&
 		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) {
 		detail := returnCountErrorText(name, len(declared), len(stk)-unnamedCount)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			r.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "type_error",
-				Detail: detail,
-				Word:   name,
-				Row:    pos.Row,
-				Col:    pos.Col,
+				Code:          "type_error",
+				Detail:        detail,
+				Word:          name,
+				Row:           pos.Row,
+				Col:           pos.Col,
+				RuntimeMirror: true,
 			})
 		}
 	}
@@ -588,12 +590,16 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unna
 		}
 		detail, _ := returnTypeErrorText(name, k+1, exp, got)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
+			// A RuntimeMirror like the count path: the VM RET re-checks the
+			// runtime value and raises the byte-identical type_error, so the
+			// compiled error path is exact.
 			r.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "type_error",
-				Detail: detail,
-				Word:   name,
-				Row:    pos.Row,
-				Col:    pos.Col,
+				Code:          "type_error",
+				Detail:        detail,
+				Word:          name,
+				Row:           pos.Row,
+				Col:           pos.Col,
+				RuntimeMirror: true,
 			})
 		}
 	}
@@ -624,10 +630,12 @@ func fnBodyUndefinedWordShield(r *Registry, name string, pos, bodyEnd SrcPos) bo
 
 // hasCheckDiagnostic reports whether a diagnostic with the given code and
 // exact detail is already recorded — the dedupe the per-call-shape ReturnsFn
-// paths use (one analysed shape can repeat across call sites).
+// paths use (one analysed shape can repeat across call sites). A caught
+// (downgraded) entry does not count: it must never mask a later REAL
+// emission of the same finding outside the trapping region.
 func hasCheckDiagnostic(r *Registry, code, detail string) bool {
 	for _, d := range r.Check.Diagnostics {
-		if d.Code == code && d.Detail == detail {
+		if d.Code == code && d.Detail == detail && !d.CaughtAtRuntime {
 			return true
 		}
 	}

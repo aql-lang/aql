@@ -275,11 +275,11 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 			return []Value{val}
 		}
 		// A module's export map is sealed at import, so a concrete-key miss
-		// is ALSO a plain-check diagnostic (the strict-read contract, same
-		// text). PLAIN check only: the COMPILE pass must stay
-		// diagnostic-free so the trap below keeps compiling
-		// (TestModuleExportGetrNotFoundTrapCompiles pins it).
-		if r.Check.IsActive() && !r.Check.Compiling {
+		// is ALSO a check diagnostic (the strict-read contract, same text).
+		// A RuntimeMirror: the refusal loop skips it, so the trap below
+		// keeps compiling (TestModuleExportGetrNotFoundTrapCompiles pins
+		// it).
+		if r.Check.IsActive() {
 			eng.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos)
 		}

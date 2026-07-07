@@ -238,11 +238,13 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 		if r.Check.IsActive() {
 			val = NewCarrier(TAny)
 			// A miss against a PROVEN (concrete) source is a guaranteed
-			// runtime unpack_error — flag it at `aql check` with the same
-			// detail. An abstract source's stub miss proves nothing and
-			// stays lenient, and the COMPILE pass stays diagnostic-free so
-			// the trap below keeps compiling (TestEmitTrap pins it).
-			if proven && !r.Check.Compiling {
+			// runtime unpack_error — flag it (a RuntimeMirror: the trap
+			// below compiles the identical error, and the refusal loop
+			// skips mirrors — TestEmitTrap pins the trap still compiling).
+			// An abstract source's stub miss proves nothing; a nested /
+			// fn-body unpack is conditionally reached and stays lenient
+			// (the top-level gate).
+			if proven && eng.CheckAtUncaughtTopLevel(r) {
 				eng.CheckAddUniqueDiagnostic(r, "unpack_error",
 					"unpack: key "+srcKey+" not found in source", "unpack", pos)
 			}

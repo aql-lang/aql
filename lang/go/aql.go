@@ -293,18 +293,13 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	}
 
 	a.registry.Source = src
-	defer a.registry.Check.Begin()()
+	// BeginCompilePass arms the shared compile-pass ritual (fresh
+	// EmitState, Compiling flag, fn-memo drop) in one place.
+	defer a.registry.Check.BeginCompilePass()()
 	// Per-check-run reset (see Check): a reused instance must not inherit a
 	// prior pass's deferred parse kinds.
 	native.ResetParseDeferredKinds(a.registry)
 	native.ResetModuleExportGrowth(a.registry)
-	a.registry.Check.Emit = eng.NewEmitState()
-	a.registry.Check.Compiling = true
-	// Fn-body analyses must run (and record) under THIS emit pass —
-	// a summary cached by an earlier plain Check on the same instance
-	// would skip the body and leave its compiled unit empty.
-	a.registry.Check.FnSummaries = nil
-	a.registry.Check.FnInflight = nil
 
 	engine := native.NewTop(a.registry)
 	engine.SetSource(src)
@@ -323,7 +318,17 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 		return nil, "check error", res, runErr
 	}
 	for _, d := range res.Diagnostics {
-		if d.Severity == SeverityError {
+		// Refuse only on MODEL-UNDERMINING findings (undefined_word,
+		// no_signature, … — dispatch did not resolve, so the recording is
+		// a guess). A RuntimeMirror error is a validation finding whose
+		// model is exact — the program compiles and raises the identical
+		// error at runtime (trap / VM RET / the same handler) — so it
+		// must not cost compile coverage. A CAUGHT model-undermining
+		// finding still undermines the model: the `do` body's contents
+		// were recorded from the same guess (the runtime catches the
+		// error, but the compiled region computes a different value), so
+		// the caught downgrade must not slip it past this gate.
+		if !d.RuntimeMirror && (d.Severity == SeverityError || d.CaughtAtRuntime) {
 			return nil, "check diagnostics", res, nil
 		}
 	}

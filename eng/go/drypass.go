@@ -18,14 +18,15 @@ import "errors"
 // parseSpecReturns (aql:parse), CheckMicronConstruction (make).
 
 // CheckAtUncaughtTopLevel reports whether the current analysis position is
-// the PLAIN-check top-level straight line: outside every fn body and
-// nested branch/loop/quotation body, and not the compile pass. A
-// guaranteed runtime fault detected here is unconditionally reached, so it
-// may be flagged as a program error; anywhere else reachability is
-// conditional (and inside `do` bodies CheckAddUniqueDiagnostic's
-// CaughtBodyDepth gate keeps the mirror silent).
+// the check pass's top-level straight line: outside every fn body and
+// nested branch/loop/quotation body. A guaranteed runtime fault detected
+// here is unconditionally reached, so it may be flagged as a program
+// error; anywhere else reachability is conditional. Inside `do` bodies
+// AddDiagnostic re-attributes error findings to caught info centrally,
+// and the compile pass no longer needs excluding — mirror diagnostics
+// (RuntimeMirror) do not trip the compile pipeline's refusal.
 func CheckAtUncaughtTopLevel(r *Registry) bool {
-	return r != nil && r.Check.IsActive() && !r.Check.Compiling &&
+	return r != nil && r.Check.IsActive() &&
 		r.Check.FnBodyDepth == 0 && r.Check.NestedBodyDepth == 0
 }
 

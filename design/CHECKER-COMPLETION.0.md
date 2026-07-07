@@ -1,6 +1,9 @@
 # Checker Completion — the guaranteed-runtime-error mirror sweep
 
-**Status:** implemented, 2026-07-07. Outcome record (§6) is authoritative.
+**Status:** implemented, 2026-07-07; design refits (§7) landed the same
+day. Outcome record (§6) is authoritative; §7 supersedes the two
+workaround mechanisms §1 and §5 describe (CaughtBodyDepth suppression,
+the blanket `!Compiling` gating).
 
 ## 1. Motivation
 
@@ -143,3 +146,44 @@ module values); value-dependent generic instantiation (`Box of
 fn-predicate types (check-mode `.Is` is deliberately lenient for them);
 and divergence needing BRANCH-fold propagation (`f 0` reaching a raise
 through a folded condition, plus Assert.throws' body run).
+
+## 7. Design refits — classification over suppression
+
+Review of the first cut identified the two suppression mechanisms as
+design debt: CaughtBodyDepth *silenced* findings (discarding
+information, and leaving other diagnostic families inconsistently loud
+inside `do` bodies — `do [undefined-word] error [dot code]` is a WORKING
+program the checker still error-flagged), and the blanket `!Compiling`
+gating made the check and compile passes report DIFFERENT diagnostics
+for the same source (Vm.compile's surfaced diagnostics were a subset of
+`aql check`'s). Three refits replace both workarounds with structure:
+
+1. **`CheckState.BeginCompilePass()`** — the compile-pass arming ritual
+   (fresh EmitState, the Compiling flag, fn-memo drop) extracted into
+   one shared helper used by lang's `CompileCheck` and aql:vm's
+   `Vm.compile`. The hand-rolled copy is how Vm.compile shipped without
+   the Compiling flag.
+2. **`CheckDiagnostic.RuntimeMirror`** — mirrors are classified at the
+   emit site (`CheckAddUniqueDiagnostic` stamps all its callers; the
+   direct emitters — the return count/type conformance mirrors,
+   `emitIndexOOB` — stamp explicitly). The compile refusal loops
+   (`CompileCheck`, `Vm.compile::hasCheckError`) skip mirrors: only
+   MODEL-UNDERMINING errors (undefined_word, no_signature — the
+   recording is a guess) refuse. Every `!Compiling` sprinkle in the
+   mirror emitters is deleted; the two passes now report identical
+   diagnostics, and guaranteed-error rows COMPILE their exact error
+   path (trap / VM RET / the same handler) instead of falling back.
+3. **`CheckDiagnostic.CaughtAtRuntime`** — `AddDiagnostic` re-attributes
+   centrally: inside an error-trapping region (CaughtBodyDepth) every
+   error-severity finding is downgraded to info and stamped, uniformly
+   across ALL families. The finding stays visible ("this expression
+   always raises, and the trap is here"); the false error verdict is
+   gone — including the previously-latent `do [undefined-word]` false
+   positive, now pinned by TestCaughtRegionReattribution. Dedupe
+   helpers skip caught entries so a caught info never masks a later
+   real emission of the same finding.
+
+Pins: eng/go/drypass_test.go (BeginCompilePass, caught re-attribution
+at the emit seam), lang/go/checker_refit_test.go (refusal narrowing,
+check/compile diagnostic agreement, per-family re-attribution).
+Ratchet unchanged by the refits: 137 unflagged / 0 false positives.

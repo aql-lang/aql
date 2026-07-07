@@ -600,24 +600,27 @@ func CheckMicronConstruction(r *Registry, target, src Value, pos SrcPos) {
 // CheckAddUniqueDiagnostic adds a check-mode diagnostic unless an
 // identical one (code+detail+position) is already recorded — ReturnsFns
 // run once per analysed call shape, and a body can be analysed under
-// several shapes. Every caller mirrors a GUARANTEED runtime error, so
-// inside an error-catching body (`do [...]`, CaughtBodyDepth) the mirror
-// stays silent: the runtime error is trapped there, not raised.
+// several shapes. Every caller mirrors a GUARANTEED runtime error over
+// exactly-known operands, so the diagnostic is stamped RuntimeMirror
+// (the compile pipeline does not refuse on it — the recording model is
+// exact) and inside an error-catching `do` body AddDiagnostic
+// re-attributes it to a caught info finding. A caught (downgraded)
+// entry never blocks a later REAL emission of the same finding at
+// another site, so the dedupe skips it.
 func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
-	if r.Check.CaughtBodyDepth > 0 {
-		return
-	}
 	for _, d := range r.Check.Diagnostics {
-		if d.Code == code && d.Detail == detail && d.Row == pos.Row && d.Col == pos.Col {
+		if d.Code == code && d.Detail == detail && d.Row == pos.Row && d.Col == pos.Col &&
+			!d.CaughtAtRuntime {
 			return
 		}
 	}
 	r.Check.AddDiagnostic(CheckDiagnostic{
-		Code:   code,
-		Detail: detail,
-		Word:   word,
-		Row:    pos.Row,
-		Col:    pos.Col,
+		Code:          code,
+		Detail:        detail,
+		Word:          word,
+		Row:           pos.Row,
+		Col:           pos.Col,
+		RuntimeMirror: true,
 	})
 }
 

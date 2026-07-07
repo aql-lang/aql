@@ -396,19 +396,9 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 		return compileResultValue(false, "parse error", nil), nil
 	}
 	subReg.Source = src
-	defer subReg.Check.Begin()()
-	subReg.Check.Emit = native.NewEmitState()
-	// This IS a compile pass: mark it so (mirroring CompileCheck) — the
-	// plain-check-only guaranteed-error mirrors (design/CHECKER-COMPLETION
-	// .0.md) must stay silent here, or a row that compiles the error path
-	// (a trap, the VM RET count check) flips to a "check diagnostics"
-	// refusal.
-	subReg.Check.Compiling = true
-	// Fn-body analyses must record under THIS emit pass; a summary cached by
-	// an earlier plain check on the shared registry would leave its compiled
-	// unit empty (see CompileCheck).
-	subReg.Check.FnSummaries = nil
-	subReg.Check.FnInflight = nil
+	// The shared compile-pass ritual (fresh EmitState, Compiling flag,
+	// fn-memo drop) — see CheckState.BeginCompilePass.
+	defer subReg.Check.BeginCompilePass()()
 
 	eng := native.NewTop(subReg)
 	eng.SetSource(src)
@@ -440,7 +430,11 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 // hasCheckError reports whether any diagnostic is error-severity.
 func hasCheckError(diags []native.CheckDiagnostic) bool {
 	for _, d := range diags {
-		if d.Severity == native.SeverityError {
+		// Model-undermining findings only — a RuntimeMirror compiles the
+		// identical error path and must not refuse, while a CAUGHT
+		// non-mirror finding still marks a guessed recording (see
+		// CompileCheck's refusal loop).
+		if !d.RuntimeMirror && (d.Severity == native.SeverityError || d.CaughtAtRuntime) {
 			return true
 		}
 	}

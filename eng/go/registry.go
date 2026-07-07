@@ -835,6 +835,25 @@ type CheckDiagnostic struct {
 	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
 	FnBody   bool          `json:"fnBody,omitempty"`   // emitted during fn-body analysis (call-time code) — see RescueForwardRefDiagnostics
 	FnName   string        `json:"fnName,omitempty"`   // enclosing named fn for an FnBody diagnostic — the reader for the dynamic-scope rescue
+
+	// RuntimeMirror marks a diagnostic that mirrors a GUARANTEED runtime
+	// error over exactly-known operands (design/CHECKER-COMPLETION.0.md):
+	// the finding gates `aql check`, but the recording MODEL underneath it
+	// is exact — the program compiles and raises the identical error at
+	// runtime (a trap, the VM RET check, the same pure handler) — so the
+	// compile pipeline does NOT refuse on it (CompileCheck / Vm.compile
+	// skip mirrors in their error-diagnostic refusal). Contrast a
+	// model-undermining diagnostic (undefined_word, no_signature), where
+	// dispatch did not resolve and the recording is a guess.
+	RuntimeMirror bool `json:"runtimeMirror,omitempty"`
+
+	// CaughtAtRuntime marks a would-be-error diagnostic emitted inside an
+	// error-TRAPPING region (`do [...]` — CaughtBodyDepth): the runtime
+	// traps the error there, so the program is not wrong. AddDiagnostic
+	// downgrades such findings to SeverityInfo centrally and stamps this
+	// flag — the information (the expression always raises, and where the
+	// trap is) survives without a false error verdict.
+	CaughtAtRuntime bool `json:"caughtAtRuntime,omitempty"`
 }
 
 // NewRegistry creates an empty registry.

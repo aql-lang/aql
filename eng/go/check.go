@@ -120,14 +120,34 @@ func (c *CheckState) Begin() func() {
 	c.CaughtBodyDepth = 0
 	c.NestedBodyDepth = 0
 	c.ArgsFrameUnnamed = false
-	// Compiling marks a REAL compile pass; the compile entry points
-	// (CompileCheck / RunCompiled) set it true AFTER this Begin. Reset it here so
-	// it is a proper per-pass flag — a later plain check on a reused registry
+	// Compiling marks a REAL compile pass; the compile entry points set it
+	// true AFTER this Begin (via BeginCompilePass). Reset it here so it is
+	// a proper per-pass flag — a later plain check on a reused registry
 	// must not inherit a prior compile's true.
 	c.Compiling = false
 	return func() {
 		c.Mode = false
 	}
+}
+
+// BeginCompilePass is Begin() plus the compile-pass arming ritual shared
+// by every bytecode-recording entry point (lang's CompileCheck, aql:vm's
+// Vm.compile): install a fresh EmitState, mark the pass as Compiling, and
+// drop the fn-body memos so bodies re-analyse — and re-record — under
+// THIS pass (a summary cached by an earlier plain check would leave its
+// compiled unit empty). One shared helper is what keeps the ritual's
+// pieces from going missing in a hand-rolled copy: Vm.compile shipped
+// without the Compiling flag for exactly that reason.
+func (c *CheckState) BeginCompilePass() func() {
+	done := c.Begin()
+	if c == nil {
+		return done
+	}
+	c.Emit = NewEmitState()
+	c.Compiling = true
+	c.FnSummaries = nil
+	c.FnInflight = nil
+	return done
 }
 
 // AddDiagnostic appends a diagnostic to the active check run. Safe to
@@ -151,6 +171,17 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 		case "no_signature", "undefined_word", "uncalled_function", "branch_error":
 			return
 		}
+	}
+	// Inside an error-TRAPPING region (`do [...]`, CaughtBodyDepth) the
+	// runtime catches every body error, so an error-severity finding there
+	// is not a program error — re-attribute it centrally: downgrade to
+	// info and stamp CaughtAtRuntime, keeping the finding visible without
+	// a false verdict. This covers EVERY error family uniformly (the
+	// guaranteed-error mirrors, undefined_word, no_signature, …) instead
+	// of each emitter special-casing the region.
+	if c.CaughtBodyDepth > 0 && d.Severity == SeverityError {
+		d.Severity = SeverityInfo
+		d.CaughtAtRuntime = true
 	}
 	if c.FnBodyDepth > 0 {
 		d.FnBody = true

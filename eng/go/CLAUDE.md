@@ -23,30 +23,39 @@ marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
 linear. Behaviour the marker can't express directly belongs in the
 registered word's handler, not in a separate parser stage.
 
-## Check-mode guaranteed-error mirrors (reachability gates)
+## Check-mode guaranteed-error mirrors (classification + gates)
 
 A check diagnostic that mirrors a GUARANTEED runtime error (a strict-
 accessor static miss, a provable index OOB, an unconditional raise, a
-dry-passed pure handler's failure — design/CHECKER-COMPLETION.0.md)
-must respect four gates before it fires:
+dry-passed pure handler's failure — design/CHECKER-COMPLETION.0.md) is
+classified and gated rather than sprinkled with ad-hoc suppressions:
 
-- `CheckState.FnBodyDepth` — fn bodies run only if called;
-- `CheckState.NestedBodyDepth` — raised by `RunCarrierBodyWithDefs`,
-  so every branch / loop / quotation body counts as conditionally
-  reached;
-- `CheckState.CaughtBodyDepth` — raised by `do`'s body analysis; `do`
-  TRAPS body errors at runtime, so mirrors inside it are not program
-  errors (`CheckAddUniqueDiagnostic` and `emitIndexOOB` honour it);
-- `!Compiling` — the compile pass must stay diagnostic-free for these
-  rows: it deliberately COMPILES the error path (RecordTrap / the VM
-  RET count check) and an Error diagnostic there flips the row to a
-  "check diagnostics" refusal (aql.go::CompileCheck).
+- **`CheckDiagnostic.RuntimeMirror`** — stamped by every mirror emitter
+  (`CheckAddUniqueDiagnostic` does it for all its callers; direct
+  emitters set it explicitly). The compile pipeline's error-diagnostic
+  refusal (`CompileCheck` / `Vm.compile`) SKIPS mirrors: the finding's
+  model is exact — the program compiles and raises the identical error
+  (trap / VM RET / the same handler) — so only MODEL-UNDERMINING errors
+  (undefined_word, no_signature: dispatch didn't resolve) refuse.
+  Check and compile passes therefore report the SAME diagnostics.
+- **`CheckDiagnostic.CaughtAtRuntime`** — stamped CENTRALLY by
+  `AddDiagnostic`: inside an error-TRAPPING region (`do [...]` raises
+  `CheckState.CaughtBodyDepth`) every would-be-error finding is
+  downgraded to info, uniformly across families. The information
+  survives; the false error verdict does not. Dedupe helpers skip
+  caught entries so they never mask a real emission elsewhere.
+- **Reachability** — a mirror that claims "the program errors" must be
+  unconditionally reached: `CheckState.FnBodyDepth` (fn bodies run only
+  if called) and `CheckState.NestedBodyDepth` (raised by
+  `RunCarrierBodyWithDefs` — every branch / loop / quotation body is
+  conditionally reached). `CheckAtUncaughtTopLevel(r)` (drypass.go)
+  composes them.
 
-`CheckAtUncaughtTopLevel(r)` (drypass.go) composes all four; use it —
-or the CaughtBodyDepth-honouring `CheckAddUniqueDiagnostic` — rather
-than re-deriving the gates at a new emit site. For PURE handlers over
-concrete args, wire `DryPassReturns` / `DryPassWrap` instead of a
-bespoke ReturnsFn.
+For PURE handlers over concrete args, wire `DryPassReturns` /
+`DryPassWrap` instead of a bespoke ReturnsFn. Compile passes arm
+themselves through ONE helper — `CheckState.BeginCompilePass()` (fresh
+EmitState, the Compiling flag, fn-memo drop); never hand-roll the
+ritual, that is how Vm.compile shipped without the Compiling flag.
 
 ## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
 

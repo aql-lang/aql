@@ -64,6 +64,11 @@ func TestSetListIndexReturnsGuards(t *testing.T) {
 
 func TestGetrObjectReturnsUnresolvableSchema(t *testing.T) {
 	r := mirrorReg(t)
+	// A COMPUTED key proves nothing — the guard arm returns the base
+	// result with no miss claimed.
+	if out := getrObjectReturns([]Value{NewCarrier(TAtom), NewCarrier(TClass)}, r); len(out) != 1 {
+		t.Fatalf("computed-key residual = %v, want one value", out)
+	}
 	// A class-typed receiver whose type binding is gone: getObjectReturns'
 	// result flows through unchanged and no miss is claimed.
 	recv := NewCarrier(TClass)
