@@ -193,7 +193,7 @@ func runExpirySet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -232,7 +232,7 @@ func runExpiryClear(args []string, homeDir string, stdout, stderr io.Writer) int
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	_, alias, err := findAliasRef(s, fs.Arg(0))
+	_, alias, err := w8findAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1

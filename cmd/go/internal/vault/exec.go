@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/term"
-
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 )
 
@@ -159,7 +157,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			return 1
 		}
 		defer sess.Close()
-		if err := requireScope(sess, OpRead); err != nil {
+		if err := w8requireScope(sess, OpRead); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
@@ -236,11 +234,11 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			}
 			mappings[i].alias = name
 		}
+		// No duplicate-env-name re-check here: parseExecAliases already
+		// rejects duplicates within the mapping, and overrides is empty in
+		// this branch (forMode is false), so a collision is unconstructible
+		// (see design/TEST-SEAMS.10.md on unreachable guards).
 		for _, m := range mappings {
-			if _, dup := overrides[m.envName]; dup {
-				fmt.Fprintf(stderr, "error: duplicate env name %q in mapping\n", m.envName)
-				return 1
-			}
 			ns, _ := splitAlias(m.alias)
 			v, err := resolveSecret(sess, *dryRun, m.alias, ns)
 			if err != nil {
@@ -374,10 +372,10 @@ func (p *promptSource) close() {
 // stdin is a redirected file/pipe the child will consume, otherwise stdin
 // itself. The returned closer releases the terminal handle if one was opened.
 func openPromptReader(stdin io.Reader) (*auth.InputReader, func(), error) {
-	if f, ok := stdin.(*os.File); ok && !term.IsTerminal(int(f.Fd())) {
+	if f, ok := stdin.(*os.File); ok && !isTerminal(int(f.Fd())) {
 		// Redirected stdin belongs to the child; prompt on the tty so we
 		// don't consume the child's input.
-		tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		tty, err := openTTY()
 		if err != nil {
 			return nil, nil, errors.New("cannot prompt: stdin is redirected to the child and no controlling terminal is available (pass the value via the environment, or use --dry-run)")
 		}

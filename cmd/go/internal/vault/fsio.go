@@ -20,7 +20,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	// Unique temp name so concurrent writers never share one, and a
 	// leading dot keeps a crash-orphaned temp out of casual listings.
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*.tmp")
+	tmp, err := createTemp(dir, "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
@@ -34,21 +34,21 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		}
 	}()
 
-	if err := tmp.Chmod(perm); err != nil {
+	if err := fileChmod(tmp, perm); err != nil {
 		return err
 	}
-	if _, err := tmp.Write(data); err != nil {
+	if _, err := fileWrite(tmp, data); err != nil {
 		return err
 	}
 	// fsync the data before the rename so the rename can never expose a
 	// file whose contents have not yet reached disk.
-	if err := tmp.Sync(); err != nil {
+	if err := fileSync(tmp); err != nil {
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := fileClose(tmp); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := osRename(tmpName, path); err != nil {
 		return err
 	}
 	renamed = true

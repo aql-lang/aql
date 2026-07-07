@@ -1,0 +1,148 @@
+package modules
+
+import (
+	"regexp"
+	"strings"
+	"testing"
+
+	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/native"
+)
+
+// s7bMap returns an empty concrete opts map.
+func s7bMap() native.Value { return native.NewMap(native.NewOrderedMap()) }
+
+// TestS7B_MiniByteLiteralSrcErrors drives the src / subject AsConcreteString
+// refusal arms of the hb, bb and re handlers (a non-concrete String passes
+// the sig but is refused by the handler).
+func TestS7B_MiniByteLiteralSrcErrors(t *testing.T) {
+	r := mcovReg(t)
+	litS := native.NewTypeLiteral(native.TString)
+
+	if _, err := miniHexBytesHandler([]native.Value{litS, s7bMap()}, nil, nil, r); err == nil {
+		t.Error("hb: non-concrete src should error")
+	}
+	if _, err := miniBinBytesHandler([]native.Value{litS, s7bMap()}, nil, nil, r); err == nil {
+		t.Error("bb: non-concrete src should error")
+	}
+	if _, err := miniReHandler([]native.Value{litS, s7bMap(), native.NewString("x")}, nil, nil, r); err == nil {
+		t.Error("re: non-concrete src should error")
+	}
+	// re subject arm: valid src, non-concrete subject.
+	if _, err := miniReHandler([]native.Value{native.NewString("a"), s7bMap(), litS}, nil, nil, r); err == nil {
+		t.Error("re: non-concrete subject should error")
+	}
+}
+
+// TestS7B_MiniRunReSubjectError drives run-re's subject-error arm: a valid
+// precompiled regexp carrier with a non-concrete subject.
+func TestS7B_MiniRunReSubjectError(t *testing.T) {
+	r := mcovReg(t)
+	tMini := r.Types.MintType("S7bCompiled", native.TIdeal)
+	ext := eng.NewExtension(tMini, regexp.MustCompile("a"))
+	args := []native.Value{ext, s7bMap(), native.NewTypeLiteral(native.TString)}
+	if _, err := miniRunReHandler(args, nil, nil, r); err == nil {
+		t.Error("run-re: non-concrete subject should error")
+	}
+}
+
+// TestS7B_MiniBfHandlerErrors drives miniBfHandler's src and input error
+// arms.
+func TestS7B_MiniBfHandlerErrors(t *testing.T) {
+	r := mcovReg(t)
+	litS := native.NewTypeLiteral(native.TString)
+	if _, err := miniBfHandler([]native.Value{litS, s7bMap()}, nil, nil, r); err == nil {
+		t.Error("bf: non-concrete src should error")
+	}
+	// 3-arg form with a non-concrete stack input.
+	if _, err := miniBfHandler([]native.Value{native.NewString("+."), s7bMap(), litS}, nil, nil, r); err == nil {
+		t.Error("bf: non-concrete input should error")
+	}
+}
+
+// TestS7B_RunBrainfuckPointerAndSkip drives runBrainfuck's `>` overrun
+// (pointer past the tape end) and the `[`-skip-when-zero arm.
+func TestS7B_RunBrainfuckPointerAndSkip(t *testing.T) {
+	if _, bferr := runBrainfuck(strings.Repeat(">", 30000), "", 1_000_000); bferr == nil {
+		t.Error("runBrainfuck: 30000 rights should overrun the tape")
+	}
+	// `[]` at cell 0 skips the loop body via the forward jump.
+	out, bferr := runBrainfuck("[]", "", 100)
+	if bferr != nil || out != "" {
+		t.Errorf("runBrainfuck(`[]`) = %q, %v; want empty, nil", out, bferr)
+	}
+}
+
+// TestS7B_MiniGexShapeDefault drives miniGexShapeReturns' default arm: a
+// subject whose type is neither List, Map nor Scalar (a Function) yields the
+// dynamic(Any) shape.
+func TestS7B_MiniGexShapeDefault(t *testing.T) {
+	dummy := native.NewInteger(0)
+	out := miniGexShapeReturns([]native.Value{dummy, dummy, s7bFn()}, nil)
+	if len(out) != 1 {
+		t.Fatalf("miniGexShapeReturns default: got %d values, want 1", len(out))
+	}
+}
+
+// TestS7B_MiniRegisterInstallErrors drives miniRegisterInstall's name and
+// signature refusal arms directly (the runtime handler path, without the
+// check-mode concrete-name guard).
+func TestS7B_MiniRegisterInstallErrors(t *testing.T) {
+	r := mcovReg(t)
+	exports := native.NewOrderedMap()
+	idents := map[string]registerIdent{}
+
+	// Non-concrete (type-literal) name.
+	err := miniRegisterInstall(exports, idents,
+		[]native.Value{native.NewTypeLiteral(native.TAtom), mcovFilterFn()}, r, nil)
+	if err == nil {
+		t.Error("register: non-concrete name should error")
+	}
+	// args[1] is not a Function value.
+	err = miniRegisterInstall(exports, idents,
+		[]native.Value{native.NewAtom("poly"), native.NewInteger(5)}, r, nil)
+	if err == nil {
+		t.Error("register: non-function body should error")
+	}
+}
+
+// TestS7B_MiniRegisterCompiledNameError drives miniRegisterCompiledHandler's
+// name AsConcreteAtom refusal arm.
+func TestS7B_MiniRegisterCompiledNameError(t *testing.T) {
+	r := mcovReg(t)
+	h := miniRegisterCompiledHandler(native.NewOrderedMap())
+	_, err := h([]native.Value{native.NewTypeLiteral(native.TAtom), mcovFilterFn()}, nil, nil, r)
+	if err == nil {
+		t.Error("register-compiled: non-concrete name should error")
+	}
+}
+
+// TestS7B_MiniMicronValidateArms drives miniMicronLitValidate's lenient
+// carrier arm and its non-Function refusal.
+func TestS7B_MiniMicronValidateArms(t *testing.T) {
+	r := mcovReg(t)
+
+	// Lenient carrier kind: a dynamic carrier is neither concrete nor a
+	// bare node, so validation defers the kind to the runtime handler.
+	carrier := native.NewCarrier(native.TMicron)
+	if _, _, err := miniMicronLitValidate(
+		[]native.Value{carrier, s7bMap(), mcovFilterFn()}, r, true); err != nil {
+		t.Errorf("lenient carrier kind should not error, got %v", err)
+	}
+
+	// A valid user Micron kind but a non-Function builder is refused.
+	userKind := r.Types.MintType("S7bon", native.TMicron)
+	kindV := native.NewTypeLiteral(userKind)
+	if _, _, err := miniMicronLitValidate(
+		[]native.Value{kindV, s7bMap(), native.NewInteger(5)}, r, false); err == nil {
+		t.Error("non-Function builder should be refused")
+	}
+}
+
+// TestS7B_MicronSpecMapNonMap drives micronSpecMapCheck's non-map refusal.
+func TestS7B_MicronSpecMapNonMap(t *testing.T) {
+	r := mcovReg(t)
+	if err := micronSpecMapCheck(native.NewInteger(5), r, false); err == nil {
+		t.Error("micronSpecMapCheck: non-map spec should error")
+	}
+}

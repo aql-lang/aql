@@ -16,7 +16,7 @@ func injectHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 
 	result := voxgigstruct.Inject(val, store)
 
-	out, err := anyToValue(result)
+	out, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("inject: %w", err)
 	}

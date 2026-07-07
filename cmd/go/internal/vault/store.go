@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -608,7 +607,7 @@ func (s *Store) ActiveCapabilities(now time.Time) []Capability {
 
 func randomID() (string, error) {
 	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := s7randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
@@ -617,7 +616,7 @@ func randomID() (string, error) {
 // randomToken returns a 256-bit random bearer token as hex.
 func randomToken() (string, error) {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := s7randRead(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

@@ -176,7 +176,7 @@ func (c *conn) notify(method string, params any) error {
 		Method:  method,
 		Params:  pBytes,
 	}
-	out, err := json.Marshal(msg)
+	out, err := jsonMarshal(msg)
 	if err != nil {
 		return err
 	}

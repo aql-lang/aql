@@ -2349,15 +2349,27 @@ func IsAtom(v Value) bool {
 	return v.Parent.ConformsTo(TAtom)
 }
 
+// payloadOf unwraps the payload variant P from v — the ONE nil-check +
+// type-assertion + error shape every scalar accessor shares. name is the
+// accessor name and kind the payload description for the error text
+// ("AsString: not a string value (got %T)"), kept identical to the
+// hand-rolled messages the accessors carried before unification.
+func payloadOf[P Payload](v Value, name, kind string) (P, error) {
+	var zero P
+	if v.Data == nil {
+		return zero, fmt.Errorf("%s: nil data", name)
+	}
+	p, ok := v.Data.(P)
+	if !ok {
+		return zero, fmt.Errorf("%s: not %s value (got %T)", name, kind, v.Data)
+	}
+	return p, nil
+}
+
 // AsAtom returns the string payload. Returns "" if Data is nil.
 func AsAtom(v Value) (string, error) {
-	if v.Data == nil {
-		return "", fmt.Errorf("AsAtom: nil data")
-	}
-	if ap, ok := v.Data.(AtomPayload); ok {
-		return ap.Name, nil
-	}
-	return "", fmt.Errorf("AsAtom: not an atom value (got %T)", v.Data)
+	p, err := payloadOf[AtomPayload](v, "AsAtom", "an atom")
+	return p.Name, err
 }
 
 // IsTypedList reports whether this value is a typed list (has child type constraint).
@@ -2468,57 +2480,32 @@ func AsForward(v Value) (ForwardInfo, error) {
 
 // AsString returns the string payload. Returns "" if Data is nil (type literal).
 func AsString(v Value) (string, error) {
-	if v.Data == nil {
-		return "", fmt.Errorf("AsString: nil data")
-	}
-	if sp, ok := v.Data.(StrPayload); ok {
-		return sp.S, nil
-	}
-	return "", fmt.Errorf("AsString: not a string value (got %T)", v.Data)
+	p, err := payloadOf[StrPayload](v, "AsString", "a string")
+	return p.S, err
 }
 
 // AsInteger returns the int64 payload. Returns 0 if Data is nil (type literal).
 func AsInteger(v Value) (int64, error) {
-	if v.Data == nil {
-		return 0, fmt.Errorf("AsInteger: nil data")
-	}
-	if ip, ok := v.Data.(IntPayload); ok {
-		return ip.N, nil
-	}
-	return 0, fmt.Errorf("AsInteger: not an integer value (got %T)", v.Data)
+	p, err := payloadOf[IntPayload](v, "AsInteger", "an integer")
+	return p.N, err
 }
 
 // AsFloat returns the float64 payload. Returns 0.0 if Data is nil (type literal).
 func AsFloat(v Value) (float64, error) {
-	if v.Data == nil {
-		return 0.0, fmt.Errorf("AsFloat: nil data")
-	}
-	if dp, ok := v.Data.(FloatPayload); ok {
-		return dp.F, nil
-	}
-	return 0.0, fmt.Errorf("AsFloat: not a float value (got %T)", v.Data)
+	p, err := payloadOf[FloatPayload](v, "AsFloat", "a float")
+	return p.F, err
 }
 
 // AsBigInteger returns the *big.Int payload of a BigInteger value.
 func AsBigInteger(v Value) (*big.Int, error) {
-	if v.Data == nil {
-		return nil, fmt.Errorf("AsBigInteger: nil data")
-	}
-	if bp, ok := v.Data.(BigIntPayload); ok {
-		return bp.N, nil
-	}
-	return nil, fmt.Errorf("AsBigInteger: not a BigInteger value (got %T)", v.Data)
+	p, err := payloadOf[BigIntPayload](v, "AsBigInteger", "a BigInteger")
+	return p.N, err
 }
 
 // AsBigDecimal returns the *apd.Decimal payload of a BigDecimal value.
 func AsBigDecimal(v Value) (*apd.Decimal, error) {
-	if v.Data == nil {
-		return nil, fmt.Errorf("AsBigDecimal: nil data")
-	}
-	if dp, ok := v.Data.(DecimalPayload); ok {
-		return dp.D, nil
-	}
-	return nil, fmt.Errorf("AsBigDecimal: not a BigDecimal value (got %T)", v.Data)
+	p, err := payloadOf[DecimalPayload](v, "AsBigDecimal", "a BigDecimal")
+	return p.D, err
 }
 
 // AsNumber returns the numeric value as float64. It is defined ONLY for
@@ -2564,13 +2551,8 @@ func AsFloatApprox(v Value) (float64, error) {
 
 // AsBoolean returns the bool payload. Returns false if Data is nil (type literal).
 func AsBoolean(v Value) (bool, error) {
-	if v.Data == nil {
-		return false, fmt.Errorf("AsBoolean: nil data")
-	}
-	if bp, ok := v.Data.(BoolPayload); ok {
-		return bp.B, nil
-	}
-	return false, fmt.Errorf("AsBoolean: not a boolean value (got %T)", v.Data)
+	p, err := payloadOf[BoolPayload](v, "AsBoolean", "a boolean")
+	return p.B, err
 }
 
 // AsList returns the []Value payload, or nil if the data is not a []Value.
@@ -2892,12 +2874,6 @@ func kernelFormatDefault(v Value) string {
 	// from this switch.
 	case IsClassInstance(v):
 		oi, _ := AsClassInstance(v)
-		allFields := oi.AllFields()
-		parts := make([]string, 0, allFields.Len())
-		for _, k := range allFields.Keys() {
-			val, _ := allFields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
 		// A class instance normally carries its schema TypeRef; guard
 		// defensively against a nil/anonymous TypeRef by rendering under
 		// the lattice leaf or ID instead of dereferencing an absent
@@ -2913,14 +2889,9 @@ func kernelFormatDefault(v Value) string {
 		default:
 			name = "Class"
 		}
-		return name + "{" + strings.Join(parts, " ") + "}"
+		return formatFieldBag(name, oi.AllFields())
 	case IsResourceInstance(v):
 		ri, _ := AsResourceInstance(v)
-		parts := make([]string, 0, ri.Fields.Len())
-		for _, k := range ri.Fields.Keys() {
-			val, _ := ri.Fields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
 		name := "Resource"
 		switch {
 		case ri.TypeRef != nil && ri.TypeRef.Name != "":
@@ -2928,20 +2899,14 @@ func kernelFormatDefault(v Value) string {
 		case v.Parent != nil:
 			name = v.Parent.Leaf()
 		}
-		return name + "{" + strings.Join(parts, " ") + "}"
+		return formatFieldBag(name, ri.Fields)
 	case IsClassType(v):
 		ot, _ := AsClassType(v)
-		allFields := ot.AllFields()
-		parts := make([]string, 0, allFields.Len())
-		for _, k := range allFields.Keys() {
-			val, _ := allFields.Get(k)
-			parts = append(parts, k+":"+val.String())
-		}
 		name := ot.Name
 		if name == "" {
 			name = "Ideal/Class/" + ot.ID
 		}
-		return "object<" + name + ">{" + strings.Join(parts, " ") + "}"
+		return formatFieldBag("object<"+name+">", ot.AllFields())
 	case IsDisjunct(v):
 		di, _ := AsDisjunct(v)
 		parts := make([]string, len(di.Alternatives))

@@ -159,7 +159,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 	var copied []string
 	abort := func(from string, err error) int {
 		for _, c := range copied {
-			_ = sess.deleteValue(c)
+			_ = c7sessDeleteValue(sess, c)
 		}
 		fmt.Fprintf(stderr, "error: moving %s: %s\n", from, err)
 		return 1
@@ -172,19 +172,19 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		// destination (the sealed value's AAD binds the alias+namespace,
 		// so a raw copy would not open under the new name). In legacy mode
 		// these are raw passthrough.
-		v, err := sess.getValue(m.from, valueNamespace(m.from))
+		v, err := c7sessGetValue(sess, m.from, valueNamespace(m.from))
 		if err != nil {
 			return abort(m.from, err)
 		}
 		if err := writeSecret(homeDir, sess, m.to, valueNamespace(m.to), v); err != nil {
 			return abort(m.from, err)
 		}
-		got, err := sess.getValue(m.to, valueNamespace(m.to))
+		got, err := c7sessGetValue(sess, m.to, valueNamespace(m.to))
 		if err != nil {
 			return abort(m.from, err)
 		}
 		if got != v {
-			_ = sess.deleteValue(m.to)
+			_ = c7sessDeleteValue(sess, m.to)
 			return abort(m.from, fmt.Errorf("copy to %q did not verify", m.to))
 		}
 		copied = append(copied, m.to)
@@ -213,7 +213,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		return nil
 	}); err != nil {
 		for _, c := range copied {
-			_ = sess.deleteValue(c)
+			_ = c7sessDeleteValue(sess, c)
 		}
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -226,7 +226,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		if m.from == m.to {
 			continue
 		}
-		if err := sess.deleteValue(m.from); err != nil {
+		if err := c7sessDeleteValue(sess, m.from); err != nil {
 			fmt.Fprintf(stderr, "warning: could not remove old keyring entry %q: %s\n", m.from, err)
 		}
 	}

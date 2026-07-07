@@ -15,7 +15,6 @@ import (
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pack"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
 	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
@@ -92,7 +91,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	var packOut, packErr bytes.Buffer
-	code := pack.Run([]string{dir}, &packOut, &packErr)
+	code := packRun([]string{dir}, &packOut, &packErr)
 	if code != 0 {
 		fmt.Fprintf(stderr, "error: pack failed: %s", packErr.String())
 		return 1

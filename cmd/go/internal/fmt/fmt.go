@@ -17,6 +17,11 @@ import (
 	"github.com/aql-lang/aql/lang/go/formatter"
 )
 
+// osWriteFile is a test seam (design/TEST-SEAMS.10.md); tests swap it to
+// drive Run's write-failure arm, which cannot be forced via file
+// permissions when the suite runs as root.
+var osWriteFile = os.WriteFile
+
 type cmd struct{}
 
 // New returns the fmt subcommand.
@@ -70,7 +75,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		formatted := formatter.Format(string(data))
 		if string(data) != formatted {
-			if err := os.WriteFile(path, []byte(formatted), 0644); err != nil {
+			if err := osWriteFile(path, []byte(formatted), 0644); err != nil {
 				stdfmt.Fprintf(stderr, "error: %s\n", err)
 				return 1
 			}

@@ -130,7 +130,7 @@ func (f *Flags) Resolve() (policy.Policy, error) {
 	if base == nil {
 		// Mods supplied with no base: start from "full" as the
 		// most-permissive base so they're additive subtractions.
-		base, err = policy.Load("full")
+		base, err = policyLoadFull()
 		if err != nil {
 			return nil, err
 		}

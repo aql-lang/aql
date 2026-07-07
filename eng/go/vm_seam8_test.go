@@ -1,0 +1,207 @@
+package eng
+
+import (
+	"testing"
+)
+
+// vm_seam8_test.go extends vm_seam7_test.go with the residual VM dispatch
+// arms it left uncovered: the get/getr poly auto-apply of a 0-arg
+// trivial-delegation method (callPoly, vm.go:307-317), the shaped-method
+// delegation result screen (callDynMethod guard, vm.go:622), the shaped-
+// method island SUCCESS return (vm.go:657), and the typed-bind result
+// screen (OpBindTyped, vm.go:1037). All are driven with the same direct-
+// call / hand-built-Program seam vm_seam7 uses. The screenResults arms that
+// sit only on an ISLAND path are covered organically here where the leak
+// travels a DIRECT handler (poly result, delegation apply, typed bind) —
+// never through a sub-engine, which re-steps tape tokens and so can never
+// return one as a residual (see the residual notes in the fleet report).
+
+// w8Reg is seam7Reg plus a convenience for asserting registration succeeded.
+func w8Reg(t *testing.T) *Registry {
+	t.Helper()
+	return seam7Reg(t)
+}
+
+// w8reg0 registers a 0-arg inner native `name` with the given handler and
+// returns a 0-arg trivial-delegation fn VALUE wrapping it (body [Word(name)],
+// no named params) — the `r.bool`-shaped method get/getr auto-applies.
+func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
+	t.Helper()
+	r.RegisterNativeFunc(NativeFunc{
+		Name: name,
+		Signatures: []Signature{{
+			Args: nil, Returns: []*Type{TAny}, BarrierPos: -1,
+			Impl: Go(impl),
+		}},
+	})
+	if err := r.Err(); err != nil {
+		t.Fatalf("register %s: %v", name, err)
+	}
+	return NewFnDef(FnDefInfo{
+		Name: name, Registry: r,
+		Signatures: []Signature{{
+			Returns: []*Type{TAny}, BarrierPos: -1,
+			Impl: AQL([]Value{NewWord(name)}),
+		}},
+	})
+}
+
+// w8registerReturningPoly registers a get-family poly word `word` whose single
+// [TAny] overload returns `result` verbatim — the shape callPoly re-dispatches
+// and then post-processes (auto-apply / screen).
+func w8registerReturningPoly(t *testing.T, r *Registry, word string, result Value) {
+	t.Helper()
+	r.RegisterNativeFunc(NativeFunc{
+		Name: word,
+		Signatures: []Signature{{
+			Args: []*Type{TAny}, Returns: []*Type{TAny}, BarrierPos: -1,
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{result}, nil
+			}),
+		}},
+	})
+	if err := r.Err(); err != nil {
+		t.Fatalf("register poly %s: %v", word, err)
+	}
+}
+
+// --- callPoly get/getr auto-apply of a 0-arg delegation method -----------
+
+func TestW8CallPolyGetAutoApplySuccess(t *testing.T) {
+	r := w8Reg(t)
+	deleg := w8Deleg0(t, r, "w8zero", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{NewInteger(99)}, nil
+	})
+	// `dot` is a get-word (isGetWord). Its poly result is the delegation
+	// method value; callPoly auto-applies it 0-arg (vm.go:307-313).
+	w8registerReturningPoly(t, r, "dot", deleg)
+	vc := seam7VC(r)
+	out, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	if err != nil {
+		t.Fatalf("callPoly auto-apply: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("auto-apply residual = %v, want a single value", out)
+	}
+	if n, _ := out[0].AsConcreteInteger(); n != 99 {
+		t.Errorf("auto-applied method value = %v, want 99", out[0])
+	}
+}
+
+func TestW8CallPolyGetAutoApplyError(t *testing.T) {
+	r := w8Reg(t)
+	// The auto-applied inner native errors: callPoly surfaces it (vm.go:310).
+	deleg := w8Deleg0(t, r, "w8zfail", func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return nil, r.AqlError("value_error", "w8zfail: boom", "w8zfail")
+	})
+	w8registerReturningPoly(t, r, "getr", deleg) // getr is a getr-word
+	vc := seam7VC(r)
+	_, err := vc.callPoly(&PolyRef{Word: "getr", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	wantErr(t, err, "w8zfail: boom")
+}
+
+func TestW8CallPolyResultScreened(t *testing.T) {
+	r := w8Reg(t)
+	// A get-word poly whose result is a bare Word (not an FnDef): the
+	// auto-apply branch declines (not an FnDefInfo) and the belt-and-braces
+	// screen rejects the tape-coupled result (vm.go:317).
+	w8registerReturningPoly(t, r, "dot", NewWord("leak"))
+	vc := seam7VC(r)
+	_, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	wantInternal(t, err, "tape-coupled poly result at dot")
+}
+
+// --- callDynMethod: delegation result screen + island success ------------
+
+// w8Deleg1 registers a 1-arg inner native `name` and returns a
+// trivial-delegation fn VALUE wrapping it (body [Word(name)]).
+func w8Deleg1(t *testing.T, r *Registry, name string, impl Handler) Value {
+	t.Helper()
+	r.RegisterNativeFunc(NativeFunc{
+		Name: name,
+		Signatures: []Signature{{
+			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
+			Impl: Go(impl),
+		}},
+	})
+	if err := r.Err(); err != nil {
+		t.Fatalf("register %s: %v", name, err)
+	}
+	return NewFnDef(FnDefInfo{
+		Name: name, Registry: r,
+		Signatures: []Signature{{
+			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
+			Impl: AQL([]Value{NewWord(name)}),
+		}},
+	})
+}
+
+func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
+	r := w8Reg(t)
+	// A delegation method whose inner native returns a tape-coupled Word:
+	// tryNativeFnApply hands it back DIRECTLY (no island), so guard's
+	// screenResults rejects it (vm.go:622).
+	deleg := w8Deleg1(t, r, "w8mleak", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{NewWord("leak")}, nil
+	})
+	if !isDelegationFnDef(deleg.Data.(FnDefInfo)) {
+		t.Fatal("w8mleak wrapper is not a delegation fn")
+	}
+	vc := seam7VC(r)
+	_, err := vc.callDynMethod(&DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
+		[]Value{NewInteger(5), deleg}, seam7Dbg, 0)
+	wantInternal(t, err, "tape-coupled shaped method result at w8mleak")
+}
+
+func TestW8CallDynMethodIslandSuccess(t *testing.T) {
+	r := w8Reg(t)
+	// A non-delegation user fn (named param disqualifies the fast path) that
+	// returns its arg cleanly: callDynMethod islands it and the guard SUCCESS
+	// return commits the shaped result (vm.go:657).
+	fn := NewFnDef(FnDefInfo{
+		Name: "w8okmethod", Registry: r,
+		Signatures: []Signature{{
+			Params:  []FnParam{{Name: "n", Type: TInteger}},
+			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
+			Impl: AQL([]Value{NewWord("n")}),
+		}},
+	})
+	if isDelegationFnDef(fn.Data.(FnDefInfo)) {
+		t.Fatal("named-param fn should NOT be a delegation")
+	}
+	vc := seam7VC(r)
+	out, err := vc.callDynMethod(&DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
+		[]Value{NewInteger(5), fn}, seam7Dbg, 0)
+	if err != nil {
+		t.Fatalf("island method success: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("island method residual = %v, want a single value", out)
+	}
+	if n, _ := out[0].AsConcreteInteger(); n != 5 {
+		t.Errorf("island method returned %v, want 5", out[0])
+	}
+}
+
+// --- OpBindTyped result screen -------------------------------------------
+
+func TestW8BindTypedResultScreened(t *testing.T) {
+	// A malformed program pushes a tape-coupled token (a Forward) as the value
+	// a DepScalar typed-bind admits verbatim (Unify against Any returns the
+	// value unchanged), so the belt-and-braces screen rejects the bound result
+	// (vm.go:1037). No valid emitter ever bakes a tape-coupled const; this is
+	// the same compiler-bug shape vm_seam7 feeds the other dispatch guards.
+	// (A Word would be re-tagged by Unify and slip the IsWord screen, so a
+	// Forward — which survives Unify unchanged — is used.)
+	anyLit := NewTypeLiteral(TAny)
+	p := &Program{
+		Consts: []Value{NewForward(ForwardInfo{})},
+		Code:   []Instr{{Op: OpPushConst, Arg: 0}, {Op: OpBindTyped, Arg: 0}},
+		Debug:  []SrcPos{{}, {}},
+		TypedBinds: []TypedBindSpec{{
+			Kind: TypedBindDepScalar, Name: "tb", Describe: "Any", Cons: &anyLit,
+		}},
+	}
+	_, err := RunProgram(p, seam7Reg(t))
+	wantInternal(t, err, "tape-coupled typed-bind result at tb")
+}

@@ -30,6 +30,16 @@ import (
 // package — see help.ModuleCatalog / help.ModuleSummary — so the CLI here and
 // the `describe` language word render the same module index.
 
+// defaultRegistry is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive newRegistry's construction-error arm, which no input can
+// provoke.
+var defaultRegistry = native.DefaultRegistry
+
+// modulesResolve is a test seam (design/TEST-SEAMS.10.md); tests swap it
+// to drive the module-resolution failure arms — the built-in modules all
+// resolve successfully.
+var modulesResolve = modules.Resolve
+
 type cmd struct{}
 
 // New returns the describe subcommand.
@@ -103,7 +113,7 @@ func describeName(w io.Writer, name string) int {
 
 	// A bare built-in module name (math-util, struct-util, …).
 	if isModule(name) {
-		desc, derr := modules.Resolve(name, reg)
+		desc, derr := modulesResolve(name, reg)
 		if derr != nil {
 			fmt.Fprintf(w, "describe: cannot load module %q: %s\n", name, derr)
 			return 1
@@ -178,7 +188,7 @@ func splitModulePath(name string) (modRef, word string) {
 // otherwise ("attempt to load a module if unknown").
 func resolveModule(reg *native.Registry, modRef string) (native.ModuleDesc, error) {
 	if short := strings.TrimPrefix(modRef, "aql:"); isModule(short) {
-		return modules.Resolve(short, reg)
+		return modulesResolve(short, reg)
 	}
 	return native.ResolveAnyModule(reg, modRef)
 }
@@ -302,7 +312,7 @@ func qualifiedExportInfo(reg *native.Registry, name string) *helppkg.FuncInfo {
 	ns, word := name[:dot], name[dot+1:]
 
 	for _, m := range modules.Names() {
-		desc, derr := modules.Resolve(m, reg)
+		desc, derr := modulesResolve(m, reg)
 		if derr != nil {
 			continue
 		}
@@ -327,7 +337,7 @@ func qualifiedExportInfo(reg *native.Registry, name string) *helppkg.FuncInfo {
 // installed (file modules need it) and the native-module resolver is enabled
 // so "aql:<name>" references load.
 func newRegistry() (*native.Registry, error) {
-	reg, err := native.DefaultRegistry()
+	reg, err := defaultRegistry()
 	if err != nil {
 		return nil, err
 	}

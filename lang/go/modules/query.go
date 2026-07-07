@@ -25,31 +25,37 @@ import (
 // clause as a forward argument. The query is lazy — it runs only when
 // the result is printed, iterated, or otherwise needs rows.
 func BuildQueryModule(parent *native.Registry) (native.ModuleDesc, error) {
-	// Create an isolated sub-registry for the module's Go words.
-	subReg, err := native.DefaultRegistry()
+	// Create an isolated sub-registry with the query words. They are
+	// deliberately absent from the global registry — query is only
+	// reachable through `import "aql:query"`.
+	subReg, err := newModuleRegistry(native.QueryNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	// Register the query words into the sub-registry. They are
-	// deliberately absent from the global registry — query is only
-	// reachable through `import "aql:query"`.
-	for _, n := range native.QueryNatives {
-		subReg.RegisterNativeFunc(n)
-	}
-
+	// Each export is a trivial-delegation wrapper for one query word;
+	// the matched inner sig carries its own QuoteArgs/NoEvalArgs. The
+	// wrapper's NoEvalArgs still suppresses auto-evaluation of clause
+	// lists during the wrapper's own forward collection.
 	exports := native.NewOrderedMap()
 	for _, w := range queryExports {
-		exports.Set(w.export, makeQueryFnDef(w, subReg))
+		sig := wrapSig{
+			params:  make([]native.FnParam, len(w.params)),
+			returns: []*native.Type{native.TList},
+		}
+		for i, p := range w.params {
+			sig.params[i] = native.FnParam{Type: p.typ}
+			if p.noEval {
+				if sig.noEval == nil {
+					sig.noEval = make(map[int]bool)
+				}
+				sig.noEval[i] = true
+			}
+		}
+		exports.Set(w.export, makeWrapFnDef(w.internal, subReg, sig))
 	}
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"Query": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "Query", subReg, exports), nil
 }
 
 // qParam describes one parameter of a query word in sig order
@@ -99,37 +105,6 @@ var queryExports = []qWord{
 	{export: "unionall", internal: "unionall", params: []qParam{{typ: native.TList}, {typ: native.TList}}},
 	{export: "intersect", internal: "intersect", params: []qParam{{typ: native.TList}, {typ: native.TList}}},
 	{export: "except", internal: "except", params: []qParam{{typ: native.TList}, {typ: native.TList}}},
-}
-
-// makeQueryFnDef builds the trivial-delegation FnDef wrapper for one
-// query word. The wrapper body is a single Word naming the inner native,
-// so execFnDefLiteral short-circuits to direct dispatch on the inner
-// native's matched sig (carrying its own QuoteArgs/NoEvalArgs). The
-// wrapper's NoEvalArgs still suppresses auto-evaluation of clause lists
-// during the wrapper's own forward collection.
-func makeQueryFnDef(w qWord, subReg *native.Registry) native.Value {
-	params := make([]native.FnParam, len(w.params))
-	var noEvalMap map[int]bool
-	for i, p := range w.params {
-		params[i] = native.FnParam{Type: p.typ}
-		if p.noEval {
-			if noEvalMap == nil {
-				noEvalMap = make(map[int]bool)
-			}
-			noEvalMap[i] = true
-		}
-	}
-	return native.NewFnDef(native.FnDefInfo{
-		Name: w.internal,
-		Signatures: []native.FnSig{{
-			Params:     params,
-			Returns:    []*native.Type{native.TList},
-			Impl:       native.AQL([]native.Value{native.NewWord(w.internal)}),
-			NoEvalArgs: noEvalMap,
-			BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
 }
 
 // InstallQueryExports builds the query module and installs its exports

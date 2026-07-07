@@ -36,6 +36,36 @@ func TestLargeIntegerExactCompare(t *testing.T) {
 	}
 }
 
+func TestLargeIntegerDeepEqual(t *testing.T) {
+	// DeepEqual (deq) shares the scalar leaf comparison with ExactEqual
+	// via scalarFamilyEqual, so it must make the SAME exact-int64
+	// distinction. Before the unification deq lacked the int64 arm and
+	// reported 2^53+1 deq-equal to 2^53 through the float64 projection —
+	// including nested inside a container.
+	a := NewInteger(9007199254740993) // 2^53 + 1
+	b := NewInteger(9007199254740992) // 2^53
+	if DeepEqual(a, b) {
+		t.Error("DeepEqual(2^53+1, 2^53) = true, want false")
+	}
+	if !DeepEqual(a, NewInteger(9007199254740993)) {
+		t.Error("DeepEqual(x, x) = false for large int, want true")
+	}
+	// Nested: the divergence propagated into list elements via deq's
+	// recursion, so pin the container case too.
+	la := NewList([]Value{a})
+	lb := NewList([]Value{b})
+	if DeepEqual(la, lb) {
+		t.Error("DeepEqual([2^53+1], [2^53]) = true, want false")
+	}
+	if !DeepEqual(la, NewList([]Value{NewInteger(9007199254740993)})) {
+		t.Error("DeepEqual([x], [x]) = false for large int, want true")
+	}
+	// Cross-leaf magnitude equivalence must survive: 1 deq 1.0.
+	if !DeepEqual(NewInteger(1), NewFloat(1.0)) {
+		t.Error("DeepEqual(1, 1.0) = false, want true (cross-leaf magnitude)")
+	}
+}
+
 func TestLargeIntegerSortOrder(t *testing.T) {
 	vals := []Value{
 		NewInteger(9007199254740993),

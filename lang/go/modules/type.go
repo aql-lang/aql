@@ -30,125 +30,58 @@ import (
 //
 // See design/TYPE-OPERATIONS.8.md.
 func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newModuleRegistry(typeModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
-	}
-
-	for _, n := range typeModuleNatives {
-		subReg.RegisterNativeFunc(n)
 	}
 	// tpartial moved here from core.
 	for _, n := range native.TPartialModuleNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	exports := native.NewOrderedMap()
-	for _, n := range native.TPartialModuleNatives {
-		exports.Set(n.Name, makeModuleFnDef(n, subReg))
-	}
+	exports := delegatingExports(native.TPartialModuleNatives, subReg)
 
 	// Unary Any -> Type.
 	for _, name := range []string{"required", "parent", "root", "nominal"} {
-		exports.Set(name, makeTypeUnaryFnDef(name, subReg, native.TType))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TType, native.TAny))
 	}
 
 	// Unary Any -> List (typed [:Type]).
 	for _, name := range []string{"paramsof", "alts"} {
-		exports.Set(name, makeTypeUnaryFnDef(name, subReg, native.TList))
+		exports.Set(name, makeTypedFnDef(name, subReg, native.TList, native.TAny))
 	}
 
 	// Unary Any -> Any.
-	exports.Set("returnsof", makeTypeUnaryFnDef("returnsof", subReg, native.TAny))
+	exports.Set("returnsof", makeTypedFnDef("returnsof", subReg, native.TAny, native.TAny))
 
 	// Unary Any -> Integer.
-	exports.Set("arityof", makeTypeUnaryFnDef("arityof", subReg, native.TInteger))
+	exports.Set("arityof", makeTypedFnDef("arityof", subReg, native.TInteger, native.TAny))
 
 	// Binary Any Any -> Type (both args TAny — the wrapper accepts
 	// either dispatch order; the handler validates). `merge` is also
 	// a built-in word, so the inner native is registered as `_t_merge`
-	// to avoid the dispatch path hitting the built-in via reg.Lookup.
-	exports.Set("exclude", makeTypeBinaryAnyFnDef("exclude", "exclude", subReg, native.TType))
-	exports.Set("extract", makeTypeBinaryAnyFnDef("extract", "extract", subReg, native.TType))
-	exports.Set("merge", makeTypeBinaryAnyFnDef("_t_merge", "_t_merge", subReg, native.TType))
-	exports.Set("lca", makeTypeBinaryAnyFnDef("lca", "lca", subReg, native.TType))
+	// to avoid the dispatch path hitting the built-in via reg.Lookup —
+	// the wrapper carries the same clash-avoiding name (the FnDef name
+	// doubles as the body word) while the export keeps the clean key.
+	exports.Set("exclude", makeTypedFnDef("exclude", subReg, native.TType, native.TAny, native.TAny))
+	exports.Set("extract", makeTypedFnDef("extract", subReg, native.TType, native.TAny, native.TAny))
+	exports.Set("merge", makeTypedFnDef("_t_merge", subReg, native.TType, native.TAny, native.TAny))
+	exports.Set("lca", makeTypedFnDef("lca", subReg, native.TType, native.TAny, native.TAny))
 
 	// Any List -> Type (pick/omit). Surface form: `record op [list]`.
 	// `pick` is a built-in stack op, so the inner is registered as
-	// `_t_pick` to avoid the clash.
-	exports.Set("pick", makeTypePickOmitFnDef("_t_pick", subReg))
-	exports.Set("omit", makeTypePickOmitFnDef("omit", subReg))
+	// `_t_pick` to avoid the clash. Uses [TAny, TAny] like the other
+	// binary wrappers so post-forward-collection dispatch matches
+	// uniformly; the handler validates types.
+	exports.Set("pick", makeTypedFnDef("_t_pick", subReg, native.TType, native.TAny, native.TAny))
+	exports.Set("omit", makeTypedFnDef("omit", subReg, native.TType, native.TAny, native.TAny))
 
 	// Any Atom -> Type (brand). Surface form: `BaseType brand tag/q`.
-	exports.Set("brand", makeTypeBrandFnDef("brand", subReg))
+	// Same [TAny, TAny] shape as the other binary wrappers; the handler
+	// validates the tag-atom and base-type arguments.
+	exports.Set("brand", makeTypedFnDef("brand", subReg, native.TType, native.TAny, native.TAny))
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"TypeUtil": exports},
-	}
-	return desc, nil
-}
-
-// ---- FnDef wrapper helpers ----
-
-func makeTypeUnaryFnDef(wordName string, subReg *native.Registry, returnType *native.Type) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TAny}},
-			Returns: []*native.Type{returnType},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeTypeBinaryAnyFnDef takes both a Name (used for reg.Lookup) and
-// a bodyWord (used to invoke the inner native). They differ when the
-// export name clashes with a built-in word — see the `merge` case
-// where the inner native is registered as `_t_merge`.
-func makeTypeBinaryAnyFnDef(name, bodyWord string, subReg *native.Registry, returnType *native.Type) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: name,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
-			Returns: []*native.Type{returnType},
-			Impl:    native.AQL([]native.Value{native.NewWord(bodyWord)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeTypePickOmitFnDef wraps pick/omit. Uses [TAny, TAny] BarrierPos=-1
-// like the other binary wrappers so post-forward-collection dispatch
-// matches uniformly. Handler validates types.
-func makeTypePickOmitFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
-			Returns: []*native.Type{native.TType},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-// makeTypeBrandFnDef wraps brand. Same [TAny, TAny] BarrierPos=-1 shape
-// as the other binary wrappers; handler validates the tag-atom and
-// base-type arguments.
-func makeTypeBrandFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{
-		Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
-			Returns: []*native.Type{native.TType},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
+	return moduleDesc(parent, "TypeUtil", subReg, exports), nil
 }
 
 // ---- Common helpers ----

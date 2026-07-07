@@ -344,46 +344,53 @@ func addConcatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	return []Value{NewString(ValToString(args[1]) + ValToString(args[0]))}, nil
 }
 
-func addDateCalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsDate(args[0])
-	cd, _ := AsCalendarDuration(args[1])
-	return []Value{NewDate(t.AddDate(cd.Years, cd.Months, cd.Days))}, nil
+// The temporal add/sub overload pairs share one implementation each: the
+// sub side is the add side with the duration negated (neg=true). Each
+// builder returns the Handler for one (temporal, duration) sig pair.
+
+// dateCalArith builds the Date ± CalendarDuration → Date handler.
+func dateCalArith(neg bool) Handler {
+	sign := 1
+	if neg {
+		sign = -1
+	}
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := AsDate(args[0])
+		cd, _ := AsCalendarDuration(args[1])
+		return []Value{NewDate(t.AddDate(sign*cd.Years, sign*cd.Months, sign*cd.Days))}, nil
+	}
 }
 
-func addDateTimeClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsDateTime(args[0])
-	d, _ := AsClockDuration(args[1])
-	return []Value{NewDateTime(t.Add(d))}, nil
+// dateTimeClkArith builds the DateTime ± ClockDuration → DateTime handler.
+func dateTimeClkArith(neg bool) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := AsDateTime(args[0])
+		d, _ := AsClockDuration(args[1])
+		if neg {
+			d = -d
+		}
+		return []Value{NewDateTime(t.Add(d))}, nil
+	}
 }
 
-func addInstantClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsInstant(args[0])
-	d, _ := AsClockDuration(args[1])
-	return []Value{NewInstant(t.Add(d))}, nil
+// instantClkArith builds the Instant ± ClockDuration → Instant handler.
+func instantClkArith(neg bool) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		t := AsInstant(args[0])
+		d, _ := AsClockDuration(args[1])
+		if neg {
+			d = -d
+		}
+		return []Value{NewInstant(t.Add(d))}, nil
+	}
 }
 
+// addDateClkHandler (Date + ClockDuration → DateTime) has no sub
+// counterpart, so it stays a plain handler.
 func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	t := AsDate(args[0])
 	d, _ := AsClockDuration(args[1])
 	return []Value{NewDateTime(t.Add(d))}, nil
-}
-
-func subDateCalHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsDate(args[0])
-	cd, _ := AsCalendarDuration(args[1])
-	return []Value{NewDate(t.AddDate(-cd.Years, -cd.Months, -cd.Days))}, nil
-}
-
-func subDateTimeClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsDateTime(args[0])
-	d, _ := AsClockDuration(args[1])
-	return []Value{NewDateTime(t.Add(-d))}, nil
-}
-
-func subInstantClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	t := AsInstant(args[0])
-	d, _ := AsClockDuration(args[1])
-	return []Value{NewInstant(t.Add(-d))}, nil
 }
 
 // TemporalArithmeticExtensions builds the add / sub WORD-EXTENSION
@@ -399,15 +406,15 @@ func subInstantClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 	return []FnDefInfo{
 		NewWordExtension("add", []Signature{
-			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(addDateCalHandler), Returns: []*Type{TDate}, BarrierPos: -1},
-			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(addDateTimeClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
-			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(addInstantClkHandler), Returns: []*Type{TInstant}, BarrierPos: -1},
+			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(false)), Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(false)), Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(false)), Returns: []*Type{TInstant}, BarrierPos: -1},
 			{Args: []*Type{TDate, tt.ClockDuration}, Impl: Go(addDateClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
 		}),
 		NewWordExtension("sub", []Signature{
-			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(subDateCalHandler), Returns: []*Type{TDate}, BarrierPos: -1},
-			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(subDateTimeClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
-			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(subInstantClkHandler), Returns: []*Type{TInstant}, BarrierPos: -1},
+			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(true)), Returns: []*Type{TDate}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(true)), Returns: []*Type{TDateTime}, BarrierPos: -1},
+			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(true)), Returns: []*Type{TInstant}, BarrierPos: -1},
 		}),
 	}
 }

@@ -44,7 +44,7 @@ import (
 // the framework — register / kinds / source — and folds in any
 // host-registered parsers; it carries no built-in parser kinds.
 func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -141,33 +141,25 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: native.TAny}},
 	}, []*native.Type{native.TString}, nil, subReg))
 
-	// ---- built-in parser kinds ----------------------------------------
+	// ---- built-in parser kinds + host-registered parsers ----------------
 	// The tabnas parser family (ini, json, jsonic, json5, jsonc, csv, toml,
 	// yaml, xml, zon, markdown, feed) ships in the box, so `import
 	// "aql:parselang"` then `parse <kind> '<text>'` works with no host
 	// registration. Each gets source resolution (String or {src:…}) for
-	// free, like every host parser.
-	for _, spec := range tabnasParserSpecs() {
-		if err := installHostParser(exports, subReg, spec); err != nil {
-			return native.ModuleDesc{}, err
-		}
-	}
-
-	// aontu (github.com/rjrodger/aontu): a CUE-inspired unification config
-	// dialect with no Go port, so it ships as a hand-written parser in
-	// native (see native/aontu.go) rather than via the tabnas family. It is
-	// built in the same way — importing aql:parselang is enough.
-	if err := installHostParser(exports, subReg, aontuParserSpec()); err != nil {
-		return native.ModuleDesc{}, err
-	}
-
-	// ---- host-registered parsers --------------------------------------
+	// free, like every host parser. aontu (github.com/rjrodger/aontu, a
+	// CUE-inspired unification config dialect with no Go port) ships as a
+	// hand-written parser in native (see native/aontu.go) and installs the
+	// same way. Host-registered parsers follow. One merged loop (built-ins
+	// first, exactly the previous install order) keeps a single coverable
+	// install-error arm — see design/TEST-SEAMS.10.md.
+	//
 	// create=true: record the live module even with no host parsers yet,
 	// so a post-import RegisterHostParser injects directly (the loaded
 	// cache would otherwise never rebuild). Mirrors the MiniLang fold.
 	state := parseLangHostStateFor(parent, true)
 	state.mu.Lock()
-	for _, spec := range state.specs {
+	builtins := append(tabnasParserSpecs(), aontuParserSpec())
+	for _, spec := range append(builtins, state.specs...) {
 		if err := installHostParser(exports, subReg, spec); err != nil {
 			state.mu.Unlock()
 			return native.ModuleDesc{}, err

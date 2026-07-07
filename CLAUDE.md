@@ -15,5 +15,9 @@ that module:
 Before committing, run the pre-commit checklist from the repo root:
 
 ```bash
-make fmt && make vet && make lint && make test
+make fmt && make vet && make lint && make test && make cover-gate
 ```
+
+`make cover-gate` enforces **ADR-008**: 100% unit-test coverage of every
+reachable Go statement (the sole exclusion is the reviewed, proof-carrying
+`test/go/covergate/allowlist.tsv` — see `design/COVERAGE-ALLOWLIST.10.md`).

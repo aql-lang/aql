@@ -241,7 +241,7 @@ func (s *server) ensureRegistry() *native.Registry {
 	if s.registry != nil {
 		return s.registry
 	}
-	reg, err := native.DefaultRegistry()
+	reg, err := nativeDefaultRegistry()
 	if err != nil {
 		fmt.Fprintf(s.stderrLog, "lsp: native registry: %s\n", err)
 		return nil

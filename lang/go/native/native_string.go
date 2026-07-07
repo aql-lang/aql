@@ -59,10 +59,10 @@ func foldIndex(s, substr string, from int) (start, span int) {
 		if i >= len(s) {
 			break
 		}
+		// s[i:] is non-empty here (i < len(s)), so DecodeRuneInString always
+		// returns size >= 1 — a "size == 0" guard would be dead
+		// (design/TEST-SEAMS.10.md, ADR-005).
 		_, size := utf8.DecodeRuneInString(s[i:])
-		if size == 0 {
-			break
-		}
 		i += size
 	}
 	return -1, 0
@@ -1096,10 +1096,11 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 			if !all {
 				break
 			}
+			// input[idx:idx+span] was just sliced above without panicking, so
+			// idx+span <= len(input): a "start > len(input)" guard would be
+			// dead (design/TEST-SEAMS.10.md, ADR-005). foldIndex tolerates
+			// start == len(input) on the next pass.
 			start = idx + span
-			if start > len(input) {
-				break
-			}
 		}
 		return matches
 	}

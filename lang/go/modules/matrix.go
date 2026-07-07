@@ -192,7 +192,7 @@ func validDims(rows, cols int) error {
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := native.DefaultRegistry()
+	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -217,44 +217,47 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports := native.NewOrderedMap()
 
 	// Construction
-	exports.Set("create", makeListToMatrixFnDef(tt, "matrix-make", subReg))
-	exports.Set("zeros", makeIntIntToMatrixFnDef(tt, "matrix-zeros", subReg))
-	exports.Set("ones", makeIntIntToMatrixFnDef(tt, "matrix-ones", subReg))
-	exports.Set("eye", makeIntToMatrixFnDef(tt, "matrix-eye", subReg))
-	exports.Set("fill", makeIntIntNumToMatrixFnDef(tt, "matrix-fill", subReg))
+	exports.Set("create", makeTypedFnDef("matrix-make", subReg, tt.Matrix, native.TList))
+	exports.Set("zeros", makeTypedFnDef("matrix-zeros", subReg, tt.Matrix, native.TInteger, native.TInteger))
+	exports.Set("ones", makeTypedFnDef("matrix-ones", subReg, tt.Matrix, native.TInteger, native.TInteger))
+	exports.Set("eye", makeTypedFnDef("matrix-eye", subReg, tt.Matrix, native.TInteger))
+	exports.Set("fill", makeTypedFnDef("matrix-fill", subReg, tt.Matrix, native.TInteger, native.TInteger, native.TNumber))
 
 	// Shape. No `size` export: the core `size` word already reports a
 	// tensor's entry count via the Sizer behavior (TensorData), so a
 	// MatrixUtil.size would only shadow it — see ADR-001.
-	exports.Set("rows", makeMatrixToIntFnDef(tt, "matrix-rows", subReg))
-	exports.Set("cols", makeMatrixToIntFnDef(tt, "matrix-cols", subReg))
+	exports.Set("rows", makeTypedFnDef("matrix-rows", subReg, native.TInteger, tt.Matrix))
+	exports.Set("cols", makeTypedFnDef("matrix-cols", subReg, native.TInteger, tt.Matrix))
 
-	// Access
-	exports.Set("elem", makeMatrixIntIntToDecFnDef(tt, "matrix-at", subReg))
-	exports.Set("row", makeMatrixIntToListFnDef(tt, "matrix-row", subReg))
-	exports.Set("col", makeMatrixIntToListFnDef(tt, "matrix-col", subReg))
+	// Access. elem's wrapper Params keep the user-facing positional
+	// order `mat row col` (deepest→top) so the wrapper resolves as
+	// before; the underlying NativeFunc sig is the reverse (top-down)
+	// and is "data-last" by virtue of mat being deepest.
+	exports.Set("elem", makeTypedFnDef("matrix-at", subReg, native.TFloat, tt.Matrix, native.TInteger, native.TInteger))
+	exports.Set("row", makeTypedFnDef("matrix-row", subReg, native.TList, tt.Matrix, native.TInteger))
+	exports.Set("col", makeTypedFnDef("matrix-col", subReg, native.TList, tt.Matrix, native.TInteger))
 
 	// Arithmetic
-	exports.Set("mat-add", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-add", subReg))
-	exports.Set("mat-sub", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-sub", subReg))
-	exports.Set("mat-mul", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-mul", subReg))
-	exports.Set("scale", makeMatrixNumToMatrixFnDef(tt, "matrix-scale", subReg))
-	exports.Set("mat-emul", makeMatrixMatrixToMatrixFnDef(tt, "matrix-mat-emul", subReg))
+	exports.Set("mat-add", makeTypedFnDef("matrix-mat-add", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
+	exports.Set("mat-sub", makeTypedFnDef("matrix-mat-sub", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
+	exports.Set("mat-mul", makeTypedFnDef("matrix-mat-mul", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
+	exports.Set("scale", makeTypedFnDef("matrix-scale", subReg, tt.Matrix, tt.Matrix, native.TNumber))
+	exports.Set("mat-emul", makeTypedFnDef("matrix-mat-emul", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
 
 	// Transform. The flat row-major list of entries is exported as
 	// `values`, not `flatten`, so it does not shadow the core `flatten`
 	// word (ADR-001). `transpose` is an aql:array module word, not a
 	// core word, so MatrixUtil.transpose is fine.
-	exports.Set("transpose", makeUnaryMatrixFnDef(tt, "matrix-transpose", subReg))
-	exports.Set("values", makeMatrixToListFnDef(tt, "matrix-flatten", subReg))
+	exports.Set("transpose", makeTypedFnDef("matrix-transpose", subReg, tt.Matrix, tt.Matrix))
+	exports.Set("values", makeTypedFnDef("matrix-flatten", subReg, native.TList, tt.Matrix))
 
 	// Aggregation
-	exports.Set("sum", makeMatrixToDecFnDef(tt, "matrix-sum", subReg))
-	exports.Set("tr", makeMatrixToDecFnDef(tt, "matrix-trace", subReg))
-	exports.Set("det", makeMatrixToDecFnDef(tt, "matrix-det", subReg))
+	exports.Set("sum", makeTypedFnDef("matrix-sum", subReg, native.TFloat, tt.Matrix))
+	exports.Set("tr", makeTypedFnDef("matrix-trace", subReg, native.TFloat, tt.Matrix))
+	exports.Set("det", makeTypedFnDef("matrix-det", subReg, native.TFloat, tt.Matrix))
 
 	// Vector
-	exports.Set("dot", makeListListToDecFnDef("matrix-dot", subReg))
+	exports.Set("dot", makeTypedFnDef("matrix-dot", subReg, native.TFloat, native.TList, native.TList))
 
 	// The module-owned tensor types, exported as type literals so the
 	// importer can reference them — `make MatrixUtil.Matrix [[1 2][3 4]]`,
@@ -272,163 +275,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 		exports.Set(ext.Extends, native.NewFnDef(ext))
 	}
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"MatrixUtil": exports},
-	}
-	return desc, nil
-}
-
-// --- FnDef helpers ---
-
-func makeListToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TList}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeIntIntToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeIntToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TInteger}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeIntIntNumToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}, {Type: native.TNumber}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixToIntFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}},
-			Returns: []*native.Type{native.TInteger},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixIntIntToDecFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	// FnDef.Params is matched deepest-first against the user stack. Keep the
-	// user-facing positional order `mat row col` (deepest→top) so the
-	// wrapper resolves correctly; the underlying NativeFunc sig is the
-	// reverse (top-down = stack[N-1], stack[N-2], …, stack[0]) and is
-	// "data-last" by virtue of mat being deepest.
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TInteger}, {Type: native.TInteger}},
-			Returns: []*native.Type{native.TFloat},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixIntToListFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TInteger}},
-			Returns: []*native.Type{native.TList},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixMatrixToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: tt.Matrix}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixNumToMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}, {Type: native.TNumber}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeUnaryMatrixFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}},
-			Returns: []*native.Type{tt.Matrix},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixToListFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}},
-			Returns: []*native.Type{native.TList},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeMatrixToDecFnDef(tt TensorModuleTypes, wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: tt.Matrix}},
-			Returns: []*native.Type{native.TFloat},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
-}
-
-func makeListListToDecFnDef(wordName string, subReg *native.Registry) native.Value {
-	return native.NewFnDef(native.FnDefInfo{Name: wordName,
-		Signatures: []native.FnSig{{
-			Params:  []native.FnParam{{Type: native.TList}, {Type: native.TList}},
-			Returns: []*native.Type{native.TFloat},
-			Impl:    native.AQL([]native.Value{native.NewWord(wordName)}), BarrierPos: -1,
-		}},
-		Registry: subReg,
-	})
+	return moduleDesc(parent, "MatrixUtil", subReg, exports), nil
 }
 
 // --- Word definitions ---

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -87,7 +86,7 @@ func appendAudit(homeDir string, ev AuditEvent) error {
 // interactive CLI invocations. Falls back to "local" when the OS
 // user is unavailable (e.g. in a minimal container).
 func defaultActor() string {
-	if u, err := user.Current(); err == nil && u.Username != "" {
+	if u, err := c7userCurrent(); err == nil && u.Username != "" {
 		return "user:" + u.Username
 	}
 	return "local"

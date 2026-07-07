@@ -96,7 +96,7 @@ func saveTUIPrefs(homeDir string, p tuiPrefs) error {
 	if err := os.MkdirAll(homeAQLDir(homeDir), 0700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(p, "", "  ")
+	data, err := t7jsonMarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}

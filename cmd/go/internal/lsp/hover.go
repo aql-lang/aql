@@ -86,10 +86,12 @@ func wordAt(src string, pos Position) (string, Range, bool) {
 	if start == end {
 		return "", Range{}, false
 	}
+	// isWordChar accepts only ASCII alnum/_/-/. — never whitespace — so
+	// line[start:end] (non-empty since start != end above) never has
+	// leading/trailing space for TrimSpace to remove and never trims
+	// down to empty (see design/TEST-SEAMS.10.md, ADR-005: an
+	// untestable defensive branch is dead code).
 	word := strings.TrimSpace(line[start:end])
-	if word == "" {
-		return "", Range{}, false
-	}
 	return word, Range{
 		Start: Position{Line: pos.Line, Character: start},
 		End:   Position{Line: pos.Line, Character: end},

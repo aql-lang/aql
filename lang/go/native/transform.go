@@ -3,6 +3,7 @@ package native
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	voxgigstruct "github.com/voxgig/struct"
 )
@@ -20,7 +21,10 @@ func transformHandler(args []Value, ctx map[string]Value, stack []Value, r *Regi
 
 	result := voxgigstruct.Transform(data, spec)
 
-	val, err := anyToValue(result)
+	// Route convert-back through the shared structConvert seam
+	// (design/TEST-SEAMS.10.md) so the failure arm is drivable — the
+	// voxgig-struct round-trip guarantee is owned by the library, not here.
+	val, err := structConvert(result)
 	if err != nil {
 		return nil, fmt.Errorf("transform: %w", err)
 	}
@@ -65,6 +69,13 @@ func valueToAny(v Value) any {
 		return nil
 	case v.Parent.ConformsTo(TMap):
 		m, _ := AsMap(v)
+		if m == nil {
+			// A TMap-conforming value whose payload is not a concrete
+			// OrderedMap (a record/options/typed-map descriptor) — AsMap
+			// returns nil rather than an OrderedMap. Fall back to the
+			// rendered form instead of dereferencing nil (ADR-005).
+			return v.String()
+		}
 		out := make(map[string]any, m.Len())
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
@@ -85,10 +96,12 @@ func valueToAny(v Value) any {
 		// rather than the debug rendering. (The $class metadata key is
 		// added by the serialization layer, not here — enumeration
 		// reports fields only.)
-		flat, ok := FlatInstanceFields(v)
-		if !ok {
-			return v.String()
-		}
+		//
+		// FlatInstanceFields always returns ok==true here: IsFlatInstance
+		// matches exactly ClassInstanceInfo / ResourceInstanceInfo, and
+		// flatInstanceParts returns ok==true (non-nil field map) for both,
+		// so a "!ok" guard would be dead (design/TEST-SEAMS.10.md).
+		flat, _ := FlatInstanceFields(v)
 		out := make(map[string]any, flat.Len())
 		for _, key := range flat.Keys() {
 			val, _ := flat.Get(key)
@@ -161,16 +174,14 @@ func valueToMap(v Value) map[string]any {
 	return out
 }
 
-// sortedAnyMapKeys returns map keys in sorted order for deterministic output.
+// sortedAnyMapKeys returns map keys in sorted order for deterministic
+// output. The single implementation shared across the package (fileio's
+// sortedMapKeys delegates here).
 func sortedAnyMapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
-		}
-	}
+	sort.Strings(keys)
 	return keys
 }

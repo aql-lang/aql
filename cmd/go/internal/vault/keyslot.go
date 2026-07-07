@@ -18,13 +18,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 
@@ -58,7 +56,7 @@ var ErrNoKeyForValue = errors.New("vault: no data key for this namespace")
 // newRandom returns n cryptographically random bytes.
 func newRandom(n int) ([]byte, error) {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randRead(b); err != nil {
 		return nil, err
 	}
 	return b, nil
@@ -79,7 +77,7 @@ func zeroize(b []byte) {
 // scrypt KDF over the shared VaultSalt. This is the only scrypt call on
 // the authentication path.
 func vaultMasterKEK(passphrase string, vaultSalt []byte) ([]byte, error) {
-	return scryptKey(passphrase, vaultSalt)
+	return p7scryptKey(passphrase, vaultSalt)
 }
 
 // slotKEK derives a per-slot key-encryption key from the master KEK and
@@ -88,7 +86,7 @@ func vaultMasterKEK(passphrase string, vaultSalt []byte) ([]byte, error) {
 func slotKEK(masterKEK, slotSalt []byte) ([]byte, error) {
 	r := hkdf.New(sha256.New, masterKEK, slotSalt, []byte(labelKEK))
 	out := make([]byte, kekLen)
-	if _, err := io.ReadFull(r, out); err != nil {
+	if _, err := p7ioReadFull(r, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -164,7 +162,7 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 
 // newSlotKeypair generates an X25519 keypair for a new slot.
 func newSlotKeypair() (pub, priv *[32]byte, err error) {
-	return box.GenerateKey(rand.Reader)
+	return box.GenerateKey(p7boxRand)
 }
 
 // sealPrivKey AES-GCM-seals a slot's X25519 private key under its KEK,
@@ -217,7 +215,7 @@ var errSlotAuth = errors.New("vault: wrong passphrase or corrupt keyring")
 // sealNDK seals a namespace data key to a slot's public key using a NaCl
 // anonymous sealed box (ephemeral-key, self-contained), base64-encoded.
 func sealNDK(ndk []byte, slotPub *[32]byte) (string, error) {
-	sealed, err := box.SealAnonymous(nil, ndk, slotPub, rand.Reader)
+	sealed, err := box.SealAnonymous(nil, ndk, slotPub, p7boxRand)
 	if err != nil {
 		return "", err
 	}

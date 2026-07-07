@@ -167,7 +167,7 @@ func scanPath(p string, maxBytes int64, vaultIndex map[string]string) ([]scanRes
 		return scanFile(p, maxBytes, vaultIndex)
 	}
 	var out []scanResult
-	err = filepath.WalkDir(p, func(path string, d iofs.DirEntry, walkErr error) error {
+	err = c7walkDir(p, func(path string, d iofs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}

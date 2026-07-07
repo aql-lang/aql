@@ -105,17 +105,25 @@ func formatTableDataAsList(td TableData) string {
 	return v.String()
 }
 
+// joinEntries renders m's entries as "k:render(v)" joined by spaces —
+// the ONE k:v body every field-bag and map render shares (Value.String
+// for display, CanonValue for canon, class/resource instance field
+// bags). Keys iterate in insertion order; commas are optional in AQL
+// source and the default render omits them.
+func joinEntries(m ReadMap, render func(Value) string) string {
+	parts := make([]string, 0, m.Len())
+	for _, k := range m.Keys() {
+		val, _ := m.Get(k)
+		parts = append(parts, k+":"+render(val))
+	}
+	return strings.Join(parts, " ")
+}
+
 // formatFieldBag renders an OrderedMap of field name → value as
 // `name{k:v …}` — the shared render shape of record / options /
-// table-schema type values. Fields are space-separated (commas are
-// optional in AQL source, and the default render omits them).
+// table-schema type values.
 func formatFieldBag(name string, fields *OrderedMap) string {
-	parts := make([]string, 0, fields.Len())
-	for _, k := range fields.Keys() {
-		val, _ := fields.Get(k)
-		parts = append(parts, k+":"+val.String())
-	}
-	return name + "{" + strings.Join(parts, " ") + "}"
+	return name + "{" + joinEntries(fields, Value.String) + "}"
 }
 
 // mapFormatBehavior renders a Map value, dispatching on the
@@ -140,12 +148,7 @@ func (mapFormatBehavior) Format(v Value) string {
 	if m == nil {
 		return "{}"
 	}
-	parts := make([]string, 0, m.Len())
-	for _, k := range m.Keys() {
-		val, _ := m.Get(k)
-		parts = append(parts, k+":"+val.String())
-	}
-	return "{" + strings.Join(parts, " ") + "}"
+	return "{" + joinEntries(m, Value.String) + "}"
 }
 
 func init() {

@@ -2,8 +2,6 @@ package native
 
 import (
 	"fmt"
-
-	voxgigstruct "github.com/voxgig/struct"
 )
 
 // The "items" word is registered via the consolidated Natives slice in
@@ -13,7 +11,7 @@ import (
 // two-element lists [key, value].
 func itemsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	data := valueToAny(args[0])
-	pairs := voxgigstruct.Items(data)
+	pairs := w9ItemsFn(data)
 
 	result := make([]Value, len(pairs))
 	for i, pair := range pairs {
@@ -22,7 +20,7 @@ func itemsHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 			keyStr = fmt.Sprintf("%v", pair[0])
 		}
 		keyVal := NewString(keyStr)
-		valVal, err := anyToValue(pair[1])
+		valVal, err := structConvert(pair[1])
 		if err != nil {
 			valVal = NewString("")
 		}

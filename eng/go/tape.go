@@ -141,10 +141,9 @@ func growthCeiling(initial, maxGrows int, factor float64) int {
 // by cfg. warn (may be nil) receives one-time 90/95/99% capacity
 // warnings.
 func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
+	// resolve guarantees initial >= len(vals) (its final clamp raises
+	// initial to progLen), so no re-check is needed here.
 	initial, maxGrows, factor := cfg.resolve(len(vals))
-	if initial < len(vals) {
-		initial = len(vals)
-	}
 	buf := make([]Value, initial)
 	copy(buf, vals)
 	return &Tape{
@@ -196,6 +195,12 @@ func (t *Tape) MaxCap() int { return t.maxCap }
 
 // Len reports the number of logical elements.
 func (t *Tape) Len() int { return len(t.buf) - (t.gapEnd - t.gapStart) }
+
+// capEntries reports the tape's current physical capacity in entries —
+// the size of the backing buffer, independent of the gap. Used by the
+// registry's engine pool to drop engines whose tape grew too large to
+// keep around.
+func (t *Tape) capEntries() int { return len(t.buf) }
 
 // phys translates a logical index to a physical one.
 func (t *Tape) phys(i int) int {

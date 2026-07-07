@@ -24,30 +24,25 @@ import (
 // name, not a shadow of the string word `indexof` (which is string-only,
 // in aql:string-util).
 func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
-	// Create an isolated sub-registry for the module's Go words.
-	subReg, err := native.DefaultRegistry()
+	// Create an isolated sub-registry with the specialised array words.
+	// They are deliberately absent from the global registry (see
+	// native_array.go).
+	subReg, err := newModuleRegistry(native.ArrayModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 
-	// Register the specialised array words into the sub-registry. They are
-	// deliberately absent from the global registry (see native_array.go).
-	for _, n := range native.ArrayModuleNatives {
-		subReg.RegisterNativeFunc(n)
-	}
-
 	exports := native.NewOrderedMap()
 	for _, w := range arrayExports {
-		exports.Set(w.export, makeArrayFnDef(w.internal, w.sigs, w.noEval, subReg))
+		sigs := make([]wrapSig, len(w.sigs))
+		for i, s := range w.sigs {
+			sigs[i] = typeSig(s.params, s.returns...)
+			sigs[i].noEval = w.noEval
+		}
+		exports.Set(w.export, makeWrapFnDef(w.internal, subReg, sigs...))
 	}
 
-	modID := parent.Modules.NextID()
-	desc := native.ModuleDesc{
-		Src:     subReg,
-		ID:      modID,
-		Exports: map[string]*native.OrderedMap{"ArrayUtil": exports},
-	}
-	return desc, nil
+	return moduleDesc(parent, "ArrayUtil", subReg, exports), nil
 }
 
 // arrSig describes one signature of an array word: argument types (in sig
@@ -58,7 +53,7 @@ type arrSig struct {
 }
 
 // arrWord maps a module export name to the internal native word it
-// delegates to, with one or more signatures. noEval lists the sig
+// delegates to, with one or more signatures. noEval marks the sig
 // positions that hold a quoted code body (mirrors the inner native's
 // NoEvalArgs) so the wrapper does not auto-evaluate them during forward
 // collection.
@@ -66,7 +61,7 @@ type arrWord struct {
 	export   string
 	internal string
 	sigs     []arrSig
-	noEval   []int
+	noEval   map[int]bool
 }
 
 // arrayExports is the export table for aql:array. export is the clean
@@ -92,10 +87,10 @@ var arrayExports = []arrWord{
 	// --- rank polymorphism (quoted code body at position 1) ---
 	{export: "eachrank", internal: "eachrank",
 		sigs:   []arrSig{{[]*native.Type{native.TInteger, native.TList, native.TList}, []*native.Type{native.TList}}},
-		noEval: []int{1}},
+		noEval: map[int]bool{1: true}},
 	{export: "foldaxis", internal: "foldaxis",
 		sigs:   []arrSig{{[]*native.Type{native.TInteger, native.TList, native.TList}, []*native.Type{native.TList}}},
-		noEval: []int{1}},
+		noEval: map[int]bool{1: true}},
 
 	// --- editing (copy-returning single-element edits) ---
 	{export: "insert-at", internal: "insert-at",
@@ -126,40 +121,4 @@ func sig1(a, ret *native.Type) []arrSig {
 // sig2 builds a single two-argument signature: [a, b] -> [ret].
 func sig2(a, b, ret *native.Type) []arrSig {
 	return []arrSig{{[]*native.Type{a, b}, []*native.Type{ret}}}
-}
-
-// makeArrayFnDef builds a FnDef value that wraps an internal array word.
-// Each signature delegates via a trivial body [Word(internalName)], which
-// execFnDefLiteral short-circuits to a direct dispatch of the inner native
-// in the sub-registry. BarrierPos: -1 keeps the swap form dispatchable
-// (see the "Module FnDef Wrappers" note in lang/go/CLAUDE.md). noEval
-// marks the wrapper sig positions holding a quoted code body, so forward
-// collection does not auto-evaluate them before the inner native runs.
-func makeArrayFnDef(internalName string, sigs []arrSig, noEval []int, subReg *native.Registry) native.Value {
-	var noEvalMap map[int]bool
-	if len(noEval) > 0 {
-		noEvalMap = make(map[int]bool, len(noEval))
-		for _, p := range noEval {
-			noEvalMap[p] = true
-		}
-	}
-	fnSigs := make([]native.FnSig, len(sigs))
-	for i, s := range sigs {
-		params := make([]native.FnParam, len(s.params))
-		for j, t := range s.params {
-			params[j] = native.FnParam{Type: t}
-		}
-		fnSigs[i] = native.FnSig{
-			Params:     params,
-			Returns:    s.returns,
-			Impl:       native.AQL([]native.Value{native.NewWord(internalName)}),
-			NoEvalArgs: noEvalMap,
-			BarrierPos: -1,
-		}
-	}
-	return native.NewFnDef(native.FnDefInfo{
-		Name:       internalName,
-		Signatures: fnSigs,
-		Registry:   subReg,
-	})
 }

@@ -120,7 +120,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-	ln, err := net.Listen("tcp", s.tcpAddr)
+	ln, err := netListen("tcp", s.tcpAddr)
 	if err != nil {
 		s.state.Store(int32(service.StateStopped))
 		return fmt.Errorf("listen %s: %w", s.tcpAddr, err)
