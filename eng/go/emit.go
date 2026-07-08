@@ -950,6 +950,19 @@ func (es *EmitState) consumeCaptureArm() bool {
 	return es.active()
 }
 
+// peekCaptureArm reports whether the next RunCarrierBodyWithDefs will
+// record its body into a fragment (branch/loop lowering armed and the
+// recorder live) WITHOUT clearing the one-shot flag — the same condition
+// consumeCaptureArm settles. RunCarrierBodyWithDefs consults it to mark
+// the branch/loop sub-engine element-eval-recordable, so a residual
+// computed container (`{a: x}` / `[x y]` returned from a branch arm) has
+// its OpMakeMap / OpMakeList assembly recorded rather than left an
+// unresolvable residual — the body runs in the LIVE frame here (unlike
+// the end-of-run residual eval), so recording is sound.
+func (es *EmitState) peekCaptureArm() bool {
+	return es != nil && es.captureArm && es.active()
+}
+
 // beginFragment opens a recording frame; the returned func closes it
 // into es.captured.
 func (es *EmitState) beginFragment() func() {

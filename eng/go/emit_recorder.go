@@ -80,6 +80,7 @@ type EmitRecorder interface {
 
 	// --- branches / loops ------------------------------------------------
 	ArmBranchCapture()
+	peekCaptureArm() bool
 	ArmLoopCapture()
 	ConsumeLoopArm() bool
 	TakeFragment() *EmitFragment
@@ -176,6 +177,7 @@ func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}
 
 func (inactiveEmit) ArmBranchCapture()           {}
+func (inactiveEmit) peekCaptureArm() bool        { return false }
 func (inactiveEmit) ArmLoopCapture()             {}
 func (inactiveEmit) ConsumeLoopArm() bool        { return false }
 func (inactiveEmit) TakeFragment() *EmitFragment { return nil }
