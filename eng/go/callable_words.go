@@ -646,14 +646,23 @@ func (es *EmitState) emptyFlexHookOperand(v Value) bool {
 		return false
 	}
 	pr, ok := es.producedBy[v.ID]
-	if !ok || pr.seq != es.seq || pr.idx != 0 {
+	if !ok || pr.idx != 0 {
 		return false
 	}
 	evs := es.frames[0]
-	if len(evs) == 0 {
+	// Trailing evDynBind events are def-site BOOKKEEPING (the dynamic-scope
+	// binder trail): their only runtime effect is a registry install, which
+	// cannot touch the flex contents — skip them when locating the last
+	// EFFECTFUL event, which must still be this flex's construction (the
+	// "no event recorded since" proof, dyn-bind-tolerant).
+	i := len(evs) - 1
+	for i >= 0 && evs[i].kind == evDynBind {
+		i--
+	}
+	if i < 0 {
 		return false
 	}
-	last := evs[len(evs)-1]
+	last := evs[i]
 	if last.seq != pr.seq || last.kind != evCall || last.call.word != "flex" {
 		return false
 	}

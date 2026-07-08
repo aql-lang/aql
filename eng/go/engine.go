@@ -1135,16 +1135,31 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// at the source token; here we only need to replace any dangling
 	// Undefined atoms with `Any` carriers so the residual stack stays
 	// type-clean for downstream consumers of CheckResult.Stack.
-	for i := 0; i < e.tape.Len(); i++ {
-		if !e.tape.At(i).Undefined {
-			continue
-		}
-		if e.registry.Check.IsActive() {
-			e.tape.Set(i, NewCarrier(TAny))
-		}
-	}
+	e.drainUndefinedAtoms()
 
 	return e.reconcileTopResidual(e.tape.TakeAll()), nil
+}
+
+// drainUndefinedAtoms replaces dangling Undefined atoms with Any carriers
+// (check mode only — outside check mode stepWord errors on undefined words,
+// so this is a no-op). Each carrier remembers which NAME the atom carried:
+// an analysis-time-undefined read inside a fn body can still be a
+// DYNAMIC-SCOPE reference bound by a live frame at run time (a recursive
+// base case reading the previous frame's body-local — recursion.tsv:71);
+// resolveOperand's dynScopeRescue lowers it to a runtime lookup iff a
+// binder fn reaches the reader.
+func (e *Engine) drainUndefinedAtoms() {
+	for i := 0; i < e.tape.Len(); i++ {
+		und := e.tape.At(i)
+		if !und.Undefined || !e.registry.Check.IsActive() {
+			continue
+		}
+		c := NewCarrier(TAny)
+		if a, aerr := AsAtom(und); aerr == nil && a != "" {
+			e.registry.Check.Recorder().NoteDefRead(c.ID, a)
+		}
+		e.tape.Set(i, c)
+	}
 }
 
 // reconcileTopResidual reconciles the top-level program residual the same
@@ -2111,6 +2126,11 @@ func (e *Engine) stepWord(val Value) error {
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
+			// Remember which NAME produced this value (compile passes): if the
+			// value later has no compiled home in a fn unit, the read was a
+			// dynamic-scope reference and lowers to a runtime name lookup
+			// (resolveOperand's dynScopeRescue).
+			e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
 			// at def time (so `size xs` → 3). To splice a list's elements

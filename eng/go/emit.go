@@ -61,12 +61,13 @@ const (
 type operandKind uint8
 
 const (
-	opNone    operandKind = iota // zero value: unset / invalid (ok=false only)
-	opConst                      // idx → Program.Consts index
-	opEvent                      // idx → producing event sequence number
-	opLocal                      // idx → frame-local slot (loop iterator / param)
-	opType                       // idx → Program.Types index (canonical type)
-	opClosure                    // closureUnit + closureCaps (a compiled body)
+	opNone     operandKind = iota // zero value: unset / invalid (ok=false only)
+	opConst                       // idx → Program.Consts index
+	opEvent                       // idx → producing event sequence number
+	opLocal                       // idx → frame-local slot (loop iterator / param)
+	opType                        // idx → Program.Types index (canonical type)
+	opClosure                     // closureUnit + closureCaps (a compiled body)
+	opDynScope                    // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
 )
 
 // emitOperand names where one dispatch argument comes from. For every kind but
@@ -96,6 +97,9 @@ type emitOperand struct {
 // operand kinds — the only places that pair a kind with its idx. eventOperand
 // additionally carries the result index within the producing event (P5).
 func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
+func dynScopeOperand(idx int) emitOperand {
+	return emitOperand{kind: opDynScope, idx: idx}
+}
 func eventOperand(seq, resIdx int) emitOperand {
 	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
 }
@@ -290,6 +294,7 @@ const (
 	evFallback
 	evTrap
 	evStore
+	evDynBind
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -358,6 +363,31 @@ type emitEvent struct {
 	fb    emitFallback
 	trap  emitTrap
 	store *emitStore
+	dyn   *emitDynBind
+}
+
+// emitDynBind is one recorded `def` site (every value def records one,
+// cheaply): the binding name, its interned name const, and the bound
+// value's operand, resolved AT RECORD TIME while the unit context is
+// live. The lowering emits a registry-visible OpBindDynScope for it ONLY
+// when the name is in dynScopeNames (some OpLookupDynScope reads it);
+// otherwise the event lowers to nothing.
+type emitDynBind struct {
+	name string
+	// src carries a LOCAL operand when the bound value is a live frame slot
+	// (a param re-bound by `def` — resolved via the unit's localByID at
+	// record time, a pure read). An EVENT-produced value rides srcSeq as a
+	// plain int, NOT an operand — so forEachOperand's reference counting and
+	// the scopeFloor guard never see a phantom extra reference from a def
+	// site whose bind the lowering skips (every def records one of these;
+	// only dynamically-read names lower). Any other value rides val VERBATIM
+	// and is interned UNPOOLED at lowering, only if the bind actually lowers
+	// — record-time interning polluted the canonical const pool (a
+	// reparented `def y:Pos 2` merging with the plain literal 2).
+	src    emitOperand
+	srcSeq int // producing event seq for an event-sourced value; -1 otherwise
+	val    Value
+	pos    SrcPos
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -453,6 +483,27 @@ type EmitState struct {
 	// value ID) so the get-family read guards can exempt a read whose
 	// landing the shaped-method model owns. See noteShapedRead.
 	shapedReads map[string]bool
+	// defReads maps a value ID to the BINDING NAME the check pass read it
+	// from (stepWord's simple-value substitution). When such a value later
+	// fails operand resolution inside a fn unit — no param/capture/local/
+	// event/const home — the read was a DYNAMIC-SCOPE reference (a callee
+	// reading the caller's frame binding), and resolveOperand lowers it to
+	// a runtime OpLookupDynScope instead of refusing, gated on the check's
+	// binder/call-graph reachability model (dynamicScopeReachable). See
+	// NoteDefRead.
+	defReads map[string]string
+	// dynScopeNames collects every name resolveOperand lowered as an
+	// OpLookupDynScope read. The Finalize pass installs an OpBindDynScope
+	// twin in every unit (params and body-local defs) and at every
+	// top-level def that binds one of these names, so the runtime lookup
+	// finds the same binding the interpreter's def stack holds.
+	dynScopeNames map[string]bool
+	// unitNames parallels the open-unit stack with each unit's FN NAME, so
+	// the dynamic-scope rescue knows which fn is READING (the FnNameStack
+	// may already have advanced past a memoised body analysis by the time
+	// the unit finish resolves its residual).
+	unitNames []string
+
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -997,7 +1048,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	}
 	lit, ok := es.materialise(v)
 	if !ok {
-		return emitOperand{}, false
+		return es.dynScopeRescue(v)
 	}
 	// At MODULE scope a NoEvalArgs body that is inert except for InterpStrings
 	// (interpBodyInert) bakes as code-as-data and is re-interpreted against the
@@ -1006,7 +1057,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
 	// before resolveOperand, so the operand never gets here.
 	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
-		return emitOperand{}, false
+		return es.dynScopeRescue(v)
 	}
 	idx := es.intern(lit)
 	// A compound VALUE literal materialised inside a fn unit gets per-call
@@ -2091,6 +2142,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
 	es.units = append(es.units, u)
+	es.unitNames = append(es.unitNames, name)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
 	}
@@ -2326,6 +2378,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		rec.numLoc = u.numLocals
 		rec.finished = true
 		es.units = es.units[:len(es.units)-1]
+		es.unitNames = es.unitNames[:len(es.unitNames)-1]
 	}
 	return unit, finish, true
 }
@@ -3343,6 +3396,79 @@ func zeroArgFnOut(outs []Value) bool {
 // recorder: the get-family read that produced `id` resolved a shaped-
 // instance member whose LANDING the shaped-method model owns, so the
 // read-guard auto-dispatch refusals skip it (shapedReadOut).
+// NoteDefRead records that value ID was produced by reading binding `name`
+// (stepWord's simple-value substitution). Consulted by resolveOperand's
+// dynamic-scope rescue when the value has no compiled home.
+func (es *EmitState) NoteDefRead(id, name string) {
+	if !es.active() || id == "" || name == "" {
+		return
+	}
+	if es.defReads == nil {
+		es.defReads = map[string]string{}
+	}
+	es.defReads[id] = name
+}
+
+// RecordDynBind records a value-def site (name + the bound value's operand)
+// as an evDynBind event. Every def records one cheaply; the lowering emits a
+// registry-visible OpBindDynScope ONLY for names in dynScopeNames (some
+// OpLookupDynScope reads them) and skips the event otherwise. Engine-internal
+// and capitalised (type) names never bind dynamically.
+func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
+	if !es.active() || name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+		return
+	}
+	src, srcSeq := emitOperand{}, -1
+	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+		srcSeq = pr.seq
+	} else if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+		src = localOperand(slot)
+	}
+	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
+		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
+	}})
+}
+
+// dynScopeRescue is resolveOperand's last resort inside a fn unit: a value
+// that was READ from a def binding (NoteDefRead) but has no compiled home is
+// a DYNAMIC-SCOPE reference — the interpreter resolves the name against the
+// live def stack at run time (a callee reading the caller's param, a
+// recursive base case reading the previous frame's body-local). Lower it to
+// a runtime OpLookupDynScope, gated on the check's binder/call-graph model
+// (dynamicScopeReachable): some fn that BINDS the name must reach the
+// reading fn, so a plain typo still refuses. The name joins dynScopeNames so
+// Finalize installs the OpBindDynScope twin in every binding unit.
+func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
+	if es.reg == nil || len(es.units) <= 1 {
+		return emitOperand{}, false
+	}
+	name := v.DynFrom
+	if name == "" {
+		name = es.defReads[v.ID]
+	}
+	if name == "" {
+		return emitOperand{}, false
+	}
+	c := es.reg.Check
+	reader := ""
+	if n := len(es.unitNames); n > 0 {
+		reader = es.unitNames[n-1]
+	}
+	if reader == "" {
+		if n := len(c.FnNameStack); n > 0 {
+			reader = c.FnNameStack[n-1]
+		}
+	}
+	if !c.dynamicScopeReachable(name, reader) {
+		return emitOperand{}, false
+	}
+	if es.dynScopeNames == nil {
+		es.dynScopeNames = map[string]bool{}
+	}
+	es.dynScopeNames[name] = true
+	return dynScopeOperand(es.intern(NewString(name))), true
+}
+
 func (es *EmitState) noteShapedRead(id string) {
 	if !es.active() || id == "" {
 		return
@@ -4112,6 +4238,15 @@ func (es *EmitState) internType(v Value) int {
 	es.types = append(es.types, TypeRef{Name: v.String(), ID: v.ID})
 	es.typeIdx[v.ID] = len(es.types) - 1
 	return len(es.types) - 1
+}
+
+// internUnpooled appends a const WITHOUT registering it in the canonical
+// pool: a dynamic-scope bind's value must never merge with (or be merged
+// into by) a source literal of the same canon — the bind may carry a
+// reparented tag the literal must not inherit. Lowering-time only.
+func (es *EmitState) internUnpooled(v Value) int {
+	es.consts = append(es.consts, v)
+	return len(es.consts) - 1
 }
 
 // intern pools a constant by canonical form. Compounds (lists,
@@ -4964,6 +5099,83 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 // entry and are pushed at the end. ok=false (with reason) when the
 // source was marked uncompilable or a shape is beyond the current
 // stage's lowering.
+// eventsBindDynScope reports whether any event in the slice (recursing into
+// branch arms, list-form conditions, and loop bodies) records a def of a name
+// in `names` — the unit then installs registry-visible bindings and must not
+// TAIL-call (the interpreter keeps a frame's bindings live across the calls
+// in its body tail; a tail replacement would tear them down early).
+func eventsBindDynScope(events []emitEvent, names map[string]bool) bool {
+	if len(names) == 0 {
+		return false
+	}
+	var frag func(f *EmitFragment) bool
+	walk := func(evs []emitEvent) bool {
+		for i := range evs {
+			ev := &evs[i]
+			switch ev.kind {
+			case evDynBind:
+				if names[ev.dyn.name] {
+					return true
+				}
+			case evBranch:
+				if frag(ev.br.condFrag) || frag(ev.br.then) || frag(ev.br.els) {
+					return true
+				}
+			case evLoop:
+				if frag(ev.loop.body) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	frag = func(f *EmitFragment) bool {
+		if f == nil {
+			return false
+		}
+		return walk(f.events)
+	}
+	return walk(events)
+}
+
+// unitBindsDynScope reports whether a unit installs dynamic-scope bindings:
+// a body-local def of a dyn-read name (evDynBind in its fragment tree), or a
+// PARAM some fn reads dynamically.
+func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
+	if eventsBindDynScope(rec.frag.events, es.dynScopeNames) {
+		return true
+	}
+	if len(es.dynScopeNames) == 0 {
+		return false
+	}
+	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+		if es.dynScopeNames[rec.locals[i]] {
+			return true
+		}
+	}
+	return false
+}
+
+// emitDynParamBinds installs a unit's dynamically-read PARAMS into r.Defs at
+// frame entry (a callee reading the caller's `n` — recursion.tsv:72), exactly
+// where the interpreter's InstallFrameBinding makes them visible; the frame's
+// RET truncates them back.
+func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
+	if len(es.dynScopeNames) == 0 {
+		return
+	}
+	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+		if !es.dynScopeNames[rec.locals[i]] {
+			continue
+		}
+		flw.emit(OpPushLocal, i, rec.pos)
+		flw.emit(OpBindDynScope, es.internUnpooled(NewString(rec.locals[i])), rec.pos)
+		flw.vm = append(flw.vm, nonEventSlot)
+		flw.note()
+		flw.vm = flw.vm[:len(flw.vm)-1]
+	}
+}
+
 func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if es == nil {
 		return nil, "no emit state", false
@@ -5171,7 +5383,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
 		diverged := fragDiverges(rec.frag)
-		if !rec.generic && len(rec.outOps) == 1 && rec.outOps[0].kind == opEvent {
+		// A unit that installs dynamic-scope bindings — a body-local def of a
+		// dyn-read name, or a PARAM some other fn reads dynamically — must not
+		// TAIL-call: the interpreter keeps the frame's bindings live until the
+		// body's cleanup tail runs AFTER the call returns, so the compiled
+		// frame must survive the call too (plain CALL_USER; RET pops the
+		// bindings at the same point the interpreter's __DC does).
+		bindsDyn := es.unitBindsDynScope(rec)
+		if !rec.generic && !bindsDyn && len(rec.outOps) == 1 && rec.outOps[0].kind == opEvent {
 			// Tail marking is single-result only: a tail call's results
 			// become the fn's results wholesale, so a multi-return tail
 			// boundary needs no rewrite here (it stays a plain CALL_USER).
@@ -5194,6 +5413,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
+		es.emitDynParamBinds(flw, rec)
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
@@ -5333,6 +5553,8 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.trap.pos
 	case evStore:
 		return ev.store.pos
+	case evDynBind:
+		return ev.dyn.pos
 	}
 	return ev.br.pos
 }

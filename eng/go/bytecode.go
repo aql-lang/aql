@@ -311,6 +311,35 @@ const (
 	// AQL error raised by the method surfaces as-is (the interpreter raises
 	// the same at the same point, prior side effects included).
 	OpCallDynMethod
+
+	// OpLookupDynScope is a DYNAMIC-SCOPE name read: a fn body's word that
+	// resolves through no lexical home — not a param, capture, local, const,
+	// or module binding the recorder can bake — but which SOME live frame
+	// binds at run time (a callee reading the caller's param, a recursive
+	// base case reading the previous frame's body-local — recursion.tsv
+	// 71/72). Arg indexes Program.Consts (a String holding the name); the VM
+	// reads r.Defs.Top(name) exactly as the interpreter's stepWord
+	// substitution does. A miss, or a binding the substitution would NOT
+	// push as a simple value (an FnDef/class dispatch, a splice/reach
+	// marker), defers to the interpreter via internal_error
+	// (runtimeShouldFallback — slow, not wrong). The binder side is
+	// OpBindDynScope: the whole-program lowering pass installs it in every
+	// unit that binds a dynamically-read name.
+	OpLookupDynScope
+
+	// OpBindDynScope makes a frame binding REGISTRY-VISIBLE for dynamic-scope
+	// readers: it pops the top value and installs it under the name in
+	// Program.Consts[Arg] via InstallDef — the same installer the
+	// interpreter's `def` runs — recording the name's prior depth so the
+	// frame's exit (RET) truncates the binding stack back, exactly the
+	// interpreter's def-cleanup discipline. Emitted only for names some
+	// OpLookupDynScope reads (the DynScopeNames set), at the def site for
+	// body-locals and at unit entry for params; top-level binds are never
+	// popped (the interpreter leaves top-level defs installed too). A unit
+	// containing binds never TAIL-calls (the interpreter keeps the frame's
+	// bindings live across the call in its body tail), so bindings stack
+	// per-activation and pop innermost-first.
+	OpBindDynScope
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -355,6 +384,8 @@ var opcodeNames = [...]string{
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
 	OpBindTyped:           "BIND_TYPED",
 	OpCallDynMethod:       "CALL_DYN_METHOD",
+	OpLookupDynScope:      "LOOKUP_DYN_SCOPE",
+	OpBindDynScope:        "BIND_DYN_SCOPE",
 }
 
 func (o Opcode) String() string {
@@ -739,7 +770,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 	for i, in := range code {
 		fmt.Fprintf(sb, "%04d %-11s", i, in.Op.String())
 		switch in.Op {
-		case OpPushConst:
+		case OpPushConst, OpLookupDynScope, OpBindDynScope:
 			c := p.Consts[in.Arg]
 			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:

@@ -77,6 +77,19 @@ type vmFrame struct {
 	locals         []Value
 	loopBase       int
 	stackBase      int
+	// dynBase is the vc.dynBinds depth at call entry: RET truncates the
+	// registry's dynamic-scope bindings back to it (the interpreter's
+	// def-cleanup discipline for the frame's OpBindDynScope installs).
+	dynBase int
+}
+
+// dynBindEntry records one OpBindDynScope install: the name and the def
+// stack's depth for it BEFORE the install, so unwinding truncates back to
+// exactly the pre-install state (InstallDef may itself pop an overlapping
+// same-scope binding, so a paired Pop would drift — Truncate cannot).
+type dynBindEntry struct {
+	name  string
+	depth int
 }
 
 // vmContext holds the state SHARED across a program run and every re-entrant
@@ -91,6 +104,12 @@ type vmContext struct {
 	ceiling   int
 	stepLimit int
 	steps     int
+	// dynBinds is the live dynamic-scope binding trail (OpBindDynScope),
+	// shared across re-entrant closure runs (they nest strictly): frames
+	// record their entry depth (vmFrame.dynBase), RET truncates back, and
+	// the top-level error path restores everything so a failed run never
+	// leaks registry bindings.
+	dynBinds []dynBindEntry
 	// frameDepth counts live VM activations — user-call frames AND re-entrant
 	// run() invocations (a closure invoked from a native handler via
 	// invokeClosure starts a FRESH run with its own frames slice). The per-run
@@ -794,6 +813,18 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	return append(stack, results...), nil
 }
 
+// unwindDynBinds truncates every dynamic-scope binding installed above the
+// given trail depth back to its recorded pre-install def-stack depth,
+// innermost-first — the compiled twin of the interpreter's per-frame
+// def-cleanup (__DC) for OpBindDynScope installs.
+func (vc *vmContext) unwindDynBinds(base int) {
+	for i := len(vc.dynBinds) - 1; i >= base; i-- {
+		e := vc.dynBinds[i]
+		vc.r.Defs.Truncate(e.name, e.depth)
+	}
+	vc.dynBinds = vc.dynBinds[:base]
+}
+
 // run executes from startUnit (unit -1 is the main program; >=0 indexes
 // p.Fns) with the given frame locals and initial operand stack, returning the
 // residual stack when the unit runs off the end of its code (the main program
@@ -807,9 +838,20 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 // as the engine.go step dispatch and matchSignature (.golangci.yml).
 //
 //nolint:gocyclo // the VM instruction dispatch is inherently one big switch — one
-func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value, error) {
+func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut []Value, runErr error) {
 	p, r := vc.p, vc.r
 	ceiling := vc.ceiling
+	// Dynamic-scope bindings installed by this activation (and its callees)
+	// must never outlive it: a frameless top RET pops back to this depth,
+	// and an ERROR unwind — where the RETs never run — restores it here so a
+	// failed run (or a closure error a caller traps) leaks nothing into the
+	// registry.
+	dynBase := len(vc.dynBinds)
+	defer func() {
+		if runErr != nil {
+			vc.unwindDynBinds(dynBase)
+		}
+	}()
 	// This activation counts against the shared frame ceiling; restore the
 	// entry baseline on exit so sequential runs and error unwinds never leak
 	// (the per-CALL_USER increments below are balanced by their RETs, and the
@@ -1152,7 +1194,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				return nil, stampAt(err, curDebug, pc, r)
 			}
 			if in.Op == OpCallUser {
-				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
+				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds)})
 				vc.frameDepth++ // balanced by the matching RET below
 			} else {
 				// Tail call: REPLACE the frame — the language's
@@ -1175,6 +1217,43 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 			locals = nl
 			enterUnit(int(in.Arg))
 			pc = -1
+		case OpBindDynScope:
+			// Install the top value under the name for dynamic-scope readers
+			// (OpLookupDynScope), through the same installer the interpreter's
+			// `def` runs; record the prior depth so the frame's RET (or the
+			// error unwind) truncates the binding stack back.
+			if len(stack) == 0 {
+				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
+			}
+			name, nerr := p.Consts[in.Arg].AsConcreteString()
+			if nerr != nil {
+				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
+			}
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			vc.dynBinds = append(vc.dynBinds, dynBindEntry{name: name, depth: r.Defs.Depth(name)})
+			InstallDef(r, name, v)
+		case OpLookupDynScope:
+			// The interpreter's stepWord simple-value substitution, at run
+			// time: read the name's live binding. A miss, or a binding the
+			// substitution would DISPATCH instead of push (an FnDef / class /
+			// splice / reach), defers to the interpreter (slow, not wrong).
+			name, nerr := p.Consts[in.Arg].AsConcreteString()
+			if nerr != nil {
+				return nil, vmErrAt(curDebug, pc, "LOOKUP_DYN_SCOPE bad name const")
+			}
+			v, ok := r.Defs.Top(name)
+			if !ok {
+				return nil, vmErrAt(curDebug, pc, "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
+			}
+			switch v.Data.(type) {
+			case FnDefInfo, *ClassTypeInfo:
+				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of a dispatching binding `"+name+"`; deferring to the interpreter")
+			}
+			if IsSplice(v) || IsReach(v) || IsWord(v) || IsMark(v) || IsMove(v) {
+				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
+			}
+			stack = append(stack, v)
 		case OpRet:
 			// Return-type check — the compiled mirror of the interpreter's
 			// ReturnCheck (__RC, engine.go): the body's result must satisfy
@@ -1205,12 +1284,15 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				// via invokeClosure): the residual stack is the unit's
 				// result, threaded back through the InvokeBody seam. The
 				// main program (unit -1) never RETs — it runs off the end —
-				// so this path is closure/fn-root only.
+				// so this path is closure/fn-root only. Bindings this
+				// activation installed pop here, like any frame exit.
+				vc.unwindDynBinds(dynBase)
 				return stack, nil
 			}
 			f := frames[len(frames)-1]
 			frames = frames[:len(frames)-1]
 			vc.frameDepth-- // matches the OpCallUser increment
+			vc.unwindDynBinds(f.dynBase)
 			loops = loops[:f.loopBase]
 			locals = f.locals
 			enterUnit(f.retUnit)

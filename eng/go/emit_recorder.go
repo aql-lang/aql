@@ -71,6 +71,8 @@ type EmitRecorder interface {
 	// --- defs / locals ---------------------------------------------------
 	MarkValueDef(v Value)
 	RecordDefRebind(name string, v Value, pos SrcPos)
+	RecordDynBind(name string, v Value, pos SrcPos)
+	NoteDefRead(id, name string)
 	RefuseCarriedUndef(name string)
 	RegisterLocal(id string) int
 	RememberOriginal(v Value)
@@ -128,7 +130,10 @@ func (inactiveEmit) bodyAnalysisGuard() func() { return func() {} }
 func (inactiveEmit) fnBodyGuard() func()       { return func() {} }
 
 func (inactiveEmit) MarkUncompilable(string) {}
-func (inactiveEmit) Sites() map[string]int   { return nil }
+
+func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
+func (inactiveEmit) NoteDefRead(string, string)          {}
+func (inactiveEmit) Sites() map[string]int               { return nil }
 func (inactiveEmit) Finalize([]Value) (*Program, string, bool) {
 	return nil, "no emit state", false
 }

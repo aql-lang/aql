@@ -139,6 +139,45 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // def site immediately follows the producing dispatch; a promoted producer
 // was rewritten to a local operand); any other layout refuses — a sound
 // interpreter fallback, never a wrong store.
+// lowerDynBind emits the registry-visible twin of a `def` whose name some
+// OpLookupDynScope reads (the DynScopeNames set): push the bound value's
+// operand, then OpBindDynScope pops it into r.Defs under the name (the VM
+// records the prior depth; the frame's RET truncates back — the
+// interpreter's def-cleanup discipline). A def of any other name lowers to
+// nothing here — its value flows by provenance exactly as before.
+func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
+	d := ev.dyn
+	if lw.es == nil || lw.es.dynScopeNames == nil || !lw.es.dynScopeNames[d.name] {
+		return ""
+	}
+	src := d.src
+	switch {
+	case d.srcSeq >= 0:
+		// A COMPUTED def value lives on the simulated stack at its producing
+		// event, not here — it is re-pushable only through a promoted frame
+		// local (planValueDefLocals / the unit's promoted map). Without the
+		// promotion there is no way to duplicate it for the registry install;
+		// refuse (sound interpreter fallback).
+		slot, ok := lw.promoted[d.srcSeq]
+		if !ok {
+			return "dynamic-scope def `" + d.name + "` of unpromoted computed value"
+		}
+		src = localOperand(slot)
+	case src.kind == opNone:
+		// A literal binding: bake the recorded value verbatim, UNPOOLED (it
+		// may carry a reparented tag a same-canon source literal must not
+		// inherit). Only inert data bakes; anything tape-coupled refuses.
+		if !isInertConst(d.val) {
+			return "dynamic-scope def `" + d.name + "` of unknown provenance"
+		}
+		src = constOperand(lw.es.internUnpooled(d.val))
+	}
+	lw.pushOperand(src, d.pos)
+	lw.emit(OpBindDynScope, lw.es.internUnpooled(NewString(d.name)), d.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1]
+	return ""
+}
+
 func (lw *lowerer) lowerStore(ev *emitEvent) string {
 	st := ev.store
 	if st.src.kind == opEvent {
@@ -309,6 +348,8 @@ func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 		lw.emit(OpPushLocal, op.idx, pos)
 	case opType:
 		lw.emit(OpPushType, op.idx, pos)
+	case opDynScope:
+		lw.emit(OpLookupDynScope, op.idx, pos)
 	default: // opConst
 		lw.emit(OpPushConst, op.idx, pos)
 	}
@@ -414,6 +455,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerTrap(ev)
 		case evStore:
 			reason = lw.lowerStore(ev)
+		case evDynBind:
+			reason = lw.lowerDynBind(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -491,6 +534,8 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		}
 	case evStore:
 		visit(ev.store.src)
+	case evDynBind:
+		visit(ev.dyn.src)
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
 		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes
