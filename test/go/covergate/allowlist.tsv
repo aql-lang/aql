@@ -215,8 +215,6 @@ github.com/aql-lang/aql/lang/go/native/walk_core.go:346.16,348.3	native handler 
 github.com/aql-lang/aql/eng/go/vm.go:935.93,937.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/vm.go:1212.26,1214.5	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/registry.go:1838.33,1841.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
-github.com/aql-lang/aql/lang/go/native/native_bytes.go:786.16,788.3	native handler defensive error-propagation / same-assertion guard (§native)
-github.com/aql-lang/aql/lang/go/native/native_bytes.go:923.17,925.3	native handler defensive error-propagation / same-assertion guard (§native)
 github.com/aql-lang/aql/eng/go/engine.go:5045.20,5048.6	execFnDefSig cross-registry CallAQL result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
 github.com/aql-lang/aql/eng/go/engine.go:5052.9,5052.24	execFnDefSig cross-registry 0-arg splice arm; see 5015.20 entry (§kernel)
 github.com/aql-lang/aql/eng/go/engine.go:5052.24,5054.4	execFnDefSig cross-registry 0-arg splice arm; see 5015.20 entry (§kernel)
