@@ -840,40 +840,6 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 	}
 }
 
-// bodyConstructsFn reports whether a fn body's tokens construct a function
-// value at run time — a `fn` / `afn` word (`=>` desugars to a paren group
-// around `afn`), or a literal FnDefInfo riding in the tokens. Used to gate
-// unit-compiling FOREIGN-registry (module-preamble) fn bodies: a lambda
-// constructed inside such a body escapes as a VALUE carrying name-resolved
-// body tokens, and only the interpreter's foreign dispatch (execFnDefLiteral's
-// wrapper branch) executes the constructing body in the module's own scope —
-// a compiled unit runs against the dispatching registry, so the escaped
-// lambda's module-private words would no longer resolve (the aql:repl served
-// handler was the observed divergence).
-func bodyConstructsFn(toks []Value) bool {
-	for _, t := range toks {
-		if IsWord(t) {
-			if w, err := AsWord(t); err == nil && (w.Name == "fn" || w.Name == "afn") {
-				return true
-			}
-			continue
-		}
-		switch d := t.Data.(type) {
-		case FnDefInfo:
-			return true
-		case ListPayload:
-			if bodyConstructsFn(d.Elems) {
-				return true
-			}
-		case ParenExprPayload:
-			if bodyConstructsFn(d.Toks) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -984,17 +950,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
 			}
 		}
-		// A FOREIGN-registry fn (module-preamble body dispatched from another
-		// registry) whose body CONSTRUCTS a fn value cannot be unit-compiled:
-		// the compiled unit executes against the dispatching registry, so the
-		// constructed lambda — and any capability state forked around it (a
-		// listener's per-connection registries) — loses the module's private
-		// scope that the interpreter's foreign-wrapper dispatch provides.
-		// Refuse → the row falls back to full interpretation (the documented
-		// aql:repl endpoint tier in test/go/langspec/compiled_coverage_test.go).
-		if es.active() && caller != nil && caller != r && bodyConstructsFn(bodyCopy) {
-			es.MarkUncompilable("module fn `" + nameCopy + "` constructs a fn value: module scope only survives the interpreter's foreign dispatch")
-		}
+		// A FOREIGN-registry fn whose body constructs a fn value USED to
+		// refuse wholesale (the compiled unit executed against the
+		// dispatching registry, losing module scope for the constructed
+		// lambda). Units now carry their owning registry (CompiledFn.Reg):
+		// the VM dispatches the unit's natives against it — exactly the
+		// registry the interpreter's foreign-wrapper CallAQL runs the body
+		// in — so a constructed lambda's downstream capability state (a
+		// listener's per-connection registries) forks module scope on both
+		// engines, and the refusal is retired (aql:repl rows 12/16/18
+		// compile; the remaining statement-position recovery strand refuses
+		// through the ordinary provenance paths).
 		if es.Armed() && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
@@ -1064,7 +1030,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if len(bodyCopy) > 0 {
 				fnPos = bodyCopy[0].Pos
 			}
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
 			}

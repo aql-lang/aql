@@ -7140,6 +7140,19 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				}
 			}
 		}
+		// Auto-evaluate a raw eval-map operand exactly as the runtime match's
+		// execMatch would (word members resolve against the live frame, the
+		// recorder assembles a per-run OpMakeMap): the recovery otherwise
+		// hands the RAW source map to the poly record, which either baked a
+		// live word member as a frozen const (the repl-eval `{line: src}`
+		// request map) or refuses. Errors leave the raw operand — the
+		// assumed-sig model stays as before.
+		if IsConcrete(av) && av.Parent != nil && av.Parent.ConformsTo(TMap) && bearsActiveTokens(av) {
+			if ev, everr := e.autoEvalMap(av, false, true); everr == nil {
+				e.tape.Set(p, ev)
+				av = ev
+			}
+		}
 		args[i] = av
 	}
 	// Strict disjunct rescue (design/checker-accuracy-review.10.md A1):

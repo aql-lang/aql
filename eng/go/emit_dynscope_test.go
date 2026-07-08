@@ -114,3 +114,49 @@ func TestLowerDynBindArms(t *testing.T) {
 		t.Errorf("unread bind must be a no-op: reason=%q code=%v", reason, cf.Code)
 	}
 }
+
+// The active-token MAP const gate: inside a compiled fn frame a map operand
+// bearing a word (autoEvalMap re-evaluates it per dispatch against the LIVE
+// frame) must not bake — it routes to the dyn-scope rescue and, with no read
+// provenance, refuses. Lists stay bakeable (code-as-data), and module scope
+// keeps the map bake.
+func TestActiveTokenMapConstGate(t *testing.T) {
+	r := seam7Reg(t)
+	r.Check.Mode = true
+	mkMap := func() Value {
+		om := NewOrderedMap()
+		om.Set("line", NewWord("src"))
+		return NewMap(om)
+	}
+	es := NewEmitState()
+	es.bindRegistry(r)
+	// NewEmitState seeds the module unit; one more puts us inside a fn unit.
+	es.units = append(es.units, &emitUnit{localByID: map[string]int{}})
+	if _, ok := es.resolveOperand(mkMap()); ok {
+		t.Error("an active-token map const must not bake inside a fn unit")
+	}
+	lst := NewList([]Value{NewWord("dup"), NewWord("mul")})
+	if _, ok := es.resolveOperand(lst); !ok {
+		t.Error("a code-as-data LIST const must stay bakeable inside a fn unit")
+	}
+	// Module scope (the seeded single unit) keeps the map bake.
+	es2 := NewEmitState()
+	es2.bindRegistry(r)
+	if _, ok := es2.resolveOperand(mkMap()); !ok {
+		t.Error("module scope must keep the active-token map bake")
+	}
+}
+
+func TestBearsActiveTokensArms(t *testing.T) {
+	if !bearsActiveTokens(NewList([]Value{NewInteger(1), NewWord("w")})) {
+		t.Error("a list member word must count as an active token")
+	}
+	if bearsActiveTokens(NewMap(nil)) {
+		t.Error("a nil-backed map bears nothing")
+	}
+	om := NewOrderedMap()
+	om.Set("k", NewInteger(2))
+	if bearsActiveTokens(NewMap(om)) {
+		t.Error("an all-data map bears no active tokens")
+	}
+}

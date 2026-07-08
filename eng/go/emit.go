@@ -554,6 +554,14 @@ type loopCarriedScope struct {
 type emitUnit struct {
 	localByID map[string]int
 	numLocals int
+	// reg is the compiled fn's OWNING registry (a module sub-registry for a
+	// module-preamble fn; the main registry otherwise). Finalize stamps it
+	// on the CompiledFn when it differs from the check registry, and the VM
+	// then dispatches the unit's natives against it — the interpreter's
+	// CallAQL runs a foreign fn's body IN its own registry, so handlers
+	// with registry-visible effects (Net.listen forking per-connection
+	// registries) see module scope on both engines.
+	reg *Registry
 	// capID marks the value IDs that are this unit's CAPTURES (enclosing-scope
 	// values bound into trailing slots). A capture's value may ALSO carry a
 	// producedBy entry from the ENCLOSING unit (a computed `def a (h add 1)`
@@ -609,8 +617,11 @@ type fnUnitRec struct {
 	returns       []*Type  // declared return types — enforced at the VM's RET
 	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
 	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
-	locals        []string // slot→name table (params then captures); debug only
-	frag          *EmitFragment
+	locals        []string // slot→name table (params then captures)
+	// reg is the fn's owning registry; stamped on CompiledFn.Reg when it
+	// differs from the check registry (see emitUnit.reg).
+	reg  *Registry
+	frag *EmitFragment
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -1059,6 +1070,21 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return es.dynScopeRescue(v)
 	}
+	// An ACTIVE-token MAP (`{line: src}` — a word / paren / interpolation
+	// member) must not bake inside a compiled fn frame: autoEvalMap runs on
+	// EVERY map argument at dispatch (NoEvalArgs does not suppress it), so
+	// the interpreter re-evaluates the member per dispatch against the LIVE
+	// FRAME (src is a param), which the VM holds as a frame local the baked
+	// const can never see. Lists stay bakeable — a NoEvalArgs code body
+	// (`each [dup mul]`, `each $.1`) is legitimately code-as-data, guarded
+	// by the position-aware body gates (execBodyRefsNames /
+	// noEvalBodiesInertScoped). Module scope keeps the map bake too —
+	// resolution there is registry-identical.
+	if len(es.units) > 1 {
+		if _, isMap := lit.Data.(MapPayload); isMap && bearsActiveTokens(lit) {
+			return es.dynScopeRescue(v)
+		}
+	}
 	idx := es.intern(lit)
 	// A compound VALUE literal materialised inside a fn unit gets per-call
 	// identity treatment (OpPushConstFresh / share / refuse — see
@@ -1340,6 +1366,14 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 		if !ok {
 			return v, false
 		}
+		// Inside a compiled fn frame an ACTIVE-token original (a word, a
+		// paren, an interpolation, a splice/reach) must not bake: the
+		// interpreter re-evaluates it per dispatch against the live frame
+		// (a param named by the word — `call {line: src} …` inside
+		// repl-eval), which the VM holds as a frame local the baked const
+		// can never see. Module scope keeps the recovery (code-as-data
+		// consts re-run against the registry, where resolution is
+		// identical).
 		return orig, true
 	}
 	switch d := v.Data.(type) {
@@ -1403,6 +1437,34 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 // Carrier flag or ID). ok=false when the member's original is unknown, so the
 // whole container cannot be recovered. The shared per-member step of
 // materialise's list and map arms.
+// bearsActiveTokens reports whether a value (recursively through lists and
+// maps) contains a token the interpreter evaluates or re-steps — a word, a
+// paren expression, an interpolation, a splice or reach marker.
+func bearsActiveTokens(v Value) bool {
+	if IsWord(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) || IsReach(v) {
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if bearsActiveTokens(e) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if bearsActiveTokens(mv) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (es *EmitState) materialiseMember(e Value) (m Value, changed, ok bool) {
 	m, ok = es.materialise(e)
 	if !ok {
@@ -2111,7 +2173,7 @@ func (es *EmitState) fnBodyGuard() func() {
 // bindings installed around the recorded analysis. ok=false when the
 // fn is beyond Stage 4 (unchecked or multi-value returns) — the
 // program is then marked uncompilable.
-func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
+func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
@@ -2137,10 +2199,10 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			nUnnamed++
 		}
 	}
-	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
+	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos, reg: fnReg}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), reg: fnReg}
 	es.units = append(es.units, u)
 	es.unitNames = append(es.unitNames, name)
 	for _, a := range args {
@@ -5412,6 +5474,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		if rec.reg != nil {
+			// Unconditional: for an ordinary (program-registry) fn this equals
+			// the VM's own registry and changes nothing; comparing against
+			// es.reg here would be unreliable — the recorder's back-pointer
+			// re-binds on every engine run during the pass (module bodies,
+			// islands), so it does not name "the program's registry".
+			cf.Reg = rec.reg
+		}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		es.emitDynParamBinds(flw, rec)
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {

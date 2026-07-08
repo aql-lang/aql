@@ -88,6 +88,7 @@ type vmFrame struct {
 // exactly the pre-install state (InstallDef may itself pop an overlapping
 // same-scope binding, so a paired Pop would drift — Truncate cannot).
 type dynBindEntry struct {
+	reg   *Registry
 	name  string
 	depth int
 }
@@ -110,6 +111,12 @@ type vmContext struct {
 	// the top-level error path restores everything so a failed run never
 	// leaks registry bindings.
 	dynBinds []dynBindEntry
+	// foreignInvokers lists the module sub-registries this run lazily
+	// installed the body-closure invoker on (a foreign unit's handler
+	// drives its code bodies through InvokeBody on the MODULE registry —
+	// test-describe, each — which needs the VM seam there just as the main
+	// registry does). Restored to nil at run end by runProgram's defer.
+	foreignInvokers []*Registry
 	// frameDepth counts live VM activations — user-call frames AND re-entrant
 	// run() invocations (a closure invoked from a native handler via
 	// invokeClosure starts a FRESH run with its own frames slice). The per-run
@@ -232,8 +239,13 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 	// handler) runs through a sub-engine — identical to InvokeBody's nil
 	// branch. Restored on exit so nested RunProgram calls nest cleanly.
 	prevInvoker := r.Invoker
-	r.Invoker = vc.invokeClosure
-	defer func() { r.Invoker = prevInvoker }()
+	r.Invoker = vc.invokeClosureOn
+	defer func() {
+		r.Invoker = prevInvoker
+		for _, fr := range vc.foreignInvokers {
+			fr.Invoker = nil
+		}
+	}()
 	return vc.run(-1, make([]Value, p.NumLocals), make([]Value, 0, p.MaxStack))
 }
 
@@ -244,13 +256,22 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 // raw token list — an island's interpreter run reaching a higher-order
 // handler) runs through a sub-engine exactly as InvokeBody does with no
 // Invoker, so the island path is unchanged.
-func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) {
+func (vc *vmContext) invokeClosure(reg *Registry, body Value, inputs []Value) ([]Value, error) {
+	return vc.invokeClosureOn(reg, body, inputs)
+}
+
+// invokeClosureOn runs a code body for the InvokeBody seam against the
+// CALLING registry: the registry the handler dispatched on (the main
+// registry, a module sub-registry, or a per-connection fork that inherited
+// the invoker), so a raw token body's sub-engine fallback resolves names
+// exactly as the interpreter's dispatch would.
+func (vc *vmContext) invokeClosureOn(reg *Registry, body Value, inputs []Value) ([]Value, error) {
 	cl, ok := body.Data.(ClosurePayload)
 	if !ok {
 		// Pooled + resolved inputs, mirroring InvokeBody's no-Invoker branch
 		// (never the island engine — see vmContext.islandEng's
 		// non-reentrancy contract).
-		return RunResolved(vc.r, inputs, bodyTokens(body))
+		return RunResolved(reg, inputs, bodyTokens(body))
 	}
 	fn := &vc.p.Fns[cl.Unit]
 	locals := make([]Value, fn.NLocals)
@@ -274,13 +295,22 @@ func (vc *vmContext) invokeClosure(body Value, inputs []Value) ([]Value, error) 
 // matched handler (plan P3). A no-match raises signature_error, the same
 // taxonomy the interpreter's sigError raises.
 func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
-	r := vc.r
+	return vc.callPolyIn(vc.r, pr, stack, curDebug, pc)
+}
+
+// callPolyIn is callPoly against an explicit dispatch registry — the active
+// unit's (a module fn's natives run in module scope, like the interpreter's
+// CallAQL body run).
+func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	vc.ensureInvoker(dispReg)
+	r := dispReg
 	n := pr.Arity
 	if len(stack) < n {
 		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY underflow at "+pr.Word)
 	}
 	// A MODULE poly word (`StructUtil.getpath`) re-matches over its OWN
-	// sub-registry's signatures; a core word over the main registry.
+	// sub-registry's signatures; a core word over the dispatch registry
+	// (the active unit's — module scope for a module fn's body).
 	lookupReg := r
 	if pr.Reg != nil {
 		lookupReg = pr.Reg
@@ -432,7 +462,7 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	if _, ok := fnVal.Data.(ClosurePayload); ok {
 		// Pass fnVal directly so the payload's InShape rides along (invokeClosure
 		// only fills param slots, but a downstream handler may read the shape).
-		results, err := vc.invokeClosure(fnVal, append([]Value(nil), args...))
+		results, err := vc.invokeClosure(vc.r, fnVal, append([]Value(nil), args...))
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -518,7 +548,7 @@ func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc
 		args[i] = stack[top-1-i]
 	}
 	if _, ok := fnVal.Data.(ClosurePayload); ok {
-		results, err := vc.invokeClosure(fnVal, args)
+		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -569,7 +599,7 @@ func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc
 		args[i] = stack[top-1-i]
 	}
 	if _, ok := fnVal.Data.(ClosurePayload); ok {
-		results, err := vc.invokeClosure(fnVal, args)
+		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -644,7 +674,7 @@ func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug 
 		return append(stack[:base], results...), nil
 	}
 	if _, ok := fnVal.Data.(ClosurePayload); ok && !fnVal.Quoted {
-		results, err := vc.invokeClosure(fnVal, args)
+		results, err := vc.invokeClosure(vc.r, fnVal, args)
 		if err != nil {
 			return nil, stampAt(err, curDebug, pc, r)
 		}
@@ -817,10 +847,29 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 // given trail depth back to its recorded pre-install def-stack depth,
 // innermost-first — the compiled twin of the interpreter's per-frame
 // def-cleanup (__DC) for OpBindDynScope installs.
+// ensureInvoker installs the run's body-closure invoker on a FOREIGN unit's
+// dispatch registry (once per registry per run): the unit's native handlers
+// run their code bodies through InvokeBody on that registry, exactly as the
+// interpreter's CallAQL dispatch does, so the VM seam must be present there
+// too. The main registry's invoker is installed by runProgram; the ones added
+// here are removed by its deferred cleanup.
+func (vc *vmContext) ensureInvoker(reg *Registry) {
+	if reg == nil || reg == vc.r || reg.Invoker != nil {
+		return
+	}
+	// One shared implementation: the InvokeBody seam passes the CALLING
+	// registry, so a compiled closure runs VM-native (its unit carries its
+	// own Reg) while a raw TOKEN body's sub-engine fallback resolves names
+	// against the caller's scope — a per-connection fork inherits this
+	// field and passes itself.
+	reg.Invoker = vc.invokeClosureOn
+	vc.foreignInvokers = append(vc.foreignInvokers, reg)
+}
+
 func (vc *vmContext) unwindDynBinds(base int) {
 	for i := len(vc.dynBinds) - 1; i >= base; i-- {
 		e := vc.dynBinds[i]
-		vc.r.Defs.Truncate(e.name, e.depth)
+		e.reg.Defs.Truncate(e.name, e.depth)
 	}
 	vc.dynBinds = vc.dynBinds[:base]
 }
@@ -875,12 +924,23 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 	curUnit := startUnit
 	var curCode []Instr
 	var curDebug []SrcPos
+	// curReg is the ACTIVE unit's dispatch registry: a module-preamble fn's
+	// unit (CompiledFn.Reg) runs its natives against the module's own
+	// registry — the interpreter's CallAQL does exactly that — so
+	// registry-visible handler effects (Net.listen's per-connection forks,
+	// dynamic-scope binds) land in module scope on both engines. Ordinary
+	// units (Reg nil) run on the program's registry.
+	curReg := r
 	enterUnit := func(u int) {
 		curUnit = u
+		curReg = r
 		if u < 0 {
 			curCode, curDebug = p.Code, p.Debug
 		} else {
 			curCode, curDebug = p.Fns[u].Code, p.Fns[u].Debug
+			if p.Fns[u].Reg != nil {
+				curReg = p.Fns[u].Reg
+			}
 		}
 	}
 	enterUnit(startUnit)
@@ -1054,11 +1114,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// dispatch), raise the byte-identical signature_error on a miss (== the
 			// interpreter finding no overload). See SigRef.Guard.
 			if s.Guard {
-				if err := checkNativeParamContract(r, &s, args); err != nil {
+				if err := checkNativeParamContract(curReg, &s, args); err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}
 			}
-			results, err := s.Sig.dispatchHandler()(args, r.Contexts.TopData(), nil, r)
+			vc.ensureInvoker(curReg)
+			results, err := s.Sig.dispatchHandler()(args, curReg.Contexts.TopData(), nil, curReg)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1099,7 +1160,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			stack = ns
 		case OpCallNativePoly:
-			ns, err := vc.callPoly(&p.PolyRefs[in.Arg], stack, curDebug, pc)
+			ns, err := vc.callPolyIn(curReg, &p.PolyRefs[in.Arg], stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
@@ -1231,8 +1292,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			v := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			vc.dynBinds = append(vc.dynBinds, dynBindEntry{name: name, depth: r.Defs.Depth(name)})
-			InstallDef(r, name, v)
+			vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
+			InstallDef(curReg, name, v)
 		case OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the
@@ -1242,7 +1303,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if nerr != nil {
 				return nil, vmErrAt(curDebug, pc, "LOOKUP_DYN_SCOPE bad name const")
 			}
-			v, ok := r.Defs.Top(name)
+			v, ok := curReg.Defs.Top(name)
 			if !ok {
 				return nil, vmErrAt(curDebug, pc, "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
 			}

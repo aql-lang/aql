@@ -93,7 +93,7 @@ type EmitRecorder interface {
 	CanSeatAcrossFragment(v Value) bool
 
 	// --- fn-unit compilation ---------------------------------------------
-	StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool)
+	StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool)
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
 	unitVariadic(unit int) bool
 }
@@ -189,7 +189,7 @@ func (inactiveEmit) Checkpoint() emitCheckpoint           { return emitCheckpoin
 func (inactiveEmit) Rollback(emitCheckpoint)              {}
 func (inactiveEmit) CanSeatAcrossFragment(Value) bool     { return false }
 
-func (inactiveEmit) StartFnCompile(string, string, []Value, []*Type, []string, []CapturedBinding, bool, SrcPos) (int, func([]Value), bool) {
+func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, []string, []CapturedBinding, bool, SrcPos) (int, func([]Value), bool) {
 	return -1, nil, false
 }
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}

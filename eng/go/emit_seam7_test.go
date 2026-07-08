@@ -118,7 +118,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive CanSeatAcrossFragment should be false")
 	}
 
-	unit, finish, ok := e.StartFnCompile("k", "n", nil, nil, nil, nil, false, SrcPos{})
+	unit, finish, ok := e.StartFnCompile("k", "n", nil, nil, nil, nil, nil, false, SrcPos{})
 	if unit != -1 || finish != nil || ok {
 		t.Fatalf("inactive StartFnCompile = %d finish-nil=%v %v", unit, finish == nil, ok)
 	}
@@ -504,7 +504,7 @@ func TestSetUnitParamTypesGuard(t *testing.T) {
 func TestStartFnCompileEmptyParamNames(t *testing.T) {
 	es := NewEmitState()
 	a1, a2 := NewCarrier(TInteger), NewCarrier(TInteger)
-	unit, finish, ok := es.StartFnCompile("k", "fn", []Value{a1, a2}, nil, nil, nil, false, SrcPos{})
+	unit, finish, ok := es.StartFnCompile("k", "fn", nil, []Value{a1, a2}, nil, nil, nil, false, SrcPos{})
 	if !ok || finish == nil {
 		t.Fatalf("StartFnCompile should open a fresh unit: ok=%v", ok)
 	}
@@ -1389,7 +1389,7 @@ func TestTryReturnedClosureProbeFails(t *testing.T) {
 
 func TestStartFnCompileFinishZeroOut(t *testing.T) {
 	es := NewEmitState()
-	_, finish, ok := es.StartFnCompile("k", "fn", nil, nil, nil, nil, false, SrcPos{})
+	_, finish, ok := es.StartFnCompile("k", "fn", nil, nil, nil, nil, nil, false, SrcPos{})
 	if !ok {
 		t.Fatal("StartFnCompile should open a unit")
 	}
@@ -1405,7 +1405,7 @@ func TestStartFnCompileFinishZeroOut(t *testing.T) {
 
 func TestStartFnCompileFinishDynTrail(t *testing.T) {
 	es := NewEmitState()
-	_, finish, _ := es.StartFnCompile("k", "fn", nil, nil, nil, nil, false, SrcPos{})
+	_, finish, _ := es.StartFnCompile("k", "fn", nil, nil, nil, nil, nil, false, SrcPos{})
 	arg := NewInteger(5)
 	fn := NewDynamicCarrier(TFunction)
 	es.producedBy[fn.ID] = producer{seq: 1} // resolves to an event
@@ -1415,7 +1415,7 @@ func TestStartFnCompileFinishDynTrail(t *testing.T) {
 
 func TestStartFnCompileFinishPendingApply(t *testing.T) {
 	es := NewEmitState()
-	_, finish, _ := es.StartFnCompile("k", "fn", nil, nil, nil, nil, false, SrcPos{})
+	_, finish, _ := es.StartFnCompile("k", "fn", nil, nil, nil, nil, nil, false, SrcPos{})
 	u := es.units[len(es.units)-1]
 	fnHead := NewDynamicCarrier(TFunction)
 	fnLast := NewDynamicCarrier(TFunction)

@@ -31,7 +31,7 @@ func TestW9RandListOfClosureArms(t *testing.T) {
 
 	// 376: the body invocation errors.
 	rErr := mcovReg(t)
-	rErr.Invoker = func(native.Value, []native.Value) ([]native.Value, error) {
+	rErr.Invoker = func(_ *native.Registry, _ native.Value, _ []native.Value) ([]native.Value, error) {
 		return nil, errors.New("w9 invoke boom")
 	}
 	if _, err := h(twoArgs(), nil, nil, rErr); err == nil {
@@ -40,7 +40,7 @@ func TestW9RandListOfClosureArms(t *testing.T) {
 
 	// 379: the body produces no value.
 	rEmpty := mcovReg(t)
-	rEmpty.Invoker = func(native.Value, []native.Value) ([]native.Value, error) {
+	rEmpty.Invoker = func(_ *native.Registry, _ native.Value, _ []native.Value) ([]native.Value, error) {
 		return nil, nil
 	}
 	if _, err := h(twoArgs(), nil, nil, rEmpty); err == nil {
@@ -53,7 +53,7 @@ func TestW9RandListOfClosureArms(t *testing.T) {
 func TestW9CallParseFnCompiledClosure(t *testing.T) {
 	r := mcovReg(t)
 	want := native.NewInteger(42)
-	r.Invoker = func(native.Value, []native.Value) ([]native.Value, error) {
+	r.Invoker = func(_ *native.Registry, _ native.Value, _ []native.Value) ([]native.Value, error) {
 		return []native.Value{want}, nil
 	}
 	closure := eng.NewClosure(0, nil)

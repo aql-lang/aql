@@ -167,7 +167,11 @@ type Registry struct {
 	// the duration of a RunProgram, a single registry cannot drive two
 	// compiled runs concurrently — see RunProgram's concurrency note. Each
 	// concurrent run needs its own *Registry (ForkConcurrent / per-instance).
-	Invoker func(body Value, inputs []Value) ([]Value, error)
+	// The seam passes the CALLING registry (the handler's own dispatch
+	// registry — a per-connection fork, a module sub-registry) so a raw
+	// token body's sub-engine fallback resolves names in the caller's
+	// scope; forks inherit the field and pass THEMSELVES.
+	Invoker func(reg *Registry, body Value, inputs []Value) ([]Value, error)
 
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the

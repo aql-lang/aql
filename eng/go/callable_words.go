@@ -51,7 +51,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	}
 	name := word + "$body"
 	key := FnAnalysisKey(r.AnalysisScopeID(), name, inputs, captures, bodyToks)
-	unit, finish, ok := es.StartFnCompile(key, name, inputs, declared, paramNames, captures, false, pos)
+	unit, finish, ok := es.StartFnCompile(key, name, r, inputs, declared, paramNames, captures, false, pos)
 	if !ok {
 		return -1, false
 	}

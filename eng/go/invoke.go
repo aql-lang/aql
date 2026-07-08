@@ -18,7 +18,7 @@ package eng
 // per-call values exactly where the original code placed them.
 func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	if r.Invoker != nil {
-		return r.Invoker(body, inputs)
+		return r.Invoker(r, body, inputs)
 	}
 	// Pooled + resolved: the engine and its tape are reused across
 	// invocations (runPooledSub / the registry sub-engine pool), and the

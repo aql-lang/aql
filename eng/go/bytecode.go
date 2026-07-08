@@ -683,6 +683,17 @@ type CompiledFn struct {
 	// 0 for all-named fns and closures.
 	NUnnamed int
 	NLocals  int
+	// Reg is the fn's OWNING registry when it differs from the program's —
+	// a module-preamble fn compiled through a foreign dispatch. The VM runs
+	// the unit's native dispatches against it (vmContext curReg), exactly
+	// as the interpreter's CallAQL runs the body in the fn's own registry:
+	// module-private names resolve there, and registry-visible handler
+	// effects (Net.listen forking per-connection registries, dynamic-scope
+	// binds) land in module scope on both engines. Nil for ordinary fns —
+	// the unit runs on the program's registry. The pointer is the same
+	// sub-registry object the check pass created on the shared registry
+	// (like PolyRef.Reg), so it stays valid for the compiled run.
+	Reg *Registry
 	// InShape is the input convention a closure over this unit presents to its
 	// driving handler (ClosureInValue for an ordinary fn / token body, or
 	// ClosureInKeyVal for a map-iteration lambda body). Copied onto the
