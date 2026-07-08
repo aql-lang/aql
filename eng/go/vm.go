@@ -210,6 +210,55 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 	if p == nil {
 		return nil, fmt.Errorf("bytecode: nil program")
 	}
+	return runVMEntry(p, r, stepLimit, func(vc *vmContext) ([]Value, error) {
+		// The top-level program runs at unit -1 (its own Code), with the
+		// program's declared locals and an operand stack pre-sized to the
+		// program's static ceiling.
+		return vc.run(-1, make([]Value, p.NumLocals), make([]Value, 0, p.MaxStack))
+	})
+}
+
+// RunUnit starts a FRESH top-level VM run on r, entered at ref.Prog.Fns[ref.Unit],
+// with args bound to the unit's leading param slots and ref.Captures bound to the
+// trailing slots. It is the DURABLE-callback twin of vmContext.invokeClosureOn
+// (which requires a live vmContext): a callback invoked AFTER the enclosing
+// RunProgram has returned — a serve-raw connection handler on its per-connection
+// fork, a spawned process — runs its compiled body here. Each such fork starts
+// with vmRunning==0 (ForkConcurrent), so concurrent callbacks each drive an
+// isolated run and the guard in runVMEntry never rejects them.
+func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
+	if ref == nil || ref.Prog == nil {
+		return nil, fmt.Errorf("bytecode: nil unit reference")
+	}
+	if ref.Unit < 0 || ref.Unit >= len(ref.Prog.Fns) {
+		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
+	}
+	return runVMEntry(ref.Prog, r, DefaultStepLimit, func(vc *vmContext) ([]Value, error) {
+		fn := &ref.Prog.Fns[ref.Unit]
+		locals := make([]Value, fn.NLocals)
+		// Same split as invokeClosureOn: inputs fill the leading param slots,
+		// captures the trailing ones (StartFnCompile registers params before
+		// captures). Extra args past the param count are ignored, matching the
+		// interpreter's CallAQL binding.
+		nInputs := fn.NParams - len(ref.Captures)
+		for i := 0; i < len(args) && i < nInputs; i++ {
+			locals[i] = args[i]
+		}
+		for i, cv := range ref.Captures {
+			if slot := nInputs + i; slot < len(locals) {
+				locals[slot] = cv
+			}
+		}
+		return vc.run(ref.Unit, locals, nil)
+	})
+}
+
+// runVMEntry is the shared guarded prologue for every fresh VM run: it takes the
+// concurrency guard, installs the top-level panic recover, wires the body-closure
+// invoker, then calls enter to begin execution at the caller's chosen unit. The
+// top-level RunProgram enters unit -1; RunUnit enters a specific fn unit with its
+// frame locals pre-bound.
+func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) ([]Value, error)) (result []Value, runErr error) {
 	// Concurrency guard: a single registry cannot drive two OVERLAPPING runs —
 	// the shared Invoker install/restore below (and the mutable scopes the run
 	// touches) would race. Catch the misuse with a clear error instead of
@@ -225,9 +274,9 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 		defer atomic.StoreInt32(&r.vmRunning, 0)
 		// Also reject starting a compiled run while an INTERPRETER run is in
 		// flight on this same registry — the cross-engine race the CAS above
-		// cannot catch. Safe to check here: RunProgram has not yet spawned any
-		// island sub-engine, so a non-zero depth means a DISTINCT interpreter
-		// run (the compiled run's own islands increment the depth only later).
+		// cannot catch. Safe to check here: no island sub-engine has spawned
+		// yet, so a non-zero depth means a DISTINCT interpreter run (this run's
+		// own islands increment the depth only later).
 		if r.interpRunActive() {
 			// The deferred StoreInt32 above releases vmRunning on this return.
 			return nil, makeAqlError("concurrency_error",
@@ -258,7 +307,7 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 	// invoker dispatches on the body VALUE: a compiled closure runs in the
 	// VM, a raw token-list body (an island's interpreter run reaching a
 	// handler) runs through a sub-engine — identical to InvokeBody's nil
-	// branch. Restored on exit so nested RunProgram calls nest cleanly.
+	// branch. Restored on exit so nested runs nest cleanly.
 	prevInvoker := r.Invoker
 	r.Invoker = vc.invokeClosureOn
 	defer func() {
@@ -267,7 +316,7 @@ func runProgram(p *Program, r *Registry, stepLimit int) (result []Value, runErr 
 			fr.Invoker = nil
 		}
 	}()
-	return vc.run(-1, make([]Value, p.NumLocals), make([]Value, 0, p.MaxStack))
+	return enter(vc)
 }
 
 // invokeClosure runs a code body for the InvokeBody seam. A compiled closure

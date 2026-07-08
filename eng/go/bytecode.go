@@ -523,6 +523,28 @@ func IsCompiledClosure(v Value) bool {
 	return ok
 }
 
+// CompiledFnRef is a DURABLE reference from a runtime fn VALUE to its AOT-
+// compiled body unit. Unlike a ClosurePayload — which OpPushClosure feeds
+// straight to a higher-order handler INSIDE the live VM run — a CompiledFnRef
+// rides on an FnDefInfo-shaped value that a native callback word (a serve-raw
+// connection handler, a spawned process) invokes AFTER the enclosing RunProgram
+// has returned, from its own forked registry. RunUnit uses it to start a fresh
+// VM run entered at the unit. Prog is the parent program whose Consts / Fns /
+// Sigs pools the unit's instructions index; Unit indexes Prog.Fns; Captures are
+// the construction-time lexical captures bound into the body's trailing local
+// slots (nil for a capture-free body).
+//
+// Prog is stamped at Finalize — the point the *Program first exists — over the
+// Program.storedFnRefs side-list, so a ref recorded before Finalize gets its
+// program back-filled once. A nil Prog (a ref that never reached Finalize)
+// means "no runnable unit": the invoke seam treats it as absent and falls back
+// to the interpreter, so a missed stamp is slow, never wrong.
+type CompiledFnRef struct {
+	Prog     *Program
+	Unit     int
+	Captures []Value
+}
+
 // Instr is one fixed-width instruction.
 type Instr struct {
 	Op  Opcode
@@ -682,6 +704,12 @@ type Program struct {
 	Debug      []SrcPos // 1:1 with Code
 	MaxStack   int      // a floor when the program loops (results accumulate)
 	NumLocals  int
+	// storedFnRefs is the set of CompiledFnRefs recorded during compilation
+	// (store-fn handler bakes) whose Prog pointer Finalize back-fills once the
+	// *Program exists. Not part of the executable program; a build-time
+	// side-list so Finalize needn't re-scan Consts structurally. Nil for a
+	// program with no stored-fn callbacks.
+	storedFnRefs []*CompiledFnRef
 }
 
 // CompiledFn is one compiled AQL fn overload at one arg shape: its
