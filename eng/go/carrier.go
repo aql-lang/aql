@@ -722,16 +722,13 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	// r.Args is empty so `args` falls through to RecordCall's refusal.
 	if word == "args" {
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
-			// In compile mode `args.N` folds to a frame local (PUSH_LOCAL N),
-			// which is exact ONLY when every param is named. When the frame has
-			// an unnamed (stack-flowing) param, that input stays live on the
-			// body stack, so folding args.N over the projection strands it — a
-			// divergent value/count vs the interpreter, which reads the separate
-			// per-call args stack (design/EDGE-SPEC-FINDINGS.0.md §4). Refuse so
-			// the body falls back, matching the bare-`args` boundary.
-			if es := r.Check.Recorder(); es.active() && r.Check.ArgsFrameUnnamed {
-				es.MarkUncompilable("args over a frame with unnamed params (Stage 3)")
-			}
+			// In compile mode `args.N` folds to a frame local (PUSH_LOCAL N)
+			// for named AND unnamed params alike: an unnamed param is a
+			// local re-pushed onto the operand stack at unit entry, and the
+			// copy the body never consumes is discarded by the RET's
+			// NUnnamed trim — the exact __RC frame discipline — so the fold
+			// no longer strands a divergent count (the former "args over a
+			// frame with unnamed params" refusal).
 			return []Value{top}, true
 		}
 	}
@@ -1456,10 +1453,12 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		}
 	}
 	// get/getr over a Map/Object/Module receiver can return a Function FIELD
-	// (a method). The VM handles that faithfully now: callPoly auto-applies a
-	// named 0-arg method result (`r.bool`), and a method needing args
-	// (`r.int`) stays a value and flows to CALL_DYNAMIC — so both atom- and
-	// integer-keyed gets poly.
+	// (a method). RecordPolyCall's read guard refuses the risky reads
+	// (containerFnAutoDispatchRisk / zeroArgFnOut / instanceFnFieldRisk)
+	// unless the landing model owns them (an ANNOTATED shaped read — the
+	// recorder then lays an explicit arity-0 OpCallDynMethod after the poly);
+	// a method needing args (`r.int`) stays a value and flows to
+	// CALL_DYNAMIC — so both atom- and integer-keyed gets poly.
 	// CORE-dispatch guard: the matched sig must be the word's binding IN THE
 	// REGISTRY the VM will re-match over (matchReg), since callPoly re-matches
 	// over matchReg.Lookup's signatures — a sig that is not that registry's
@@ -1970,6 +1969,15 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 		}
 		reach := true
 		for j := range args {
+			// A GENERIC placeholder slot ((T extends Comparable)) admits by
+			// per-call instantiation over the runtime value, which a gradual
+			// arg's bound-disjointness probe cannot see (tand(Integer, T-node)
+			// is Never even though a runtime Integer instantiates T) — count
+			// the arm reachable so the ambiguous dispatch stays a runtime
+			// re-matched user poly instead of a wrong static commit.
+			if args[j].Dynamic && IsTypeParamNode(sigArgType(s, j)) {
+				continue
+			}
 			if !sigTypeMatches(args[j], sigArgType(s, j)) {
 				reach = false
 				break
@@ -3475,23 +3483,13 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 		if i < len(paramNames) && paramNames[i] != "" {
 			r.Defs.Push(paramNames[i], arg)
 		} else {
-			// An unnamed FN-VALUE param is a runtime auto-dispatch the
-			// compiled model cannot express: the interpreter steps the raw
-			// Function/FnDef on the body frame and dispatches it against the
-			// neighbouring frame values (execFnDefLiteral), but the analysis
-			// sees only an inert carrier, so the lowered unit strands the
-			// operands and returns the wrong residual (found by the
-			// module-fnvalue-boundary.tsv differential: `fn [[Function
-			// Integer] [Integer] []]` compiled to a 0-return unit where the
-			// interpreter returns the dispatch result). Refuse so the
-			// program falls back — the value twin of the "fn value read
-			// from a container auto-dispatches" tier.
-			if arg.Parent != nil &&
-				(arg.Parent.ConformsTo(TFunction) || arg.Parent.ConformsTo(TFnDef)) {
-				if es := r.Check.Recorder(); es.active() {
-					es.MarkUncompilable("unnamed fn-value param auto-dispatches on the body frame (Stage 3)")
-				}
-			}
+			// An unnamed FN-VALUE param is inert frame DATA under the
+			// arguments-are-inert unification (the interpreter no longer
+			// auto-fires a frame argument — design/ARG-SEMANTICS-
+			// UNIFICATION.0.md), and the unit model now mirrors the frame
+			// exactly: the value re-pushes at entry, `args.N` folds to its
+			// local, and the RET's NUnnamed trim discards an unconsumed
+			// copy — so the former guard refusal is retired.
 			input = append(input, arg)
 			hasUnnamed = true
 		}

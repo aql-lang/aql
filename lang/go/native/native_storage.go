@@ -562,10 +562,15 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	// writers the shape cannot see, so the claim is a bound a guard
 	// discharges, never strict/concrete). A key the shape missed keeps
 	// dynamic(Any) — untracked writers exist, so absent-key None would be
-	// unsound. Plain check mode only (compile parity: flex rows compile
-	// natively today over the bare carrier).
+	// unsound. The COMPILE pass narrows through the same bound: overload
+	// commitment then models the right RESULT ARITY for a downstream
+	// dispatch (`set b/q 9 f.a drop …` — a dynamic(Any) receiver committed
+	// set's 0-return Store overload and starved the drop, flex.tsv:88/95),
+	// while the dispatch itself still records a runtime-re-matching poly
+	// whose NOut claim the VM enforces (a hidden-writer bound miss defers
+	// to the interpreter instead of shifting the stack).
 	if ss, ok := eng.StoreShapeOf(container); ok {
-		if r != nil && !r.Check.Compiling {
+		if r != nil {
 			if v, hit := ss.LookupKey(getKey(key)); hit {
 				return []Value{eng.ShapeFieldRead(v)}
 			}

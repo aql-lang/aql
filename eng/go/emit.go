@@ -448,6 +448,11 @@ type EmitState struct {
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Over-approximate + append-only like
 	// fnRiskFields — a stale entry only ever over-refuses (sound).
 	memberFnReads map[string]bool
+
+	// shapedReads mirrors CheckState.MethodShapes annotations (by read-out
+	// value ID) so the get-family read guards can exempt a read whose
+	// landing the shaped-method model owns. See noteShapedRead.
+	shapedReads map[string]bool
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -547,6 +552,7 @@ type emitUnit struct {
 type fnUnitRec struct {
 	name          string
 	nParams       int
+	nUnnamed      int // unnamed (stack-flowing) params — the RET trim allowance
 	caps          []CapturedBinding
 	generic       bool
 	returns       []*Type  // declared return types — enforced at the VM's RET
@@ -2074,7 +2080,13 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	for _, cb := range captures {
 		locals = append(locals, cb.Name)
 	}
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
+	nUnnamed := 0
+	for i := range args {
+		if i >= len(paramNames) || paramNames[i] == "" {
+			nUnnamed++
+		}
+	}
+	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
 	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
@@ -2208,7 +2220,23 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// GENUINE count mismatch that happens to carry a fn value still errors in
 			// both engines, so the fallback is sound either way.)
 			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
-				for _, v := range bodyStk {
+				extra := len(ops) - len(rec.returns)
+				for i, v := range bodyStk {
+					// An UNNAMED PARAM's entry re-push in the FRAME-BOTTOM
+					// window is inert DATA in both engines (arguments-are-
+					// inert: the interpreter never auto-fires a frame
+					// argument), and the RET trim discards it (NUnnamed
+					// allowance) — never an unapplied apply. The window is
+					// POSITIONAL: a Function value ABOVE it was produced at
+					// the pointer (an args.N fold, a paren apply), where the
+					// interpreter's execFnDefLiteral rule fires by RUNTIME
+					// Name/arity — statically unknowable, so it keeps the
+					// refusal (module-fnvalue-boundary rows 24/25/31).
+					if i < extra && i < rec.nUnnamed {
+						if slot, isLocal := u.localByID[v.ID]; isLocal && slot < rec.nParams {
+							continue
+						}
+					}
 					if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
 						es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
 						return
@@ -2916,7 +2944,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
+	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -2924,7 +2952,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// collects forward args). The VM would push it as inert data — a
 		// silent wrong value (miscompile mechanism E, the deferred-field
 		// auto-invoke, design/MISCOMPILE-HUNT-FINDINGS.0.md). Refuse on the
-		// RECEIVER signal: reads from fn-free containers are unaffected.
+		// RECEIVER signal: reads from fn-free containers are unaffected. An
+		// ANNOTATED shaped-method read (shapedReadOut) is exempt: its landing
+		// is modelled by tryShapedMethodDispatch, whose guard-owned decline
+		// re-refuses, so the guard is re-homed rather than weakened.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
@@ -3146,10 +3177,11 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
-	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
+	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
+		// Annotated shaped-method reads are exempt (see recordCallRefusal).
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 		return true
@@ -3301,6 +3333,34 @@ func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
 func zeroArgFnOut(outs []Value) bool {
 	for _, o := range outs {
 		if !o.Carrier && fnValueZeroArg(o) {
+			return true
+		}
+	}
+	return false
+}
+
+// noteShapedRead mirrors a CheckState.NoteMethodShape annotation into the
+// recorder: the get-family read that produced `id` resolved a shaped-
+// instance member whose LANDING the shaped-method model owns, so the
+// read-guard auto-dispatch refusals skip it (shapedReadOut).
+func (es *EmitState) noteShapedRead(id string) {
+	if !es.active() || id == "" {
+		return
+	}
+	if es.shapedReads == nil {
+		es.shapedReads = map[string]bool{}
+	}
+	es.shapedReads[id] = true
+}
+
+// shapedReadOut reports whether any dispatch out is an annotated shaped
+// method read — the landing model's responsibility, not the read guard's.
+func (es *EmitState) shapedReadOut(outs []Value) bool {
+	if len(es.shapedReads) == 0 {
+		return false
+	}
+	for _, o := range outs {
+		if es.shapedReads[o.ID] {
 			return true
 		}
 	}
@@ -4768,9 +4828,16 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
-	// FnDefInfo). All refuse so the program falls back faithfully.
+	// FnDefInfo). All refuse so the program falls back faithfully — EXCEPT a
+	// dynamic whose static bound provably excludes every callable (the
+	// sigTypeMatches not-disjoint rule against Function/FnDef): such a value
+	// can never auto-apply to the values above it, so both engines leave it
+	// as data and the residual renders identically (a narrowed flex-shape
+	// read — dynamic(FlexMap) — sitting under later statement results,
+	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
-		if residual[i].Dynamic {
+		if residual[i].Dynamic &&
+			(sigTypeMatches(residual[i], TFunction) || sigTypeMatches(residual[i], TFnDef)) {
 			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
 		}
 		if isFnValueResidual(residual[i]) {
@@ -5125,7 +5192,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
@@ -5139,6 +5206,26 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 		if !diverged {
+			// The __RC unnamed-arg allowance, applied at LOWERING time: a
+			// declared fn's residual bottoms that are (a) within the
+			// NUnnamed window and (b) pure PARAM-LOCAL references are the
+			// frame's unconsumed unnamed args — the interpreter's __RC
+			// discards them, and since operands lower lazily they were
+			// never emitted, so dropping them here is the trim with zero
+			// runtime cost (the VM RET's NUnnamed trim remains as the
+			// runtime backstop). Bottoms that are anything else keep the
+			// full residual and let reconcileResults refuse as before.
+			if len(rec.returns) > 0 && rec.nUnnamed > 0 && len(rec.outOps) > len(rec.returns) {
+				if extra := len(rec.outOps) - len(rec.returns); extra <= rec.nUnnamed {
+					drop := 0
+					for drop < extra && rec.outOps[drop].kind == opLocal && rec.outOps[drop].idx < rec.nParams {
+						drop++
+					}
+					if drop == extra {
+						rec.outOps = rec.outOps[extra:]
+					}
+				}
+			}
 			// Reconcile the body's N result operands with the simulated
 			// stack and emit a RET. Event results must already sit on the
 			// stack in order (they were left by their own events); inert

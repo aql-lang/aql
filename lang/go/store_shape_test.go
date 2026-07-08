@@ -311,8 +311,12 @@ func TestStoreShapeCompileDiscipline(t *testing.T) {
 		}
 	}
 
-	// The family's pre-existing refusal stays a refusal with the same
-	// reason (nothing NEW compiles, nothing regresses to a broader refusal).
+	// The family's historical refusal (`set` over the dynamic flex read
+	// committed the 0-return Store overload and starved the drop) now
+	// COMPILES: the compile pass narrows through the same shape bound the
+	// plain check uses, so `set` commits a container overload with the
+	// right result arity, and the dispatch stays a runtime-re-matched poly
+	// whose NOut claim the VM enforces (flex.tsv:88/95).
 	src := `def m {a:{b:1}} def f (flex m) set b/q 9 f.a drop f.a.b`
 	a, err := New()
 	if err != nil {
@@ -322,13 +326,12 @@ func TestStoreShapeCompileDiscipline(t *testing.T) {
 	if cerr != nil {
 		t.Fatalf("%q: CompileCheck error %v", src, cerr)
 	}
-	if prog != nil || !strings.Contains(reason, "drop") {
-		t.Errorf("%q: expected the pre-existing refusal at drop; got prog=%v reason=%q",
-			src, prog != nil, reason)
+	if prog == nil {
+		t.Errorf("%q: expected a native compile after the flex-shape narrowing; refused: %q", src, reason)
 	}
 	b, _ := New()
 	got, compiled, rerr := b.RunCompiled(src)
-	if compiled || rerr != nil || fmt.Sprint(got) != "[9]" {
-		t.Errorf("%q: fallback run got %v compiled=%v err=%v, want [9] uncompiled", src, got, compiled, rerr)
+	if !compiled || rerr != nil || fmt.Sprint(got) != "[9]" {
+		t.Errorf("%q: compiled run got %v compiled=%v err=%v, want [9] compiled", src, got, compiled, rerr)
 	}
 }

@@ -149,24 +149,20 @@ func TestEdgeFindingComputedElseBody(t *testing.T) {
 	mustCompileWithParity(t, `def n 0 if (n eq 0) [99] [88]`, "[99]")
 }
 
-// §4 — `args.N` inside a compiled fn body with UNNAMED params. The unnamed
-// input stays live on the body stack, so folding `args.N` over the projection
-// strands it (`def f fn [[Integer String] [String] [args.1]] f 1 "hi"` → `'hi'`
-// interp, a divergent value/count compiled). Refuse when the frame has unnamed
-// params; a fully NAMED-param frame folds `args.N` to a frame local and keeps
-// compiling (recursion.tsv:35,36).
+// §4 — `args.N` inside a compiled fn body with UNNAMED params. Unnamed params
+// now bind to frame locals exactly like named ones (CompiledFn.NUnnamed: RET
+// discards the unconsumed frame-bottom copies the interpreter's body splice
+// leaves), so `args.N` folds to PUSH_LOCAL N for EVERY frame shape and these
+// previously-refused rows compile with parity.
 func TestEdgeFindingArgsOverUnnamedParams(t *testing.T) {
-	mustRefuseWithParity(t,
-		`def f fn [[Integer String] [String] [args.1]] f 1 "hi"`,
-		"args over a frame with unnamed params")
-	mustRefuseWithParity(t,
-		`def f fn [[Integer String] [Integer] [args.0]] f 1 "hi"`,
-		"args over a frame with unnamed params")
-	mustRefuseWithParity(t,
-		`def f fn [[a:Integer Integer] [Integer] [args.0]] f 3 4`,
-		"args over a frame with unnamed params")
+	mustCompileWithParity(t,
+		`def f fn [[Integer String] [String] [args.1]] f 1 "hi"`, "[hi]")
+	mustCompileWithParity(t,
+		`def f fn [[Integer String] [Integer] [args.0]] f 1 "hi"`, "[1]")
+	mustCompileWithParity(t,
+		`def f fn [[a:Integer Integer] [Integer] [args.0]] f 3 4`, "[3]")
 
-	// Negatives: every param NAMED — `args.N` folds to PUSH_LOCAL N.
+	// Every param NAMED — `args.N` folds to PUSH_LOCAL N.
 	mustCompileWithParity(t,
 		`def f fn [[a:Integer b:String] [String] [args.1]] f 1 "hi"`, "[hi]")
 	mustCompileWithParity(t,

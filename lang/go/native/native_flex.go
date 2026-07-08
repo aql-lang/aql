@@ -95,12 +95,14 @@ var flexNatives = []NativeFunc{
 // site), so downstream `set`/`get`/`dot` over the result read/write ITS
 // key types instead of degrading to dynamic(Any). A flex-of-flex source
 // CLONES the source's shape (runtime FlexDeepCopy disconnects aliasing).
-// Compile passes keep the legacy bare carriers (byte-identical lowering).
+// The COMPILE pass narrows through the same shape so downstream dispatch
+// commits the right result arity (see getNodeReturns' flex-shape rule);
+// the dispatches stay runtime-re-matched polys with an enforced NOut claim.
 func flexReturns(args []Value, r *Registry) []Value {
 	if len(args) != 1 || args[0].Parent == nil {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
-	shapes := r != nil && r.Check.IsActive() && !r.Check.Compiling
+	shapes := r != nil && r.Check.IsActive()
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
 		if shapes {

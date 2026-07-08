@@ -370,6 +370,14 @@ func (o Opcode) String() string {
 type PolyRef struct {
 	Word  string
 	Arity int
+	// NOut is the result-count CLAIM the recorder's stack model committed
+	// downstream ops to. The runtime re-match may land on a DIFFERENT
+	// overload than the checker's model (that is poly's point), and when
+	// that overload's result count differs from the claim the program's
+	// stack layout no longer holds — the VM defers to the interpreter via
+	// internal_error (runtimeShouldFallback: slow, not wrong) instead of
+	// silently shifting every downstream operand.
+	NOut int
 	// Reg is the sub-registry whose signatures the VM re-matches a MODULE poly
 	// word over (`StructUtil.getpath` — a sub-registry word). Nil means the main
 	// registry (the common case: a core builtin like get/size/is). The pointer
@@ -633,7 +641,17 @@ type CompiledFn struct {
 	// fn the captures still ride as trailing CALL_USER args, so NCaptures
 	// stays 0 there — it is closure-specific.)
 	NCaptures int
-	NLocals   int
+	// NUnnamed is how many of the params are UNNAMED (stack-flowing): the
+	// lowering re-pushes each unnamed param onto the operand stack at unit
+	// entry (mirroring the interpreter's frame, where unnamed args sit
+	// resolved at the body's bottom), so an unnamed arg the body never
+	// consumes remains in the frame region at RET. The RET contract
+	// (checkReturnContract) DISCARDS up to NUnnamed extra bottom values —
+	// the exact __RC discipline (engine.go: extras beyond the declared
+	// returns are tolerated up to the unnamed-arg allowance, then trimmed).
+	// 0 for all-named fns and closures.
+	NUnnamed int
+	NLocals  int
 	// InShape is the input convention a closure over this unit presents to its
 	// driving handler (ClosureInValue for an ordinary fn / token body, or
 	// ClosureInKeyVal for a map-iteration lambda body). Copied onto the

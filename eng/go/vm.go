@@ -294,24 +294,25 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	// A get/getr whose result is a NAMED trivial-delegation METHOD with a 0-arg
-	// overload is auto-applied by the interpreter the instant it is produced
-	// (`r.bool`). Mirror that: dispatch it 0-arg VM-native. A method needing args
-	// (`r.int`) has no 0-arg sig, so it stays a value and flows to a later
-	// CALL_DYNAMIC; an anonymous fn stays data (the interpreter does not
-	// auto-invoke a 0-arg anonymous value). The isDelegationFnDef guard is
-	// essential: a USER fn ref (`{b:f/r}`) is NOT a 0-arg method — tryNativeFnApply
-	// would match its InstallFnDef-registered handler and call it argless,
-	// diverging. A user fn stays a value here and applies correctly at CALL_DYNAMIC.
-	if (isGetWord(pr.Word) || isGetrWord(pr.Word)) && len(results) == 1 {
-		if fnDef, ok := results[0].Data.(FnDefInfo); ok && !fnDef.Anonymous && isDelegationFnDef(fnDef) {
-			if applied, done, aerr := vc.tryNativeFnApply(fnDef, nil); done {
-				if aerr != nil {
-					return nil, stampAt(aerr, curDebug, pc, r)
-				}
-				results = applied
-			}
-		}
+	// A get/getr surfacing a 0-arg trivial-delegation METHOD (`r.bool`) is NOT
+	// auto-applied here: the recorder owns that landing. Every annotated
+	// method-shape read either models the interpreter's instant auto-fire as an
+	// explicit arity-0 OpCallDynMethod right after this poly (the shaped-method
+	// landing model) or REFUSES compilation (tryShapedMethodDispatch's
+	// guard-owned decline), so the poly's job is exactly its recorded claim —
+	// return the member value. A runtime auto-apply here would double-fire
+	// against the following CALL_DYN_METHOD (span-finish underflow,
+	// rand-bool's non-fn operand).
+	// Enforce the recorder's result-count claim: the runtime re-match may
+	// land on an overload whose arity the checker's model did not commit
+	// (`set` over a dynamic receiver — Store writes in place and returns
+	// nothing, Map/Flex return the container). A mismatched count would
+	// silently shift every downstream operand, so defer to the interpreter
+	// instead (runtimeShouldFallback — slow, not wrong).
+	if len(results) != pr.NOut {
+		return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+			"poly dispatch %s: result count %d differs from the recorded claim %d; deferring to the interpreter",
+			pr.Word, len(results), pr.NOut))
 	}
 	if err := vc.screenResults(results, "poly result at "+pr.Word, curDebug, pc); err != nil {
 		return nil, err
@@ -1193,9 +1194,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) ([]Value,
 				if len(frames) > 0 {
 					stackBase = frames[len(frames)-1].stackBase
 				}
-				if err := checkReturnContract(r, &p.Fns[curUnit], stack, stackBase, len(frames) > 0); err != nil {
+				trimmed, err := checkReturnContract(r, &p.Fns[curUnit], stack, stackBase, len(frames) > 0)
+				if err != nil {
 					return nil, stampAt(err, curDebug, pc, r)
 				}
+				stack = trimmed
 			}
 			if len(frames) == 0 {
 				// Top RET of a re-entrant unit run (a body closure invoked
@@ -1471,25 +1474,51 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 	return nil
 }
 
-func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) error {
+func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) ([]Value, error) {
 	rets := fn.Returns
 	if len(rets) == 0 {
-		return nil
+		return stack, nil
 	}
+	// The __RC arity discipline (engine.go): the frame must produce at
+	// least the declared count; extras are tolerated only up to the
+	// unnamed-arg allowance (NUnnamed — an unnamed param the body never
+	// consumed, re-pushed at unit entry, sits at the frame's bottom exactly
+	// as it sits at the interpreter frame's bottom) and are DISCARDED
+	// before the caller sees the result. Beyond the allowance it is the
+	// interpreter's count error, byte-identical.
 	if hasFrame {
-		if produced := len(stack) - stackBase; produced != len(rets) {
-			return vmReturnCountErr(r, fn.Name, len(rets), produced)
+		produced := len(stack) - stackBase
+		if produced < len(rets) {
+			return stack, vmReturnCountErr(r, fn.Name, len(rets), produced)
 		}
-	} else if len(stack) < len(rets) {
-		return vmReturnCountErr(r, fn.Name, len(rets), len(stack))
+		if extra := produced - len(rets); extra > 0 {
+			if extra > fn.NUnnamed {
+				return stack, vmReturnCountErr(r, fn.Name, len(rets), produced-fn.NUnnamed)
+			}
+			stack = append(stack[:stackBase], stack[stackBase+extra:]...)
+		}
+	} else {
+		if len(stack) < len(rets) {
+			return stack, vmReturnCountErr(r, fn.Name, len(rets), len(stack))
+		}
+		// Frameless (re-entrant closure / fn-root run): same trim over the
+		// whole residual — a closure unit has NUnnamed 0, so this is a
+		// no-op for every closure body.
+		if extra := len(stack) - len(rets); extra > 0 && fn.NUnnamed > 0 {
+			trim := extra
+			if trim > fn.NUnnamed {
+				trim = fn.NUnnamed
+			}
+			stack = append(stack[:0], stack[trim:]...)
+		}
 	}
 	base := len(stack) - len(rets)
 	for k, exp := range rets {
 		if !stack[base+k].Is(CanonicalType(r, exp)) {
-			return vmReturnTypeErr(r, fn.Name, k+1, exp, stack[base+k])
+			return stack, vmReturnTypeErr(r, fn.Name, k+1, exp, stack[base+k])
 		}
 	}
-	return nil
+	return stack, nil
 }
 
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and
