@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -162,4 +163,57 @@ func TestFnUnitDynFrameBreakWithoutLoopDefers(t *testing.T) {
 		t.Fatalf("interpreter error = %v, want the flow_error", errI)
 	}
 	requireParity(t, src, gotC, errC, gotI, errI)
+}
+
+// The replay executes ONLY the deferred apply — never the body's other
+// statements (they ran as compiled ops) — and it fires at the RET, so it is
+// gated to bodies where the apply is the LAST statement (replayIsBodyTail).
+// Pins both sides of that contract:
+//   - an effectful CALLEE fires exactly once, with identical output;
+//   - a body with an effectful statement AFTER the apply refuses (compiling
+//     it would run the print before the callee's output — the observed
+//     inversion this gate closes), falling back with identical output.
+func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
+	runOut := func(src string, compiled bool) (out []any, printed string, took bool, err error) {
+		a, e := New()
+		if e != nil {
+			t.Fatal(e)
+		}
+		var buf bytes.Buffer
+		a.SetOutput(&buf)
+		if compiled {
+			out, took, err = a.RunCompiled(src)
+		} else {
+			out, err = a.Run(src)
+		}
+		return out, buf.String(), took, err
+	}
+
+	// Effectful callee over the pure corpus body: compiles, fires once.
+	once := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, pk: (fn [[x:Integer] [Integer] [print "callee" x mul 2]])}] end L.useanon L.pk 14`
+	gotC, printedC, took, errC := runOut(once, true)
+	gotI, printedI, _, errI := runOut(once, false)
+	if !took || errC != nil {
+		t.Fatalf("effectful callee: compiled=%v err=%v", took, errC)
+	}
+	if strings.Count(printedC, "callee") != 1 || printedC != printedI ||
+		fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
+		t.Errorf("effectful callee parity: C=%v %q I=%v %q", gotC, printedC, gotI, printedI)
+	}
+
+	// A statement AFTER the apply: the replay would reorder its effect ahead
+	// of the callee's — must refuse and fall back with identical output.
+	after := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1) print "after" drop]] export "L" {useanon: useanon/r, pk: (fn [[x:Integer] [Integer] [print "callee" x]])}] end L.useanon L.pk 14`
+	a, _ := New()
+	if prog, reason, _, _ := a.CompileCheck(after); prog != nil {
+		t.Errorf("a post-apply statement must refuse the replay (reason=%q):\n%s", reason, prog.Disassemble())
+	}
+	gotC, printedC, took, errC = runOut(after, true)
+	gotI, printedI, _, errI = runOut(after, false)
+	if took {
+		t.Error("the post-apply shape must take the interpreter fallback")
+	}
+	if printedC != printedI || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
+		t.Errorf("fallback parity: C=%v %q/%v I=%v %q/%v", gotC, printedC, errC, gotI, printedI, errI)
+	}
 }

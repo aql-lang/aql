@@ -274,8 +274,11 @@ const (
 	// run whose stepping starts after the prefix, exactly the sub-engine twin
 	// of the frame's own ArgSpan — and replaces the frame region with the
 	// run's residual. Faithful by construction for ANY callee arity, type
-	// mismatch (the value stays data), or below-window collection; the
-	// following RET applies the CallAQL-path trim (CompiledFn.RetReplay).
+	// mismatch (the value stays data), or below-window collection — PROVIDED
+	// the window is the body's LAST statement: the replay fires at the RET,
+	// so a recorded event after it would reorder observable effects ahead of
+	// the apply's (the recorder's replayIsBodyTail gate refuses that shape).
+	// The following RET applies the CallAQL-path trim (CompiledFn.RetReplay).
 	OpCallDynFrame
 
 	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container

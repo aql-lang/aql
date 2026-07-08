@@ -5700,11 +5700,42 @@ func noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bo
 			}
 		}
 		if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
-			if w, ok := dynFrameWindow(u, rec, vals); ok {
+			if w, ok := dynFrameWindow(u, rec, vals); ok && replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
 				rec.dynFrameW = w
 				rec.retReplay = true
 				return true
 			}
+			return false
+		}
+	}
+	return true
+}
+
+// replayIsBodyTail reports whether the replay window is the body's LAST
+// statement in source order. The whole-frame replay fires at the RET, so any
+// recorded event positioned AFTER the window would have its effects reordered
+// ahead of the apply's (the interpreter runs the apply at its own source
+// position: `[(args.0 args.1) print "after"]` prints the callee's output
+// first) — such a body declines and falls back. Events BEFORE the window ran
+// before the apply on both engines, and an event-free body is trivially a
+// tail. When events exist but no window value carries a source position, the
+// order cannot be proven and the replay declines.
+func replayIsBodyTail(frag *EmitFragment, window []Value) bool {
+	if frag == nil || len(frag.events) == 0 {
+		return true
+	}
+	anchor := SrcPos{}
+	for _, v := range window {
+		if v.Pos.Row > anchor.Row || (v.Pos.Row == anchor.Row && v.Pos.Col > anchor.Col) {
+			anchor = v.Pos
+		}
+	}
+	if anchor.Row == 0 && anchor.Col == 0 {
+		return false
+	}
+	for i := range frag.events {
+		p := eventPos(frag.events[i])
+		if p.Row > anchor.Row || (p.Row == anchor.Row && p.Col > anchor.Col) {
 			return false
 		}
 	}

@@ -158,3 +158,33 @@ func TestSetLoopBodyApplySourceOrderGate(t *testing.T) {
 		t.Error("a const fn operand must decline the loop apply")
 	}
 }
+
+func TestReplayIsBodyTailArms(t *testing.T) {
+	at := func(row, col int) SrcPos { return SrcPos{Row: row, Col: col} }
+	win := func(pos SrcPos) []Value {
+		v := NewInteger(1)
+		v.Pos = pos
+		return []Value{daFnCarrier("f"), v}
+	}
+	evAt := func(p SrcPos) emitEvent { return emitEvent{kind: evCall, call: emitCall{pos: p}} }
+
+	// An event-free body is trivially a tail.
+	if !replayIsBodyTail(&EmitFragment{}, win(at(1, 30))) {
+		t.Error("an event-free body is a tail")
+	}
+	// Events all BEFORE the window anchor: still a tail.
+	frag := &EmitFragment{events: []emitEvent{evAt(at(1, 5))}}
+	if !replayIsBodyTail(frag, win(at(1, 30))) {
+		t.Error("events before the apply keep the replay")
+	}
+	// An event AFTER the anchor: its effects would reorder — decline.
+	frag = &EmitFragment{events: []emitEvent{evAt(at(1, 60))}}
+	if replayIsBodyTail(frag, win(at(1, 30))) {
+		t.Error("an event after the apply must decline the replay")
+	}
+	// Events but NO positioned window value: order unprovable — decline.
+	frag = &EmitFragment{events: []emitEvent{evAt(at(1, 5))}}
+	if replayIsBodyTail(frag, win(SrcPos{})) {
+		t.Error("an unanchored window with events must decline")
+	}
+}

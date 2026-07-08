@@ -76,7 +76,10 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > through a nested interpreter run (`RunResolved` with the unnamed-param
 > re-pushes as the resolved prefix — the sub-engine twin of the frame's
 > ArgSpan), so an unapplied fn value dispatches by execFnDefLiteral's
-> own runtime rule, including below-window stack collection; the RET
+> own runtime rule, including below-window stack collection (gated to
+> bodies whose apply is the LAST statement — replayIsBodyTail — since
+> the replay fires at the RET and a later effectful statement would
+> otherwise reorder ahead of the callee's effects); the RET
 > then takes the **RetReplay** discipline (the CallAQL trim-only
 > return path for foreign-registry fns, count-exact-or-defer so a
 > runtime-variable residual falls back soundly). And the per-iteration
