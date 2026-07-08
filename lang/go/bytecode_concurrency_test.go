@@ -139,3 +139,31 @@ func renderResidual(vs []eng.Value) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// The concurrency race regression pin (CI -race, PR #233): an ORDINARY
+// top-level fn's unit must carry NO Reg override — the VM runs it on whatever
+// registry RunProgram is handed (a ForkConcurrent fork per goroutine), so a
+// baked shared-registry pointer would defeat isolation and race on
+// ensureInvoker. Only a FOREIGN module sub-registry fn is stamped. Without the
+// progReg discriminator every fn carried the shared compile registry and
+// TestCompiledConcurrencyRaceFree tripped the detector.
+func TestOrdinaryFnUnitsCarryNoRegOverride(t *testing.T) {
+	src := `def f fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [f (n sub 1) (acc add n)]]] each [mul 2] [1 2 3] f 3 0`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("did not compile: reason=%q err=%v", reason, cerr)
+	}
+	if len(prog.Fns) == 0 {
+		t.Fatal("expected at least the recursive fn + each-body units")
+	}
+	for i := range prog.Fns {
+		if prog.Fns[i].Reg != nil {
+			t.Errorf("unit %d (%s): ordinary fn carries a Reg override — a shared registry pointer would race under ForkConcurrent",
+				i, prog.Fns[i].Name)
+		}
+	}
+}

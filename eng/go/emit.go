@@ -456,6 +456,13 @@ type EmitState struct {
 	// RETURNS (the factory pattern), which needs r but is reached from a finish
 	// closure that has only es. Nil outside a compile pass.
 	reg *Registry
+	// progReg is the TOP-LEVEL program registry — captured at the FIRST
+	// bindRegistry (the outermost check Run, before any module body / island
+	// sub-engine re-binds reg). Unlike reg it never re-binds, so Finalize can
+	// tell an ordinary top-level fn (rec.reg == progReg) from a foreign
+	// sub-registry fn (a module preamble body, rec.reg != progReg) and stamp
+	// CompiledFn.Reg only for the latter — see the Finalize stamp site.
+	progReg *Registry
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -789,6 +796,12 @@ func (es *EmitState) Armed() bool { return es != nil }
 func (es *EmitState) bindRegistry(r *Registry) {
 	if es == nil {
 		return
+	}
+	// The FIRST bind names the program registry: the outermost check Run binds
+	// the top-level registry before any module-body / island sub-engine run
+	// re-binds reg to a foreign sub-registry. Captured once, never re-bound.
+	if es.progReg == nil {
+		es.progReg = r
 	}
 	es.reg = r
 }
@@ -5551,12 +5564,23 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
 		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
-		if rec.reg != nil {
-			// Unconditional: for an ordinary (program-registry) fn this equals
-			// the VM's own registry and changes nothing; comparing against
-			// es.reg here would be unreliable — the recorder's back-pointer
-			// re-binds on every engine run during the pass (module bodies,
-			// islands), so it does not name "the program's registry".
+		if rec.reg != nil && rec.reg != es.progReg {
+			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
+			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):
+			// its body resolves module-private words there, exactly where the
+			// interpreter's CallAQL runs it, so the VM must override curReg. An
+			// ORDINARY top-level fn (rec.reg == the program registry) must NOT be
+			// stamped: the VM run may be handed a DIFFERENT registry
+			// (ForkConcurrent gives each concurrent execution its own fork), so
+			// stamping the shared compile registry would (a) defeat that
+			// isolation and (b) race — every fork's CALL_NATIVE would call
+			// ensureInvoker on the one shared registry, mutating its Invoker
+			// field concurrently (the -race gate TestCompiledConcurrencyRaceFree).
+			// progReg is the FIRST-bound registry (bindRegistry), stable across
+			// the pass unlike es.reg which re-binds on every module-body / island
+			// sub-engine run. A foreign sub-registry stays the correct shared
+			// pointer (module bodies are not fork-parallelised in the corpus);
+			// an ordinary fn falls through to curReg == vc.r (the fork).
 			cf.Reg = rec.reg
 		}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
