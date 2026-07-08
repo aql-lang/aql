@@ -172,6 +172,27 @@ func (vc *vmContext) island() *Engine {
 	return vc.islandEng
 }
 
+// islandRun runs an island token window on the given dispatch registry. The
+// program registry keeps the vm's cached island engine; a FOREIGN (module
+// sub-registry) unit runs its window on ITS OWN registry's pooled sub-engine —
+// the interpreter twin: the enclosing body would have run there (CallAQL), so
+// a same-registry callee SPLICES into the island tape and a break/continue it
+// raises exits cleanly with the registry FlowCtrl flag set (exitWithFlowCtrl's
+// sub-engine contract) for the VM to translate (escapedFlow). Islanding a
+// foreign unit's window on the program registry instead would push the callee
+// through CallAQL's NewTop sub-engine, where the same signal is a hard
+// flow_error the interpreter never raises.
+func (vc *vmContext) islandRun(reg *Registry, tokens []Value) ([]Value, error) {
+	if reg == nil || reg == vc.r {
+		eng := vc.island()
+		eng.flowUnwind = true
+		res, err := eng.Run(tokens)
+		eng.flowUnwind = false
+		return res, err
+	}
+	return runIslandResolved(reg, nil, tokens)
+}
+
 // screenResults rejects handler / island results that carry a tape-coupled
 // token (Word/Mark/Move/Forward/OpenParen/Splice) — a value the interpreter
 // would re-STEP rather than treat as data. No compiled-reachable handler should
@@ -441,7 +462,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 // ([value, args]); for a TRAILING fn (`5 m.f`, `[..] r.one-of`) the interpreter
 // leaves the value ON TOP of its args, so a non-callable trailing value is
 // rotated up from the base. The callable result is identical either way.
-func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynamic(reg *Registry, n int, trailing bool, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC underflow")
@@ -499,7 +520,7 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
-	results, err := vc.island().Run(island)
+	results, err := vc.islandRun(reg, island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -509,14 +530,31 @@ func (vc *vmContext) callDynamic(n int, trailing bool, stack []Value, curDebug [
 	return append(stack[:base], results...), nil
 }
 
+// callDynFamily routes every fn-value-call-boundary opcode to its handler —
+// the single run-loop case for the family. frameBase is the CURRENT frame's
+// operand-stack base (the whole-frame replay's resolved-prefix boundary);
+// only OpCallDynFrame reads it.
+func (vc *vmContext) callDynFamily(reg *Registry, op Opcode, arg, frameBase int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	switch op {
+	case OpCallDynTrailTop:
+		return vc.callDynTrailTop(reg, arg, stack, curDebug, pc)
+	case OpCallDynApplyTop:
+		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
+	case OpCallDynFrame:
+		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
+	default:
+		return vc.callDynamicOp(reg, op, arg, stack, curDebug, pc)
+	}
+}
+
 // callDynamicOp routes a fn-value-call-boundary opcode to its handler, keeping
 // the VM's run loop a single case. Trailing only changes the non-callable
 // residual order (see callDynamic); mixed islands an interior-fn window.
-func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynamicOp(reg *Registry, op Opcode, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	if op == OpCallDynamicMixed {
-		return vc.callDynamicMixed(arg, stack, curDebug, pc)
+		return vc.callDynamicMixed(reg, arg, stack, curDebug, pc)
 	}
-	return vc.callDynamic(arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
+	return vc.callDynamic(reg, arg, op == OpCallDynamicTrailing, stack, curDebug, pc)
 }
 
 // callDynTrailTop applies a runtime FUNCTION value ON TOP of its n args to those
@@ -528,7 +566,7 @@ func (vc *vmContext) callDynamicOp(op Opcode, arg int, stack []Value, curDebug [
 // for ANY arity (unlike OpCallDynamicTrailing's 1-arg rotation). The args slice is
 // the same stack-order window callDynamic's leading case feeds, so the closure /
 // island binding matches the proven leading path.
-func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYN_TRAIL_TOP underflow")
@@ -568,7 +606,7 @@ func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
-	results, err := vc.island().Run(island)
+	results, err := vc.islandRun(reg, island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -586,7 +624,7 @@ func (vc *vmContext) callDynTrailTop(n int, stack []Value, curDebug []SrcPos, pc
 // param), identical to callDynTrailTop's reversed-window forward bind. A
 // non-FnDefInfo, non-closure payload raises applyHandler's own byte-identical
 // error — the same taxonomy the interpreter's dispatch of `apply` yields.
-func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	if len(stack) < n+1 {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYN_APPLY_TOP underflow")
@@ -623,7 +661,7 @@ func (vc *vmContext) callDynApplyTop(n int, stack []Value, curDebug []SrcPos, pc
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
-	results, err := vc.island().Run(island)
+	results, err := vc.islandRun(reg, island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -715,13 +753,13 @@ func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug 
 // out to have, and a non-callable value simply stays put (the island Run leaves
 // it on the stack). The leading / trailing OpCallDynamic layouts cannot express
 // this because the args straddle the fn.
-func (vc *vmContext) callDynamicMixed(w int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynamicMixed(reg *Registry, w int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	if w < 1 || len(stack) < w {
 		return nil, vmErrAt(curDebug, pc, "CALL_DYNAMIC_MIXED underflow")
 	}
 	base := len(stack) - w
 	window := append([]Value(nil), stack[base:]...)
-	results, err := vc.island().Run(window)
+	results, err := vc.islandRun(reg, window)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
@@ -729,6 +767,63 @@ func (vc *vmContext) callDynamicMixed(w int, stack []Value, curDebug []SrcPos, p
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
+}
+
+// callDynFrame replays the CURRENT frame's end-of-body residual through a
+// nested interpreter run — the whole-frame dynamic-apply window
+// (OpCallDynFrame). The top w stack entries are the TOKEN region (the values
+// the interpreter's pointer would step: unapplied fn reads and the args after
+// them); everything between the frame base and the token region is the
+// RESOLVED prefix (the frame-bottom unnamed-param re-pushes, which the
+// interpreter never steps — arguments are inert). RunResolved starts stepping
+// after the prefix, so an fn value in the token region auto-dispatches by
+// execFnDefLiteral's own runtime rule — forward-collecting token-region values
+// and stack-collecting prefix values below, for whatever name/arity the value
+// turns out to have — and a non-callable value stays data. The run's residual
+// replaces the whole frame region; the following RET applies the fn's return
+// discipline (checkReturnContract, RetReplay).
+func (vc *vmContext) callDynFrame(reg *Registry, w, frameBase int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if w < 1 || len(stack)-frameBase < w {
+		return nil, vmErrAt(curDebug, pc, "CALL_DYN_FRAME underflow")
+	}
+	base := len(stack) - w
+	prefix := append([]Value(nil), stack[frameBase:base]...)
+	tokens := append([]Value(nil), stack[base:]...)
+	results, err := runIslandResolved(reg, prefix, tokens)
+	if err != nil {
+		return nil, stampAt(err, curDebug, pc, vc.r)
+	}
+	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil {
+		return nil, err
+	}
+	return append(stack[:frameBase], results...), nil
+}
+
+// escapedFlow reports (and clears) a break/continue signal that escaped an
+// island apply. A value-dispatched body that breaks/continues with no
+// enclosing loop on the ISLAND's own tape returns cleanly with the registry
+// FlowCtrl flag still set (Engine.exitWithFlowCtrl's sub-engine contract) so
+// an OUTER run can resolve it — in the interpreter that outer run is the
+// shared tape holding the enclosing `for`; here it is the VM, which translates
+// the flag to the cross-frame OpFlowBreak / OpFlowContinue unwind (flowSignal:
+// nearest open loop in any frame; none at all defers to the interpreter, which
+// raises the canonical flow_error). Checked on every registry an island apply
+// may have run against (vc.r, and the active unit's curReg).
+func (vc *vmContext) escapedFlow(regs ...*Registry) Opcode {
+	for _, reg := range regs {
+		if reg == nil {
+			continue
+		}
+		switch reg.FlowCtrl {
+		case FlowBreak:
+			reg.FlowCtrl = FlowNone
+			return OpFlowBreak
+		case FlowContinue:
+			reg.FlowCtrl = FlowNone
+			return OpFlowContinue
+		}
+	}
+	return 0
 }
 
 // isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
@@ -944,7 +1039,25 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 		}
 	}
 	enterUnit(startUnit)
-	for pc := 0; pc < len(curCode); pc++ {
+	pc := 0
+	// resolveEscapedFlow translates a break/continue that escaped an island
+	// apply (the registry FlowCtrl contract — see escapedFlow) into the
+	// cross-frame flow unwind, mutating the run loop's frames/loops/locals/
+	// stack/pc in place. Shared by every island-apply opcode case.
+	resolveEscapedFlow := func() error {
+		fop := vc.escapedFlow(vc.r, curReg)
+		if fop == 0 {
+			return nil
+		}
+		var u int
+		var err error
+		if frames, loops, locals, stack, pc, u, err = vc.flowSignal(fop, frames, loops, locals, stack, pc, curUnit, curDebug); err != nil {
+			return err
+		}
+		enterUnit(u)
+		return nil
+	}
+	for pc = 0; pc < len(curCode); pc++ {
 		if len(stack) > ceiling || vc.frameDepth > ceiling {
 			return nil, vmExhaustedAt(curDebug, pc, r, ceiling)
 		}
@@ -1165,27 +1278,28 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				return nil, err
 			}
 			stack = ns
-		case OpCallDynamic, OpCallDynamicTrailing, OpCallDynamicMixed:
-			// The fn-value-call boundary family: leading / trailing-1 (callDynamic)
-			// and interior-window (callDynamicMixed). callDynamicOp routes by opcode
-			// so run's dispatch stays a single case.
-			ns, err := vc.callDynamicOp(in.Op, int(in.Arg), stack, curDebug, pc)
+		case OpCallDynamic, OpCallDynamicTrailing, OpCallDynamicMixed,
+			OpCallDynTrailTop, OpCallDynApplyTop, OpCallDynFrame:
+			// The fn-value-call boundary family: leading / trailing-1
+			// (callDynamic), interior-window (callDynamicMixed), fn-on-top
+			// (callDynTrailTop / callDynApplyTop) and the whole-frame replay
+			// (callDynFrame). callDynFamily routes by opcode so run's dispatch
+			// stays a single case; a break/continue that escaped the applied
+			// body is then translated to the cross-frame flow unwind, exactly
+			// as the interpreter's shared tape resolves it at the enclosing
+			// loop.
+			fb := 0
+			if len(frames) > 0 {
+				fb = frames[len(frames)-1].stackBase
+			}
+			ns, err := vc.callDynFamily(curReg, in.Op, int(in.Arg), fb, stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
 			stack = ns
-		case OpCallDynTrailTop:
-			ns, err := vc.callDynTrailTop(int(in.Arg), stack, curDebug, pc)
-			if err != nil {
+			if err := resolveEscapedFlow(); err != nil {
 				return nil, err
 			}
-			stack = ns
-		case OpCallDynApplyTop:
-			ns, err := vc.callDynApplyTop(int(in.Arg), stack, curDebug, pc)
-			if err != nil {
-				return nil, err
-			}
-			stack = ns
 		case OpCallDynMethod:
 			ns, err := vc.callDynMethod(&p.DynMethods[in.Arg], stack, curDebug, pc)
 			if err != nil {
@@ -1401,9 +1515,20 @@ func (vc *vmContext) opForSetup(stack []Value, loops []vmLoop, slot int, curCode
 	if stepV == 0 {
 		return nil, nil, stampAt(vc.r.AqlError("for_error", "for: step cannot be zero", "for"), debug, pc, vc.r)
 	}
+	// The loop's FOR_NEXT usually follows FOR_SETUP directly, but a loop with
+	// CARRIED defs seats their slot inits between the two (lowerLoop) — scan
+	// forward for the real FOR_NEXT so exitPC / nextPC never read another
+	// instruction's Arg as a jump target.
+	next := pc + 1
+	for next < len(curCode) && curCode[next].Op != OpForNext {
+		next++
+	}
+	if next >= len(curCode) {
+		return nil, nil, vmErrAt(debug, pc, "FOR_SETUP without a FOR_NEXT")
+	}
 	loops = append(loops, vmLoop{
 		cur: start, end: endV, step: stepV, slot: slot,
-		exitPC: int(curCode[pc+1].Arg), nextPC: pc + 1, unit: curUnit, iterBase: len(stack),
+		exitPC: int(curCode[next].Arg), nextPC: next, unit: curUnit, iterBase: len(stack),
 	})
 	return stack, loops, nil
 }
@@ -1620,6 +1745,37 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase int, hasFrame bool) ([]Value, error) {
 	rets := fn.Returns
 	if len(rets) == 0 {
+		return stack, nil
+	}
+	// A whole-frame dynamic-apply replay (RetReplay) in a FOREIGN-registry fn:
+	// the interpreter dispatches such a fn via CallAQL, whose return path is
+	// TRIM-ONLY (registry.go — up to NUnnamed extra bottom values discarded,
+	// count and type NEVER enforced; the documented frame-path asymmetry). The
+	// replay's residual count is runtime-variable, but every compiled CALLER
+	// was laid out against the static model of len(Returns) results — so after
+	// the CallAQL trim, a count that still differs cannot be represented and
+	// DEFERS to the interpreter (internal_error → the sound whole-program
+	// fallback). A same-registry fn falls through to the frame-path contract
+	// below, which the interpreter enforces identically.
+	if fn.RetReplay && fn.Reg != nil && fn.Reg != r {
+		base := 0
+		if hasFrame {
+			base = stackBase
+		}
+		produced := len(stack) - base
+		if extra := produced - len(rets); extra > 0 {
+			trim := extra
+			if trim > fn.NUnnamed {
+				trim = fn.NUnnamed
+			}
+			stack = append(stack[:base], stack[base+trim:]...)
+			produced -= trim
+		}
+		if produced != len(rets) {
+			return stack, vmErrAt(nil, 0, fmt.Sprintf(
+				"dynamic frame replay %s: result count %d differs from the declared %d; deferring to the interpreter",
+				fn.Name, produced, len(rets)))
+		}
 		return stack, nil
 	}
 	// The __RC arity discipline (engine.go): the frame must produce at

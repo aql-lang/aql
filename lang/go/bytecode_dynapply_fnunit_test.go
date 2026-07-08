@@ -1,0 +1,165 @@
+package lang
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// bytecode_dynapply_fnunit_test.go pins the dynamic apply INSIDE fn units
+// (module-fnvalue-boundary rows 24/25/31/32/33, the I7 close-out):
+//
+//   - a fn body's unapplied fn-value residual compiles to the whole-frame
+//     replay (OpCallDynFrame) — the paren apply `(args.0 args.1)`, the bare
+//     `args.0` read returned as data, and an erroring applied body;
+//   - the replay is faithful for a callee that collects BELOW the window
+//     (the frame's unnamed-param re-pushes), and a runtime residual count
+//     the callers' static model cannot absorb DEFERS to the interpreter
+//     (CompiledFn.RetReplay) instead of diverging;
+//   - a for-body per-iteration apply of a Function param compiles to
+//     OpCallDynamic (apply-last hoist and apply-FIRST source orders), and a
+//     break/continue raised inside the applied body crosses the island to
+//     the enclosing compiled loop (escapedFlow), byte-identical.
+
+func runBothEngines(t *testing.T, src string) (gotC []any, compiled bool, errC error, gotI []any, errI error) {
+	t.Helper()
+	b, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotC, compiled, errC = b.RunCompiled(src)
+	d, _ := New()
+	gotI, errI = d.Run(src)
+	return
+}
+
+func requireParity(t *testing.T, src string, gotC []any, errC error, gotI []any, errI error) {
+	t.Helper()
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
+		t.Errorf("%q: parity: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
+	}
+}
+
+func TestFnUnitDynFrameApplyCompiles(t *testing.T) {
+	rows := []struct{ src, want string }{
+		// row 24: the bare read — the fn value is DATA both sides (a 1-arg
+		// callee cannot fire on the Function param below it).
+		{`import module [def keep fn [[Function] [Function] [args.0]] export "L" {keep: keep/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end typeof (L.keep L.mk)`, "[Function]"},
+		// row 25: the paren apply fires exactly once.
+		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.useanon L.mk 14`, "[42]"},
+		// off-corpus: a 2-arg callee collects the frame's OTHER unnamed param
+		// from BELOW the apply window (14+14) — the replay's resolved prefix.
+		{`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, m2: (fn [[a:Integer b:Integer] [Integer] [a add b]])}] end L.useanon L.m2 14`, "[28]"},
+	}
+	for _, c := range rows {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q: refused: %q err=%v", c.src, reason, cerr)
+		}
+		if !strings.Contains(prog.Disassemble(), "CALL_DYN_FRAME") {
+			t.Errorf("%q: compiled without the whole-frame replay:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled run: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q = %v, want %s", c.src, gotC, c.want)
+		}
+	}
+}
+
+// row 31: a raise inside the value-dispatched body propagates out of the
+// replay as the same error.
+func TestFnUnitDynFrameApplyErrorPropagates(t *testing.T) {
+	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1`
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled {
+		t.Fatalf("expected the compiled path, got fallback (errC=%v)", errC)
+	}
+	if errC == nil || !strings.Contains(errC.Error(), "bang") {
+		t.Fatalf("compiled error = %v, want the raised bang", errC)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+}
+
+// A runtime residual the callers' static model cannot absorb — the callee
+// stays data (type mismatch) or returns two values — DEFERS to the
+// interpreter (RetReplay count enforcement) with full parity.
+func TestFnUnitDynFrameRuntimeCountDefers(t *testing.T) {
+	rows := []string{
+		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, ms: (fn [[s:String] [Integer] [5]])}] end L.useanon L.ms 14`,
+		`import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, mp: (fn [[x:Integer] [Integer Integer] [x x]])}] end L.useanon L.mp 14`,
+	}
+	for _, src := range rows {
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+		if compiled {
+			t.Errorf("%q: expected the runtime deferral (sound fallback), got a compiled run", src)
+		}
+		requireParity(t, src, gotC, errC, gotI, errI)
+	}
+}
+
+func TestFnUnitLoopApplyFlowCrossesIsland(t *testing.T) {
+	rows := []struct{ src, want string }{
+		// row 32: apply-LAST hoist; break in the applied body terminates the
+		// enclosing compiled loop (acc stops at 1).
+		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk`, "[1]"},
+		// row 33: apply-FIRST source order; continue skips the statements
+		// after the apply on every iteration (acc stays 0).
+		{`import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/r, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp`, "[0]"},
+	}
+	for _, c := range rows {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(c.src)
+		if cerr != nil || prog == nil {
+			t.Fatalf("%q: refused: %q err=%v", c.src, reason, cerr)
+		}
+		if !strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") {
+			t.Errorf("%q: compiled without the per-iteration apply:\n%s", c.src, prog.Disassemble())
+		}
+		gotC, compiled, errC, gotI, errI := runBothEngines(t, c.src)
+		if !compiled || errC != nil {
+			t.Fatalf("%q: compiled run: compiled=%v err=%v", c.src, compiled, errC)
+		}
+		requireParity(t, c.src, gotC, errC, gotI, errI)
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%q = %v, want %s", c.src, gotC, c.want)
+		}
+	}
+}
+
+// A VALUE-producing callee through the same looper shape accumulates one
+// value per iteration — a runtime residual the static model cannot absorb,
+// deferring soundly.
+func TestFnUnitLoopApplyValueCalleeDefers(t *testing.T) {
+	src := `import module [def looper fn [[Function] [Integer] [def acc 0 for 3 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.looper L.mk`
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if compiled {
+		t.Errorf("expected the runtime deferral (sound fallback), got a compiled run")
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+}
+
+// A break raised in the applied body with NO enclosing loop anywhere: the VM
+// translates the escaped signal, finds no open loop, and defers to the
+// interpreter, which raises the canonical flow_error — parity on the error.
+func TestFnUnitDynFrameBreakWithoutLoopDefers(t *testing.T) {
+	src := `import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.useanon L.brk 1`
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if compiled {
+		t.Errorf("expected the runtime deferral (no enclosing loop), got a compiled run")
+	}
+	if errI == nil || !strings.Contains(fmt.Sprint(errI), "outside loop") {
+		t.Fatalf("interpreter error = %v, want the flow_error", errI)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+}

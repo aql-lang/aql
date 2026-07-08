@@ -9,12 +9,12 @@ Corpus: **5941** spec value rows (**5626** compilable, 315 statically invalid in
 
 | outcome | rows |
 | --- | ---: |
-| compiled natively (fallback-free) | 5617 |
+| compiled natively (fallback-free) | 5622 |
 | compiled with an interpreter island | 0 |
-| refused (whole-program fallback) | 9 |
+| refused (whole-program fallback) | 4 |
 | static check-error (invalid in both engines) | 315 |
 
-**5617 / 5626** compilable rows produce a Program (99% — 5617 of those fully native).
+**5622 / 5626** compilable rows produce a Program (99% — 5622 of those fully native).
 
 ## Ceilings (downward ratchets toward runtime independence)
 
@@ -22,21 +22,18 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | ratchet | current | ceiling | finish line |
 | --- | ---: | ---: | --- |
-| refusals (whole-program fallback) | 9 | 0 | → 0 |
+| refusals (whole-program fallback) | 4 | 0 | → 0 |
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 0 | 0 | → 0 |
-| compute frontier | 5 | 17 | → 0 |
+| compute frontier | 1 | 17 | → 0 |
 
 ## Refusals by reason
 
 | count | bucket | root cause |
 | ---: | --- | --- |
 | 3 | dispatch recovery (best guess) | soundness |
-| 2 | other: fn useanon: unapplied fn-value in body residual (dynamic apply not compiled in a fn body) | coverage |
-| 2 | other: for: body nets multiple values per iteration | coverage |
 | 1 | function value reaches word (Stage 3) | soundness |
-| 1 | other: fn keep: unapplied fn-value in body residual (dynamic apply not compiled in a fn body) | coverage |
 
 | root cause | refusals |
 | --- | ---: |
@@ -44,11 +41,11 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | soundness | 4 |
 | scheduling | 0 |
 | opcode | 0 |
-| coverage | 5 |
+| coverage | 0 |
 
 ## Re-scoped P7 partition
 
-Over the 9 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **0** reducible (tier 2, TODO), **4** allowlisted error rows, **5** compute-frontier gaps.
+Over the 4 not-fully-native rows (refused or islanded): **0** interpreter-only (tier 1, permanent), **0** reducible (tier 2, TODO), **3** allowlisted error rows, **1** compute-frontier gaps.
 
 ### tier 1 — interpreter-only (permanent home of the island)
 
@@ -62,8 +59,5 @@ _None._
 
 | count | reason |
 | ---: | --- |
-| 2 | other: for: body nets multiple values per iteration |
 | 1 | function value reaches word (Stage 3) |
-| 1 | other: fn keep: unapplied fn-value in body residual (dynamic apply not compiled in a fn body) |
-| 1 | other: fn useanon: unapplied fn-value in body residual (dynamic apply not compiled in a fn body) |
 

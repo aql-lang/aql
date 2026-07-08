@@ -256,6 +256,28 @@ const (
 	// paren-bounded RecordDynApply event when the apply word drove it.
 	OpCallDynApplyTop
 
+	// OpCallDynFrame replays a fn body's ENTIRE end-of-body residual — the
+	// whole-frame dynamic-apply window. A fn body that leaves an unapplied
+	// runtime FUNCTION value in its residual (`(args.0 args.1)` over an
+	// unnamed Function param, or a bare `args.0` read of one) cannot lower to
+	// the bounded leading/trailing apply ops: the interpreter's
+	// execFnDefLiteral rule dispatches that value against the LIVE FRAME —
+	// forward-collecting the residual values after it AND stack-collecting the
+	// frame values below it (including the unnamed-param re-pushes at the
+	// frame bottom), by whatever name/arity the value turns out to have. Arg
+	// is the width of the TOKEN region: the top Arg stack entries are the
+	// values the interpreter's pointer actually stepped (fn reads and their
+	// following args); everything below them in the CURRENT frame is the
+	// resolved prefix (the frame-bottom unnamed-param re-pushes, inert by the
+	// arguments-are-inert invariant). The VM re-runs the whole frame region
+	// via RunResolved(unit registry, prefix, tokens) — a nested interpreter
+	// run whose stepping starts after the prefix, exactly the sub-engine twin
+	// of the frame's own ArgSpan — and replaces the frame region with the
+	// run's residual. Faithful by construction for ANY callee arity, type
+	// mismatch (the value stays data), or below-window collection; the
+	// following RET applies the CallAQL-path trim (CompiledFn.RetReplay).
+	OpCallDynFrame
+
 	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container
 	// identity (CloneValue) instead of the pooled instance. A compound VALUE
 	// literal written in a fn body is re-EVALUATED per call by the interpreter,
@@ -381,6 +403,7 @@ var opcodeNames = [...]string{
 	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
+	OpCallDynFrame:        "CALL_DYN_FRAME",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
 	OpBindTyped:           "BIND_TYPED",
 	OpCallDynMethod:       "CALL_DYN_METHOD",
@@ -732,6 +755,18 @@ type CompiledFn struct {
 	// Body-local iterator slots have no name (empty string). Purely
 	// metadata — the VM never reads it.
 	LocalNames []string
+	// RetReplay marks a body that ends in a whole-frame dynamic-apply replay
+	// (OpCallDynFrame): its residual count is RUNTIME-variable, so the RET
+	// contract switches discipline. A FOREIGN-registry fn (Reg set, a module-
+	// preamble fn) is dispatched via CallAQL in the interpreter, whose return
+	// path is TRIM-ONLY — it discards up to NUnnamed extra bottom values and
+	// has never enforced return count or type (registry.go::CallAQL, the
+	// documented asymmetry) — so the compiled RET mirrors that trim, then
+	// DEFERS to the interpreter (internal_error → sound whole-program
+	// fallback) if the count still differs from the callers' static model. A
+	// same-registry fn keeps the frame-path contract (count error + type
+	// validation), which checkReturnContract already mirrors byte-identically.
+	RetReplay bool
 }
 
 // slotNames renders a CompiledFn's slot→name table for the
@@ -818,6 +853,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		case OpCallDynamicTrailing:
 			fmt.Fprintf(sb, " /%d ; apply trailing fn-value", in.Arg)
+		case OpCallDynFrame:
+			fmt.Fprintf(sb, " /%d ; replay frame residual (dynamic apply)", in.Arg)
 		case OpMakeList:
 			fmt.Fprintf(sb, " n%-3d ; assemble %d into a list", in.Arg, in.Arg)
 		case OpMakeMap:

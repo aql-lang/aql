@@ -53,6 +53,16 @@ type Engine struct {
 	// container eval runs in-frame at its own recordable site.
 	elemEvalRecordable bool
 	reuseTape          bool // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
+	// flowUnwind marks a VM ISLAND engine: a break/continue that escapes the
+	// island's tape (no enclosing loop there) must TEAR DOWN the island's live
+	// spliced frames before returning — in the interpreter the frame and the
+	// enclosing loop always share one tape (handleLoopBreak's unwindLiveFrames
+	// runs at the loop), but the island boundary separates them, so the frame
+	// cleanup (args pop, def truncation, capture teardown) would otherwise be
+	// lost with the discarded tape. exitWithFlowCtrl then returns NO values —
+	// the VM discards the signalled iteration's partials anyway (flowSignal) —
+	// with the registry FlowCtrl flag left set for the VM to translate.
+	flowUnwind bool
 	// startAt is a one-shot start offset for the next Run: the leading
 	// startAt input values are RESOLVED arguments (a callback's inputs, a
 	// fn call's unnamed args) and enter as stack data below the pointer,
@@ -5609,6 +5619,14 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 		ctrl := e.registry.FlowCtrl
 		e.registry.FlowCtrl = FlowNone
 		return nil, e.runtimeError("flow_error", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
+	}
+	if e.flowUnwind {
+		// A VM island: no outer TAPE exists to adopt the residual — tear down
+		// the live spliced frames (their registry state: args stack, body-local
+		// defs, captures) and return nothing; the VM translates the signal.
+		e.unwindLiveFrames(0, e.tape.Len())
+		e.tape.TakeAll()
+		return nil, nil
 	}
 	return e.tape.TakeAll(), nil
 }

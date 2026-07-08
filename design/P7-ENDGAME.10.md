@@ -68,6 +68,26 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > decision, same rationale as below): it is the mechanism that keeps
 > the 9 documented-tier refusals sound — slow, not wrong.
 
+> **Addendum 3 (2026-07-08, I7 — dynamic apply inside fn units):** the
+> module fn-value-boundary tier (module-fnvalue-boundary 24/25/31/32/33)
+> is closed; refusals **9 → 4** (5,622 of 5,941 rows compiled, 0
+> islands, differential + property fuzz clean). Two mechanisms:
+> **OpCallDynFrame** replays a fn body's whole end-of-body residual
+> through a nested interpreter run (`RunResolved` with the unnamed-param
+> re-pushes as the resolved prefix — the sub-engine twin of the frame's
+> ArgSpan), so an unapplied fn value dispatches by execFnDefLiteral's
+> own runtime rule, including below-window stack collection; the RET
+> then takes the **RetReplay** discipline (the CallAQL trim-only
+> return path for foreign-registry fns, count-exact-or-defer so a
+> runtime-variable residual falls back soundly). And the per-iteration
+> loop apply extends to Function params (`applyFn` re-push, apply-first
+> / apply-last seated by source order), with an escaping break/continue
+> crossing the island boundary via the registry FlowCtrl contract
+> (`Engine.flowUnwind` tears down the island's live frames;
+> `escapedFlow` translates the signal to the compiled cross-frame
+> unwind). The 4 remaining refusals are the three sound non-definite
+> error rows and the fn-value-reaches-`drop` row (`refusalGate = 4`).
+
 ## The three endgame actions
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns

@@ -183,25 +183,25 @@ func TestCompiledCoverage(t *testing.T) {
 	// unnamed-param frame flow) and three of the repl served-handler rows
 	// (I5: CompiledFn.Reg — units dispatch against their owning registry, so
 	// an escaped lambda keeps module scope and bodyConstructsFn is retired).
-	// What remains:
+	// I7 then closed the module fn-value-boundary tier (rows 24/25/31/32/33):
+	// a fn body's unapplied fn-value residual compiles to the whole-frame
+	// replay (OpCallDynFrame — the interpreter's execFnDefLiteral rule decides
+	// the apply at run time against the frame, with the RetReplay trim/defer
+	// return discipline), and a for-body per-iteration apply of a Function
+	// param lowers to OpCallDynamic in source order (apply-first / apply-last),
+	// with an escaping break/continue crossing the island to the enclosing
+	// compiled loop (escapedFlow). What remains:
 	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier
 	//      80, word-splice 115) — the entire error allowlist: each recovers
 	//      an unmatched dispatch that the interpreter resolves (or errors)
 	//      at runtime, so a compiled best guess could diverge; the fallback
 	//      owns them.
-	//   5  module fn-value boundary (module-fnvalue-boundary 24/25/31/32/33):
-	//      a module fn whose Function-typed arg is APPLIED dynamically inside
-	//      the body — `(args.0 args.1)` (24/25/31: dynamic apply is not
-	//      compiled in a fn body) — or a `for` body netting multiple values
-	//      per iteration around that apply (32/33). Clearing these needs a
-	//      dynamic-apply lowering inside fn units (the OpCallDynamic family
-	//      is currently recorded only at module scope).
 	//   1  fn value reaching a consuming word (module-repl 17): the served
 	//      handler's teardown pipeline passes a Function value to `drop` —
 	//      fn-as-data reaching a word with no CompileStoresFn declaration
 	//      stays a sound refusal (the value's identity/capture state cannot
 	//      bake).
-	const refusalGate = 9 // P7 endgame I1–I5 close-out: 21 → 9 (tiers above)
+	const refusalGate = 4 // P7 endgame I1–I7 close-out: 21 → 9 → 4 (tiers above)
 	const islandGate = 0  // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)
