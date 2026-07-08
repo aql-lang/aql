@@ -22,6 +22,18 @@ func recordTypeInitErr(err error) {
 	}
 }
 
+// SwapTypeInitErrs replaces the recorded init-error list and returns the
+// previous one. It is a cross-package test seam (design/TEST-SEAMS.10.md):
+// sibling packages' coverage tests exercise their registration error arms
+// (a duplicate FixedID re-registration) and must snapshot/restore the
+// accumulator, or the recorded error would poison every later registry
+// construction in the test binary.
+func SwapTypeInitErrs(errs []error) []error {
+	prev := typeInitErrs
+	typeInitErrs = errs
+	return prev
+}
+
 // RecordTypeInitError is the exported spelling of recordTypeInitErr for
 // sibling packages (lang/go/modules) that register global external
 // builtins of their own (the aql:net Socket/Listener handles) and must
