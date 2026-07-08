@@ -2273,6 +2273,29 @@ func anyDisjunctCarrier(vs []Value) bool {
 	return false
 }
 
+// anyImpreciseCarrier reports whether any value is a CARRIER of a concrete-but-
+// imprecise type — a checker stand-in whose static type is a definite tag
+// (Integer, String, List, …) that a multi-branch narrowing / carrier-join
+// settled on, but which at run time may hold a value of a DIFFERENT type the
+// static analysis could not pin (the deep guard-complement chain in the
+// mini-redis codec's `join " " reply` — reply lands as a scalar carrier where
+// `join`'s List slot cannot commit). Like an Any / Disjunct carrier it is NOT a
+// concrete value (Carrier=true), so per the no-signature-recovery contract
+// ("Concrete operands are a genuine type error and refuse; carriers recover")
+// it is eligible for the runtime-re-matching OpCallNativePoly: tryRecordPoly's
+// own poly-safety gates decide whether recovery is faithful, and a runtime
+// value that matches no overload routes to the sound OpFallback island / raises
+// the interpreter's byte-identical error. Bare type nodes (a type-literal
+// operand of is/typeof) are excluded — they are not runtime values to re-match.
+func anyImpreciseCarrier(vs []Value) bool {
+	for _, v := range vs {
+		if v.Carrier && v.Parent != nil && !IsBareTypeNode(v) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReturnsIdentity is a ReturnsFunc helper that returns its inputs
 // unchanged (as carriers). Use for stack operations that preserve
 // their inputs — dup, swap, over, rot, etc. — where the output types
@@ -2722,7 +2745,24 @@ func isNoneArm(v Value) bool {
 }
 
 func joinCarriersInner(a, b Value) Value {
-	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
+	// A None arm is a lattice-root literal — NewTypeLiteral(TNone) has BOTH
+	// Data==nil AND Parent==nil (None has no lattice parent). The parent-math
+	// collapse blocks below are unsafe against such a nil Parent: ConformsTo(nil)
+	// and Equal(nil) are vacuously permissive, so `Integer.ConformsTo(None)` would
+	// collapse the merge to NewCarrier(None.Parent==nil) — a Parent-less carrier
+	// the engine HALTS on when it steps the `if` result (undefined stack entry).
+	// Handle None arms explicitly: two None arms join to a None carrier; a mixed
+	// None/value arm falls through to the alternatives-union path (None|T), the
+	// tested general join — JoinCarrierStacks then flips that result gradual
+	// (the optional / sentinel merge). Only the parent-math shortcuts are
+	// bypassed; the union below already treats None as a first-class alternative.
+	aNone := a.Parent == nil
+	bNone := b.Parent == nil
+	if aNone && bNone {
+		return NewCarrier(TNone)
+	}
+	collapse := !aNone && !bNone
+	if collapse && a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true
 		out.Data = nil
@@ -2734,7 +2774,7 @@ func joinCarriersInner(a, b Value) Value {
 		out.ID = GenerateID(IDPrefixForType(out.Parent))
 		return out
 	}
-	if !IsDisjunct(a) && !IsDisjunct(b) {
+	if collapse && !IsDisjunct(a) && !IsDisjunct(b) {
 		if a.Parent.ConformsTo(b.Parent) {
 			// a is subtype of b → widen to b
 			return NewCarrier(b.Parent)
@@ -2817,6 +2857,16 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	// line: pause bytecode recording — unless a branch-lowering hook
 	// armed fragment capture (the `if` ReturnsFn), in which case the
 	// body's events record into a fragment for structured lowering.
+	// Peek the arm BEFORE the guard consumes it: when recording into a
+	// fragment, mark the body sub-engine element-eval-recordable so a
+	// residual computed container it returns (`{a: x}` / `[x y]`, an if
+	// arm's map/list value) records its OpMakeMap / OpMakeList assembly
+	// instead of leaving an unresolvable residual. The branch/loop body
+	// runs in the LIVE frame (its def-locals are present), so the
+	// re-assembled-per-run operand semantics are sound — the same
+	// property that already makes CONSUMED-arg container recording safe
+	// in a fn body.
+	recordable := r.Check.Recorder().peekCaptureArm()
 	defer r.Check.Recorder().bodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
@@ -2825,6 +2875,7 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
 	sub := New(r)
+	sub.elemEvalRecordable = recordable
 	// Every body through here is a NESTED region (branch / loop /
 	// quotation) — reached-conditionally by construction. Mark the depth
 	// so unconditional-only diagnostics (unconditional_raise) stay silent.

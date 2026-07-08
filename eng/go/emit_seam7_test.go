@@ -1159,14 +1159,45 @@ func TestTypeBodyConstOKElements(t *testing.T) {
 func TestRecordCallOperandsInertFnBakeCaptured(t *testing.T) {
 	es := NewEmitState()
 	sig := &Signature{Args: []*Type{TFunction}, FnInertArgs: map[int]bool{0: true}}
-	// A captured fn value is NOT an inert const, so resolveOperand declines and
-	// the fn-inert-slot path bakes it as a const instead.
+	// A CAPTURED fn value must NOT bake as a const: a frozen const body leaves
+	// the captured names as unbound Words (`word(c)`), so a later invocation
+	// reads them unbound (the capturing-sink miscompile). It routes to the
+	// closure path instead — which, for a NON-anonymous fn like this synthetic
+	// one, declines (tryReturnedClosure requires an anonymous single-sig
+	// lambda), so the operand does not resolve and recordCallOperands refuses.
+	// The program then falls back faithfully. (Anonymous capturing lambdas whose
+	// body compiles DO resolve to an opClosure — see
+	// lang/go's TestPatrunFnValueStoreCompiles / TestReturnedCapturingClosureApply.)
 	fn := Value{ID: GenerateID(IDPrefixForType(TFunction)), Parent: TFunction,
 		Data: FnDefInfo{Signatures: []Signature{{Args: []*Type{TInteger}}},
 			Captured: []CapturedBinding{{Name: "c", Value: NewInteger(1)}}}}
 	ops, ok := es.recordCallOperands("stash", sig, []Value{fn})
-	if !ok || len(ops) != 1 || ops[0].kind != opConst {
-		t.Fatalf("captured inert fn should bake as a const: ok=%v ops=%+v", ok, ops)
+	if ok {
+		t.Fatalf("captured non-anonymous fn must NOT resolve as a const bake: ops=%+v", ops)
+	}
+}
+
+func TestRecordCallOperandsInertFnBakeCaptureFree(t *testing.T) {
+	r := newTestRegistry(t)
+	es := NewEmitState()
+	sig := &Signature{Args: []*Type{TFunction}, FnInertArgs: map[int]bool{0: true}}
+	// The sibling of the captured case: a CAPTURE-FREE concrete fn value in an
+	// fn-inert slot bakes as a const the storing / introspecting handler reads
+	// at run time — its frozen body has no captured names to leave unbound, so
+	// the const is faithful. A plain capture-free fn is const-baked by
+	// resolveOperand's isInertConst path BEFORE this switch; only a fn that
+	// isInertConst refuses reaches here. A capture-free MACRO module fn (Registry
+	// set, Macro true) is exactly that case — resolveOperand declines it, so the
+	// `IsConcrete && no-captures` arm is what places the const operand.
+	fn := Value{ID: GenerateID(IDPrefixForType(TFunction)), Parent: TFunction,
+		Data: FnDefInfo{Signatures: []Signature{{Args: []*Type{TInteger}}},
+			Registry: r, Macro: true}}
+	ops, ok := es.recordCallOperands("stash", sig, []Value{fn})
+	if !ok {
+		t.Fatalf("a capture-free fn that resolveOperand refuses must bake as a const here")
+	}
+	if len(ops) != 1 || ops[0].kind != opConst {
+		t.Fatalf("expected a single opConst operand, got %+v", ops)
 	}
 }
 

@@ -210,9 +210,10 @@ func TestEmitIslandReport(t *testing.T) {
 }
 
 func TestEmitUncompilableWithSiteCounts(t *testing.T) {
-	// A computed range refuses to compile but still tallies dispatch sites.
+	// A computed-START range refuses to compile (FOR_SETUP const-bakes
+	// start/step; only a computed END lowers) but still tallies dispatch sites.
 	var stdout, stderr bytes.Buffer
-	if err := Emit(&stdout, &stderr, "for [1, (1 add 2)] [i]"); err != nil {
+	if err := Emit(&stdout, &stderr, "for [(1 add 2), 5] [i]"); err != nil {
 		t.Fatalf("Emit: %v", err)
 	}
 	out := stdout.String()

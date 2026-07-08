@@ -2979,14 +2979,19 @@ func TestPatrunFnValueStoreCompiles(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: a genuinely CAPTURING closure (captures the enclosing fn param
-	// `bse`) stored in a patrun declines the const-bake (isInertConst rejects a
-	// Captured fn) and falls back — compiled == interp, no divergence.
+	// A genuinely CAPTURING closure (captures the enclosing fn param `bse`)
+	// stored in a patrun compiles to an OpPushClosure operand — NOT a const
+	// bake (a const bake would leave `bse` an unbound Word in the frozen body,
+	// the capturing-sink miscompile) — so the stored closure carries bse=100
+	// and h {v:5} → 5+100 = 105, compiled == interp.
 	capSrc := `def mk fn [[bse:Integer] [Patrun] [def p (patrun Function)  add {cmd:"x"} ([m:Map] => [m.v add bse]) p  p]]  def api (mk 100)  def h (find {cmd:"x" v:5} api)  h {v:5}`
-	gotC, _, eC := mustNew(t).RunCompiled(capSrc)
+	gotC, capComp, eC := mustNew(t).RunCompiled(capSrc)
 	gotI, eI := mustNew(t).Run(capSrc)
 	if eC != nil || eI != nil {
 		t.Fatalf("capturing: compiled err=%v interp err=%v", eC, eI)
+	}
+	if !capComp {
+		t.Errorf("capturing closure: expected native compile (OpPushClosure operand)")
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[105]" {
 		t.Errorf("capturing closure: compiled=%v interp=%v want [105]", gotC, gotI)

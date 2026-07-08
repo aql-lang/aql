@@ -7291,6 +7291,38 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// Ineligible shapes (a carrier operand whose runtime tag could match, a
 		// nested frame/unit, a plain check pass) keep the blanket refusal.
 		if !e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+			// The trap DECLINED: the mismatch is not statically definite — a
+			// carrier operand's runtime tag could still match. An IMPRECISE
+			// carrier (a scalar tag a multi-branch narrowing settled on, the
+			// mini-redis `join " " reply` where reply IS a list at run time) is a
+			// checker stand-in, not a concrete value, so recover via the runtime-
+			// re-matching poly instead of refusing — the DEFINITE mismatches (a
+			// disjoint Box<String> vs Box<Integer> param) already trapped above,
+			// so only genuinely could-match carriers reach here. tryRecordPoly /
+			// the single-overload user-fn recovery decline (leaving es untouched)
+			// for anything their own gates reject, and the refusal below stands.
+			// ONLY the native-poly recovery (OpCallNativePoly), never the
+			// single-overload USER-fn recovery: a user fn's guarded CALL_USER
+			// enforces the param's NOMINAL type at entry, not a value-sensitive
+			// PREDICATE / refinement (`def Big (Integer gt 10) def g […n:Big…]`),
+			// so a nominally-typed but predicate-failing arg would run the body
+			// compiled where the interpreter raises. tryRecordPoly re-runs the
+			// native's own matchSignature over the concrete runtime value (the
+			// redis `join` re-match), which is faithful; a user fn stays refused
+			// and falls back.
+			recovered := false
+			if es.active() && anyImpreciseCarrier(args) {
+				resume := es.Suspend()
+				results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
+				resume()
+				if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, e.registry, true) {
+					e.spliceCheckResults(positions, results)
+					recovered = true
+				}
+			}
+			if recovered {
+				return nil
+			}
 			e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		}
 	}
