@@ -217,3 +217,31 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 		t.Errorf("fallback parity: C=%v %q/%v I=%v %q/%v", gotC, printedC, errC, gotI, printedI, errI)
 	}
 }
+
+// A multi-overload fn DEF'D INSIDE an enclosing fn body, called over a
+// gradual (Dynamic) arg: the poly re-match cannot compile it — the body-local
+// binding is popped before the VM runs, so a runtime Lookup could never
+// resolve it (tryCompileUserPolyArms' baseline-depth guard). The refusal is
+// sound; the interpreter owns body-local multi-overload fns.
+func TestBodyLocalMultiOverloadPolyRefuses(t *testing.T) {
+	src := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:3}`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog != nil {
+		t.Fatalf("expected a sound refusal, got prog=%v err=%v (reason=%q)", prog != nil, cerr, reason)
+	}
+	if !strings.Contains(reason, "inner") {
+		t.Errorf("refusal %q should name the body-local fn", reason)
+	}
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if compiled {
+		t.Error("the refused program must take the interpreter fallback")
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[6]" {
+		t.Errorf("result = %v, want [6]", gotC)
+	}
+}
