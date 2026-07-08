@@ -3371,23 +3371,30 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
 		if !ok && (introspect || inertFn || sig.FnInertArgs[i]) {
-			if _, isFn := a.Data.(FnDefInfo); isFn {
-				if IsConcrete(a) {
-					// Bake the concrete (immutable) fn value as a const the
-					// introspection / fn-inert-slot handler reads at run time.
+			if fd, isFn := a.Data.(FnDefInfo); isFn {
+				switch {
+				case IsConcrete(a) && len(fd.Captured) == 0:
+					// A CAPTURE-FREE concrete (immutable) fn value bakes as a const
+					// the introspection / fn-inert-slot / store-fn handler reads at
+					// run time. A CAPTURING fn must NOT bake as a const: its baked
+					// body leaves the captured names as bare Words with no binding
+					// (`word(bse)`), so a later invocation reads them unbound — the
+					// capturing-sink miscompile. It falls to the closure path below.
 					op, ok = constOperand(es.intern(a)), true
-				} else if cop, cok := es.tryReturnedClosure(a, a.Pos); cok {
+				default:
 					// A CAPTURING anonymous lambda in a store-fn / fn-inert slot
 					// (`Net.serve-raw {…} ([conn] => [ handle conn store ])`,
-					// mini-S3's per-connection actor closing over the shared
-					// store): resolveOperand cannot materialise it as a const, but
-					// it lowers to an OpPushClosure the storing native invokes per
-					// call — exactly as the interpreter dispatches the AQL handler
-					// with its captures. tryReturnedClosure resolves each capture
-					// in THIS frame and probes the body; it declines (leaving es
+					// mini-S3's per-connection actor closing over the shared store):
+					// resolveOperand cannot materialise it as a const, but it lowers
+					// to an OpPushClosure — the captures resolved in THIS frame and
+					// packed into the closure value the storing native invokes per
+					// call, exactly as the interpreter dispatches the AQL handler
+					// with its captures. tryReturnedClosure declines (leaving es
 					// untouched) when a capture is unreachable or the body refuses,
 					// so an uncompilable handler still falls back faithfully.
-					op, ok = cop, true
+					if cop, cok := es.tryReturnedClosure(a, a.Pos); cok {
+						op, ok = cop, true
+					}
 				}
 			}
 		}
