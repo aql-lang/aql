@@ -1,5 +1,11 @@
 package native
 
+import (
+	"errors"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
+
 // StructModuleNatives holds the voxgig-struct data-manipulation words that
 // were moved out of the core registry into the loadable `aql:struct` module
 // (namespace `Struct`). They are registered ONLY into that module's
@@ -244,7 +250,7 @@ func setpathReturns(args []Value, _ *Registry) []Value {
 // operand: a bare type literal yields dynamic(<that type>), a tor union
 // (Disjunct — `$class` selects the member at run time) yields the dynamic
 // disjunct, anything else stays dynamic(Any).
-func reifyReturns(args []Value, _ *Registry) []Value {
+func reifyReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
 		return dyn
@@ -252,6 +258,22 @@ func reifyReturns(args []Value, _ *Registry) []Value {
 	target := args[0]
 	if target.Carrier || target.Dynamic {
 		return dyn // computed target — the class is unknown statically
+	}
+	// Dry pass (top-level, statically-known target + CONCRETE source):
+	// reifyHandler is a pure hydration of the source against the target
+	// schema, so a shape violation — unknown field, predicate-field
+	// failure, a union source missing its $class discriminator, a
+	// non-class target — is a guaranteed runtime error, flagged with the
+	// runtime's own code + detail.
+	if atUncaughtTopLevel(r) && IsConcrete(args[1]) {
+		if _, err := reifyHandler(args, nil, nil, r); err != nil {
+			code, detail := "reify_error", err.Error()
+			var ae *AqlError
+			if errors.As(err, &ae) {
+				code, detail = ae.Code, ae.Detail
+			}
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos)
+		}
 	}
 	if IsDisjunct(target) {
 		return []Value{NewDynamicCarrierValue(target)}
@@ -283,6 +305,17 @@ func parseTextReturns(args []Value, r *Registry) []Value {
 	}
 	out, err := parseTextHandler(args, nil, nil, r)
 	if err != nil || len(out) != 1 {
+		// A malformed CONCRETE literal is a guaranteed runtime
+		// parse_error — surface it on the top-level straight line with
+		// the runtime's own code + detail (the dry-pass discipline).
+		if err != nil && atUncaughtTopLevel(r) {
+			code, detail := "parse_error", err.Error()
+			var ae *AqlError
+			if errors.As(err, &ae) {
+				code, detail = ae.Code, ae.Detail
+			}
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos)
+		}
 		return dyn
 	}
 	return out

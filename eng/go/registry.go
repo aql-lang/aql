@@ -167,7 +167,11 @@ type Registry struct {
 	// the duration of a RunProgram, a single registry cannot drive two
 	// compiled runs concurrently — see RunProgram's concurrency note. Each
 	// concurrent run needs its own *Registry (ForkConcurrent / per-instance).
-	Invoker func(body Value, inputs []Value) ([]Value, error)
+	// The seam passes the CALLING registry (the handler's own dispatch
+	// registry — a per-connection fork, a module sub-registry) so a raw
+	// token body's sub-engine fallback resolves names in the caller's
+	// scope; forks inherit the field and pass THEMSELVES.
+	Invoker func(reg *Registry, body Value, inputs []Value) ([]Value, error)
 
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the
@@ -445,6 +449,24 @@ type CheckState struct {
 	// re-entry re-runs body tokens the outer analysis already checked.
 	SuppressBodyErrors int
 
+	// CaughtBodyDepth, when > 0, marks analysis running inside an
+	// error-CATCHING body — `do [body]` traps every body error and
+	// surfaces it as an Error VALUE, so a guaranteed-runtime-error mirror
+	// (a strict-accessor static miss, a provable index OOB, a make
+	// construction failure) that fires in the region is NOT a program
+	// error and must stay silent (`do [{a:1} !. b] error [dot message]`
+	// is a working program). Raised around doListReturnsFn's body run;
+	// consulted by CheckAddUniqueDiagnostic and emitIndexOOB.
+	CaughtBodyDepth int
+
+	// NestedBodyDepth, when > 0, marks analysis running inside ANY nested
+	// body region (RunCarrierBodyWithDefs — if/case branches, loop bodies,
+	// quotation/closure bodies). A diagnostic that is only sound for
+	// unconditionally-reached code (the top-level unconditional-raise
+	// mirror) consults it: a branch or loop body may never execute, so
+	// firing there would flag working guard idioms.
+	NestedBodyDepth int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares
@@ -676,16 +698,60 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,
 	"analysis_truncated":    SeverityInfo,
-	"index_out_of_range":    SeverityWarning,
-	"missing_returns":       SeverityWarning,
-	"step_budget_exceeded":  SeverityWarning,
-	"body_error":            SeverityWarning,
+	// Every emit site (CheckListIndex / CheckAtIndices / the module
+	// insert-at/remove-at mirrors) fires only on a PROVABLY out-of-range
+	// index over a statically-known length, and every consuming word
+	// (getr / at / set / ArrayUtil.*) errors at runtime on that index —
+	// there is no lenient consumer, so the diagnostic is a guaranteed
+	// runtime failure, not a suspicion. Promoted from SeverityWarning
+	// (accessors are REQUIRED reads: a static miss must gate).
+	"index_out_of_range":   SeverityError,
+	"missing_returns":      SeverityWarning,
+	"step_budget_exceeded": SeverityWarning,
+	"body_error":           SeverityWarning,
 	// The Micron naming rule: a type bound under Scalar/Micron whose
 	// name does not end in the "on" suffix (micron.go).
 	"micron_name": SeverityError,
 	// A strict read (getr/dotr) whose miss is statically decidable — a
-	// known Micron kind with a concrete unknown key (native_micron.go).
+	// known Micron kind with a concrete unknown key (native_micron.go), a
+	// concrete map / class schema / module export the key provably misses
+	// (native_accessor.go getrNodeReturns / getrObjectReturns,
+	// native_module_types.go), or a statically-None strict-read parent.
 	"not_found": SeverityError,
+	// A strict read whose CONTAINER is provably the wrong shape — a
+	// concrete list read with a non-integer key ("getr: expected a map").
+	"getr_error": SeverityError,
+	// `unpack` against a CONCRETE source map that provably lacks a
+	// requested key (native_unpack.go's check-mode mirror).
+	"unpack_error": SeverityError,
+	// A `raise` on the top-level straight line — outside every fn body,
+	// branch, loop, and catching `do` — unconditionally errors the
+	// program (native_error_raise.go raiseReturns).
+	"unconditional_raise": SeverityError,
+	// Concrete-operand arithmetic that provably faults at runtime, on the
+	// same top-level straight line: an int64 overflow (integer_overflow,
+	// the runtime's own code) or an uncoded arithmetic raise — div/mod by
+	// a static zero, pow's negative exponent (native_math.go
+	// returnsIntArithChecked / returnsDivMod).
+	"integer_overflow": SeverityError,
+	"arith_error":      SeverityError,
+	// `convert` of a PROVEN-Float source into a Big target — the one
+	// type-decidable convert refusal (native_type.go convertScalarReturns).
+	"convert_error": SeverityError,
+	// `set` of a field outside a class instance's CLOSED schema
+	// (native_storage.go setClassInstanceReturns — the runtime's own code).
+	"sealed_field": SeverityError,
+	// Dry-pass mirrors of PURE words over concrete literals
+	// (eng/go/drypass.go DryPassReturns): each code is the runtime's own —
+	// a failing Assert comparison, a malformed codec/parse literal, an
+	// out-of-range module list edit, a reify shape violation, and the
+	// outside-a-template macro words.
+	"assertion_failure": SeverityError,
+	"decode_error":      SeverityError,
+	"parse_error":       SeverityError,
+	"reify_error":       SeverityError,
+	"unquote_error":     SeverityError,
+	"splice_error":      SeverityError,
 	// Parse.spec's check-mode dry pass (aql:parse): a concrete
 	// whole-grammar map with a decidable shape error — unknown section,
 	// mistyped token/action/matcher/abnf/rule entries.
@@ -773,6 +839,25 @@ type CheckDiagnostic struct {
 	Severity CheckSeverity `json:"severity,omitempty"` // default severity from checkCodeSeverity; empty = info
 	FnBody   bool          `json:"fnBody,omitempty"`   // emitted during fn-body analysis (call-time code) — see RescueForwardRefDiagnostics
 	FnName   string        `json:"fnName,omitempty"`   // enclosing named fn for an FnBody diagnostic — the reader for the dynamic-scope rescue
+
+	// RuntimeMirror marks a diagnostic that mirrors a GUARANTEED runtime
+	// error over exactly-known operands (design/CHECKER-COMPLETION.0.md):
+	// the finding gates `aql check`, but the recording MODEL underneath it
+	// is exact — the program compiles and raises the identical error at
+	// runtime (a trap, the VM RET check, the same pure handler) — so the
+	// compile pipeline does NOT refuse on it (CompileCheck / Vm.compile
+	// skip mirrors in their error-diagnostic refusal). Contrast a
+	// model-undermining diagnostic (undefined_word, no_signature), where
+	// dispatch did not resolve and the recording is a guess.
+	RuntimeMirror bool `json:"runtimeMirror,omitempty"`
+
+	// CaughtAtRuntime marks a would-be-error diagnostic emitted inside an
+	// error-TRAPPING region (`do [...]` — CaughtBodyDepth): the runtime
+	// traps the error there, so the program is not wrong. AddDiagnostic
+	// downgrades such findings to SeverityInfo centrally and stamps this
+	// flag — the information (the expression always raises, and where the
+	// trap is) survives without a false error verdict.
+	CaughtAtRuntime bool `json:"caughtAtRuntime,omitempty"`
 }
 
 // NewRegistry creates an empty registry.
@@ -1523,6 +1608,10 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			tokens = append(tokens, args[i])
 		}
 	}
+	// The unnamed-arg prefix assembled above is call-site-resolved data;
+	// stepping starts after it (arguments are inert — the sub-engine twin
+	// of FrameOpenInfo.ArgSpan; design/ARG-SEMANTICS-UNIFICATION.0.md).
+	unnamedCount := len(tokens)
 	body := make([]Value, len(sig.body()))
 	copy(body, sig.body())
 	tokens = append(tokens, body...)
@@ -1534,6 +1623,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
+	sub.startAt = unnamedCount
 	result, err := sub.Run(tokens)
 
 	// Cleanup: pop args stack, undef named params + captures, then
@@ -1576,6 +1666,29 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 		// a fn-call / import boundary and broke *AqlError type
 		// assertions downstream (decision DX report finding 4).
 		return nil, err
+	}
+
+	// Mirror the frame collapse's unnamed-arg DISCARD (stepCloseParen's
+	// ReturnCheck handling): residuals beyond the declared return count
+	// are unconsumed unnamed args sitting at the bottom of the scope —
+	// call-scoped data, trimmed up to unnamedCount. Leaking them into the
+	// caller's stream would let a resolved fn-value argument re-step and
+	// fire there (the inert-arguments invariant,
+	// design/ARG-SEMANTICS-UNIFICATION.0.md). Trim ONLY — this path has
+	// never enforced return count/type (guard predicates signal failure
+	// via a None residual, lambdas auto-declare [Any] over side-effect
+	// bodies), so the frame path's validation errors are deliberately not
+	// mirrored here; that asymmetry is pre-existing and documented.
+	// Undeclared returns keep the historical flow-through (the residual
+	// IS the return), matching the frame path, which emits no ReturnCheck
+	// in that case.
+	if len(sig.Returns) > 0 && unnamedCount > 0 {
+		if extra := len(result) - len(sig.Returns); extra > 0 {
+			if extra > unnamedCount {
+				extra = unnamedCount
+			}
+			result = result[extra:]
+		}
 	}
 	return result, nil
 }

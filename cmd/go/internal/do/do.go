@@ -28,9 +28,9 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	// so this works as long as users put flags first.
 	fs := flag.NewFlagSet("do", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	compileFlag := fs.Bool("compile", false, "EXPERIMENTAL: execute via the bytecode compiler when possible; silent interpreter fallback")
-	noCompileFlag := fs.Bool("no-compile", false, "disable the bytecode compiler even if --compile/--force-compile or their env vars are set (also enabled by AQL_NO_COMPILE)")
-	forceCompileFlag := fs.Bool("force-compile", false, "EXPERIMENTAL: REQUIRE the bytecode compiler — abort with the refusal reason if the program is not compilable")
+	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when possible; silent interpreter fallback (the default; also enabled by AQL_COMPILE)")
+	noCompileFlag := fs.Bool("no-compile", false, "run the interpreter instead of the default bytecode compiler; wins over --compile/--force-compile and their env vars (also enabled by AQL_NO_COMPILE)")
+	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason if the program is not compilable")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 	if err := fs.Parse(args); err != nil {

@@ -146,9 +146,10 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			// design/PARSING.10.md §3. Parse errors raise
 			// [aql/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
-			Signatures: []native.Signature{{
-				Args: []*native.Type{native.TString},
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			// Pure parse of the literal (see Debug.parse): the dry-pass
+			// mirror flags top-level malformed source at check time.
+			Signatures: func() []native.Signature {
+				h := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					code, err := args[0].AsConcreteString()
 					if err != nil {
 						return nil, err
@@ -161,10 +162,15 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					lst := native.NewList(tokens)
 					lst.Quoted = true
 					return []native.Value{lst}, nil
-				}),
-				Returns:    []*native.Type{native.TList},
-				BarrierPos: -1,
-			}},
+				}
+				return []native.Signature{{
+					Args:       []*native.Type{native.TString},
+					Impl:       native.Go(h),
+					ReturnsFn:  native.DryPassReturns(h, native.TList),
+					Returns:    []*native.Type{native.TList},
+					BarrierPos: -1,
+				}}
+			}(),
 		},
 		{
 			Name: "vm-run-with",
@@ -390,13 +396,9 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 		return compileResultValue(false, "parse error", nil), nil
 	}
 	subReg.Source = src
-	defer subReg.Check.Begin()()
-	subReg.Check.Emit = native.NewEmitState()
-	// Fn-body analyses must record under THIS emit pass; a summary cached by
-	// an earlier plain check on the shared registry would leave its compiled
-	// unit empty (see CompileCheck).
-	subReg.Check.FnSummaries = nil
-	subReg.Check.FnInflight = nil
+	// The shared compile-pass ritual (fresh EmitState, Compiling flag,
+	// fn-memo drop) — see CheckState.BeginCompilePass.
+	defer subReg.Check.BeginCompilePass()()
 
 	eng := native.NewTop(subReg)
 	eng.SetSource(src)
@@ -428,7 +430,11 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 // hasCheckError reports whether any diagnostic is error-severity.
 func hasCheckError(diags []native.CheckDiagnostic) bool {
 	for _, d := range diags {
-		if d.Severity == native.SeverityError {
+		// Model-undermining findings only — a RuntimeMirror compiles the
+		// identical error path and must not refuse, while a CAUGHT
+		// non-mirror finding still marks a guessed recording (see
+		// CompileCheck's refusal loop).
+		if !d.RuntimeMirror && (d.Severity == native.SeverityError || d.CaughtAtRuntime) {
 			return true
 		}
 	}

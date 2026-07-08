@@ -234,6 +234,11 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
+	// Record the def site for the dynamic-scope binder pass: if some fn body
+	// READS this name with no lexical home (OpLookupDynScope), the lowering
+	// installs a registry-visible OpBindDynScope twin here so the runtime
+	// lookup finds the binding the interpreter's def stack would hold.
+	r.Check.Recorder().RecordDynBind(name, value, pos)
 	return nil, nil
 }
 

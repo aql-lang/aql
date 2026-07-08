@@ -559,21 +559,13 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "base64-decode",
 
+		// Pure codec: the DryPassReturns mirror flags a top-level decode
+		// of a provably-malformed literal with the runtime's decode_error.
 		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TString},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				s, err := args[0].AsConcreteString()
-				if err != nil {
-					return nil, err
-				}
-				b, derr := base64.StdEncoding.DecodeString(s)
-				if derr != nil {
-					return nil, r.AqlError("decode_error",
-						fmt.Sprintf("BinUtil.base64-decode: invalid base64: %v", derr), "base64-decode")
-				}
-				return []native.Value{native.NewString(string(b))}, nil
-			}),
-			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+			Args:      []*native.Type{native.TString},
+			Impl:      native.Go(base64DecodeHandler),
+			ReturnsFn: native.DryPassReturns(base64DecodeHandler, native.TString),
+			Returns:   []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
 	// `BinUtil.hex-encode s` → the lowercase hexadecimal of the raw bytes of s.
@@ -597,21 +589,40 @@ var binaryModuleNatives = []native.NativeFunc{
 	{
 		Name: "hex-decode",
 
+		// Pure codec: see base64-decode.
 		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TString},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-				s, err := args[0].AsConcreteString()
-				if err != nil {
-					return nil, err
-				}
-				b, derr := hex.DecodeString(s)
-				if derr != nil {
-					return nil, r.AqlError("decode_error",
-						fmt.Sprintf("BinUtil.hex-decode: invalid hex: %v", derr), "hex-decode")
-				}
-				return []native.Value{native.NewString(string(b))}, nil
-			}),
-			Returns: []*native.Type{native.TString}, BarrierPos: -1,
+			Args:      []*native.Type{native.TString},
+			Impl:      native.Go(hexDecodeHandler),
+			ReturnsFn: native.DryPassReturns(hexDecodeHandler, native.TString),
+			Returns:   []*native.Type{native.TString}, BarrierPos: -1,
 		}},
 	},
+}
+
+// The decode handlers are NAMED so the sigs wire the same function as both
+// the runtime Impl and the check-mode DryPassReturns mirror.
+func base64DecodeHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	s, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, err
+	}
+	b, derr := base64.StdEncoding.DecodeString(s)
+	if derr != nil {
+		return nil, r.AqlError("decode_error",
+			fmt.Sprintf("BinUtil.base64-decode: invalid base64: %v", derr), "base64-decode")
+	}
+	return []native.Value{native.NewString(string(b))}, nil
+}
+
+func hexDecodeHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	s, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, err
+	}
+	b, derr := hex.DecodeString(s)
+	if derr != nil {
+		return nil, r.AqlError("decode_error",
+			fmt.Sprintf("BinUtil.hex-decode: invalid hex: %v", derr), "hex-decode")
+	}
+	return []native.Value{native.NewString(string(b))}, nil
 }

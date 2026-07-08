@@ -61,12 +61,13 @@ const (
 type operandKind uint8
 
 const (
-	opNone    operandKind = iota // zero value: unset / invalid (ok=false only)
-	opConst                      // idx → Program.Consts index
-	opEvent                      // idx → producing event sequence number
-	opLocal                      // idx → frame-local slot (loop iterator / param)
-	opType                       // idx → Program.Types index (canonical type)
-	opClosure                    // closureUnit + closureCaps (a compiled body)
+	opNone     operandKind = iota // zero value: unset / invalid (ok=false only)
+	opConst                       // idx → Program.Consts index
+	opEvent                       // idx → producing event sequence number
+	opLocal                       // idx → frame-local slot (loop iterator / param)
+	opType                        // idx → Program.Types index (canonical type)
+	opClosure                     // closureUnit + closureCaps (a compiled body)
+	opDynScope                    // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
 )
 
 // emitOperand names where one dispatch argument comes from. For every kind but
@@ -96,6 +97,9 @@ type emitOperand struct {
 // operand kinds — the only places that pair a kind with its idx. eventOperand
 // additionally carries the result index within the producing event (P5).
 func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
+func dynScopeOperand(idx int) emitOperand {
+	return emitOperand{kind: opDynScope, idx: idx}
+}
 func eventOperand(seq, resIdx int) emitOperand {
 	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
 }
@@ -124,6 +128,12 @@ type eventFlags struct {
 	// (an arm is an fn value), so a trailing arg over it in the residual lowers
 	// to a runtime-conditional OpCallDynamic (`if c [99] MathUtil.sqrt 16`).
 	mayBeFn bool
+	// applyLoop marks a LOOP event whose body runs a per-iteration dynamic
+	// apply (setLoopBodyApply). Its variadic value region may sit in a fn-body
+	// residual under an inert tail: the RET then takes the RetReplay trim
+	// discipline (finish()'s loop-apply residual detection) instead of the
+	// variadic refusal.
+	applyLoop bool
 	// variadicResult marks an event whose result count is RUNTIME-VARIABLE — a
 	// loop, or a branch whose arms leave different / multiple counts (`if c [] [a
 	// b]`). Only a variadic-absorbing position (the program residual or a
@@ -290,6 +300,7 @@ const (
 	evFallback
 	evTrap
 	evStore
+	evDynBind
 )
 
 // emitUserCall is a recorded call of a compiled AQL fn: the target
@@ -358,6 +369,31 @@ type emitEvent struct {
 	fb    emitFallback
 	trap  emitTrap
 	store *emitStore
+	dyn   *emitDynBind
+}
+
+// emitDynBind is one recorded `def` site (every value def records one,
+// cheaply): the binding name, its interned name const, and the bound
+// value's operand, resolved AT RECORD TIME while the unit context is
+// live. The lowering emits a registry-visible OpBindDynScope for it ONLY
+// when the name is in dynScopeNames (some OpLookupDynScope reads it);
+// otherwise the event lowers to nothing.
+type emitDynBind struct {
+	name string
+	// src carries a LOCAL operand when the bound value is a live frame slot
+	// (a param re-bound by `def` — resolved via the unit's localByID at
+	// record time, a pure read). An EVENT-produced value rides srcSeq as a
+	// plain int, NOT an operand — so forEachOperand's reference counting and
+	// the scopeFloor guard never see a phantom extra reference from a def
+	// site whose bind the lowering skips (every def records one of these;
+	// only dynamically-read names lower). Any other value rides val VERBATIM
+	// and is interned UNPOOLED at lowering, only if the bind actually lowers
+	// — record-time interning polluted the canonical const pool (a
+	// reparented `def y:Pos 2` merging with the plain literal 2).
+	src    emitOperand
+	srcSeq int // producing event seq for an event-sourced value; -1 otherwise
+	val    Value
+	pos    SrcPos
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -386,6 +422,22 @@ type EmitFragment struct {
 	// operands (const / local / type) so a computed arg — already on the sim — never
 	// double-pushes (such a residual fails the sole-fn check and refuses instead).
 	applyArgs []emitOperand
+	// applyFn, when set, is the leading fn value of the per-iteration apply as a
+	// RE-PUSHABLE operand (a frame-local read — an `args.N` fold of a Function
+	// param inside a fn unit) instead of an event on the sim: the body events
+	// leave NOTHING, and lowerFragment pushes this before the applyArgs. A
+	// break/continue raised inside the applied body escapes the island with the
+	// registry FlowCtrl flag set; the VM translates it to the cross-frame
+	// break/continue unwind (escapedFlow), exactly the interpreter's shared-tape
+	// flow resolution.
+	applyFn *emitOperand
+	// applyFirst places the per-iteration apply BEFORE the body's other
+	// statements — the source order of `for n [(args.0 1) def acc …]`, where a
+	// continue raised inside the applied body must skip the statements after
+	// it. Set when every recorded body event follows the fn read in source
+	// order; the apply-last hoist (the original layout) requires the opposite,
+	// and a mid-body apply declines. Only meaningful with applyFn.
+	applyFirst bool
 }
 
 // EmitState is the recording side of the compile pass. Set
@@ -404,6 +456,13 @@ type EmitState struct {
 	// RETURNS (the factory pattern), which needs r but is reached from a finish
 	// closure that has only es. Nil outside a compile pass.
 	reg *Registry
+	// progReg is the TOP-LEVEL program registry — captured at the FIRST
+	// bindRegistry (the outermost check Run, before any module body / island
+	// sub-engine re-binds reg). Unlike reg it never re-binds, so Finalize can
+	// tell an ordinary top-level fn (rec.reg == progReg) from a foreign
+	// sub-registry fn (a module preamble body, rec.reg != progReg) and stamp
+	// CompiledFn.Reg only for the latter — see the Finalize stamp site.
+	progReg *Registry
 	// SiteCounts tallies dispatches per site class while recording is
 	// active (counting stops once the program is marked
 	// uncompilable, with the rest of the recording).
@@ -448,6 +507,32 @@ type EmitState struct {
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Over-approximate + append-only like
 	// fnRiskFields — a stale entry only ever over-refuses (sound).
 	memberFnReads map[string]bool
+
+	// shapedReads mirrors CheckState.MethodShapes annotations (by read-out
+	// value ID) so the get-family read guards can exempt a read whose
+	// landing the shaped-method model owns. See noteShapedRead.
+	shapedReads map[string]bool
+	// defReads maps a value ID to the BINDING NAME the check pass read it
+	// from (stepWord's simple-value substitution). When such a value later
+	// fails operand resolution inside a fn unit — no param/capture/local/
+	// event/const home — the read was a DYNAMIC-SCOPE reference (a callee
+	// reading the caller's frame binding), and resolveOperand lowers it to
+	// a runtime OpLookupDynScope instead of refusing, gated on the check's
+	// binder/call-graph reachability model (dynamicScopeReachable). See
+	// NoteDefRead.
+	defReads map[string]string
+	// dynScopeNames collects every name resolveOperand lowered as an
+	// OpLookupDynScope read. The Finalize pass installs an OpBindDynScope
+	// twin in every unit (params and body-local defs) and at every
+	// top-level def that binds one of these names, so the runtime lookup
+	// finds the same binding the interpreter's def stack holds.
+	dynScopeNames map[string]bool
+	// unitNames parallels the open-unit stack with each unit's FN NAME, so
+	// the dynamic-scope rescue knows which fn is READING (the FnNameStack
+	// may already have advanced past a memoised body analysis by the time
+	// the unit finish resolves its residual).
+	unitNames []string
+
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
@@ -498,6 +583,14 @@ type loopCarriedScope struct {
 type emitUnit struct {
 	localByID map[string]int
 	numLocals int
+	// reg is the compiled fn's OWNING registry (a module sub-registry for a
+	// module-preamble fn; the main registry otherwise). Finalize stamps it
+	// on the CompiledFn when it differs from the check registry, and the VM
+	// then dispatches the unit's natives against it — the interpreter's
+	// CallAQL runs a foreign fn's body IN its own registry, so handlers
+	// with registry-visible effects (Net.listen forking per-connection
+	// registries) see module scope on both engines.
+	reg *Registry
 	// capID marks the value IDs that are this unit's CAPTURES (enclosing-scope
 	// values bound into trailing slots). A capture's value may ALSO carry a
 	// producedBy entry from the ENCLOSING unit (a computed `def a (h add 1)`
@@ -547,13 +640,17 @@ type emitUnit struct {
 type fnUnitRec struct {
 	name          string
 	nParams       int
+	nUnnamed      int // unnamed (stack-flowing) params — the RET trim allowance
 	caps          []CapturedBinding
 	generic       bool
 	returns       []*Type  // declared return types — enforced at the VM's RET
 	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
 	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
-	locals        []string // slot→name table (params then captures); debug only
-	frag          *EmitFragment
+	locals        []string // slot→name table (params then captures)
+	// reg is the fn's owning registry; stamped on CompiledFn.Reg when it
+	// differs from the check registry (see emitUnit.reg).
+	reg  *Registry
+	frag *EmitFragment
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -579,9 +676,29 @@ type fnUnitRec struct {
 	// instead of OpCallDynTrailTop (which leaves a Quoted fn as data, the
 	// paren semantics).
 	dynTrailApply bool
-	numLoc        int
-	pos           SrcPos
-	finished      bool
+	// dynFrameW > 0 marks a body whose residual carries an UNAPPLIED runtime fn
+	// value beyond the frame-bottom re-push window — the shape the interpreter
+	// resolves by execFnDefLiteral's runtime rule against the LIVE frame. The
+	// unit lowering seats the FULL residual (the unnamed-param re-push prefix
+	// included) and emits OpCallDynFrame(dynFrameW) before the RET: the top
+	// dynFrameW entries are the token region the interpreter's pointer stepped,
+	// replayed with the prefix resolved (see the opcode doc). Sets
+	// CompiledFn.RetReplay so the RET applies the CallAQL-path trim discipline.
+	dynFrameW int
+	// retPrefix seats the unnamed-param frame-bottom re-pushes at UNIT START
+	// (before the body events), for a body whose residual holds a variadic
+	// apply-loop value region under an inert tail — the values must sit BELOW
+	// the loop's runtime region, which only exists once the loop has run, so
+	// they cannot be re-pushed by the RET seating. Paired with retReplay.
+	retPrefix []emitOperand
+	// retReplay marks a body whose RET takes the replay trim discipline
+	// (CompiledFn.RetReplay): a whole-frame dynamic apply (dynFrameW) or a
+	// variadic apply-loop residual (retPrefix) leaves a runtime-variable
+	// count the static contract cannot pin.
+	retReplay bool
+	numLoc    int
+	pos       SrcPos
+	finished  bool
 	// inShape is the closure input convention recorded for a closure body unit
 	// (ClosureInValue by default; ClosureInKeyVal for a map-iteration lambda).
 	// Copied into CompiledFn.InShape at lowering. Zero (value) for user fns.
@@ -679,6 +796,12 @@ func (es *EmitState) Armed() bool { return es != nil }
 func (es *EmitState) bindRegistry(r *Registry) {
 	if es == nil {
 		return
+	}
+	// The FIRST bind names the program registry: the outermost check Run binds
+	// the top-level registry before any module-body / island sub-engine run
+	// re-binds reg to a foreign sub-registry. Captured once, never re-bound.
+	if es.progReg == nil {
+		es.progReg = r
 	}
 	es.reg = r
 }
@@ -991,7 +1114,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	}
 	lit, ok := es.materialise(v)
 	if !ok {
-		return emitOperand{}, false
+		return es.dynScopeRescue(v)
 	}
 	// At MODULE scope a NoEvalArgs body that is inert except for InterpStrings
 	// (interpBodyInert) bakes as code-as-data and is re-interpreted against the
@@ -1000,7 +1123,22 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
 	// before resolveOperand, so the operand never gets here.
 	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
-		return emitOperand{}, false
+		return es.dynScopeRescue(v)
+	}
+	// An ACTIVE-token MAP (`{line: src}` — a word / paren / interpolation
+	// member) must not bake inside a compiled fn frame: autoEvalMap runs on
+	// EVERY map argument at dispatch (NoEvalArgs does not suppress it), so
+	// the interpreter re-evaluates the member per dispatch against the LIVE
+	// FRAME (src is a param), which the VM holds as a frame local the baked
+	// const can never see. Lists stay bakeable — a NoEvalArgs code body
+	// (`each [dup mul]`, `each $.1`) is legitimately code-as-data, guarded
+	// by the position-aware body gates (execBodyRefsNames /
+	// noEvalBodiesInertScoped). Module scope keeps the map bake too —
+	// resolution there is registry-identical.
+	if len(es.units) > 1 {
+		if _, isMap := lit.Data.(MapPayload); isMap && bearsActiveTokens(lit) {
+			return es.dynScopeRescue(v)
+		}
 	}
 	idx := es.intern(lit)
 	// A compound VALUE literal materialised inside a fn unit gets per-call
@@ -1283,6 +1421,14 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 		if !ok {
 			return v, false
 		}
+		// Inside a compiled fn frame an ACTIVE-token original (a word, a
+		// paren, an interpolation, a splice/reach) must not bake: the
+		// interpreter re-evaluates it per dispatch against the live frame
+		// (a param named by the word — `call {line: src} …` inside
+		// repl-eval), which the VM holds as a frame local the baked const
+		// can never see. Module scope keeps the recovery (code-as-data
+		// consts re-run against the registry, where resolution is
+		// identical).
 		return orig, true
 	}
 	switch d := v.Data.(type) {
@@ -1346,6 +1492,34 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 // Carrier flag or ID). ok=false when the member's original is unknown, so the
 // whole container cannot be recovered. The shared per-member step of
 // materialise's list and map arms.
+// bearsActiveTokens reports whether a value (recursively through lists and
+// maps) contains a token the interpreter evaluates or re-steps — a word, a
+// paren expression, an interpolation, a splice or reach marker.
+func bearsActiveTokens(v Value) bool {
+	if IsWord(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) || IsReach(v) {
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if bearsActiveTokens(e) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M == nil {
+			return false
+		}
+		for _, k := range d.M.Keys() {
+			mv, _ := d.M.Get(k)
+			if bearsActiveTokens(mv) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (es *EmitState) materialiseMember(e Value) (m Value, changed, ok bool) {
 	m, ok = es.materialise(e)
 	if !ok {
@@ -2054,7 +2228,7 @@ func (es *EmitState) fnBodyGuard() func() {
 // bindings installed around the recorded analysis. ok=false when the
 // fn is beyond Stage 4 (unchecked or multi-value returns) — the
 // program is then marked uncompilable.
-func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
+func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
 	if !es.active() {
 		return -1, nil, false
 	}
@@ -2074,11 +2248,18 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 	for _, cb := range captures {
 		locals = append(locals, cb.Name)
 	}
-	rec := &fnUnitRec{name: name, nParams: len(args), caps: captures, generic: generic, returns: declared, locals: locals, pos: pos}
+	nUnnamed := 0
+	for i := range args {
+		if i >= len(paramNames) || paramNames[i] == "" {
+			nUnnamed++
+		}
+	}
+	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos, reg: fnReg}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs()}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), reg: fnReg}
 	es.units = append(es.units, u)
+	es.unitNames = append(es.unitNames, name)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
 	}
@@ -2103,6 +2284,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// leaves NO operand — skip it, exactly as the top-level residual
 			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
 			ops := make([]emitOperand, 0, len(bodyStk))
+			vals := make([]Value, 0, len(bodyStk))
 			for _, v := range bodyStk {
 				if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
 					continue
@@ -2125,6 +2307,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 					return
 				}
 				ops = append(ops, op)
+				vals = append(vals, v)
 			}
 			// A paren-bounded TRAILING fn-value apply as the ENTIRE body residual
 			// (`(prev key comp)` → residual [prev, key, comp], the fn on top with its
@@ -2207,13 +2390,10 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// hunt), so a fn-body fn-value apply is never lowered. Refuse → fall back. (A
 			// GENUINE count mismatch that happens to carry a fn value still errors in
 			// both engines, so the fallback is sound either way.)
-			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) {
-				for _, v := range bodyStk {
-					if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
-						es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
-						return
-					}
-				}
+			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) &&
+				!noteDynFrameReplay(u, rec, vals, len(ops)-len(rec.returns)) {
+				es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
+				return
 			}
 			// A CLOSURE body whose residual carries an UNAPPLIED fn-value — a captured/
 			// param comparator applied as `(a b comp)` leaves the residual [a, b, comp]
@@ -2246,6 +2426,11 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 			// ever reads the top.
 			if dynTrail == 0 && rec.takesTop && len(ops) > 1 {
 				ops = trimToTopResult(ops)
+			}
+			// A per-iteration APPLY-LOOP's variadic value region in the residual,
+			// under an inert tail: the RET takes the replay trim discipline.
+			if dynTrail == 0 && rec.dynFrameW == 0 && !rec.closure && len(rec.returns) > 0 {
+				ops = es.noteApplyLoopReplay(rec, ops)
 			}
 			rec.dynTrailArity = dynTrail
 			rec.outOps = ops
@@ -2298,6 +2483,7 @@ func (es *EmitState) StartFnCompile(key, name string, args []Value, declared []*
 		rec.numLoc = u.numLocals
 		rec.finished = true
 		es.units = es.units[:len(es.units)-1]
+		es.unitNames = es.unitNames[:len(es.unitNames)-1]
 	}
 	return unit, finish, true
 }
@@ -2556,6 +2742,9 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	es.SiteCounts[SiteMono]++
 	es.setProduced(out, seq)
 	f := es.eventInfo[seq]
+	if len(body.applyArgs) > 0 {
+		f.applyLoop = true
+	}
 	if lp.hasBodyOut {
 		// A value-producing loop leaves a runtime-variable count (one per-iteration
 		// value, N unknown at compile time) — variadic, like lowerLoop marks
@@ -2592,7 +2781,51 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool 
 		return false
 	}
 	fnOp, ok := es.resolveOperand(bodyStk[0])
-	if !ok || fnOp.kind != opEvent {
+	if !ok {
+		return false
+	}
+	// A frame-LOCAL fn read (an `args.N` fold of a Function param inside a fn
+	// unit): nothing sits on the sim after the body events, so the fragment
+	// re-pushes the local before the args (applyFn). An event-produced fn (the
+	// factory `(mk2 i)`) is already on the sim top — the original layout.
+	if fnOp.kind == opLocal {
+		// The lowered apply is emitted at one of the iteration's two ends, so
+		// the fn read must bound the body's other statements in source order:
+		// every event strictly before it (apply-last, the hoist) or strictly
+		// after it (apply-first — a continue in the applied body must skip
+		// them). A mid-body apply declines and keeps the refusal.
+		fnPos := bodyStk[0].Pos
+		if fnPos.Row == 0 && fnPos.Col == 0 {
+			// A folded args.N read loses its own position; the apply's ARG
+			// literals sit inside the same paren, so any of theirs stands in.
+			for _, a := range bodyStk[1:] {
+				if a.Pos.Row != 0 || a.Pos.Col != 0 {
+					fnPos = a.Pos
+					break
+				}
+			}
+		}
+		if fnPos.Row == 0 && fnPos.Col == 0 {
+			return false // no source anchor — cannot order the apply
+		}
+		before, after := 0, 0
+		for i := range body.events {
+			p := eventPos(body.events[i])
+			if p.Row == 0 && p.Col == 0 {
+				continue // no position recorded — count as neither side
+			}
+			if p.Row < fnPos.Row || (p.Row == fnPos.Row && p.Col < fnPos.Col) {
+				before++
+			} else {
+				after++
+			}
+		}
+		if before > 0 && after > 0 {
+			return false
+		}
+		body.applyFn = &fnOp
+		body.applyFirst = after > 0
+	} else if fnOp.kind != opEvent {
 		return false
 	}
 	applyArgs := make([]emitOperand, 0, len(bodyStk)-1)
@@ -2916,7 +3149,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case sig.fullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
-	case isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
+	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
 		// A get/dot/getr/dotr read from a container HOLDING a function member
 		// may surface that fn, and the interpreter AUTO-DISPATCHES a surfaced
 		// fn value in every delivery context (probe-verified: `{f:make42/r}.f`
@@ -2924,7 +3157,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// collects forward args). The VM would push it as inert data — a
 		// silent wrong value (miscompile mechanism E, the deferred-field
 		// auto-invoke, design/MISCOMPILE-HUNT-FINDINGS.0.md). Refuse on the
-		// RECEIVER signal: reads from fn-free containers are unaffected.
+		// RECEIVER signal: reads from fn-free containers are unaffected. An
+		// ANNOTATED shaped-method read (shapedReadOut) is exempt: its landing
+		// is modelled by tryShapedMethodDispatch, whose guard-owned decline
+		// re-refuses, so the guard is re-homed rather than weakened.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 	case word == "args" || word == "__pa":
@@ -3146,10 +3382,11 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
-	if isGetFamilyWord(word) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
+	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
 		// Same auto-dispatch divergence as the mono path (recordCallRefusal):
 		// the interpreter invokes a container-read fn value as it lands; the
 		// VM would push it as data. Refuse the program (sound fallback).
+		// Annotated shaped-method reads are exempt (see recordCallRefusal).
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 		return true
@@ -3301,6 +3538,107 @@ func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
 func zeroArgFnOut(outs []Value) bool {
 	for _, o := range outs {
 		if !o.Carrier && fnValueZeroArg(o) {
+			return true
+		}
+	}
+	return false
+}
+
+// noteShapedRead mirrors a CheckState.NoteMethodShape annotation into the
+// recorder: the get-family read that produced `id` resolved a shaped-
+// instance member whose LANDING the shaped-method model owns, so the
+// read-guard auto-dispatch refusals skip it (shapedReadOut).
+// NoteDefRead records that value ID was produced by reading binding `name`
+// (stepWord's simple-value substitution). Consulted by resolveOperand's
+// dynamic-scope rescue when the value has no compiled home.
+func (es *EmitState) NoteDefRead(id, name string) {
+	if !es.active() || id == "" || name == "" {
+		return
+	}
+	if es.defReads == nil {
+		es.defReads = map[string]string{}
+	}
+	es.defReads[id] = name
+}
+
+// RecordDynBind records a value-def site (name + the bound value's operand)
+// as an evDynBind event. Every def records one cheaply; the lowering emits a
+// registry-visible OpBindDynScope ONLY for names in dynScopeNames (some
+// OpLookupDynScope reads them) and skips the event otherwise. Engine-internal
+// and capitalised (type) names never bind dynamically.
+func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
+	if !es.active() || name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+		return
+	}
+	src, srcSeq := emitOperand{}, -1
+	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+		srcSeq = pr.seq
+	} else if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+		src = localOperand(slot)
+	}
+	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
+		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
+	}})
+}
+
+// dynScopeRescue is resolveOperand's last resort inside a fn unit: a value
+// that was READ from a def binding (NoteDefRead) but has no compiled home is
+// a DYNAMIC-SCOPE reference — the interpreter resolves the name against the
+// live def stack at run time (a callee reading the caller's param, a
+// recursive base case reading the previous frame's body-local). Lower it to
+// a runtime OpLookupDynScope, gated on the check's binder/call-graph model
+// (dynamicScopeReachable): some fn that BINDS the name must reach the
+// reading fn, so a plain typo still refuses. The name joins dynScopeNames so
+// Finalize installs the OpBindDynScope twin in every binding unit.
+func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
+	if es.reg == nil || len(es.units) <= 1 {
+		return emitOperand{}, false
+	}
+	name := v.DynFrom
+	if name == "" {
+		name = es.defReads[v.ID]
+	}
+	if name == "" {
+		return emitOperand{}, false
+	}
+	c := es.reg.Check
+	reader := ""
+	if n := len(es.unitNames); n > 0 {
+		reader = es.unitNames[n-1]
+	}
+	if reader == "" {
+		if n := len(c.FnNameStack); n > 0 {
+			reader = c.FnNameStack[n-1]
+		}
+	}
+	if !c.dynamicScopeReachable(name, reader) {
+		return emitOperand{}, false
+	}
+	if es.dynScopeNames == nil {
+		es.dynScopeNames = map[string]bool{}
+	}
+	es.dynScopeNames[name] = true
+	return dynScopeOperand(es.intern(NewString(name))), true
+}
+
+func (es *EmitState) noteShapedRead(id string) {
+	if !es.active() || id == "" {
+		return
+	}
+	if es.shapedReads == nil {
+		es.shapedReads = map[string]bool{}
+	}
+	es.shapedReads[id] = true
+}
+
+// shapedReadOut reports whether any dispatch out is an annotated shaped
+// method read — the landing model's responsibility, not the read guard's.
+func (es *EmitState) shapedReadOut(outs []Value) bool {
+	if len(es.shapedReads) == 0 {
+		return false
+	}
+	for _, o := range outs {
+		if es.shapedReads[o.ID] {
 			return true
 		}
 	}
@@ -4054,6 +4392,15 @@ func (es *EmitState) internType(v Value) int {
 	return len(es.types) - 1
 }
 
+// internUnpooled appends a const WITHOUT registering it in the canonical
+// pool: a dynamic-scope bind's value must never merge with (or be merged
+// into by) a source literal of the same canon — the bind may carry a
+// reparented tag the literal must not inherit. Lowering-time only.
+func (es *EmitState) internUnpooled(v Value) int {
+	es.consts = append(es.consts, v)
+	return len(es.consts) - 1
+}
+
 // intern pools a constant by canonical form. Compounds (lists,
 // maps) are NEVER pooled: `eq` on compounds compares by identity
 // (compare-restrict), so two source literals must stay two constants
@@ -4768,9 +5115,16 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
-	// FnDefInfo). All refuse so the program falls back faithfully.
+	// FnDefInfo). All refuse so the program falls back faithfully — EXCEPT a
+	// dynamic whose static bound provably excludes every callable (the
+	// sigTypeMatches not-disjoint rule against Function/FnDef): such a value
+	// can never auto-apply to the values above it, so both engines leave it
+	// as data and the residual renders identically (a narrowed flex-shape
+	// read — dynamic(FlexMap) — sitting under later statement results,
+	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
-		if residual[i].Dynamic {
+		if residual[i].Dynamic &&
+			(sigTypeMatches(residual[i], TFunction) || sigTypeMatches(residual[i], TFnDef)) {
 			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
 		}
 		if isFnValueResidual(residual[i]) {
@@ -4897,6 +5251,83 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 // entry and are pushed at the end. ok=false (with reason) when the
 // source was marked uncompilable or a shape is beyond the current
 // stage's lowering.
+// eventsBindDynScope reports whether any event in the slice (recursing into
+// branch arms, list-form conditions, and loop bodies) records a def of a name
+// in `names` — the unit then installs registry-visible bindings and must not
+// TAIL-call (the interpreter keeps a frame's bindings live across the calls
+// in its body tail; a tail replacement would tear them down early).
+func eventsBindDynScope(events []emitEvent, names map[string]bool) bool {
+	if len(names) == 0 {
+		return false
+	}
+	var frag func(f *EmitFragment) bool
+	walk := func(evs []emitEvent) bool {
+		for i := range evs {
+			ev := &evs[i]
+			switch ev.kind {
+			case evDynBind:
+				if names[ev.dyn.name] {
+					return true
+				}
+			case evBranch:
+				if frag(ev.br.condFrag) || frag(ev.br.then) || frag(ev.br.els) {
+					return true
+				}
+			case evLoop:
+				if frag(ev.loop.body) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	frag = func(f *EmitFragment) bool {
+		if f == nil {
+			return false
+		}
+		return walk(f.events)
+	}
+	return walk(events)
+}
+
+// unitBindsDynScope reports whether a unit installs dynamic-scope bindings:
+// a body-local def of a dyn-read name (evDynBind in its fragment tree), or a
+// PARAM some fn reads dynamically.
+func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
+	if eventsBindDynScope(rec.frag.events, es.dynScopeNames) {
+		return true
+	}
+	if len(es.dynScopeNames) == 0 {
+		return false
+	}
+	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+		if es.dynScopeNames[rec.locals[i]] {
+			return true
+		}
+	}
+	return false
+}
+
+// emitDynParamBinds installs a unit's dynamically-read PARAMS into r.Defs at
+// frame entry (a callee reading the caller's `n` — recursion.tsv:72), exactly
+// where the interpreter's InstallFrameBinding makes them visible; the frame's
+// RET truncates them back.
+func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
+	if len(es.dynScopeNames) == 0 {
+		return
+	}
+	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+		if !es.dynScopeNames[rec.locals[i]] {
+			continue
+		}
+		flw.emit(OpPushLocal, i, rec.pos)
+		flw.emit(OpBindDynScope, es.internUnpooled(NewString(rec.locals[i])), rec.pos)
+		flw.vm = append(flw.vm, nonEventSlot)
+		flw.note()
+		flw.vm = flw.vm[:len(flw.vm)-1]
+	}
+}
+
 func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if es == nil {
 		return nil, "no emit state", false
@@ -5104,7 +5535,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
 		diverged := fragDiverges(rec.frag)
-		if !rec.generic && len(rec.outOps) == 1 && rec.outOps[0].kind == opEvent {
+		// A unit that installs dynamic-scope bindings — a body-local def of a
+		// dyn-read name, or a PARAM some other fn reads dynamically — must not
+		// TAIL-call: the interpreter keeps the frame's bindings live until the
+		// body's cleanup tail runs AFTER the call returns, so the compiled
+		// frame must survive the call too (plain CALL_USER; RET pops the
+		// bindings at the same point the interpreter's __DC does).
+		bindsDyn := es.unitBindsDynScope(rec)
+		if !rec.generic && !bindsDyn && len(rec.outOps) == 1 && rec.outOps[0].kind == opEvent {
 			// Tail marking is single-result only: a tail call's results
 			// become the fn's results wholesale, so a multi-return tail
 			// boundary needs no rewrite here (it stays a plain CALL_USER).
@@ -5125,8 +5563,36 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		if rec.reg != nil && rec.reg != es.progReg {
+			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
+			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):
+			// its body resolves module-private words there, exactly where the
+			// interpreter's CallAQL runs it, so the VM must override curReg. An
+			// ORDINARY top-level fn (rec.reg == the program registry) must NOT be
+			// stamped: the VM run may be handed a DIFFERENT registry
+			// (ForkConcurrent gives each concurrent execution its own fork), so
+			// stamping the shared compile registry would (a) defeat that
+			// isolation and (b) race — every fork's CALL_NATIVE would call
+			// ensureInvoker on the one shared registry, mutating its Invoker
+			// field concurrently (the -race gate TestCompiledConcurrencyRaceFree).
+			// progReg is the FIRST-bound registry (bindRegistry), stable across
+			// the pass unlike es.reg which re-binds on every module-body / island
+			// sub-engine run. A foreign sub-registry stays the correct shared
+			// pointer (module bodies are not fork-parallelised in the corpus);
+			// an ordinary fn falls through to curReg == vc.r (the fork).
+			cf.Reg = rec.reg
+		}
 		flw := &lowerer{es: es, p: p, code: &cf.Code, debug: &cf.Debug, sigIdx: lw.sigIdx, variadic: map[int]bool{}, numLocals: rec.numLoc, promoted: rec.promoted, dead: rec.dead, isFnUnit: true}
+		es.emitDynParamBinds(flw, rec)
+		// The apply-loop replay's unnamed-param re-pushes seat at UNIT START —
+		// they must sit BELOW the loop's runtime value region, which exists only
+		// once the loop has run. They are runtime-only frame bottoms outside the
+		// sim's model (the RET trim owns them), so the sim resets after.
+		for _, op := range rec.retPrefix {
+			flw.pushOperand(op, rec.pos)
+		}
+		flw.vm = flw.vm[:0]
 		if reason := flw.lowerEvents(rec.frag.events, rec.frag.startSeq); reason != "" {
 			return nil, "fn " + rec.name + ": " + reason, false
 		}
@@ -5139,13 +5605,33 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 		}
 		if !diverged {
+			// The __RC unnamed-arg allowance, applied at LOWERING time: a
+			// declared fn's residual bottoms that are (a) within the
+			// NUnnamed window and (b) pure PARAM-LOCAL references are the
+			// frame's unconsumed unnamed args — the interpreter's __RC
+			// discards them, and since operands lower lazily they were
+			// never emitted, so dropping them here is the trim with zero
+			// runtime cost (the VM RET's NUnnamed trim remains as the
+			// runtime backstop). Bottoms that are anything else keep the
+			// full residual and let reconcileResults refuse as before.
+			if len(rec.returns) > 0 && rec.nUnnamed > 0 && len(rec.outOps) > len(rec.returns) && !rec.retReplay {
+				if extra := len(rec.outOps) - len(rec.returns); extra <= rec.nUnnamed {
+					drop := 0
+					for drop < extra && rec.outOps[drop].kind == opLocal && rec.outOps[drop].idx < rec.nParams {
+						drop++
+					}
+					if drop == extra {
+						rec.outOps = rec.outOps[extra:]
+					}
+				}
+			}
 			// Reconcile the body's N result operands with the simulated
 			// stack and emit a RET. Event results must already sit on the
 			// stack in order (they were left by their own events); inert
 			// operands (const / local / type) are pushed as a trailing
 			// tail above the last event result. This is the fn-unit mirror
 			// of the program-residual reconciliation below.
-			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0 || rec.dynTrailArity > 0, rec.pos); reason != "" {
+			if reason := flw.reconcileResults(rec.outOps, "fn "+rec.name, len(rec.returns) == 0 || rec.dynTrailArity > 0 || rec.dynFrameW > 0, rec.retReplay, rec.pos); reason != "" {
 				return nil, reason, false
 			}
 			// A paren-bounded trailing fn-value apply body: outOps were seated as the
@@ -5159,6 +5645,13 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 				}
 				flw.emit(op, rec.dynTrailArity, rec.pos)
 			}
+			// A whole-frame dynamic-apply replay: outOps seated the FULL residual
+			// (frame re-push prefix included); replay the top dynFrameW token-region
+			// entries against it and let the RET apply the RetReplay discipline.
+			if rec.dynFrameW > 0 {
+				flw.emit(OpCallDynFrame, rec.dynFrameW, rec.pos)
+			}
+			cf.RetReplay = rec.retReplay
 			flw.emit(OpRet, 0, rec.pos)
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
@@ -5175,6 +5668,127 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
 	return lw.p, "", true
+}
+
+// noteApplyLoopReplay classifies a fn-body residual holding a per-iteration
+// APPLY-LOOP's variadic value region under an inert tail (`def acc 0 for 5 […
+// (args.0 1)] acc` → residual [param re-pushes…, loop values…, acc]): the
+// loop's runtime count is variable, so the RET takes the replay trim
+// discipline (retReplay). The param prefix seats at UNIT START (below the
+// loop's region — it cannot be re-pushed after the loop has run), the loop
+// event stays the seated residual, and the inert tail pushes above it as
+// usual. Returns ops with the prefix split off (or unchanged when the shape
+// does not fit — the normal reconciliation then refuses as before).
+func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []emitOperand) []emitOperand {
+	j := -1
+	for i, op := range ops {
+		if op.kind == opEvent && es.eventInfo[op.idx].variadicResult && es.eventInfo[op.idx].applyLoop {
+			j = i
+			break
+		}
+	}
+	if j < 0 || j > rec.nUnnamed {
+		return ops
+	}
+	for i := 0; i < j; i++ {
+		if ops[i].kind != opLocal || ops[i].idx >= rec.nParams {
+			return ops
+		}
+	}
+	for i := j + 1; i < len(ops); i++ {
+		if ops[i].kind == opEvent {
+			return ops
+		}
+	}
+	rec.retPrefix = ops[:j]
+	rec.retReplay = true
+	return ops[j:]
+}
+
+// noteDynFrameReplay scans a count-mismatched fn-body residual for an
+// unapplied runtime fn VALUE beyond the frame-bottom re-push window. An
+// UNNAMED PARAM's entry re-push in that window is inert DATA in both engines
+// (arguments-are-inert: the interpreter never auto-fires a frame argument),
+// and the RET trim discards it (NUnnamed allowance) — never an unapplied
+// apply. A Function value ABOVE the window was produced at the pointer (an
+// args.N fold, a paren apply), where the interpreter's execFnDefLiteral rule
+// fires by RUNTIME Name/arity — statically unknowable in the recorder, so the
+// WHOLE frame residual is replayed at run time (OpCallDynFrame /
+// dynFrameWindow), where that same rule decides. Returns true when no such
+// value exists or the replay window was seated; false keeps the refusal.
+func noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bool {
+	for i, v := range vals {
+		if i < extra && i < rec.nUnnamed {
+			if slot, isLocal := u.localByID[v.ID]; isLocal && slot < rec.nParams {
+				continue
+			}
+		}
+		if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+			if w, ok := dynFrameWindow(u, rec, vals); ok && replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
+				rec.dynFrameW = w
+				rec.retReplay = true
+				return true
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// replayIsBodyTail reports whether the replay window is the body's LAST
+// statement in source order. The whole-frame replay fires at the RET, so any
+// recorded event positioned AFTER the window would have its effects reordered
+// ahead of the apply's (the interpreter runs the apply at its own source
+// position: `[(args.0 args.1) print "after"]` prints the callee's output
+// first) — such a body declines and falls back. Events BEFORE the window ran
+// before the apply on both engines, and an event-free body is trivially a
+// tail. When events exist but no window value carries a source position, the
+// order cannot be proven and the replay declines.
+func replayIsBodyTail(frag *EmitFragment, window []Value) bool {
+	if frag == nil || len(frag.events) == 0 {
+		return true
+	}
+	anchor := SrcPos{}
+	for _, v := range window {
+		if v.Pos.Row > anchor.Row || (v.Pos.Row == anchor.Row && v.Pos.Col > anchor.Col) {
+			anchor = v.Pos
+		}
+	}
+	if anchor.Row == 0 && anchor.Col == 0 {
+		return false
+	}
+	for i := range frag.events {
+		p := eventPos(frag.events[i])
+		if p.Row > anchor.Row || (p.Row == anchor.Row && p.Col > anchor.Col) {
+			return false
+		}
+	}
+	return true
+}
+
+// dynFrameWindow classifies a fn-body residual that carries an unapplied
+// runtime fn value as the whole-frame dynamic-apply replay (OpCallDynFrame): a
+// leading PREFIX of unnamed-param frame re-pushes (param locals, capped at
+// nUnnamed — the values the interpreter's pointer never steps) under a TOKEN
+// region holding everything the pointer did step, at least one entry of which
+// is the fn value that could not statically dispatch. Returns the token-region
+// width. The replay is faithful by construction — the region's values re-step
+// under execFnDefLiteral's own runtime rule, with the prefix (and nothing
+// deeper: both engines bound collection at the frame) as the stack below — so
+// the only decline is a residual with no token region at all.
+func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []Value) (int, bool) {
+	k := 0
+	for k < len(vals) && k < rec.nUnnamed {
+		slot, isLocal := u.localByID[vals[k].ID]
+		if !isLocal || slot >= rec.nParams {
+			break
+		}
+		k++
+	}
+	if w := len(vals) - k; w >= 1 {
+		return w, true
+	}
+	return 0, false
 }
 
 // isFnTypedCarrier reports whether v is a Function/FnDef-typed CARRIER — a
@@ -5246,6 +5860,8 @@ func eventPos(ev emitEvent) SrcPos {
 		return ev.trap.pos
 	case evStore:
 		return ev.store.pos
+	case evDynBind:
+		return ev.dyn.pos
 	}
 	return ev.br.pos
 }

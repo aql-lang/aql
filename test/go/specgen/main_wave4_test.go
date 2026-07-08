@@ -13,10 +13,14 @@ import (
 )
 
 // TestW4ClassifyFrontierBareErrorDetail pins the classifyFrontier arm
-// for a runtime error whose message has no [aql/<code>] prefix:
-// "1 0 div" checks clean and compiles, yet fails at run with a bare
-// "division by zero" — errorClass yields the generic "ERROR:", and the
-// classifier substitutes the "error" detail.
+// for a runtime error whose message has no [aql/<code>] prefix. A
+// TOP-LEVEL "1 0 div" no longer qualifies — the checker's arith mirror
+// flags it statically (design/CHECKER-COMPLETION.0.md) so it classifies
+// classCheck now; the div is moved inside a fn body, where the mirror's
+// reachability gate keeps the checker silent: the program checks clean
+// and compiles, yet fails at run with a bare "division by zero" —
+// errorClass yields the generic "ERROR:", and the classifier
+// substitutes the "error" detail.
 func TestW4ClassifyFrontierBareErrorDetail(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
@@ -24,7 +28,7 @@ func TestW4ClassifyFrontierBareErrorDetail(t *testing.T) {
 	}
 	a.SetClock(specClock)
 
-	cl, detail, compiled := classifyFrontier(a, "1 0 div")
+	cl, detail, compiled := classifyFrontier(a, "def w4d fn [[n:Integer] [Integer] [1 div n]] w4d 0")
 	if cl != classRuntime {
 		t.Fatalf("class = %d, want classRuntime", cl)
 	}

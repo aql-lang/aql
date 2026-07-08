@@ -56,8 +56,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "verbose pre-flight: print ALL check diagnostics (the pre-flight itself runs by default; this flag adds the advisory tiers to stderr)")
 	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before execution (also enabled by AQL_NO_CHECK)")
-	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (also enabled by AQL_COMPILE)")
-	noCompileFlag := fs.Bool("no-compile", false, "disable the bytecode compiler even if --compile/--force-compile or their env vars are set (also enabled by AQL_NO_COMPILE)")
+	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (the default; also enabled by AQL_COMPILE)")
+	noCompileFlag := fs.Bool("no-compile", false, "run the interpreter instead of the default bytecode compiler; wins over --compile/--force-compile and their env vars (also enabled by AQL_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	var pf permsflags.Flags
@@ -166,24 +166,27 @@ func EvalWithPolicy(w io.Writer, source string, registry string, seed int64, pol
 
 // EvalOptions runs source under the full Options set (registry, seed,
 // policy, tape bounds). The CLI builds Options from its flags —
-// including --options — and calls this.
+// including --options — and calls this. It runs in the default engine
+// mode, CompileTry: bytecode when the program compiles, silent sound
+// interpreter fallback otherwise.
 func EvalOptions(w io.Writer, source string, o lang.Options) error {
-	return EvalOptionsMode(w, source, o, CompileOff)
+	return EvalOptionsMode(w, source, o, CompileTry)
 }
 
 // CompileMode selects which execution engine EvalOptionsMode drives: the
-// interpreter (the default), the best-effort bytecode compiler (silent
-// fallback), or the bytecode compiler in FORCE mode (error if uncompilable).
+// best-effort bytecode compiler (silent fallback — the default), the
+// interpreter (--no-compile), or the bytecode compiler in FORCE mode
+// (error if uncompilable).
 // The type and its constants live in buildrt so the standalone executable
 // produced by `aql build` can reference them without importing run; run
 // aliases them here to keep its public surface unchanged.
 type CompileMode = buildrt.CompileMode
 
 const (
-	// CompileOff runs the interpreter — the default.
+	// CompileOff runs the interpreter (the `--no-compile` flag).
 	CompileOff = buildrt.CompileOff
 	// CompileTry runs the bytecode compiler when the program is compilable and
-	// silently falls back to the interpreter otherwise (the `--compile` flag).
+	// silently falls back to the interpreter otherwise — the default.
 	CompileTry = buildrt.CompileTry
 	// CompileForce REQUIRES the bytecode path: an uncompilable program (or a VM
 	// soundness assertion) aborts with the refusal reason rather than falling
@@ -193,13 +196,14 @@ const (
 
 // ResolveCompileMode applies the bytecode-mode control contract, styled
 // exactly like the checker's flag family (--check / --no-check /
-// AQL_NO_CHECK): a positive opt-in flag, a force variant, and a --no twin
-// that wins over everything. Compiled mode is OFF by default (maintainer
-// decision, design/P7-ENDGAME.10.md addendum — the Stage-7 default flip was
-// landed and then reverted to opt-in):
+// AQL_NO_CHECK): a positive flag, a force variant, and a --no twin
+// that wins over everything. Compiled mode is ON by default (maintainer
+// decision, design/P7-ENDGAME.10.md — the P7 endgame closed the refusal
+// ledger to the documented residue and flipped the default to TRY):
 //
-//	--compile        / AQL_COMPILE        → TRY: bytecode when compilable,
+//	(default)                             → TRY: bytecode when compilable,
 //	                                        silent sound fallback otherwise
+//	--compile        / AQL_COMPILE        → TRY, explicitly
 //	--force-compile  / AQL_FORCE_COMPILE  → FORCE: refusal is a loud error
 //	--no-compile     / AQL_NO_COMPILE     → OFF, wins over all of the above
 //
@@ -216,7 +220,7 @@ func ResolveCompileMode(compile, force, noCompile bool) CompileMode {
 	if compile || envEnabled("AQL_COMPILE") {
 		return CompileTry
 	}
-	return CompileOff
+	return CompileTry
 }
 
 // envEnabled reports whether an env var is set to a truthy value

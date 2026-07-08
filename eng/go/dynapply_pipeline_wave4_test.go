@@ -394,7 +394,7 @@ func TestInvokeClosureRawTokens(t *testing.T) {
 	}
 	vc := &vmContext{p: prog, r: r}
 	body := NewList([]Value{NewWord("cadd")})
-	out, err := vc.invokeClosure(body, []Value{NewInteger(2), NewInteger(3)})
+	out, err := vc.invokeClosure(r, body, []Value{NewInteger(2), NewInteger(3)})
 	if err != nil {
 		t.Fatalf("invokeClosure raw: %v", err)
 	}

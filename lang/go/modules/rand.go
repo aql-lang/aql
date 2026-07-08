@@ -391,8 +391,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					bodyTokens := body.Slice()
 					for i := int64(0); i < n; i++ {
-						sub := native.New(r)
-						res, err := sub.Run(append([]native.Value(nil), bodyTokens...))
+						res, err := native.RunPooled(r, append([]native.Value(nil), bodyTokens...))
 						if err != nil {
 							return nil, fmt.Errorf("evaluating Rand.list-of[%d]: %w", i, err)
 						}
@@ -430,8 +429,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						if err != nil {
 							return nil, fmt.Errorf("evaluating Rand.map-from[%s]: %w", key, err)
 						}
-						sub := native.New(r)
-						res, err := sub.Run(append([]native.Value(nil), body.Slice()...))
+						res, err := native.RunPooled(r, append([]native.Value(nil), body.Slice()...))
 						if err != nil {
 							return nil, fmt.Errorf("evaluating Rand.map-from[%s]: %w", key, err)
 						}

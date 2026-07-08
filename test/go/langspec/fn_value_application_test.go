@@ -54,13 +54,13 @@ func TestFnValueApplicationCompiles(t *testing.T) {
 		})
 	}
 
-	// Negative: the miscompile-E auto-dispatch guard (emit.go) MUST keep
-	// refusing a 0-arg shaped-method read — it auto-dispatches on landing and
-	// baking the check-time closure would freeze seed-specific RNG state. These
-	// are documented sound refusals (STAGE3-INLINING-DESIGN-ROUND.0.md M2c:
-	// "do not weaken the guard to move 2 rows"). If one starts compiling, the
-	// guard was weakened — confirm a real runtime auto-dispatch model landed
-	// (not a const-fold) before updating this pin.
+	// A 0-arg shaped-method read now COMPILES through a real runtime
+	// auto-dispatch model (not a const-fold): NoteMethodShape annotates the
+	// genuine-0-arg delegation member, the read guards skip the annotated
+	// read, and the landing lowers to an explicit arity-0 OpCallDynMethod
+	// whose operand is the RUNTIME member value — nothing of the check-time
+	// shape state bakes (the freeze-gate holds; the recorded program carries
+	// a CALL_DYN_METHOD, pinned here, and the differential pins the value).
 	guarded := []struct {
 		name string
 		src  string
@@ -70,12 +70,15 @@ func TestFnValueApplicationCompiles(t *testing.T) {
 	}
 	for _, c := range guarded {
 		t.Run(c.name, func(t *testing.T) {
-			prog, _, _, err := compileRow(t, c.src)
+			prog, reason, _, err := compileRow(t, c.src)
 			if err != nil {
 				t.Fatalf("check error: %v", err)
 			}
-			if prog != nil {
-				t.Errorf("a 0-arg shaped-method read compiled — the miscompile-E auto-dispatch guard was weakened; verify a sound runtime model landed before re-pinning: %s", c.src)
+			if prog == nil {
+				t.Fatalf("0-arg shaped-method landing refused (reason %q); the arity-0 OpCallDynMethod model regressed: %s", reason, c.src)
+			}
+			if !strings.Contains(prog.Disassemble(), "CALL_DYN_METHOD") {
+				t.Errorf("compiled without the guarded CALL_DYN_METHOD landing — a const-fold would freeze shape state:\n%s", prog.Disassemble())
 			}
 		})
 	}

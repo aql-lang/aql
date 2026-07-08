@@ -1,4 +1,4 @@
-.PHONY: all build install test test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
+.PHONY: all build install test test-race test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd tags \
@@ -98,6 +98,28 @@ test:
 	  echo "==> test $$m"; \
 	  ( cd $$m && go test -timeout 20m ./... ); \
 	done
+
+# test-race is the data-race gate (design/TEST-SEAMS.10.md). `make test` does
+# NOT run under -race — the detector inflates CPU/alloc ~5-10x, which breaks
+# the perf/alloc-ceiling tests and would make the whole suite too slow. So the
+# race lane runs -race -short: -short skips the perf gates (they guard
+# testing.Short()), while every concurrency test — anything spawning goroutines
+# or forking a registry — runs under the detector.
+#
+# RACE_MODULES run their WHOLE package tree under -race, so a NEW concurrency
+# test is covered automatically with no hand-maintained name list (the gap that
+# let the ForkConcurrent cf.Reg race reach CI). test/go/langspec is the one
+# exception: its 5941-row differential is single-threaded per row (race adds no
+# value) and times out under the detector, so only its concurrency rows run
+# here.
+RACE_MODULES := eng/go lang/go
+test-race:
+	@set -e; for m in $(RACE_MODULES); do \
+	  echo "==> test-race $$m"; \
+	  ( cd $$m && go test -race -short -timeout 25m ./... ); \
+	done
+	@echo "==> test-race test/go/langspec (concurrency rows)"
+	cd test/go && go test -race -short -timeout 15m ./langspec/ -run 'Concurrent|RaceFree|Race'
 
 vet:
 	@set -e; for m in $(MODULES); do \

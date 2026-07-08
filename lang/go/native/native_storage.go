@@ -59,27 +59,33 @@ var storageNatives = []NativeFunc{
 			},
 
 			// List (immutable — copy-returning, completing the column
-			// rule: Map and List both return the updated copy).
+			// rule: Map and List both return the updated copy). set
+			// range-checks its index at runtime (never grows), so a
+			// provably out-of-range index over a known length is flagged
+			// at check time (setListIndexReturns → CheckListIndex).
 			{
 				Args:    []*Type{TInteger, TAny, TList},
 				Impl:    Go(setListHandler),
-				Returns: []*Type{TList}, BarrierPos: -1,
+				Returns: []*Type{TList}, ReturnsFn: setListIndexReturns, BarrierPos: -1,
 			},
 
 			// Class instance (in-place, SEALED): a declared field
 			// writes in place and returns nothing; an undeclared
 			// field is a loud sealed_field error — see
-			// design/CLASS-OBJECT.10.md §3.3.
+			// design/CLASS-OBJECT.10.md §3.3. A statically-decidable
+			// violation (unknown field, or a concrete value failing the
+			// same MakeClassFieldValue check the write runs) is flagged
+			// at check time (setClassInstanceReturns).
 			{
 				Args:    []*Type{TString, TAny, TClass},
 				Impl:    Go(setClassInstanceHandler),
-				Returns: []*Type{}, BarrierPos: -1,
+				Returns: []*Type{}, ReturnsFn: setClassInstanceReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TClass},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(setClassInstanceHandler),
-				Returns:   []*Type{}, BarrierPos: -1,
+				Returns:   []*Type{}, ReturnsFn: setClassInstanceReturns, BarrierPos: -1,
 			},
 
 			// FlexMap (in-place key set; returns the node for chaining)
@@ -285,6 +291,60 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // writes into the flat field map and returns nothing; an undeclared
 // field raises sealed_field loudly — the open-bag use case belongs to
 // plain maps / FlexMaps, not class instances (design/CLASS-OBJECT.10.md).
+// classSchemaOf resolves the CLASS schema governing a check-mode receiver
+// via the type-binding body (TopTypeBody). An unresolvable schema — the
+// class was `undef`'d after construction, or the receiver is an
+// instantiated generic whose minted node carries no ClassTypeInfo payload
+// — reports false and the caller stays silent (the runtime write-time
+// check still guards those instances through their retained TypeRef).
+func classSchemaOf(r *Registry, recv Value) (ClassTypeInfo, bool) {
+	if recv.Parent == nil {
+		return ClassTypeInfo{}, false
+	}
+	if body, ok := r.TopTypeBody(recv.Parent.Leaf()); ok {
+		if info, err := AsClassType(body); err == nil {
+			return info, true
+		}
+	}
+	return ClassTypeInfo{}, false
+}
+
+// setClassInstanceReturns is the check-mode mirror of the sealed-write
+// contract below: an unknown field is a guaranteed sealed_field, and a
+// CONCRETE value failing MakeClassFieldValue — the byte-identical check the
+// runtime write runs — is a guaranteed type_error. Both flag on the
+// top-level straight line; a carrier value, unresolvable schema, or
+// computed key keeps the declared no-residual model silently.
+func setClassInstanceReturns(args []Value, r *Registry) []Value {
+	if !atUncaughtTopLevel(r) || len(args) != 3 || !IsConcrete(args[0]) {
+		return []Value{}
+	}
+	info, ok := classSchemaOf(r, args[2])
+	if !ok {
+		return []Value{}
+	}
+	key := StoreKey(args[0])
+	all := info.AllFields()
+	constraint, declared := all.Get(key)
+	if !declared {
+		name := info.Name
+		if name == "" {
+			name = args[2].Parent.Name
+		}
+		eng.CheckAddUniqueDiagnostic(r, "sealed_field",
+			fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
+			"set", args[0].Pos)
+		return []Value{}
+	}
+	if IsConcrete(args[1]) {
+		if _, err := MakeClassFieldValue(args[1], constraint, r); err != nil {
+			eng.CheckAddUniqueDiagnostic(r, "type_error",
+				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set", args[0].Pos)
+		}
+	}
+	return []Value{}
+}
+
 func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if !IsConcrete(container) {
@@ -502,10 +562,15 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	// writers the shape cannot see, so the claim is a bound a guard
 	// discharges, never strict/concrete). A key the shape missed keeps
 	// dynamic(Any) — untracked writers exist, so absent-key None would be
-	// unsound. Plain check mode only (compile parity: flex rows compile
-	// natively today over the bare carrier).
+	// unsound. The COMPILE pass narrows through the same bound: overload
+	// commitment then models the right RESULT ARITY for a downstream
+	// dispatch (`set b/q 9 f.a drop …` — a dynamic(Any) receiver committed
+	// set's 0-return Store overload and starved the drop, flex.tsv:88/95),
+	// while the dispatch itself still records a runtime-re-matching poly
+	// whose NOut claim the VM enforces (a hidden-writer bound miss defers
+	// to the interpreter instead of shifting the stack).
 	if ss, ok := eng.StoreShapeOf(container); ok {
-		if r != nil && !r.Check.Compiling {
+		if r != nil {
 			if v, hit := ss.LookupKey(getKey(key)); hit {
 				return []Value{eng.ShapeFieldRead(v)}
 			}
@@ -902,6 +967,18 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 // a NEW list with the element at the index replaced; the receiver is
 // untouched. Out-of-range indices are a loud error (edits, not
 // lookups). Completes the immutable column of the container 2x2.
+// setListIndexReturns is the check-mode mirror of setListHandler's range
+// check: set never grows a list, so a provably out-of-range index over a
+// statically-known length is a guaranteed runtime index_out_of_range —
+// CheckListIndex flags it. The result model is the declared updated-copy
+// List either way (soundness: an unknown length or index stays silent).
+func setListIndexReturns(args []Value, r *Registry) []Value {
+	if len(args) == 3 {
+		CheckListIndex(r, args[0], args[2], "set")
+	}
+	return []Value{NewCarrier(TList)}
+}
+
 func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_idx, err := args[0].AsConcreteInteger()
 	if err != nil {

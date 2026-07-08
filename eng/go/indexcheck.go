@@ -4,10 +4,12 @@ import "fmt"
 
 // Static index / size checking for check mode.
 //
-// The runtime errors on an out-of-bounds list index (`getr`) or
+// The runtime errors on an out-of-bounds list index (`getr`, `set`) or
 // out-of-bounds selector (`at`). This pass catches the provable cases
 // statically: when a list's length is known and an index is provably
-// outside [0, length), it records an `index_out_of_range` diagnostic.
+// outside [0, length), it records an `index_out_of_range` diagnostic
+// (SeverityError — every consuming word errors at runtime on the index,
+// so the finding is a guaranteed failure, not a suspicion).
 //
 // Soundness is the whole game here — a false positive (flagging an
 // access that is actually in bounds) would be far worse than a missed
@@ -126,14 +128,18 @@ func indexProvablyOOB(idx Value, n int) (string, bool) {
 }
 
 // emitIndexOOB records an index_out_of_range diagnostic stamped with
-// the offending index value's source position (when known).
+// the offending index value's source position (when known). A
+// RuntimeMirror: the consuming word errors at runtime on exactly this
+// index, and the recording model is unaffected — inside an error-catching
+// `do` body AddDiagnostic re-attributes it to a caught info finding.
 func emitIndexOOB(r *Registry, word, detail string, pos SrcPos) {
 	r.Check.AddDiagnostic(CheckDiagnostic{
-		Code:   "index_out_of_range",
-		Detail: word + ": " + detail,
-		Word:   word,
-		Row:    pos.Row,
-		Col:    pos.Col,
+		Code:          "index_out_of_range",
+		Detail:        word + ": " + detail,
+		Word:          word,
+		Row:           pos.Row,
+		Col:           pos.Col,
+		RuntimeMirror: true,
 	})
 }
 

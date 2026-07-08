@@ -18,13 +18,14 @@ package eng
 // per-call values exactly where the original code placed them.
 func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	if r.Invoker != nil {
-		return r.Invoker(body, inputs)
+		return r.Invoker(r, body, inputs)
 	}
-	toks := bodyTokens(body)
-	input := make([]Value, len(inputs)+len(toks))
-	copy(input, inputs)
-	copy(input[len(inputs):], toks)
-	return runPooledSub(r, input, false)
+	// Pooled + resolved: the engine and its tape are reused across
+	// invocations (runPooledSub / the registry sub-engine pool), and the
+	// inputs enter as RESOLVED stack data rather than being re-stepped —
+	// arguments are inert (design/ARG-SEMANTICS-UNIFICATION.0.md, via
+	// RunResolved's start offset).
+	return RunResolved(r, inputs, bodyTokens(body))
 }
 
 // runPooledSub runs input on a pooled reusable sub-engine and returns a

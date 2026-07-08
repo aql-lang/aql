@@ -50,8 +50,9 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	registry := fs.String("r", "", "registry path baked into the binary")
 	var seed int64
 	fs.Int64Var(&seed, "s", 0, "random seed baked into the binary")
-	compileFlag := fs.Bool("compile", false, "EXPERIMENTAL: bake best-effort bytecode compilation into the binary")
-	forceCompileFlag := fs.Bool("force-compile", false, "EXPERIMENTAL: bake REQUIRED bytecode compilation into the binary")
+	compileFlag := fs.Bool("compile", false, "bake best-effort bytecode compilation into the binary (the default)")
+	noCompileFlag := fs.Bool("no-compile", false, "bake interpreter-only execution into the binary; wins over --compile/--force-compile")
+	forceCompileFlag := fs.Bool("force-compile", false, "bake REQUIRED bytecode compilation into the binary")
 	optionsStr := fs.String("options", "", "engine options as jsonic, baked in (e.g. tape:initial:65536)")
 
 	// flag.Parse stops at the first non-flag token, so flags placed after the
@@ -91,7 +92,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	cfg, err := buildConfig(srcPath, *registry, seed, resolveCompile(*compileFlag, *forceCompileFlag), *optionsStr)
+	cfg, err := buildConfig(srcPath, *registry, seed, resolveCompile(*compileFlag, *forceCompileFlag, *noCompileFlag), *optionsStr)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -119,17 +120,20 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// resolveCompile maps the two flags to a CompileMode. force wins over try
+// resolveCompile maps the three flags to a CompileMode. The default is
+// best-effort TRY; noCompile wins over everything, then force wins over try
 // (mirrors run.ResolveCompileMode without the env-var rollout knobs, which do
-// not apply to a frozen binary).
-func resolveCompile(compile, force bool) buildrt.CompileMode {
+// not apply to a frozen binary — --no-compile is the only opt-out here).
+func resolveCompile(compile, force, noCompile bool) buildrt.CompileMode {
 	switch {
+	case noCompile:
+		return buildrt.CompileOff
 	case force:
 		return buildrt.CompileForce
 	case compile:
-		return buildrt.CompileTry
+		return buildrt.CompileTry // the explicit spelling of the default
 	default:
-		return buildrt.CompileOff
+		return buildrt.CompileTry
 	}
 }
 

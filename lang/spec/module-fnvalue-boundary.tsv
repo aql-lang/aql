@@ -1,0 +1,33 @@
+# AQL Language Specification: module fn-VALUE application boundary
+# Format: input<TAB>expected<TAB>description
+#
+# Boundary rows for a module-captured Function VALUE applied inside its
+# own module — the execFnDefSig same-registry dispatch class routed onto
+# the main-tape frame splice (design/SUB-ENGINE-MAIN-TAPE-REVIEW.0.md R2)
+# — and for the ARGUMENTS-ARE-INERT invariant
+# (design/ARG-SEMANTICS-UNIFICATION.0.md): an argument never acts on its
+# own; binding style (named vs unnamed) changes only how the body refers
+# to it. The callee here is an ANONYMOUS fn in the export map (a named
+# module fn resolves through its registered body-runner handler instead)
+# and the caller takes it via an UNNAMED Function param, so the raw value
+# sits on the body frame — the exact shape that used to auto-fire on
+# placement.
+#
+# Go twins (value-result pins, args-stack balance, the cross-registry
+# negative, and the flow-unwind leak pins) live in
+# lang/go/native/fnvalue_sameregistry_test.go and
+# lang/go/native/args_inert_test.go.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  arguments are inert — placement alone does nothing
+import module [def useanon fn [[Function Integer] [Integer] [args.1]] export "L" {useanon: useanon/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.useanon L.mk 14	14	an unnamed fn-value arg does NOT fire on frame placement — the body returns the sibling Integer untouched (42/126 would mean the fn fired); the unconsumed fn value is discarded by the return discipline
+import module [def keep fn [[Function] [Function] [args.0]] export "L" {keep: keep/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end typeof (L.keep L.mk)	Function	an unnamed fn-value arg is real data — readable via args.N and returnable, exactly like a named binding read via /r
+import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, mk: (fn [[x:Integer] [Integer] [x mul 3]])}] end L.useanon L.mk 14	42	explicit application via args.N fires EXACTLY once — no double dispatch from placement plus body
+#
+# §2  the frame tears down — nothing leaks
+import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, lk: (fn [[x:Integer] [Integer] [def tmpz 7 x add tmpz]])}] end L.useanon L.lk 1 end tmpz	ERROR:undefined_word	a body-local def in the value-dispatched callee is torn down by the frame tail — it must NOT leak past the call
+#
+# §3  errors and flow control behave exactly as named dispatch
+import module [def useanon fn [[Function Integer] [Integer] [(args.0 args.1)]] export "L" {useanon: useanon/r, bm: (fn [[x:Integer] [Integer] [raise oops_e "bang"]])}] end L.useanon L.bm 1	ERROR:bang	a raise inside the value-dispatched body propagates out as the same error
+import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [def acc (acc add 1) (args.0 1)] acc]] export "L" {looper: looper/r, brk: (fn [[x:Integer] [Any] [break]])}] end L.looper L.brk	1	a break in a value-dispatched body terminates the enclosing loop — identical to a named call (the escaped frame's cleanup tail is unwound, not leaked)
+import module [def looper fn [[Function] [Integer] [def acc 0 for 5 [(args.0 1) def acc (acc add 1)] acc]] export "L" {looper: looper/r, skp: (fn [[x:Integer] [Any] [continue]])}] end L.looper L.skp	0	a continue in a value-dispatched body skips the rest of the iteration — identical to a named call; the escaped frame's args list is popped, so the caller's args stay its own

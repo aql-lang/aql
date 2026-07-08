@@ -1,10 +1,12 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
 
+	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -97,6 +99,73 @@ func checkedPowInt(base, exp int64) (int64, bool) {
 	return result, true
 }
 
+// returnsIntArithChecked wraps ReturnsNumericBinary for add / sub / mul /
+// pow: two concrete int64 operands that PROVABLY fault at runtime — an
+// int64 overflow (the checkedXxxInt guards) or pow's negative exponent —
+// are a guaranteed error, flagged on the top-level straight line with the
+// byte-identical runtime detail (integerOverflowError / the pow message).
+// The residual model is unchanged (the numeric-binary carrier): the flag
+// gates, and every non-top-level / non-concrete / non-int64 shape — Big
+// leaves never overflow, Float saturates per IEEE — takes the base path
+// untouched, so compile-pass behaviour is byte-identical.
+func returnsIntArithChecked(op string, faultFn func(a, b int64) error) ReturnsFunc {
+	base := ReturnsNumericBinary()
+	return func(args []Value, r *Registry) []Value {
+		checkBigFloatMix(r, args)
+		if atUncaughtTopLevel(r) && len(args) == 2 &&
+			IsConcrete(args[0]) && IsConcrete(args[1]) &&
+			args[0].Parent.ConformsTo(TInteger) && args[1].Parent.ConformsTo(TInteger) &&
+			!args[0].Parent.ConformsTo(TBigInteger) && !args[1].Parent.ConformsTo(TBigInteger) {
+			a, aerr := args[0].AsConcreteInteger()
+			b, berr := args[1].AsConcreteInteger()
+			if aerr == nil && berr == nil {
+				if err := faultFn(a, b); err != nil {
+					code, detail := "arith_error", err.Error()
+					var ae *AqlError
+					if errors.As(err, &ae) {
+						code, detail = ae.Code, ae.Detail
+					}
+					eng.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos)
+				}
+			}
+		}
+		return base(args, r)
+	}
+}
+
+// The faultFns mirror the intFn bodies exactly (same operand order, same
+// error constructors) so the static detail is byte-identical to runtime.
+func addIntFault(a, b int64) error {
+	if _, ok := checkedAddInt(b, a); !ok {
+		return integerOverflowError("add", a, b)
+	}
+	return nil
+}
+
+func subIntFault(a, b int64) error {
+	if _, ok := checkedSubInt(b, a); !ok {
+		return integerOverflowError("sub", a, b)
+	}
+	return nil
+}
+
+func mulIntFault(a, b int64) error {
+	if _, ok := checkedMulInt(b, a); !ok {
+		return integerOverflowError("mul", a, b)
+	}
+	return nil
+}
+
+func powIntFault(a, b int64) error {
+	if a < 0 {
+		return fmt.Errorf("pow: negative exponent %d", a)
+	}
+	if _, ok := checkedPowInt(b, a); !ok {
+		return integerOverflowError("pow", a, b)
+	}
+	return nil
+}
+
 var mathNatives = []NativeFunc{
 	{
 		Name: "add",
@@ -116,7 +185,7 @@ var mathNatives = []NativeFunc{
 					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Add, b, a) },
 					fltFn: func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
 				})),
-				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+				ReturnsFn: returnsIntArithChecked("add", addIntFault), BarrierPos: -1,
 			},
 			// String concatenation requires AT LEAST ONE String operand;
 			// the other may be any Scalar (coerced via ValToString). Two
@@ -151,7 +220,7 @@ var mathNatives = []NativeFunc{
 					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Sub, b, a) },
 					fltFn: func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
 				})),
-				ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+				ReturnsFn: returnsIntArithChecked("sub", subIntFault), BarrierPos: -1,
 			},
 			// Temporal sub overloads: moved to aql:time-util — see the
 			// add note above and TemporalArithmeticExtensions.
@@ -174,7 +243,7 @@ var mathNatives = []NativeFunc{
 				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Mul, b, a) },
 				fltFn: func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
 			})),
-			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+			ReturnsFn: returnsIntArithChecked("mul", mulIntFault), BarrierPos: -1,
 		}},
 	},
 	{
@@ -216,7 +285,7 @@ var mathNatives = []NativeFunc{
 					return NewFloat(b / a), nil
 				},
 			})),
-			ReturnsFn: returnsDivMod(), BarrierPos: -1,
+			ReturnsFn: returnsDivMod("division by zero"), BarrierPos: -1,
 		}},
 	},
 	{
@@ -249,7 +318,7 @@ var mathNatives = []NativeFunc{
 					return NewFloat(math.Mod(b, a)), nil
 				},
 			})),
-			ReturnsFn: returnsDivMod(), BarrierPos: -1,
+			ReturnsFn: returnsDivMod("modulo by zero"), BarrierPos: -1,
 		}},
 	},
 	{
@@ -278,7 +347,7 @@ var mathNatives = []NativeFunc{
 				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Pow, b, a) },
 				fltFn: func(a, b float64) (Value, error) { return NewFloat(math.Pow(b, a)), nil },
 			})),
-			ReturnsFn: ReturnsNumericBinary(), BarrierPos: -1,
+			ReturnsFn: returnsIntArithChecked("pow", powIntFault), BarrierPos: -1,
 		}},
 	},
 	{

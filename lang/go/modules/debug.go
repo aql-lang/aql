@@ -64,6 +64,25 @@ func debugExportName(internal string) string {
 // BarrierPos: -1 so the dotted swap form (`value Debug.tap`) dispatches
 // (the module-wrapper rule, lang/go/CLAUDE.md). Body-taking words mark
 // NoEvalArgs so the quoted code body reaches the handler unevaluated.
+// debugParseHandler is NAMED so the sig wires the same function as both
+// the runtime Impl and the check-mode DryPassReturns mirror.
+func debugParseHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	src, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, err
+	}
+	if r.ParseFunc == nil {
+		return nil, r.AqlError("debug_error", "Debug.parse: parser not configured", "Debug.parse")
+	}
+	tokens, perr := r.ParseFunc(src)
+	if perr != nil {
+		return nil, r.AqlError("parse_error", fmt.Sprintf("Debug.parse: %v", perr), "Debug.parse")
+	}
+	lst := native.NewList(tokens)
+	lst.Quoted = true
+	return []native.Value{lst}, nil
+}
+
 func debugNatives() []native.NativeFunc {
 	return []native.NativeFunc{
 		// ── (A) Printing & tracing ────────────────────────────────────
@@ -163,27 +182,15 @@ func debugNatives() []native.NativeFunc {
 		// ── (C) Program structural analysis ───────────────────────────
 		{
 			// Parse source to its token/value list without running it.
+			// Pure parse of the literal: the DryPassReturns mirror flags a
+			// top-level parse of provably-malformed source at check time.
 			Name: "debug-parse",
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
 				Returns:    []*native.Type{native.TList},
+				ReturnsFn:  native.DryPassReturns(debugParseHandler, native.TList),
 				BarrierPos: -1,
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-					src, err := args[0].AsConcreteString()
-					if err != nil {
-						return nil, err
-					}
-					if r.ParseFunc == nil {
-						return nil, r.AqlError("debug_error", "Debug.parse: parser not configured", "Debug.parse")
-					}
-					tokens, perr := r.ParseFunc(src)
-					if perr != nil {
-						return nil, r.AqlError("parse_error", fmt.Sprintf("Debug.parse: %v", perr), "Debug.parse")
-					}
-					lst := native.NewList(tokens)
-					lst.Quoted = true
-					return []native.Value{lst}, nil
-				}),
+				Impl:       native.Go(debugParseHandler),
 			}},
 		},
 		{

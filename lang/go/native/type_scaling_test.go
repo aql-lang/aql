@@ -751,6 +751,13 @@ func TestMatchSignatureEfficiencyThousandsOfSiblings(t *testing.T) {
 // TestUnifyEfficiencyThousandsOfSiblings confirms Unify(a/b/x, a/b) is efficient
 // across thousands of distinct sibling types.
 func TestUnifyEfficiencyThousandsOfSiblings(t *testing.T) {
+	// A wall-clock efficiency assertion — meaningless under the race
+	// detector, which inflates CPU ~5-10x. The race lane runs -short so this
+	// perf gate is skipped there while the concurrency tests still run under
+	// -race (Makefile test-race).
+	if testing.Short() {
+		t.Skip("perf timing assertion; skipped under -short (race lane)")
+	}
 	const numSiblings = 10_000
 	parentVal := Value{Parent: mustTestType(t, "A/B"), Data: nil}
 

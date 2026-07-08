@@ -68,10 +68,14 @@ type PendingMethodApply struct {
 //     sub-registry qualifies (the shaped-instance-method class — a plain
 //     user fn stored in a map keeps today's refusal paths, so a capturing
 //     method fn still refuses);
-//   - a member with a GENUINE 0-arg overload is excluded: that is the
-//     miscompile-E auto-dispatch family (Span.finish, Rand.bool), whose
-//     reads the get-family guards refuse — the annotation must never
-//     offer the model a way around them;
+//   - a member with a GENUINE 0-arg overload — the miscompile-E
+//     auto-dispatch family (Span.finish, Rand.bool) — is now ANNOTATED
+//     rather than excluded: its landing is modelled as an arity-0
+//     OpCallDynMethod (shapedMethodApplyWindow's all-0-arg path), the
+//     read-guard refusal is skipped for the annotated read
+//     (EmitState.noteShapedRead), and a landing the model cannot claim
+//     REFUSES outright (tryShapedMethodDispatch's guard-owned decline)
+//     so the guard is re-homed, never weakened;
 //   - macros stay data (applied only by name).
 func (c *CheckState) NoteMethodShape(out, member Value) {
 	if !c.IsActive() || out.ID == "" {
@@ -81,13 +85,19 @@ func (c *CheckState) NoteMethodShape(out, member Value) {
 	if !ok || fd.Registry == nil || fd.Name == "" || fd.Macro {
 		return
 	}
-	if !isDelegationFnDef(fd) || fnValueZeroArg(member) {
+	if !isDelegationFnDef(fd) {
 		return
 	}
 	if c.MethodShapes == nil {
 		c.MethodShapes = map[string]Value{}
 	}
 	c.MethodShapes[out.ID] = member
+	// Mirror the annotation into the recorder so the get-family read
+	// guards (recordCallRefusal / RecordPolyCall) can skip their
+	// auto-dispatch refusal for a read the landing model owns.
+	if es, ok := c.Emit.(*EmitState); ok {
+		es.noteShapedRead(out.ID)
+	}
 }
 
 // methodShapeMember returns the annotated member for a carrier ID.
@@ -195,6 +205,14 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	}
 	sig, positions, ok := e.shapedMethodApplyWindow(valIdx, member)
 	if !ok {
+		// Guard-owned decline: the get-family read guard was SKIPPED for this
+		// annotated read (noteShapedRead), so a genuine-0-arg member whose
+		// landing the model cannot claim must refuse HERE — the auto-dispatch
+		// guard is re-homed onto the landing, never weakened.
+		if fnValueZeroArg(member) {
+			r.Check.Recorder().MarkUncompilable(
+				"shaped 0-arg method landing not modelable at " + fnDefName(member))
+		}
 		return false
 	}
 	fnDef, _ := member.Data.(FnDefInfo) // validated by shapedMethodApplyWindow
@@ -252,8 +270,29 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 		}
 		winEnd = i
 	}
-	if winEnd == valIdx {
-		return nil, nil, false // no args — a bare landed value stays data in both engines
+	if winEnd == valIdx || allZeroArgSigs(fn) {
+		// No forward window (or every overload is 0-arg, so the landing
+		// never collects): the interpreter auto-fires a GENUINE 0-arg
+		// overload the moment the member lands — the miscompile-E family
+		// (Span.finish, Rand.bool). Model it as an arity-0 apply through
+		// the member's 0-arg signature; a member without a genuine 0-arg
+		// overload stays data in both engines.
+		if !fnValueZeroArg(member) {
+			return nil, nil, false
+		}
+		for i := range fn.Signatures {
+			sg := &fn.Signatures[i]
+			if sg.Fallback || sg.TotalArgs() != 0 {
+				continue
+			}
+			if sg.dispatchHandler() == nil || sg.fnFrame() != nil || sg.fullStack() ||
+				sg.runInCheckMode() || sg.Callable != nil || len(sg.NoEvalArgs) > 0 ||
+				sg.parkResult() {
+				return nil, nil, false // not a plain Go-handler apply
+			}
+			return sg, nil, true
+		}
+		return nil, nil, false
 	}
 	// The interpreter's own overload choice over the same tape. The window
 	// admission above guarantees no paren pre-evaluation is needed
@@ -285,6 +324,32 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 		return nil, nil, false
 	}
 	return sig, positions, true
+}
+
+// allZeroArgSigs reports whether every non-fallback signature of a native
+// takes zero args — such a member never forward-collects at landing: it
+// auto-fires with no operands and any following values belong to the next
+// dispatch, so the 0-arg model applies even with an inert window after it.
+func allZeroArgSigs(fn *FnDefInfo) bool {
+	any := false
+	for i := range fn.Signatures {
+		if fn.Signatures[i].Fallback {
+			continue
+		}
+		if fn.Signatures[i].TotalArgs() != 0 {
+			return false
+		}
+		any = true
+	}
+	return any
+}
+
+// fnDefName names a function value for a refusal message.
+func fnDefName(v Value) string {
+	if fd, ok := v.Data.(FnDefInfo); ok && fd.Name != "" {
+		return fd.Name
+	}
+	return "fn value"
 }
 
 // shapedMethodReturnArity is the runtime result count of a shaped-method apply,

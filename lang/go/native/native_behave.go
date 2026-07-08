@@ -361,8 +361,7 @@ func (u *userBehavior) runCompareBody(a, b Value) (int, error) {
 	defer r.Defs.Pop("b")
 
 	tokens := append([]Value{}, u.compareBody...)
-	sub := eng.NewTop(r)
-	result, err := sub.Run(tokens)
+	result, err := eng.RunPooledTop(r, tokens)
 	if err != nil {
 		return 0, fmt.Errorf("behave compare %s: %w", u.typeName, err)
 	}
@@ -451,8 +450,7 @@ func (u *userBehavior) runUnifyBody(a, b Value) (Value, *eng.UnifyError) {
 	defer r.Defs.Pop("b")
 
 	tokens := append([]Value{}, u.unifyBody...)
-	sub := eng.NewTop(r)
-	result, err := sub.Run(tokens)
+	result, err := eng.RunPooledTop(r, tokens)
 	if err != nil {
 		return Value{}, &eng.UnifyError{
 			Reason: fmt.Sprintf("behave unify %s: %v", u.typeName, err),
@@ -517,8 +515,7 @@ func (u *userBehavior) runNodifyBody(v Value) (Value, error) {
 	defer r.Defs.Pop("a")
 
 	tokens := append([]Value{}, u.nodifyBody...)
-	sub := eng.NewTop(r)
-	result, err := sub.Run(tokens)
+	result, err := eng.RunPooledTop(r, tokens)
 	if err != nil {
 		return Value{}, fmt.Errorf("behave nodify %s: %w", u.typeName, err)
 	}
@@ -537,8 +534,7 @@ func (u *userBehavior) runCanonBody(v Value) (string, error) {
 	defer r.Defs.Pop("a")
 
 	tokens := append([]Value{}, u.canonBody...)
-	sub := eng.NewTop(r)
-	result, err := sub.Run(tokens)
+	result, err := eng.RunPooledTop(r, tokens)
 	if err != nil {
 		return "", err
 	}

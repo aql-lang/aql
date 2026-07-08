@@ -1,6 +1,10 @@
 package native
 
-import "fmt"
+import (
+	"fmt"
+
+	eng "github.com/aql-lang/aql/eng/go"
+)
 
 // accessorNatives covers strict-access words.
 //
@@ -90,18 +94,21 @@ var accessorNatives = []NativeFunc{
 func accessorGetrSignatures() []Signature {
 	return []Signature{
 		// [Key | Node] — key forward, container from stack
-		// Field type narrows exactly as get's twin does (getNodeReturns); the
-		// strict-read difference is only the miss behaviour (raise vs none),
-		// which is the runtime's job.
-		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getNodeReturns},
-		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getNodeReturns},
+		// Field type narrows exactly as get's twin does (getNodeReturns);
+		// the strict-read difference is the miss behaviour (raise vs none),
+		// so a statically-provable miss over a concrete container is
+		// flagged at check time (getrNodeReturns).
+		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getrNodeReturns},
+		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: getrNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getrMapHandler), ReturnsFn: returnsGetrIndexChecked},
 		// [Key | Class instance] — strict field read (mirrors get's TClass
 		// sigs; getrObjectHandler resolves the flat instance via
 		// AsClassInstance and raises on a missing field). Field type
-		// narrows from the schema via getObjectReturns, as get does.
-		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getObjectReturns},
-		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getObjectReturns},
+		// narrows from the schema via getObjectReturns, as get does; a
+		// concrete key provably outside the CLOSED class schema is a
+		// guaranteed runtime not_found, flagged by the getr wrapper.
+		{Args: []*Type{TAtom, TClass}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getrObjectReturns},
+		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getrObjectReturns},
 		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
 		{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
 		// [Key | ModuleExport] / [Key | Module]
@@ -115,8 +122,10 @@ func accessorGetrSignatures() []Signature {
 		{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		// [Key | None]
-		// Always raises not_found — never produces a value.
-		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler), Returns: []*Type{}},
+		// Always raises not_found — never produces a value; a receiver the
+		// checker KNOWS is None (a literal, a strict None carrier from a
+		// statically-absent lenient read) flags the same error statically.
+		{Args: []*Type{TAny, TNone}, BarrierPos: 1, Impl: Go(getrNoneHandler), ReturnsFn: getrNoneReturns},
 	}
 }
 
@@ -191,6 +200,79 @@ func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
 		return ReturnsListElemAt(1)(args, r)
 	}
 	return []Value{NewCarrier(TAny)}
+}
+
+// getrNodeReturns is getNodeReturns plus the strict-read static-miss
+// contract (the map/list twin of getrMicronReturns): getr means REQUIRED,
+// so a miss the checker can prove — a concrete key absent from a concrete
+// map, or a concrete list read with a non-integer key — is a guaranteed
+// runtime error, flagged with the byte-identical getrMapHandler text. The
+// miss is re-proved against the container directly (never inferred from
+// the None carrier getNodeReturns returns) because a PRESENT key whose
+// stored value is `none` produces the same carrier shape and succeeds at
+// runtime. Everything non-concrete keeps getNodeReturns' gradual result.
+func getrNodeReturns(args []Value, r *Registry) []Value {
+	out := getNodeReturns(args, r)
+	if r == nil || !r.Check.IsActive() || len(args) != 2 ||
+		!IsConcrete(args[0]) || !IsConcrete(args[1]) {
+		return out
+	}
+	key, container := args[0], args[1]
+	if container.Parent.ConformsTo(TList) && !key.Parent.ConformsTo(TInteger) {
+		eng.CheckAddUniqueDiagnostic(r, "getr_error",
+			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr", key.Pos)
+		return out
+	}
+	if m, err := AsMap(container); err == nil && m != nil && container.Parent.ConformsTo(TMap) {
+		if _, ok := m.Get(getKey(key)); !ok {
+			eng.CheckAddUniqueDiagnostic(r, "not_found",
+				fmt.Sprintf("getr: key %q not found in map", getKey(key)), "getr", key.Pos)
+		}
+	}
+	return out
+}
+
+// getrObjectReturns is getObjectReturns plus the strict-read static-miss
+// contract for CLASS instances: a class schema is a closed field set (a
+// runtime `set` cannot add fields — it rejects unknown names), so a
+// concrete key the resolvable schema lacks is a guaranteed runtime
+// not_found, flagged with getrObjectHandler's text. An unresolvable
+// schema, a computed key, and every present field keep getObjectReturns'
+// result unchanged.
+func getrObjectReturns(args []Value, r *Registry) []Value {
+	out := getObjectReturns(args, r)
+	if r == nil || !r.Check.IsActive() || len(args) != 2 ||
+		!IsConcrete(args[0]) || args[1].Parent == nil {
+		return out
+	}
+	body, ok := r.TopTypeBody(args[1].Parent.Leaf())
+	if !ok {
+		return out
+	}
+	info, oerr := AsClassType(body)
+	if oerr != nil {
+		return out
+	}
+	if _, ok := info.AllFields().Get(getKey(args[0])); !ok {
+		eng.CheckAddUniqueDiagnostic(r, "not_found",
+			fmt.Sprintf("getr: field %q not found in object", getKey(args[0])), "getr", args[0].Pos)
+	}
+	return out
+}
+
+// getrNoneReturns mirrors getrNoneHandler statically: the [Any|None] sig
+// ALWAYS raises, so a receiver the checker knows is None — the `none`
+// literal, or a strict (non-dynamic) None carrier from a statically-absent
+// lenient read — flags the same not_found. A DYNAMIC None (an optimistic
+// maybe-miss) stays silent; the residual model stays empty either way
+// (the sig never produces a value).
+func getrNoneReturns(args []Value, r *Registry) []Value {
+	if r != nil && r.Check.IsActive() && len(args) == 2 &&
+		eng.IsNoneShape(args[1]) && !args[1].Dynamic {
+		eng.CheckAddUniqueDiagnostic(r, "not_found",
+			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos)
+	}
+	return []Value{}
 }
 
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

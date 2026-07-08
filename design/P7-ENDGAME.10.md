@@ -38,6 +38,59 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > other two endgame actions (the gated frontier, the standing
 > perf/alloc baseline) are unaffected.
 
+> **Addendum 2 (2026-07-08, maintainer direction — the I-wave
+> close-out):** the flip is **taken**: compiled mode is ON by default.
+> The I1–I5 improvement wave first shrank the residue table below —
+> I1 (unnamed-param frame flow: `args` stack in the VM, unnamed args
+> pushed through the frame) retired the unnamed fn-value param guard
+> for the residual-flow rows; I2 (runtime re-match for recovered
+> dispatch: PolyRef.NOut arity claims, flex StoreShapeInfo narrowing
+> in the compile pass, generic-slot reachability) closed the G5 flex
+> tier; I3 (guarded 0-arg method landings recorded by the check pass,
+> guard-owned declines) closed the container auto-dispatch tier; I4
+> (OpLookupDynScope / OpBindDynScope over the runtime def stack,
+> reachability-gated by FnBinders + FnCallGraph) closed the M6
+> dynamic-scope tier; I5 (CompiledFn.Reg — every compiled unit
+> dispatches against its OWNING registry, Registry.Invoker threads the
+> calling registry, escaped lambdas keep module scope) closed three of
+> the four repl served-handler rows and retired bodyConstructsFn.
+> Refusals: **21 → 9** on the 5,941-row corpus (5,617 compiled, **0
+> islands**, differential + property fuzz clean at every step); the
+> remaining 9 are the three sound non-definite error rows, five
+> module fn-value-boundary rows (dynamic apply inside fn units), and
+> one fn-value-reaches-`drop` row — see the tier ledger in
+> `compiled_coverage_test.go` (`refusalGate = 9`). With that,
+> `ResolveCompileMode` returns `CompileTry` by default (`aql run` /
+> `aql do`), `EvalOptions` drives TRY, and `aql build` bakes TRY with
+> a new `--no-compile` opt-out (a frozen binary has no env knobs).
+> The `--no` twin and the env kill switch win over everything,
+> unchanged. **The whole-program fallback stays** (maintainer
+> decision, same rationale as below): it is the mechanism that keeps
+> the 9 documented-tier refusals sound — slow, not wrong.
+
+> **Addendum 3 (2026-07-08, I7 — dynamic apply inside fn units):** the
+> module fn-value-boundary tier (module-fnvalue-boundary 24/25/31/32/33)
+> is closed; refusals **9 → 4** (5,622 of 5,941 rows compiled, 0
+> islands, differential + property fuzz clean). Two mechanisms:
+> **OpCallDynFrame** replays a fn body's whole end-of-body residual
+> through a nested interpreter run (`RunResolved` with the unnamed-param
+> re-pushes as the resolved prefix — the sub-engine twin of the frame's
+> ArgSpan), so an unapplied fn value dispatches by execFnDefLiteral's
+> own runtime rule, including below-window stack collection (gated to
+> bodies whose apply is the LAST statement — replayIsBodyTail — since
+> the replay fires at the RET and a later effectful statement would
+> otherwise reorder ahead of the callee's effects); the RET
+> then takes the **RetReplay** discipline (the CallAQL trim-only
+> return path for foreign-registry fns, count-exact-or-defer so a
+> runtime-variable residual falls back soundly). And the per-iteration
+> loop apply extends to Function params (`applyFn` re-push, apply-first
+> / apply-last seated by source order), with an escaping break/continue
+> crossing the island boundary via the registry FlowCtrl contract
+> (`Engine.flowUnwind` tears down the island's live frames;
+> `escapedFlow` translates the signal to the compiled cross-frame
+> unwind). The 4 remaining refusals are the three sound non-definite
+> error rows and the fn-value-reaches-`drop` row (`refusalGate = 4`).
+
 ## The three endgame actions
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns
@@ -70,6 +123,7 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 | M6 dynamic-scope tier | recursion 71/72 | Maintainer tiering decision — dynamic-scope frames are the one semantics the unit model cannot honestly claim. |
 | Sound non-definite error rows | convert-ideal 30, forward-barrier 80, word-splice 115 | The entire error allowlist: each has a written feasibility proof that the dispatch may succeed at runtime. |
 | Compute-frontier island | error.tsv 25 | The single `OpFallback` span. |
+| Unnamed fn-value param guard (miscompile-E) | module-fnvalue-boundary rows (6) | **Sound refusals** (added July 2026 with the execFnDefSig same-registry splice flip; re-justified under the arguments-are-inert unification — design/ARG-SEMANTICS-UNIFICATION.0.md §7). Originally the VALUE twin of the container auto-dispatch tier (the interpreter auto-fired the value where the unit stranded it). The unification removed the auto-fire, but the unit model still binds unnamed params to slots without pushing them onto the operand stack, so an unnamed arg FLOWING to the residual (`args.N` reads, the return-discipline trim) still diverges — the guard stays until unnamed-param frame flow is modelled in unit lowering. Guard in `carrier.go::runFnBodyOnce`; refusal gate 11 → 17; compute-gap ceiling 9 → 13. The module-fn EMPTY-body shape remains outside the guard's reach and outside the corpus (documented in both design notes). |
 
 **The unbounded whole-program fallback in `RunCompiled` stays**, by
 design: with 11 documented-tier refusals live it is the mechanism

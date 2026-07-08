@@ -139,6 +139,45 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // def site immediately follows the producing dispatch; a promoted producer
 // was rewritten to a local operand); any other layout refuses — a sound
 // interpreter fallback, never a wrong store.
+// lowerDynBind emits the registry-visible twin of a `def` whose name some
+// OpLookupDynScope reads (the DynScopeNames set): push the bound value's
+// operand, then OpBindDynScope pops it into r.Defs under the name (the VM
+// records the prior depth; the frame's RET truncates back — the
+// interpreter's def-cleanup discipline). A def of any other name lowers to
+// nothing here — its value flows by provenance exactly as before.
+func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
+	d := ev.dyn
+	if lw.es == nil || lw.es.dynScopeNames == nil || !lw.es.dynScopeNames[d.name] {
+		return ""
+	}
+	src := d.src
+	switch {
+	case d.srcSeq >= 0:
+		// A COMPUTED def value lives on the simulated stack at its producing
+		// event, not here — it is re-pushable only through a promoted frame
+		// local (planValueDefLocals / the unit's promoted map). Without the
+		// promotion there is no way to duplicate it for the registry install;
+		// refuse (sound interpreter fallback).
+		slot, ok := lw.promoted[d.srcSeq]
+		if !ok {
+			return "dynamic-scope def `" + d.name + "` of unpromoted computed value"
+		}
+		src = localOperand(slot)
+	case src.kind == opNone:
+		// A literal binding: bake the recorded value verbatim, UNPOOLED (it
+		// may carry a reparented tag a same-canon source literal must not
+		// inherit). Only inert data bakes; anything tape-coupled refuses.
+		if !isInertConst(d.val) {
+			return "dynamic-scope def `" + d.name + "` of unknown provenance"
+		}
+		src = constOperand(lw.es.internUnpooled(d.val))
+	}
+	lw.pushOperand(src, d.pos)
+	lw.emit(OpBindDynScope, lw.es.internUnpooled(NewString(d.name)), d.pos)
+	lw.vm = lw.vm[:len(lw.vm)-1]
+	return ""
+}
+
 func (lw *lowerer) lowerStore(ev *emitEvent) string {
 	st := ev.store
 	if st.src.kind == opEvent {
@@ -309,6 +348,8 @@ func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 		lw.emit(OpPushLocal, op.idx, pos)
 	case opType:
 		lw.emit(OpPushType, op.idx, pos)
+	case opDynScope:
+		lw.emit(OpLookupDynScope, op.idx, pos)
 	default: // opConst
 		lw.emit(OpPushConst, op.idx, pos)
 	}
@@ -414,6 +455,8 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 			reason = lw.lowerTrap(ev)
 		case evStore:
 			reason = lw.lowerStore(ev)
+		case evDynBind:
+			reason = lw.lowerDynBind(ev)
 		default:
 			reason = "unknown event kind"
 		}
@@ -491,6 +534,8 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		}
 	case evStore:
 		visit(ev.store.src)
+	case evDynBind:
+		visit(ev.dyn.src)
 	default: // evBranch
 		// thenVal / elsVal are the value-arm operands — meaningful only when
 		// thenIsVal / elsIsVal, and an opEvent only for the computed-arm shapes
@@ -1327,9 +1372,9 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 // This is the fn-unit caller of the shared seatResults primitive — it rejects a
 // variadic loop result (a fn body may not return one in Stage 3), the one way it
 // differs from Finalize's program-residual reconciliation.
-func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract bool, pos SrcPos) string {
+func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract, variadicMid bool, pos SrcPos) string {
 	extra := who + ": body leaves extra values (Stage 3 lowers in-order results)"
-	return lw.seatResults(ops, true, noContract, seatMsgs{
+	return lw.seatResults(ops, !variadicMid, noContract, seatMsgs{
 		variadic:     who + ": result is a variadic loop value (Stage 3)",
 		aboveLiteral: who + ": result above a literal (Stage 3)",
 		reordered:    extra,
@@ -1401,7 +1446,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.
 		pi := len(lw.p.PolyRefs)
-		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, Reg: c.polyReg})
+		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, NOut: c.nout, Reg: c.polyReg})
 		lw.emit(OpCallNativePoly, pi, c.pos)
 	} else {
 		si, ok := lw.sigIdx[c.sig]
@@ -1459,6 +1504,28 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 	lw.fragMulti = false
 	parent := lw.vm
 	lw.vm = nil
+	// An apply-FIRST per-iteration dynamic apply: the fn read precedes the
+	// body's other statements in source order, so the apply emits BEFORE them —
+	// a continue raised inside the applied body then skips the rest of the
+	// iteration exactly as the interpreter's shared tape does. The apply nets
+	// one value; the trailing statements must net zero (stores), leaving the
+	// applied result as the iteration's sole value.
+	if frag.applyFn != nil && frag.applyFirst {
+		lw.pushOperand(*frag.applyFn, pos)
+		for _, a := range frag.applyArgs {
+			lw.pushOperand(a, pos)
+		}
+		lw.emit(OpCallDynamic, len(frag.applyArgs), pos)
+		lw.vm = lw.vm[:len(lw.vm)-len(frag.applyArgs)]
+		if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
+			return reason
+		}
+		if !fragDiverges(frag) && len(lw.vm) != 1 {
+			return "loop body apply: statements after the apply leave values"
+		}
+		lw.vm = parent
+		return ""
+	}
 	if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
 		return reason
 	}
@@ -1472,6 +1539,15 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		if fragDiverges(frag) {
 			lw.vm = parent
 			return ""
+		}
+		// A re-pushable fn (applyFn — a frame-local `args.N` read): the body
+		// events left nothing on the sim; push the fn first, so the layout below
+		// is identical to the event-produced case.
+		if frag.applyFn != nil {
+			if len(lw.vm) != 0 {
+				return "loop body apply: fn re-push over a non-empty residual"
+			}
+			lw.pushOperand(*frag.applyFn, pos)
 		}
 		if len(lw.vm) != 1 {
 			return "loop body apply: leading fn value not the sole residual"

@@ -424,6 +424,9 @@ var (
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
+	RunPooled                 = eng.RunPooled
+	RunPooledTop              = eng.RunPooledTop
+	RunResolved               = eng.RunResolved
 	InvokeBody                = eng.InvokeBody
 	ConvertIdealToMap         = eng.ConvertIdealToMap
 	ConvertIdealToList        = eng.ConvertIdealToList
@@ -545,6 +548,8 @@ var (
 	ReturnsAddConcat       = eng.ReturnsAddConcat
 	ReturnsPreserveListAt  = eng.ReturnsPreserveListAt
 	ReturnsStatic          = eng.ReturnsStatic
+	DryPassReturns         = eng.DryPassReturns
+	DryPassWrap            = eng.DryPassWrap
 	CheckListIndex         = eng.CheckListIndex
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen

@@ -53,6 +53,23 @@ type Engine struct {
 	// container eval runs in-frame at its own recordable site.
 	elemEvalRecordable bool
 	reuseTape          bool // when set, Run reloads the existing tape in place instead of allocating (the VM's reusable island engine)
+	// flowUnwind marks a VM ISLAND engine: a break/continue that escapes the
+	// island's tape (no enclosing loop there) must TEAR DOWN the island's live
+	// spliced frames before returning — in the interpreter the frame and the
+	// enclosing loop always share one tape (handleLoopBreak's unwindLiveFrames
+	// runs at the loop), but the island boundary separates them, so the frame
+	// cleanup (args pop, def truncation, capture teardown) would otherwise be
+	// lost with the discarded tape. exitWithFlowCtrl then returns NO values —
+	// the VM discards the signalled iteration's partials anyway (flowSignal) —
+	// with the registry FlowCtrl flag left set for the VM to translate.
+	flowUnwind bool
+	// startAt is a one-shot start offset for the next Run: the leading
+	// startAt input values are RESOLVED arguments (a callback's inputs, a
+	// fn call's unnamed args) and enter as stack data below the pointer,
+	// never re-stepped — the sub-engine twin of FrameOpenInfo.ArgSpan
+	// (arguments are inert; design/ARG-SEMANTICS-UNIFICATION.0.md).
+	// Consumed (zeroed) by Run so it cannot leak into a later reuse.
+	startAt int
 	// voidGroups records the candidate consumers of paren groups that
 	// resolved to ZERO values in the current statement: the pending
 	// word names sitting below such a group when it closed. A
@@ -835,7 +852,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	e.marks = nil
 	e.voidGroups = nil
 	e.traceNote = ""
-	e.pointer = 0
+	e.pointer = e.consumeStartAt()
 
 	// stepLimit is always set by the constructors (New / NewTop); the
 	// defensive check that used to substitute a default if the field
@@ -906,7 +923,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.pointer++
 
 		case IsOpenParen(val):
-			e.pointer++
+			e.stepPastOpenParen(val)
 
 		case IsCloseParen(val):
 			if err := e.stepCloseParen(); err != nil {
@@ -1128,16 +1145,31 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// at the source token; here we only need to replace any dangling
 	// Undefined atoms with `Any` carriers so the residual stack stays
 	// type-clean for downstream consumers of CheckResult.Stack.
-	for i := 0; i < e.tape.Len(); i++ {
-		if !e.tape.At(i).Undefined {
-			continue
-		}
-		if e.registry.Check.IsActive() {
-			e.tape.Set(i, NewCarrier(TAny))
-		}
-	}
+	e.drainUndefinedAtoms()
 
 	return e.reconcileTopResidual(e.tape.TakeAll()), nil
+}
+
+// drainUndefinedAtoms replaces dangling Undefined atoms with Any carriers
+// (check mode only — outside check mode stepWord errors on undefined words,
+// so this is a no-op). Each carrier remembers which NAME the atom carried:
+// an analysis-time-undefined read inside a fn body can still be a
+// DYNAMIC-SCOPE reference bound by a live frame at run time (a recursive
+// base case reading the previous frame's body-local — recursion.tsv:71);
+// resolveOperand's dynScopeRescue lowers it to a runtime lookup iff a
+// binder fn reaches the reader.
+func (e *Engine) drainUndefinedAtoms() {
+	for i := 0; i < e.tape.Len(); i++ {
+		und := e.tape.At(i)
+		if !und.Undefined || !e.registry.Check.IsActive() {
+			continue
+		}
+		c := NewCarrier(TAny)
+		if a, aerr := AsAtom(und); aerr == nil && a != "" {
+			e.registry.Check.Recorder().NoteDefRead(c.ID, a)
+		}
+		e.tape.Set(i, c)
+	}
 }
 
 // reconcileTopResidual reconciles the top-level program residual the same
@@ -2104,6 +2136,11 @@ func (e *Engine) stepWord(val Value) error {
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
 			e.registry.Check.recordUse(w.Name)
+			// Remember which NAME produced this value (compile passes): if the
+			// value later has no compiled home in a fn unit, the read was a
+			// dynamic-scope reference and lowers to a runtime name lookup
+			// (resolveOperand's dynScopeRescue).
+			e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
 			// at def time (so `size xs` → 3). To splice a list's elements
@@ -4967,10 +5004,22 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		args[i].Undefined = false
 	}
 
-	if capturedReg != nil {
+	if capturedReg != nil && (capturedReg != e.registry || e.registry.Lookup("__pa") == nil) {
 		// Execute in the captured module's registry via CallAQL.
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
+		//
+		// Same-registry values fall through to the splice branch below: a
+		// module-fn VALUE applied inside its own module (a callback passed
+		// back in) needs no registry hop, so it takes the same main-tape
+		// frame path a named fn call does — one fewer sub-engine per call,
+		// and flow-control/def-cleanup semantics identical to named
+		// dispatch (the TCO-STAGED Stage-5 residual flip; boundary rows in
+		// lang/spec/module-fnvalue-boundary.tsv). Gated on the frame
+		// protocol being EXECUTABLE: the splice tail's `__pa` word is
+		// registered by the language layer, so a bare kernel registry (an
+		// eng-only embedder, the kernel test harnesses) keeps the CallAQL
+		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
 		if valIdx < e.tape.Len() {
 			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {
@@ -5059,6 +5108,12 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			tokens = append(tokens, args[i])
 			unnamedCount++
 		}
+	}
+	// Stamp the resolved-argument span on the frame open so the step
+	// loop skips the unnamed args (arguments are inert —
+	// FrameOpenInfo.ArgSpan; same stamp as buildFnBodyHandler).
+	if unnamedCount > 0 {
+		tokens[0] = NewFrameOpenSpan(fnValueFrameMeta, unnamedCount)
 	}
 	// Snapshot AFTER captures+params so the tail's DefCleanup tears
 	// down only body-local defs — the same placement as
@@ -5565,6 +5620,14 @@ func (e *Engine) exitWithFlowCtrl() ([]Value, error) {
 		e.registry.FlowCtrl = FlowNone
 		return nil, e.runtimeError("flow_error", fmt.Sprintf("%s outside loop", ctrl), ctrl.String(), "")
 	}
+	if e.flowUnwind {
+		// A VM island: no outer TAPE exists to adopt the residual — tear down
+		// the live spliced frames (their registry state: args stack, body-local
+		// defs, captures) and return nothing; the VM translates the signal.
+		e.unwindLiveFrames(0, e.tape.Len())
+		e.tape.TakeAll()
+		return nil, nil
+	}
 	return e.tape.TakeAll(), nil
 }
 
@@ -5591,6 +5654,11 @@ func (e *Engine) handleLoopBreak() bool {
 					delete(e.marks, info.To)
 					continue
 				}
+
+				// Unwind any fn frame the break is escaping — its cleanup
+				// tail is about to be discarded with the loop region and
+				// would otherwise leak the per-call stacks (fn_frame.go).
+				e.unwindLiveFrames(markIdx, i)
 
 				// Uninstall iterator, splice in accumulated results.
 				UninstallDef(info.Cont.Registry, info.Cont.IterName)
@@ -5628,6 +5696,11 @@ func (e *Engine) handleLoopContinue() bool {
 					continue
 				}
 
+				// Unwind any fn frame the continue is escaping — its cleanup
+				// tail is about to be discarded with the iteration region and
+				// would otherwise leak the per-call stacks (fn_frame.go).
+				e.unwindLiveFrames(markIdx, i)
+
 				// Remove values between mark and move (discard partial results).
 				if i-markIdx > 1 {
 					e.tape.Splice(markIdx+1, i-markIdx-1)
@@ -5661,6 +5734,33 @@ func (e *Engine) stepOpenParen() error {
 	e.tape.Set(e.pointer, NewOpenParen())
 	e.pointer++
 	return nil
+}
+
+// consumeStartAt resolves the one-shot resolved-argument prefix for the
+// Run that is starting: the leading startAt input values are call-site-
+// resolved arguments, so stepping starts after them and they enter as
+// stack data (see the startAt field doc). Zeroes the field so it cannot
+// leak into a later reuse of a pooled engine.
+func (e *Engine) consumeStartAt() int {
+	start := 0
+	if e.startAt > 0 && e.startAt <= e.tape.Len() {
+		start = e.startAt
+	}
+	e.startAt = 0
+	return start
+}
+
+// stepPastOpenParen advances the pointer over an open paren at the
+// pointer. A fn frame's open paren carries the span of unnamed arguments
+// spliced at the frame head; they were resolved at the call site, so the
+// pointer skips them and they enter as stack data, never re-stepped — a
+// Function value or __SP marker argument must not fire on placement
+// (arguments are inert; design/ARG-SEMANTICS-UNIFICATION.0.md).
+func (e *Engine) stepPastOpenParen(val Value) {
+	e.pointer++
+	if info, ok := val.Data.(FrameOpenInfo); ok && info.ArgSpan > 0 {
+		e.pointer += info.ArgSpan
+	}
 }
 
 // stepCloseParen handles the ")" word. It resolves any pending forwards
@@ -7056,6 +7156,19 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 					av = top
 					e.registry.Check.recordUse(wi.Name)
 				}
+			}
+		}
+		// Auto-evaluate a raw eval-map operand exactly as the runtime match's
+		// execMatch would (word members resolve against the live frame, the
+		// recorder assembles a per-run OpMakeMap): the recovery otherwise
+		// hands the RAW source map to the poly record, which either baked a
+		// live word member as a frozen const (the repl-eval `{line: src}`
+		// request map) or refuses. Errors leave the raw operand — the
+		// assumed-sig model stays as before.
+		if IsConcrete(av) && av.Parent != nil && av.Parent.ConformsTo(TMap) && bearsActiveTokens(av) {
+			if ev, everr := e.autoEvalMap(av, false, true); everr == nil {
+				e.tape.Set(p, ev)
+				av = ev
 			}
 		}
 		args[i] = av

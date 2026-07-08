@@ -31,17 +31,23 @@ func TestDefaultOutput(t *testing.T) {
 // --- resolveCompile ---
 
 func TestResolveCompile(t *testing.T) {
-	if resolveCompile(false, false) != buildrt.CompileOff {
-		t.Error("default should be CompileOff")
+	if resolveCompile(false, false, false) != buildrt.CompileTry {
+		t.Error("default should be CompileTry (compiled mode on by default)")
 	}
-	if resolveCompile(true, false) != buildrt.CompileTry {
+	if resolveCompile(true, false, false) != buildrt.CompileTry {
 		t.Error("--compile should be CompileTry")
 	}
-	if resolveCompile(false, true) != buildrt.CompileForce {
+	if resolveCompile(false, true, false) != buildrt.CompileForce {
 		t.Error("--force-compile should be CompileForce")
 	}
-	if resolveCompile(true, true) != buildrt.CompileForce {
+	if resolveCompile(true, true, false) != buildrt.CompileForce {
 		t.Error("force should win over try")
+	}
+	if resolveCompile(false, false, true) != buildrt.CompileOff {
+		t.Error("--no-compile should be CompileOff")
+	}
+	if resolveCompile(true, true, true) != buildrt.CompileOff {
+		t.Error("--no-compile should win over both")
 	}
 }
 

@@ -74,23 +74,24 @@ func TestEvalForceCompile(t *testing.T) {
 	}
 }
 
-// ResolveCompileMode applies the bytecode rollout contract: the `--compile`
-// flag OR AQL_COMPILE enables best-effort compiled mode; the `--force-compile`
-// flag OR AQL_FORCE_COMPILE demands the bytecode path (winning over the
-// best-effort form); and AQL_NO_COMPILE is the kill switch that wins over all.
+// ResolveCompileMode applies the bytecode mode contract: best-effort compiled
+// mode is the DEFAULT (the `--compile` flag / AQL_COMPILE spell it
+// explicitly); the `--force-compile` flag OR AQL_FORCE_COMPILE demands the
+// bytecode path (winning over the best-effort form); and --no-compile /
+// AQL_NO_COMPILE is the kill switch that wins over all.
 func TestResolveCompileMode(t *testing.T) {
 	cases := []struct {
 		compileFlag, forceFlag, noCompileFlag bool
 		compile, force, noCompile             string
 		want                                  CompileMode
 	}{
-		{false, false, false, "", "", "", CompileOff},     // default: interpreter (maintainer decision — compiled mode is opt-in)
-		{true, false, false, "", "", "", CompileTry},      // --compile flag
+		{false, false, false, "", "", "", CompileTry},     // default: compiled mode ON (P7 endgame flip)
+		{true, false, false, "", "", "", CompileTry},      // --compile flag (explicit spelling of the default)
 		{false, true, false, "", "", "", CompileForce},    // --force-compile flag
 		{false, false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
 		{false, false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
-		{false, false, false, "0", "", "", CompileOff},    // AQL_COMPILE=0 is off
-		{false, false, false, "no", "", "", CompileOff},   // AQL_COMPILE=no is off
+		{false, false, false, "0", "", "", CompileTry},    // AQL_COMPILE=0 is not an opt-out — the default TRY stands
+		{false, false, false, "no", "", "", CompileTry},   // AQL_COMPILE=no likewise; --no-compile/AQL_NO_COMPILE is the opt-out
 		{false, false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
 		{true, true, false, "", "", "", CompileForce},     // force wins over try (flags)
 		{true, false, false, "", "1", "", CompileForce},   // force env wins over try flag

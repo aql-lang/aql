@@ -304,6 +304,12 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				unnamedCount++
 			}
 		}
+		// Stamp the resolved-argument span on the frame open so the step
+		// loop skips the unnamed args — they enter as stack data and are
+		// never re-stepped (arguments are inert; FrameOpenInfo.ArgSpan).
+		if unnamedCount > 0 {
+			result[0] = NewFrameOpenSpan(meta, unnamedCount)
+		}
 		// Snapshot DefStacks lengths after installing named params
 		// so we can clean up any defs created during body execution
 		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
@@ -472,8 +478,44 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 // membership errors; a disjunct flags only when EVERY alternative is
 // impossible. Deduped by detail — the ReturnsFn runs once per analysed call
 // shape, but shapes repeat across call sites.
-func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk []Value, pos, bodyEnd SrcPos) {
-	if len(declared) == 0 || len(stk) < len(declared) || !r.Check.IsActive() {
+//
+// The COUNT mirror of the same boundary: a residual provably LONGER than the
+// declaration tolerates is the runtime's "expected N return value(s), got M"
+// (returnCountErrorText — the __RC arity rule, which discards bottom extras
+// only up to unnamedCount, the fn's unconsumed unnamed-arg allowance). Only a
+// count the analysis knows exactly flags: a variadic spread models 0-or-more
+// values, and a Function/FnDef in the residual may be an unapplied fn-value
+// call the static model over-counts (the emit.go cluster-E shape) — both
+// skip. The short side (len < declared) stays with the runtime arity error —
+// EXCEPT the all-concrete-call EMPTY residual on the top-level straight
+// line: a declared fn whose per-call analysis (real argument values, no
+// generalisation) nets NOTHING either diverged (a taken `raise` branch —
+// the divergence model leaves no carrier) or under-returns, and the runtime
+// errors EITHER way (the raise, or "expected N…, got 0"), so the call is a
+// guaranteed program error. argsConcrete gates it to real concrete-arg
+// calls — the install-time synthetic example eval and generalised analyses
+// use carriers and never fire it.
+func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unnamedCount int, argsConcrete bool, stk []Value, pos, bodyEnd SrcPos) {
+	if len(declared) == 0 || !r.Check.IsActive() {
+		return
+	}
+	if len(stk) < len(declared) {
+		if len(stk) == 0 && argsConcrete && CheckAtUncaughtTopLevel(r) &&
+			!fnBodyUndefinedWordShield(r, name, pos, bodyEnd) {
+			detail := fmt.Sprintf(
+				"%s: the body produces no return value for this call (declared %d) — the call always errors",
+				name, len(declared))
+			if !hasCheckDiagnostic(r, "type_error", detail) {
+				r.Check.AddDiagnostic(CheckDiagnostic{
+					Code:          "type_error",
+					Detail:        detail,
+					Word:          name,
+					Row:           pos.Row,
+					Col:           pos.Col,
+					RuntimeMirror: true,
+				})
+			}
+		}
 		return
 	}
 	// A residual computed while this body contained an UNDEFINED word is not
@@ -492,17 +534,32 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 	// wrong regardless of the first f's rescued `g`). An unattributed
 	// diagnostic (Row 0) or an unpositioned body keeps the name-wide skip —
 	// conservative, never a new false positive.
-	for _, d := range r.Check.Diagnostics {
-		if d.Code != "undefined_word" || d.FnName != name {
-			continue
-		}
-		if d.Row != 0 && (bodyEnd.Row != 0 || bodyEnd.Col != 0) &&
-			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, SrcPos{Row: d.Row, Col: d.Col})) {
-			continue // attributed outside this body — not this body's signal
-		}
+	if fnBodyUndefinedWordShield(r, name, pos, bodyEnd) {
 		return
 	}
 	extra := len(stk) - len(declared)
+	// The count mirror flags only an exactly-known count: a DYNAMIC value
+	// in the residual marks a modelling seam (a mid-body `apply`, a
+	// gradual branch join) where the static count can diverge from the
+	// runtime one — skip, like the variadic/fn-value shapes. It is a
+	// RuntimeMirror: the compile pass deliberately COMPILES the
+	// count-mismatched body and lets the VM RET raise the byte-identical
+	// error (emit.go — TestEmitP5MultiResult pins it), so the refusal
+	// loop skips mirror diagnostics.
+	if extra > unnamedCount &&
+		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) {
+		detail := returnCountErrorText(name, len(declared), len(stk)-unnamedCount)
+		if !hasCheckDiagnostic(r, "type_error", detail) {
+			r.Check.AddDiagnostic(CheckDiagnostic{
+				Code:          "type_error",
+				Detail:        detail,
+				Word:          name,
+				Row:           pos.Row,
+				Col:           pos.Col,
+				RuntimeMirror: true,
+			})
+		}
+	}
 	for k, exp := range declared {
 		if exp == nil || exp.Equal(TAny) {
 			continue
@@ -532,23 +589,81 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, stk 
 			}
 		}
 		detail, _ := returnTypeErrorText(name, k+1, exp, got)
-		dup := false
-		for _, d := range r.Check.Diagnostics {
-			if d.Code == "type_error" && d.Detail == detail {
-				dup = true
-				break
-			}
-		}
-		if !dup {
+		if !hasCheckDiagnostic(r, "type_error", detail) {
+			// A RuntimeMirror like the count path: the VM RET re-checks the
+			// runtime value and raises the byte-identical type_error, so the
+			// compiled error path is exact.
 			r.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "type_error",
-				Detail: detail,
-				Word:   name,
-				Row:    pos.Row,
-				Col:    pos.Col,
+				Code:          "type_error",
+				Detail:        detail,
+				Word:          name,
+				Row:           pos.Row,
+				Col:           pos.Col,
+				RuntimeMirror: true,
 			})
 		}
 	}
+}
+
+// fnBodyUndefinedWordShield reports whether an undefined_word diagnostic is
+// attributed to THIS fn body's source span — the "analysis ran early"
+// signal (a mutually-recursive sibling defined later makes the install-time
+// analysis see an incomplete world, and FnSummaries then serves that broken
+// residual to every later call). Scoped to [pos, bodyEnd]: an undefined
+// forward ref in a DIFFERENT overload/redefinition of the same name must
+// not shield this body's conformance check. An unattributed diagnostic
+// (Row 0) or an unpositioned body keeps the name-wide shield —
+// conservative, never a new false positive.
+func fnBodyUndefinedWordShield(r *Registry, name string, pos, bodyEnd SrcPos) bool {
+	for _, d := range r.Check.Diagnostics {
+		if d.Code != "undefined_word" || d.FnName != name {
+			continue
+		}
+		if d.Row != 0 && (bodyEnd.Row != 0 || bodyEnd.Col != 0) &&
+			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, SrcPos{Row: d.Row, Col: d.Col})) {
+			continue // attributed outside this body — not this body's signal
+		}
+		return true
+	}
+	return false
+}
+
+// hasCheckDiagnostic reports whether a diagnostic with the given code and
+// exact detail is already recorded — the dedupe the per-call-shape ReturnsFn
+// paths use (one analysed shape can repeat across call sites). A caught
+// (downgraded) entry does not count: it must never mask a later REAL
+// emission of the same finding outside the trapping region.
+func hasCheckDiagnostic(r *Registry, code, detail string) bool {
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == code && d.Detail == detail && !d.CaughtAtRuntime {
+			return true
+		}
+	}
+	return false
+}
+
+// stackHasFnValue reports whether any residual value is a Function/FnDef —
+// the shape whose static count can over-report (an unapplied fn-value call
+// the interpreter applies at runtime; see emit.go's cluster-E refusal).
+func stackHasFnValue(stk []Value) bool {
+	for _, v := range stk {
+		if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+			return true
+		}
+	}
+	return false
+}
+
+// stackHasDynamic reports whether any residual value is gradual (Dynamic)
+// — the marker of a modelling seam where the analysis count may not equal
+// the runtime count.
+func stackHasDynamic(stk []Value) bool {
+	for _, v := range stk {
+		if v.Dynamic {
+			return true
+		}
+	}
+	return false
 }
 
 // posBefore reports whether source position (row, col) strictly precedes p
@@ -725,40 +840,6 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 	}
 }
 
-// bodyConstructsFn reports whether a fn body's tokens construct a function
-// value at run time — a `fn` / `afn` word (`=>` desugars to a paren group
-// around `afn`), or a literal FnDefInfo riding in the tokens. Used to gate
-// unit-compiling FOREIGN-registry (module-preamble) fn bodies: a lambda
-// constructed inside such a body escapes as a VALUE carrying name-resolved
-// body tokens, and only the interpreter's foreign dispatch (execFnDefLiteral's
-// wrapper branch) executes the constructing body in the module's own scope —
-// a compiled unit runs against the dispatching registry, so the escaped
-// lambda's module-private words would no longer resolve (the aql:repl served
-// handler was the observed divergence).
-func bodyConstructsFn(toks []Value) bool {
-	for _, t := range toks {
-		if IsWord(t) {
-			if w, err := AsWord(t); err == nil && (w.Name == "fn" || w.Name == "afn") {
-				return true
-			}
-			continue
-		}
-		switch d := t.Data.(type) {
-		case FnDefInfo:
-			return true
-		case ListPayload:
-			if bodyConstructsFn(d.Elems) {
-				return true
-			}
-		case ParenExprPayload:
-			if bodyConstructsFn(d.Toks) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -869,17 +950,17 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
 			}
 		}
-		// A FOREIGN-registry fn (module-preamble body dispatched from another
-		// registry) whose body CONSTRUCTS a fn value cannot be unit-compiled:
-		// the compiled unit executes against the dispatching registry, so the
-		// constructed lambda — and any capability state forked around it (a
-		// listener's per-connection registries) — loses the module's private
-		// scope that the interpreter's foreign-wrapper dispatch provides.
-		// Refuse → the row falls back to full interpretation (the documented
-		// aql:repl endpoint tier in test/go/langspec/compiled_coverage_test.go).
-		if es.active() && caller != nil && caller != r && bodyConstructsFn(bodyCopy) {
-			es.MarkUncompilable("module fn `" + nameCopy + "` constructs a fn value: module scope only survives the interpreter's foreign dispatch")
-		}
+		// A FOREIGN-registry fn whose body constructs a fn value USED to
+		// refuse wholesale (the compiled unit executed against the
+		// dispatching registry, losing module scope for the constructed
+		// lambda). Units now carry their owning registry (CompiledFn.Reg):
+		// the VM dispatches the unit's natives against it — exactly the
+		// registry the interpreter's foreign-wrapper CallAQL runs the body
+		// in — so a constructed lambda's downstream capability state (a
+		// listener's per-connection registries) forks module scope on both
+		// engines, and the refusal is retired (aql:repl rows 12/16/18
+		// compile; the remaining statement-position recovery strand refuses
+		// through the ordinary provenance paths).
 		if es.Armed() && !clusterCRefuse {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
@@ -949,7 +1030,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if len(bodyCopy) > 0 {
 				fnPos = bodyCopy[0].Pos
 			}
-			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
+			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
 				fnUnit = -1
 			}
@@ -992,7 +1073,14 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if len(bodyCopy) > 0 {
 				retPos = bodyCopy[0].Pos
 			}
-			checkBodyReturnConformance(r, nameCopy, declaredReturns, stk, retPos, bodySpanEnd(bodyCopy))
+			unnamedCount := 0
+			for _, p := range sigParams {
+				if p.Name == "" {
+					unnamedCount++
+				}
+			}
+			checkBodyReturnConformance(r, nameCopy, declaredReturns, unnamedCount,
+				allConcreteArgs(args), stk, retPos, bodySpanEnd(bodyCopy))
 		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))

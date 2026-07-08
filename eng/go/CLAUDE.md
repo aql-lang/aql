@@ -23,6 +23,40 @@ marker — see `;` → `"end"`, `=>` → `"afn"`, `|` → `"|"` in
 linear. Behaviour the marker can't express directly belongs in the
 registered word's handler, not in a separate parser stage.
 
+## Check-mode guaranteed-error mirrors (classification + gates)
+
+A check diagnostic that mirrors a GUARANTEED runtime error (a strict-
+accessor static miss, a provable index OOB, an unconditional raise, a
+dry-passed pure handler's failure — design/CHECKER-COMPLETION.0.md) is
+classified and gated rather than sprinkled with ad-hoc suppressions:
+
+- **`CheckDiagnostic.RuntimeMirror`** — stamped by every mirror emitter
+  (`CheckAddUniqueDiagnostic` does it for all its callers; direct
+  emitters set it explicitly). The compile pipeline's error-diagnostic
+  refusal (`CompileCheck` / `Vm.compile`) SKIPS mirrors: the finding's
+  model is exact — the program compiles and raises the identical error
+  (trap / VM RET / the same handler) — so only MODEL-UNDERMINING errors
+  (undefined_word, no_signature: dispatch didn't resolve) refuse.
+  Check and compile passes therefore report the SAME diagnostics.
+- **`CheckDiagnostic.CaughtAtRuntime`** — stamped CENTRALLY by
+  `AddDiagnostic`: inside an error-TRAPPING region (`do [...]` raises
+  `CheckState.CaughtBodyDepth`) every would-be-error finding is
+  downgraded to info, uniformly across families. The information
+  survives; the false error verdict does not. Dedupe helpers skip
+  caught entries so they never mask a real emission elsewhere.
+- **Reachability** — a mirror that claims "the program errors" must be
+  unconditionally reached: `CheckState.FnBodyDepth` (fn bodies run only
+  if called) and `CheckState.NestedBodyDepth` (raised by
+  `RunCarrierBodyWithDefs` — every branch / loop / quotation body is
+  conditionally reached). `CheckAtUncaughtTopLevel(r)` (drypass.go)
+  composes them.
+
+For PURE handlers over concrete args, wire `DryPassReturns` /
+`DryPassWrap` instead of a bespoke ReturnsFn. Compile passes arm
+themselves through ONE helper — `CheckState.BeginCompilePass()` (fresh
+EmitState, the Compiling flag, fn-memo drop); never hand-roll the
+ritual, that is how Vm.compile shipped without the Compiling flag.
+
 ## Per-Call Stacks (Args / DefSnapshot / FnBaselines)
 
 Every fn-body entry pushes onto three coordinated stacks; every fn
@@ -35,6 +69,14 @@ together when you touch one of these sites.
 | Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallAQL` | `__pa` token in the synthesized body tail / `CallAQL` inline cleanup | `args` native word |
 | Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
 | Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
+
+A `break`/`continue` escaping a live spliced frame discards the
+frame's tail before it executes; the flow resolvers therefore run
+`unwindLiveFrames` (`fn_frame.go`) over the discarded region, which
+replays each open frame's canonical tail (`__DC`, `__pa`, the
+force-forward `undef` pairs, innermost-first) so all three stacks
+stay balanced. Without it the dead callee's args list shadows the
+caller's `args` for the rest of the loop.
 
 The baseline is what closure-capture detection consults at fn-
 construction time: an inner-fn body Word whose `Defs.Depth(name) >
@@ -70,7 +112,12 @@ Concretely:
 - Body-token push (unnamed params via CallAQL / InstallFnDef /
   execFnDefSig): appends `args[0]…args[N-1]` in order, no
   reversal. Body frame contains `args[0]` at the bottom and
-  `args[N-1]` on top.
+  `args[N-1]` on top. **Arguments enter the frame RESOLVED** — the
+  step region starts after them (`FrameOpenInfo.ArgSpan` on spliced
+  frames, `Engine.startAt` on sub-engine runs), so an argument with
+  active step semantics (a Function value, an `__SP` marker) is
+  inert data exactly like a named binding; it acts only where the
+  body uses it. See design/ARG-SEMANTICS-UNIFICATION.0.md.
 
 There is **no exception path**. Anything that looks like a
 "reordering" elsewhere is either:

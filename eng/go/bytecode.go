@@ -256,6 +256,31 @@ const (
 	// paren-bounded RecordDynApply event when the apply word drove it.
 	OpCallDynApplyTop
 
+	// OpCallDynFrame replays a fn body's ENTIRE end-of-body residual — the
+	// whole-frame dynamic-apply window. A fn body that leaves an unapplied
+	// runtime FUNCTION value in its residual (`(args.0 args.1)` over an
+	// unnamed Function param, or a bare `args.0` read of one) cannot lower to
+	// the bounded leading/trailing apply ops: the interpreter's
+	// execFnDefLiteral rule dispatches that value against the LIVE FRAME —
+	// forward-collecting the residual values after it AND stack-collecting the
+	// frame values below it (including the unnamed-param re-pushes at the
+	// frame bottom), by whatever name/arity the value turns out to have. Arg
+	// is the width of the TOKEN region: the top Arg stack entries are the
+	// values the interpreter's pointer actually stepped (fn reads and their
+	// following args); everything below them in the CURRENT frame is the
+	// resolved prefix (the frame-bottom unnamed-param re-pushes, inert by the
+	// arguments-are-inert invariant). The VM re-runs the whole frame region
+	// via RunResolved(unit registry, prefix, tokens) — a nested interpreter
+	// run whose stepping starts after the prefix, exactly the sub-engine twin
+	// of the frame's own ArgSpan — and replaces the frame region with the
+	// run's residual. Faithful by construction for ANY callee arity, type
+	// mismatch (the value stays data), or below-window collection — PROVIDED
+	// the window is the body's LAST statement: the replay fires at the RET,
+	// so a recorded event after it would reorder observable effects ahead of
+	// the apply's (the recorder's replayIsBodyTail gate refuses that shape).
+	// The following RET applies the CallAQL-path trim (CompiledFn.RetReplay).
+	OpCallDynFrame
+
 	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container
 	// identity (CloneValue) instead of the pooled instance. A compound VALUE
 	// literal written in a fn body is re-EVALUATED per call by the interpreter,
@@ -311,6 +336,35 @@ const (
 	// AQL error raised by the method surfaces as-is (the interpreter raises
 	// the same at the same point, prior side effects included).
 	OpCallDynMethod
+
+	// OpLookupDynScope is a DYNAMIC-SCOPE name read: a fn body's word that
+	// resolves through no lexical home — not a param, capture, local, const,
+	// or module binding the recorder can bake — but which SOME live frame
+	// binds at run time (a callee reading the caller's param, a recursive
+	// base case reading the previous frame's body-local — recursion.tsv
+	// 71/72). Arg indexes Program.Consts (a String holding the name); the VM
+	// reads r.Defs.Top(name) exactly as the interpreter's stepWord
+	// substitution does. A miss, or a binding the substitution would NOT
+	// push as a simple value (an FnDef/class dispatch, a splice/reach
+	// marker), defers to the interpreter via internal_error
+	// (runtimeShouldFallback — slow, not wrong). The binder side is
+	// OpBindDynScope: the whole-program lowering pass installs it in every
+	// unit that binds a dynamically-read name.
+	OpLookupDynScope
+
+	// OpBindDynScope makes a frame binding REGISTRY-VISIBLE for dynamic-scope
+	// readers: it pops the top value and installs it under the name in
+	// Program.Consts[Arg] via InstallDef — the same installer the
+	// interpreter's `def` runs — recording the name's prior depth so the
+	// frame's exit (RET) truncates the binding stack back, exactly the
+	// interpreter's def-cleanup discipline. Emitted only for names some
+	// OpLookupDynScope reads (the DynScopeNames set), at the def site for
+	// body-locals and at unit entry for params; top-level binds are never
+	// popped (the interpreter leaves top-level defs installed too). A unit
+	// containing binds never TAIL-calls (the interpreter keeps the frame's
+	// bindings live across the call in its body tail), so bindings stack
+	// per-activation and pop innermost-first.
+	OpBindDynScope
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -352,9 +406,12 @@ var opcodeNames = [...]string{
 	OpCallUserPoly:        "CALL_USER_POLY",
 	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
 	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
+	OpCallDynFrame:        "CALL_DYN_FRAME",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
 	OpBindTyped:           "BIND_TYPED",
 	OpCallDynMethod:       "CALL_DYN_METHOD",
+	OpLookupDynScope:      "LOOKUP_DYN_SCOPE",
+	OpBindDynScope:        "BIND_DYN_SCOPE",
 }
 
 func (o Opcode) String() string {
@@ -370,6 +427,14 @@ func (o Opcode) String() string {
 type PolyRef struct {
 	Word  string
 	Arity int
+	// NOut is the result-count CLAIM the recorder's stack model committed
+	// downstream ops to. The runtime re-match may land on a DIFFERENT
+	// overload than the checker's model (that is poly's point), and when
+	// that overload's result count differs from the claim the program's
+	// stack layout no longer holds — the VM defers to the interpreter via
+	// internal_error (runtimeShouldFallback: slow, not wrong) instead of
+	// silently shifting every downstream operand.
+	NOut int
 	// Reg is the sub-registry whose signatures the VM re-matches a MODULE poly
 	// word over (`StructUtil.getpath` — a sub-registry word). Nil means the main
 	// registry (the common case: a core builtin like get/size/is). The pointer
@@ -633,7 +698,28 @@ type CompiledFn struct {
 	// fn the captures still ride as trailing CALL_USER args, so NCaptures
 	// stays 0 there — it is closure-specific.)
 	NCaptures int
-	NLocals   int
+	// NUnnamed is how many of the params are UNNAMED (stack-flowing): the
+	// lowering re-pushes each unnamed param onto the operand stack at unit
+	// entry (mirroring the interpreter's frame, where unnamed args sit
+	// resolved at the body's bottom), so an unnamed arg the body never
+	// consumes remains in the frame region at RET. The RET contract
+	// (checkReturnContract) DISCARDS up to NUnnamed extra bottom values —
+	// the exact __RC discipline (engine.go: extras beyond the declared
+	// returns are tolerated up to the unnamed-arg allowance, then trimmed).
+	// 0 for all-named fns and closures.
+	NUnnamed int
+	NLocals  int
+	// Reg is the fn's OWNING registry when it differs from the program's —
+	// a module-preamble fn compiled through a foreign dispatch. The VM runs
+	// the unit's native dispatches against it (vmContext curReg), exactly
+	// as the interpreter's CallAQL runs the body in the fn's own registry:
+	// module-private names resolve there, and registry-visible handler
+	// effects (Net.listen forking per-connection registries, dynamic-scope
+	// binds) land in module scope on both engines. Nil for ordinary fns —
+	// the unit runs on the program's registry. The pointer is the same
+	// sub-registry object the check pass created on the shared registry
+	// (like PolyRef.Reg), so it stays valid for the compiled run.
+	Reg *Registry
 	// InShape is the input convention a closure over this unit presents to its
 	// driving handler (ClosureInValue for an ordinary fn / token body, or
 	// ClosureInKeyVal for a map-iteration lambda body). Copied onto the
@@ -672,6 +758,18 @@ type CompiledFn struct {
 	// Body-local iterator slots have no name (empty string). Purely
 	// metadata — the VM never reads it.
 	LocalNames []string
+	// RetReplay marks a body that ends in a whole-frame dynamic-apply replay
+	// (OpCallDynFrame): its residual count is RUNTIME-variable, so the RET
+	// contract switches discipline. A FOREIGN-registry fn (Reg set, a module-
+	// preamble fn) is dispatched via CallAQL in the interpreter, whose return
+	// path is TRIM-ONLY — it discards up to NUnnamed extra bottom values and
+	// has never enforced return count or type (registry.go::CallAQL, the
+	// documented asymmetry) — so the compiled RET mirrors that trim, then
+	// DEFERS to the interpreter (internal_error → sound whole-program
+	// fallback) if the count still differs from the callers' static model. A
+	// same-registry fn keeps the frame-path contract (count error + type
+	// validation), which checkReturnContract already mirrors byte-identically.
+	RetReplay bool
 }
 
 // slotNames renders a CompiledFn's slot→name table for the
@@ -721,7 +819,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 	for i, in := range code {
 		fmt.Fprintf(sb, "%04d %-11s", i, in.Op.String())
 		switch in.Op {
-		case OpPushConst:
+		case OpPushConst, OpLookupDynScope, OpBindDynScope:
 			c := p.Consts[in.Arg]
 			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:
@@ -758,6 +856,8 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 			fmt.Fprintf(sb, " /%d ; apply fn-value", in.Arg)
 		case OpCallDynamicTrailing:
 			fmt.Fprintf(sb, " /%d ; apply trailing fn-value", in.Arg)
+		case OpCallDynFrame:
+			fmt.Fprintf(sb, " /%d ; replay frame residual (dynamic apply)", in.Arg)
 		case OpMakeList:
 			fmt.Fprintf(sb, " n%-3d ; assemble %d into a list", in.Arg, in.Arg)
 		case OpMakeMap:

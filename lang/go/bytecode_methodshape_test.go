@@ -114,35 +114,34 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 	}
 }
 
-// --- negatives: the guard rows stay refused --------------------------------
+// --- the former guard rows: 0-arg landings now compile ---------------------
 
-// The 4 auto-dispatch guard rows (module-log 72/73, module-rand 14/15) sit on
-// the SOUND miscompile-E guard: a member with a genuine 0-arg overload
+// The 4 miscompile-E rows (module-log 72/73, module-rand 14/15) used to sit
+// on a read-side refusal: a member with a genuine 0-arg overload
 // (Span.finish, Rand.bool/float) auto-dispatches the moment it lands, which
-// the VM cannot honour — NoteMethodShape excludes the class and the
-// get-family read guards refuse first, so the model must never compile them.
-func TestShapedMethodGuardRowsStayRefused(t *testing.T) {
-	for _, c := range []struct{ name, src string }{
+// the read guard blocked wholesale. The guard is now RE-HOMED onto the
+// landing: NoteMethodShape ANNOTATES the 0-arg class, the read guards skip
+// the annotated read (EmitState.noteShapedRead), and the landing model claims
+// it as an explicit arity-0 OpCallDynMethod (shapedMethodApplyWindow's 0-arg
+// path) — or refuses via tryShapedMethodDispatch's guard-owned decline. So
+// the rows compile with parity, and the VM's poly-get returns the member
+// VALUE for the opcode to consume (no runtime auto-apply).
+func TestShapedMethodZeroArgLandingsCompile(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
 		{"module-log.tsv:72 — span set-attr/finish",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get`},
+			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get`,
+			"[{region:'eu'}]"},
 		{"module-log.tsv:73 — span record-error/finish",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get`},
+			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get`,
+			"[error]"},
 		{"module-rand.tsv:14 — r.bool (0-arg draw)",
-			`import "aql:rand"  def r (Rand.with-seed 7)  r.bool`},
+			`import "aql:rand"  def r (Rand.with-seed 7)  r.bool`,
+			"[false]"},
 		{"module-rand.tsv:15 — r.float (0-arg draw)",
-			`import "aql:rand"  def r (Rand.with-seed 1)  r.float`},
+			`import "aql:rand"  def r (Rand.with-seed 1)  r.float`,
+			"[0.6046602879796196]"},
 	} {
-		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
-		if cerr != nil {
-			t.Fatalf("%s: check error %v", c.name, cerr)
-		}
-		if prog != nil {
-			t.Errorf("%s: compiled; the miscompile-E auto-dispatch guard must keep refusing", c.name)
-			continue
-		}
-		if !strings.Contains(reason, "fn value read from a container auto-dispatches") {
-			t.Errorf("%s: refusal reason %q; want the auto-dispatch guard's", c.name, reason)
-		}
+		mustCompileWithParity(t, c.src, c.want)
 	}
 }
 

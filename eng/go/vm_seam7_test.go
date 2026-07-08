@@ -282,7 +282,7 @@ func TestSeam7CheckReturnContractUnderflow(t *testing.T) {
 	r := seam7Reg(t)
 	fn := &CompiledFn{Name: "g", Returns: []*Type{TInteger}}
 	// Re-entrant (no frame) with too few values on the stack.
-	err := checkReturnContract(r, fn, nil, 0, false)
+	_, err := checkReturnContract(r, fn, nil, 0, false)
 	wantErr(t, err, "g")
 	if err == nil {
 		t.Fatal("underflow return count did not error")
@@ -325,13 +325,13 @@ func TestSeam7MatchUserPolyArms(t *testing.T) {
 func TestSeam7CallDynamicArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
 	// leading underflow
-	_, err := vc.callDynamic(2, false, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callDynamic(vc.r, 2, false, []Value{NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC underflow")
 	// trailing with arity != 1
-	_, err = vc.callDynamic(2, true, []Value{NewInteger(1), NewInteger(2), NewInteger(3)}, seam7Dbg, 0)
+	_, err = vc.callDynamic(vc.r, 2, true, []Value{NewInteger(1), NewInteger(2), NewInteger(3)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_TRAILING with arity != 1")
 	// non-callable leading: value + args stay put.
-	got, err := vc.callDynamic(1, false, []Value{NewInteger(9), NewInteger(5)}, seam7Dbg, 0)
+	got, err := vc.callDynamic(vc.r, 1, false, []Value{NewInteger(9), NewInteger(5)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("non-callable leading: %v", err)
 	}
@@ -342,10 +342,10 @@ func TestSeam7CallDynamicArms(t *testing.T) {
 
 func TestSeam7CallDynTrailTopArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynTrailTop(1, nil, seam7Dbg, 0)
+	_, err := vc.callDynTrailTop(vc.r, 1, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_TRAIL_TOP underflow")
 	// non-callable: [args, fn] left untouched.
-	got, err := vc.callDynTrailTop(1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	got, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("trail-top non-callable: %v", err)
 	}
@@ -356,27 +356,27 @@ func TestSeam7CallDynTrailTopArms(t *testing.T) {
 
 func TestSeam7CallDynApplyTopArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynApplyTop(1, nil, seam7Dbg, 0)
+	_, err := vc.callDynApplyTop(vc.r, 1, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_APPLY_TOP underflow")
 	// A non-FnDefInfo, non-closure value raises applyHandler's own error.
-	_, err = vc.callDynApplyTop(1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
 	wantErr(t, err, "carries no FnDefInfo")
 }
 
 func TestSeam7CallDynMethodArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynMethod(&DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_METHOD underflow at m")
 	// non-appliable value on top: shape claim failed → defer.
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
 	wantInternal(t, err, "is not an appliable function at run time")
 }
 
 func TestSeam7CallDynamicMixedUnderflow(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynamicMixed(2, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callDynamicMixed(vc.r, 2, []Value{NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_MIXED underflow")
-	_, err = vc.callDynamicMixed(0, nil, seam7Dbg, 0)
+	_, err = vc.callDynamicMixed(vc.r, 0, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYNAMIC_MIXED underflow")
 }
 
@@ -407,10 +407,10 @@ func TestSeam7TryNativeFnApplyNoSigs(t *testing.T) {
 
 func TestSeam7RunFallbackArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.runFallback(&FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
+	_, err := vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK underflow at d")
 	// NIn > 1 with enough stack: the lowerer never threads >1, so it is refused.
-	_, err = vc.runFallback(&FallbackSpan{NIn: 2, Desc: "d"}, []Value{NewInteger(1), NewInteger(2)}, seam7Dbg, 0)
+	_, err = vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, []Value{NewInteger(1), NewInteger(2)}, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK threads >1 input at d")
 }
 
@@ -532,8 +532,8 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 	}
 	vc := seam7VC(r)
 	// callDynTrailTop / callDynApplyTop: fn ON TOP of its arg → [arg, fn].
-	for _, apply := range []func(int, []Value, []SrcPos, int) ([]Value, error){vc.callDynTrailTop, vc.callDynApplyTop} {
-		got, err := apply(1, []Value{NewInteger(5), inc}, seam7Dbg, 0)
+	for _, apply := range []func(*Registry, int, []Value, []SrcPos, int) ([]Value, error){vc.callDynTrailTop, vc.callDynApplyTop} {
+		got, err := apply(vc.r, 1, []Value{NewInteger(5), inc}, seam7Dbg, 0)
 		if err != nil {
 			t.Fatalf("delegation apply: %v", err)
 		}
@@ -542,7 +542,7 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 		}
 	}
 	// callDynamic: LEADING fn → [fn, arg].
-	got, err := vc.callDynamic(1, false, []Value{inc, NewInteger(5)}, seam7Dbg, 0)
+	got, err := vc.callDynamic(vc.r, 1, false, []Value{inc, NewInteger(5)}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("leading delegation apply: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 		t.Errorf("leading delegation cinc(5) = %d, want 6", n)
 	}
 	// callDynMethod: fn ON TOP, shape claim {NArgs:1, NOut:1}.
-	got, err = vc.callDynMethod(&DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []Value{NewInteger(5), inc}, seam7Dbg, 0)
+	got, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []Value{NewInteger(5), inc}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("method delegation apply: %v", err)
 	}
@@ -563,13 +563,13 @@ func TestSeam7DelegationApplyError(t *testing.T) {
 	r, _, fail := seam7DelegReg(t)
 	vc := seam7VC(r)
 	// Each apply path must surface the inner handler's error (delegation err arm).
-	_, err := vc.callDynTrailTop(1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynApplyTop(1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynamic(1, false, []Value{fail, NewInteger(5)}, seam7Dbg, 0)
+	_, err = vc.callDynamic(vc.r, 1, false, []Value{fail, NewInteger(5)}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 }
 
@@ -651,15 +651,15 @@ func TestSeam7IslandApplyErrorArms(t *testing.T) {
 		t.Fatal("user fail fn should NOT be a trivial delegation")
 	}
 	vc := seam7VC(r)
-	_, err := vc.callDynTrailTop(1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err := vc.callDynTrailTop(vc.r, 1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynApplyTop(1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 	// callDynamicMixed islands its window verbatim — a window that calls cfail
 	// errors through the island (the mixed island error arm).
-	_, err = vc.callDynamicMixed(2, []Value{NewWord("cfail"), NewInteger(5)}, seam7Dbg, 0)
+	_, err = vc.callDynamicMixed(vc.r, 2, []Value{NewWord("cfail"), NewInteger(5)}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 }
 

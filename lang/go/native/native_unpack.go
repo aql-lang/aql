@@ -3,6 +3,8 @@ package native
 import (
 	"fmt"
 	"strings"
+
+	eng "github.com/aql-lang/aql/eng/go"
 )
 
 // unpackNatives covers the destructuring word `unpack`, which extracts
@@ -187,24 +189,28 @@ func unpackModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *R
 // check mode a non-concrete source (e.g. an imported export not yet
 // materialised) yields an empty getter so analysis can continue with
 // Any carriers rather than erroring.
-func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys []string, err error) {
+// The `proven` result reports whether the getter reads a CONCRETE source —
+// a miss through a proven getter is a guaranteed runtime unpack_error the
+// checker may flag, where the check-mode stub's misses (an abstract source)
+// prove nothing.
+func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys []string, proven bool, err error) {
 	switch {
 	case IsConcrete(src):
 		if m, mErr := AsMap(src); mErr == nil && m != nil {
-			return m.Get, m.Keys(), nil
+			return m.Get, m.Keys(), true, nil
 		}
 		if IsRecordType(src) {
 			rec, rErr := AsRecordType(src)
 			if rErr != nil {
-				return nil, nil, r.AqlError("unpack_error", "unpack: source record is malformed", "unpack")
+				return nil, nil, false, r.AqlError("unpack_error", "unpack: source record is malformed", "unpack")
 			}
-			return rec.Fields.Get, rec.Fields.Keys(), nil
+			return rec.Fields.Get, rec.Fields.Keys(), true, nil
 		}
-		return nil, nil, r.AqlError("unpack_error", "unpack: source must be a map or record", "unpack")
+		return nil, nil, false, r.AqlError("unpack_error", "unpack: source must be a map or record", "unpack")
 	case r.Check.IsActive():
-		return func(string) (Value, bool) { return Value{}, false }, nil, nil
+		return func(string) (Value, bool) { return Value{}, false }, nil, false, nil
 	default:
-		return nil, nil, r.AqlError("unpack_error", "unpack: source is not a concrete map", "unpack")
+		return nil, nil, false, r.AqlError("unpack_error", "unpack: source is not a concrete map", "unpack")
 	}
 }
 
@@ -213,7 +219,7 @@ func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys 
 // and is strict on missing keys except in check mode (where it binds an
 // Any carrier so later references still resolve). pos locates the name
 // token for unused-def analysis.
-func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Value, bool), pos SrcPos) error {
+func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Value, bool), proven bool, pos SrcPos) error {
 	if localName == "" {
 		return r.AqlError("unpack_error", "unpack: names must be words, atoms, or strings", "unpack")
 	}
@@ -231,12 +237,23 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 	if !ok {
 		if r.Check.IsActive() {
 			val = NewCarrier(TAny)
-			// Lenient in check mode, but the interpreter errors at runtime.
-			// Record a TERMINAL trap so a bytecode compile raises the
-			// byte-identical unpack_error here (the same detail as the
-			// non-check branch below) instead of refusing; if the trap can't be
-			// recorded (a nested unpack), keep the blanket-refusal flag so the
-			// program falls back.
+			// A miss against a PROVEN (concrete) source is a guaranteed
+			// runtime unpack_error — flag it (a RuntimeMirror: the trap
+			// below compiles the identical error, and the refusal loop
+			// skips mirrors — TestEmitTrap pins the trap still compiling).
+			// An abstract source's stub miss proves nothing; a nested /
+			// fn-body unpack is conditionally reached and stays lenient
+			// (the top-level gate).
+			if proven && eng.CheckAtUncaughtTopLevel(r) {
+				eng.CheckAddUniqueDiagnostic(r, "unpack_error",
+					"unpack: key "+srcKey+" not found in source", "unpack", pos)
+			}
+			// Lenient binding either way, but the interpreter errors at
+			// runtime. Record a TERMINAL trap so a bytecode compile raises
+			// the byte-identical unpack_error here (the same detail as the
+			// non-check branch below) instead of refusing; if the trap can't
+			// be recorded (a nested unpack), keep the blanket-refusal flag so
+			// the program falls back.
 			if !r.Check.Recorder().RecordTrap("unpack_error",
 				"unpack: key "+srcKey+" not found in source", "unpack", "", pos) {
 				r.Check.SuppressedRuntimeError = true
@@ -256,13 +273,13 @@ func unpackHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, err
 	}
-	get, _, err := unpackSource(args[1], r)
+	get, _, proven, err := unpackSource(args[1], r)
 	if err != nil {
 		return nil, err
 	}
 	for _, el := range names.Slice() {
 		name := defName(el)
-		if err := bindUnpackEntry(r, name, name, get, el.Pos); err != nil {
+		if err := bindUnpackEntry(r, name, name, get, proven, el.Pos); err != nil {
 			return nil, err
 		}
 	}
@@ -280,12 +297,12 @@ func unpackAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if kw != "all" {
 		return nil, r.AqlError("unpack_error", "unpack: expected a name list, the keyword `all`, or a rename map, got "+kw, "unpack")
 	}
-	get, keys, err := unpackSource(args[1], r)
+	get, keys, proven, err := unpackSource(args[1], r)
 	if err != nil {
 		return nil, err
 	}
 	for _, k := range keys {
-		if err := bindUnpackEntry(r, k, k, get, args[0].Pos); err != nil {
+		if err := bindUnpackEntry(r, k, k, get, proven, args[0].Pos); err != nil {
 			return nil, err
 		}
 	}
@@ -301,14 +318,14 @@ func unpackRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if err != nil {
 		return nil, err
 	}
-	get, _, err := unpackSource(args[1], r)
+	get, _, proven, err := unpackSource(args[1], r)
 	if err != nil {
 		return nil, err
 	}
 	for _, srcKey := range renames.Keys() {
 		target, _ := renames.Get(srcKey)
 		localName := defName(target)
-		if err := bindUnpackEntry(r, localName, srcKey, get, target.Pos); err != nil {
+		if err := bindUnpackEntry(r, localName, srcKey, get, proven, target.Pos); err != nil {
 			return nil, err
 		}
 	}

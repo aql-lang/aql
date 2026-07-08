@@ -71,3 +71,38 @@ tests run with `-coverpkg` spanning the whole repo, profiles are
 merged, and every statement must be hit by at least one suite. The
 gate fails below 100%. Run it before commit alongside the standard
 `make fmt && make vet && make lint && make test`.
+
+## The data-race gate (`make test-race`)
+
+`make test` does **not** run under `-race`: the detector inflates
+CPU and allocation ~5-10x, which breaks the perf/alloc-ceiling gates
+(`TestInterpAllocCeilings`, `TestCompiledAllocCeilings`,
+`TestUnifyEfficiencyThousandsOfSiblings`) and would make the whole
+suite too slow to run every commit. Races are therefore gated
+separately by `make test-race`, which runs `go test -race -short`
+over the **whole** `eng/go` and `lang/go` package trees.
+
+Two rules make this both sound and comprehensive:
+
+- **`-short` excludes the perf gates, nothing else.** Every
+  perf/alloc/wall-clock-timing test guards its body with
+  `if testing.Short() { t.Skip(...) }`, so the race lane skips
+  exactly the tests that are meaningless under the detector while
+  every concurrency test still runs. A NEW perf test that asserts an
+  allocation or timing budget MUST add the same `testing.Short()`
+  guard, or it will red the race lane spuriously.
+- **Whole trees, not a name list.** The lane runs `./...`, so any
+  test that spawns a goroutine or forks a registry
+  (`ForkConcurrent`) is covered automatically — there is no
+  hand-maintained list of race-test names to keep in sync. That list
+  is exactly what let the `ForkConcurrent` `cf.Reg` data race
+  (a shared compile registry baked into every fn unit, mutated
+  concurrently through `ensureInvoker`) reach CI: the race lived in a
+  test the old gate happened to name, but a race one file over would
+  have sailed through.
+
+`test/go/langspec` is the one deliberate exception: its 5941-row
+differential is single-threaded per row (the detector adds no
+coverage there) and times out under `-race`, so `test-race` runs
+only its concurrency rows (`-run 'Concurrent|RaceFree|Race'`). CI
+runs `make test-race` as a dedicated step after `make test`.

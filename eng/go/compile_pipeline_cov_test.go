@@ -426,6 +426,15 @@ func runErrParity(t *testing.T, extra func(*Registry), tokens func() []Value, wa
 	if cErr == nil {
 		t.Fatal("compiled run unexpectedly succeeded where the interpreter errors")
 	}
+	if strings.Contains(cErr.Error(), "internal_error") &&
+		strings.Contains(cErr.Error(), "deferring to the interpreter") {
+		// A runtime shape-claim deferral (a poly whose re-matched overload
+		// returns a different result count than the recorded claim) is also
+		// sound — under RunCompiled the interpreter re-runs and owns the
+		// canonical error, asserted on the interpreted run above.
+		t.Logf("compiled run defers (%v); interpreter owns the error", cErr)
+		return
+	}
 	if !strings.Contains(cErr.Error(), wantSub) {
 		t.Fatalf("compiled error %q does not mention %q", cErr, wantSub)
 	}

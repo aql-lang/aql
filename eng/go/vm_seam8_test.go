@@ -65,38 +65,57 @@ func w8registerReturningPoly(t *testing.T, r *Registry, word string, result Valu
 	}
 }
 
-// --- callPoly get/getr auto-apply of a 0-arg delegation method -----------
+// --- callPoly get/getr returns a 0-arg delegation method AS DATA ----------
+//
+// The runtime auto-apply this arm used to pin was removed with the shaped
+// 0-arg landing model: the recorder now models the interpreter's instant
+// auto-fire as an explicit arity-0 OpCallDynMethod after the poly (or the
+// program refuses via tryShapedMethodDispatch's guard-owned decline), so
+// the poly must return the member VALUE for that opcode to consume.
 
-func TestW8CallPolyGetAutoApplySuccess(t *testing.T) {
+func TestW8CallPolyGetMethodValueStaysData(t *testing.T) {
 	r := w8Reg(t)
 	deleg := w8Deleg0(t, r, "w8zero", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewInteger(99)}, nil
 	})
 	// `dot` is a get-word (isGetWord). Its poly result is the delegation
-	// method value; callPoly auto-applies it 0-arg (vm.go:307-313).
+	// method value; callPoly returns it VERBATIM — the arity-0
+	// CALL_DYN_METHOD the recorder emits right after is what applies it.
 	w8registerReturningPoly(t, r, "dot", deleg)
 	vc := seam7VC(r)
-	out, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	out, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1, NOut: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
 	if err != nil {
-		t.Fatalf("callPoly auto-apply: %v", err)
+		t.Fatalf("callPoly method-value get: %v", err)
 	}
 	if len(out) != 1 {
-		t.Fatalf("auto-apply residual = %v, want a single value", out)
+		t.Fatalf("method-value get residual = %v, want the member value", out)
 	}
-	if n, _ := out[0].AsConcreteInteger(); n != 99 {
-		t.Errorf("auto-applied method value = %v, want 99", out[0])
+	fd, ok := out[0].Data.(FnDefInfo)
+	if !ok || fd.Name != "w8zero" {
+		t.Errorf("get result = %v, want the w8zero delegation method value (unapplied)", out[0])
+	}
+	// The explicit landing opcode applies it — the runtime pair the recorder lays.
+	applied, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zero", NArgs: 0, NOut: 1}, out, seam7Dbg, 0)
+	if err != nil {
+		t.Fatalf("arity-0 callDynMethod: %v", err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("arity-0 apply residual = %v, want a single value", applied)
+	}
+	if n, _ := applied[0].AsConcreteInteger(); n != 99 {
+		t.Errorf("arity-0 applied method value = %v, want 99", applied[0])
 	}
 }
 
-func TestW8CallPolyGetAutoApplyError(t *testing.T) {
+func TestW8CallDynMethodZeroArgError(t *testing.T) {
 	r := w8Reg(t)
-	// The auto-applied inner native errors: callPoly surfaces it (vm.go:310).
+	// The arity-0 applied inner native errors: callDynMethod surfaces it.
 	deleg := w8Deleg0(t, r, "w8zfail", func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		return nil, r.AqlError("value_error", "w8zfail: boom", "w8zfail")
 	})
-	w8registerReturningPoly(t, r, "getr", deleg) // getr is a getr-word
 	vc := seam7VC(r)
-	_, err := vc.callPoly(&PolyRef{Word: "getr", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
+		[]Value{deleg}, seam7Dbg, 0)
 	wantErr(t, err, "w8zfail: boom")
 }
 
@@ -107,7 +126,7 @@ func TestW8CallPolyResultScreened(t *testing.T) {
 	// screen rejects the tape-coupled result (vm.go:317).
 	w8registerReturningPoly(t, r, "dot", NewWord("leak"))
 	vc := seam7VC(r)
-	_, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
+	_, err := vc.callPoly(&PolyRef{Word: "dot", Arity: 1, NOut: 1}, []Value{NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled poly result at dot")
 }
 
@@ -148,7 +167,7 @@ func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
 		t.Fatal("w8mleak wrapper is not a delegation fn")
 	}
 	vc := seam7VC(r)
-	_, err := vc.callDynMethod(&DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
 		[]Value{NewInteger(5), deleg}, seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled shaped method result at w8mleak")
 }
@@ -170,7 +189,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 		t.Fatal("named-param fn should NOT be a delegation")
 	}
 	vc := seam7VC(r)
-	out, err := vc.callDynMethod(&DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
+	out, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
 		[]Value{NewInteger(5), fn}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("island method success: %v", err)
