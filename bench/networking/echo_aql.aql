@@ -1,0 +1,32 @@
+# TCP echo round-trip benchmark in AQL.
+# One persistent connection; measures request/response round-trips over
+# a newline-framed TCP echo protocol.
+import "aql:net"
+import "aql:time-util"
+
+# Server: echo 20001 newline-framed lines (20000 timed + 1 warm-up).
+def ln (Net.serve-raw {tcp: 19099} (fn [[sock:Any] [Any] [
+  def nl (convert Bytes "\n")
+  for 20001 [
+    def line (Net.recv-until sock nl)
+    Net.send-bytes (convert Bytes (join "" [(convert String line) "\n"])) sock
+  ]
+]]))
+
+def sock (Net.connect-raw {tcp: "127.0.0.1:19099"})
+def nl (convert Bytes "\n")
+def msg (convert Bytes "hello world\n")
+
+# Warm-up exchange (not timed).
+Net.send-bytes msg sock
+Net.recv-until sock nl drop
+
+def start (TimeUtil.now)
+for 20000 [
+  Net.send-bytes msg sock
+  Net.recv-until sock nl drop
+]
+def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
+
+print (join "" ["AQL  20000 round-trips  " (convert String dur) " ms  " (convert String (div dur 20000000.0)) " req/s"])
+Net.close sock
