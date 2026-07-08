@@ -1,0 +1,30 @@
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -47,16 +47,17 @@
+       - name: Test (all modules)
+         run: make test
+ 
+-      # The bytecode compiler's correctness gates (differential,
+-      # whole-corpus parity, combination matrix, alloc ceilings) run as
+-      # part of `make test`. The race-detector gates do not, so run them
+-      # explicitly: a shared immutable Program driven across forks, the
+-      # island sub-engine reuse, and the concurrent spec rows in compiled
+-      # mode must be data-race-free.
+-      - name: Bytecode race gates
+-        run: |
+-          ( cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race )
+-          ( cd test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race )
++      # The race-detector gate. `make test` does NOT run under -race (the
++      # detector inflates CPU/alloc ~5-10x, breaking the perf/alloc-ceiling
++      # tests), so races are gated separately. `make test-race` runs the WHOLE
++      # eng/go + lang/go trees under -race -short — so every concurrency test
++      # (a shared immutable Program driven across forks, island sub-engine
++      # reuse, the net/debugserve servers, and any test added later) is covered
++      # automatically, no hand-maintained name list. langspec's concurrent
++      # compiled rows run too; its single-threaded differential does not (race
++      # adds no value there and it times out under the detector).
++      - name: Race gate (test-race)
++        run: make test-race
+ 
+       # The VM's hot path reuses one args buffer per run (eng/go/vm.go),
+       # sound only while no compiled-reachable native retains its args slice.
