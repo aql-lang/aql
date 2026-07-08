@@ -945,19 +945,32 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		}
 	}
 
-	// Decompose the loop bounds for recording.
+	// Decompose the loop bounds for recording. `lowerable` means RecordLoop can
+	// emit FOR_SETUP (const start/step, a resolvable end). `staticBounds` is the
+	// stronger property that ALL THREE bounds are concrete integers, so the exact
+	// iteration count is known — required for the spread-residual model below,
+	// which asInt64Or-defaults an unknown bound to 0 and would otherwise starve a
+	// computed loop's residual.
 	var startV, endV, stepV Value
-	lowerable := false
+	lowerable, staticBounds := false, false
 	if countArg >= 0 {
 		cv := args[countArg]
 		switch {
 		case cv.Parent.ConformsTo(TInteger):
 			startV, endV, stepV = NewInteger(0), cv, NewInteger(1)
-			lowerable = true
+			lowerable, staticBounds = true, IsConcrete(cv)
 		case IsConcrete(cv) && cv.Parent.ConformsTo(TList):
 			if lst, err := AsList(cv); err == nil && !lst.IsNil() {
-				if st, en, sp, perr := parseRange(lst.Slice()); perr == nil {
+				elems := lst.Slice()
+				if st, en, sp, perr := parseRange(elems); perr == nil {
 					startV, endV, stepV = NewInteger(st), NewInteger(en), NewInteger(sp)
+					lowerable, staticBounds = true, true
+				} else if s, e, sp, cok := computedRangeBounds(elems); cok {
+					// Const start/step, a COMPUTED end (`for [0 total 65536]` —
+					// mini-s3's s3-send-resp): lowerable as FOR_SETUP with the end
+					// resolved to its runtime operand, but NOT statically counted, so
+					// the exact-count spread below stays off.
+					startV, endV, stepV = s, e, sp
 					lowerable = true
 				}
 			}
@@ -988,11 +1001,16 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// counts a trailing statement's arity — the false "expected 1 return
 	// value(s), got 2" a side-effect loop with a carrier count produced
 	// (mini-s3's s3-send-resp / s3-read-body-into / s3-drain-body). When
-	// RECORDING, `out` must still be returned so the loop EVENT stays linked to
-	// the residual (dropping it re-emits `for` as an interpreted CALL_NATIVE —
-	// a double-lowered loop); RecordLoop already marked that event zeroOut for
-	// an empty bodyStk, so the fn/closure return reconciliation strips it there.
-	if len(stk) == 0 && !es.Active() {
+	// RECORDING a LOWERABLE loop, `out` must still be returned so the loop EVENT
+	// stays linked to the residual (dropping it re-emits `for` as an interpreted
+	// CALL_NATIVE — a double-lowered loop); RecordLoop already marked that event
+	// zeroOut for an empty bodyStk, so the fn/closure return reconciliation strips
+	// it there. When the loop is NOT lowerable (a computed start/step range the
+	// compiler refuses), NO loop event exists to link and the program falls back,
+	// so return the empty residual in the recording pass too — otherwise the check
+	// and compile passes disagree (plain check nets 0, compile keeps `out` and
+	// reports a phantom "got 2"), violating the same-diagnostics contract.
+	if len(stk) == 0 && (!es.Active() || !lowerable) {
 		return []Value{}
 	}
 	// Plain check (no bytecode recording): a STATICALLY-COUNTED loop leaves the
@@ -1009,7 +1027,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// to a carrier endV, which asInt64Or would default to 0 — spreading a
 	// runtime-unknown iteration count to an EMPTY residual and starving every
 	// downstream consumer (`size (for n [n])` failed no_signature on nothing).
-	if !es.Active() && lowerable && len(stk) > 0 && IsConcrete(args[countArg]) {
+	if !es.Active() && staticBounds && len(stk) > 0 {
 		if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
 			spread := make([]Value, 0, int(n)*len(stk))
 			for i := int64(0); i < n; i++ {
@@ -1027,6 +1045,32 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 // materialising a large residual stack — the exact arity of a big loop is not
 // worth the memory, and such loops rarely leave a consumed residual.
 const loopSpreadResidualCap = 256
+
+// computedRangeBounds decomposes a `for` range list whose START and STEP are
+// concrete integers but whose END may be computed (a carrier / event value —
+// `for [0 total 65536]`, mini-s3's s3-send-resp). It mirrors parseRange's arity
+// defaults (1 elem → [0, end, 1]; 2 → [start, end, 1]; 3 → [start, end, step])
+// but requires only start/step to be statically known: RecordLoop const-bakes
+// those and resolves the end to its runtime operand. The end value is returned
+// AS-IS (carrying its ID) so resolveOperand finds its producing event/local.
+// ok=false when start or step is not a concrete integer (RecordLoop refuses a
+// computed start/step) or the arity is not 1–3.
+func computedRangeBounds(elems []Value) (startV, endV, stepV Value, ok bool) {
+	isInt := func(v Value) bool { return IsConcrete(v) && v.Parent.ConformsTo(TInteger) }
+	switch len(elems) {
+	case 1:
+		return NewInteger(0), elems[0], NewInteger(1), true
+	case 2:
+		if isInt(elems[0]) {
+			return elems[0], elems[1], NewInteger(1), true
+		}
+	case 3:
+		if isInt(elems[0]) && isInt(elems[2]) {
+			return elems[0], elems[1], elems[2], true
+		}
+	}
+	return Value{}, Value{}, Value{}, false
+}
 
 // asInt64Or returns v's integer value, or def when v is not a concrete integer.
 func asInt64Or(v Value, def int64) int64 {

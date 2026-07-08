@@ -192,6 +192,12 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 		// A def-bound range is CONCRETE at check time (def evaluates
 		// its body) — statically known bounds compile.
 		`def r [1,3] for r [i]`,
+		// A computed-END range with a CONST start (and step) lowers to
+		// FOR_SETUP with the end resolved to its runtime operand — the
+		// s3-send-resp shape. The variadic loop result is absorbed by the
+		// program residual (`[1 2]` / `[0 2 4]` here).
+		`for [1, (1 add 2)] [i]`,
+		`for [0, (2 mul 3), 2] [i]`,
 	} {
 		if got, reason := compile(t, src); got == "" {
 			t.Errorf("%q unexpectedly uncompilable: %s", src, reason)
@@ -206,13 +212,12 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 	if got, _ := compile(t, `if (1 gt 0) [break] [1]`); got != "" {
 		t.Errorf("break outside a loop compiled but must refuse:\n%s", got)
 	}
-	// Negative: a range with a computed element does NOT compile natively — its
-	// bounds are carriers at check time, not literals, so `for` cannot lower a
-	// counted loop. The element list now assembles via OpMakeList, but `for`
-	// still islands over the runtime list (falls back), so the program is never
-	// a native compile.
-	if got, _ := compile(t, `for [1, (1 add 2)] [i]`); got != "" && !strings.Contains(got, "FALLBACK") {
-		t.Errorf("computed range compiled NATIVELY but must island/refuse:\n%s", got)
+	// Negative: a range whose START (or step) is computed does NOT compile — a
+	// FOR_SETUP loop const-bakes start/step and can only resolve a computed END,
+	// so a computed start/step keeps islanding over the runtime list (falls
+	// back). The interpreter runs it faithfully.
+	if got, _ := compile(t, `for [(1 add 2), 5] [i]`); got != "" && !strings.Contains(got, "FALLBACK") {
+		t.Errorf("computed-start range compiled NATIVELY but must island/refuse:\n%s", got)
 	}
 }
 

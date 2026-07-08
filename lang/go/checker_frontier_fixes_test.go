@@ -1,6 +1,9 @@
 package lang
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // countErrors returns the number of error-severity diagnostics for src.
 func countErrors(t *testing.T, src string) (int, []string) {
@@ -46,18 +49,60 @@ func TestNoneBranchInFnBodyChecksClean(t *testing.T) {
 // contribute no residual, so a trailing statement is the sole return. Before
 // the forCarrierAnalyse 0-net guard the loop wrongly returned a single List
 // carrier, over-counting the fn's return arity as a false
-// "expected 1 return value(s), got 2". Both the count form and the
-// computed-range form (mini-s3's s3-send-resp `for [0 total 65536]`) must check
-// clean — even though the computed-range form falls back to the interpreter at
-// compile time rather than lowering to bytecode (a separate axis).
+// "expected 1 return value(s), got 2". The count form and the const-start/step
+// computed-range form (mini-s3's s3-send-resp `for [0 total 65536]`) both check
+// clean AND lower; a computed-start/step range checks clean but falls back at
+// compile time — either way, no phantom "got 2".
 func TestForZeroNetBodyChecksClean(t *testing.T) {
 	for _, src := range []string{
 		`def f fn [[n:Integer] [Any] [ for n [ 5 drop ] 0 ]] f 3`,
 		`def f fn [[n:Integer] [Any] [ for [0 n 1] [ 5 drop ] 0 ]] f 3`,
 		`def f fn [[n:Integer] [Any] [ for [0 n 65536] [ 5 drop ] 0 ]] f 3`,
+		// Ranges the compiler CANNOT lower (a computed start or step — RecordLoop
+		// needs a const start/step) must still check clean and net 0: the check and
+		// compile passes agree (compile falls back rather than reporting "got 2").
+		`def f fn [[a:Integer b:Integer] [Any] [ for [a b] [ 5 drop ] 0 ]] f 1 4`,
+		`def f fn [[n:Integer s:Integer] [Any] [ for [0 n s] [ 5 drop ] 0 ]] f 6 2`,
 	} {
 		if n, ds := countErrors(t, src); n != 0 {
 			t.Errorf("expected 0 errors for %q, got %d: %v", src, n, ds)
+		}
+	}
+}
+
+// A computed-END range loop is a compiler advance, not just a checker one: the
+// const-start/step forms lower to FOR_SETUP with a resolved end operand and run
+// COMPILED (byte-identical to the interpreter). The computed-start/step forms
+// correctly decline and fall back. This pins the compile/interpret parity.
+func TestComputedRangeLoopCompilesAndMatches(t *testing.T) {
+	type wc struct {
+		src         string
+		wantCompile bool
+	}
+	cases := []wc{
+		{`def f fn [[n:Integer] [Any] [ for [0 n 65536] [ 5 drop ] 0 ]] f 3`, true},
+		{`def f fn [[n:Integer] [Any] [ for [n] [ 5 drop ] 0 ]] f 4`, true},
+		{`def f fn [[n:Integer] [Any] [ for [2 n] [ 5 drop ] 0 ]] f 5`, true},
+		{`def f fn [[a:Integer b:Integer] [Any] [ for [a b] [ 5 drop ] 0 ]] f 1 4`, false},
+		{`def f fn [[n:Integer s:Integer] [Any] [ for [0 n s] [ 5 drop ] 0 ]] f 6 2`, false},
+	}
+	for _, c := range cases {
+		ac, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		gotC, compiled, eC := ac.RunCompiled(c.src)
+		ai, _ := New()
+		gotI, eI := ai.Run(c.src)
+		if eC != nil || eI != nil {
+			t.Errorf("%q: run errs compiled=%v interp=%v", c.src, eC, eI)
+			continue
+		}
+		if compiled != c.wantCompile {
+			t.Errorf("%q: compiled=%v want %v", c.src, compiled, c.wantCompile)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%q: MISCOMPILE compiled=%v interp=%v", c.src, gotC, gotI)
 		}
 	}
 }
