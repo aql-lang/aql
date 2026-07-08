@@ -980,6 +980,21 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		frag := es.TakeFragment()
 		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos)
 	}
+	// A body that nets ZERO values per iteration (every pass drops / is pure
+	// side effect) leaves the stack untouched at run time — BOTH engines net
+	// zero values from the loop, whatever the (possibly carrier) count. On a
+	// PLAIN check (no bytecode recording) model that exactly: contribute no
+	// residual. Returning the List-carrier approximation here instead over-
+	// counts a trailing statement's arity — the false "expected 1 return
+	// value(s), got 2" a side-effect loop with a carrier count produced
+	// (mini-s3's s3-send-resp / s3-read-body-into / s3-drain-body). When
+	// RECORDING, `out` must still be returned so the loop EVENT stays linked to
+	// the residual (dropping it re-emits `for` as an interpreted CALL_NATIVE —
+	// a double-lowered loop); RecordLoop already marked that event zeroOut for
+	// an empty bodyStk, so the fn/closure return reconciliation strips it there.
+	if len(stk) == 0 && !es.Active() {
+		return []Value{}
+	}
 	// Plain check (no bytecode recording): a STATICALLY-COUNTED loop leaves the
 	// SPREAD of its per-iteration residual on the stack, not one List value
 	// (`for 3 ['x']` leaves `'x' 'x' 'x'`; `for [1 4] [7 8]` leaves six ints).

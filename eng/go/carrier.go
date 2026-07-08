@@ -2745,7 +2745,24 @@ func isNoneArm(v Value) bool {
 }
 
 func joinCarriersInner(a, b Value) Value {
-	if a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
+	// A None arm is a lattice-root literal — NewTypeLiteral(TNone) has BOTH
+	// Data==nil AND Parent==nil (None has no lattice parent). The parent-math
+	// collapse blocks below are unsafe against such a nil Parent: ConformsTo(nil)
+	// and Equal(nil) are vacuously permissive, so `Integer.ConformsTo(None)` would
+	// collapse the merge to NewCarrier(None.Parent==nil) — a Parent-less carrier
+	// the engine HALTS on when it steps the `if` result (undefined stack entry).
+	// Handle None arms explicitly: two None arms join to a None carrier; a mixed
+	// None/value arm falls through to the alternatives-union path (None|T), the
+	// tested general join — JoinCarrierStacks then flips that result gradual
+	// (the optional / sentinel merge). Only the parent-math shortcuts are
+	// bypassed; the union below already treats None as a first-class alternative.
+	aNone := a.Parent == nil
+	bNone := b.Parent == nil
+	if aNone && bNone {
+		return NewCarrier(TNone)
+	}
+	collapse := !aNone && !bNone
+	if collapse && a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
 		out := a
 		out.Carrier = true
 		out.Data = nil
@@ -2757,7 +2774,7 @@ func joinCarriersInner(a, b Value) Value {
 		out.ID = GenerateID(IDPrefixForType(out.Parent))
 		return out
 	}
-	if !IsDisjunct(a) && !IsDisjunct(b) {
+	if collapse && !IsDisjunct(a) && !IsDisjunct(b) {
 		if a.Parent.ConformsTo(b.Parent) {
 			// a is subtype of b → widen to b
 			return NewCarrier(b.Parent)

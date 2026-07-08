@@ -1177,6 +1177,30 @@ func TestRecordCallOperandsInertFnBakeCaptured(t *testing.T) {
 	}
 }
 
+func TestRecordCallOperandsInertFnBakeCaptureFree(t *testing.T) {
+	r := newTestRegistry(t)
+	es := NewEmitState()
+	sig := &Signature{Args: []*Type{TFunction}, FnInertArgs: map[int]bool{0: true}}
+	// The sibling of the captured case: a CAPTURE-FREE concrete fn value in an
+	// fn-inert slot bakes as a const the storing / introspecting handler reads
+	// at run time — its frozen body has no captured names to leave unbound, so
+	// the const is faithful. A plain capture-free fn is const-baked by
+	// resolveOperand's isInertConst path BEFORE this switch; only a fn that
+	// isInertConst refuses reaches here. A capture-free MACRO module fn (Registry
+	// set, Macro true) is exactly that case — resolveOperand declines it, so the
+	// `IsConcrete && no-captures` arm is what places the const operand.
+	fn := Value{ID: GenerateID(IDPrefixForType(TFunction)), Parent: TFunction,
+		Data: FnDefInfo{Signatures: []Signature{{Args: []*Type{TInteger}}},
+			Registry: r, Macro: true}}
+	ops, ok := es.recordCallOperands("stash", sig, []Value{fn})
+	if !ok {
+		t.Fatalf("a capture-free fn that resolveOperand refuses must bake as a const here")
+	}
+	if len(ops) != 1 || ops[0].kind != opConst {
+		t.Fatalf("expected a single opConst operand, got %+v", ops)
+	}
+}
+
 // --- loop-carried def machinery -----------------------------------------
 
 func TestNoteLoopCarriedArms(t *testing.T) {
