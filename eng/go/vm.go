@@ -542,6 +542,8 @@ func (vc *vmContext) callDynFamily(reg *Registry, op Opcode, arg, frameBase int,
 		return vc.callDynApplyTop(reg, arg, stack, curDebug, pc)
 	case OpCallDynFrame:
 		return vc.callDynFrame(reg, arg, frameBase, stack, curDebug, pc)
+	case OpCallDynMethod:
+		return vc.callDynMethod(reg, &vc.p.DynMethods[arg], stack, curDebug, pc)
 	default:
 		return vc.callDynamicOp(reg, op, arg, stack, curDebug, pc)
 	}
@@ -687,7 +689,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 // interpreter's forward auto-dispatch of the same window. A genuine AQL
 // error from the method surfaces as-is (the interpreter raises the same,
 // prior side effects included).
-func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	n := spec.NArgs
 	if len(stack) < n+1 {
@@ -737,7 +739,7 @@ func (vc *vmContext) callDynMethod(spec *DynMethodSpec, stack []Value, curDebug 
 	island := make([]Value, 0, n+1)
 	island = append(island, fnVal)
 	island = append(island, args...)
-	results, err := vc.island().Run(island)
+	results, err := vc.islandRun(reg, island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -910,7 +912,7 @@ func isAppliableFn(v Value) bool {
 // residual pushed. break/continue/return raised across the boundary propagate
 // via the shared registry FlowCtrl, as in any nested Run. (Deleted in plan
 // P7 once every shape compiles natively.)
-func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	r := vc.r
 	if len(stack) < fb.NIn {
 		return nil, vmErrAt(curDebug, pc, "FALLBACK underflow at "+fb.Desc)
@@ -928,7 +930,7 @@ func (vc *vmContext) runFallback(fb *FallbackSpan, stack []Value, curDebug []Src
 	island = append(island, stack[len(stack)-fb.NIn:]...)
 	island = append(island, fb.Tokens...)
 	stack = stack[:len(stack)-fb.NIn]
-	results, err := vc.island().Run(island)
+	results, err := vc.islandRun(reg, island)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -1149,8 +1151,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// copy (eng/go/CLAUDE.md, Canonical *Type Pointers). Types
 			// the check pass minted (def Foo …) live in the registry's
 			// table; kernel builtins in the package Builtin table.
+			// The ACTIVE unit's registry first: a module-preamble fn's minted
+			// types (def Pos (refine Integer) in the module body) live in the
+			// module's own table (CompiledFn.Reg / curReg), not the importer's
+			// — exactly where the interpreter's CallAQL resolves them. An
+			// ordinary unit has curReg == r, so the second lookup repeats only
+			// for the kernel-builtin path below.
 			var t *Type
-			if r != nil {
+			if curReg != nil {
+				t = curReg.Types.LookupByID(p.Types[in.Arg].ID)
+			}
+			if t == nil && r != nil {
 				t = r.Types.LookupByID(p.Types[in.Arg].ID)
 			}
 			if t == nil {
@@ -1267,7 +1278,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			stack[len(stack)-1] = bound
 		case OpFallback:
-			ns, err := vc.runFallback(&p.Fallbacks[in.Arg], stack, curDebug, pc)
+			ns, err := vc.runFallback(curReg, &p.Fallbacks[in.Arg], stack, curDebug, pc)
 			if err != nil {
 				return nil, err
 			}
@@ -1279,7 +1290,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			stack = ns
 		case OpCallDynamic, OpCallDynamicTrailing, OpCallDynamicMixed,
-			OpCallDynTrailTop, OpCallDynApplyTop, OpCallDynFrame:
+			OpCallDynTrailTop, OpCallDynApplyTop, OpCallDynFrame, OpCallDynMethod:
 			// The fn-value-call boundary family: leading / trailing-1
 			// (callDynamic), interior-window (callDynamicMixed), fn-on-top
 			// (callDynTrailTop / callDynApplyTop) and the whole-frame replay
@@ -1300,12 +1311,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if err := resolveEscapedFlow(); err != nil {
 				return nil, err
 			}
-		case OpCallDynMethod:
-			ns, err := vc.callDynMethod(&p.DynMethods[in.Arg], stack, curDebug, pc)
-			if err != nil {
-				return nil, err
-			}
-			stack = ns
+
 		case OpJmp:
 			t := int(in.Arg)
 			// The only legal back-edge is a counted loop's trailing
@@ -1344,7 +1350,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if err := checkParamContract(r, fn, nl); err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
-			frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack)})
+			frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds)})
 			vc.frameDepth++ // balanced by the matching RET, like OpCallUser
 			locals = nl
 			enterUnit(unit)
@@ -1559,6 +1565,11 @@ func (vc *vmContext) flowSignal(op Opcode, frames []vmFrame, loops []vmLoop, loc
 		vc.frameDepth--
 		locals = f.locals
 		unit = f.retUnit
+		// The discarded frame's dynamic-scope bindings tear down with it —
+		// the interpreter's unwindLiveFrames replays the frame's cleanup
+		// tail when a break/continue escapes it; without this a dead
+		// frame's OpBindDynScope install would stay readable in Defs.
+		vc.unwindDynBinds(f.dynBase)
 	}
 	stack = stack[:lp.iterBase]
 	if op == OpFlowBreak {

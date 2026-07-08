@@ -95,7 +95,7 @@ func TestW8CallPolyGetMethodValueStaysData(t *testing.T) {
 		t.Errorf("get result = %v, want the w8zero delegation method value (unapplied)", out[0])
 	}
 	// The explicit landing opcode applies it — the runtime pair the recorder lays.
-	applied, err := vc.callDynMethod(&DynMethodSpec{Word: "w8zero", NArgs: 0, NOut: 1}, out, seam7Dbg, 0)
+	applied, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zero", NArgs: 0, NOut: 1}, out, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("arity-0 callDynMethod: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestW8CallDynMethodZeroArgError(t *testing.T) {
 		return nil, r.AqlError("value_error", "w8zfail: boom", "w8zfail")
 	})
 	vc := seam7VC(r)
-	_, err := vc.callDynMethod(&DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
 		[]Value{deleg}, seam7Dbg, 0)
 	wantErr(t, err, "w8zfail: boom")
 }
@@ -167,7 +167,7 @@ func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
 		t.Fatal("w8mleak wrapper is not a delegation fn")
 	}
 	vc := seam7VC(r)
-	_, err := vc.callDynMethod(&DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8mleak", NArgs: 1, NOut: 1},
 		[]Value{NewInteger(5), deleg}, seam7Dbg, 0)
 	wantInternal(t, err, "tape-coupled shaped method result at w8mleak")
 }
@@ -189,7 +189,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 		t.Fatal("named-param fn should NOT be a delegation")
 	}
 	vc := seam7VC(r)
-	out, err := vc.callDynMethod(&DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
+	out, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8okmethod", NArgs: 1, NOut: 1},
 		[]Value{NewInteger(5), fn}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("island method success: %v", err)

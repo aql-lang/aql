@@ -107,3 +107,38 @@ func TestLookupDynScopeReadsTopLevelBinding(t *testing.T) {
 		t.Errorf("lookup read %v, want 7", out[0])
 	}
 }
+
+// A break escaping a callee to an outer loop (flowSignal) tears down the
+// escaped frame's dynamic-scope bindings — the interpreter's
+// unwindLiveFrames replays the frame's cleanup tail; without the unwind the
+// dead frame's install stays readable in Defs (PR #233 review).
+func TestFlowSignalUnwindsEscapedFrameDynBinds(t *testing.T) {
+	r := seam7Reg(t)
+	fn := CompiledFn{
+		Name: "dsbrk", Returns: nil,
+		Code: []Instr{
+			{Op: OpPushConst, Arg: 0},
+			{Op: OpBindDynScope, Arg: 1}, // install dsfl=5 in this frame
+			{Op: OpFlowBreak},            // escape to the caller's loop
+		},
+		Debug: make([]SrcPos, 3),
+	}
+	main := []Instr{
+		{Op: OpPushConst, Arg: 2}, // step 1
+		{Op: OpPushConst, Arg: 3}, // end 3
+		{Op: OpPushConst, Arg: 4}, // start 0
+		{Op: OpForSetup, Arg: 0},  // iterator slot 0
+		{Op: OpForNext, Arg: 7},   // exit -> 7
+		{Op: OpCallUser, Arg: 0},  // per-iteration call that breaks
+		{Op: OpJmp, Arg: 4},       // back-edge
+	}
+	p := dsProgram([]CompiledFn{fn}, main,
+		NewInteger(5), NewString("dsfl"), NewInteger(1), NewInteger(3), NewInteger(0))
+	p.NumLocals = 1
+	if _, err := RunProgram(p, r); err != nil {
+		t.Fatalf("break-out-of-callee run: %v", err)
+	}
+	if _, ok := r.Defs.Top("dsfl"); ok {
+		t.Error("the escaped frame's dynamic-scope binding must tear down with the frame")
+	}
+}

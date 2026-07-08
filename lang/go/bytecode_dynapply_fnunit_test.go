@@ -245,3 +245,62 @@ func TestBodyLocalMultiOverloadPolyRefuses(t *testing.T) {
 		t.Errorf("result = %v, want [6]", gotC)
 	}
 }
+
+// PR #233 review fixes, pinned end-to-end:
+//
+//   - a runtime-dispatched multi-overload user call (OpCallUserPoly) records
+//     the caller's dynamic-binding depth on its frame, so its RET unwinds only
+//     its OWN binds — without dynBase it truncated the whole run's bindings
+//     and the caller's later dynamic-scope read deferred spuriously;
+//   - a module-preamble fn's minted type (a module-private refine) resolves
+//     through the ACTIVE unit's registry at OpPushType, exactly where the
+//     interpreter's CallAQL resolves it — previously the importer-registry
+//     lookup missed it and the whole program deferred.
+func TestUserPolyFramePreservesCallerDynBinds(t *testing.T) {
+	src := `def p fn [[a:Integer] [Integer] [a add 1] [s:String] [Integer] [0]] def f fn [[m:Map n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n p (m get k/q) drop f m (n sub 1)]]] f {k:3} 2`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("refused: %q err=%v", reason, cerr)
+	}
+	dis := prog.Disassemble()
+	for _, op := range []string{"CALL_USER_POLY", "BIND_DYN_SCOPE", "LOOKUP_DYN_SCOPE"} {
+		if !strings.Contains(dis, op) {
+			t.Fatalf("missing %s — the shape no longer exercises the poly-under-dyn-binds path:\n%s", op, dis)
+		}
+	}
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled || errC != nil {
+		t.Fatalf("the poly RET wiped the caller's dyn binds (spurious deferral): compiled=%v err=%v", compiled, errC)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[1]" {
+		t.Errorf("result = %v, want [1]", gotC)
+	}
+}
+
+func TestModulePrivateTypeResolvesInUnitRegistry(t *testing.T) {
+	src := `import module [def Pos (refine Integer) def f fn [[x:Integer] [Boolean] [x is Pos]] export "L" {f: f/r}] end L.f 3`
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("refused: %q err=%v", reason, cerr)
+	}
+	if !strings.Contains(prog.Disassemble(), "PUSH_TYPE") {
+		t.Fatalf("no PUSH_TYPE — the shape no longer exercises the module-type operand:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if !compiled || errC != nil {
+		t.Fatalf("the module-private type operand deferred at run time: compiled=%v err=%v", compiled, errC)
+	}
+	requireParity(t, src, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[false]" {
+		t.Errorf("result = %v, want [false] (a plain Integer is not the nominal newtype)", gotC)
+	}
+}

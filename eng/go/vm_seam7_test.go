@@ -365,10 +365,10 @@ func TestSeam7CallDynApplyTopArms(t *testing.T) {
 
 func TestSeam7CallDynMethodArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.callDynMethod(&DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
+	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "CALL_DYN_METHOD underflow at m")
 	// non-appliable value on top: shape claim failed → defer.
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "m", NArgs: 1, NOut: 1}, []Value{NewInteger(5), NewInteger(9)}, seam7Dbg, 0)
 	wantInternal(t, err, "is not an appliable function at run time")
 }
 
@@ -407,10 +407,10 @@ func TestSeam7TryNativeFnApplyNoSigs(t *testing.T) {
 
 func TestSeam7RunFallbackArms(t *testing.T) {
 	vc := seam7VC(seam7Reg(t))
-	_, err := vc.runFallback(&FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
+	_, err := vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, nil, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK underflow at d")
 	// NIn > 1 with enough stack: the lowerer never threads >1, so it is refused.
-	_, err = vc.runFallback(&FallbackSpan{NIn: 2, Desc: "d"}, []Value{NewInteger(1), NewInteger(2)}, seam7Dbg, 0)
+	_, err = vc.runFallback(vc.r, &FallbackSpan{NIn: 2, Desc: "d"}, []Value{NewInteger(1), NewInteger(2)}, seam7Dbg, 0)
 	wantInternal(t, err, "FALLBACK threads >1 input at d")
 }
 
@@ -550,7 +550,7 @@ func TestSeam7DelegationApplySuccess(t *testing.T) {
 		t.Errorf("leading delegation cinc(5) = %d, want 6", n)
 	}
 	// callDynMethod: fn ON TOP, shape claim {NArgs:1, NOut:1}.
-	got, err = vc.callDynMethod(&DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []Value{NewInteger(5), inc}, seam7Dbg, 0)
+	got, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cinc", NArgs: 1, NOut: 1}, []Value{NewInteger(5), inc}, seam7Dbg, 0)
 	if err != nil {
 		t.Fatalf("method delegation apply: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestSeam7DelegationApplyError(t *testing.T) {
 	wantErr(t, err, "cfail: boom")
 	_, err = vc.callDynamic(vc.r, 1, false, []Value{fail, NewInteger(5)}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fail}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fail}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 }
 
@@ -655,7 +655,7 @@ func TestSeam7IslandApplyErrorArms(t *testing.T) {
 	wantErr(t, err, "cfail: boom")
 	_, err = vc.callDynApplyTop(vc.r, 1, []Value{NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
-	_, err = vc.callDynMethod(&DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fn}, seam7Dbg, 0)
+	_, err = vc.callDynMethod(vc.r, &DynMethodSpec{Word: "cuserfail", NArgs: 1, NOut: 1}, []Value{NewInteger(5), fn}, seam7Dbg, 0)
 	wantErr(t, err, "cfail: boom")
 	// callDynamicMixed islands its window verbatim — a window that calls cfail
 	// errors through the island (the mixed island error arm).
