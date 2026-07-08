@@ -38,6 +38,36 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > other two endgame actions (the gated frontier, the standing
 > perf/alloc baseline) are unaffected.
 
+> **Addendum 2 (2026-07-08, maintainer direction — the I-wave
+> close-out):** the flip is **taken**: compiled mode is ON by default.
+> The I1–I5 improvement wave first shrank the residue table below —
+> I1 (unnamed-param frame flow: `args` stack in the VM, unnamed args
+> pushed through the frame) retired the unnamed fn-value param guard
+> for the residual-flow rows; I2 (runtime re-match for recovered
+> dispatch: PolyRef.NOut arity claims, flex StoreShapeInfo narrowing
+> in the compile pass, generic-slot reachability) closed the G5 flex
+> tier; I3 (guarded 0-arg method landings recorded by the check pass,
+> guard-owned declines) closed the container auto-dispatch tier; I4
+> (OpLookupDynScope / OpBindDynScope over the runtime def stack,
+> reachability-gated by FnBinders + FnCallGraph) closed the M6
+> dynamic-scope tier; I5 (CompiledFn.Reg — every compiled unit
+> dispatches against its OWNING registry, Registry.Invoker threads the
+> calling registry, escaped lambdas keep module scope) closed three of
+> the four repl served-handler rows and retired bodyConstructsFn.
+> Refusals: **21 → 9** on the 5,941-row corpus (5,617 compiled, **0
+> islands**, differential + property fuzz clean at every step); the
+> remaining 9 are the three sound non-definite error rows, five
+> module fn-value-boundary rows (dynamic apply inside fn units), and
+> one fn-value-reaches-`drop` row — see the tier ledger in
+> `compiled_coverage_test.go` (`refusalGate = 9`). With that,
+> `ResolveCompileMode` returns `CompileTry` by default (`aql run` /
+> `aql do`), `EvalOptions` drives TRY, and `aql build` bakes TRY with
+> a new `--no-compile` opt-out (a frozen binary has no env knobs).
+> The `--no` twin and the env kill switch win over everything,
+> unchanged. **The whole-program fallback stays** (maintainer
+> decision, same rationale as below): it is the mechanism that keeps
+> the 9 documented-tier refusals sound — slow, not wrong.
+
 ## The three endgame actions
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns

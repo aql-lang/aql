@@ -27,18 +27,19 @@ import (
 )
 
 // CompileMode selects which execution engine Eval/Main drives: the
-// interpreter (the default), the best-effort bytecode compiler (silent
-// fallback), or the bytecode compiler in FORCE mode (error if uncompilable).
+// best-effort bytecode compiler (silent fallback — the default), the
+// interpreter (--no-compile), or the bytecode compiler in FORCE mode
+// (error if uncompilable).
 // It mirrors the run subcommand's mode; run type-aliases this type so there is
 // a single source of truth that the generated binary can reference without
 // importing run.
 type CompileMode int
 
 const (
-	// CompileOff runs the interpreter — the default.
+	// CompileOff runs the interpreter (the `--no-compile` flag).
 	CompileOff CompileMode = iota
 	// CompileTry runs the bytecode compiler when the program is compilable and
-	// silently falls back to the interpreter otherwise (the `--compile` flag).
+	// silently falls back to the interpreter otherwise — the default.
 	CompileTry
 	// CompileForce REQUIRES the bytecode path: an uncompilable program (or a VM
 	// soundness assertion) aborts with the refusal reason rather than falling

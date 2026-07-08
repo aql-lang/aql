@@ -170,48 +170,39 @@ func TestCompiledCoverage(t *testing.T) {
 		t.Errorf("correct-error refusals %d (want 0): a known-to-error row must compile an OpTrap / RET error path, not refuse", byCause["correct-error"])
 	}
 
-	// P7 ENDGAME RE-ARM (design/P7-ENDGAME.10.md): the growth-phase
-	// informational policy is over — the frontier is GATED again at the
+	// P7 ENDGAME (design/P7-ENDGAME.10.md): the frontier is GATED at the
 	// documented-tier floor. Every one of the refusalGate rows below is owned
 	// by a named tier with a written rationale; a NEW refusal (a regression,
 	// or an unclassified corpus row) must trip CI and force a conscious
 	// classification, never drift in silently. The gate moves DOWN as tiers
-	// close (auto-dispatch runtime model, G5 flex path shapes, M6
-	// dynamic-scope decision, the three proof-held error rows); it moves UP
-	// only with a new named tier documented in the endgame record.
-	//   4  container auto-dispatch guard (module-log 72/73, module-rand 14/15)
-	//   6  unnamed fn-value param guard (the module-fnvalue-boundary rows) —
-	//      a fn whose UNNAMED param is Function/FnDef refuses compilation
-	//      (carrier.go::runFnBodyOnce). Originally the VALUE twin of the
-	//      container auto-dispatch tier (the shape compiled to a 0-return
-	//      unit while the interpreter auto-fired the value); under the
-	//      arguments-are-inert unification
-	//      (design/ARG-SEMANTICS-UNIFICATION.0.md) the interpreter no longer
-	//      auto-fires, but the unit model still binds unnamed params to
-	//      slots without pushing them, so an unnamed arg FLOWING to the
-	//      residual (args.N reads, the trim discipline) still diverges —
-	//      the guard stays as a sound refusal until unnamed-param lowering
-	//      models the frame flow. Same disposition as the container tier.
-	//   2  G5 flex path-shape typing (flex 88/95)
-	//   2  M6 dynamic-scope tier (recursion 71/72)
-	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier 80,
-	//      word-splice 115) — the entire error allowlist
-	//   4  aql:repl served-handler construction (module-repl 12/16/17/18):
-	//      repl-serve's body CONSTRUCTS the service-handler lambda, whose
-	//      tokens reference module-private words (repl-eval-line). A compiled
-	//      unit executes against the DISPATCHING registry, so the escaped
-	//      lambda loses module scope — only the interpreter's foreign-wrapper
-	//      dispatch (execFnDefLiteral) runs the constructing body in the
-	//      module's own registry. The emitter refuses any foreign-registry fn
-	//      whose body constructs a fn value (bodyConstructsFn,
-	//      eng/go/core_helpers.go); these rows fall back to full
-	//      interpretation. (Supersedes the previous 3-row "endpoint
-	//      round-trips" entry: rows 16/18 stopped refusing for the incidental
-	//      reason — repl-close's return-arity mismatch — once that was fixed,
-	//      and then diverged; this tier names the real frontier and row 12
-	//      joins it.)
-	const refusalGate = 21 // merge: main's 15 (incl. the repl served-handler tier) + the 6-row unnamed fn-value param tier from the arguments-are-inert branch (above)
-	const islandGate = 0   // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
+	// close; it moves UP only with a new named tier documented in the endgame
+	// record. The I1–I5 wave closed the container auto-dispatch tier (I3:
+	// guarded 0-arg method landings), the G5 flex path-shape tier (I2: flex
+	// shape narrowing in the compile pass), the M6 dynamic-scope tier (I4:
+	// OpLookupDynScope/OpBindDynScope), one unnamed fn-value row (I1:
+	// unnamed-param frame flow) and three of the repl served-handler rows
+	// (I5: CompiledFn.Reg — units dispatch against their owning registry, so
+	// an escaped lambda keeps module scope and bodyConstructsFn is retired).
+	// What remains:
+	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier
+	//      80, word-splice 115) — the entire error allowlist: each recovers
+	//      an unmatched dispatch that the interpreter resolves (or errors)
+	//      at runtime, so a compiled best guess could diverge; the fallback
+	//      owns them.
+	//   5  module fn-value boundary (module-fnvalue-boundary 24/25/31/32/33):
+	//      a module fn whose Function-typed arg is APPLIED dynamically inside
+	//      the body — `(args.0 args.1)` (24/25/31: dynamic apply is not
+	//      compiled in a fn body) — or a `for` body netting multiple values
+	//      per iteration around that apply (32/33). Clearing these needs a
+	//      dynamic-apply lowering inside fn units (the OpCallDynamic family
+	//      is currently recorded only at module scope).
+	//   1  fn value reaching a consuming word (module-repl 17): the served
+	//      handler's teardown pipeline passes a Function value to `drop` —
+	//      fn-as-data reaching a word with no CompileStoresFn declaration
+	//      stays a sound refusal (the value's identity/capture state cannot
+	//      bake).
+	const refusalGate = 9 // P7 endgame I1–I5 close-out: 21 → 9 (tiers above)
+	const islandGate = 0  // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)
 	}
