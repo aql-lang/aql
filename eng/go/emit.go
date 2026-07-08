@@ -3370,25 +3370,11 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
-		if !ok && (introspect || inertFn || sig.FnInertArgs[i]) {
+		if !ok && (introspect || sig.FnInertArgs[i]) && IsConcrete(a) {
 			if _, isFn := a.Data.(FnDefInfo); isFn {
-				if IsConcrete(a) {
-					// Bake the concrete (immutable) fn value as a const the
-					// introspection / fn-inert-slot handler reads at run time.
-					op, ok = constOperand(es.intern(a)), true
-				} else if cop, cok := es.tryReturnedClosure(a, a.Pos); cok {
-					// A CAPTURING anonymous lambda in a store-fn / fn-inert slot
-					// (`Net.serve-raw {…} ([conn] => [ handle conn store ])`,
-					// mini-S3's per-connection actor closing over the shared
-					// store): resolveOperand cannot materialise it as a const, but
-					// it lowers to an OpPushClosure the storing native invokes per
-					// call — exactly as the interpreter dispatches the AQL handler
-					// with its captures. tryReturnedClosure resolves each capture
-					// in THIS frame and probes the body; it declines (leaving es
-					// untouched) when a capture is unreachable or the body refuses,
-					// so an uncompilable handler still falls back faithfully.
-					op, ok = cop, true
-				}
+				// Bake the concrete (immutable) fn value as a const the
+				// introspection / fn-inert-slot handler reads at run time.
+				op, ok = constOperand(es.intern(a)), true
 			}
 		}
 		if !ok {
