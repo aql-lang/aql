@@ -85,13 +85,41 @@ a loop body and after a `for` that a later statement reads across. This lets the
 `bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
 (dropping `-no-check`). It is a workaround, not the fix.
 
-**The fix (Stage 2):** make an IMPLICIT statement boundary inside a `for`/list
-body commit the forward residual exactly as an explicit `;`/`end` does — i.e. a
-module fn-value dispatch must not leave its fn value on the check-mode stack
-across a statement boundary. Localised to the body-analysis statement stepping /
-`commitBarrierForward`, but soundness-critical (it is the forward-collection path
-every dispatch uses), so it must land gated by `TestCheckAccuracyRatchet` +
-`verify-bytecode` + the corpus, and is not attempted in this pass.
+### Localised to the ARMED loop-capture path (not "statement boundaries")
+
+Further bisection (read-only, this session) narrows it precisely, and corrects the
+earlier "implicit statement boundary" framing:
+
+- `do [ … ]`, `if … [ … ]`, a paren group, and a NON-lowerable `for`
+  (`def n dynamic; for n [ … ]`) with the two dispatches are ALL CLEAN. Only a
+  **lowerable `for`** (`for 3 [ … ]`) trips.
+- The discriminator is `loopCapture` in `AnalyseLoopBody` (`carrier.go:3016`),
+  armed by `es.ArmLoopCapture()` in the `for` handler (`native_control.go:980`)
+  when the count is statically lowerable. `do`/`if` use `RunCarrierBodyWithDefs`
+  UNARMED and are clean; the armed loop re-analysis (fragment capture for bytecode
+  lowering, `elemEvalRecordable=true`) leaves a module-fn-VALUE residual on the
+  check-mode stack, which the next dispatch mis-collects as `ep` (→ `Function`).
+- Confirmed at the emit site: the failing `call` runs with `recordable=false`
+  (it is `redis-cmd`'s return-type probe), but its `ep` arg arrived as `Function`
+  from the upstream armed dispatch.
+
+So it is NOT a general statement-boundary bug — it is specific to the ARMED
+loop-lowering re-analysis. `;` clears it because `stepEnd` commits the residual;
+`do`/`if`/non-lowerable-`for` avoid it by never arming.
+
+**The fix (Stage 2), sound + ratchet-gated:** the armed loop-capture analysis
+exists to RECORD the loop body for lowering; its diagnostics are a byproduct and
+the authoritative ones come from an UNARMED analysis (what `do`/`if` run cleanly).
+The precise, sound change is to make `AnalyseLoopBody` source its ERROR
+diagnostics from an unarmed round (matching `do`/`if`/non-lowerable-`for`) while
+the armed rounds only RECORD the fragment — so a genuine loop-body error (present
+in both armed and unarmed) still reports, but an armed-only residual artifact does
+not. This is a restructure of a soundness-critical function; it MUST land gated by
+`TestCheckAccuracyRatchet` (no genuine-error row dropped) + `verify-bytecode` (the
+lowering must still record identically) + the corpus. It is precisely scoped but
+not landed in this pass — the residual-leaving line in the armed dispatch was not
+pinned, and a restructure without that certainty risks the ratchet. The `;`
+workaround remains the shipped resolution for the benchmark drivers.
 
 ## The design tension (must respect)
 
