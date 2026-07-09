@@ -290,6 +290,19 @@ tail vs non-tail; `break`/`continue` escaping a live frame.
 **Win:** the biggest per-call reduction; recursion is ~340→(target tens)
 allocs/frame, directly closing the ~3000× fib gap.
 
+**Follow-up (splice-macro capture hole).** The static skip
+(`bodyNeedsFrameState`, `fn_capture.go`) originally scanned only for the
+literal `frameStateWords` (`fn`/`def`/…). A `word`-macro hides those: `def
+mk word [fn …]` used in an outer body shows only the bare word `mk`, so
+the scan skipped the baseline and the inner `fn` reached through the
+splice never captured the outer param (interp returned an
+`undefined_word`/`no_signature` error where a literal `fn` gave the
+capture). Fixed by resolving each body word against the registry at
+construction: a splice (`__SP`) binding has its payload walked too, with a
+cycle guard for mutually-recursive macros. Pinned by
+`eng/frame_state_test.go::TestBodyNeedsFrameState` and
+`native/word_splice_test.go::TestWordSpliceMacroFnCapture`.
+
 ---
 
 ## #4 — Sub-evaluation tape allocations  *(reframed by the profile)*

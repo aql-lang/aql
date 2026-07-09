@@ -298,6 +298,17 @@ func (r *Registry) putSubEngine(e *Engine) {
 		return
 	}
 	e.elemEvalRecordable = false
+	// Release any Values still held in the forward-collection scratch
+	// buffers before the engine idles in the pool. rearrangeForForward
+	// leaves the last call's collected args (which can be large list/map
+	// payloads) in rrValues/rrReordered; without clearing, a pooled engine
+	// would pin that transient data for the pool's lifetime, and a later
+	// shorter call would leave stale tail entries pinned. Zero every slot up
+	// to capacity but keep the backing arrays so the buffers stay reusable.
+	clear(e.rrValues[:cap(e.rrValues)])
+	e.rrValues = e.rrValues[:0]
+	clear(e.rrReordered[:cap(e.rrReordered)])
+	e.rrReordered = e.rrReordered[:0]
 	r.enginePool = append(r.enginePool, e)
 }
 

@@ -230,7 +230,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 	// (design/INTERPRETER-SPEED-PLAN.10.md #5). Stack balance is preserved:
 	// the fn baseline still pushes/pops (a nil entry) and the DefCleanup
 	// marker still rides the tape (carrying SkipCleanup).
-	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(s.body())
+	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(r, s.body())
 	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
 		// Reached from a FOREIGN registry (callReg != the install registry r) — a
 		// module fn dispatched through the unified execMatch path from an outer

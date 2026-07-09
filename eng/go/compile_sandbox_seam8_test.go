@@ -48,3 +48,30 @@ func TestW8RestoreForCompileNilCheck(t *testing.T) {
 		t.Fatal("restore must reinstall the snapshot's CheckState")
 	}
 }
+
+// TestW8RestoreForCompileClearsDispatchCache pins that a compile rollback
+// drops the registry's dispatchCache. DefTable.Clone starts a fresh gen
+// timeline at 0, so reinstalling the clone under a cache keyed by (name, gen)
+// could otherwise serve a gen-0 entry cached before the rollback for a name
+// whose restored binding differs. The cache must be nil after restore so the
+// fallback interpreter rebuilds every aggregate from the restored state.
+func TestW8RestoreForCompileClearsDispatchCache(t *testing.T) {
+	r := w8reg(t)
+	r.upsertFnDef("w", Signature{Args: []*Type{TInteger}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return a, nil })})
+	s := r.SnapshotForCompile()
+	// Populate the runtime-mode dispatch cache.
+	if r.Lookup("w") == nil {
+		t.Fatal("Lookup(w) = nil")
+	}
+	if r.dispatchCache == nil {
+		t.Fatal("precondition: dispatch cache not populated")
+	}
+	r.RestoreForCompile(s)
+	if r.dispatchCache != nil {
+		t.Fatal("RestoreForCompile did not clear the dispatch cache")
+	}
+	// A subsequent lookup rebuilds cleanly against the restored table.
+	if r.Lookup("w") == nil {
+		t.Fatal("Lookup(w) after restore = nil")
+	}
+}

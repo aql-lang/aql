@@ -31,13 +31,46 @@ var frameStateWords = map[string]bool{
 // conservative over-approximation: any frameStateWords occurrence, at any
 // code depth, forces the snapshots. Reuses the vetted WalkBodyWords
 // recursion (skips quoted data and nested closures).
-func bodyNeedsFrameState(body []Value) bool {
+//
+// A bare body Word can HIDE a frameStateWord: a `word`-macro (an __SP
+// splice binding, `def m word [fn …]`) splices its payload inline into
+// THIS frame and runs it against the live stack, so a macro whose
+// expansion constructs an inner fn or installs a def needs the baseline
+// exactly as a literal `fn`/`def` would — but the body only shows the
+// macro's name. So resolve each body Word against r: if it is bound to a
+// splice, walk the macro's payload too (recursively, with a cycle guard).
+// Macro-ness is judged at construction time, consistent with the rest of
+// the frame-state analysis; a word unbound or non-macro here is treated as
+// non-macro (the same assumption recursion's forward refs rely on).
+func bodyNeedsFrameState(r *Registry, body []Value) bool {
 	needs := false
-	WalkBodyWords(body, func(w WordInfo, _ Value) {
-		if frameStateWords[w.Name] {
-			needs = true
-		}
-	})
+	seen := map[string]bool{} // guards mutually-recursive macros
+	var walk func([]Value)
+	walk = func(toks []Value) {
+		WalkBodyWords(toks, func(w WordInfo, _ Value) {
+			if needs {
+				return
+			}
+			if frameStateWords[w.Name] {
+				needs = true
+				return
+			}
+			if r == nil || seen[w.Name] {
+				return
+			}
+			bound, ok := r.Defs.Top(w.Name)
+			if !ok {
+				return
+			}
+			info, ok := bound.Data.(SpliceInfo)
+			if !ok {
+				return
+			}
+			seen[w.Name] = true
+			walk(spliceExpand(info.Data))
+		})
+	}
+	walk(body)
 	return needs
 }
 
