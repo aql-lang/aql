@@ -1,10 +1,43 @@
 # Interpreter → Python parity — a second-pass review (2026-07)
 
-**Status:** Review / discovery note. Grounds the *next* round of
+**Status:** Review + implementation log. Grounds the *next* round of
 interpreter-performance work against fresh profiles taken **after** the
-six root-cause fixes of `INTERPRETER-SPEED-PLAN.10.md` all landed. No
-behaviour change is proposed here; it identifies the remaining
-refactorings and algorithms and ranks them by measured impact.
+six root-cause fixes of `INTERPRETER-SPEED-PLAN.10.md` all landed, then
+tracks which of its own findings have since been implemented. It
+identifies the remaining refactorings and algorithms and ranks them by
+measured impact.
+
+### Landed since this note (2026-07)
+
+- **F1 — trace-note gating completion.** DONE. The `#6` fix had missed 7
+  hot-path `traceNote` builders (`if`, `for`-next, forward-collect,
+  mark/move, module call); all now gated behind `e.trace != nil`. Cut
+  13–16 % of allocations on `for`/`if`-heavy shapes.
+- **F4 — forward-collection scratch reuse.** DONE. `effectiveResolved`
+  now reuses two engine-owned buffers instead of allocating a result
+  slice + exclusion map per forward-collecting dispatch. Cut a further
+  5–11 % of allocations on hot shapes.
+- **F5 — frame body copy (slice of the full finding).** DONE. Removed the
+  redundant intermediate `make+copy` of the sig body in the two fn-frame
+  builders (`append` already copies out). Helps recursion
+  (~43.5k → ~36k allocs/op on `recursion_nontail`). The *full* F5 —
+  memoizing the whole frame skeleton / a real call frame — is NOT done
+  (see below).
+- **Cumulative end-to-end** (cross-language, best-of-3, same box): fib
+  7030 → 6113 ms (−13 %), nestloop 1637 → 1503 ms (−8 %), loopsum
+  1905 → 1815 ms (−5 %). The wall-clock gains trail the allocation cuts
+  because GC is only ~⅓ of CPU; the large remaining gap to Python needs
+  the two big structural findings still open below (F2, F3).
+
+**Still open (large, land in dedicated focused work, NOT rushed under the
+100 % coverage + differential-correctness gate):** F2 (lazy IDs — blocked
+on `Value` being a by-value type, so a lazy read cannot cache; the viable
+route decouples runtime IDs from creation and materializes them at
+`emit.go`'s ~73 provenance sites, a miscompilation-risk refactor), F3
+(per-call-site inline cache — needs a stable call-site identity across the
+gap-buffer splice model plus a guard/deopt state machine), F5-full (frame
+skeleton memoization / real call frame — coordinated with the per-call
+stacks; the highest-risk area per `eng/go/CLAUDE.md`), F6 (tagged values).
 
 Companion reading (read these first — this note assumes them):
 `INTERPRETER-SPEED-INVESTIGATION.10.md` (the original diagnosis),
