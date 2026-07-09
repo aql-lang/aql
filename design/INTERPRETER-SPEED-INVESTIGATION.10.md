@@ -8,12 +8,12 @@ best-of-5, same box:
 
 | workload | interp BEFORE | interp AFTER | speedup | AFTER ÷ compiled | AFTER ÷ python |
 |---|---:|---:|---:|---:|---:|
-| fib(24)          | 22,162 ms | 7,539 ms | 2.9× | ~22× | ~380× |
-| loopsum (100k)   |  3,951 ms | 2,269 ms | 1.7× | ~27× | ~115× |
-| nestloop (300²)  |  3,330 ms | 1,882 ms | 1.8× | ~24× | ~105× |
+| fib(24)          | 22,162 ms | 6,646 ms | 3.3× | ~26× | ~300× |
+| loopsum (100k)   |  3,951 ms | 1,872 ms | 2.1× | ~25× | ~80× |
+| nestloop (300²)  |  3,330 ms | 1,617 ms | 2.1× | ~23× | ~75× |
 
-(AFTER includes the full #1A `Value`-shrink series — 184 → 96 bytes,
-−48% — which cut duffcopy/GC-scan across every shape.)
+(AFTER includes the full #1A `Value`-shrink series — 184 → 72 bytes,
+−61% — which cut duffcopy/GC-scan across every shape.)
 
 Interpreter-vs-compiled microbenchmarks (`BenchmarkStage6`, execution
 only) — the gap roughly **halved**, worst on the recursion shapes:

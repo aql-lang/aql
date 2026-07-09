@@ -15,14 +15,20 @@
 > (FixedID/Rank/Depth/In/Out) behind a shared `*typeMeta`, then `Name`,
 > then `Behavior` into the same `*typeMeta` (each with exported
 > `Set*` accessors since external packages can no longer touch the
-> fields), and separately `Pos` behind a `*SrcPos` pointer (nil = unknown,
-> threaded by pointer-copy so the hot path allocates none). **`Value` went
-> 184 → 152 → 136 → 112 → 96 bytes (−48%).** `Behavior` moving into the
-> shared `*typeMeta` also closed the orphan-`*Type` gap the CanonicalType
-> discipline works around (a `behave` rewrite is now visible through every
-> copy). Remaining headroom: packing the seven bool flags + `Origin` into
-> a bitfield (~7 B), and the 16-byte `ID` string (needed by type nodes and
-> the compile-time emitter, not runtime scalars).
+> fields); `Pos` behind a `*SrcPos` and `DynFrom` behind a `*string`
+> (both nil-when-unset, threaded/set off the hot path); and a **field
+> reorder** that clusters the seven bool flags + `Origin` at the tail so
+> they pack with no alignment padding (the bool-packing win, by field
+> ORDER rather than a bitfield — no churn to the ~575 flag sites).
+> **`Value` went 184 → 152 → 136 → 112 → 96 → 80 → 72 bytes (−61%).**
+> `Behavior` moving into the shared `*typeMeta` also closed the
+> orphan-`*Type` gap the CanonicalType discipline works around (a `behave`
+> rewrite is now visible through every copy). The last inline 16-byte
+> field, `ID`, is left as-is: the bytecode emitter's provenance keys on
+> the ID being minted at value creation and shared across copies, so a
+> lazy ID diverges across copies, an eager `*string` adds a per-value
+> alloc, and a `[14]byte` forces the type-registry map key type to change
+> across ~293 sites — none a clean win for 8 bytes.
 
 Companion to `design/INTERPRETER-SPEED-INVESTIGATION.10.md` (the data +
 diagnosis). This note is the **implementation plan**: for each root
