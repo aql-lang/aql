@@ -2155,13 +2155,20 @@ func (e *Engine) stepWord(val Value) error {
 			// the OpenParen barrier hides the pending forward, so the
 			// re-stepped word takes the standalone splice-fire path — no
 			// recursion (and recordUse fires on that inner step).
-			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
-				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
-					if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
-						pe := NewParenExpr([]Value{val})
-						pe.pos = val.pos
-						e.tape.Set(e.pointer, pe)
-						return e.stepLiteral()
+			// IsSplice gates the AsSplice destructure: bindings are almost
+			// never splices, and AsSplice's failure path builds a discarded
+			// fmt.Errorf — an allocation on EVERY def-value substitution
+			// without the guard (the same guard the collection-side twin at
+			// the stepLiteral splice check already carries).
+			if IsSplice(top) {
+				if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+					if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
+						if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
+							pe := NewParenExpr([]Value{val})
+							pe.pos = val.pos
+							e.tape.Set(e.pointer, pe)
+							return e.stepLiteral()
+						}
 					}
 				}
 			}
@@ -6513,6 +6520,24 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	}
 	var bestDeferred *matchResult
 
+	// One positions buffer per matchSignature INVOCATION, re-sliced (and
+	// re-zeroed, preserving the old make()'s zero-fill) per candidate —
+	// the previous per-candidate make([]int, nArgs) was ~17% of all
+	// interpreter allocations (design/INTERPRETER-PYTHON-PARITY.10.md F3
+	// Stage 1). Per-invocation (NOT engine-level) is load-bearing: a
+	// predicate-typed param runs AQL during sigTypeMatches (RunPredicate),
+	// so matchSignature can nest — each nested call owns its own buffer.
+	// A success return hands the buffer to the caller (ownership
+	// transfers; this call never touches it again); bestDeferred keeps
+	// its explicit copy since later candidates overwrite the buffer.
+	maxSigArgs := 0
+	for si := range fn.Signatures {
+		if n := fn.Signatures[si].TotalArgs(); n > maxSigArgs {
+			maxSigArgs = n
+		}
+	}
+	posBuf := make([]int, maxSigArgs)
+
 	// ── 0.1: one outer loop over sorted signatures ───────────────
 	for si := range fn.Signatures {
 		sig := &fn.Signatures[si]
@@ -6547,7 +6572,10 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 		// ── Step 1: forward matching ─────────────────────────────
 
-		positions := make([]int, nArgs)
+		positions := posBuf[:nArgs]
+		for i := range positions {
+			positions[i] = 0
+		}
 		fwd := 0     // number of params matched by forward tokens
 		specAt := -1 // first slot filled by a dispatching word, -1 = none
 
