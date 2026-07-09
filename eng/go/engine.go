@@ -39,8 +39,19 @@ type Engine struct {
 	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
-	source    string          // original source text for error reporting
-	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// rrValues / rrReordered are reusable scratch buffers for
+	// rearrangeForForward's two per-call []Value allocations (forward
+	// collection is on the interpreter's hot path — see
+	// design/INTERPRETER-SPEED-PLAN.10.md #3). Both are purely local to
+	// one rearrangeForForward call (extracted from the tape, permuted,
+	// written straight back via tape.Set — never retained past the call),
+	// and rearrangeForForward triggers no nested dispatch, so a single
+	// engine-owned buffer is race- and aliasing-safe. Retained across
+	// pooled sub-engine reuse (harmless: reset to [:0] on entry).
+	rrValues    []Value
+	rrReordered []Value
+	source      string // original source text for error reporting
+	isTop       bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
 	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
 	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
@@ -3045,15 +3056,23 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 		return
 	}
 
-	// Extract values in current order.
-	values := make([]Value, total)
-	for i, idx := range indices {
-		values[i] = e.tape.At(idx)
+	// Extract values in current order into a reused scratch buffer.
+	values := e.rrValues[:0]
+	for _, idx := range indices {
+		values = append(values, e.tape.At(idx))
 	}
+	e.rrValues = values // retain any grown capacity
 
-	// Reorder: stack args stay in source order; forward args go after
-	// them in REVERSED collection order so fwd_0 sits at the top.
-	reordered := make([]Value, total)
+	// Reorder into a second reused buffer: stack args stay in source
+	// order; forward args go after them in REVERSED collection order so
+	// fwd_0 sits at the top.
+	reordered := e.rrReordered
+	if cap(reordered) < total {
+		reordered = make([]Value, total)
+	} else {
+		reordered = reordered[:total]
+	}
+	e.rrReordered = reordered
 	for i := 0; i < stackArgs; i++ {
 		reordered[i] = values[i]
 	}
@@ -6095,7 +6114,10 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 // forward's context and should not be consumed by inner stack matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
-	excludeIndices := make(map[int]bool)
+	// Lazily allocated: most dispatches have no active Forward in the
+	// window, so the common case pays no map allocation (nil-map reads
+	// below return false). design/INTERPRETER-SPEED-PLAN.10.md #3.
+	var excludeIndices map[int]bool
 	for i := e.pointer - 1; i >= 0; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			start = i + 1
@@ -6103,6 +6125,9 @@ func (e *Engine) effectiveResolved() []Value {
 		}
 		if IsForward(e.tape.At(i)) {
 			fwd, _ := AsForward(e.tape.At(i))
+			if excludeIndices == nil {
+				excludeIndices = make(map[int]bool)
+			}
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
