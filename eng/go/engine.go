@@ -2365,7 +2365,14 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
-		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
+		// traceSigStr formats via fmt on every dispatch; the note is read
+		// only when a trace hook is installed (see the e.trace guard in
+		// Run's step loop). Gate the build — ~5% of interpreter CPU on
+		// dispatch-hot shapes was this dead string (design/
+		// INTERPRETER-SPEED-PLAN.10.md #6).
+		if e.trace != nil {
+			e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
+		}
 		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
 
@@ -2390,7 +2397,9 @@ func (e *Engine) stepWord(val Value) error {
 			match.Args[i] = e.tape.At(pos)
 		}
 	}
-	e.traceNote = "stack " + traceSigStr(w.Name, sig)
+	if e.trace != nil {
+		e.traceNote = "stack " + traceSigStr(w.Name, sig)
+	}
 	return e.execMatch(match)
 }
 
