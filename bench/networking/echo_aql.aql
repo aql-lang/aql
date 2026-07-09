@@ -5,7 +5,15 @@ import "aql:net"
 import "aql:time-util"
 
 # Server: echo 20001 newline-framed lines (20000 timed + 1 warm-up).
-def ln (Net.serve-raw {tcp: 19099} (fn [[sock:Any] [Any] [
+# The connection param MUST be typed `Socket` (not `Any`): a concrete receiver
+# type lets the compiler resolve the `Net.recv-until` / `Net.send-bytes`
+# overloads, so the whole handler body compiles to a VM unit and runs compiled
+# (via the callback-compilation seam). With `Any` the socket-word dispatch is
+# unresolved, `def line (Net.recv-until sock nl)` misfires as a locked-signature
+# redefinition, the program refuses to compile, and the handler falls back to
+# the tree-walking interpreter (~95x slower). `Socket` is exported by aql:net
+# and resolves as a bare type name.
+def ln (Net.serve-raw {tcp: 19099} (fn [[sock:Socket] [Any] [
   def nl (convert Bytes "\n")
   for 20001 [
     def line (Net.recv-until sock nl)

@@ -1,10 +1,13 @@
 # CALLBACK-COMPILATION — runtime independence for callback bodies
 
-Status: implemented (foundation + Stages 1–4 routing), gate-green. This note is
-the "endgame accounting" record for the callback-compilation work: what was
-retired from the interpreter, what deliberately stays, and what the remaining
-frontier is. It is a design note, **not** an ADR (see `lang/go/CLAUDE.md` — ADR
-entries only on explicit maintainer instruction).
+Status: implemented (foundation + Stages 1–4 routing), gate-green. The echo
+networking benchmark that motivated the work now runs its handler compiled on
+the VM at **~58,000 req/s (~97× over the interpreter, ~1.9× off Go)** — see "The
+networking benchmark" below. This note is the "endgame accounting" record for the
+callback-compilation work: what was retired from the interpreter, what
+deliberately stays, and what the remaining frontier is. It is a design note,
+**not** an ADR (see `lang/go/CLAUDE.md` — ADR entries only on explicit maintainer
+instruction).
 
 ## Problem
 
@@ -86,16 +89,34 @@ and `Model` action `makeAction` (`modules/model.go`).
   touch the corpus refusal count, so the `refusalCeiling` / `islandCeiling`
   ratchets and `COMPILABLE-SUBSET.md §5` are unchanged.
 
-## The networking benchmark is gated on a separate frontier
+## The networking benchmark: the handler compiles — ~97× measured
 
-The mechanism is complete and correct, but the echo benchmark's own handler body
-does **not** compile: it is `Net.recv-until` / `Net.send-bytes` over a dynamic
-(`Any`) socket param — module fn-value dispatch over a dynamic receiver, the
-carrier-inference "hard wall" (`aql-bytecode-stage3-inlining-plan.0.md`,
-`MODULE-FN-PARAM-SLOT-COMPILATION.0.md`; two prior reverts). Every real networking
-handler is socket-word-dominated, so **the echo req/s number cannot move without
-module socket-word compilation** — out of scope here. A pure-core handler body
-(`for`, `def`, `add`, `convert`) compiles and runs on the VM (verified).
+The echo benchmark handler body **does** compile and run on the VM through this
+seam: `for`, `def`, `convert`, `join`, AND the `Net.recv-until` / `Net.send-bytes`
+socket words over the connection all lower. Measured end-to-end
+(`bench/networking/`): **~58,000 req/s compiled vs ~600 interpreted (~97×)**,
+within ~1.9× of Go. This is the payoff the whole exercise was after.
+
+**One requirement — the connection param must be typed `Socket`, not `Any`.** The
+socket words are module overloads (`Net.recv-until : [Socket Bytes]` /
+`[Socket Bytes Map]`); with an `Any` receiver the compiler cannot resolve an
+overload, and `def line (Net.recv-until sock nl)` is then misread as *redefining*
+a word `line` with the locked builtin signature `[Socket Bytes Map]` — a
+`locked_signature` error that refuses whole-program compilation, so the handler
+falls back to the interpreter. Typing the param `Socket` (a bare type name
+exported by `aql:net`, which resolves and rejects non-sockets) resolves the
+overload and the whole handler compiles.
+
+**Correction of a prior hypothesis.** An earlier revision of this note (and the
+plan's Stage-1 finding) claimed the handler was blocked by "module fn-value
+dispatch over a dynamic receiver — the carrier-inference hard wall
+(`MODULE-FN-PARAM-SLOT-COMPILATION.0.md`; two prior reverts)." That was wrong,
+and was verified so by direct measurement: module dispatch over a **concrete**
+`Socket` compiles fine (`Net.close sock`, `Net.recv-until sock (convert Bytes
+"\n")` both lower to VM units), and `sock:Any` vs `sock:Socket` is the entire
+difference on the real handler. The `§16` mutable-Array carrier wall is a
+genuine, separate frontier (the sort chain), but it never gated this benchmark —
+the blocker was an under-specified `Any` param annotation in the example.
 
 ## Remaining frontier (not landed)
 

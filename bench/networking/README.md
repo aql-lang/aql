@@ -48,16 +48,24 @@ never touched by `make fmt/vet/lint/test/cover-gate`.
 
 Representative figures (≈3 runs each; Go 1.24, Node 22, loopback Linux):
 
-| Runtime | req/s | µs / round-trip | vs. AQL |
+| Runtime | req/s | µs / round-trip | vs. Go |
 |---|--:|--:|--:|
-| Go (`net` + `bufio`)               | ~118,000 | ~8.5   | ~125× faster |
-| TypeScript (Node `net`)            | ~53,000  | ~19    | ~55× faster  |
-| AQL — bytecode compiler (default)  | ~940     | ~1,065 | 1× (baseline) |
-| AQL — interpreter (`-no-compile`)  | ~680     | ~1,470 | 0.7×          |
+| Go (`net` + `bufio`)                    | ~110,000 | ~9.1   | 1× (baseline) |
+| TypeScript (Node `net`)                 | ~53,000  | ~19    | ~2× slower   |
+| **AQL — bytecode compiler (default)**   | **~58,000** | **~17** | **~1.9× slower** |
+| AQL — interpreter (`-no-compile`)       | ~600     | ~1,650 | ~180× slower |
 
-So Go ≈ 2.2× Node, and both lead AQL by one-to-two orders of magnitude on
-this workload. AQL's bytecode compiler buys ~1.4× over its tree-walking
-interpreter but does not close the gap.
+The **compiled** AQL server now runs its per-connection handler on the bytecode
+VM and lands within ~1.9× of Go and slightly ahead of Node — a **~97× jump over
+the tree-walking interpreter** (~600 → ~58,000 req/s). This is the payoff of
+compiling the `serve-raw` handler body (see *Resolution* below); it requires the
+connection param typed **`Socket`**, not `Any` (an `Any` receiver leaves the
+socket-word overloads unresolved, the program refuses to compile, and the
+handler silently falls back to the interpreter — the ~600 req/s row).
+
+Earlier revisions of this file reported ~940 req/s for the "compiler (default)"
+row: at that time function-body compilation did not exist, so the handler ran
+interpreted regardless of the compile flag. That row is superseded.
 
 ### Where AQL's time goes
 
@@ -119,6 +127,31 @@ because server request handlers are AQL *function bodies*, and function bodies
 currently execute on the interpreter rather than the compiler, at ~19× the
 per-word cost. Compiling fn bodies / handler loops would be the highest-leverage
 fix; the socket words themselves are not the constraint.
+
+## Resolution — the handler now compiles (~97× faster)
+
+The highest-leverage fix above **landed**: the callback-compilation seam
+(`design/CALLBACK-COMPILATION.0.md`) compiles a `serve-raw` connection handler
+body to its own bytecode unit and runs it on the VM (`RunUnit`) per connection,
+instead of `Registry.CallAQL` on the interpreter. The echo handler body — `for`,
+`def`, `convert`, `join`, and the `Net.recv-until` / `Net.send-bytes` socket
+words over the connection — compiles in full, and this benchmark now measures
+**~58,000 req/s compiled vs ~600 interpreted** (the table above).
+
+**One requirement:** the connection param must be typed **`Socket`**, not `Any`.
+The socket words are module overloads (`Net.recv-until : [Socket Bytes]` /
+`[Socket Bytes Map]`); with an `Any` receiver the compiler cannot pick an
+overload, and `def line (Net.recv-until sock nl)` is then misread as *redefining*
+a word `line` with the locked builtin signature `[Socket Bytes Map]` — a
+`locked_signature` error that refuses whole-program compilation, so the handler
+falls back to the interpreter. Typing the param `Socket` (a bare type name
+exported by `aql:net`) resolves the overload and the whole handler compiles.
+
+This corrects an earlier hypothesis that the handler was blocked by a deep
+"module fn-value dispatch over a dynamic receiver" carrier-inference wall. It is
+not: module dispatch over a concrete `Socket` compiles fine (`Net.close sock`,
+`Net.recv-until sock (convert Bytes "\n")` both compile); the only blocker was
+the under-specified `Any` param annotation in the example.
 
 ### `diag/` — the localization harness
 
