@@ -220,13 +220,13 @@ func getrNodeReturns(args []Value, r *Registry) []Value {
 	key, container := args[0], args[1]
 	if container.Parent.ConformsTo(TList) && !key.Parent.ConformsTo(TInteger) {
 		eng.CheckAddUniqueDiagnostic(r, "getr_error",
-			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr", key.Pos)
+			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr", key.Pos())
 		return out
 	}
 	if m, err := AsMap(container); err == nil && m != nil && container.Parent.ConformsTo(TMap) {
 		if _, ok := m.Get(getKey(key)); !ok {
 			eng.CheckAddUniqueDiagnostic(r, "not_found",
-				fmt.Sprintf("getr: key %q not found in map", getKey(key)), "getr", key.Pos)
+				fmt.Sprintf("getr: key %q not found in map", getKey(key)), "getr", key.Pos())
 		}
 	}
 	return out
@@ -255,7 +255,7 @@ func getrObjectReturns(args []Value, r *Registry) []Value {
 	}
 	if _, ok := info.AllFields().Get(getKey(args[0])); !ok {
 		eng.CheckAddUniqueDiagnostic(r, "not_found",
-			fmt.Sprintf("getr: field %q not found in object", getKey(args[0])), "getr", args[0].Pos)
+			fmt.Sprintf("getr: field %q not found in object", getKey(args[0])), "getr", args[0].Pos())
 	}
 	return out
 }
@@ -270,7 +270,7 @@ func getrNoneReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 2 &&
 		eng.IsNoneShape(args[1]) && !args[1].Dynamic {
 		eng.CheckAddUniqueDiagnostic(r, "not_found",
-			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos)
+			"getr: parent is None — nothing to read a key from", "getr", args[0].Pos())
 	}
 	return []Value{}
 }

@@ -1084,11 +1084,22 @@ type Value struct {
 	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
 
 	// Payload and evaluation state — populated on ordinary values.
-	Data      Payload // the kernel-known data payload; see payload.go for variants
-	Quoted    bool    // produced by the quote word; prevents auto-evaluation
-	Eval      bool    // parser-created list that should auto-evaluate at end of Run
-	Pos       SrcPos  // source position for error reporting (zero value = unknown)
-	Undefined bool    // atom created from an undefined word (error if left on result stack)
+	Data   Payload // the kernel-known data payload; see payload.go for variants
+	Quoted bool    // produced by the quote word; prevents auto-evaluation
+	Eval   bool    // parser-created list that should auto-evaluate at end of Run
+	// pos is the source position for error reporting, behind a pointer so
+	// the ~24 inline bytes of SrcPos (Row/Col/Src) don't ride on every
+	// Value copy — nil means "unknown" (design/INTERPRETER-SPEED-PLAN.10.md
+	// #1A, Pos follow-up). A position is minted once at parse time; the
+	// interpreter then THREADS it by copying the pointer (WithPos, the
+	// internal `.pos = other.pos` assignments), so no per-value SrcPos is
+	// allocated on the hot path and synthesized values (nil pos) carry
+	// none. The Src text is never mutated after parse, so sharing one
+	// *SrcPos across every copy of a value is sound. Read via Pos()
+	// (nil-safe, returns the zero SrcPos); external packages set it via
+	// SetPos since the field is unexported.
+	pos       *SrcPos
+	Undefined bool // atom created from an undefined word (error if left on result stack)
 	// FailedDispatch marks a named Function value that a dispatch
 	// attempt left on the stack as data because no signature matched
 	// (the silent-failure shape of design/ERRORS.8.md §5, VOXGIG T1).
@@ -1161,6 +1172,24 @@ func (v *Value) ensureTMeta() *typeMeta {
 // an ad-hoc *Type node cannot assign the field directly.
 func (v *Value) SetName(name string) {
 	v.ensureTMeta().Name = name
+}
+
+// Pos returns the value's source position, or the zero SrcPos (Row/Col 0
+// = unknown) when none is set. Nil-safe read of the pos pointer.
+func (v Value) Pos() SrcPos {
+	if v.pos == nil {
+		return SrcPos{}
+	}
+	return *v.pos
+}
+
+// SetPos attaches a source position, allocating a *SrcPos. Internal eng
+// code threads a position without allocating by copying the pos pointer
+// directly (`v.pos = other.pos`, as WithPos does); SetPos is the exported
+// entry point for the parser and lang layer, where the field is not
+// reachable and a fresh position is being minted anyway.
+func (v *Value) SetPos(p SrcPos) {
+	v.pos = &p
 }
 
 // Name is the nil-safe read of the type-node leaf name — "" for an

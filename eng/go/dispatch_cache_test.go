@@ -150,4 +150,12 @@ func TestTypeMetaAccessorsNilValue(t *testing.T) {
 	if v.Name() != "x" {
 		t.Fatalf("after SetName, Name = %q, want x", v.Name())
 	}
+	// Pos: nil-safe read returns the zero SrcPos; SetPos then attaches one.
+	if (v.Pos() != SrcPos{}) {
+		t.Fatalf("nil-pos Pos() = %+v, want zero", v.Pos())
+	}
+	v.SetPos(SrcPos{Row: 3, Col: 7})
+	if v.Pos().Row != 3 || v.Pos().Col != 7 {
+		t.Fatalf("after SetPos, Pos() = %+v, want Row3 Col7", v.Pos())
+	}
 }

@@ -3314,8 +3314,8 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 						Code:   "redundant_guard",
 						Detail: detail,
 						Word:   "is",
-						Row:    condList.Pos.Row,
-						Col:    condList.Pos.Col,
+						Row:    condList.Pos().Row,
+						Col:    condList.Pos().Col,
 					})
 				}
 			}
@@ -3456,9 +3456,9 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	}
 	if len(body) > 0 {
 		sb.WriteByte('@')
-		sb.WriteString(strconv.Itoa(body[0].Pos.Row))
+		sb.WriteString(strconv.Itoa(body[0].Pos().Row))
 		sb.WriteByte(':')
-		sb.WriteString(strconv.Itoa(body[0].Pos.Col))
+		sb.WriteString(strconv.Itoa(body[0].Pos().Col))
 	}
 	return sb.String()
 }

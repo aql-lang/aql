@@ -279,7 +279,7 @@ func unpackHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	}
 	for _, el := range names.Slice() {
 		name := defName(el)
-		if err := bindUnpackEntry(r, name, name, get, proven, el.Pos); err != nil {
+		if err := bindUnpackEntry(r, name, name, get, proven, el.Pos()); err != nil {
 			return nil, err
 		}
 	}
@@ -302,7 +302,7 @@ func unpackAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, err
 	}
 	for _, k := range keys {
-		if err := bindUnpackEntry(r, k, k, get, proven, args[0].Pos); err != nil {
+		if err := bindUnpackEntry(r, k, k, get, proven, args[0].Pos()); err != nil {
 			return nil, err
 		}
 	}
@@ -325,7 +325,7 @@ func unpackRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	for _, srcKey := range renames.Keys() {
 		target, _ := renames.Get(srcKey)
 		localName := defName(target)
-		if err := bindUnpackEntry(r, localName, srcKey, get, proven, target.Pos); err != nil {
+		if err := bindUnpackEntry(r, localName, srcKey, get, proven, target.Pos()); err != nil {
 			return nil, err
 		}
 	}

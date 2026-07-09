@@ -77,7 +77,7 @@ func setMicronDetail(args []Value) string {
 // message.
 func setMicronReturns(args []Value, r *Registry) []Value {
 	if r != nil && r.Check.IsActive() && len(args) == 3 {
-		eng.CheckAddUniqueDiagnostic(r, "type_error", setMicronDetail(args), "set", args[0].Pos)
+		eng.CheckAddUniqueDiagnostic(r, "type_error", setMicronDetail(args), "set", args[0].Pos())
 	}
 	return []Value{}
 }
@@ -97,7 +97,7 @@ func getrMicronReturns(args []Value, r *Registry) []Value {
 			kind = args[1].Parent.Leaf()
 		}
 		eng.CheckAddUniqueDiagnostic(r, "not_found",
-			fmt.Sprintf("getr: %s has no property %q", kind, getKey(args[0])), "getr", args[0].Pos)
+			fmt.Sprintf("getr: %s has no property %q", kind, getKey(args[0])), "getr", args[0].Pos())
 	}
 	return out
 }

@@ -1081,7 +1081,7 @@ func miniMicronLitReturns(args []native.Value, r *native.Registry) []native.Valu
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "micron", args[0].Pos)
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "micron", args[0].Pos())
 		}
 	}
 	return []native.Value{}

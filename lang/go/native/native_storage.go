@@ -333,13 +333,13 @@ func setClassInstanceReturns(args []Value, r *Registry) []Value {
 		}
 		eng.CheckAddUniqueDiagnostic(r, "sealed_field",
 			fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
-			"set", args[0].Pos)
+			"set", args[0].Pos())
 		return []Value{}
 	}
 	if IsConcrete(args[1]) {
 		if _, err := MakeClassFieldValue(args[1], constraint, r); err != nil {
 			eng.CheckAddUniqueDiagnostic(r, "type_error",
-				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set", args[0].Pos)
+				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set", args[0].Pos())
 		}
 	}
 	return []Value{}

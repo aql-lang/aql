@@ -707,8 +707,8 @@ func bodySpanEnd(body []Value) SrcPos {
 	var walk func(vs []Value)
 	walk = func(vs []Value) {
 		for _, v := range vs {
-			if posBefore(end.Row, end.Col, v.Pos) {
-				end = v.Pos
+			if posBefore(end.Row, end.Col, v.Pos()) {
+				end = v.Pos()
 			}
 			if IsParenExpr(v) {
 				if toks, err := AsParenExpr(v); err == nil {
@@ -1052,7 +1052,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// unknown position. Empty body falls back to a zero pos.
 			var fnPos SrcPos
 			if len(bodyCopy) > 0 {
-				fnPos = bodyCopy[0].Pos
+				fnPos = bodyCopy[0].Pos()
 			}
 			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
@@ -1095,7 +1095,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		if genSpec == nil {
 			var retPos SrcPos
 			if len(bodyCopy) > 0 {
-				retPos = bodyCopy[0].Pos
+				retPos = bodyCopy[0].Pos()
 			}
 			unnamedCount := 0
 			for _, p := range sigParams {
@@ -1218,7 +1218,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserCall(fnUnit, args, out, pos)
 			} else if polyPlan != nil {
@@ -1229,7 +1229,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// whichever arm the VM selects.
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, out, pos)
 			}
@@ -1247,7 +1247,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
@@ -1260,7 +1260,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		if fnUnit >= 0 {
 			pos := SrcPos{}
 			if len(args) > 0 {
-				pos = args[0].Pos
+				pos = args[0].Pos()
 			}
 			es.RecordUserCall(fnUnit, args, stk, pos)
 		}
