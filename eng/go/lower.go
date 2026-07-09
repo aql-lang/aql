@@ -908,6 +908,26 @@ func fragmentResultSeqs(allEvents []*emitEvent) map[int]bool {
 	return res
 }
 
+// fragResultStaysOnSim reports whether a fragment-internal RESULT event (an arm /
+// loop-body result produced inside the fragment) can be left on that fragment's
+// simulated stack — so planValueDefLocals should NOT promote it. It stays iff it
+// is the fragment result, is produced inside it, is not consumed across a NESTED
+// fragment boundary, AND is not ALSO consumed as an operand within its own
+// fragment. The last exception is the todo-api PUT shape `def t2 {…}; (todos set
+// (id) t2) drop; t2`: t2 is both the `set` argument and the arm result, so the
+// operand use pops its single sim slot and nothing is left to seat as the result
+// (the arm refused "branch leaves extra values", out=opEvent vm=0). Such a
+// value-def is promoted to a frame local instead (stored once, re-pushed per use;
+// the arm re-resolves its out to the local). refs counts operand uses only, never
+// the result designation, so a pure arm result (refs==0) still stays on the sim.
+func (es *EmitState) fragResultStaysOnSim(seq int, refs map[int]int, fragResult, fragInternal, crossFragRef map[int]bool) bool {
+	if !fragResult[seq] || !fragInternal[seq] || crossFragRef[seq] {
+		return false
+	}
+	selfConsumed := refs[seq] > 0 && es.eventInfo[seq].valueDef
+	return !selfConsumed
+}
+
 // planValueDefLocals decides which of a unit's top-level computed results are
 // referenced more than once and so must be promoted to a frame local (the
 // carrier-identity item's value-def locals). A single VM-stack copy of a
@@ -1001,7 +1021,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// consumes it — lowerFragment resets the sim per fragment, so the only
 		// sound delivery is a unit-frame local (the trie-insert `def kid
 		// (find-kid …)` in the outer arm, referenced as the inner if's arm-out).
-		if fragResult[ev.seq] && fragInternal[ev.seq] && !crossFragRef[ev.seq] {
+		if es.fragResultStaysOnSim(ev.seq, refs, fragResult, fragInternal, crossFragRef) {
 			continue
 		}
 		// A DEAD branch value-def — `def _ (if c [t] [e])` whose merge result is never

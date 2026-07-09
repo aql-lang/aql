@@ -73,3 +73,59 @@ def _ (bcount set bi ((bcount get bi) add 1)) end
 		})
 	}
 }
+
+// TestBranchArmResultSelfConsumed pins the fix for a value-def that is BOTH the
+// arm RESULT and consumed as an operand WITHIN the same arm — the todo-api PUT
+// handler shape `def t2 {…}; (todos set (id) t2) drop; t2`, where t2 is the
+// `set` argument and the arm's returned value. planValueDefLocals USED to skip
+// promotion for every fragment-internal arm result (assuming it stays on the
+// arm's simulated stack); but the intra-arm `set` consumed t2's single sim slot,
+// so nothing was left to seat as the result and the arm refused "branch leaves
+// extra values" (out=opEvent, vm=0). Such a self-consumed arm-result value-def is
+// now promoted to a frame local (stored once inside the arm, re-pushed for the
+// operand use AND re-resolved as the arm out). compile == interpret MUST hold.
+func TestBranchArmResultSelfConsumed(t *testing.T) {
+	strict := []struct{ name, src, want string }{
+		// the PUT shape: build t2, mutate a flex with it, return t2.
+		{"arm result also a set argument",
+			`def m (flex {b: 0})
+def out (if (3 gt 1) [
+  def t2 {a: 1}
+  (m set "k" t2) drop
+  t2
+] [ {a: 0} ])
+out`, "[{a:1}]"},
+		// the value feeds a plain call operand AND is the arm result.
+		{"arm result also a call operand",
+			`def out (if (2 gt 1) [
+  def xs [10 20 30]
+  (size xs) drop
+  xs
+] [ [] ])
+out`, "[[10 20 30]]"},
+	}
+	for _, c := range strict {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog == nil {
+				t.Fatalf("must compile natively, refused: %q", reason)
+			}
+			if strings.Contains(prog.Disassemble(), "FALLBACK") {
+				t.Errorf("%s must compile native (no island)", c.name)
+			}
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("RunCompiledStrict: %v", err)
+			}
+			b, _ := New()
+			want, _ := b.Run(c.src)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			}
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
+	}
+}
