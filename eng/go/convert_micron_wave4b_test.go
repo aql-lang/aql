@@ -559,10 +559,12 @@ func TestMakeHoston(t *testing.T) {
 		t.Errorf("authority = %q", s)
 	}
 
-	// Negative space — string forms.
+	// Negative space — string forms. A host is not a URL, so authority
+	// delimiters (/ ? #) are rejected rather than swallowed into the host.
 	for _, bad := range []string{
 		"", "   ", "a b:80", ":80", "host:99999", "host:-1", "host:notaport",
 		"[::1", "[not-an-ip]:80", "[::1]x", "[::1]:99999", "1:2:3",
+		"example.com/path", "example.com/path:443", "a?b", "a#b",
 	} {
 		if _, err := makeHoston(NewString(bad)); err == nil {
 			t.Errorf("bad authority %q accepted", bad)
@@ -571,6 +573,18 @@ func TestMakeHoston(t *testing.T) {
 	// Negative space — map + source.
 	if _, err := mval(mapOf("port", NewInteger(80))); err == nil {
 		t.Error("missing host accepted")
+	}
+	// The host field is a host, not an authority: a "host:port" string there
+	// is rejected (not silently split into the optional port), as are URL
+	// delimiters and an out-of-range explicit port.
+	if _, err := mval(mapOf("host", NewString("a.com:80"))); err == nil {
+		t.Error("host field with a :port accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a.com/p"))); err == nil {
+		t.Error("host field with a / accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a.com"), "port", NewInteger(99999))); err == nil {
+		t.Error("out-of-range map port accepted")
 	}
 	if _, err := mval(mapOf("host", NewString("a"), "extra", NewString("y"))); err == nil {
 		t.Error("unknown field accepted")

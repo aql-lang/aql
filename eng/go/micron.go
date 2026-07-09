@@ -513,10 +513,21 @@ func makeHoston(src Value) ([]Value, error) {
 		if !hasHost {
 			return nil, hostonErr("Hoston requires a host field")
 		}
-		if hasPort {
-			return hostonFromString(micronHostonRender(host, port, true))
+		// Build directly from the two named fields — do NOT re-parse the host
+		// as a full authority, or `{host:'a.com:80'}` would silently set a
+		// port the caller never supplied (violating the {host port?} shape).
+		if err := validHostonHostField(host); err != nil {
+			return nil, err
 		}
-		return hostonFromString(host)
+		if hasPort && (port < 0 || port > 65535) {
+			return nil, hostonErr(fmt.Sprintf("Hoston port %d is not in 0..65535", port))
+		}
+		fields := NewOrderedMap()
+		fields.Set("host", NewString(host))
+		if hasPort {
+			fields.Set("port", NewInteger(port))
+		}
+		return []Value{NewValueRaw(THoston, MicronPayload{Fields: fields})}, nil
 	}
 	return nil, hostonErr(fmt.Sprintf("Hoston source must be a string or map, got %s", src.String()))
 }
@@ -595,6 +606,26 @@ func validHostonHost(h string) error {
 	}
 	if strings.ContainsAny(h, " \t\r\n") {
 		return hostonErr(fmt.Sprintf("Hoston host %q must not contain whitespace", h))
+	}
+	// A Hoston is a network authority (host[:port]), not a URL: the
+	// authority delimiters end it, so a host must not contain them.
+	if i := strings.IndexAny(h, "/?#"); i >= 0 {
+		return hostonErr(fmt.Sprintf("Hoston host %q must not contain %q (it is a host, not a URL)", h, h[i:i+1]))
+	}
+	return nil
+}
+
+// validHostonHostField validates a Hoston map's `host` field as a HOST, not a
+// full authority: a ':' is allowed only inside an IPv6 literal, so a
+// "host:port" string in the host field is a loud error rather than quietly
+// populating the optional port.
+func validHostonHostField(h string) error {
+	if err := validHostonHost(h); err != nil {
+		return err
+	}
+	if strings.Contains(h, ":") && net.ParseIP(h) == nil {
+		return hostonErr(fmt.Sprintf(
+			"Hoston host %q is not valid (a ':' is only allowed in an IPv6 literal; put the port in the port field)", h))
 	}
 	return nil
 }

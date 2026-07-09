@@ -103,6 +103,8 @@ make Hoston {host:'a' extra:'y'}	ERROR:Hoston has no field extra	unknown field
 make Hoston {port:80}	ERROR:Hoston requires a host	missing host
 make Hoston {host:42}	ERROR:field host must be a String	non-string host
 make Hoston {host:'a' port:'80'}	ERROR:field port must be an Integer	non-integer port
+make Hoston 'example.com/path'	ERROR:must not contain	a host is not a URL
+make Hoston {host:'a.com:80'}	ERROR:only allowed in an IPv6 literal	host field must not carry a port
 
 # ─────────────────────────────────────────────────────────────────────
 # §3  Construction — the abstract root and Pathon under make.
