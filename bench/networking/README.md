@@ -138,20 +138,39 @@ instead of `Registry.CallAQL` on the interpreter. The echo handler body — `for
 words over the connection — compiles in full, and this benchmark now measures
 **~58,000 req/s compiled vs ~600 interpreted** (the table above).
 
-**One requirement:** the connection param must be typed **`Socket`**, not `Any`.
-The socket words are module overloads (`Net.recv-until : [Socket Bytes]` /
-`[Socket Bytes Map]`); with an `Any` receiver the compiler cannot pick an
-overload, and `def line (Net.recv-until sock nl)` is then misread as *redefining*
-a word `line` with the locked builtin signature `[Socket Bytes Map]` — a
-`locked_signature` error that refuses whole-program compilation, so the handler
-falls back to the interpreter. Typing the param `Socket` (a bare type name
-exported by `aql:net`) resolves the overload and the whole handler compiles.
+**Param typing (no longer required).** The socket words are module overloads
+(`Net.recv-until : [Socket Bytes]` / `[Socket Bytes Map]`). An explicitly-`Any`
+handler param now binds a **gradual** carrier, so the socket-word dispatch
+resolves optimistically and the whole handler compiles — `[sock:Any]` and
+`[sock:Socket]` both reach the VM (the benchmark uses `Socket` only for clarity).
+Historically `[sock:Any]` was a hard blocker: the strict `Any` receiver could not
+pick an overload, `def line (Net.recv-until sock nl)` was misread as *redefining*
+a word `line` with the locked builtin signature `[Socket Bytes Map]`, and that
+`locked_signature` error refused whole-program compilation. Two compiler fixes
+removed it — see *Compiler fixes* below.
 
-This corrects an earlier hypothesis that the handler was blocked by a deep
+This corrected an earlier hypothesis that the handler was blocked by a deep
 "module fn-value dispatch over a dynamic receiver" carrier-inference wall. It is
-not: module dispatch over a concrete `Socket` compiles fine (`Net.close sock`,
+not: module dispatch over a `Socket` compiles fine (`Net.close sock`,
 `Net.recv-until sock (convert Bytes "\n")` both compile); the only blocker was
-the under-specified `Any` param annotation in the example.
+the strict modelling of the `Any` param.
+
+### Compiler fixes
+
+1. **Gradual `Any` handler params (root).** The stored-handler compile path
+   (`fnValueInputs`, `eng/go/emit.go`) built strict `Any` param carriers; it now
+   uses `ParamInputCarrier`, so an `Any` param is gradual exactly as on the
+   ordinary user-fn compile path. A body word over it poly-matches at runtime
+   instead of failing `no_signature` against the strict `Any` top.
+2. **Failed dispatch is not a word extension (defense-in-depth).** A value whose
+   producing call genuinely fails to dispatch is left as a `FailedDispatch`
+   Function carrying the native's locked signatures; `defWordExtension`
+   (`lang/go/native/native_definition.go`) now declines to treat it as an
+   open-words merge, so a def-bound failed dispatch inside a loop reports the real
+   dispatch diagnostic instead of a spurious `locked_signature`.
+
+Both landed gate-green (`verify-bytecode` differential + `-race`, `cover-gate`
+100%).
 
 ### `diag/` — the localization harness
 

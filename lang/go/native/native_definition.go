@@ -283,6 +283,19 @@ func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, e
 	if !body.Parent.Equal(TFnDef) && !body.Parent.Equal(TFunction) {
 		return false, nil
 	}
+	// A FailedDispatch fn value is here because a CALL matched no signature and
+	// was left on the stack as data (a genuine dispatch failure — a concrete
+	// type mismatch, e.g. `def y (Net.recv-until nl nl)` feeding Bytes to the
+	// Socket slot). `def` consumes it as a plain value binding, exactly as
+	// value.go documents. It is never a deliberate `def <word> fn […]`
+	// extension, yet it carries the dispatched native's LOCKED signatures;
+	// without this guard a re-analysis (a def inside a `for` loop) finds the name
+	// already bound to it and misfires the open-words merge as a spurious
+	// `locked_signature` refusal instead of the real dispatch diagnostic. Fall
+	// through to the ordinary value binding.
+	if body.FailedDispatch {
+		return false, nil
+	}
 	fnDef, ok := body.Data.(FnDefInfo)
 	if !ok {
 		return false, nil

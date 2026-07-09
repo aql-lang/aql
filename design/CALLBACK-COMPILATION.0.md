@@ -97,15 +97,29 @@ socket words over the connection all lower. Measured end-to-end
 (`bench/networking/`): **~58,000 req/s compiled vs ~600 interpreted (~97×)**,
 within ~1.9× of Go. This is the payoff the whole exercise was after.
 
-**One requirement — the connection param must be typed `Socket`, not `Any`.** The
-socket words are module overloads (`Net.recv-until : [Socket Bytes]` /
-`[Socket Bytes Map]`); with an `Any` receiver the compiler cannot resolve an
-overload, and `def line (Net.recv-until sock nl)` is then misread as *redefining*
-a word `line` with the locked builtin signature `[Socket Bytes Map]` — a
-`locked_signature` error that refuses whole-program compilation, so the handler
-falls back to the interpreter. Typing the param `Socket` (a bare type name
-exported by `aql:net`, which resolves and rejects non-sockets) resolves the
-overload and the whole handler compiles.
+**`Any` handler params now compile too (two follow-up fixes).** The socket words
+are module overloads (`Net.recv-until : [Socket Bytes]` / `[Socket Bytes Map]`).
+Originally an `Any`-typed connection param was a hard blocker: the strict `Any`
+receiver could not resolve an overload, `def line (Net.recv-until sock nl)` was
+misread as *redefining* a word `line` with the locked builtin signature `[Socket
+Bytes Map]`, and that `locked_signature` error refused whole-program compilation.
+Two fixes removed it, so `[sock:Any]` and `[sock:Socket]` both compile the handler
+to the VM:
+
+1. **Gradual `Any` handler params (root).** `fnValueInputs` (`eng/go/emit.go`) —
+   the stored-handler compile path's param carriers — now uses `ParamInputCarrier`
+   instead of a strict `NewCarrier`, so an explicitly-`Any` param is gradual, as
+   on the ordinary user-fn compile path (`user_poly.go`). The socket-word dispatch
+   then matches optimistically (the connection value IS a Socket at runtime).
+2. **Failed dispatch ≠ word extension (defense-in-depth).** `defWordExtension`
+   (`lang/go/native/native_definition.go`) declines to treat a `FailedDispatch`
+   Function value — a genuinely-unresolved call left as data, carrying the native's
+   locked sigs — as an open-words merge, so a def-bound failed dispatch inside a
+   loop reports the real dispatch diagnostic, never a spurious `locked_signature`.
+
+Both landed gate-green (`verify-bytecode` differential + `-race` clean, `cover-gate`
+100%), each with a meaningful off-corpus regression
+(`lang/go/locked_sig_misfire_test.go`).
 
 **Correction of a prior hypothesis.** An earlier revision of this note (and the
 plan's Stage-1 finding) claimed the handler was blocked by "module fn-value

@@ -1326,7 +1326,14 @@ func fnValueInputs(params []FnParam) (inputs []Value, names []string) {
 		if t == nil {
 			t = TAny
 		}
-		inputs[i] = NewCarrier(t)
+		// ParamInputCarrier (not a strict NewCarrier): an explicitly-`Any`
+		// handler param binds a GRADUAL carrier, so a body word over it
+		// poly-matches at runtime instead of failing no_signature against the
+		// strict Any top — the same treatment the user-fn compile path gives
+		// (user_poly.go). This lets a `serve-raw` handler `[sock:Any]` compile
+		// its socket-word dispatch to the VM (the connection value IS a Socket
+		// at runtime); a concrete-typed param stays strict.
+		inputs[i] = ParamInputCarrier(t)
 		names[i] = p.Name
 	}
 	return inputs, names
