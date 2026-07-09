@@ -38,8 +38,8 @@ func (d *disjunctUnifier) Match(v Value, t *Type) bool {
 // any existing Behavior. Called by InstallType when minting a disjunct
 // type so the alternatives drive every Is/Match call site.
 func installDisjunctUnifier(def *Type, alternatives []Value, name string) {
-	def.Behavior = &disjunctUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &disjunctUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		alternatives:    alternatives,
 		typeName:        name,
 	}

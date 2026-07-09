@@ -197,8 +197,8 @@ func patrunAddReturns(args []Value, r *Registry) []Value {
 				Code:   "patrun_error",
 				Detail: fmt.Sprintf("add: value must be a %s, got %s", ss.DeclaredVal.Leaf(), args[1].Parent.String()),
 				Word:   "add",
-				Row:    args[1].Pos.Row,
-				Col:    args[1].Pos.Col,
+				Row:    args[1].Pos().Row,
+				Col:    args[1].Pos().Col,
 			})
 		}
 	}

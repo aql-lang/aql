@@ -333,7 +333,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, TMicron)
 		info.Name = name
 		info.Type = def
-		def.Behavior = micronBehavior{kind: def, info: &info}
+		def.ensureTMeta().Behavior = micronBehavior{kind: def, info: &info}
 		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if IsClassType(body) {
 		info, _ := AsClassType(body)
@@ -377,7 +377,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			parent = TFnUndef
 		}
 		def := r.Types.MintType(name, parent)
-		info.Name = parent.Name + "/" + name
+		info.Name = parent.Name() + "/" + name
 		info.Type = def
 		InstallSchemaUnifier(def, info)
 		r.RegisterPart(name)
@@ -435,8 +435,8 @@ func InstallType(r *Registry, name string, body Value) error {
 				return err
 			}
 		}
-		def.Name = name
-		body.Name = name
+		def.ensureTMeta().Name = name
+		body.ensureTMeta().Name = name
 		// Attach a bareRefineUnifier so dispatch admits any value
 		// whose declared type satisfies the base. Without this, the
 		// fresh lattice node carries DefaultBehavior and the walk

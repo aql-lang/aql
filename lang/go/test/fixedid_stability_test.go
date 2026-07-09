@@ -144,8 +144,8 @@ func TestFixedIDStability(t *testing.T) {
 			t.Errorf("Builtin.Lookup(%q) returned nil — type not registered", path)
 			continue
 		}
-		if def.FixedID != want {
-			t.Errorf("FixedID drift: %s has FixedID=%d, snapshot says %d", path, def.FixedID, want)
+		if def.FixedID() != want {
+			t.Errorf("FixedID drift: %s has FixedID=%d, snapshot says %d", path, def.FixedID(), want)
 		}
 	}
 }

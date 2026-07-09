@@ -55,10 +55,10 @@ func dispatchUnifier(a, b Value) (Value, *UnifyError, bool) {
 	}
 
 	for t := start; t != nil; t = t.Parent {
-		if t.Behavior == nil {
+		if t.Behavior() == nil {
 			continue
 		}
-		u, ok := t.Behavior.(Unifier)
+		u, ok := t.Behavior().(Unifier)
 		if !ok {
 			continue
 		}

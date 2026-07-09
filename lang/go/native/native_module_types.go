@@ -281,11 +281,11 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 		// it).
 		if r.Check.IsActive() {
 			eng.CheckAddUniqueDiagnostic(r, "not_found",
-				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos)
+				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos())
 		}
 		r.Check.Recorder().RecordTrap("not_found",
 			fmt.Sprintf("getr: export %q not found in module", k), "getr",
-			"", args[0].Pos)
+			"", args[0].Pos())
 	}
 	return []Value{NewCarrier(TAny)}
 }

@@ -288,7 +288,7 @@ func MintTypeParam(r *Registry, p GenParam) *Type {
 		}
 	}
 	node := r.Types.MintType(p.Name, parent)
-	node.Behavior = &genParamUnifier{behaviorWrapper: behaviorWrapper{prev: node.Behavior}, param: p}
+	node.ensureTMeta().Behavior = &genParamUnifier{behaviorWrapper: behaviorWrapper{prev: node.Behavior()}, param: p}
 	return node
 }
 
@@ -299,7 +299,7 @@ func MintTypeParam(r *Registry, p GenParam) *Type {
 // reaches the surface). Safe pre-publication: while the gen list is
 // still being walked nothing outside it holds the node.
 func AttachGenBound(r *Registry, node *Type, p GenParam) {
-	if g, ok := node.Behavior.(*genParamUnifier); ok {
+	if g, ok := node.Behavior().(*genParamUnifier); ok {
 		g.param = p
 	}
 	if p.HasBound {
@@ -316,7 +316,7 @@ func IsTypeParamNode(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	_, ok := t.Behavior.(*genParamUnifier)
+	_, ok := t.Behavior().(*genParamUnifier)
 	return ok
 }
 
@@ -326,7 +326,7 @@ func TypeParamName(t *Type) string {
 	if t == nil {
 		return ""
 	}
-	if g, ok := t.Behavior.(*genParamUnifier); ok {
+	if g, ok := t.Behavior().(*genParamUnifier); ok {
 		return g.param.Name
 	}
 	return ""
@@ -342,7 +342,7 @@ func IsUnconstrainedTypeParam(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	g, ok := t.Behavior.(*genParamUnifier)
+	g, ok := t.Behavior().(*genParamUnifier)
 	return ok && !g.param.HasBound
 }
 
@@ -373,7 +373,7 @@ func (s *schemaUnifier) Format(v Value) string {
 // InstallSchemaUnifier attaches a schemaUnifier to a minted schema
 // node. Called by InstallType's TypeSchema branch.
 func InstallSchemaUnifier(def *Type, info *TypeSchemaInfo) {
-	def.Behavior = &schemaUnifier{behaviorWrapper: behaviorWrapper{prev: def.Behavior}, info: info}
+	def.ensureTMeta().Behavior = &schemaUnifier{behaviorWrapper: behaviorWrapper{prev: def.Behavior()}, info: info}
 }
 
 // SchemaInfoOf returns the schema payload when t is a minted schema
@@ -382,7 +382,7 @@ func SchemaInfoOf(t *Type) (*TypeSchemaInfo, bool) {
 	if t == nil {
 		return nil, false
 	}
-	if s, ok := t.Behavior.(*schemaUnifier); ok {
+	if s, ok := t.Behavior().(*schemaUnifier); ok {
 		return s.info, true
 	}
 	return nil, false

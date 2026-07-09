@@ -50,7 +50,7 @@ func TestS6b1TypeTableNilReceivers(t *testing.T) {
 func TestS6b1DepthOfAdHocParent(t *testing.T) {
 	// A parent with an unset Depth (ad-hoc *Type) takes the typeDepth
 	// walk: chain length 1, so a child of it sits at depth 2.
-	adhoc := &Type{Name: "S6b1AdHoc"}
+	adhoc := &Type{tmeta: &typeMeta{Name: "S6b1AdHoc"}}
 	if got := depthOf(adhoc); got != 2 {
 		t.Errorf("depthOf(ad-hoc parent) = %d, want 2", got)
 	}
@@ -74,18 +74,18 @@ func TestS6b1MintIDNilSeqAndPrefixes(t *testing.T) {
 	// ad-hoc chains whose TOP node carries the branch name — build
 	// those directly.
 	dt := NewDynamicTypeTable()
-	s := dt.MintType("s6b1s", &Type{Name: "Scalar"})
+	s := dt.MintType("s6b1s", &Type{tmeta: &typeMeta{Name: "Scalar"}})
 	if !strings.HasPrefix(s.ID, "S_") {
 		t.Errorf("Scalar-rooted mint ID = %q, want S_ prefix", s.ID)
 	}
-	if s.Rank != 21_000_000_000 {
-		t.Errorf("Scalar-rooted mint Rank = %d, want 21e9", s.Rank)
+	if s.Rank() != 21_000_000_000 {
+		t.Errorf("Scalar-rooted mint Rank = %d, want 21e9", s.Rank())
 	}
-	n := dt.MintType("s6b1n", &Type{Name: "Node"})
+	n := dt.MintType("s6b1n", &Type{tmeta: &typeMeta{Name: "Node"}})
 	if !strings.HasPrefix(n.ID, "N_") {
 		t.Errorf("Node-rooted mint ID = %q, want N_ prefix", n.ID)
 	}
-	w := dt.MintType("s6b1w", &Type{Name: "Word"})
+	w := dt.MintType("s6b1w", &Type{tmeta: &typeMeta{Name: "Word"}})
 	if !strings.HasPrefix(w.ID, "W_") {
 		t.Errorf("Word-rooted mint ID = %q, want W_ prefix", w.ID)
 	}
@@ -93,8 +93,8 @@ func TestS6b1MintIDNilSeqAndPrefixes(t *testing.T) {
 	// A mint under the REAL Word branch takes the Word external band
 	// (the branch walk stops one step below Any).
 	rw := dt.MintType("s6b1rw", TWord)
-	if rw.Rank != 51_000_000_000 {
-		t.Errorf("Word-branch mint Rank = %d, want 51e9", rw.Rank)
+	if rw.Rank() != 51_000_000_000 {
+		t.Errorf("Word-branch mint Rank = %d, want 51e9", rw.Rank())
 	}
 }
 
@@ -283,7 +283,7 @@ func TestS6b1MintTestTypePrefixes(t *testing.T) {
 		"S6b1PoolWd": "Word",
 	}
 	for k, name := range seed {
-		testTypePool[k] = &Type{Name: name}
+		testTypePool[k] = &Type{tmeta: &typeMeta{Name: name}}
 	}
 	t.Cleanup(func() {
 		for k := range seed {
@@ -315,7 +315,7 @@ func TestS6b1MustBuiltinTypeMissing(t *testing.T) {
 	if def == nil {
 		t.Fatal("mustBuiltinType must return a placeholder, not nil")
 	}
-	if def.Name != "S6b1/NoSuchBuiltin" || def.Origin != OriginBuiltin {
+	if def.Name() != "S6b1/NoSuchBuiltin" || def.Origin != OriginBuiltin {
 		t.Errorf("placeholder = %+v, want Name=path Origin=builtin", def)
 	}
 	if len(builtinInitErrs) != base+1 {
@@ -341,7 +341,7 @@ func TestS6b1BuildTypeNamesSkipsNilEntry(t *testing.T) {
 }
 
 func TestS6b1TypeNameByIDNotUserFacing(t *testing.T) {
-	fake := &Type{ID: "S6b1FakeByID", Name: "S6b1NotInByName"}
+	fake := &Type{ID: "S6b1FakeByID", tmeta: &typeMeta{Name: "S6b1NotInByName"}}
 	Builtin.byID["S6b1FakeByID"] = fake
 	t.Cleanup(func() { delete(Builtin.byID, "S6b1FakeByID") })
 	if got := TypeNameByID("S6b1FakeByID"); got != "" {
@@ -352,7 +352,7 @@ func TestS6b1TypeNameByIDNotUserFacing(t *testing.T) {
 func TestS6b1ResolveTypePathNonCanonicalEntry(t *testing.T) {
 	// A bypath entry whose *Type resolves Path() to a DIFFERENT key is
 	// not canonical — ResolveTypePath must reject it (the final guard).
-	decoy := &Type{Name: "S6b1Decoy"}
+	decoy := &Type{tmeta: &typeMeta{Name: "S6b1Decoy"}}
 	Builtin.bypath["S6b1Rtp/S6b1Sub"] = decoy
 	t.Cleanup(func() { delete(Builtin.bypath, "S6b1Rtp/S6b1Sub") })
 	if got, ok := ResolveTypePath("S6b1Rtp/S6b1Sub"); ok || got != nil {

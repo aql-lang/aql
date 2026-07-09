@@ -176,7 +176,7 @@ func TestAnyToValueFractionalFloat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !v.Parent.Equal(TFloat) {
-		t.Fatalf("expected Float, got %s", v.Parent.Name)
+		t.Fatalf("expected Float, got %s", v.Parent.Name())
 	}
 	if f, _ := AsFloat(v); f != 1.5 {
 		t.Errorf("expected 1.5, got %v", f)

@@ -52,8 +52,8 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 // constraint runs at every Is/Match call site (sig dispatch, the `is`
 // word, options/record/Make slot checks).
 func installDepScalarUnifier(def *Type, base *Type, info DepScalarInfo, name string) {
-	def.Behavior = &depScalarUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &depScalarUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		baseType:        base,
 		depInfo:         info,
 		typeName:        name,

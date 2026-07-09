@@ -31,7 +31,7 @@ type IdealConverter interface {
 // when nothing in the chain converts (the Ideal root always does).
 func ConvertIdealToMap(v Value) (Value, error) {
 	for t := ValueType(v); t != nil; t = t.Parent {
-		c, ok := t.Behavior.(IdealConverter)
+		c, ok := t.Behavior().(IdealConverter)
 		if !ok {
 			continue
 		}
@@ -47,7 +47,7 @@ func ConvertIdealToMap(v Value) (Value, error) {
 // ConvertIdealToList converts an Ideal value to a List by the same walk.
 func ConvertIdealToList(v Value) (Value, error) {
 	for t := ValueType(v); t != nil; t = t.Parent {
-		c, ok := t.Behavior.(IdealConverter)
+		c, ok := t.Behavior().(IdealConverter)
 		if !ok {
 			continue
 		}
@@ -75,7 +75,7 @@ func init() {
 	// Install the fallback converter on the Ideal root. Package vars
 	// (incl. TIdeal) are initialised before init() runs — see the
 	// compare_scalar_behaviors.go init for the same ordering rationale.
-	TIdeal.Behavior = idealConvertBehavior{}
+	TIdeal.ensureTMeta().Behavior = idealConvertBehavior{}
 }
 
 // ---- concrete converters for the built-in Ideal kinds ----
@@ -259,14 +259,14 @@ func init() {
 	// instances have no prototype chain, so the flatten is a single
 	// pass). The behavior carries no Sizer, so the SizeOf walk continues
 	// past Class to the Ideal root's payload-switch Sizer.
-	TClass.Behavior = objectConvertBehavior{}
+	TClass.ensureTMeta().Behavior = objectConvertBehavior{}
 	// Resource/Entity instances share the flat field-map shape, so they
 	// reuse the same converter (registered on the TResource root, so
 	// Entity inherits it via the Parent-chain Behavior walk).
-	TResource.Behavior = objectConvertBehavior{}
-	TStore.Behavior = storeConvertBehavior{}
-	TError.Behavior = errorConvertBehavior{}
-	TReach.Behavior = reachConvertBehavior{}
+	TResource.ensureTMeta().Behavior = objectConvertBehavior{}
+	TStore.ensureTMeta().Behavior = storeConvertBehavior{}
+	TError.ensureTMeta().Behavior = errorConvertBehavior{}
+	TReach.ensureTMeta().Behavior = reachConvertBehavior{}
 }
 
 // tableConvertBehavior: a Table → its rows (List); ToMap is columnar —
@@ -305,4 +305,4 @@ func (tableConvertBehavior) ToMap(v Value) (Value, error) {
 	return NewMap(out), nil
 }
 
-func init() { TTable.Behavior = tableConvertBehavior{} }
+func init() { TTable.ensureTMeta().Behavior = tableConvertBehavior{} }

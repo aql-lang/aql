@@ -39,8 +39,27 @@ type Engine struct {
 	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
-	source    string          // original source text for error reporting
-	isTop     bool            // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// rrValues / rrReordered are reusable scratch buffers for
+	// rearrangeForForward's two per-call []Value allocations (forward
+	// collection is on the interpreter's hot path — see
+	// design/INTERPRETER-SPEED-PLAN.10.md #3). Both are purely local to
+	// one rearrangeForForward call (extracted from the tape, permuted,
+	// written straight back via tape.Set — never retained past the call),
+	// and rearrangeForForward triggers no nested dispatch, so a single
+	// engine-owned buffer is race- and aliasing-safe. Retained across
+	// pooled sub-engine reuse (harmless: reset to [:0] on entry).
+	rrValues    []Value
+	rrReordered []Value
+	// loopTokens is a reusable scratch buffer for stepMoveCont's per-
+	// iteration `mark + body + move` re-splice (for/each-style loops run
+	// their body in place on this tape — design/INTERPRETER-SPEED-PLAN.10.md
+	// #4). Tape.Splice COPIES the tokens in, so the buffer is free the
+	// moment Splice returns; a nested loop's stepMoveCont builds+splices
+	// atomically before control returns, so a single engine-owned buffer is
+	// reentrancy-safe.
+	loopTokens []Value
+	source     string // original source text for error reporting
+	isTop      bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
 	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
 	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
@@ -558,7 +577,7 @@ func stampResultPos(vals []Value, pos SrcPos) {
 		return
 	}
 	for i := range vals {
-		if vals[i].Pos.Row != 0 {
+		if vals[i].Pos().Row != 0 {
 			continue
 		}
 		switch {
@@ -568,7 +587,7 @@ func stampResultPos(vals []Value, pos SrcPos) {
 				vals[i] = NewReturnCheck(rc)
 			}
 		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
-			vals[i].Pos = pos
+			vals[i].pos = &pos
 		}
 	}
 }
@@ -663,7 +682,7 @@ func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got
 // at the token that triggered it.
 func (e *Engine) currentPos() SrcPos {
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		return e.tape.At(e.pointer).Pos
+		return e.tape.At(e.pointer).Pos()
 	}
 	return SrcPos{}
 }
@@ -1011,7 +1030,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.pointer++
 
 		default:
-			if val.Parent == nil && val.Behavior == nil {
+			if val.Parent == nil && val.Behavior() == nil {
 				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
 			}
 			if err := e.stepLiteral(); err != nil {
@@ -1125,8 +1144,8 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 						Code:   "uncalled_function",
 						Detail: "call to '" + name + "' matched no signature and was left on the stack as data",
 						Word:   name,
-						Row:    v.Pos.Row,
-						Col:    v.Pos.Col,
+						Row:    v.Pos().Row,
+						Col:    v.Pos().Col,
 					})
 					continue
 				}
@@ -1134,7 +1153,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 					"call to '"+name+"' matched no signature and was left on the stack as data",
 					name, e.effectiveSource(),
 					"hint: check the call's argument types and arity — or use "+name+"/r to push the function as a value deliberately",
-					v.Pos)
+					v.Pos())
 			}
 		}
 	}
@@ -1488,7 +1507,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			if err != nil {
 				return err
 			}
-			result.Pos = tok.Pos
+			result.pos = tok.pos
 			e.tape.Set(scanIdx, result)
 			pruneViable(pos, result)
 			pos++
@@ -1507,7 +1526,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			if err != nil {
 				return err
 			}
-			result.Pos = tok.Pos
+			result.pos = tok.pos
 			e.tape.Set(scanIdx, result)
 			pruneViable(pos, result)
 			pos++
@@ -1566,7 +1585,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 						pe := NewParenExpr([]Value{tok})
-						pe.Pos = tok.Pos
+						pe.pos = tok.pos
 						e.tape.Set(scanIdx, pe)
 						continue
 					}
@@ -1772,7 +1791,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 				e.pointer = savedPointer
 				return err
 			}
-			result.Pos = v.Pos
+			result.pos = v.pos
 			e.tape.Set(e.pointer, result)
 		case IsXmlInterp(v):
 			// Mirror the InterpString case: a paren-wrapped interpolated
@@ -1782,7 +1801,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 				e.pointer = savedPointer
 				return err
 			}
-			result.Pos = v.Pos
+			result.pos = v.pos
 			e.tape.Set(e.pointer, result)
 		default:
 			if err := e.stepLiteral(); err != nil {
@@ -1847,11 +1866,11 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 				Code:   "undefined_word",
 				Detail: "undefined word: " + w.Name,
 				Word:   w.Name,
-				Row:    val.Pos.Row,
-				Col:    val.Pos.Col,
+				Row:    val.Pos().Row,
+				Col:    val.Pos().Col,
 			})
 			placeholder := NewAtom(w.Name)
-			placeholder.Pos = val.Pos
+			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
@@ -1860,8 +1879,8 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			Code:       "undefined_word",
 			Detail:     "undefined word: " + w.Name,
 			Src:        w.Name,
-			Row:        val.Pos.Row,
-			Col:        val.Pos.Col,
+			Row:        val.Pos().Row,
+			Col:        val.Pos().Col,
 			fullSource: e.effectiveSource(),
 		}
 	}
@@ -1875,8 +1894,8 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 				Code:   "illegal_ref",
 				Detail: detail,
 				Word:   w.Name,
-				Row:    val.Pos.Row,
-				Col:    val.Pos.Col,
+				Row:    val.Pos().Row,
+				Col:    val.Pos().Col,
 			})
 			// Check mode is lenient (the illegal_ref diagnostic is advisory), but
 			// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
@@ -1886,7 +1905,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			// and refuses (falls back) as before.
 			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
-			placeholder.Pos = val.Pos
+			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
@@ -1895,12 +1914,12 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			Code:       "illegal_ref",
 			Detail:     detail,
 			Src:        w.Name,
-			Row:        val.Pos.Row,
-			Col:        val.Pos.Col,
+			Row:        val.Pos().Row,
+			Col:        val.Pos().Col,
 			fullSource: e.effectiveSource(),
 		}
 	}
-	v.Pos = val.Pos
+	v.pos = val.pos
 	if w.ForceRef {
 		// /ur: leave the usurped wrapper as inert data (mirrors /r) — it
 		// still dispatches if args follow or it is later stepped. As
@@ -1942,11 +1961,11 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 				Code:   "undefined_word",
 				Detail: "undefined word: " + w.Name,
 				Word:   w.Name,
-				Row:    val.Pos.Row,
-				Col:    val.Pos.Col,
+				Row:    val.Pos().Row,
+				Col:    val.Pos().Col,
 			})
 			placeholder := NewAtom(w.Name)
-			placeholder.Pos = val.Pos
+			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
@@ -1955,8 +1974,8 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			Code:       "undefined_word",
 			Detail:     "undefined word: " + w.Name,
 			Src:        w.Name,
-			Row:        val.Pos.Row,
-			Col:        val.Pos.Col,
+			Row:        val.Pos().Row,
+			Col:        val.Pos().Col,
 			fullSource: e.effectiveSource(),
 		}
 	}
@@ -1970,8 +1989,8 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 				Code:   "illegal_ref",
 				Detail: detail,
 				Word:   w.Name,
-				Row:    val.Pos.Row,
-				Col:    val.Pos.Col,
+				Row:    val.Pos().Row,
+				Col:    val.Pos().Col,
 			})
 			// Check mode is lenient (the illegal_ref diagnostic is advisory), but
 			// the interpreter raises illegal_ref here at runtime. Record a TERMINAL
@@ -1981,7 +2000,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			// and refuses (falls back) as before.
 			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
-			placeholder.Pos = val.Pos
+			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
@@ -1990,12 +2009,12 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			Code:       "illegal_ref",
 			Detail:     detail,
 			Src:        w.Name,
-			Row:        val.Pos.Row,
-			Col:        val.Pos.Col,
+			Row:        val.Pos().Row,
+			Col:        val.Pos().Col,
 			fullSource: e.effectiveSource(),
 		}
 	}
-	v.Pos = val.Pos
+	v.pos = val.pos
 	e.tape.Set(e.pointer, v)
 	// (The use is recorded inside ResolveRef, covering this `/r` path, the
 	// `ref` word, and export-map reference values alike.)
@@ -2079,7 +2098,7 @@ func (e *Engine) stepWord(val Value) error {
 	if e.registry != nil {
 		if tv, ok := e.registry.TopTypeBody(w.Name); ok {
 			push := tv
-			push.Pos = val.Pos
+			push.pos = val.pos
 			// A fn-shape type body (a predicate type, e.g. `def Bbd
 			// fn […]`) is pushed Quoted so stepLiteral's Function gate
 			// leaves it as DATA: type-defining functions participate
@@ -2127,7 +2146,7 @@ func (e *Engine) stepWord(val Value) error {
 				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
 					if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
 						pe := NewParenExpr([]Value{val})
-						pe.Pos = val.Pos
+						pe.pos = val.pos
 						e.tape.Set(e.pointer, pe)
 						return e.stepLiteral()
 					}
@@ -2150,7 +2169,7 @@ func (e *Engine) stepWord(val Value) error {
 			if top.Dynamic && e.registry.Check.IsActive() {
 				// Tag the gradual value with its binding so a typed use
 				// downstream narrows the binding (narrowing-through-use).
-				top.DynFrom = w.Name
+				top.SetDynFrom(w.Name)
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
@@ -2232,8 +2251,8 @@ func (e *Engine) stepWord(val Value) error {
 				Code:       "undefined_word",
 				Detail:     "undefined word: " + w.Name,
 				Src:        w.Name,
-				Row:        val.Pos.Row,
-				Col:        val.Pos.Col,
+				Row:        val.Pos().Row,
+				Col:        val.Pos().Col,
 				Hint:       hint,
 				fullSource: e.effectiveSource(),
 			}
@@ -2242,11 +2261,11 @@ func (e *Engine) stepWord(val Value) error {
 			Code:   "undefined_word",
 			Detail: "undefined word: " + w.Name,
 			Word:   w.Name,
-			Row:    val.Pos.Row,
-			Col:    val.Pos.Col,
+			Row:    val.Pos().Row,
+			Col:    val.Pos().Col,
 		})
 		v := NewAtom(w.Name)
-		v.Pos = val.Pos
+		v.pos = val.pos
 		v.Undefined = true
 		e.tape.Set(e.pointer, v)
 		return nil
@@ -2311,7 +2330,7 @@ func (e *Engine) stepWord(val Value) error {
 		if hint != "" {
 			return makeAqlErrorAt("signature_error",
 				"no matching signature for "+w.Name, w.Name,
-				e.effectiveSource(), hint, val.Pos)
+				e.effectiveSource(), hint, val.Pos())
 		}
 	}
 
@@ -2328,12 +2347,12 @@ func (e *Engine) stepWord(val Value) error {
 			// (Self := the surface node) — the contract guarantees the
 			// operation for every member, so this is a correct typing,
 			// not a degrade; no diagnostic.
-			if handled, herr := e.checkModeSurfaceShape(w, val.Pos); handled {
+			if handled, herr := e.checkModeSurfaceShape(w, val.Pos()); handled {
 				return herr
 			}
-			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos)
+			return e.checkModeAssumeSig(w, fn, &fn.Signatures[0], val.Pos())
 		}
-		return e.sigError(w.Name, fn, val.Pos)
+		return e.sigError(w.Name, fn, val.Pos())
 	}
 
 	// Count forward vs stack args from positions.
@@ -2351,7 +2370,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Extracted from stepWord to keep this hot dispatch path under the
 	// cyclomatic-complexity gate; diagnostics only — no effect on execution
 	// or dispatch. See design/FORWARD-STRAND-ADVISORY.10.md.
-	e.checkMixedFormAdvisories(w, sig, positions, val.Pos, fwdCount, stkCount)
+	e.checkMixedFormAdvisories(w, sig, positions, val.Pos(), fwdCount, stkCount)
 
 	// Compile-mode stranded-member-fn guard (design/EDGE-SPEC-FINDINGS.0.md §2):
 	// a parked user-fn value surfaced from a container read (`m.double`) AUTO-
@@ -2365,7 +2384,14 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
-		e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
+		// traceSigStr formats via fmt on every dispatch; the note is read
+		// only when a trace hook is installed (see the e.trace guard in
+		// Run's step loop). Gate the build — ~5% of interpreter CPU on
+		// dispatch-hot shapes was this dead string (design/
+		// INTERPRETER-SPEED-PLAN.10.md #6).
+		if e.trace != nil {
+			e.traceNote = "forward→ " + traceSigStr(w.Name, sig)
+		}
 		return e.insertForward(w, sig, fwdCount, stkCount, specAt)
 	}
 
@@ -2390,7 +2416,9 @@ func (e *Engine) stepWord(val Value) error {
 			match.Args[i] = e.tape.At(pos)
 		}
 	}
-	e.traceNote = "stack " + traceSigStr(w.Name, sig)
+	if e.trace != nil {
+		e.traceNote = "stack " + traceSigStr(w.Name, sig)
+	}
 	return e.execMatch(match)
 }
 
@@ -2776,7 +2804,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		name := match.Name
 		var pos SrcPos
 		if e.pointer < e.tape.Len() && IsWord(e.tape.At(e.pointer)) {
-			pos = e.tape.At(e.pointer).Pos
+			pos = e.tape.At(e.pointer).Pos()
 			if w, err := AsWord(e.tape.At(e.pointer)); err == nil {
 				name = w.Name
 			}
@@ -2913,7 +2941,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// return-type error (named-fn body or anonymous fn value) points at the
 	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		stampResultPos(results, e.tape.At(e.pointer).Pos)
+		stampResultPos(results, e.tape.At(e.pointer).Pos())
 	}
 
 	// Full frame replacement: the callee's frame (the handler result,
@@ -3036,15 +3064,23 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 		return
 	}
 
-	// Extract values in current order.
-	values := make([]Value, total)
-	for i, idx := range indices {
-		values[i] = e.tape.At(idx)
+	// Extract values in current order into a reused scratch buffer.
+	values := e.rrValues[:0]
+	for _, idx := range indices {
+		values = append(values, e.tape.At(idx))
 	}
+	e.rrValues = values // retain any grown capacity
 
-	// Reorder: stack args stay in source order; forward args go after
-	// them in REVERSED collection order so fwd_0 sits at the top.
-	reordered := make([]Value, total)
+	// Reorder into a second reused buffer: stack args stay in source
+	// order; forward args go after them in REVERSED collection order so
+	// fwd_0 sits at the top.
+	reordered := e.rrReordered
+	if cap(reordered) < total {
+		reordered = make([]Value, total)
+	} else {
+		reordered = reordered[:total]
+	}
+	e.rrReordered = reordered
 	for i := 0; i < stackArgs; i++ {
 		reordered[i] = values[i]
 	}
@@ -3106,16 +3142,16 @@ func (e *Engine) resolvedStackBeforeFrom(from int, excludeIndices []int) []Value
 // forward-collection completion points where the word must re-dispatch
 // against the stack; callers set e.pointer themselves as needed.
 func (e *Engine) forceStackWord(idx int, w WordInfo) {
-	pos := e.tape.At(idx).Pos
+	pos := e.tape.At(idx).Pos()
 	nw := NewWordModified(w.Name, w.ArgCount, true, false)
-	nw.Pos = pos // preserve source position across force-stack rewrite
+	nw.pos = &pos // preserve source position across force-stack rewrite
 	e.tape.Set(idx, nw)
 }
 
 func (e *Engine) insertForward(w WordInfo, sig *Signature, forwardNeeded, stackArgs, specAt int) error {
 	var pos SrcPos
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		pos = e.tape.At(e.pointer).Pos
+		pos = e.tape.At(e.pointer).Pos()
 	}
 	fwd := NewForward(ForwardInfo{
 		FuncName:     w.Name,
@@ -3298,7 +3334,7 @@ func (e *Engine) stepLiteral() error {
 			val.Parent.Equal(TWord) && TAtom.ConformsTo(sigArgType(fwd.Sig, nextIdx)) {
 			w, _ := AsWord(val)
 			atom := NewAtom(w.Name)
-			atom.Pos = val.Pos // preserve source position across /q Word→Atom conversion
+			atom.pos = val.pos // preserve source position across /q Word→Atom conversion
 			e.tape.Set(valIdx, atom)
 			matches = true
 		}
@@ -3442,7 +3478,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 			switch {
 			case e.isTop:
 				// Top-level (frames==1): the canonical case, evaluated once.
-				es.RecordMakeList(e.registry, result, out, val.Pos)
+				es.RecordMakeList(e.registry, result, out, val.Pos())
 			case consumed || e.elemEvalRecordable:
 				// A CONSUMED computed list ARG inside a fn body / closure
 				// (`make Array [i 99]`, `f [j (g x)]`): the interpreter auto-evaluates
@@ -3456,7 +3492,7 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 				// baking OpMakeList would diverge — it stays unresolved and falls back.
 				// A stateful generator never reaches here: its body is a NoEval arg,
 				// so execMatch does not auto-evaluate it as a data list.
-				es.recordMakeListInner(e.registry, result, out, val.Pos)
+				es.recordMakeListInner(e.registry, result, out, val.Pos())
 			}
 		}
 	}
@@ -3487,7 +3523,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 		// fall back. Mirrors RecordMakeMap — re-assembled per run, no const bake.
 		out := NewCarrier(TString)
 		if es := e.registry.Check.Recorder(); es.active() {
-			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos) {
+			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos()) {
 				es.MarkUncompilable("interpolated string with a runtime-computed part")
 			}
 		}
@@ -3965,7 +4001,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			if es := e.registry.Check.Recorder(); es.Armed() {
 				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
 					if lp, isList := lv.Data.(ListPayload); isList {
-						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos)
+						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos())
 					}
 				}
 			}
@@ -4005,7 +4041,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			for i, k := range keys {
 				vals[i], _ = out.Get(k)
 			}
-			es.RecordMakeMap(e.registry, keys, vals, out.Implicit, res, val.Pos)
+			es.RecordMakeMap(e.registry, keys, vals, out.Implicit, res, val.Pos())
 		}
 	}
 	return res, nil
@@ -4742,10 +4778,10 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			// Borrow a span from the nearest argument when the FnDef value
 			// itself carries none, so the end-of-run report can point
 			// somewhere real.
-			if fv.Pos.Row == 0 {
+			if fv.Pos().Row == 0 {
 				for _, c := range candidates {
-					if c.Pos.Row > 0 {
-						fv.Pos = c.Pos
+					if c.Pos().Row > 0 {
+						fv.pos = c.pos
 						break
 					}
 				}
@@ -4959,7 +4995,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// stack is mutated, so a return-type error can point at the call.
 	var callPos SrcPos
 	if valIdx >= 0 && valIdx < e.tape.Len() {
-		callPos = e.tape.At(valIdx).Pos
+		callPos = e.tape.At(valIdx).Pos()
 	}
 
 	// Auto-evaluate consumed arguments with Eval=true so FnDef handlers
@@ -5410,6 +5446,11 @@ func (e *Engine) stepEnd() error {
 // the body ran. Any defs added since are popped via UninstallDef.
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := AsDefCleanup(val)
+	if info.SkipCleanup {
+		// The frame installs no body-local defs — nothing to truncate,
+		// and no Names() scan to pay (design/INTERPRETER-SPEED-PLAN.10.md #5).
+		return
+	}
 	reg := info.Registry
 	for _, name := range reg.Defs.Names() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
@@ -5517,14 +5558,17 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 		// Generate new mark ID.
 		id := NextMarkID()
 
-		// Build replacement: mark + body + move.
+		// Build replacement `mark + body + move` into a reused scratch
+		// buffer. The mark stores cont.Body (stable, for the next re-mark);
+		// the body elements appended after it are the executable copy — no
+		// separate bodyCopy is needed because Tape.Splice copies the whole
+		// token run into the tape, leaving cont.Body untouched.
 		body := cont.Body
-		tokens := make([]Value, 0, len(body)+2)
+		tokens := e.loopTokens[:0]
 		tokens = append(tokens, NewMark(id, body...))
-		bodyCopy := make([]Value, len(body))
-		copy(bodyCopy, body)
-		tokens = append(tokens, bodyCopy...)
+		tokens = append(tokens, body...)
 		tokens = append(tokens, NewMoveCont(id, info.Reason, cont))
+		e.loopTokens = tokens
 
 		// Remove old mark ID, register new one.
 		delete(e.marks, info.To)
@@ -6010,8 +6054,8 @@ func (e *Engine) stepCloseParen() error {
 			}
 			out := NewCarrier(TAny)
 			out.ID = GenerateID(IDPrefixForType(TAny))
-			out.Pos = last.Pos
-			if es.RecordDynApply(argVals, last, out, last.Pos) {
+			out.pos = last.pos
+			if es.RecordDynApply(argVals, last, out, last.Pos()) {
 				e.tape.Set(lastIdx, out)
 				for j := len(argIdxs) - 1; j >= 0; j-- {
 					e.tape.Remove(argIdxs[j])
@@ -6086,7 +6130,10 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 // forward's context and should not be consumed by inner stack matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
-	excludeIndices := make(map[int]bool)
+	// Lazily allocated: most dispatches have no active Forward in the
+	// window, so the common case pays no map allocation (nil-map reads
+	// below return false). design/INTERPRETER-SPEED-PLAN.10.md #3.
+	var excludeIndices map[int]bool
 	for i := e.pointer - 1; i >= 0; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			start = i + 1
@@ -6094,6 +6141,9 @@ func (e *Engine) effectiveResolved() []Value {
 		}
 		if IsForward(e.tape.At(i)) {
 			fwd, _ := AsForward(e.tape.At(i))
+			if excludeIndices == nil {
+				excludeIndices = make(map[int]bool)
+			}
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).

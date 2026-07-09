@@ -177,7 +177,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 			if len(stk) == 0 {
 				es.RecordTrap("case_error",
 					"case: value expression produced no value to dispatch on",
-					"case", "", v.Pos)
+					"case", "", v.Pos())
 				return dynAny
 			}
 			if isCodeBody(clauses) {
@@ -205,7 +205,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		// nested case (RecordTrap declines, frames/units != 1) keeps the island.
 		r.Check.Recorder().RecordTrap("case_error",
 			"case: clause list must be a concrete list of match/block pairs (optional trailing default)",
-			"case", "", args[0].Pos)
+			"case", "", args[0].Pos())
 		return dynAny
 	}
 	lst, _ := AsList(clauses)

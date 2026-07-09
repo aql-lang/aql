@@ -49,7 +49,7 @@ func DryPassWrap(h func(args []Value, named map[string]Value, body []Value, r *R
 		if CheckAtUncaughtTopLevel(r) && allConcreteArgs(args) {
 			var pos SrcPos
 			if len(args) > 0 {
-				pos = args[0].Pos
+				pos = args[0].Pos()
 			}
 			if _, err := h(dryPassOperands(args), nil, nil, r); err != nil {
 				code, detail := "type_error", err.Error()

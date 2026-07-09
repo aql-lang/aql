@@ -83,7 +83,7 @@ func deSite(v any) (any, eng.SrcPos) {
 // already set on a nested value.
 func withPos(v eng.Value, pos eng.SrcPos) eng.Value {
 	if pos.Row != 0 {
-		v.Pos = pos
+		v.SetPos(pos)
 	}
 	return v
 }

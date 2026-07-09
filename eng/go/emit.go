@@ -1459,12 +1459,12 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	probe := NewEmitState()
 	probe.reg = r
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos)
+	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
 	if !probeOK {
 		return Value{}, false
 	}
-	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos)
+	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	if !realOK || unit < 0 {
 		return Value{}, false
 	}
@@ -2985,13 +2985,13 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool 
 		// every event strictly before it (apply-last, the hoist) or strictly
 		// after it (apply-first — a continue in the applied body must skip
 		// them). A mid-body apply declines and keeps the refusal.
-		fnPos := bodyStk[0].Pos
+		fnPos := bodyStk[0].Pos()
 		if fnPos.Row == 0 && fnPos.Col == 0 {
 			// A folded args.N read loses its own position; the apply's ARG
 			// literals sit inside the same paren, so any of theirs stands in.
 			for _, a := range bodyStk[1:] {
-				if a.Pos.Row != 0 || a.Pos.Col != 0 {
-					fnPos = a.Pos
+				if a.Pos().Row != 0 || a.Pos().Col != 0 {
+					fnPos = a.Pos()
 					break
 				}
 			}
@@ -3560,7 +3560,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// handler falls back to the interpreter, per-body and sound.
 		if sig.CompileEffect.Has(CompileStoresFn) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
-				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos); cOK {
+				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos()); cOK {
 					ref := &CompiledFnRef{Unit: unit, depNames: es.storedFnDeps(fd)}
 					if stampCompiledRef(fd, ref) {
 						es.storedFnRefs = append(es.storedFnRefs, ref)
@@ -3603,7 +3603,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 					// with its captures. tryReturnedClosure declines (leaving es
 					// untouched) when a capture is unreachable or the body refuses,
 					// so an uncompilable handler still falls back faithfully.
-					if cop, cok := es.tryReturnedClosure(a, a.Pos); cok {
+					if cop, cok := es.tryReturnedClosure(a, a.Pos()); cok {
 						op, ok = cop, true
 					}
 				}
@@ -3839,7 +3839,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	if es.reg == nil || len(es.units) <= 1 {
 		return emitOperand{}, false
 	}
-	name := v.DynFrom
+	name := v.DynFrom()
 	if name == "" {
 		name = es.defReads[v.ID]
 	}
@@ -6011,8 +6011,8 @@ func replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 	}
 	anchor := SrcPos{}
 	for _, v := range window {
-		if v.Pos.Row > anchor.Row || (v.Pos.Row == anchor.Row && v.Pos.Col > anchor.Col) {
-			anchor = v.Pos
+		if v.Pos().Row > anchor.Row || (v.Pos().Row == anchor.Row && v.Pos().Col > anchor.Col) {
+			anchor = v.Pos()
 		}
 	}
 	if anchor.Row == 0 && anchor.Col == 0 {

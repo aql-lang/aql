@@ -16,7 +16,7 @@ func TestDefaultBehaviorInstalled(t *testing.T) {
 			t.Errorf("Builtin.byID[%q] is nil", id)
 			continue
 		}
-		if def.Behavior == nil {
+		if def.Behavior() == nil {
 			t.Errorf("Builtin type %q (%s) has nil Behavior", def.Path(), id)
 		}
 	}
@@ -27,7 +27,7 @@ func TestDefaultBehaviorInstalled(t *testing.T) {
 func TestMintTypeInstallsDefaultBehavior(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	def := tt.MintType("DynamicFoo", TInteger)
-	if def.Behavior == nil {
+	if def.Behavior() == nil {
 		t.Fatal("MintType returned a Type with nil Behavior")
 	}
 }
@@ -40,12 +40,12 @@ func TestMintTypeWithBehaviorRespectsArg(t *testing.T) {
 
 	custom := &fakeBehavior{}
 	a := tt.MintTypeWithBehavior("WithCustom", TInteger, custom)
-	if a.Behavior != custom {
+	if a.Behavior() != custom {
 		t.Errorf("WithCustom: got Behavior %T, want custom", a.Behavior)
 	}
 
 	b := tt.MintTypeWithBehavior("WithNil", TInteger, nil)
-	if b.Behavior != DefaultBehavior {
+	if b.Behavior() != DefaultBehavior {
 		t.Errorf("WithNil: got Behavior %T, want DefaultBehavior", b.Behavior)
 	}
 }

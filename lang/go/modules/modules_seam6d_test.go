@@ -234,7 +234,7 @@ func TestSeam6DRegisterCollisionCheckModeReanalysis(t *testing.T) {
 	exports := native.NewOrderedMap()
 	idents := map[string]registerIdent{}
 	fn := native.NewInteger(1)
-	fn.Pos.Row, fn.Pos.Col, fn.Pos.Src = 3, 7, "seam6d.aql"
+	fn.SetPos(native.SrcPos{Row: 3, Col: 7, Src: "seam6d.aql"})
 	existsErr := func() error { return errors.New("kind_exists") }
 
 	if err := registerCollisionInstall(exports, idents, "k", fn, true, existsErr); err != nil {

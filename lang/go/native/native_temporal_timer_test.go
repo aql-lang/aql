@@ -79,7 +79,7 @@ func TestTimeoutReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if result[0].Parent.Name != "Timeout" {
+	if result[0].Parent.Name() != "Timeout" {
 		t.Fatalf("expected Timeout, got %s", result[0].Parent)
 	}
 	ti, _ := result[0].Data.(*TimeoutInfo), true
@@ -111,7 +111,7 @@ func TestTimeoutCallbackExecutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].Parent.Name != "Timeout" {
+	if len(result) != 1 || result[0].Parent.Name() != "Timeout" {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -144,7 +144,7 @@ func TestTimeoutWithWordCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0].Parent.Name != "Timeout" {
+	if len(result) != 1 || result[0].Parent.Name() != "Timeout" {
 		t.Fatalf("expected Timeout result, got %v", result)
 	}
 
@@ -187,7 +187,7 @@ func TestIntervalReturnType(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d: %v", len(result), result)
 	}
-	if result[0].Parent.Name != "Interval" {
+	if result[0].Parent.Name() != "Interval" {
 		t.Fatalf("expected Interval, got %s", result[0].Parent)
 	}
 	ii, _ := result[0].Data.(*IntervalInfo), true

@@ -30,7 +30,7 @@ func compareTypes(a, b *Type) int {
 	if c := cmpInt(typeDepth(a), typeDepth(b)); c != 0 {
 		return c
 	}
-	if c := strings.Compare(a.Name, b.Name); c != 0 {
+	if c := strings.Compare(a.Name(), b.Name()); c != 0 {
 		return c
 	}
 	return strings.Compare(a.ID, b.ID)
@@ -42,8 +42,8 @@ func compareTypes(a, b *Type) int {
 // *Type assembled without one (chiefly in tests).
 func rankOf(t *Type) int {
 	for ; t != nil; t = t.Parent {
-		if t.Rank != 0 {
-			return t.Rank
+		if t.Rank() != 0 {
+			return t.Rank()
 		}
 	}
 	return 0
@@ -55,8 +55,8 @@ func rankOf(t *Type) int {
 // RegisterExternalBuiltin), so this is an O(1) field read; the walk is a
 // fallback for an ad-hoc *Type assembled without a Depth (chiefly tests).
 func typeDepth(t *Type) int {
-	if t != nil && t.Depth > 0 {
-		return t.Depth
+	if t != nil && t.Depth() > 0 {
+		return t.Depth()
 	}
 	d := 0
 	for ; t != nil; t = t.Parent {
