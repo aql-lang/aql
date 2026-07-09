@@ -46,8 +46,8 @@ func ValuesEqual(a, b Value) bool {
 	// a per-type semantic compare.
 	if a.Data != nil && b.Data != nil &&
 		a.Parent != nil && a.Parent == b.Parent &&
-		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
-		return a.Parent.Behavior.Equal(a, b)
+		a.Parent.Behavior() != nil && a.Parent.Behavior() != DefaultBehavior {
+		return a.Parent.Behavior().Equal(a, b)
 	}
 	return valuesEqualDefault(a, b)
 }

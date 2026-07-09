@@ -345,10 +345,9 @@ func (tt *TypeTable) AdoptSeqFrom(src *TypeTable) {
 // before exposing it, or use MintTypeWithBehavior.
 func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
-		Parent:   parent,
-		tmeta:    &typeMeta{Name: name, Depth: depthOf(parent)},
-		Origin:   OriginUserDef,
-		Behavior: DefaultBehavior,
+		Parent: parent,
+		tmeta:  &typeMeta{Name: name, Depth: depthOf(parent), Behavior: DefaultBehavior},
+		Origin: OriginUserDef,
 	}
 	// User and external types share a single Rank band per kernel
 	// branch — they sit one band above the kernel positional ranks
@@ -498,11 +497,10 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	}
 
 	def := &Type{
-		ID:       id,
-		Parent:   parent,
-		tmeta:    &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: fixedID},
-		Origin:   OriginBuiltin,
-		Behavior: behavior,
+		ID:     id,
+		Parent: parent,
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: fixedID, Behavior: behavior},
+		Origin: OriginBuiltin,
 	}
 	// External builtins share the user-/external-type band for
 	// their branch (one increment above the kernel positional band)
@@ -544,7 +542,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 func (tt *TypeTable) MintTypeWithBehavior(name string, parent *Type, behavior TypeBehavior) *Type {
 	def := tt.MintType(name, parent)
 	if behavior != nil {
-		def.Behavior = behavior
+		def.ensureTMeta().Behavior = behavior
 	}
 	return def
 }
@@ -840,7 +838,7 @@ func newBuiltinTypeTable() *TypeTable {
 	// acceptance to the literals and bodies `is Type` already admits).
 	// Installed on the canonical node here so every lookup sees it.
 	if t := tt.bypath["Type"]; t != nil {
-		t.Behavior = typeMembershipBehavior{}
+		t.ensureTMeta().Behavior = typeMembershipBehavior{}
 	}
 	return tt
 }
@@ -871,10 +869,9 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 	def := &Type{
 		ID:         id,
 		Parent:     parent,
-		tmeta:      &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank},
+		tmeta:      &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank, Behavior: DefaultBehavior},
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
-		Behavior:   DefaultBehavior,
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def
@@ -995,11 +992,10 @@ func MintTestType(path string) *Type {
 		}
 	}
 	def := &Type{
-		ID:       fmt.Sprintf("%st%011x", prefix, testTypeSeq),
-		tmeta:    &typeMeta{Name: parts[len(parts)-1]},
-		Parent:   parent,
-		Origin:   OriginUserDef,
-		Behavior: DefaultBehavior,
+		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Behavior: DefaultBehavior},
+		Parent: parent,
+		Origin: OriginUserDef,
 	}
 	if parent != nil {
 		def.ensureTMeta().Rank = externalBandFor(parent)

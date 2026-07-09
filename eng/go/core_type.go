@@ -333,7 +333,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, TMicron)
 		info.Name = name
 		info.Type = def
-		def.Behavior = micronBehavior{kind: def, info: &info}
+		def.ensureTMeta().Behavior = micronBehavior{kind: def, info: &info}
 		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if IsClassType(body) {
 		info, _ := AsClassType(body)

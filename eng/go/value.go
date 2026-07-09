@@ -1079,9 +1079,8 @@ type Value struct {
 	// ensureTMeta so a mint site that forgets to allocate one cannot
 	// nil-panic.
 	tmeta      *typeMeta
-	IsInternal bool         // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind   // builtin / userdef
-	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
+	IsInternal bool       // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind // builtin / userdef
 
 	// Payload and evaluation state — populated on ordinary values.
 	Data   Payload // the kernel-known data payload; see payload.go for variants
@@ -1134,6 +1133,13 @@ type Value struct {
 type typeMeta struct {
 	// Name is the type-node leaf name (e.g. "ProperString").
 	Name string
+	// Behavior is the type node's pluggable dispatch (Match/Format/Equal +
+	// optional capabilities); non-nil is the marker of a type node. A
+	// `behave` word rewrites it through the canonical *Type — and because
+	// every copy of a type Value shares this one *typeMeta, that rewrite is
+	// now visible through every copy, not just the canonical pointer (the
+	// orphan-*Type gap the CanonicalType discipline exists to paper over).
+	Behavior TypeBehavior
 	// FixedID is >0 for builtin type nodes; 0 otherwise. Baked into the
 	// serialised Value ID (formatFixedID).
 	FixedID int
@@ -1172,6 +1178,24 @@ func (v *Value) ensureTMeta() *typeMeta {
 // an ad-hoc *Type node cannot assign the field directly.
 func (v *Value) SetName(name string) {
 	v.ensureTMeta().Name = name
+}
+
+// Behavior is the nil-safe read of the type node's pluggable dispatch —
+// nil for an ordinary value (no tmeta). A non-nil result is the marker of
+// a type node, exactly as the inline field was.
+func (v Value) Behavior() TypeBehavior {
+	if v.tmeta == nil {
+		return nil
+	}
+	return v.tmeta.Behavior
+}
+
+// SetBehavior installs the type node's Behavior, allocating the typeMeta
+// if needed. Exported because Behavior now lives behind the unexported
+// tmeta pointer (the `behave` word and behavior-registering init code set
+// it through here).
+func (v *Value) SetBehavior(b TypeBehavior) {
+	v.ensureTMeta().Behavior = b
 }
 
 // Pos returns the value's source position, or the zero SrcPos (Row/Col 0
@@ -1714,10 +1738,10 @@ func (v Value) Is(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	if t.Behavior == nil {
+	if t.Behavior() == nil {
 		return v.Parent.ConformsTo(t)
 	}
-	return t.Behavior.Match(v, t)
+	return t.Behavior().Match(v, t)
 }
 
 // IsNone reports whether v is the value `none` (not the None type
@@ -2867,13 +2891,13 @@ func (v Value) String() string {
 	// kernelFormatDefault.
 	if v.Data != nil && v.Parent != nil {
 		for t := v.Parent; t != nil; t = t.Parent {
-			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+			if t.Behavior() == nil || t.Behavior() == DefaultBehavior {
 				continue
 			}
-			if delegatesFormat(t.Behavior) {
+			if delegatesFormat(t.Behavior()) {
 				continue
 			}
-			return t.Behavior.Format(v)
+			return t.Behavior().Format(v)
 		}
 	}
 	return kernelFormatDefault(v)

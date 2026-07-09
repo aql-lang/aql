@@ -190,7 +190,7 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 	if def == nil {
 		return nil, false
 	}
-	if _, ok := def.Behavior.(*predicateUnifier); !ok {
+	if _, ok := def.Behavior().(*predicateUnifier); !ok {
 		return nil, false
 	}
 	return def, true
@@ -213,7 +213,7 @@ func disjunctHasPredicate(disj DisjunctInfo) bool {
 // the node's type literal, so predicateUnifier.Unify admits it iff the
 // predicate body accepts (via the shared unifyMembership contract).
 func unifyResolvedPredicate(def *Type, candidate Value) (Value, *UnifyError) {
-	pu, ok := def.Behavior.(*predicateUnifier)
+	pu, ok := def.Behavior().(*predicateUnifier)
 	if !ok {
 		return Value{}, unifyFail("not a predicate type", candidate, NewTypeLiteral(def))
 	}

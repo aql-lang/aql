@@ -423,10 +423,10 @@ func comparePathons(a, b Value) int {
 // before this init fires. We assign Behaviors directly on the *Type
 // values; CompareValues consults Behavior at call time.
 func init() {
-	TNumber.Behavior = numberCompareBehavior{}
-	TString.Behavior = stringCompareBehavior{}
-	TBoolean.Behavior = booleanCompareBehavior{}
-	TAtom.Behavior = atomCompareBehavior{}
-	TScalar.Behavior = scalarCompareBehavior{}
-	TWord.Behavior = wordCompareBehavior{}
+	TNumber.ensureTMeta().Behavior = numberCompareBehavior{}
+	TString.ensureTMeta().Behavior = stringCompareBehavior{}
+	TBoolean.ensureTMeta().Behavior = booleanCompareBehavior{}
+	TAtom.ensureTMeta().Behavior = atomCompareBehavior{}
+	TScalar.ensureTMeta().Behavior = scalarCompareBehavior{}
+	TWord.ensureTMeta().Behavior = wordCompareBehavior{}
 }

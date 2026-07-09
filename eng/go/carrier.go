@@ -328,7 +328,7 @@ func UnionCarrierForType(t *Type) (Value, bool) {
 	if t == nil {
 		return Value{}, false
 	}
-	du, ok := t.Behavior.(*disjunctUnifier)
+	du, ok := t.Behavior().(*disjunctUnifier)
 	if !ok || len(du.alternatives) == 0 {
 		return Value{}, false
 	}

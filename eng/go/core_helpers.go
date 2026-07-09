@@ -805,7 +805,7 @@ func membershipBeyondNominal(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	switch t.Behavior.(type) {
+	switch t.Behavior().(type) {
 	case *disjunctUnifier, *negationUnifier, *predicateUnifier, memberBehavior, *depScalarUnifier:
 		return true
 	}

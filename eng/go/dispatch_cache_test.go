@@ -158,4 +158,13 @@ func TestTypeMetaAccessorsNilValue(t *testing.T) {
 	if v.Pos().Row != 3 || v.Pos().Col != 7 {
 		t.Fatalf("after SetPos, Pos() = %+v, want Row3 Col7", v.Pos())
 	}
+	// Behavior: nil for an ordinary value (the type-node marker); SetBehavior
+	// then installs one.
+	if v.Behavior() != nil {
+		t.Fatalf("ordinary value Behavior() = %v, want nil", v.Behavior())
+	}
+	v.SetBehavior(DefaultBehavior)
+	if v.Behavior() != DefaultBehavior {
+		t.Fatalf("after SetBehavior, Behavior() = %v, want DefaultBehavior", v.Behavior())
+	}
 }

@@ -282,10 +282,10 @@ func init() {
 	// Package vars (the T* nodes) initialise before init() runs, so
 	// the pointers are live — same pattern as the scalar Comparer
 	// installs in compare_scalar_behaviors.go.
-	TMicron.Behavior = micronBehavior{kind: TMicron}
-	TPathon.Behavior = micronBehavior{kind: TPathon}
-	TEmailon.Behavior = micronBehavior{kind: TEmailon}
-	TUrlon.Behavior = micronBehavior{kind: TUrlon}
+	TMicron.ensureTMeta().Behavior = micronBehavior{kind: TMicron}
+	TPathon.ensureTMeta().Behavior = micronBehavior{kind: TPathon}
+	TEmailon.ensureTMeta().Behavior = micronBehavior{kind: TEmailon}
+	TUrlon.ensureTMeta().Behavior = micronBehavior{kind: TUrlon}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -331,7 +331,7 @@ func MicronProperty(v Value, key string) (Value, bool) {
 // builtin leaves and the root.
 func MicronSchemaFor(t *Type) (*OrderedMap, bool) {
 	for ; t != nil && t.ConformsTo(TMicron); t = t.Parent {
-		if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
+		if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 			return mb.info.Fields, true
 		}
 	}
@@ -703,7 +703,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		case t.Equal(TUrlon):
 			out, err = makeUrlon(data)
 		default:
-			if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
+			if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)
 			} else {
 				continue

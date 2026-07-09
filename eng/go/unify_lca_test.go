@@ -47,7 +47,7 @@ func TestDispatchUnifier_SameTypeBothSides(t *testing.T) {
 	}
 	item := r.Types.MintType("Item", TInteger)
 	want := NewInteger(99)
-	item.Behavior = &itemUnifier{prev: item.Behavior, fixed: want}
+	item.ensureTMeta().Behavior = &itemUnifier{prev: item.Behavior(), fixed: want}
 
 	x := NewInteger(3)
 	x.Parent = item
@@ -74,7 +74,7 @@ func TestDispatchUnifier_MoreSpecificStarts(t *testing.T) {
 	}
 	item := r.Types.MintType("Item", TInteger)
 	want := NewInteger(42)
-	item.Behavior = &itemUnifier{prev: item.Behavior, fixed: want}
+	item.ensureTMeta().Behavior = &itemUnifier{prev: item.Behavior(), fixed: want}
 
 	x := NewInteger(3)
 	x.Parent = item // Item-typed
@@ -98,7 +98,7 @@ func TestDispatchUnifier_FailurePropagates(t *testing.T) {
 		t.Fatal(err0)
 	}
 	item := r.Types.MintType("Item", TInteger)
-	item.Behavior = &itemUnifier{prev: item.Behavior, failOn: true}
+	item.ensureTMeta().Behavior = &itemUnifier{prev: item.Behavior(), failOn: true}
 
 	x := NewInteger(3)
 	x.Parent = item
@@ -124,7 +124,7 @@ func TestDispatchUnifier_OptOutContinuesWalk(t *testing.T) {
 	item := r.Types.MintType("Item", TInteger)
 
 	// Install a Unifier that always opts out.
-	item.Behavior = &optOutUnifier{prev: item.Behavior}
+	item.ensureTMeta().Behavior = &optOutUnifier{prev: item.Behavior()}
 
 	x := NewInteger(3)
 	x.Parent = item

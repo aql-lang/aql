@@ -455,8 +455,9 @@ func (revPathBehavior) Compare(a, b Value) (int, error) {
 // proving a subtype can override an inherited capability and that
 // CompareValues' lattice walk picks the most-specific Comparer.
 func TestRevPathComparator(t *testing.T) {
-	revPath := &Type{Parent: TPathon, Behavior: revPathBehavior{}}
+	revPath := &Type{Parent: TPathon}
 	revPath.SetName("RevPath")
+	revPath.SetBehavior(revPathBehavior{})
 	rev := func(parts ...string) Value {
 		p := NewPathon(parts, false)
 		p.Parent = revPath

@@ -16,7 +16,7 @@ import "math"
 // bare scalar — sizes 0.
 func SizeOf(v Value) int {
 	for t := v.Parent; t != nil; t = t.Parent {
-		if sz, ok := t.Behavior.(Sizer); ok {
+		if sz, ok := t.Behavior().(Sizer); ok {
 			return sz.Size(v)
 		}
 	}
@@ -121,5 +121,5 @@ func (idealSizeBehavior) Size(v Value) int {
 }
 
 func init() {
-	TIdeal.Behavior = idealSizeBehavior{}
+	TIdeal.ensureTMeta().Behavior = idealSizeBehavior{}
 }
