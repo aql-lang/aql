@@ -347,9 +347,11 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
 		}
 
-		body := make([]Value, len(s.body()))
-		copy(body, s.body())
-		result = append(result, body...)
+		// Append the body tokens directly: append COPIES them into result's
+		// backing array and s.body() (the shared AQLImpl.Body) is never
+		// mutated here, so the previous intermediate make+copy was a
+		// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
+		result = append(result, s.body()...)
 		// The canonical cleanup tail: DefCleanup (undoes body-local
 		// defs), __pa (pops Args + FnBaseline), the undef pairs for
 		// captures+params, and the ReturnCheck when returns are

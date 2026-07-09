@@ -168,6 +168,63 @@ func TestS7TraceNotesGated(t *testing.T) {
 	}
 }
 
+// --- effectiveResolved scratch reuse (F4) ---------------------------------
+
+// TestEffectiveResolvedScratchReuse pins the F4 optimization: effectiveResolved
+// reuses one engine-owned result buffer and one exclusion set across calls
+// instead of allocating per dispatch. It asserts the reuse is correct — a
+// shorter window never leaks the previous (longer) result, and a stale
+// exclusion set from a prior forward-bearing call is not applied to a later
+// forward-free one.
+func TestEffectiveResolvedScratchReuse(t *testing.T) {
+	e := engWithTape(t, []Value{NewInteger(1), NewInteger(2), NewInteger(3)}, 0)
+
+	// Full window: all three are resolved.
+	e.pointer = 3
+	if got := e.effectiveResolved(); len(got) != 3 {
+		t.Fatalf("want 3 resolved, got %d: %s", len(got), renderAll(got))
+	}
+
+	// Reuse must not leak the longer previous result: a shorter window
+	// returns exactly its own entries (buffer reset to [:0]).
+	e.pointer = 1
+	got := e.effectiveResolved()
+	iv, _ := AsInteger(got[0])
+	if len(got) != 1 || iv != 1 {
+		t.Fatalf("reuse leaked stale data: %s", renderAll(got))
+	}
+
+	// An OpenParen bounds the scan: entries below the paren are excluded.
+	e2 := engWithTape(t, []Value{NewInteger(9), NewOpenParen(), NewInteger(1), NewInteger(2)}, 0)
+	e2.pointer = 4
+	if got := e2.effectiveResolved(); len(got) != 2 {
+		t.Fatalf("paren-bounded window: want 2, got %d", len(got))
+	}
+
+	// A Forward in the window excludes its function-word slot.
+	sig := &Signature{Args: []*Type{TInteger}, BarrierPos: -1}
+	e3 := engWithTape(t, []Value{
+		NewInteger(5),
+		NewForward(ForwardInfo{FuncName: "cadd", Sig: sig, FuncIndex: 2, CollectedArgs: 0}),
+		NewWord("cadd"),
+	}, 0)
+	e3.pointer = 3
+	got = e3.effectiveResolved()
+	iv, _ = AsInteger(got[0])
+	if len(got) != 1 || iv != 5 {
+		t.Fatalf("forward-exclude: want [5], got %s", renderAll(got))
+	}
+
+	// A later forward-FREE call on the same engine must NOT apply the stale
+	// exclusion set from the call above (the reused map is only consulted
+	// when this call itself saw a forward).
+	e3.tape = NewTape([]Value{NewInteger(7), NewInteger(8)}, stackHeadroom)
+	e3.pointer = 2
+	if got := e3.effectiveResolved(); len(got) != 2 {
+		t.Fatalf("stale-exclusion leak: want 2, got %d", len(got))
+	}
+}
+
 // --- handleLoopBreak / handleLoopContinue with missing mark ---------------
 
 func TestS7HandleLoopBreakMissingMark(t *testing.T) {

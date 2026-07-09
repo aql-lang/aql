@@ -58,8 +58,21 @@ type Engine struct {
 	// atomically before control returns, so a single engine-owned buffer is
 	// reentrancy-safe.
 	loopTokens []Value
-	source     string // original source text for error reporting
-	isTop      bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// resolvedScratch / excludeScratch are reusable buffers for
+	// effectiveResolved's two per-dispatch allocations — the resolved-stack
+	// snapshot and the forward-exclusion set — which forward-collecting
+	// dispatch pays on every hot-loop step (design/INTERPRETER-SPEED-PLAN.10.md
+	// #3). effectiveResolved runs a single backward tape scan with NO nested
+	// dispatch, and its returned slice is consumed only by matchSignature —
+	// which merely READS it by index and never retains it — before any
+	// further dispatch runs. So one engine-owned buffer per engine is
+	// aliasing- and reentrancy-safe by the same argument as rrValues /
+	// loopTokens above. Both are reset at the top of effectiveResolved;
+	// excludeScratch is never returned (fully consumed inside the scan).
+	resolvedScratch []Value
+	excludeScratch  map[int]bool
+	source          string // original source text for error reporting
+	isTop           bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
 	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
 	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
@@ -5160,9 +5173,11 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// AppendFrameTail now, so the two splice paths cannot diverge.)
 	defSnapshot := e.registry.Defs.Snapshot()
 
-	body := make([]Value, len(sig.body()))
-	copy(body, sig.body())
-	tokens = append(tokens, body...)
+	// Append the sig's body tokens directly: append COPIES them into
+	// tokens' backing array, and sig.body() (the shared AQLImpl.Body) is
+	// never mutated here, so the previous intermediate make+copy was a
+	// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
+	tokens = append(tokens, sig.body()...)
 
 	tokens = AppendFrameTail(tokens, FrameTailSpec{
 		Registry:     e.registry,
@@ -6144,10 +6159,12 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 // forward's context and should not be consumed by inner stack matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
-	// Lazily allocated: most dispatches have no active Forward in the
-	// window, so the common case pays no map allocation (nil-map reads
-	// below return false). design/INTERPRETER-SPEED-PLAN.10.md #3.
-	var excludeIndices map[int]bool
+	// Reused exclusion set, cleared each call (see resolvedScratch/
+	// excludeScratch on Engine). Most dispatches have no active Forward in
+	// the window, so hasExclude stays false and the set is never touched.
+	// design/INTERPRETER-SPEED-PLAN.10.md #3.
+	excludeIndices := e.excludeScratch
+	hasExclude := false
 	for i := e.pointer - 1; i >= 0; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			start = i + 1
@@ -6157,7 +6174,11 @@ func (e *Engine) effectiveResolved() []Value {
 			fwd, _ := AsForward(e.tape.At(i))
 			if excludeIndices == nil {
 				excludeIndices = make(map[int]bool)
+				e.excludeScratch = excludeIndices
+			} else if !hasExclude {
+				clear(excludeIndices)
 			}
+			hasExclude = true
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -6176,14 +6197,19 @@ func (e *Engine) effectiveResolved() []Value {
 			}
 		}
 	}
-	var resolved []Value
+	// Reused result buffer: after the first few dispatches it has grown to
+	// the window size and append never reallocates. Its sole consumer,
+	// matchSignature, reads it and returns before any further dispatch, so
+	// reuse is aliasing-safe (see the field comment).
+	resolved := e.resolvedScratch[:0]
 	for i := start; i < e.pointer; i++ {
 		v := e.tape.At(i)
-		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || excludeIndices[i] {
+		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || (hasExclude && excludeIndices[i]) {
 			continue
 		}
 		resolved = append(resolved, v)
 	}
+	e.resolvedScratch = resolved
 	return resolved
 }
 
