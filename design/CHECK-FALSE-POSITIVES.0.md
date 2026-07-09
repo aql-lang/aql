@@ -85,6 +85,33 @@ a loop body and after a `for` that a later statement reads across. This lets the
 `bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
 (dropping `-no-check`). It is a workaround, not the fix.
 
+### DEFINITIVE: three distinct facets of one systemic over-approximation
+
+The problem is NOT a single bug — it is three independent manifestations of the
+same check-mode over-approximation (a module-fn dispatch in a loop leaving stray
+residual values instead of netting zero for a `…drop`-ed statement), each fixed
+ONLY by the `;` workaround:
+
+1. **Static-count spread** (`native_control.go:1030`): a static `for` spreads the
+   body residual `count` times; a stray `Function` in it is dispatched top-level
+   and mis-collects a sibling as a receiver → `call (Map, Function, Map)`.
+   Confirmed by disabling the spread (clears facet 1 only).
+2. **Loop-residual → next-statement collection**: the loop leaves a residual on
+   the stack that the FOLLOWING statement's forward/stack collection mis-grabs —
+   `def dur (…)` after the loop gets `def — got (dynamic(Any), List)` then
+   `undefined_word: dur`. Independent of the spread (disabling it does NOT fix
+   this); requires the loop (no-loop is clean).
+3. **Service-handler internal loops**: mini-redis's own handler bodies
+   (`def expires state.expires` in the SET handler) trip `undefined_word` when
+   the driver's dispatch degrades the handler's `state` carrier — the same
+   over-approximation one level down.
+
+Each facet is fragile and context-dependent (facet 2 needs a pre-loop dispatch to
+accumulate the residual). A single-line fix addresses at most one; a complete fix
+is a refactor of check-mode loop-residual + statement-boundary handling, gated by
+`TestCheckAccuracyRatchet`. This exceeded what could be landed soundly in one
+pass; the `;` workaround (passes BOTH `aql check` and `aql run`) is the resolution.
+
 ### CONFIRMED mechanism + partial fix (decisive, this session)
 
 Disabling the plain-check static-count residual SPREAD (`native_control.go:1030`)
