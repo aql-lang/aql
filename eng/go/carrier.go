@@ -2115,12 +2115,12 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		return
 	}
 	for i, a := range args {
-		if !a.Dynamic || a.DynFrom == "" {
+		if !a.Dynamic || a.DynFrom() == "" {
 			continue
 		}
 		// Only narrow a binding that is itself still dynamic (consistent
 		// with this value) — guards against a since-rebound name.
-		cur, ok := r.Defs.Top(a.DynFrom)
+		cur, ok := r.Defs.Top(a.DynFrom())
 		if !ok || !cur.Dynamic {
 			continue
 		}
@@ -2142,7 +2142,8 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 			continue
 		}
 		bound := cur
-		bound.Dynamic, bound.DynFrom = false, ""
+		bound.Dynamic = false
+		bound.SetDynFrom("")
 		narrowed := TandValues(bound, NewCarrier(slot))
 		// A successful match guarantees a non-disjoint intersection; skip
 		// when the bound did not actually tighten (no-op / avoids
@@ -2175,7 +2176,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		// the recorder's producedBy still resolves the rebound name to its
 		// original producer.
 		narrowed.ID = cur.ID
-		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
+		r.Defs.Push(a.DynFrom(), NewDynamicCarrierValue(narrowed))
 	}
 }
 

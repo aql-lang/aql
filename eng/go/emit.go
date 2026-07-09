@@ -3628,7 +3628,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	if es.reg == nil || len(es.units) <= 1 {
 		return emitOperand{}, false
 	}
-	name := v.DynFrom
+	name := v.DynFrom()
 	if name == "" {
 		name = es.defReads[v.ID]
 	}

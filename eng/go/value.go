@@ -1067,12 +1067,6 @@ type ForwardInfo struct {
 // INTERPRETER-SPEED-PLAN.10.md #1A, bool-packing follow-up).
 type Value struct {
 	ID string
-	// DynFrom is the binding name a dynamic carrier was resolved from
-	// (check mode only). It lets narrowing-through-use tighten that
-	// binding to dynamic(bound ∩ slot) at a typed use, so a later
-	// provably-disjoint use of the same name is caught. Empty for
-	// non-binding-derived carriers; never read at runtime.
-	DynFrom string
 	// Data is the kernel-known data payload; see payload.go for variants.
 	Data Payload
 
@@ -1106,6 +1100,14 @@ type Value struct {
 	// (nil-safe, returns the zero SrcPos); external packages set it via
 	// SetPos since the field is unexported.
 	pos *SrcPos
+	// dynFrom is the binding name a dynamic carrier was resolved from
+	// (check mode ONLY — never read at runtime), behind a pointer so its
+	// 16-byte string doesn't ride on every runtime Value copy (nil for the
+	// overwhelming majority that are not check-mode dynamic carriers). It
+	// lets narrowing-through-use tighten that binding to dynamic(bound ∩
+	// slot) at a typed use so a later provably-disjoint use of the same
+	// name is caught. Read via DynFrom() (nil-safe), set via SetDynFrom.
+	dynFrom *string
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1222,6 +1224,26 @@ func (v Value) Pos() SrcPos {
 // reachable and a fresh position is being minted anyway.
 func (v *Value) SetPos(p SrcPos) {
 	v.pos = &p
+}
+
+// DynFrom returns the check-mode binding name a dynamic carrier was
+// resolved from, or "" when unset. Nil-safe read of the pointer.
+func (v Value) DynFrom() string {
+	if v.dynFrom == nil {
+		return ""
+	}
+	return *v.dynFrom
+}
+
+// SetDynFrom records (name != "") or clears (name == "") the dynamic
+// carrier's origin binding. A check-mode-only path, so the *string it
+// allocates is off the runtime hot path.
+func (v *Value) SetDynFrom(name string) {
+	if name == "" {
+		v.dynFrom = nil
+		return
+	}
+	v.dynFrom = &name
 }
 
 // Name is the nil-safe read of the type-node leaf name — "" for an

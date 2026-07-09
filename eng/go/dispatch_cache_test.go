@@ -167,4 +167,16 @@ func TestTypeMetaAccessorsNilValue(t *testing.T) {
 	if v.Behavior() != DefaultBehavior {
 		t.Fatalf("after SetBehavior, Behavior() = %v, want DefaultBehavior", v.Behavior())
 	}
+	// DynFrom: nil-safe read is ""; SetDynFrom sets, SetDynFrom("") clears.
+	if v.DynFrom() != "" {
+		t.Fatalf("nil DynFrom() = %q, want empty", v.DynFrom())
+	}
+	v.SetDynFrom("b")
+	if v.DynFrom() != "b" {
+		t.Fatalf("after SetDynFrom, DynFrom() = %q, want b", v.DynFrom())
+	}
+	v.SetDynFrom("")
+	if v.DynFrom() != "" {
+		t.Fatalf("after SetDynFrom(\"\"), DynFrom() = %q, want empty", v.DynFrom())
+	}
 }

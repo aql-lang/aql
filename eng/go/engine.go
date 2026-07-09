@@ -2169,7 +2169,7 @@ func (e *Engine) stepWord(val Value) error {
 			if top.Dynamic && e.registry.Check.IsActive() {
 				// Tag the gradual value with its binding so a typed use
 				// downstream narrows the binding (narrowing-through-use).
-				top.DynFrom = w.Name
+				top.SetDynFrom(w.Name)
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
