@@ -1,0 +1,326 @@
+# Interpreter → Python parity — a second-pass review (2026-07)
+
+**Status:** Review / discovery note. Grounds the *next* round of
+interpreter-performance work against fresh profiles taken **after** the
+six root-cause fixes of `INTERPRETER-SPEED-PLAN.10.md` all landed. No
+behaviour change is proposed here; it identifies the remaining
+refactorings and algorithms and ranks them by measured impact.
+
+Companion reading (read these first — this note assumes them):
+`INTERPRETER-SPEED-INVESTIGATION.10.md` (the original diagnosis),
+`INTERPRETER-SPEED-PLAN.10.md` (the six fixes, all DONE),
+`RECURSION-PERFORMANCE.10.md` (the O(d²) tape story, fixed by the
+gap-buffer `TAPE-DATA-STRUCTURE.10.md`), `PERF-BASELINE.10.md` (the gate
+suite).
+
+## Where we are now (measured, this box)
+
+Cross-language wall-clock, best-of-3, `bench/interp/run.sh` (startup
+≈20 ms aql / 17 ms python):
+
+| workload | aql-interp | aql-compiled | python | interp÷py | interp÷compiled |
+|---|--:|--:|--:|--:|--:|
+| fib(24)         | 7,030 ms | 265 ms | 22 ms | ~320× | ~27× |
+| loopsum (100k)  | 1,905 ms |  79 ms | 23 ms |  ~83× | ~24× |
+| nestloop (300²) | 1,637 ms |  73 ms | 21 ms |  ~78× | ~22× |
+
+`BenchmarkStage6` (execution only, parse/compile amortised out),
+interp/compiled and interp **allocs/op**:
+
+| shape | interp ns/op | compiled ns/op | ratio | interp allocs/op |
+|---|--:|--:|--:|--:|
+| arith_chain64     |    581,410 |    29,386 | 20× | 1,896 |
+| for_tight         |  3,868,315 |   224,431 | 17× | 16,086 |
+| if_scalar         |  4,345,862 |   191,364 | 23× | 17,257 |
+| map_get           |  6,212,723 |   147,699 | 42× | 25,855 |
+| recursion_nontail | 12,651,835 |   418,831 | 30× | 43,561 |
+| recursion_tail    | 48,490,229 | 1,919,753 | 25× | 200,998 |
+| do_body           |  1,253,153 |    69,880 | 18× | 3,951 |
+
+**The story has not changed shape, only magnitude.** Two facts drive
+everything below:
+
+1. **The interpreter is allocation-bound.** On `recursion_nontail`, GC
+   (`gcBgMarkWorker` + `scanobject` + `mallocgc`) is **~30–35 % of CPU**,
+   and it is a pure symptom — every allocation eliminated buys that CPU
+   back directly. The handler that does the user's actual arithmetic is a
+   rounding error next to the dispatch machinery and the garbage it makes.
+2. **The interpreter re-plans, every single call, what never changes.**
+   `matchSignature` + the forward-collection cluster
+   (`resolveForwardArgs` / `effectiveResolved` / `resolvedIndicesBefore`
+   / `rearrangeForForward`) re-resolve *which overload matches these
+   argument types* and *where the arguments are* on every dispatch of
+   `add`, `sub`, `lte`, `if`, `fib` — even inside a hot loop where the
+   answer is identical every iteration. This is exactly the work the
+   bytecode VM bakes once at compile time, and exactly why compiled AQL is
+   already within ~3.4× of CPython on loops (79 ms vs 23 ms, most of it
+   startup) while the interpreter is ~80×.
+
+Everything that follows is one of those two problems.
+
+## Fresh profile — where the allocations go
+
+`go tool pprof -sample_index=alloc_space` /
+`-sample_index=alloc_objects` on
+`BenchmarkStage6/recursion_nontail/interp`:
+
+| site | % alloc space | % alloc objects | what it is |
+|---|--:|--:|---|
+| `GenerateID` → `strings.Builder` | ~5 % | **~21 %** | an eager unique ID minted for **every** Value |
+| `buildFnBodyHandler.func1` | ~24 % (cum) | — | per fn-call frame: body copy + arg copy + tail-token mints |
+| `effectiveResolved` (`engine.go:6171`, `:6145`) | ~16 % | ~9 % | fresh `resolved []Value` + `make(map[int]bool)` per forward dispatch |
+| `matchSignature` (`:6460` positions) | ~4 % | ~17 % | per-candidate-sig `[]int`, every call |
+| `resolvedIndicesBefore` (`:3108`) | ~3 % | ~12 % | per-call index slice |
+| `NewForward` / `insertForward` | ~7 % | ~9 % | forward tokens |
+| `Tape.grow` | ~8 % | — | tape reallocation during body splices |
+| `AppendFrameTail` / `expandParenExpr` | ~13 % | — | frame-tail tokens, paren expansion |
+| **`fmt.Sprintf` (`stepLiteral:3375` + siblings)** | — | **~5 %** | **dead trace strings built with tracing OFF** |
+
+The five biggest object-count contributors — IDs (21 %),
+`matchSignature` (17 %), `resolvedIndicesBefore` (12 %), `effectiveResolved`
+(9 %), dead trace `Sprintf` (5 %) — are **~64 % of all allocations** and
+every one of them is avoidable without changing a single observable
+semantic.
+
+---
+
+## Findings, ranked by (impact ÷ effort)
+
+### F1 — The `#6` trace-gating fix was incomplete *(trivial, verified, do first)*
+
+`#6` gated the two `stepWord` dispatch notes (`engine.go:2393`, `:2420`)
+behind `if e.trace != nil`. **Seven sibling `e.traceNote = …` builders
+were missed**, several on the hottest paths in the language, all still
+formatting unconditionally while `traceNote` is only ever read when
+`e.trace != nil`:
+
+| line | builder | fires |
+|---|---|---|
+| `3375` | `fmt.Sprintf("collect %s %d/%d", …)` | every forward-arg collection |
+| `4464` | `"call " + fnDef.Name` | every named fn call |
+| `5469` | `"mark " + info.ID` | every mark |
+| `5502` | `fmt.Sprintf("move orphan %s", …)` | every move |
+| `5527` | `fmt.Sprintf("move→mark %s", …)` | every move continuation |
+| `5583` | `fmt.Sprintf("for next %s i=%d", …)` | **every `for` iteration** |
+| `5631` | `fmt.Sprintf("if %v", cond)` | **every `if`** |
+
+The `stepLiteral:3375` site alone is **~5 % of all allocations** on the
+recursion profile (633 K `Sprintf` allocs). `:5583` and `:5631` tax
+`loopsum`/`nestloop` and `if_scalar` respectively.
+
+**Fix.** Wrap each assignment in `if e.trace != nil { … }` — mechanical,
+identical to what `#6` already did twice. Better still, make `traceNote`
+a `func() string` closure (or a small tagged struct) so the *format* is
+deferred to the trace sink and can never be built on the hot path again;
+that ends this whole bug class instead of playing whack-a-mole.
+
+**Impact:** removes ~5 %+ of allocations outright and the string concats
+on `if`/`for`; measurable on every dispatch-hot shape.
+**Effort/risk:** ~7 lines, low. **Cost:** it edits `engine.go`, so it
+trips the line-keyed coverage allowlist — batch it with F4 and re-anchor
+once (the `INTERPRETER-SPEED-PLAN.10.md` allowlist protocol).
+
+### F2 — Truly lazy value IDs *(biggest single allocation lever)*
+
+`NewValueRaw` (`value.go:1386`) stamps `ID: GenerateID(IPrefixForType(t))`
+on **every** value it mints. `GenerateID` is now lock-free (that was
+`#1B`) but still allocates a `strings.Builder` per call — **~21 % of all
+allocations in the interpreter**, the single largest object-count line in
+the profile.
+
+`#1B` made the ID *cheaper* but stopped short of the investigation's
+actual recommendation: make it **lazy**. Who reads a *runtime* value's
+`.ID`? Only the bytecode emitter's provenance maps (at compile time) and
+serialization. Concrete-value equality, comparison, and dispatch never
+touch it (`equal.go`, `compareStructural`). Type **nodes** need eager IDs
+(canon, `LookupByID`, wire/FixedID) — those are a tiny fixed population
+and keep them.
+
+**Fix.** For non-type-node values, defer: store no ID at mint; add
+`EnsureID(*Value)` that fills lazily on first read; materialize eagerly at
+the two boundaries that need it (emit-provenance keys in `emit.go`, the
+serialization edge). The investigation already scoped the ~244 `.ID` read
+sites and found most are `TypeRef.ID` / `MarkInfo.ID`, not `Value.ID`.
+
+**Impact:** removes ~20 % of allocations and the same slice of GC scan.
+**Effort/risk:** moderate — the risk is a runtime `.ID` read that wasn't
+routed through `EnsureID` seeing `""`; mitigate with a grep-audit and a
+debug-build assertion. **Follow-on:** once runtime IDs are lazy, the
+inline 16-byte `ID` string header (22 % of the now-72-byte `Value`) can be
+moved behind a pointer or dropped for runtime values, shrinking the
+by-value copy and GC scan across interp *and* VM (the last `#1A` step that
+was deliberately deferred).
+
+### F3 — A per-call-site **inline cache** for dispatch *(the algorithmic gap to Python)*
+
+This is the one that changes the class of the problem, not just the
+constant. `#2` added a `dispatchCache` (`registry.go:1148`) that memoizes
+the **aggregate table per name** — *which overloads exist for `add`*,
+keyed on a per-name generation counter. That removed the
+`aggregateDispatch` rebuild, but the far more expensive layer is
+untouched: **which overload matches *these* argument types, at *which*
+tape positions, and how the forward arguments are gathered** is still
+recomputed on every dispatch by `matchSignature` (17 % of objects,
+`ConformsTo`/`IsAncestor`/`Equal` ≈ 17 % of CPU) plus the
+forward-collection cluster (F5).
+
+In a monomorphic hot loop — which is the overwhelmingly common case, and
+100 % of `fib`/`loopsum`/`nestloop` — the argument type-shape at a given
+call site never changes, so the resolution is invariant and should be
+computed **once**.
+
+**Algorithm (CPython 3.11 adaptive interpreter / V8 inline cache, adapted
+to the tape).** Attach a small cache slot to each *call site*. A word
+token on the tape is spliced from an immutable source body (`sig.body()`),
+so a call site has a stable identity — key the cache on that source-token
+identity (add a cache index to `WordInfo`, or a side table keyed by the
+body-slice pointer + offset). The cached record holds the resolved
+`*Signature`, the arg **positions/plan**, and the forward-collection plan.
+On dispatch:
+
+1. Read the cache slot. If present and (a) the per-name def generation is
+   unchanged and (b) the current arg type-shape matches the cached guard —
+   **skip `matchSignature` and forward planning entirely**, jump straight
+   to `execMatch` with the cached positions.
+2. On miss (first execution, or a polymorphic site whose shape changed),
+   fall through to the existing slow path and refill the slot. Keep a tiny
+   monomorphic→polymorphic→megamorphic state (like CPython) so a genuinely
+   polymorphic site degrades to the current behaviour rather than
+   thrashing.
+
+Invalidation infrastructure already exists (`Defs.Gen(name)`, the same
+counter `#2` uses). This is the highest-value structural change remaining
+and the one that most directly imports Python's model: *plan once, execute
+many.*
+
+**Impact:** removes the bulk of `matchSignature` + the F5 cluster on every
+steady-state call — on the profile that is ~17 % of objects + ~16 % of
+alloc space + a large share of the type-match CPU. Plausibly the biggest
+end-to-end win after F1/F2.
+**Effort/risk:** the largest of the findings; the subtlety is call-site
+identity across the splice/gap-buffer model and getting the guard + de-opt
+correct. Land it behind the differential interp-vs-compiled oracle.
+
+### F4 — Reusable scratch for forward collection *(pairs with F3)*
+
+`effectiveResolved` allocates a fresh `resolved []Value` (`engine.go:6171`)
+and `excludeIndices := make(map[int]bool)` (`:6145`) on **every**
+forward-collecting dispatch — 16 % of alloc space. `resolvedIndicesBefore`
+(`:3108`) and `matchSignature`'s per-candidate `positions` (`:6460`) add
+per-call slices (12 % + part of 17 % of objects). `#3` introduced the
+scratch-reuse idea but these sites still allocate.
+
+**Fix.** The engine is single-threaded per run → hang reusable scratch
+buffers off `Engine` (`scratchResolved []Value`, `scratchIdx []int`,
+`scratchPositions []int`), reset to `[:0]` at entry; replace the
+`map[int]bool` exclude set with a **reused bitset over the bounded
+open-paren window** (the indices are small and dense — a map is the
+expensive wrong tool here). With F3 in place most forward-collecting
+dispatches skip this path altogether; for the misses, scratch reuse makes
+the slow path cheap.
+
+**Impact:** ~19 % of allocations (the forward-collection cluster).
+**Effort/risk:** `engine.go`-heavy (allowlist re-anchor — batch with F1);
+risk is aliasing a reused buffer that something retains — assert
+consumed-before-next-use, lean on the differential suite.
+
+### F5 — Memoize the fn-call **frame skeleton** *(the recursion win)*
+
+For a leaf body (`fib`), `#5` correctly skips both `Defs.Snapshot()` maps
+(`buildFnBodyHandler`, `needsFrameState == false`). But the handler still,
+**every call**: `argsCopy := make + copy`, `NewList(argsCopy)` (itself an
+ID mint), `body := make([]Value, len) + copy` — **it copies the entire
+body slice on every single call** — `AppendFrameTail` mints ~5–7 frame
+tokens (`__DC`, `__pa`, `undef`+name pairs, `__RC`, close-paren), each
+paying `GenerateID`, plus the `result` slice. That is the 24 % cumulative
+`buildFnBodyHandler.func1` line, and it is why recursion is still ~30× the
+VM.
+
+CPython never copies a function's body to call it — it pushes a
+lightweight frame that *references* the shared, immutable code object and
+interprets it in place. The AQL interpreter copies the body and mints a
+fresh token skeleton per call.
+
+**Fix (the `#5` follow-up that was scoped but not done).** Build the
+constant token skeleton — frame-open, the body copy, the tail shape —
+**once per signature** at `compileFnSigs` time, and per call only splice a
+shared template with the arg values patched in. With F2 (lazy IDs) the
+residual token mints become free; with F3 the dispatch inside the body is
+cached. The deeper, larger version is the `RECURSION-PERFORMANCE.10.md`
+remediation #1: a real call frame that references the immutable body
+instead of splicing a per-call copy onto the tape at all — that also
+removes the `Tape.grow` (8 %) and `expandParenExpr` (13 %) traffic that
+scales with call depth.
+
+**Impact:** the biggest per-call reduction; directly attacks the ~44 K
+allocs/op on `recursion_nontail` and the ~200 K on `recursion_tail`.
+**Effort/risk:** high; the frame teardown is a coordinated set
+(`eng/go/CLAUDE.md` "Per-Call Stacks") — gate against the recursion /
+closure / `break`-in-loop differential tests before deleting the copy
+path.
+
+### F6 — Tagged / boxed value representation *(structural, longest horizon)*
+
+`Value` is 72 B (down from 184 B — `#1A`) and is copied by value through
+every tape cell, argument, and body splice; `duffcopy`/`duffzero` and GC
+scan still show up. Python/Lua/JS represent the common cases as a tagged
+word (8–16 B) with interned small integers and cached singletons. A
+NaN-boxed or tagged-union runtime value for the scalar-heavy common path
+would cut copy + scan further — but this is a very large change and F2's
+lazy-ID (which removes the one pointer field that dominates the scan) plus
+F3's cache are far higher ROI first. Recorded for completeness, not
+recommended before F1–F5.
+
+---
+
+## Sequencing
+
+Land as independent, individually-measured commits against
+`bench/interp/run.sh` + `BenchmarkStage6` + the alloc-guard ceilings
+(`TestInterpAllocCeilings` / `TestCompiledAllocCeilings`), lowering each
+ceiling as the fix lands:
+
+1. **F1** trace-gating completion — trivial, verified, immediate alloc cut.
+   (Batch the `engine.go` allowlist re-anchor with F4.)
+2. **F2** lazy runtime IDs — the largest single allocation lever, ~20 %.
+3. **F4** forward-collection scratch reuse — ~19 %, pairs with F3.
+4. **F3** per-call-site inline cache — the algorithmic step-change.
+5. **F5** frame-skeleton memoization → real call frame — the recursion win.
+6. **F6** tagged values — only if F1–F5 leave a gap worth the churn.
+
+## The honest strategic read
+
+The user's target is "the same level as Python." The data says the
+**compiled** path is already there in spirit — 79 ms vs 23 ms on
+`loopsum`, ~3.4× and mostly fixed startup. The **interpreter** is 80–320×
+off, and a tree-walker's ceiling is real: F1–F5 can plausibly compound to
+another ~3–6× (allocation elimination + the inline cache), which would
+bring `loopsum`/`nestloop` to roughly **15–25× Python** and recursion into
+the **~50–80×** band — a large, worthwhile improvement, but not literal
+parity. Literal Python-level throughput from a tree-walker would need it
+to stop tree-walking (bytecode-lower the interpreter, i.e. become the VM).
+
+So the two-track recommendation is:
+
+- **For the interpreter itself** (this note's remit): do F1–F5. They are
+  well-scoped, each individually gated, and each removes a named,
+  measured cost. F1+F2+F4 alone are low-risk and should recover a
+  meaningful multiple.
+- **For "AQL is fast" as a product goal:** the answer is the compiler.
+  Widen what compiles and keep compile the default for scripts; the
+  interpreter's job is fidelity and REPL immediacy, and F1–F5 make it
+  respectable, not a VM replacement.
+
+## Reproduce
+
+```bash
+cd cmd/go && make build
+AQL=$PWD/bin/aql bash ../../bench/interp/run.sh 3
+
+cd ../../lang/go
+go test -bench 'BenchmarkStage6' -benchmem -run '^$' .
+go test -bench 'BenchmarkStage6/recursion_nontail/interp' -run '^$' \
+  -benchtime 2s -cpuprofile /tmp/cpu.prof -memprofile /tmp/mem.prof .
+go tool pprof -top -cum /tmp/cpu.prof
+go tool pprof -top -cum -sample_index=alloc_objects /tmp/mem.prof
+```
