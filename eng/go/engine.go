@@ -50,8 +50,16 @@ type Engine struct {
 	// pooled sub-engine reuse (harmless: reset to [:0] on entry).
 	rrValues    []Value
 	rrReordered []Value
-	source      string // original source text for error reporting
-	isTop       bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// loopTokens is a reusable scratch buffer for stepMoveCont's per-
+	// iteration `mark + body + move` re-splice (for/each-style loops run
+	// their body in place on this tape — design/INTERPRETER-SPEED-PLAN.10.md
+	// #4). Tape.Splice COPIES the tokens in, so the buffer is free the
+	// moment Splice returns; a nested loop's stepMoveCont builds+splices
+	// atomically before control returns, so a single engine-owned buffer is
+	// reentrancy-safe.
+	loopTokens []Value
+	source     string // original source text for error reporting
+	isTop      bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
 	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
 	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
@@ -5550,14 +5558,17 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 		// Generate new mark ID.
 		id := NextMarkID()
 
-		// Build replacement: mark + body + move.
+		// Build replacement `mark + body + move` into a reused scratch
+		// buffer. The mark stores cont.Body (stable, for the next re-mark);
+		// the body elements appended after it are the executable copy — no
+		// separate bodyCopy is needed because Tape.Splice copies the whole
+		// token run into the tape, leaving cont.Body untouched.
 		body := cont.Body
-		tokens := make([]Value, 0, len(body)+2)
+		tokens := e.loopTokens[:0]
 		tokens = append(tokens, NewMark(id, body...))
-		bodyCopy := make([]Value, len(body))
-		copy(bodyCopy, body)
-		tokens = append(tokens, bodyCopy...)
+		tokens = append(tokens, body...)
 		tokens = append(tokens, NewMoveCont(id, info.Reason, cont))
+		e.loopTokens = tokens
 
 		// Remove old mark ID, register new one.
 		delete(e.marks, info.To)
