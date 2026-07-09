@@ -209,7 +209,7 @@ func micronCompareKey(v Value) string {
 // absolute/relative flag — exactly the pairs comparePathons orders as
 // 0, so eq/deq agree with cmp on paths.
 func pathonContentEqual(a, b PathonInfo) bool {
-	if a.Abs != b.Abs || len(a.Parts) != len(b.Parts) {
+	if a.Abs != b.Abs || a.Volume != b.Volume || len(a.Parts) != len(b.Parts) {
 		return false
 	}
 	for i := range a.Parts {
@@ -306,6 +306,10 @@ func MicronProperty(v Value, key string) (Value, bool) {
 			return NewList(elems), true
 		case "abs":
 			return NewBoolean(p.Info.Abs), true
+		case "volume":
+			// The Windows drive ("C:") or UNC root ("\\server\share");
+			// empty for a POSIX / driveless path.
+			return NewString(p.Info.Volume), true
 		}
 		return Value{}, false
 	}

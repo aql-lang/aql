@@ -59,6 +59,20 @@ make Micron 1	ERROR:Micron is abstract	the root is not constructible
 make Pathon 'a/b/c'	a/b/c	Pathon keeps its forms under the new name
 make Pathon [ 'x' 'y' ]	x/y
 make Pathon 99	ERROR:Pathon source must be a list or string
+# Windows paths: a drive (C:) or UNC (\\server\share) volume is recognised,
+# both slashes split segments, and the path renders in canonical backslash
+# form. Inputs use forward slashes since AQL strings treat backslash as an escape.
+make Pathon 'C:/Users/foo'	C:\Users\foo	drive path renders canonical backslash
+(make Pathon 'C:/Users/foo').volume	'C:'	the drive is exposed as the volume
+(make Pathon 'C:/Users/foo').parts	['Users' 'foo']	the drive is not a path segment
+(make Pathon 'C:/Users/foo').abs	true	a drive-rooted path is absolute
+(make Pathon 'C:docs').abs	false	a drive-relative path is not absolute
+make Pathon 'C:docs/x'	C:docs\x	drive-relative render (no leading slash)
+make Pathon '//host/share/a/b'	\\host\share\a\b	UNC volume plus segments
+(make Pathon '/usr/bin').volume	''	a POSIX path has no volume
+(make Pathon 'C:/x') eq (make Pathon 'C:/x')	true	drive paths are content-equal
+(make Pathon 'C:/x') eq (make Pathon 'D:/x')	false	different drives are not equal
+(make Pathon 'C:/x') eq (make Pathon '/x')	false	a drive path is not the driveless path
 
 # ─────────────────────────────────────────────────────────────────────
 # §4  Properties — read-only, via dot/get (miss reads none) and the

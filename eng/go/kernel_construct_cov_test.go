@@ -452,6 +452,83 @@ func TestMakePathon(t *testing.T) {
 	}
 }
 
+func TestMakePathonWindows(t *testing.T) {
+	mkVal := func(s string) Value {
+		out, err := makePathon(NewString(s), false)
+		if err != nil {
+			t.Fatalf("makePathon(%q): %v", s, err)
+		}
+		return out[0]
+	}
+	mk := func(s string) PathonInfo { p, _ := AsPathon(mkVal(s)); return p }
+
+	// Drive-absolute — both slash spellings canonicalize to backslash form.
+	for _, s := range []string{`C:\Windows\System32`, "C:/Windows/System32"} {
+		p := mk(s)
+		if p.Volume != "C:" || !p.Abs || len(p.Parts) != 2 ||
+			p.Parts[0] != "Windows" || p.Parts[1] != "System32" {
+			t.Errorf("%q → %+v", s, p)
+		}
+		if got := p.String(); got != `C:\Windows\System32` {
+			t.Errorf("%q render = %q", s, got)
+		}
+	}
+	// Drive-relative: no separator after the colon.
+	if p := mk("C:docs/x"); p.Volume != "C:" || p.Abs || p.String() != `C:docs\x` {
+		t.Errorf("drive-relative = %+v (%q)", p, p.String())
+	}
+	// Bare drive and drive root.
+	if p := mk("C:"); p.Volume != "C:" || p.Abs || len(p.Parts) != 0 || p.String() != "C:" {
+		t.Errorf("bare drive = %+v (%q)", p, p.String())
+	}
+	if p := mk("C:/"); p.Volume != "C:" || !p.Abs || len(p.Parts) != 0 || p.String() != `C:\` {
+		t.Errorf("drive root = %+v (%q)", p, p.String())
+	}
+	// UNC: full, volume-only, single-component, and the bare "//" degenerate.
+	if p := mk("//host/share/a/b"); p.Volume != `\\host\share` || !p.Abs ||
+		len(p.Parts) != 2 || p.String() != `\\host\share\a\b` {
+		t.Errorf("UNC = %+v (%q)", p, p.String())
+	}
+	if p := mk("//host/share"); p.Volume != `\\host\share` || len(p.Parts) != 0 ||
+		p.String() != `\\host\share` {
+		t.Errorf("UNC volume-only = %+v (%q)", p, p.String())
+	}
+	if p := mk("//host"); p.Volume != `\\host` || !p.Abs {
+		t.Errorf("UNC single-component = %+v", p)
+	}
+	if p := mk("//"); p.Volume != "" || !p.Abs || len(p.Parts) != 0 {
+		t.Errorf("bare // = %+v", p)
+	}
+	// Driveless: POSIX unchanged; backslash still splits and renders "/".
+	if p := mk("/usr/bin"); p.Volume != "" || !p.Abs || p.String() != "/usr/bin" {
+		t.Errorf("posix = %+v (%q)", p, p.String())
+	}
+	if p := mk(`a\b\c`); p.Volume != "" || p.Abs || len(p.Parts) != 3 || p.String() != "a/b/c" {
+		t.Errorf("driveless backslash = %+v (%q)", p, p.String())
+	}
+
+	// Content equality: spelling-insensitive within a volume; drive-sensitive.
+	if !valuesEqualDefault(mkVal("C:/x"), mkVal(`C:\x`)) {
+		t.Error(`C:/x and C:\x must be equal`)
+	}
+	if valuesEqualDefault(mkVal("C:/x"), mkVal("D:/x")) {
+		t.Error("different drives must not be equal")
+	}
+	if valuesEqualDefault(mkVal("C:/x"), mkVal("/x")) {
+		t.Error("a drive path must not equal the driveless path")
+	}
+
+	// List form: a leading separator on the first element marks absolute,
+	// and each element still splits on either separator.
+	labs, err := makePathon(NewList([]Value{NewString(`\a`), NewString("b/c")}), false)
+	if err != nil {
+		t.Fatalf("list makePathon: %v", err)
+	}
+	if p, _ := AsPathon(labs[0]); !p.Abs || p.Volume != "" || len(p.Parts) != 3 {
+		t.Errorf("list form = %+v", p)
+	}
+}
+
 // --- core_type.go ---------------------------------------------------------------
 
 func TestPathOfAndTypeOf(t *testing.T) {

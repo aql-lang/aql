@@ -133,6 +133,9 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 			return []Value{NewCarrierTypedList(TString)}
 		case "abs":
 			return []Value{NewCarrier(TBoolean)}
+		case "volume":
+			// The Windows drive/UNC root, or "" for a POSIX path.
+			return []Value{NewCarrier(TString)}
 		}
 		return []Value{NewCarrier(TNone)}
 	case t.ConformsTo(TEmailon):

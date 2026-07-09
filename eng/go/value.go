@@ -139,11 +139,37 @@ func (m *OrderedMap) Delete(key string) bool {
 // Absolute paths start from the root (Abs = true).
 type PathonInfo struct {
 	Parts []string // path segments (e.g. ["usr", "local", "bin"])
-	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
+	Abs   bool     // true for absolute/rooted paths (e.g. /usr/local/bin, C:\Windows)
+	// Volume is a Windows path prefix: a drive ("C:") or a UNC root
+	// ("\\server\share"). Empty for a POSIX / driveless path. When set,
+	// the path renders in canonical Windows (backslash) form.
+	Volume string
 }
 
-// String returns the OS path string for this path.
+// String returns the canonical path string for this path. A driveless
+// path renders POSIX-style with "/"; a Windows path (Volume set) renders
+// with "\" — a drive path as "C:\a\b" (or "C:a\b" when drive-relative)
+// and a UNC path as "\\server\share\a\b".
 func (p PathonInfo) String() string {
+	if p.Volume != "" {
+		body := strings.Join(p.Parts, `\`)
+		unc := strings.HasPrefix(p.Volume, `\\`)
+		// A UNC volume is inherently rooted; a drive volume gets a
+		// separator after the colon only when the path is absolute.
+		if unc || p.Abs {
+			if body == "" {
+				if unc {
+					return p.Volume
+				}
+				return p.Volume + `\`
+			}
+			return p.Volume + `\` + body
+		}
+		if body == "" {
+			return p.Volume
+		}
+		return p.Volume + body // drive-relative: C:a\b
+	}
 	joined := strings.Join(p.Parts, "/")
 	if p.Abs {
 		return "/" + joined
