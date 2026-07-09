@@ -1,16 +1,13 @@
 package eng
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1119,45 +1116,61 @@ type Value struct {
 	DynFrom string
 }
 
-// idRand is the package-level RNG used for ID generation.
-// Defaults to time-seeded; can be overridden via SetIDSeed.
-//
-// idRandMu guards it: GenerateID is called from concurrently-running
-// engine forks (await branches, timer callbacks), and an *rand.Rand is
-// not safe for concurrent use. The mutex keeps ID generation race-free
-// without each call paying for its own RNG.
-var (
-	idRandMu sync.Mutex
-	idRand   = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
-)
+// idState is the package-level ID source: a monotone atomic counter
+// whose successive values are run through a splitmix64 finalizer to
+// spread them across the 48-bit ID space. This is LOCK-FREE — GenerateID
+// is called from concurrently-running engine forks (await branches,
+// timer callbacks) on the interpreter's hot path, and the previous
+// mutex-guarded *rand.Rand serialized every value mint. An atomic
+// increment is contention-free; the splitmix64 mix keeps IDs
+// well-distributed (not visibly sequential) and collision-free within a
+// process. SetIDSeed(s) sets the counter to s, so a given seed
+// reproduces the same ID stream (the determinism Options.Seed relies on).
+var idState atomic.Uint64
 
-// idMin is the minimum random value for generated IDs (0x100000000000).
+func init() { idState.Store(uint64(time.Now().UnixNano())) }
+
+// idMin is the minimum value for generated IDs (0x100000000000): its top
+// hex nibble is non-zero so every ID is a full 12 hex characters.
 const idMin uint64 = 0x100000000000
 
-// idMax is the exclusive upper bound so values fit in 12 hex chars.
+// idMax is the exclusive span above idMin so values fit in 12 hex chars.
 const idMax uint64 = 0x1000000000000 - 0x100000000000
 
-// SetIDSeed configures the package-level RNG with the given seed.
+// SetIDSeed reseeds the ID counter so the mint stream is reproducible.
 func SetIDSeed(seed int64) {
-	idRandMu.Lock()
-	defer idRandMu.Unlock()
-	idRand = rand.New(rand.NewPCG(uint64(seed), 0))
+	idState.Store(uint64(seed))
 }
 
+// splitmix64 finalizer — a well-distributed bijective mix, so a monotone
+// counter yields non-sequential, collision-free outputs.
+func mixID(x uint64) uint64 {
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	x *= 0x94d049bb133111eb
+	x ^= x >> 31
+	return x
+}
+
+const idHexDigits = "0123456789abcdef"
+
 // GenerateID creates a unique ID with the given prefix followed by 12
-// lowercase hex characters. The random value is >= 0x100000000000.
+// lowercase hex characters (value >= 0x100000000000). Lock-free, and
+// assembles prefix+hex in a single heap allocation (strings.Builder's
+// Grow'd buffer) instead of the previous hex-encode-then-concat pair.
 func GenerateID(prefix string) string {
-	idRandMu.Lock()
-	n := idMin + idRand.Uint64N(idMax)
-	idRandMu.Unlock()
-	var buf [6]byte
-	buf[0] = byte(n >> 40)
-	buf[1] = byte(n >> 32)
-	buf[2] = byte(n >> 24)
-	buf[3] = byte(n >> 16)
-	buf[4] = byte(n >> 8)
-	buf[5] = byte(n)
-	return prefix + hex.EncodeToString(buf[:])
+	n := idMin + mixID(idState.Add(1))%idMax
+	var hb [12]byte
+	for i := 11; i >= 0; i-- {
+		hb[i] = idHexDigits[n&0xf]
+		n >>= 4
+	}
+	var sb strings.Builder
+	sb.Grow(len(prefix) + 12)
+	sb.WriteString(prefix)
+	sb.Write(hb[:])
+	return sb.String()
 }
 
 // IDPrefixForType returns the ID prefix for a given type:
