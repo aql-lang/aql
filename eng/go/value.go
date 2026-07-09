@@ -1057,35 +1057,43 @@ type ForwardInfo struct {
 //   - "T_" for type/object values (Object/*, type literals, Any, None)
 //
 // Each ID is the prefix followed by 12 lowercase hex characters.
+//
+// Field order is chosen to eliminate alignment padding: the three
+// 16-byte fields (ID, DynFrom, Data) and the three pointers come first,
+// then every one-byte field is clustered at the tail so the seven bools
+// plus Origin pack into a single 8-byte-aligned run with no gaps. This is
+// a pure layout choice — fields are still accessed by name — and it took
+// the struct from 96 to 80 bytes on its own (design/
+// INTERPRETER-SPEED-PLAN.10.md #1A, bool-packing follow-up).
 type Value struct {
 	ID string
+	// DynFrom is the binding name a dynamic carrier was resolved from
+	// (check mode only). It lets narrowing-through-use tighten that
+	// binding to dynamic(bound ∩ slot) at a typed use, so a later
+	// provably-disjoint use of the same name is caught. Empty for
+	// non-binding-derived carriers; never read at runtime.
+	DynFrom string
+	// Data is the kernel-known data payload; see payload.go for variants.
+	Data Payload
 
 	// Parent is the node directly above this one in the unified
 	// lattice: for an ordinary value it is the value's type, for a
 	// type node it is the supertype. nil only for lattice roots.
 	Parent *Type
-
-	// tmeta holds type-node metadata — the leaf Name and the five integer
-	// lattice fields (FixedID, Rank, Depth, In, Out) — behind ONE pointer
-	// instead of ~56 inline bytes on every Value. The struct is copied by
-	// value on every stack push, arg, and tape cell, so shrinking it cuts
-	// the interpreter's ~15% duffcopy cost (design/
+	// tmeta holds type-node metadata — the leaf Name, the five integer
+	// lattice fields (FixedID, Rank, Depth, In, Out), and the Behavior —
+	// behind ONE pointer instead of ~72 inline bytes on every Value. The
+	// struct is copied by value on every stack push, arg, and tape cell,
+	// so shrinking it cuts the interpreter's ~15% duffcopy cost (design/
 	// INTERPRETER-SPEED-PLAN.10.md #1A). These fields are set once at type
-	// registration and never mutated, so a Value copy shares the SAME
-	// *typeMeta (an orphan `&v`-derived *Type reads the identical metadata
-	// as its canonical node — the property the old inline fields gave for
-	// free). Nil on ordinary runtime values; the Name/FixedID/Rank/Depth/
-	// In/Out accessors return the zero value for nil. Writers go through
+	// registration, so a Value copy shares the SAME *typeMeta (an orphan
+	// `&v`-derived *Type reads the identical metadata as its canonical
+	// node — the property the old inline fields gave for free). Nil on
+	// ordinary runtime values; the Name/FixedID/Rank/Depth/In/Out/Behavior
+	// accessors return the zero value for nil. Writers go through
 	// ensureTMeta so a mint site that forgets to allocate one cannot
 	// nil-panic.
-	tmeta      *typeMeta
-	IsInternal bool       // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind // builtin / userdef
-
-	// Payload and evaluation state — populated on ordinary values.
-	Data   Payload // the kernel-known data payload; see payload.go for variants
-	Quoted bool    // produced by the quote word; prevents auto-evaluation
-	Eval   bool    // parser-created list that should auto-evaluate at end of Run
+	tmeta *typeMeta
 	// pos is the source position for error reporting, behind a pointer so
 	// the ~24 inline bytes of SrcPos (Row/Col/Src) don't ride on every
 	// Value copy — nil means "unknown" (design/INTERPRETER-SPEED-PLAN.10.md
@@ -1097,8 +1105,14 @@ type Value struct {
 	// *SrcPos across every copy of a value is sound. Read via Pos()
 	// (nil-safe, returns the zero SrcPos); external packages set it via
 	// SetPos since the field is unexported.
-	pos       *SrcPos
-	Undefined bool // atom created from an undefined word (error if left on result stack)
+	pos *SrcPos
+
+	// One-byte fields, clustered so they pack without padding.
+	IsInternal bool       // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind // builtin / userdef
+	Quoted     bool       // produced by the quote word; prevents auto-evaluation
+	Eval       bool       // parser-created list that should auto-evaluate at end of Run
+	Undefined  bool       // atom created from an undefined word (error if left on result stack)
 	// FailedDispatch marks a named Function value that a dispatch
 	// attempt left on the stack as data because no signature matched
 	// (the silent-failure shape of design/ERRORS.8.md §5, VOXGIG T1).
@@ -1116,12 +1130,6 @@ type Value struct {
 	// carriers the checker cannot prove exactly (escape hatches); cleared
 	// by a successful guard, which discharges the gradual obligation.
 	Dynamic bool
-	// DynFrom is the binding name a dynamic carrier was resolved from
-	// (check mode only). It lets narrowing-through-use tighten that
-	// binding to dynamic(bound ∩ slot) at a typed use, so a later
-	// provably-disjoint use of the same name is caught. Empty for
-	// non-binding-derived carriers; never read at runtime.
-	DynFrom string
 }
 
 // typeMeta carries the integer lattice fields of a type node, held behind

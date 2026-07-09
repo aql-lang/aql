@@ -119,7 +119,7 @@ github.com/aql-lang/aql/eng/go/unify_map.go:129.4,130.12	shared-assertion / gate
 github.com/aql-lang/aql/eng/go/unify_map.go:153.3,153.27	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/user_poly.go:222.18,224.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/user_poly.go:225.27,227.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-github.com/aql-lang/aql/eng/go/value.go:1347.2,1347.13	shared-assertion / gate-guaranteed kernel guard (§kernel)
+github.com/aql-lang/aql/eng/go/value.go:1355.2,1355.13	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/vm.go:449.2,449.115	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/vm.go:527.82,529.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/vm.go:615.113,617.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
