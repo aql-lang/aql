@@ -479,7 +479,12 @@ type EmitState struct {
 	units      []*emitUnit    // units[0] = top level; fn compilations push
 	fnUnits    map[string]int // fn memo key → Program.Fns index
 	fnRecs     []*fnUnitRec
-	producedBy map[string]producer // value ID → producing (event seq, result idx)
+	// storedFnRefs collects the CompiledFnRefs minted while baking store-fn
+	// handler consts (compileStoredFnUnit). Finalize back-stamps each ref's
+	// Prog once the *Program exists and copies the slice onto Program. Nil
+	// until the first store-fn handler is compiled.
+	storedFnRefs []*CompiledFnRef
+	producedBy   map[string]producer // value ID → producing (event seq, result idx)
 	// trailingApplies maps a Function VALUE's ID → the arg count of a paren-bounded
 	// TRAILING fn-value apply (`(prev key comp)`), registered at the paren-collapse
 	// boundary (registerTrailingApply) where the paren-group size is known. The body
@@ -1308,6 +1313,25 @@ func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
 // lowering pushes the captured value before OpPushClosure exactly as the in-place
 // closure-dispatch path does (lower.go opClosure). A capture that cannot resolve
 // here (an unreachable enclosing binding) declines and the program falls back.
+// fnValueInputs builds the per-param input carriers and name table for compiling
+// a fn value's body — a returned lambda (tryReturnedClosure) or a stored handler
+// (compileStoredFnUnit). Each declared param type becomes a carrier (Any when the
+// param carries only a pattern, hence no bare type), and a named param carries
+// its name so AnalyseFnBody binds the body's references to that input.
+func fnValueInputs(params []FnParam) (inputs []Value, names []string) {
+	inputs = make([]Value, len(params))
+	names = make([]string, len(params))
+	for i, p := range params {
+		t := p.Type
+		if t == nil {
+			t = TAny
+		}
+		inputs[i] = NewCarrier(t)
+		names[i] = p.Name
+	}
+	return inputs, names
+}
+
 func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
 	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
 		return emitOperand{}, false
@@ -1339,16 +1363,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
 		return emitOperand{}, false
 	}
-	inputs := make([]Value, len(lam.Params))
-	paramNames := make([]string, len(lam.Params))
-	for i, p := range lam.Params {
-		t := p.Type
-		if t == nil {
-			t = TAny
-		}
-		inputs[i] = NewCarrier(t)
-		paramNames[i] = p.Name
-	}
+	inputs, paramNames := fnValueInputs(lam.Params)
 	r := es.reg
 	// PROBE in a throwaway emit state (mirrors recordClosureDispatch), so a body
 	// that refuses leaves THIS program untouched and the value stays unresolved.
@@ -1368,6 +1383,67 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		return emitOperand{}, false
 	}
 	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
+}
+
+// compileStoredFnUnit compiles a CAPTURE-FREE store-fn handler body (the fn a
+// CompileStoresFn word stashes for later invocation — a serve-raw connection
+// handler) to its own fn unit, so the native word can run it on the VM via
+// RunUnit instead of CallAQL. Returns the unit index and true, or (0, false)
+// when the body refuses (a refusal-class word, a flow sentinel, no single own
+// sig) — the caller then bakes only the plain const and the handler falls back
+// to the interpreter, per-body and sound. Mirrors tryReturnedClosure's
+// probe-then-real compile, but bodyOut 0 (count-agnostic): a stored handler is
+// invoked for effect and its residual, like CallAQL's, is the caller's to use
+// or discard.
+func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
+	if es == nil || es.reg == nil {
+		return 0, false
+	}
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+		return 0, false
+	}
+	inputs, paramNames := fnValueInputs(lam.Params)
+	r := es.reg
+	// PROBE in a throwaway state so a refusing body leaves THIS program
+	// untouched (mirrors tryReturnedClosure / recordClosureDispatch).
+	probe := NewEmitState()
+	probe.reg = r
+	r.Check.Emit = probe
+	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
+	r.Check.Emit = es
+	if !probeOK {
+		return 0, false
+	}
+	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
+	if !realOK || unit < 0 {
+		return 0, false
+	}
+	return unit, true
+}
+
+// stampCompiledRef records ref on the fn value's first own (non-fallback) AQL
+// body sig, so the runtime FnDefInfo the store-fn word receives carries the VM
+// edge alongside its raw Body. Mutates the shared *AQLImpl pointer, so the
+// interned const reflects it. Returns false when no own AQL body sig exists (a
+// Go-backed or fallback-only fn value — never a stored AQL handler).
+func stampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
+	for i := range fd.Signatures {
+		if fd.Signatures[i].Fallback {
+			continue
+		}
+		if a, ok := fd.Signatures[i].Impl.(*AQLImpl); ok {
+			a.Compiled = ref
+			return true
+		}
+	}
+	return false
 }
 
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
@@ -3369,6 +3445,27 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	}
 	ops := make([]emitOperand, len(args))
 	for i, a := range args {
+		// STORE-FN edge: a word that stashes a fn to invoke LATER (serve-raw)
+		// gets its capture-free handler body compiled to its own unit, and a
+		// durable CompiledFnRef stamped on the handler value's shared *AQLImpl —
+		// so the interned const the word receives carries the VM edge alongside
+		// its raw Body, and the word runs it on the VM (RunUnit) instead of the
+		// interpreter (CallAQL). Done here, BEFORE resolveOperand's outcome is
+		// consulted, because resolveOperand already interns a concrete fn value
+		// as a const (ok=true) and would skip the inert-fn branch below; the
+		// stamp mutates the pointer that interned copy shares, so it lands either
+		// way. A body that refuses to compile leaves the const un-stamped and the
+		// handler falls back to the interpreter, per-body and sound.
+		if sig.CompileEffect.Has(CompileStoresFn) {
+			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
+				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos); cOK {
+					ref := &CompiledFnRef{Unit: unit}
+					if stampCompiledRef(fd, ref) {
+						es.storedFnRefs = append(es.storedFnRefs, ref)
+					}
+				}
+			}
+		}
 		op, ok := es.resolveOperand(a)
 		if !ok && (introspect || inertFn || sig.FnInertArgs[i]) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn {
@@ -5701,6 +5798,16 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	lw.p.Fallbacks = es.fallbacks
 	lw.p.MaxStack = lw.maxDepth
 	lw.p.NumLocals = es.units[0].numLocals
+	// Back-stamp every stored-fn handler ref with the now-built *Program so a
+	// callback invoked after this run returns (a serve-raw connection handler on
+	// its own fork) can locate its unit. The refs are already reachable from the
+	// baked consts (their *AQLImpl); the side-list keeps this O(refs) rather than
+	// re-scanning Consts. Fns is fully assembled above, so every ref.Unit indexes
+	// a valid entry.
+	for _, ref := range es.storedFnRefs {
+		ref.Prog = lw.p
+	}
+	lw.p.storedFnRefs = es.storedFnRefs
 	return lw.p, "", true
 }
 

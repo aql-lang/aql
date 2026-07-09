@@ -353,6 +353,16 @@ func (r *Registry) interpRunActive() bool {
 	return r != nil && atomic.LoadInt32(&r.interpRunDepth) > 0
 }
 
+// canHostVM reports whether r can start a FRESH compiled run right now: no
+// compiled run and no interpreter run is already in flight on it. A per-
+// connection / per-process fork (ForkConcurrent) is idle, so a callback fires a
+// VM run cleanly; the main registry mid-run is busy, so InvokeCallback routes
+// the callback to the interpreter (CallAQL) instead — never racing the shared
+// invoker/scopes a live run owns.
+func (r *Registry) canHostVM() bool {
+	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
+}
+
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
 // Monotonic per registry; the `gensym` word wraps the result in an Atom. The
 // name is a valid word identifier so it can be used as a `def` binder.

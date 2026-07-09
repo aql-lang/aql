@@ -28,6 +28,28 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	return RunResolved(r, inputs, bodyTokens(body))
 }
 
+// InvokeCallback runs a runtime fn VALUE (given its matched signature and the
+// per-call args) against the VM when the sig carries a compiled unit whose
+// program is stamped AND r can host a fresh run, else falling back to CallAQL —
+// the tree-walking interpreter — with the fn's captures. It is the single seam
+// every native callback word (serve-raw, spawn, service/codec endpoints)
+// dispatches through, so retiring the interpreter for reducible callback bodies
+// is one routing decision rather than an edit per word.
+//
+// Correctness is fail-safe: a nil CompiledRef, an un-stamped ref (a body the
+// compiler refused, or a run that never reached Finalize), or a busy registry
+// all fall to CallAQL, whose values and error taxonomy are unchanged. When the
+// VM path IS taken, RunUnit executes the exact unit the differential gates prove
+// equivalent to the interpreter.
+func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []CapturedBinding) ([]Value, error) {
+	// sig is the matched signature (callers dispatch it via MatchFnSig and check
+	// it non-nil first — serve-raw's handler dispatch is the canonical caller).
+	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil && r.canHostVM() {
+		return RunUnit(ref, r, args)
+	}
+	return r.CallAQL(sig, args, captures)
+}
+
 // runPooledSub runs input on a pooled reusable sub-engine and returns a
 // caller-owned COPY of the results. It is the shared seam behind every
 // per-element sub-evaluation (higher-order bodies, list/paren/interp-hole

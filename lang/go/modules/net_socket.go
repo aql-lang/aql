@@ -422,7 +422,12 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 					fmt.Fprintf(connFork.ErrOutput, "[aql/net] serve-raw handler does not accept a Socket argument\n")
 					return
 				}
-				if _, hErr := connFork.CallAQL(sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
+				// Route through InvokeCallback: when the handler compiled to a
+				// unit (the common capture-free case) and this per-connection fork
+				// is idle, the body runs on the VM (RunUnit) — closing the ~19x
+				// interpreter penalty the networking benchmark measured — else it
+				// falls back to CallAQL, byte-identical.
+				if _, hErr := eng.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
 					// `closed` is the normal end of a connection; anything
 					// else is a real handler failure worth logging.
 					var ae *eng.AqlError

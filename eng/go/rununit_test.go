@@ -98,6 +98,40 @@ func TestRunUnitRejectsConcurrentRun(t *testing.T) {
 	}
 }
 
+// compileStoredFnUnit declines (fails safe) when it has no live EmitState /
+// registry to compile against — the defensive guards on the recorder-internal
+// path. A nil receiver and a reg-less state both return (0, false).
+func TestCompileStoredFnUnitGuards(t *testing.T) {
+	var nilES *EmitState
+	if _, ok := nilES.compileStoredFnUnit(FnDefInfo{}, SrcPos{}); ok {
+		t.Fatal("nil EmitState must decline")
+	}
+	if _, ok := (&EmitState{}).compileStoredFnUnit(FnDefInfo{}, SrcPos{}); ok {
+		t.Fatal("reg-less EmitState must decline")
+	}
+}
+
+// stampCompiledRef writes onto the first own AQL body sig and reports true; a fn
+// value with no own AQL body sig (all Go / all fallback) reports false.
+func TestStampCompiledRef(t *testing.T) {
+	ref := &CompiledFnRef{Prog: &Program{}, Unit: 0}
+	aqlFd := FnDefInfo{Signatures: []Signature{{Impl: &AQLImpl{Body: []Value{NewInteger(1)}}}}}
+	if !stampCompiledRef(aqlFd, ref) {
+		t.Fatal("an AQL body sig must accept the stamp")
+	}
+	if aqlFd.Signatures[0].CompiledRef() != ref {
+		t.Fatal("stamp did not land on the sig")
+	}
+	// A fallback-only sig is skipped; a Go sig has no *AQLImpl → no stamp.
+	goFd := FnDefInfo{Signatures: []Signature{
+		{Fallback: true, Impl: &AQLImpl{}},
+		{Impl: Go(func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) { return nil, nil })},
+	}}
+	if stampCompiledRef(goFd, ref) {
+		t.Fatal("a fn value with no own AQL body sig must not be stamped")
+	}
+}
+
 // CompiledRef reads the durable unit reference off an AQL body sig, and returns
 // nil for a Go sig (the callback-invocation seam's "no compiled unit" signal).
 func TestSignatureCompiledRef(t *testing.T) {
