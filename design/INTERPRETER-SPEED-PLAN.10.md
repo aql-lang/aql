@@ -10,17 +10,19 @@
 > re-splice buffer, #1A Value shrink (184→152 B). The allowlist churn a
 > mid-`engine.go` edit causes was handled by a diff-hunk delta
 > re-anchor rather than the proposed `covergate -reanchor` subcommand
-> (kept the coverage tool unchanged). #1A first moved the five immutable
-> integer lattice fields behind a shared `*typeMeta` (the safe,
-> orphan-pointer-proof subset), then a **follow-up also moved the leaf
-> `Name`** into the same `*typeMeta` (adding exported `SetName`/`Name`
-> accessors since external packages can no longer touch the field) —
-> Value is now **136 bytes** (184 → 152 → 136, −26%). Still available for
-> further duffcopy reduction: `Behavior` (16 B; type-node marker read at
-> ~100 dispatch-critical sites and mutated by `behave` — same `*typeMeta`
-> mechanism, higher risk), `Pos` (32 B, the largest single field; move
-> behind a pointer), and packing the seven bool flags + `Origin` into a
-> bitfield.
+> (kept the coverage tool unchanged). #1A shrank `Value` across a series
+> of five commits: first the five immutable integer lattice fields
+> (FixedID/Rank/Depth/In/Out) behind a shared `*typeMeta`, then `Name`,
+> then `Behavior` into the same `*typeMeta` (each with exported
+> `Set*` accessors since external packages can no longer touch the
+> fields), and separately `Pos` behind a `*SrcPos` pointer (nil = unknown,
+> threaded by pointer-copy so the hot path allocates none). **`Value` went
+> 184 → 152 → 136 → 112 → 96 bytes (−48%).** `Behavior` moving into the
+> shared `*typeMeta` also closed the orphan-`*Type` gap the CanonicalType
+> discipline works around (a `behave` rewrite is now visible through every
+> copy). Remaining headroom: packing the seven bool flags + `Origin` into
+> a bitfield (~7 B), and the 16-byte `ID` string (needed by type nodes and
+> the compile-time emitter, not runtime scalars).
 
 Companion to `design/INTERPRETER-SPEED-INVESTIGATION.10.md` (the data +
 diagnosis). This note is the **implementation plan**: for each root
