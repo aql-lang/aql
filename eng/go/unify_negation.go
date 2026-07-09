@@ -92,8 +92,8 @@ func (n *negationUnifier) Match(v Value, t *Type) bool {
 // existing Behavior. Called by InstallType when minting a negation type
 // so the complement drives every Is/Match call site.
 func installNegationUnifier(def *Type, inner Value, name string) {
-	def.Behavior = &negationUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &negationUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		inner:           inner,
 		typeName:        name,
 	}

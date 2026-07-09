@@ -169,7 +169,7 @@ func (s *surfaceUnifier) Format(v Value) string {
 // surface-typed carrier via the contract's shape.
 func SurfaceInfoOf(t *Type) (*SurfaceInfo, bool) {
 	for p := t; p != nil; p = p.Parent {
-		if su, ok := p.Behavior.(*surfaceUnifier); ok {
+		if su, ok := p.Behavior().(*surfaceUnifier); ok {
 			return su.info, true
 		}
 	}
@@ -179,8 +179,8 @@ func SurfaceInfoOf(t *Type) (*SurfaceInfo, bool) {
 // installSurfaceUnifier attaches a surfaceUnifier to def, wrapping any
 // existing Behavior. Called by InstallType when minting a surface type.
 func installSurfaceUnifier(def *Type, info *SurfaceInfo, name string) {
-	def.Behavior = &surfaceUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &surfaceUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		info:            info,
 		typeName:        name,
 	}

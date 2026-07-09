@@ -189,5 +189,5 @@ func IsValidXmlName(s string) bool {
 }
 
 func init() {
-	TXml.Behavior = xmlBehavior{}
+	TXml.ensureTMeta().Behavior = xmlBehavior{}
 }

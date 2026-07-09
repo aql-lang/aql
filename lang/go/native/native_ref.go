@@ -442,7 +442,7 @@ func recordGradualWrap(reg *Registry, word string, args, outs []Value) {
 	}
 	pos := eng.SrcPos{}
 	if len(args) > 0 {
-		pos = args[len(args)-1].Pos
+		pos = args[len(args)-1].Pos()
 	}
 	reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil)
 }

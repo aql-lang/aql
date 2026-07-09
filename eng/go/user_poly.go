@@ -202,7 +202,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 		}
 	}()
 	key := FnAnalysisKey(r.AnalysisScopeID(), word, genArgs, owner.Captured, body)
-	fnPos := body[0].Pos
+	fnPos := body[0].Pos()
 	unit, finishFn, ok := es.StartFnCompile(key, word, r, genArgs, declared, paramNames, owner.Captured, owner.Gen != nil, fnPos)
 	if !ok || unit < 0 {
 		return -1, false

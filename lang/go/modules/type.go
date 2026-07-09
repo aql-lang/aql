@@ -713,7 +713,7 @@ var typeModuleNatives = []native.NativeFunc{
 						"TypeUtil.brand: base must be a lattice-resident type", "brand")
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
-				anon.Name = "brand:" + tag
+				anon.SetName("brand:" + tag)
 				return []native.Value{native.NewTypeLiteral(anon)}, nil
 			}),
 			Returns: []*native.Type{native.TType}, BarrierPos: -1,

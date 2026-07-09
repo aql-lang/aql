@@ -32,11 +32,37 @@ type DefTable struct {
 	// or removed a binding the parked teardown would have sequenced
 	// differently (design/TCO-STAGED.10.md Stage 3).
 	mutations int64
+	// gen is a per-name monotone generation counter, bumped by `touch`
+	// whenever a name's binding stack changes (push / pop / replace /
+	// truncate / delete / set). It is the invalidation key for
+	// Registry.dispatchCache: a cached aggregate for a name is valid
+	// exactly while Gen(name) is unchanged. Unlike `mutations` (a single
+	// global count read by the TCO gate) this is per-name, so a param
+	// push for `n` does not invalidate the cached dispatch table for
+	// `add` — the property that makes the cache pay off in hot loops.
+	gen map[string]int64
 }
 
 // NewDefTable returns an empty def table ready for use.
 func NewDefTable() *DefTable {
-	return &DefTable{stacks: make(map[string][]DefEntry)}
+	return &DefTable{stacks: make(map[string][]DefEntry), gen: make(map[string]int64)}
+}
+
+// touch bumps name's generation counter. Called from every mutator that
+// changes name's binding stack; the bump is what invalidates a stale
+// Registry.dispatchCache entry for name.
+func (dt *DefTable) touch(name string) {
+	dt.gen[name]++
+}
+
+// Gen returns name's current generation counter (0 if never mutated).
+// Registry.Lookup compares this against its cached reading to decide
+// whether the cached dispatch aggregate is still valid.
+func (dt *DefTable) Gen(name string) int64 {
+	if dt == nil {
+		return 0
+	}
+	return dt.gen[name]
 }
 
 // Top returns the body of the most recent binding for name, or
@@ -72,6 +98,7 @@ func (dt *DefTable) Push(name string, v Value) {
 		return
 	}
 	dt.mutations++
+	dt.touch(name)
 	dt.stacks[name] = append(dt.stacks[name], DefEntry{Body: v})
 }
 
@@ -82,6 +109,7 @@ func (dt *DefTable) PushType(name string, def *Type, body Value) {
 		return
 	}
 	dt.mutations++
+	dt.touch(name)
 	dt.stacks[name] = append(dt.stacks[name], DefEntry{Body: body, TypeDef: def})
 }
 
@@ -105,6 +133,7 @@ func (dt *DefTable) PopEntry(name string) (DefEntry, bool) {
 		return DefEntry{}, false
 	}
 	dt.mutations++
+	dt.touch(name)
 	top := ds[len(ds)-1]
 	if len(ds) == 1 {
 		delete(dt.stacks, name)
@@ -179,6 +208,7 @@ func (dt *DefTable) Replace(name string, v Value) bool {
 	if len(ds) == 0 {
 		return false
 	}
+	dt.touch(name)
 	ds[len(ds)-1].Body = v
 	return true
 }
@@ -197,6 +227,7 @@ func (dt *DefTable) Truncate(name string, want int) {
 	if want >= len(ds) {
 		return
 	}
+	dt.touch(name)
 	if want == 0 {
 		delete(dt.stacks, name)
 		return
@@ -208,6 +239,9 @@ func (dt *DefTable) Truncate(name string, want int) {
 func (dt *DefTable) Delete(name string) {
 	if dt == nil {
 		return
+	}
+	if len(dt.stacks[name]) > 0 {
+		dt.touch(name)
 	}
 	delete(dt.stacks, name)
 }
@@ -222,6 +256,7 @@ func (dt *DefTable) Set(name string, bodies []Value) {
 	if dt == nil {
 		return
 	}
+	dt.touch(name)
 	if len(bodies) == 0 {
 		delete(dt.stacks, name)
 		return
@@ -293,6 +328,7 @@ func (dt *DefTable) Restore(snap map[string]int) {
 	for name := range dt.stacks {
 		want, ok := snap[name]
 		if !ok {
+			dt.touch(name)
 			delete(dt.stacks, name)
 			continue
 		}
@@ -317,5 +353,8 @@ func (dt *DefTable) Clone() *DefTable {
 		copy(cp, st)
 		stacks[name] = cp
 	}
-	return &DefTable{stacks: stacks}
+	// A fresh gen map (not copied): the clone starts its own generation
+	// timeline. dispatchCache is reset on the forked registry anyway
+	// (fork.go), so no cross-registry generation comparison occurs.
+	return &DefTable{stacks: stacks, gen: make(map[string]int64)}
 }

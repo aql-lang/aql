@@ -2807,13 +2807,13 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool 
 		// every event strictly before it (apply-last, the hoist) or strictly
 		// after it (apply-first — a continue in the applied body must skip
 		// them). A mid-body apply declines and keeps the refusal.
-		fnPos := bodyStk[0].Pos
+		fnPos := bodyStk[0].Pos()
 		if fnPos.Row == 0 && fnPos.Col == 0 {
 			// A folded args.N read loses its own position; the apply's ARG
 			// literals sit inside the same paren, so any of theirs stands in.
 			for _, a := range bodyStk[1:] {
-				if a.Pos.Row != 0 || a.Pos.Col != 0 {
-					fnPos = a.Pos
+				if a.Pos().Row != 0 || a.Pos().Col != 0 {
+					fnPos = a.Pos()
 					break
 				}
 			}
@@ -3392,7 +3392,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 					// with its captures. tryReturnedClosure declines (leaving es
 					// untouched) when a capture is unreachable or the body refuses,
 					// so an uncompilable handler still falls back faithfully.
-					if cop, cok := es.tryReturnedClosure(a, a.Pos); cok {
+					if cop, cok := es.tryReturnedClosure(a, a.Pos()); cok {
 						op, ok = cop, true
 					}
 				}
@@ -3628,7 +3628,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	if es.reg == nil || len(es.units) <= 1 {
 		return emitOperand{}, false
 	}
-	name := v.DynFrom
+	name := v.DynFrom()
 	if name == "" {
 		name = es.defReads[v.ID]
 	}
@@ -5784,8 +5784,8 @@ func replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 	}
 	anchor := SrcPos{}
 	for _, v := range window {
-		if v.Pos.Row > anchor.Row || (v.Pos.Row == anchor.Row && v.Pos.Col > anchor.Col) {
-			anchor = v.Pos
+		if v.Pos().Row > anchor.Row || (v.Pos().Row == anchor.Row && v.Pos().Col > anchor.Col) {
+			anchor = v.Pos()
 		}
 	}
 	if anchor.Row == 0 && anchor.Col == 0 {

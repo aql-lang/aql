@@ -193,7 +193,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 					args[i].Eval = false
 					args[i].Undefined = false
 				}
-				reps := make([]Value, e.shapedMethodReturnArity(sig, args, v.Pos))
+				reps := make([]Value, e.shapedMethodReturnArity(sig, args, v.Pos()))
 				for i := range reps {
 					reps[i] = NewDynamicCarrier(TAny)
 				}
@@ -226,7 +226,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	// returns, folds, contagion — identical to a real dispatch of the inner
 	// native) with the outcome seam routed to RecordDynMethod.
 	r.Check.PendingMethodApply = &PendingMethodApply{Origin: v, Word: fnDef.Name}
-	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos, nil, false)
+	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	if r.Check.PendingMethodApply != nil {
 		// Not consumed — an unexpected short-circuit upstream of the outcome
 		// seam. Decline wholesale; the carrier keeps today's paths.

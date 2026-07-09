@@ -47,8 +47,8 @@ func TestRunTypedBindRefineNoBuiltinAncestor(t *testing.T) {
 	r := seam7Reg(t)
 	// A refine target whose whole parent chain is OriginUserDef and terminates
 	// in nil has no builtin ancestor to unify against.
-	inner := &Type{Origin: OriginUserDef, Behavior: DefaultBehavior}
-	def := &Type{Origin: OriginUserDef, Parent: inner, Behavior: DefaultBehavior}
+	inner := &Type{Origin: OriginUserDef, tmeta: &typeMeta{Behavior: DefaultBehavior}}
+	def := &Type{Origin: OriginUserDef, Parent: inner, tmeta: &typeMeta{Behavior: DefaultBehavior}}
 	spec := &TypedBindSpec{Kind: TypedBindRefine, Name: "x", Describe: "Sub", Def: def}
 	_, err := RunTypedBind(r, spec, NewInteger(1))
 	tbErr(t, err, "refine subtype Sub has no builtin ancestor")

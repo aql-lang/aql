@@ -57,7 +57,7 @@ func TestFlexXmlRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FlexDeepCopy(xml2): %v", err)
 	}
-	if !TXml.Behavior.Equal(fx2, xml2) {
+	if !TXml.Behavior().Equal(fx2, xml2) {
 		t.Errorf("flex copy not Behavior-equal to its source element")
 	}
 }

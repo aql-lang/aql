@@ -51,7 +51,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 		taken := lit
 		es.Recorder().RecordBranch(BranchRecord{
 			ConstCond: &taken, HasElse: true,
-			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos,
+			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
 		return []Value{out}
 	}
@@ -82,7 +82,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 		es.Recorder().RecordBranch(BranchRecord{
 			Cond: args[0], HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
 		})
 		if !es.Recorder().Active() {
 			return nil
@@ -98,7 +98,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
 	})
 	return []Value{out}
 }

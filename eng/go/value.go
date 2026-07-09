@@ -1,16 +1,13 @@
 package eng
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1060,40 +1057,64 @@ type ForwardInfo struct {
 //   - "T_" for type/object values (Object/*, type literals, Any, None)
 //
 // Each ID is the prefix followed by 12 lowercase hex characters.
+//
+// Field order is chosen to eliminate alignment padding: the three
+// 16-byte fields (ID, DynFrom, Data) and the three pointers come first,
+// then every one-byte field is clustered at the tail so the seven bools
+// plus Origin pack into a single 8-byte-aligned run with no gaps. This is
+// a pure layout choice — fields are still accessed by name — and it took
+// the struct from 96 to 80 bytes on its own (design/
+// INTERPRETER-SPEED-PLAN.10.md #1A, bool-packing follow-up).
 type Value struct {
 	ID string
+	// Data is the kernel-known data payload; see payload.go for variants.
+	Data Payload
 
 	// Parent is the node directly above this one in the unified
 	// lattice: for an ordinary value it is the value's type, for a
 	// type node it is the supertype. nil only for lattice roots.
 	Parent *Type
+	// tmeta holds type-node metadata — the leaf Name, the five integer
+	// lattice fields (FixedID, Rank, Depth, In, Out), and the Behavior —
+	// behind ONE pointer instead of ~72 inline bytes on every Value. The
+	// struct is copied by value on every stack push, arg, and tape cell,
+	// so shrinking it cuts the interpreter's ~15% duffcopy cost (design/
+	// INTERPRETER-SPEED-PLAN.10.md #1A). These fields are set once at type
+	// registration, so a Value copy shares the SAME *typeMeta (an orphan
+	// `&v`-derived *Type reads the identical metadata as its canonical
+	// node — the property the old inline fields gave for free). Nil on
+	// ordinary runtime values; the Name/FixedID/Rank/Depth/In/Out/Behavior
+	// accessors return the zero value for nil. Writers go through
+	// ensureTMeta so a mint site that forgets to allocate one cannot
+	// nil-panic.
+	tmeta *typeMeta
+	// pos is the source position for error reporting, behind a pointer so
+	// the ~24 inline bytes of SrcPos (Row/Col/Src) don't ride on every
+	// Value copy — nil means "unknown" (design/INTERPRETER-SPEED-PLAN.10.md
+	// #1A, Pos follow-up). A position is minted once at parse time; the
+	// interpreter then THREADS it by copying the pointer (WithPos, the
+	// internal `.pos = other.pos` assignments), so no per-value SrcPos is
+	// allocated on the hot path and synthesized values (nil pos) carry
+	// none. The Src text is never mutated after parse, so sharing one
+	// *SrcPos across every copy of a value is sound. Read via Pos()
+	// (nil-safe, returns the zero SrcPos); external packages set it via
+	// SetPos since the field is unexported.
+	pos *SrcPos
+	// dynFrom is the binding name a dynamic carrier was resolved from
+	// (check mode ONLY — never read at runtime), behind a pointer so its
+	// 16-byte string doesn't ride on every runtime Value copy (nil for the
+	// overwhelming majority that are not check-mode dynamic carriers). It
+	// lets narrowing-through-use tighten that binding to dynamic(bound ∩
+	// slot) at a typed use so a later provably-disjoint use of the same
+	// name is caught. Read via DynFrom() (nil-safe), set via SetDynFrom.
+	dynFrom *string
 
-	// Type-lattice metadata — populated on type nodes, zero on
-	// ordinary values. A non-nil Behavior is the marker of a type
-	// node.
-	Name    string // type-node leaf name (e.g. "ProperString")
-	FixedID int    // >0 for builtin type nodes; 0 otherwise
-	Rank    int    // unified lattice rank — total order for CompareValues/compareTypes
-	Depth   int    // parent-chain length (root = 1); 0 = unset (ad-hoc *Type). Cached for typeDepth / LCA.
-	// In/Out are the DFS nested-set interval of a type node within the
-	// STATIC builtin lattice: In is the pre-order entry number, Out the
-	// largest entry number in the node's subtree. A descendant d of an
-	// ancestor a satisfies a.In <= d.In <= a.Out, so IsAncestor is an O(1)
-	// range test instead of a parent-chain walk. Assigned once by
-	// labelIntervals at builtin-table construction; 0 = unlabelled (minted,
-	// external, or ad-hoc types), which routes IsAncestor through the walk.
-	In         int
-	Out        int
-	IsInternal bool         // Word/__XX runtime markers — not user-facing
-	Origin     OriginKind   // builtin / userdef
-	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
-
-	// Payload and evaluation state — populated on ordinary values.
-	Data      Payload // the kernel-known data payload; see payload.go for variants
-	Quoted    bool    // produced by the quote word; prevents auto-evaluation
-	Eval      bool    // parser-created list that should auto-evaluate at end of Run
-	Pos       SrcPos  // source position for error reporting (zero value = unknown)
-	Undefined bool    // atom created from an undefined word (error if left on result stack)
+	// One-byte fields, clustered so they pack without padding.
+	IsInternal bool       // Word/__XX runtime markers — not user-facing
+	Origin     OriginKind // builtin / userdef
+	Quoted     bool       // produced by the quote word; prevents auto-evaluation
+	Eval       bool       // parser-created list that should auto-evaluate at end of Run
+	Undefined  bool       // atom created from an undefined word (error if left on result stack)
 	// FailedDispatch marks a named Function value that a dispatch
 	// attempt left on the stack as data because no signature matched
 	// (the silent-failure shape of design/ERRORS.8.md §5, VOXGIG T1).
@@ -1111,53 +1132,222 @@ type Value struct {
 	// carriers the checker cannot prove exactly (escape hatches); cleared
 	// by a successful guard, which discharges the gradual obligation.
 	Dynamic bool
-	// DynFrom is the binding name a dynamic carrier was resolved from
-	// (check mode only). It lets narrowing-through-use tighten that
-	// binding to dynamic(bound ∩ slot) at a typed use, so a later
-	// provably-disjoint use of the same name is caught. Empty for
-	// non-binding-derived carriers; never read at runtime.
-	DynFrom string
 }
 
-// idRand is the package-level RNG used for ID generation.
-// Defaults to time-seeded; can be overridden via SetIDSeed.
-//
-// idRandMu guards it: GenerateID is called from concurrently-running
-// engine forks (await branches, timer callbacks), and an *rand.Rand is
-// not safe for concurrent use. The mutex keeps ID generation race-free
-// without each call paying for its own RNG.
-var (
-	idRandMu sync.Mutex
-	idRand   = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
-)
+// typeMeta carries the integer lattice fields of a type node, held behind
+// Value.tmeta so ordinary values don't pay 40 inline bytes for metadata
+// only type nodes populate. All fields are assigned once at registration
+// (MintType / RegisterExternalBuiltin / the builtin-decl loop /
+// labelIntervals) and never mutated, so sharing one *typeMeta across
+// every copy of a type Value is sound.
+type typeMeta struct {
+	// Name is the type-node leaf name (e.g. "ProperString").
+	Name string
+	// Behavior is the type node's pluggable dispatch (Match/Format/Equal +
+	// optional capabilities); non-nil is the marker of a type node. A
+	// `behave` word rewrites it through the canonical *Type — and because
+	// every copy of a type Value shares this one *typeMeta, that rewrite is
+	// now visible through every copy, not just the canonical pointer (the
+	// orphan-*Type gap the CanonicalType discipline exists to paper over).
+	Behavior TypeBehavior
+	// FixedID is >0 for builtin type nodes; 0 otherwise. Baked into the
+	// serialised Value ID (formatFixedID).
+	FixedID int
+	// Rank is the unified lattice rank — the total order CompareValues /
+	// compareTypes use for every cross-type ordering.
+	Rank int
+	// Depth is the parent-chain length (root = 1); 0 = unset (ad-hoc
+	// *Type). Cached for typeDepth / LCA.
+	Depth int
+	// In/Out are the DFS nested-set interval of a type node within the
+	// STATIC builtin lattice: In is the pre-order entry number, Out the
+	// largest entry number in the node's subtree. A descendant d of an
+	// ancestor a satisfies a.In <= d.In <= a.Out, so IsAncestor is an O(1)
+	// range test instead of a parent-chain walk. Assigned once by
+	// labelIntervals at builtin-table construction; 0 = unlabelled
+	// (minted, external, or ad-hoc types), which routes IsAncestor through
+	// the walk.
+	In  int
+	Out int
+}
 
-// idMin is the minimum random value for generated IDs (0x100000000000).
+// ensureTMeta returns v's typeMeta, allocating it if absent. Writers of
+// the lattice integer fields call this so a mint site that did not
+// pre-allocate a typeMeta cannot nil-panic. v must be addressable (a
+// *Type or an addressable Value).
+func (v *Value) ensureTMeta() *typeMeta {
+	if v.tmeta == nil {
+		v.tmeta = &typeMeta{}
+	}
+	return v.tmeta
+}
+
+// SetName sets the type-node leaf name, allocating the typeMeta if
+// needed. Exported because the leaf name now lives behind the unexported
+// tmeta pointer, so external packages (lang, tests) that build or rename
+// an ad-hoc *Type node cannot assign the field directly.
+func (v *Value) SetName(name string) {
+	v.ensureTMeta().Name = name
+}
+
+// Behavior is the nil-safe read of the type node's pluggable dispatch —
+// nil for an ordinary value (no tmeta). A non-nil result is the marker of
+// a type node, exactly as the inline field was.
+func (v Value) Behavior() TypeBehavior {
+	if v.tmeta == nil {
+		return nil
+	}
+	return v.tmeta.Behavior
+}
+
+// SetBehavior installs the type node's Behavior, allocating the typeMeta
+// if needed. Exported because Behavior now lives behind the unexported
+// tmeta pointer (the `behave` word and behavior-registering init code set
+// it through here).
+func (v *Value) SetBehavior(b TypeBehavior) {
+	v.ensureTMeta().Behavior = b
+}
+
+// Pos returns the value's source position, or the zero SrcPos (Row/Col 0
+// = unknown) when none is set. Nil-safe read of the pos pointer.
+func (v Value) Pos() SrcPos {
+	if v.pos == nil {
+		return SrcPos{}
+	}
+	return *v.pos
+}
+
+// SetPos attaches a source position, allocating a *SrcPos. Internal eng
+// code threads a position without allocating by copying the pos pointer
+// directly (`v.pos = other.pos`, as WithPos does); SetPos is the exported
+// entry point for the parser and lang layer, where the field is not
+// reachable and a fresh position is being minted anyway.
+func (v *Value) SetPos(p SrcPos) {
+	v.pos = &p
+}
+
+// DynFrom returns the check-mode binding name a dynamic carrier was
+// resolved from, or "" when unset. Nil-safe read of the pointer.
+func (v Value) DynFrom() string {
+	if v.dynFrom == nil {
+		return ""
+	}
+	return *v.dynFrom
+}
+
+// SetDynFrom records (name != "") or clears (name == "") the dynamic
+// carrier's origin binding. A check-mode-only path, so the *string it
+// allocates is off the runtime hot path.
+func (v *Value) SetDynFrom(name string) {
+	if name == "" {
+		v.dynFrom = nil
+		return
+	}
+	v.dynFrom = &name
+}
+
+// Name is the nil-safe read of the type-node leaf name — "" for an
+// ordinary value (no tmeta), matching the old empty inline field.
+func (v Value) Name() string {
+	if v.tmeta == nil {
+		return ""
+	}
+	return v.tmeta.Name
+}
+
+// FixedID / Rank / Depth / In / Out are nil-safe reads of the lattice
+// integer fields — 0 when tmeta is absent (every ordinary runtime value,
+// where these were always zero when they were inline fields).
+func (v Value) FixedID() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.FixedID
+}
+
+func (v Value) Rank() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Rank
+}
+
+func (v Value) Depth() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Depth
+}
+
+func (v Value) In() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.In
+}
+
+func (v Value) Out() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Out
+}
+
+// idState is the package-level ID source: a monotone atomic counter
+// whose successive values are run through a splitmix64 finalizer to
+// spread them across the 48-bit ID space. This is LOCK-FREE — GenerateID
+// is called from concurrently-running engine forks (await branches,
+// timer callbacks) on the interpreter's hot path, and the previous
+// mutex-guarded *rand.Rand serialized every value mint. An atomic
+// increment is contention-free; the splitmix64 mix keeps IDs
+// well-distributed (not visibly sequential) and collision-free within a
+// process. SetIDSeed(s) sets the counter to s, so a given seed
+// reproduces the same ID stream (the determinism Options.Seed relies on).
+var idState atomic.Uint64
+
+func init() { idState.Store(uint64(time.Now().UnixNano())) }
+
+// idMin is the minimum value for generated IDs (0x100000000000): its top
+// hex nibble is non-zero so every ID is a full 12 hex characters.
 const idMin uint64 = 0x100000000000
 
-// idMax is the exclusive upper bound so values fit in 12 hex chars.
+// idMax is the exclusive span above idMin so values fit in 12 hex chars.
 const idMax uint64 = 0x1000000000000 - 0x100000000000
 
-// SetIDSeed configures the package-level RNG with the given seed.
+// SetIDSeed reseeds the ID counter so the mint stream is reproducible.
 func SetIDSeed(seed int64) {
-	idRandMu.Lock()
-	defer idRandMu.Unlock()
-	idRand = rand.New(rand.NewPCG(uint64(seed), 0))
+	idState.Store(uint64(seed))
 }
 
+// splitmix64 finalizer — a well-distributed bijective mix, so a monotone
+// counter yields non-sequential, collision-free outputs.
+func mixID(x uint64) uint64 {
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	x *= 0x94d049bb133111eb
+	x ^= x >> 31
+	return x
+}
+
+const idHexDigits = "0123456789abcdef"
+
 // GenerateID creates a unique ID with the given prefix followed by 12
-// lowercase hex characters. The random value is >= 0x100000000000.
+// lowercase hex characters (value >= 0x100000000000). Lock-free, and
+// assembles prefix+hex in a single heap allocation (strings.Builder's
+// Grow'd buffer) instead of the previous hex-encode-then-concat pair.
 func GenerateID(prefix string) string {
-	idRandMu.Lock()
-	n := idMin + idRand.Uint64N(idMax)
-	idRandMu.Unlock()
-	var buf [6]byte
-	buf[0] = byte(n >> 40)
-	buf[1] = byte(n >> 32)
-	buf[2] = byte(n >> 24)
-	buf[3] = byte(n >> 16)
-	buf[4] = byte(n >> 8)
-	buf[5] = byte(n)
-	return prefix + hex.EncodeToString(buf[:])
+	n := idMin + mixID(idState.Add(1))%idMax
+	var hb [12]byte
+	for i := 11; i >= 0; i-- {
+		hb[i] = idHexDigits[n&0xf]
+		n >>= 4
+	}
+	var sb strings.Builder
+	sb.Grow(len(prefix) + 12)
+	sb.WriteString(prefix)
+	sb.Write(hb[:])
+	return sb.String()
 }
 
 // IDPrefixForType returns the ID prefix for a given type:
@@ -1172,8 +1362,8 @@ func IDPrefixForType(t *Type) string {
 		return "T_"
 	}
 	for d := t; d != nil; d = d.Parent {
-		if d.Parent == nil || d.Parent.FixedID == anyFixedID {
-			switch d.Name {
+		if d.Parent == nil || d.Parent.FixedID() == anyFixedID {
+			switch d.Name() {
 			case "Scalar":
 				return "S_"
 			case "Node":
@@ -1578,10 +1768,10 @@ func (v Value) Is(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	if t.Behavior == nil {
+	if t.Behavior() == nil {
 		return v.Parent.ConformsTo(t)
 	}
-	return t.Behavior.Match(v, t)
+	return t.Behavior().Match(v, t)
 }
 
 // IsNone reports whether v is the value `none` (not the None type
@@ -1804,6 +1994,14 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 type DefCleanupInfo struct {
 	Snapshot map[string]int
 	Registry *Registry
+	// SkipCleanup marks a frame whose body provably installs no
+	// body-local defs (buildFnBodyHandler's bodyNeedsFrameState analysis):
+	// the marker stays on the tape so the frame shape and the
+	// break/continue unwind and TCO paths are unchanged, but stepDefCleanup
+	// short-circuits and no Snapshot map is allocated. With no body-local
+	// defs the truncation would remove nothing, so TCO treats the frame as
+	// eagerly-teardown-eligible without consulting the (nil) Snapshot.
+	SkipCleanup bool
 }
 
 // NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
@@ -2723,13 +2921,13 @@ func (v Value) String() string {
 	// kernelFormatDefault.
 	if v.Data != nil && v.Parent != nil {
 		for t := v.Parent; t != nil; t = t.Parent {
-			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+			if t.Behavior() == nil || t.Behavior() == DefaultBehavior {
 				continue
 			}
-			if delegatesFormat(t.Behavior) {
+			if delegatesFormat(t.Behavior()) {
 				continue
 			}
-			return t.Behavior.Format(v)
+			return t.Behavior().Format(v)
 		}
 	}
 	return kernelFormatDefault(v)

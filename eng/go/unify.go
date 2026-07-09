@@ -157,8 +157,8 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 	case v.Parent != nil && v.Parent.ConformsTo(TAtom) && v.Data != nil:
 		w, _ := AsAtom(v)
 		name = w
-	case IsBareTypeNode(v) && v.ID != "" && v.Name != "":
-		name = v.Name
+	case IsBareTypeNode(v) && v.ID != "" && v.Name() != "":
+		name = v.Name()
 	case isPredicateFnValue(v):
 		// Direct FnDef body — try the FnDef's Name field. Predicate
 		// types installed via `def Pos fn […]` carry Name="Pos" on
@@ -190,7 +190,7 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 	if def == nil {
 		return nil, false
 	}
-	if _, ok := def.Behavior.(*predicateUnifier); !ok {
+	if _, ok := def.Behavior().(*predicateUnifier); !ok {
 		return nil, false
 	}
 	return def, true
@@ -213,7 +213,7 @@ func disjunctHasPredicate(disj DisjunctInfo) bool {
 // the node's type literal, so predicateUnifier.Unify admits it iff the
 // predicate body accepts (via the shared unifyMembership contract).
 func unifyResolvedPredicate(def *Type, candidate Value) (Value, *UnifyError) {
-	pu, ok := def.Behavior.(*predicateUnifier)
+	pu, ok := def.Behavior().(*predicateUnifier)
 	if !ok {
 		return Value{}, unifyFail("not a predicate type", candidate, NewTypeLiteral(def))
 	}

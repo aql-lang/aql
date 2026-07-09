@@ -86,8 +86,8 @@ func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 // any existing Behavior. Called by InstallType when minting a predicate
 // type so the constraint runs at every Unify call site.
 func installPredicateUnifier(def *Type, constraint Value, r *Registry, name string) {
-	def.Behavior = &predicateUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &predicateUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		registry:        r,
 		constraint:      constraint,
 		typeName:        name,
