@@ -126,11 +126,52 @@ time (`vmContext.callPolyIn`) — the same first-match the interpreter takes.
 ### (e) Genuinely uncompilable body → **whole-program interpreter fallback**
 
 If the body neither compiles to a closure nor bakes as an inert const nor
-islands (e.g. it splices tape-coupled tokens, or a computed body carrier the
-checker can't materialise), the whole program falls back to the interpreter
-silently under `--compile`, or aborts with the refusal reason under
-`--force-compile` (`RunCompiledStrict`, `lang/go/aql.go`). None of the common
-`do` forms hit this — the closure and inert-const paths cover them.
+islands, the whole program falls back to the interpreter silently under
+`--compile`, or aborts with the refusal reason under `--force-compile`
+(`RunCompiledStrict`, `lang/go/aql.go`).
+
+**`do [ … ]` does NOT always natively compile** — and it doesn't need to, because
+the fallback is the interpreter, which produces the identical result. The body
+refuses whenever it contains a construct the VM has no representation for —
+principally **tape-coupled re-stepping tokens**:
+
+```
+def xs [add 1 2]  do [word xs]         # → 3   (correct, but INTERPRETED)
+do [def d [add]  word d 1 2]           # → runs on the interpreter
+```
+
+Both abort under `--force-compile` with **`code-body word do (Stage 2)`**. The
+`word` splice (`__SP`) contributes tokens that are re-stepped against the live
+stack (`eng/go/CLAUDE.md` "Quotation System" → splice); a `var [[…] …]` block in
+the body (`CompileExecutesBody`) likewise splices `def`/`body`/`undef` tape
+tokens. Neither can be a compiled closure, so `do` refuses to lower and the
+program runs on the interpreter. The guarantee is therefore **"`do` always runs
+correctly," not "`do` always compiles."** The differential gate proves the two
+engines agree on the result either way.
+
+### 2b. `do [ … ] error [ … ]` — the try/catch combinator
+
+`error [handler]` (sig `[List Any]`, `BarrierPos 1`) takes the **preceding stack
+value**: if it is an `Error` the handler runs (with the error on the stack) to
+produce a fallback, otherwise the value passes through. Paired with `do` it is
+AQL's try/catch, and it compiles to **two paired closures**:
+
+```
+do [raise boom "kaboom"] error [drop "recovered"]
+0000 PUSH_CLOSURE f0   ; closure do$body/0      ← body: raises, compiled with NO RET
+0001 CALL_NATIVE  s0   ; do (List)              ← traps the raise → Error VALUE on the stack
+0002 PUSH_CLOSURE f1   ; closure error$body/1   ← handler; local [_] = the trapped value
+0003 CALL_NATIVE  s1   ; error (List, Any)      ← recovers → "recovered"
+```
+
+`do`'s handler turns the propagated raise into an `Error` value (strategy (b),
+no RET); `error`'s handler closure binds that value as its single unnamed local
+`[_]` and runs. Both dispatch as ordinary `PUSH_CLOSURE` + `CALL_NATIVE`. Note
+that `error`'s result type merges the passthrough value with the handler result,
+so it is `dynamic(Any)`: a word chained after it (`… error [drop 0] add 5`)
+lowers to `CALL_NATIVE_POLY` (re-dispatched at run time), still byte-identical to
+the interpreter. Verified across `raise`, `div 0`, no-error passthrough, and
+trailing-arithmetic variants.
 
 ## 3. Static typing of the body (`doListReturnsFn`)
 
@@ -173,6 +214,9 @@ param, and every divergence/trap case:
 | `do [each [mul 2] [1 2 3]]` | `[2 4 6]` | closure over a nested closure |
 | `def bump fn [[x:Integer] [Integer] [do [x add 100]]]  bump 5` | `105` | closure **capturing** enclosing param `x` |
 | `do [do [raise x "e"]]` | `error(e)` | inner traps → Error, outer returns it |
+| `do [raise boom "kaboom"] error [drop "recovered"]` | `recovered` | paired closures (try/catch) |
+| `do [1 div 0] error [drop -1]` | `-1` | paired closures (try/catch) |
+| `def xs [add 1 2]  do [word xs]` | `3` | **refuses** → interpreter fallback |
 
 The capture case disassembles to a `do$body/1` unit with `[x]` local that the
 enclosing `bump/1` frame supplies via `PUSH_LOCAL` before `PUSH_CLOSURE` —
@@ -180,10 +224,13 @@ lexical capture flows through the closure boundary correctly.
 
 ## 5. Summary
 
-`do [ … ]` compilation is **sound and complete over its common forms**, with the
-recorder choosing among four native strategies (single-value closure, diverging
-closure with no RET, baked inert-const list, and Map poly) and falling back to
-the interpreter only for genuinely irreducible bodies. The single
-`InvokeBody`/`doListHandler` seam is what keeps the trap-and-return semantics
-byte-identical across the interpreter and the VM. No defects were found during
-this investigation.
+`do [ … ]` does **not** always natively compile — a body carrying tape-coupled
+re-stepping tokens (`word` splices, `var` blocks) refuses and the whole program
+falls back to the interpreter. What *is* guaranteed is that `do` always **runs
+correctly**: the recorder chooses among four native strategies (single-value
+closure, diverging closure with no RET, baked inert-const list, and Map poly)
+when it can, and the interpreter is the correctness backstop when it can't. The
+`do [ … ] error [ … ]` try/catch idiom compiles as two paired closures. The
+single `InvokeBody`/`doListHandler` seam is what keeps the trap-and-return
+semantics byte-identical across the interpreter and the VM. No defects were
+found during this investigation.
