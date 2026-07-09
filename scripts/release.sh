@@ -38,15 +38,40 @@ next_patch() {
   echo "${v%%.*}.$(echo "$v" | cut -d. -f2).$(( $(echo "$v" | cut -d. -f3) + 1 ))"
 }
 
+# edit_module runs a go.mod-rewriting function only for a real release; in a
+# dry run it prints the intent and leaves the working tree untouched.
+edit_module() { # $1 = description, $2 = function name
+  if [ "$DRY_RUN" = 1 ]; then echo "  [dry-run] $1"; else "$2"; fi
+}
+
 # ---- preflight ----
 [ -z "$(git status --porcelain)" ] || { echo "ERROR: working tree not clean"; exit 1; }
 [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || { echo "ERROR: releases run from main"; exit 1; }
+# Fetch tags so next_patch sees releases cut on another machine / in CI —
+# otherwise a fresh or shallow checkout recomputes a stale (or duplicate) patch.
+git fetch --tags --quiet origin || true
 
 ENGV=$(next_patch eng/go); LANGV=$(next_patch lang/go); CMDV=$(next_patch cmd/go)
 echo "==> Releasing  eng/go v$ENGV  ·  lang/go v$LANGV  ·  cmd/go v$CMDV"
 
-echo "==> Full test suite (release gate)"
-make test
+if [ "$DRY_RUN" = 1 ]; then
+  echo "==> [dry-run] skipping the full test gate"
+else
+  echo "==> Full test suite (release gate)"
+  make test
+fi
+
+# The actual go.mod surgery, run only for a real release (see edit_module).
+lang_pin() { ( cd lang/go
+  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go
+  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV"
+  GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
+cmd_pin() { ( cd cmd/go
+  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go -dropreplace=github.com/aql-lang/aql/lang/go
+  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV" -require="github.com/aql-lang/aql/lang/go@v$LANGV"
+  # Version lives in cmd/go/main.go (aql/main.go is a thin entrypoint).
+  perl -i -pe 's{(^var Version = )"[^"]*"}{$1"'"$CMDV"'"}' main.go
+  GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 
 # ---- eng/go (leaf: no sibling deps, no go.mod change) ----
 echo "==> eng/go v$ENGV"
@@ -55,10 +80,7 @@ run "git push origin eng/go/v$ENGV"
 
 # ---- lang/go (requires eng/go) ----
 echo "==> lang/go v$LANGV"
-( cd lang/go
-  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go
-  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV"
-  GOFLAGS=-mod=mod GOWORK=off go mod tidy )
+edit_module "cd lang/go: drop eng replace, pin eng@v$ENGV, go mod tidy" lang_pin
 run "git add lang/go/go.mod lang/go/go.sum"
 run "git commit -m 'lang/go: v$LANGV (eng/go v$ENGV)'"
 run "git tag lang/go/v$LANGV"
@@ -66,12 +88,8 @@ run "git push origin main lang/go/v$LANGV"
 
 # ---- cmd/go (requires eng/go + lang/go) ----
 echo "==> cmd/go v$CMDV"
-( cd cmd/go
-  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go -dropreplace=github.com/aql-lang/aql/lang/go
-  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV" -require="github.com/aql-lang/aql/lang/go@v$LANGV"
-  perl -i -pe 's{(^var Version = )"[^"]*"}{$1"'"$CMDV"'"}' aql/main.go 2>/dev/null || true
-  GOFLAGS=-mod=mod GOWORK=off go mod tidy )
-run "git add cmd/go/go.mod cmd/go/go.sum cmd/go/aql/main.go"
+edit_module "cd cmd/go: drop eng+lang replaces, pin versions, stamp Version=$CMDV, go mod tidy" cmd_pin
+run "git add cmd/go/go.mod cmd/go/go.sum cmd/go/main.go"
 run "git commit -m 'cmd/go: v$CMDV (eng/go v$ENGV, lang/go v$LANGV)'"
 run "git tag cmd/go/v$CMDV"
 run "git push origin main cmd/go/v$CMDV"
