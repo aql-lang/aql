@@ -266,7 +266,7 @@ def redis-connect fn [[addr:String] [Any] [
 ]]
 
 # Send one inline command; returns the reply line.
-def redis-cmd fn [[ep:Any line:String] [String] [
+def redis-cmd fn [[ep:Service line:String] [String] [
   def reply (call {line: line} ep {timeout: 10000})
   reply.line
 ]]

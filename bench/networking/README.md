@@ -94,9 +94,11 @@ cmd/go/bin/aql run -no-compile -install network bench/networking/apps/echo_redis
 # …and echo_s3.aql / echo_todo.aql
 ```
 
-(The drivers pass the default pre-flight check. `echo_redis.aql` uses `;`
-statement separators in and after its `for` body to avoid a checker
-false-positive — see `design/CHECK-FALSE-POSITIVES.0.md`.)
+(All three drivers pass the default pre-flight check and run without
+`-no-check`. An earlier checker false-positive on `echo_redis.aql` was traced to
+mini-redis's connection parameter being typed `Any`; it is now typed `Service`
+(its real type), which resolves the check — see
+`design/CHECK-FALSE-POSITIVES.0.md`.)
 
 | App | tier | compiled | interpreted | speedup |
 |---|---|--:|--:|--:|
@@ -116,7 +118,9 @@ handler refuses to compile for a distinct, still-open compiler-frontier reason
 - **todo-api** — `branch leaves extra values (Stage 2 lowers single-result
   branches)` (a handler `if`-arm nets more than one value — the same lowering
   leaf tracked for the sort library).
-- **mini-redis** — a check diagnostic blocks the whole-program compile.
+- **mini-redis** — the compile pass still trips a distinct false positive
+  (`undefined_word: expires` inside a `state:Any` service-handler lambda; see
+  `design/CHECK-FALSE-POSITIVES.0.md` "Remaining"). It does not block `aql run`.
 
 So the compilation win is currently **narrow**: it applies to callback bodies in
 the compilable subset (echo, spawn/service handlers with core bodies), not yet to
