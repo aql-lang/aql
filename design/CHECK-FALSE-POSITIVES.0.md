@@ -85,7 +85,28 @@ a loop body and after a `for` that a later statement reads across. This lets the
 `bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
 (dropping `-no-check`). It is a workaround, not the fix.
 
-### Localised to the ARMED loop-capture path (not "statement boundaries")
+### CORRECTION: it is NOT the armed loop-capture path either
+
+A fix attempt against `AnalyseLoopBody`'s armed (`loopCapture`) path was built and
+REVERTED: instrumentation proved `loopCapture == false` in the plain-check pass
+that actually blocks `aql run` (the pre-flight is `(*AQL).Check`, which does not
+arm the recorder), so gating a fix on `loopCapture` is a no-op there. The
+"armed-only artifact" hypothesis below is therefore WRONG for the blocking path
+and is retained only as a record of a dead end.
+
+What IS confirmed: the discriminator is a **statically-counted `for`**
+(`staticBounds`, e.g. `for 3`), not a dynamic-count `for`, `do`, or `if` — and
+`AnalyseLoopBody` receives an IDENTICAL entry (`iter=i:Integer`, `loopCapture=false`)
+for both `for 3` and `for n`, so the divergence is in the `for` handler's
+static-count handling, not in `AnalyseLoopBody` itself. The prime remaining lead:
+the plain-check STATIC-COUNT residual SPREAD (`native_control.go:1030-1038`) that
+repeats the body's residual `count` times — a module-fn-VALUE residual left by a
+body dispatch would be multiplied and mis-collected. The failing `no_signature`
+also stack-traces to a TOP-LEVEL `execFnDefLiteral` (no `for`/`AnalyseLoopBody`
+frame), consistent with the spread leaving residual fn-values on the top-level
+stack. This was not pinned to a fix; the `;` workaround remains the resolution.
+
+### [DEAD END] Earlier hypothesis: the ARMED loop-capture path (disproven above)
 
 Further bisection (read-only, this session) narrows it precisely, and corrects the
 earlier "implicit statement boundary" framing:
