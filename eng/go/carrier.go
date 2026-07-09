@@ -721,6 +721,20 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	// `args` has no foldable consumer and refuses at its use site. At top level
 	// r.Args is empty so `args` falls through to RecordCall's refusal.
 	if word == "args" {
+		// Inside a CLOSURE body compile the projection must DECLINE: the
+		// analysis args frame there holds the CallableSpec inputs (empty for
+		// `do`), while at run time the body executes through InvokeBody in
+		// the ENCLOSING call context, so the interpreter's `args` reads the
+		// enclosing fn's per-call list. Projecting the closure frame baked
+		// that wrong (often empty) list as an inert const — `do [args]`
+		// inside a fn compiled to PUSH_CONST [] against the interpreter's
+		// [7]. Falling through reaches RecordCall's context-dependent-word
+		// refusal, the closure probe declines, and the program takes the
+		// interpreter fallback with the correct value. A plain (non-
+		// recording) check keeps the projection so diagnostics are unchanged.
+		if es, isEmit := r.Check.Recorder().(*EmitState); isEmit && es.active() && es.inClosureUnit() {
+			return nil, false
+		}
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
 			// In compile mode `args.N` folds to a frame local (PUSH_LOCAL N)
 			// for named AND unnamed params alike: an unnamed param is a
@@ -1700,6 +1714,17 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 			// it correctly. (Sentinels targeting a loop WITHIN the body are
 			// rarer than this conservative rule loses; the gate stays
 			// green either way.)
+			free = false
+			return
+		case "args", "__pa":
+			// Context-dependent words read the interpreter's per-call args
+			// stack, which the VM's CALL_USER frames do not maintain (params
+			// are frame locals). An island's sub-engine inside a compiled fn
+			// would therefore see an EMPTY args stack where the interpreter
+			// sees the enclosing call's list — `do [args]` in a fn islanded
+			// to error(args_error) against the interpreter's [7]. Refuse so
+			// the whole program falls back (the same divergence RecordCall's
+			// context-dependent-word gate refuses for direct dispatches).
 			free = false
 			return
 		}

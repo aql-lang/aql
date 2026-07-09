@@ -537,6 +537,14 @@ type EmitState struct {
 	// may already have advanced past a memoised body analysis by the time
 	// the unit finish resolves its residual).
 	unitNames []string
+	// openUnitRecs parallels the open-unit stack with each unit's fnRecs
+	// INDEX (units[0], the top level, has no rec and no entry here), so a
+	// mid-body dispatch can ask what KIND of unit it is recording into —
+	// specifically whether the innermost open unit is a CLOSURE body
+	// (inClosureUnit), where the `args` frame projection must decline: the
+	// closure's analysis args frame is the CallableSpec inputs, not the
+	// enclosing fn's per-call args the interpreter reads at run time.
+	openUnitRecs []int
 
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
@@ -775,7 +783,29 @@ func (es *EmitState) forkForProbe() *EmitState {
 	copy(p.fnRecs, es.fnRecs)
 	p.units = make([]*emitUnit, len(es.units))
 	copy(p.units, es.units)
+	p.openUnitRecs = make([]int, len(es.openUnitRecs))
+	copy(p.openUnitRecs, es.openUnitRecs)
 	return p
+}
+
+// inClosureUnit reports whether the innermost OPEN fn unit is a CLOSURE body
+// (a higher-order word's each/do$body unit — compileClosureBody stamps
+// rec.closure before running the body analysis, so the flag is visible to
+// every dispatch the body records). Body dispatches with frame-context
+// semantics consult this: the `args` projection (specialWordResults) reads
+// the analysis args frame, which for a closure holds the CallableSpec inputs
+// — NOT the enclosing fn's per-call args the interpreter reads when the body
+// runs through InvokeBody — so the projection must decline and let the
+// dispatch fall to RecordCall's context-dependent-word refusal.
+func (es *EmitState) inClosureUnit() bool {
+	if es == nil || len(es.openUnitRecs) == 0 {
+		return false
+	}
+	rec := es.openUnitRecs[len(es.openUnitRecs)-1]
+	if rec < 0 || rec >= len(es.fnRecs) {
+		return false
+	}
+	return es.fnRecs[rec].closure
 }
 
 func (es *EmitState) active() bool {
@@ -2451,6 +2481,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), reg: fnReg}
 	es.units = append(es.units, u)
 	es.unitNames = append(es.unitNames, name)
+	es.openUnitRecs = append(es.openUnitRecs, unit)
 	for _, a := range args {
 		es.RegisterLocal(a.ID)
 	}
@@ -2675,6 +2706,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 		rec.finished = true
 		es.units = es.units[:len(es.units)-1]
 		es.unitNames = es.unitNames[:len(es.unitNames)-1]
+		es.openUnitRecs = es.openUnitRecs[:len(es.openUnitRecs)-1]
 	}
 	return unit, finish, true
 }
