@@ -517,7 +517,8 @@ aql vault add --from-clipboard github_token   # read from clipboard, then wipe i
 aql vault add --from-stdin github_token       # read one line from stdin
 aql vault add github_token                     # prompt (input not echoed)
 aql vault add --expiry=90d --from-stdin github_token  # optional expiry reminder
-aql vault list                          # aliases and metadata (incl. EXPIRES)
+aql vault add --ip-whitelist=10.0.0.0/8,203.0.113.7 --from-stdin ci_key  # restrict proxy use to these client IPs/CIDRs
+aql vault list                          # aliases and metadata (incl. EXPIRES, IP-WHITELIST)
 aql vault get github_token              # redacted by default
 aql vault get github_token --reveal     # show the value
 aql vault expiry                        # list pending key expiries, soonest first
@@ -574,6 +575,18 @@ A few modes that need more than one line:
   prompt). `--revoke-caps` additionally revokes every capability
   scoped to the alias — the incident-response move when a token leaks.
   `--expiry` updates the reminder; omit it to keep the current one.
+  `--ip-whitelist` updates the IP allowlist (below); a *present but
+  empty* `--ip-whitelist=` clears it, omitting it keeps the current one.
+
+- **`--ip-whitelist`** (on `add` / `rotate`) is an optional per-key
+  allowlist of client source IPs or CIDR blocks (comma-separated, e.g.
+  `10.0.0.0/8,203.0.113.7`; IPv4 and IPv6). It is **enforced by the
+  credential broker** (`vault proxy`): a proxy request for a
+  whitelisted key from an IP outside the list is denied `403`. It does
+  **not** affect host-side `vault get` / `vault exec` (which have no
+  client IP), and only bites once the proxy is bound off-loopback
+  (`proxy --allow-public`). An empty whitelist means no restriction.
+  Shown in `vault list` (the `IP-WHITELIST` column) and the TUI detail.
 
 - **`lock` / `unlock`** flip a flag in the store that blocks `get` and
   `grant` (and most mutations) without destroying anything — useful

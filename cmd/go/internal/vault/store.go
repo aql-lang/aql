@@ -29,6 +29,14 @@ type Alias struct {
 	// for rotation. It is never enforced: an expired alias still
 	// resolves, since the secret may well outlive the recorded estimate.
 	ExpiresAt string `json:"expires_at,omitempty"`
+	// IPWhitelist is an optional allowlist of client source IPs (bare IPs
+	// or CIDR blocks) permitted to use this secret through the `proxy`
+	// credential broker. Empty means no restriction. Unlike ExpiresAt it
+	// IS enforced — a proxy request for this alias from an IP outside the
+	// list is denied — but only at the broker: `vault get` / `exec` on the
+	// host itself are unaffected, and it only bites once the proxy is
+	// bound off-loopback (`proxy --allow-public`).
+	IPWhitelist []string `json:"ip_whitelist,omitempty"`
 }
 
 // Capability is a short-lived, scoped permission to use one alias.
@@ -339,6 +347,12 @@ func (s *Store) UpsertAlias(a Alias) {
 		s.Aliases[idx].Source = a.Source
 		if a.ExpiresAt != "" {
 			s.Aliases[idx].ExpiresAt = a.ExpiresAt
+		}
+		// nil = "not supplied" (preserve on re-add); a non-nil slice
+		// (including an explicit empty one) replaces, so the whitelist can
+		// be updated or cleared without disturbing an untouched one.
+		if a.IPWhitelist != nil {
+			s.Aliases[idx].IPWhitelist = a.IPWhitelist
 		}
 		s.Aliases[idx].UpdatedAt = now
 		return

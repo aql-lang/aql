@@ -427,16 +427,22 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	provider := fs.String("provider", "", "tag this secret with a provider (openai, anthropic, github, ...)")
 	namespace := fs.String("namespace", "", "store under this namespace (same as the ns: prefix; ':' = root)")
 	expiry := fs.String("expiry", "", "optional expiry reminder: YYYY-MM-DD, an RFC3339 timestamp, or a duration like 90d / 720h")
+	ipWhitelist := fs.String("ip-whitelist", "", "comma-separated client IPs/CIDRs allowed to use this secret via the proxy (empty = no restriction)")
 	yes := fs.Bool("yes", false, "confirm overwriting an existing secret non-interactively")
 	fs.BoolVar(yes, "y", false, "confirm overwriting an existing secret non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] [--expiry=WHEN] <[ns:]alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] [--expiry=WHEN] [--ip-whitelist=IPs] <[ns:]alias>\n")
 		return 1
 	}
 	expiresAt, err := parseExpiryFlag(*expiry)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	ipwl, err := parseIPWhitelist(*ipWhitelist)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -510,11 +516,12 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 			return errLocked
 		}
 		s.UpsertAlias(Alias{
-			Name:      alias,
-			Provider:  *provider,
-			Namespace: ns, // derived from the name so the two can't disagree
-			Source:    source,
-			ExpiresAt: expiresAt,
+			Name:        alias,
+			Provider:    *provider,
+			Namespace:   ns, // derived from the name so the two can't disagree
+			Source:      source,
+			ExpiresAt:   expiresAt,
+			IPWhitelist: ipwl,
 		})
 		return nil
 	}); err != nil {
@@ -529,6 +536,9 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	fmt.Fprintf(stdout, "stored %s (backend=%s, %d bytes)\n", alias, sess.Keyring().Name(), len(value))
 	if expiresAt != "" {
 		fmt.Fprintf(stdout, "  expires %s\n", expiresAt)
+	}
+	if len(ipwl) > 0 {
+		fmt.Fprintf(stdout, "  ip-whitelist %s\n", strings.Join(ipwl, ", "))
 	}
 	// Only wipe the clipboard once the secret is safely persisted, so a
 	// storage failure leaves the value available for the user to retry.
@@ -680,15 +690,24 @@ func runList(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "(no aliases)")
 		return 0
 	}
-	fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %s\n", "ALIAS", "PROVIDER", "NAMESPACE", "CREATED", "EXPIRES", "SOURCE")
+	fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %-20s %s\n", "ALIAS", "PROVIDER", "NAMESPACE", "CREATED", "EXPIRES", "SOURCE", "IP-WHITELIST")
 	for _, a := range aliases {
 		if nsFiltered && aliasNamespace(a) != nsFilter {
 			continue
 		}
-		fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %s\n",
-			a.Name, dash(a.Provider), dash(aliasNamespace(a)), a.CreatedAt, dash(a.ExpiresAt), dash(a.Source))
+		fmt.Fprintf(stdout, "%-24s %-12s %-16s %-20s %-20s %-20s %s\n",
+			a.Name, dash(a.Provider), dash(aliasNamespace(a)), a.CreatedAt, dash(a.ExpiresAt), dash(a.Source), dashJoin(a.IPWhitelist))
 	}
 	return 0
+}
+
+// dashJoin renders a string slice as a comma-separated list, or "-" when
+// empty (the list-column counterpart of dash).
+func dashJoin(xs []string) string {
+	if len(xs) == 0 {
+		return "-"
+	}
+	return strings.Join(xs, ",")
 }
 
 func dash(s string) string {
@@ -1170,19 +1189,39 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	fromClipboard := fs.Bool("from-clipboard", false, "read the new value from the OS clipboard, then wipe the clipboard")
 	revokeCaps := fs.Bool("revoke-caps", false, "revoke all capabilities scoped to this alias")
 	expiry := fs.String("expiry", "", "update the expiry reminder (YYYY-MM-DD, RFC3339, or a duration like 90d); omitted = keep the current one")
+	ipWhitelist := fs.String("ip-whitelist", "", "update the client IP/CIDR allowlist for proxy use; empty value clears it; omitted = keep the current one")
 	yes := fs.Bool("yes", false, "confirm the overwrite non-interactively")
 	fs.BoolVar(yes, "y", false, "confirm the overwrite non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] [--yes] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] [--ip-whitelist=IPs] [--yes] <alias>\n")
 		return 1
 	}
 	expiresAt, err := parseExpiryFlag(*expiry)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+	// --ip-whitelist is tri-state: absent = keep; present-and-empty =
+	// clear; present-and-set = replace. fs.Visit distinguishes "absent"
+	// from an explicit empty value.
+	ipwlSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "ip-whitelist" {
+			ipwlSet = true
+		}
+	})
+	var ipwl []string
+	if ipwlSet {
+		if ipwl, err = parseIPWhitelist(*ipWhitelist); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if ipwl == nil {
+			ipwl = []string{} // explicit clear (non-nil empty = replace with none)
+		}
 	}
 	s, err := requireStore(homeDir)
 	if err != nil {
@@ -1261,6 +1300,11 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		// preserves the existing reminder.
 		if expiresAt != "" {
 			a.ExpiresAt = expiresAt
+		}
+		// Same for the IP whitelist: absent = keep; --ip-whitelist given
+		// (set or empty) replaces (a non-nil ipwl, incl. an empty slice).
+		if ipwlSet {
+			a.IPWhitelist = ipwl
 		}
 		return nil
 	}); err != nil {
