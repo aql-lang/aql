@@ -85,6 +85,40 @@ a loop body and after a `for` that a later statement reads across. This lets the
 `bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
 (dropping `-no-check`). It is a workaround, not the fix.
 
+### CONFIRMED mechanism + partial fix (decisive, this session)
+
+Disabling the plain-check static-count residual SPREAD (`native_control.go:1030`)
+DECISIVELY eliminates the primary false positive. The spread repeats the loop
+body's per-iteration residual `count` times; that residual is
+`[ProperString Any Function Any]` for a body (`MiniRedis.cmd ep … drop` ×2) that
+should net ZERO — i.e. the check-mode analysis of a module-fn dispatch leaves
+STRAY residual values (notably an unconsumed `Function`) that `drop` does not
+clear. The spread multiplies them; a spread `Function` is then dispatched at the
+top level / end-of-run and mis-collects a sibling copy as `ep` → the
+`call … (Map, Function, Map)` no_signature. The COMPILE pass (`CompileCheck`,
+`es.Active()`, spread skipped) hits the SAME stray residual via its recorded-loop
+path — so both `aql run` (plain `Check` pre-flight, `check.Preflight`) and
+`aql check` / `-force-compile` (`CompileCheck`) manifest it.
+
+A source-level fix — `dropResidualFnValues(stk)` right after `AnalyseLoopBody`,
+removing Function/FnDef values from the loop residual — was implemented and
+VERIFIED to clear the primary `call` false positive in BOTH passes (`aql check`
+of the two-cmd loop is clean, `aql run` of the simple driver prints its result).
+But it is INCOMPLETE: the residual also carries stray NON-fn values
+(`dynamic(Any)`), and the FULL driver (`… for … ] def dur (…)`) still trips
+`def — got (dynamic(Any), List)` / `undefined_word: dur` and `expires` inside
+mini-redis's own service-handler loops — the same over-approximation, one layer
+deeper. Cleaning ALL residual values is unsound (legitimate loops leave real
+residuals). The partial fix was reverted; the `;` workaround (which passes BOTH
+`aql check` and `aql run`) remains the complete resolution.
+
+The TRUE root is that the check-mode analysis of a module-fn dispatch in a loop
+body leaves stray residual values instead of netting zero for a `…drop`-ed
+statement. Fixing THAT (the dispatch fully consuming its fn-value + result in
+check mode) collapses every manifestation; it was not pinned to a line this
+session and is the right target for a dedicated follow-up, gated by
+`TestCheckAccuracyRatchet` + `verify-bytecode` + the corpus.
+
 ### CORRECTION: it is NOT the armed loop-capture path either
 
 A fix attempt against `AnalyseLoopBody`'s armed (`loopCapture`) path was built and
