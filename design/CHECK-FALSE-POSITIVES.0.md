@@ -85,6 +85,30 @@ a loop body and after a `for` that a later statement reads across. This lets the
 `bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
 (dropping `-no-check`). It is a workaround, not the fix.
 
+### ROOT PINNED: an unparenthesized module-wrapper call leaks a check residual
+
+The three facets all trace to ONE root, now pinned by bisection:
+`RunCarrierBodyWithDefs` returns the SAME residual for `do` and `for` bodies
+(`[ProperString Any Function Any]` for `MiniRedis.cmd ep … drop` ×2), so the body
+genuinely over-approximates. Minimizing:
+
+- `MiniRedis.cmd ep "a"` (no drop) → residual `[String]` (correct: one result).
+- `MiniRedis.cmd ep "a" drop` (UNPARENTHESIZED + following word) → `[ProperString
+  Any]` — `drop` INCREASED the residual.
+- `(MiniRedis.cmd ep "a") drop` (parenthesized) → `[]` (clean).
+- A plain user fn + drop, a native word + drop, and a `MathUtil.sqrt` (Go-body)
+  module fn + drop are ALL clean.
+
+So the leak is specific to an **AQL-body module-fn WRAPPER** (redis-cmd — named
+params + real body, dispatched via `execFnDefSig`/`CallAQL` in its sub-registry)
+called **unparenthesized and followed by another token** in check mode: the
+wrapper's forward-collection/`CallAQL` splice leaves stray arg+result residuals
+instead of netting to its declared single return. `(…)` and `;` both force the
+dispatch to complete cleanly, which is why the workaround works. The fix belongs
+at the module-wrapper check-mode dispatch (`execFnDefLiteral`'s foreign-registry
+branch → `execFnDefSig`/`CallAQL` residual handling, `engine.go`), gated by
+`TestCheckAccuracyRatchet`; it was not landed this session.
+
 ### DEFINITIVE: three distinct facets of one systemic over-approximation
 
 The problem is NOT a single bug — it is three independent manifestations of the
