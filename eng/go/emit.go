@@ -1468,7 +1468,7 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	if !realOK || unit < 0 {
 		return Value{}, false
 	}
-	ref := &CompiledFnRef{Unit: unit}
+	ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(tokens)}
 	es.storedFnRefs = append(es.storedFnRefs, ref)
 	carrier := Value{Parent: TFunction, Data: FnDefInfo{
 		Signatures: []Signature{{Impl: &AQLImpl{Body: tokens, Compiled: ref}}},
@@ -1492,6 +1492,60 @@ func stampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
 		}
 	}
 	return false
+}
+
+// storedHandlerDeps returns the MODULE-LEVEL names a stored handler / spawn body
+// reads — every body word bound as a user `def` at the store site. These are the
+// names whose later undef/redefinition (NotifyNameRebound) makes the frozen unit
+// stale, so the ref is left unstamped and falls back to CallAQL. Kernel natives
+// and the handler's own params/locals are excluded: the store site sits OUTSIDE
+// the handler frame, so those are not in r.Defs here. nil when the body reads no
+// module-level def.
+func (es *EmitState) storedHandlerDeps(body []Value) map[string]bool {
+	if es == nil || es.reg == nil {
+		return nil
+	}
+	var deps map[string]bool
+	WalkBodyWords(body, func(w WordInfo, _ Value) {
+		if w.Name == "" || deps[w.Name] {
+			return
+		}
+		if _, ok := es.reg.Defs.Top(w.Name); ok {
+			if deps == nil {
+				deps = map[string]bool{}
+			}
+			deps[w.Name] = true
+		}
+	})
+	return deps
+}
+
+// storedFnDeps is storedHandlerDeps for a stored fn VALUE: it reads the module
+// deps from the fn's single own-sig body.
+func (es *EmitState) storedFnDeps(fd FnDefInfo) map[string]bool {
+	if lam, ok := fd.FirstOwnSig(); ok {
+		return es.storedHandlerDeps(lam.body())
+	}
+	return nil
+}
+
+// NotifyNameRebound poisons any already-created stored-handler / spawn ref whose
+// body reads `name`: a def or undef of that name AFTER the ref was created
+// changes what the interpreter resolves at CALL time, but the compiled unit is
+// frozen at the store-site definition. Poisoned refs are left unstamped at
+// Finalize, so InvokeCallback falls back to CallAQL. A def/undef processed BEFORE
+// a ref exists poisons nothing (the ref is not in storedFnRefs yet), so a handler
+// over stable module helpers (todo-api's live-todos, mini-redis's arg-at/kv-read,
+// never redefined) still compiles.
+func (es *EmitState) NotifyNameRebound(name string) {
+	if es == nil || !es.active() {
+		return
+	}
+	for _, ref := range es.storedFnRefs {
+		if ref.depNames[name] {
+			ref.poisoned = true
+		}
+	}
 }
 
 // OperandRepushable reports whether v resolves to a FREELY RE-PUSHABLE
@@ -3507,7 +3561,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		if sig.CompileEffect.Has(CompileStoresFn) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
 				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos); cOK {
-					ref := &CompiledFnRef{Unit: unit}
+					ref := &CompiledFnRef{Unit: unit, depNames: es.storedFnDeps(fd)}
 					if stampCompiledRef(fd, ref) {
 						es.storedFnRefs = append(es.storedFnRefs, ref)
 					}
@@ -5865,6 +5919,12 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// re-scanning Consts. Fns is fully assembled above, so every ref.Unit indexes
 	// a valid entry.
 	for _, ref := range es.storedFnRefs {
+		if ref.poisoned {
+			// A dep the body reads was undef'd/redefined after this ref was
+			// created — the frozen unit is stale. Leave Prog nil so
+			// InvokeCallback falls back to CallAQL (live resolution).
+			continue
+		}
 		ref.Prog = lw.p
 	}
 	lw.p.storedFnRefs = es.storedFnRefs

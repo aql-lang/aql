@@ -1,5 +1,7 @@
 package eng
 
+import "errors"
+
 // InvokeBody executes a code BODY against per-call inputs and returns the
 // residual value stack (bottom→top) — exactly as the body-running native
 // handlers did when they spun up `New(r).Run([inputs… bodyTokens…])`.
@@ -41,26 +43,63 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 // all fall to CallAQL, whose values and error taxonomy are unchanged. When the
 // VM path IS taken, RunUnit executes the exact unit the differential gates prove
 // equivalent to the interpreter.
+//
+// A callback fires AFTER the enclosing RunProgram returned (serve-raw handling a
+// connection, a spawned process), so — unlike an in-program island — there is no
+// outer RunCompiled to catch a VM bailout and re-run on the interpreter. This seam
+// therefore applies RunCompiled's own discipline itself: if the compiled unit
+// raises an internal_error (a VM/lowering soundness assertion or a recovered
+// handler panic, the class RunCompiled resolves by falling back), retry on
+// CallAQL so the peer sees the interpreter's canonical result/error instead of a
+// raw internal_error leaking to the network. Genuine AQL runtime errors
+// (signature_error, type_error, …) are the interpreter's answer too and are
+// returned as-is.
 func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// sig is the matched signature (callers dispatch it via MatchFnSig and check
 	// it non-nil first — serve-raw's handler dispatch is the canonical caller).
 	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil {
-		// Idle registry (a per-connection / per-process fork) → start a fresh VM
-		// run for the handler.
-		if r.canHostVM() {
-			return RunUnit(ref, r, args)
-		}
-		// Mid-run on this registry (a service handler invoked synchronously
-		// during the enclosing compiled run) → run the unit NESTED in that run,
-		// since a fresh RunUnit would trip the concurrency guard. handled=false
-		// (a cross-program ref) falls through to the interpreter below.
-		if r.nestedRunner != nil {
-			if res, handled, err := r.nestedRunner(ref, args); handled {
-				return res, err
-			}
+		// A stamped unit runs on the VM (fresh run on an idle registry, or nested
+		// in the enclosing compiled run). Its result is used ONLY when the unit did
+		// not raise an internal_error: that class means a VM/lowering soundness
+		// bailout or a recovered handler panic, so — with no outer RunCompiled to
+		// catch it out here past the enclosing run — the seam itself falls back to
+		// CallAQL, exactly as RunCompiled does. Genuine AQL runtime errors are the
+		// interpreter's answer too and pass straight through.
+		if res, err, ran := invokeCompiledUnit(r, ref, args); ran && !isInternalErr(err) {
+			return res, err
 		}
 	}
 	return r.CallAQL(sig, args, captures)
+}
+
+// invokeCompiledUnit runs a stamped callback unit on the VM and reports whether a
+// VM path actually ran it (ran=false → no VM path applied; the caller falls to the
+// interpreter). An idle registry (a per-connection / per-process fork) starts a
+// fresh RunUnit; a busy one (a service handler invoked synchronously mid-run)
+// runs the unit NESTED via nestedRunner, since a fresh RunUnit would trip the
+// concurrency guard. A nestedRunner that reports handled=false (a cross-program
+// ref) leaves ran=false so the interpreter owns it.
+func invokeCompiledUnit(r *Registry, ref *CompiledFnRef, args []Value) (res []Value, err error, ran bool) {
+	if r.canHostVM() {
+		res, err = RunUnit(ref, r, args)
+		return res, err, true
+	}
+	if r.nestedRunner != nil {
+		if res, handled, err := r.nestedRunner(ref, args); handled {
+			return res, err, true
+		}
+	}
+	return nil, nil, false
+}
+
+// isInternalErr reports whether err is an internal_error-class AqlError — the
+// signal runVMEntry stamps on a recovered VM panic / lowering soundness bailout,
+// and the exact class RunCompiled resolves by re-running on the interpreter. The
+// callback seam mirrors that decision so a post-program bailout degrades to the
+// interpreter rather than surfacing a raw compiler bug to a network peer.
+func isInternalErr(err error) bool {
+	var ae *AqlError
+	return errors.As(err, &ae) && ae.Code == "internal_error"
 }
 
 // runPooledSub runs input on a pooled reusable sub-engine and returns a

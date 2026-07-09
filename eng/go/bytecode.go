@@ -543,6 +543,17 @@ type CompiledFnRef struct {
 	Prog     *Program
 	Unit     int
 	Captures []Value
+	// depNames are the MODULE-LEVEL names the stored handler / spawn body reads
+	// (every body word bound as a user `def` when the ref was created at its
+	// store site). A stored unit is FROZEN at the definitions live when it was
+	// compiled; the interpreter resolves the same names at CALL time. So if any
+	// dep is undef'd or redefined LATER in the program — after this ref was
+	// created — NotifyNameRebound sets poisoned, Finalize leaves Prog nil, and
+	// InvokeCallback falls back to CallAQL, which resolves the live definition
+	// exactly as the interpreter does. Compile-time only; unused at run time (a
+	// stamped ref always has poisoned=false).
+	depNames map[string]bool
+	poisoned bool
 }
 
 // Instr is one fixed-width instruction.
@@ -816,6 +827,25 @@ func slotNames(names []string) string {
 		}
 	}
 	return " [" + strings.Join(parts, " ") + "]"
+}
+
+// StoredRefCount reports how many stored-fn callback refs (service/spawn/codec
+// handler bakes) were recorded during compilation, and StoredRefStampedCount how
+// many were back-stamped with the program (Prog != nil, so InvokeCallback runs
+// the compiled unit) rather than left unstamped for interpreter fallback — the
+// decline a later def/undef of a dependency name triggers to keep compile ==
+// interpret. Test-support introspection for the callback-freeze correctness gate;
+// not consulted by execution.
+func (p *Program) StoredRefCount() int { return len(p.storedFnRefs) }
+
+func (p *Program) StoredRefStampedCount() int {
+	n := 0
+	for _, ref := range p.storedFnRefs {
+		if ref.Prog != nil {
+			n++
+		}
+	}
+	return n
 }
 
 // Disassemble renders the program for golden tests and debugging.

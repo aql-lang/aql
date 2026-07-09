@@ -71,6 +71,88 @@ func TestRunUnitBindsCapture(t *testing.T) {
 	}
 }
 
+// TestInvokeCallbackInternalErrorFallsBack pins PR #243 comment #3: a callback
+// fires AFTER the enclosing RunProgram returned (serve-raw handling a connection,
+// a spawned process), so there is no outer RunCompiled to catch a VM bailout and
+// re-run on the interpreter. InvokeCallback therefore applies that discipline
+// itself — when the stamped unit raises an internal_error (here a CALL_DYNAMIC
+// underflow, the vmErrAt soundness-bailout class), it falls back to CallAQL over
+// the sig's AQL body instead of leaking the raw internal_error to the peer. The
+// body `[42]` returns 42, proving the fallback ran rather than the failing unit.
+func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
+	// A unit that raises internal_error when run: CALL_DYNAMIC over an empty
+	// stack underflows → vmErrAt(internal_error).
+	p := &Program{Fns: []CompiledFn{{
+		Name: "boom", NParams: 0, NLocals: 0,
+		Code:  []Instr{{Op: OpCallDynamic, Arg: 0}, {Op: OpRet, Arg: 0}},
+		Debug: []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
+	}}}
+	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	// Confirm the unit really does raise internal_error on its own.
+	if _, err := RunUnit(ref, runUnitReg(t), nil); !isInternalErr(err) {
+		t.Fatalf("RunUnit err = %v, want an internal_error to drive the fallback", err)
+	}
+	// The sig carries the stamped ref AND an AQL body CallAQL can run to 42.
+	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
+	out, err := InvokeCallback(runUnitReg(t), sig, nil, nil)
+	if err != nil {
+		t.Fatalf("InvokeCallback should have fallen back to CallAQL, got err: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("got %d results, want 1 (the CallAQL body residual)", len(out))
+	}
+	if n, _ := out[0].AsConcreteInteger(); n != 42 {
+		t.Fatalf("result = %v, want 42 from the interpreter fallback", out[0])
+	}
+}
+
+// TestInvokeCallbackBusyRegistryFallsBack covers the no-VM-path branch of
+// invokeCompiledUnit: a stamped ref whose registry is mid-run (canHostVM false)
+// with no nestedRunner installed cannot run on the VM, so invokeCompiledUnit
+// reports ran=false and InvokeCallback owns the call on the interpreter. The
+// CallAQL body `[7]` proves the interpreter ran.
+func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
+	r := runUnitReg(t)
+	r.vmRunning = 1 // canHostVM() false; nestedRunner stays nil
+	p := &Program{Fns: []CompiledFn{{
+		Name: "x", NParams: 0, NLocals: 0,
+		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []SrcPos{{Row: 1, Col: 1}},
+	}}}
+	ref := &CompiledFnRef{Prog: p, Unit: 0}
+	// Direct: no VM path applies, so ran=false.
+	if _, _, ran := invokeCompiledUnit(r, ref, nil); ran {
+		t.Fatal("a busy registry with no nestedRunner must report ran=false")
+	}
+	// Via InvokeCallback: it falls through to CallAQL over the body.
+	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewInteger(7)}, Compiled: ref}}
+	out, err := InvokeCallback(r, sig, nil, nil)
+	if err != nil {
+		t.Fatalf("InvokeCallback should have fallen back to CallAQL, got err: %v", err)
+	}
+	if n, _ := out[0].AsConcreteInteger(); n != 7 {
+		t.Fatalf("result = %v, want 7 from the interpreter fallback", out[0])
+	}
+}
+
+// isInternalErr classifies exactly the internal_error AqlError (and nothing
+// else): a foreign error and a genuine AQL runtime error both report false, so
+// InvokeCallback returns them straight through rather than masking with a
+// fallback.
+func TestIsInternalErr(t *testing.T) {
+	if !isInternalErr(makeAqlError("internal_error", "boom", "", "", "")) {
+		t.Error("internal_error AqlError must classify true")
+	}
+	if isInternalErr(makeAqlError("signature_error", "no match", "", "", "")) {
+		t.Error("a genuine AQL runtime error must classify false")
+	}
+	if isInternalErr(errors.New("foreign")) {
+		t.Error("a non-AqlError must classify false")
+	}
+	if isInternalErr(nil) {
+		t.Error("nil must classify false")
+	}
+}
+
 // A nil ref and a ref with a nil program both report "nil unit reference"
 // (the invoke seam treats a nil ref as "no runnable unit").
 func TestRunUnitNilRef(t *testing.T) {

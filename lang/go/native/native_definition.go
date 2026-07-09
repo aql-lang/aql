@@ -234,6 +234,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
+	// A def of a name that some ALREADY-COMPILED stored handler / spawn body
+	// reads makes that frozen unit stale (the interpreter resolves the new
+	// binding at CALL time). Poison such refs so Finalize leaves them unstamped
+	// and InvokeCallback falls back to CallAQL. A first-time def of a fresh name
+	// poisons nothing (no existing ref lists it as a dep).
+	r.Check.Recorder().NotifyNameRebound(name)
 	// Record the def site for the dynamic-scope binder pass: if some fn body
 	// READS this name with no lexical home (OpLookupDynScope), the lowering
 	// installs a registry-visible OpBindDynScope twin here so the runtime
@@ -783,6 +789,11 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// carried frame slot still holds the rebound value — compiled reads would
 	// diverge; refuse and let the interpreter own the shape.
 	r.Check.Recorder().RefuseCarriedUndef(name)
+	// An undef of a name that some ALREADY-COMPILED stored handler / spawn body
+	// reads makes that frozen unit stale (the interpreter resolves the exposed
+	// or re-established binding at CALL time). Poison such refs so InvokeCallback
+	// falls back to CallAQL. Mirrors the def-site NotifyNameRebound.
+	r.Check.Recorder().NotifyNameRebound(name)
 	UninstallDef(r, name)
 	return nil, nil
 }
