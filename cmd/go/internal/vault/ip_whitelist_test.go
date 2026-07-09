@@ -126,6 +126,27 @@ func TestRotateIPWhitelistSetClearPreserve(t *testing.T) {
 	}
 }
 
+// TestAddIPWhitelistOverwriteTriState mirrors rotate's tri-state on the add
+// overwrite path: absent keeps the prior allowlist, an explicit empty flag
+// clears it (so `add --ip-whitelist=` cannot silently leave a stale restriction).
+func TestAddIPWhitelistOverwriteTriState(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "v1\n", "add", "--from-stdin", "--ip-whitelist=10.0.0.0/8", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	// Overwrite WITHOUT the flag preserves the whitelist.
+	runVault(t, "v2\n", "add", "--yes", "--from-stdin", "k")
+	if s, _ := LoadStore(home); func() bool { a, _ := s.FindAlias("k"); return a == nil || len(a.IPWhitelist) != 1 }() {
+		t.Error("overwrite without --ip-whitelist must preserve the whitelist")
+	}
+	// Overwrite WITH an explicit empty flag clears it.
+	runVault(t, "v3\n", "add", "--yes", "--from-stdin", "--ip-whitelist=", "k")
+	if s, _ := LoadStore(home); func() bool { a, _ := s.FindAlias("k"); return a == nil || len(a.IPWhitelist) != 0 }() {
+		t.Error("add --ip-whitelist= must clear the prior whitelist")
+	}
+}
+
 func TestProxyEnforcesIPWhitelist(t *testing.T) {
 	testHome(t)
 	mustInit(t)

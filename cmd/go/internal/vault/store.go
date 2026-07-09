@@ -163,7 +163,11 @@ const maxPasswordSlots = 64
 //	     The bump makes an older binary refuse a v4 store rather than
 //	     silently dropping the password slots / key material on its next
 //	     save (which would orphan every envelope-sealed secret).
-const storeVersion = 4
+//	v5 — aliases gain the optional IPWhitelist field (a proxy-enforced
+//	     client-IP allowlist). The bump makes an older binary refuse a v5
+//	     store rather than silently dropping a key's IP restriction on its
+//	     next save, which would relax a deliberately-scoped secret.
+const storeVersion = 5
 
 // storeMigrations[i] upgrades a store from schema version i+1 to i+2.
 // Each is a pure, in-place transform; the slice length must be
@@ -172,7 +176,13 @@ var storeMigrations = []func(*Store) error{
 	migrateStoreV1ToV2, // index 0: v1 -> v2
 	migrateStoreV2ToV3, // index 1: v2 -> v3
 	migrateStoreV3ToV4, // index 2: v3 -> v4
+	migrateStoreV4ToV5, // index 3: v4 -> v5
 }
+
+// migrateStoreV4ToV5 is a no-op. v5 only adds the optional per-alias
+// IPWhitelist field; a v4 store loads with every alias unrestricted,
+// which is exactly the pre-v5 behaviour.
+func migrateStoreV4ToV5(*Store) error { return nil }
 
 // migrateStoreV1ToV2 revokes capabilities that predate token hashing.
 // They have an empty TokenHash and therefore cannot be presented as a

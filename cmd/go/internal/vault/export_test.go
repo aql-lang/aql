@@ -71,6 +71,35 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	}
 }
 
+// TestExportImportPreservesIPWhitelist guards that a proxy IP allowlist —
+// enforced metadata — is carried through the export bundle and restored on
+// import, so a backup/migration cannot silently drop a key's IP restriction.
+func TestExportImportPreservesIPWhitelist(t *testing.T) {
+	t.Setenv(EnvExportPassphrase, "bundle-pass")
+	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+
+	src := t.TempDir()
+	initVaultAt(t, src, "src-pass")
+	if code, _, e := runVault(t, "sekret\n", "add", "--from-stdin", "--ip-whitelist=10.0.0.0/8,203.0.113.7", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	if code, _, e := runVault(t, "", "export", "--out="+bundle); code != 0 {
+		t.Fatalf("export: %s", e)
+	}
+
+	dst := t.TempDir()
+	initVaultAt(t, dst, "dst-pass")
+	if code, _, e := runVault(t, "", "import", bundle); code != 0 {
+		t.Fatalf("import: %s", e)
+	}
+	s, _ := LoadStore(dst)
+	a, _ := s.FindAlias("k")
+	if a == nil || len(a.IPWhitelist) != 2 ||
+		a.IPWhitelist[0] != "10.0.0.0/8" || a.IPWhitelist[1] != "203.0.113.7" {
+		t.Errorf("ip-whitelist not preserved through export/import: %+v", a)
+	}
+}
+
 // TestExportOutTildeExpanded guards that a leading ~ in --out that the
 // shell left verbatim (e.g. --out=~/bundle.aqlx) resolves under the home
 // folder rather than writing to a literal "~" directory in the cwd.

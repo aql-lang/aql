@@ -442,10 +442,26 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
-	ipwl, err := parseIPWhitelist(*ipWhitelist)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+	// --ip-whitelist is tri-state (as in rotate): absent = keep any existing
+	// allowlist when overwriting; present-and-empty = clear it; present-and-set
+	// = replace. fs.Visit distinguishes "absent" from an explicit empty value,
+	// so `add --ip-whitelist=` actually removes a prior restriction instead of
+	// silently preserving it (UpsertAlias treats nil as preserve).
+	ipwlSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "ip-whitelist" {
+			ipwlSet = true
+		}
+	})
+	var ipwl []string
+	if ipwlSet {
+		if ipwl, err = parseIPWhitelist(*ipWhitelist); err != nil {
+			fmt.Fprintf(stderr, "error: %s\n", err)
+			return 1
+		}
+		if ipwl == nil {
+			ipwl = []string{} // explicit clear (non-nil empty = replace with none)
+		}
 	}
 	aliasRef := fs.Arg(0)
 	// --namespace is sugar for the ns: prefix; both at once is a
