@@ -58,7 +58,8 @@ with a recording side-effect" architecture (no rewrite):
 
 Wired callers: `serveRawHandler` (`net_socket.go`), service `call`
 (`native_service.go`), codec `callCodecFn` (`net_codec.go`), `RunPredicate`
-(`registry.go`), and `spawnHandler` (`native_process.go`, via `CompileStoresBody`).
+(`registry.go`), `spawnHandler` (`native_process.go`, via `CompileStoresBody`),
+and `Model` action `makeAction` (`modules/model.go`).
 
 ## Retirement scope (precise)
 
@@ -68,17 +69,22 @@ Wired callers: `serveRawHandler` (`net_socket.go`), service `call`
   program's handler runs via `runUnitNested` byte-identically to the interpreter,
   `TestServiceCallNestedVMDifferential`; a compiled `spawn [print 42]` runs its
   body on the VM via `RunUnit` on the fork, `TestSpawnCompiledRunsBodyOnVM`).
-- **Uniform seam, currently no-op:** `RunPredicate` routes through
-  `InvokeCallback`, but predicate fns are **not stamped** (refine / is / typed-def
-  are not `CompileStoresFn` slots), so predicates still interpret. The routing is
-  in place so predicate compilation benefits automatically once stamping lands.
+- **Uniform seam, currently no-op:** `RunPredicate` and `Model` actions
+  (`makeAction`) route through `InvokeCallback`, but their fns are **not stamped**
+  (predicate refine / is / typed-def are not `CompileStoresFn` slots, and the
+  model builder word does not stamp its action fns), so both still interpret. The
+  routing is in place so each benefits automatically once its stamping lands.
 - **Deliberately NOT retired (stays interpreted, by design):** runtime-*constructed*
   code (`Vm.run` of source built at runtime, `makePriorFn` Go continuations,
   macro/parselang bodies) has no ahead-of-time form; the confined `OpFallback`
-  island and `Engine.Run` remain. The whole-program fallback and the three sound
-  non-definite-error corpus refusals are unchanged — this work did not touch the
-  corpus refusal count, so the `refusalCeiling` / `islandCeiling` ratchets and
-  `COMPILABLE-SUBSET.md §5` are unchanged.
+  island and `Engine.Run` remain. `Test.check-prop` likewise stays interpreted:
+  its generator/property run through fresh per-iteration `FnSig`s synthesized from
+  the map-literal `gen`/`prop` bodies (`native.AQL(genBody)`) — there is no fn
+  value to stamp, and compiling the two bodies would make `check-prop` a
+  dual-body storing word (a separate effort). The whole-program fallback and the
+  three sound non-definite-error corpus refusals are unchanged — this work did not
+  touch the corpus refusal count, so the `refusalCeiling` / `islandCeiling`
+  ratchets and `COMPILABLE-SUBSET.md §5` are unchanged.
 
 ## The networking benchmark is gated on a separate frontier
 
@@ -101,8 +107,11 @@ module socket-word compilation** — out of scope here. A pure-core handler body
 - **Predicate compilation**: stamping refine / is / typed-def predicate fns so
   `RunPredicate` runs them on the VM. `is`-over-predicate is a current refusal
   class; high risk.
-- **`model` action handlers** are not `CompileStoresFn`-stamped; routing them
-  would be a no-op until they are.
+- **Stamping the seam's no-op callers**: `Model` action fns and `check-prop`
+  bodies are routed (or, for check-prop, could be) through the seam but are not
+  yet stamped — each needs its storing word marked `CompileStoresFn` /
+  `CompileStoresBody` and its body compiled, at which point the existing routing
+  runs it on the VM with no further wiring.
 
 ## Verification
 
