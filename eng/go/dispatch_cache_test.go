@@ -132,3 +132,14 @@ func TestDispatchCacheCheckModeBypass(t *testing.T) {
 		t.Fatal("check mode served a cached (identical) aggregate; must be fresh each call")
 	}
 }
+
+// TestTypeMetaAccessorsNilValue pins that the lattice-int accessors return
+// 0 for an ordinary runtime value (tmeta == nil) — the zero the fields
+// returned when they were inline. Guards the nil branch of each accessor.
+func TestTypeMetaAccessorsNilValue(t *testing.T) {
+	v := NewInteger(5) // an ordinary value: no typeMeta
+	if v.FixedID() != 0 || v.Rank() != 0 || v.Depth() != 0 || v.In() != 0 || v.Out() != 0 {
+		t.Fatalf("nil-tmeta accessors not all 0: FixedID=%d Rank=%d Depth=%d In=%d Out=%d",
+			v.FixedID(), v.Rank(), v.Depth(), v.In(), v.Out())
+	}
+}

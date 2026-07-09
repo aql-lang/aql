@@ -264,7 +264,7 @@ func (t *Type) PathSubtype(pattern *Type) bool {
 func (t *Type) Specificity() int {
 	n := 0
 	for d := t; d != nil; d = d.Parent {
-		if d.FixedID == anyFixedID && n > 0 {
+		if d.FixedID() == anyFixedID && n > 0 {
 			break
 		}
 		n++

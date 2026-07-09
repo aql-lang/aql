@@ -78,8 +78,8 @@ func TestS6b1MintIDNilSeqAndPrefixes(t *testing.T) {
 	if !strings.HasPrefix(s.ID, "S_") {
 		t.Errorf("Scalar-rooted mint ID = %q, want S_ prefix", s.ID)
 	}
-	if s.Rank != 21_000_000_000 {
-		t.Errorf("Scalar-rooted mint Rank = %d, want 21e9", s.Rank)
+	if s.Rank() != 21_000_000_000 {
+		t.Errorf("Scalar-rooted mint Rank = %d, want 21e9", s.Rank())
 	}
 	n := dt.MintType("s6b1n", &Type{Name: "Node"})
 	if !strings.HasPrefix(n.ID, "N_") {
@@ -93,8 +93,8 @@ func TestS6b1MintIDNilSeqAndPrefixes(t *testing.T) {
 	// A mint under the REAL Word branch takes the Word external band
 	// (the branch walk stops one step below Any).
 	rw := dt.MintType("s6b1rw", TWord)
-	if rw.Rank != 51_000_000_000 {
-		t.Errorf("Word-branch mint Rank = %d, want 51e9", rw.Rank)
+	if rw.Rank() != 51_000_000_000 {
+		t.Errorf("Word-branch mint Rank = %d, want 51e9", rw.Rank())
 	}
 }
 

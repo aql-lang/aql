@@ -81,7 +81,7 @@ func (t *Type) Path() string {
 	if t == nil {
 		return ""
 	}
-	if t.Parent == nil || t.Parent.FixedID == anyFixedID {
+	if t.Parent == nil || t.Parent.FixedID() == anyFixedID {
 		return t.Name
 	}
 	return t.Parent.Path() + "/" + t.Name
@@ -108,8 +108,8 @@ func (t *Type) IsAncestor(ancestor *Type) bool {
 	// exactly the builtins labelled at table construction, whose ancestry
 	// is fixed. Minted / external / ad-hoc types (In == 0) fall through to
 	// the structural walk, which stays the single source of truth.
-	if t.In > 0 && ancestor.In > 0 {
-		return ancestor.In <= t.In && t.In <= ancestor.Out
+	if t.In() > 0 && ancestor.In() > 0 {
+		return ancestor.In() <= t.In() && t.In() <= ancestor.Out()
 	}
 	for x := t; x != nil; x = x.Parent {
 		if x.Equal(ancestor) {
@@ -128,8 +128,8 @@ func depthOf(parent *Type) int {
 	if parent == nil {
 		return 1
 	}
-	if parent.Depth > 0 {
-		return parent.Depth + 1
+	if parent.Depth() > 0 {
+		return parent.Depth() + 1
 	}
 	return typeDepth(parent) + 1
 }
@@ -157,13 +157,13 @@ func (tt *TypeTable) labelIntervals() {
 	var visit func(t *Type)
 	visit = func(t *Type) {
 		counter++
-		t.In = counter
+		t.ensureTMeta().In = counter
 		kids := children[t.ID]
 		sort.Slice(kids, func(i, j int) bool { return kids[i].ID < kids[j].ID })
 		for _, c := range kids {
 			visit(c)
 		}
-		t.Out = counter
+		t.ensureTMeta().Out = counter
 	}
 	for _, r := range roots {
 		visit(r)
@@ -347,7 +347,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
 		Name:     name,
 		Parent:   parent,
-		Depth:    depthOf(parent),
+		tmeta:    &typeMeta{Depth: depthOf(parent)},
 		Origin:   OriginUserDef,
 		Behavior: DefaultBehavior,
 	}
@@ -359,7 +359,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	// depth → lex name. See externalBandFor for the per-branch
 	// constants.
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
@@ -401,7 +401,7 @@ func externalBandFor(parent *Type) int {
 	// degenerate root). Any itself has FixedID=anyFixedID; stop one
 	// step below.
 	branch := parent
-	for branch.Parent != nil && branch.Parent.FixedID != anyFixedID {
+	for branch.Parent != nil && branch.Parent.FixedID() != anyFixedID {
 		branch = branch.Parent
 	}
 	switch branch.Name {
@@ -416,7 +416,7 @@ func externalBandFor(parent *Type) int {
 	case "Type":
 		return 61_000_000_000
 	}
-	return parent.Rank
+	return parent.Rank()
 }
 
 // RegisterExternalBuiltin installs a non-kernel-declared "builtin-
@@ -502,8 +502,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		ID:       id,
 		Name:     parts[len(parts)-1],
 		Parent:   parent,
-		Depth:    depthOf(parent),
-		FixedID:  fixedID,
+		tmeta:    &typeMeta{Depth: depthOf(parent), FixedID: fixedID},
 		Origin:   OriginBuiltin,
 		Behavior: behavior,
 	}
@@ -512,7 +511,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	// so they sort after every kernel builtin in the same branch
 	// and tiebreak among themselves by depth then name.
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	tt.byID[id] = def
 	tt.bypath[path] = def
@@ -875,9 +874,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		ID:         id,
 		Name:       parts[len(parts)-1],
 		Parent:     parent,
-		Depth:      depthOf(parent),
-		FixedID:    d.FixedID,
-		Rank:       d.Rank,
+		tmeta:      &typeMeta{Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank},
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
 		Behavior:   DefaultBehavior,
@@ -1008,7 +1005,7 @@ func MintTestType(path string) *Type {
 		Behavior: DefaultBehavior,
 	}
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	testTypePool[path] = def
 	return def

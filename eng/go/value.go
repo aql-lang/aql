@@ -1068,19 +1068,20 @@ type Value struct {
 	// Type-lattice metadata — populated on type nodes, zero on
 	// ordinary values. A non-nil Behavior is the marker of a type
 	// node.
-	Name    string // type-node leaf name (e.g. "ProperString")
-	FixedID int    // >0 for builtin type nodes; 0 otherwise
-	Rank    int    // unified lattice rank — total order for CompareValues/compareTypes
-	Depth   int    // parent-chain length (root = 1); 0 = unset (ad-hoc *Type). Cached for typeDepth / LCA.
-	// In/Out are the DFS nested-set interval of a type node within the
-	// STATIC builtin lattice: In is the pre-order entry number, Out the
-	// largest entry number in the node's subtree. A descendant d of an
-	// ancestor a satisfies a.In <= d.In <= a.Out, so IsAncestor is an O(1)
-	// range test instead of a parent-chain walk. Assigned once by
-	// labelIntervals at builtin-table construction; 0 = unlabelled (minted,
-	// external, or ad-hoc types), which routes IsAncestor through the walk.
-	In         int
-	Out        int
+	Name string // type-node leaf name (e.g. "ProperString")
+	// tmeta holds the five integer lattice fields (FixedID, Rank, Depth,
+	// In, Out) behind ONE pointer instead of 40 inline bytes on every
+	// Value — the struct is copied by value on every stack push, arg, and
+	// tape cell, so shrinking it cuts the interpreter's ~15% duffcopy cost
+	// (design/INTERPRETER-SPEED-PLAN.10.md #1A). These fields are set once
+	// at type registration and never mutated, so a Value copy shares the
+	// SAME *typeMeta (an orphan `&v`-derived *Type reads the identical
+	// values as its canonical node — the property the old inline fields
+	// gave for free). Nil on ordinary runtime values; the FixedID/Rank/
+	// Depth/In/Out accessors return 0 for nil, matching the old zero
+	// fields. Writers go through ensureTMeta so a mint site that forgets to
+	// allocate one cannot nil-panic.
+	tmeta      *typeMeta
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
 	Behavior   TypeBehavior // pluggable dispatch — non-nil exactly on type nodes
@@ -1114,6 +1115,83 @@ type Value struct {
 	// provably-disjoint use of the same name is caught. Empty for
 	// non-binding-derived carriers; never read at runtime.
 	DynFrom string
+}
+
+// typeMeta carries the integer lattice fields of a type node, held behind
+// Value.tmeta so ordinary values don't pay 40 inline bytes for metadata
+// only type nodes populate. All fields are assigned once at registration
+// (MintType / RegisterExternalBuiltin / the builtin-decl loop /
+// labelIntervals) and never mutated, so sharing one *typeMeta across
+// every copy of a type Value is sound.
+type typeMeta struct {
+	// FixedID is >0 for builtin type nodes; 0 otherwise. Baked into the
+	// serialised Value ID (formatFixedID).
+	FixedID int
+	// Rank is the unified lattice rank — the total order CompareValues /
+	// compareTypes use for every cross-type ordering.
+	Rank int
+	// Depth is the parent-chain length (root = 1); 0 = unset (ad-hoc
+	// *Type). Cached for typeDepth / LCA.
+	Depth int
+	// In/Out are the DFS nested-set interval of a type node within the
+	// STATIC builtin lattice: In is the pre-order entry number, Out the
+	// largest entry number in the node's subtree. A descendant d of an
+	// ancestor a satisfies a.In <= d.In <= a.Out, so IsAncestor is an O(1)
+	// range test instead of a parent-chain walk. Assigned once by
+	// labelIntervals at builtin-table construction; 0 = unlabelled
+	// (minted, external, or ad-hoc types), which routes IsAncestor through
+	// the walk.
+	In  int
+	Out int
+}
+
+// ensureTMeta returns v's typeMeta, allocating it if absent. Writers of
+// the lattice integer fields call this so a mint site that did not
+// pre-allocate a typeMeta cannot nil-panic. v must be addressable (a
+// *Type or an addressable Value).
+func (v *Value) ensureTMeta() *typeMeta {
+	if v.tmeta == nil {
+		v.tmeta = &typeMeta{}
+	}
+	return v.tmeta
+}
+
+// FixedID / Rank / Depth / In / Out are nil-safe reads of the lattice
+// integer fields — 0 when tmeta is absent (every ordinary runtime value,
+// where these were always zero when they were inline fields).
+func (v Value) FixedID() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.FixedID
+}
+
+func (v Value) Rank() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Rank
+}
+
+func (v Value) Depth() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Depth
+}
+
+func (v Value) In() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.In
+}
+
+func (v Value) Out() int {
+	if v.tmeta == nil {
+		return 0
+	}
+	return v.tmeta.Out
 }
 
 // idState is the package-level ID source: a monotone atomic counter
@@ -1185,7 +1263,7 @@ func IDPrefixForType(t *Type) string {
 		return "T_"
 	}
 	for d := t; d != nil; d = d.Parent {
-		if d.Parent == nil || d.Parent.FixedID == anyFixedID {
+		if d.Parent == nil || d.Parent.FixedID() == anyFixedID {
 			switch d.Name {
 			case "Scalar":
 				return "S_"

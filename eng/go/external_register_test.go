@@ -71,8 +71,8 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	if tColor.Path() != "Ideal/TestPluginColor" {
 		t.Errorf("path = %q, want %q", tColor.Path(), "Ideal/TestPluginColor")
 	}
-	if tColor.FixedID != 99001 {
-		t.Errorf("FixedID = %d, want 99001", tColor.FixedID)
+	if tColor.FixedID() != 99001 {
+		t.Errorf("FixedID = %d, want 99001", tColor.FixedID())
 	}
 	if tColor.Behavior != cb {
 		t.Errorf("Behavior = %T, want funcBehavior", tColor.Behavior)
