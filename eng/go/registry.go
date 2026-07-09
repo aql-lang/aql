@@ -1870,7 +1870,11 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(predSig, []Value{candidate}, fnDef.Captured)
+	// InvokeCallback runs the predicate body on the VM when it compiled to a unit
+	// (nested in a live run, or fresh on an idle registry) and falls back to
+	// CallAQL — the interpreter — otherwise. The predicate sandbox (above) wraps
+	// either engine identically.
+	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}
