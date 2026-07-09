@@ -1,7 +1,8 @@
-# Networking performance test — AQL vs. plain Go vs. plain TypeScript
+# Networking performance test — AQL vs. Go, TypeScript, Python, Ruby
 
 A like-for-like **TCP echo round-trip** microbenchmark comparing the
-`aql:net` module against equivalent hand-written Go and Node/TypeScript.
+`aql:net` module against equivalent hand-written Go, Node/TypeScript, Python,
+and Ruby. Every implementation is checked in so the test is repeatable.
 
 ## What it measures
 
@@ -12,9 +13,10 @@ timed round-trips** plus one warm-up exchange, then reports throughput
 the fairest cross-language networking microbenchmark: it isolates the
 per-request cost of the send/receive path rather than raw bulk throughput.
 
-All three ends run over loopback TCP with `TCP_NODELAY` enabled — it is Go's
-default (which the `aql:net` sockets inherit, being `net.Conn` values) and is
-set explicitly in the Node version to match.
+Every implementation is server + client in one process over loopback TCP with
+`TCP_NODELAY` on both ends — Go's default (which the `aql:net` sockets inherit,
+being `net.Conn` values) and set explicitly in the Node / Python / Ruby ports
+to match. Each uses its own port so runs don't collide.
 
 The AQL version deliberately uses the same primitive words the networking
 examples in `design/examples/apps/` are built on: `Net.serve-raw`,
@@ -27,6 +29,8 @@ examples in `design/examples/apps/` are built on: `Net.serve-raw`,
 | `echo_aql.aql`  | AQL (`aql:net`) — server + client in one process |
 | `echo_go.go`    | Plain Go (`net` + `bufio`) |
 | `echo_ts.ts`    | Plain TypeScript (Node `net`) |
+| `echo_py.py`    | Plain Python (`socket` + `threading`) |
+| `echo_rb.rb`    | Plain Ruby (`socket` + `Thread`) |
 | `loop_only.aql` | AQL no-network control: same per-iteration work, no sockets, to isolate interpreter-loop overhead from socket-word cost |
 
 ## Running
@@ -35,56 +39,66 @@ examples in `design/examples/apps/` are built on: `Net.serve-raw`,
 # from the repo root (build the CLI once: cd cmd/go && make build)
 cmd/go/bin/aql run -install network bench/networking/echo_aql.aql   # bytecode compiler (default)
 cmd/go/bin/aql run -no-compile -install network bench/networking/echo_aql.aql
-go run bench/networking/echo_go.go
-ts-node bench/networking/echo_ts.ts        # or: bun run bench/networking/echo_ts.ts
+go run  bench/networking/echo_go.go
+npx ts-node bench/networking/echo_ts.ts    # or: bun run bench/networking/echo_ts.ts
+python3 bench/networking/echo_py.py
+ruby    bench/networking/echo_rb.rb
 
 cmd/go/bin/aql run bench/networking/loop_only.aql   # control (no network capability needed)
 ```
+
+Take the best of ~3 runs per runtime (loopback microbenchmarks are noisy).
 
 `bench/networking/` is intentionally outside every Go module tree, so it is
 never touched by `make fmt/vet/lint/test/cover-gate`.
 
 ## Results
 
-Representative figures (≈3 runs each; Go 1.24, Node 22, loopback Linux):
+Best of 3 runs each (Go 1.24.7, Node 22, Python 3.11, Ruby 3.3, loopback
+Linux, single box):
 
 | Runtime | req/s | µs / round-trip | vs. Go |
 |---|--:|--:|--:|
-| Go (`net` + `bufio`)                    | ~110,000 | ~9.1   | 1× (baseline) |
-| TypeScript (Node `net`)                 | ~53,000  | ~19    | ~2× slower   |
-| **AQL — bytecode compiler (default)**   | **~58,000** | **~17** | **~1.9× slower** |
-| AQL — interpreter (`-no-compile`)       | ~600     | ~1,650 | ~180× slower |
+| Go (`net` + `bufio`)                    | ~109,000 | ~9.1   | 1× (baseline) |
+| **AQL — bytecode compiler (default)**   | **~55,000** | **~18** | **~2.0× slower** |
+| TypeScript (Node `net`)                 | ~48,000  | ~21    | ~2.3× slower |
+| Python (`socket`)                       | ~14,600  | ~69    | ~7.5× slower |
+| Ruby (`socket`)                         | ~13,500  | ~74    | ~8.1× slower |
+| AQL — interpreter (`-no-compile`)       | ~620     | ~1,610 | ~176× slower |
 
-The **compiled** AQL server now runs its per-connection handler on the bytecode
-VM and lands within ~1.9× of Go and slightly ahead of Node — a **~97× jump over
-the tree-walking interpreter** (~600 → ~58,000 req/s). This is the payoff of
-compiling the `serve-raw` handler body (see *Resolution* below); it requires the
-connection param typed **`Socket`**, not `Any` (an `Any` receiver leaves the
-socket-word overloads unresolved, the program refuses to compile, and the
-handler silently falls back to the interpreter — the ~600 req/s row).
+The **compiled** AQL server runs its per-connection handler on the bytecode VM
+and lands within ~2× of Go — **ahead of Node, and ~4× ahead of Python and
+Ruby**. Only hand-written Go is faster. That is a **~90× jump over AQL's own
+tree-walking interpreter** (~620 → ~55,000 req/s), the payoff of compiling the
+`serve-raw` handler body to a unit (see *Resolution* below). The handler
+compiles whether its connection param is typed `Socket` or `Any` (an earlier
+revision required `Socket`; two compiler fixes removed that — see below).
 
-Earlier revisions of this file reported ~940 req/s for the "compiler (default)"
-row: at that time function-body compilation did not exist, so the handler ran
-interpreted regardless of the compile flag. That row is superseded.
+An earlier revision of this file reported ~940 req/s for the "compiler
+(default)" row: at that time function-body compilation did not exist, so the
+handler ran interpreted regardless of the compile flag. That row is superseded
+by the callback-compilation work.
 
-### Where AQL's time goes
+### Where AQL's time goes (the interpreter path)
 
+This analysis was done on the **interpreted** handler (the `-no-compile` /
+pre-compilation ~620 req/s row), and is why compiling the handler mattered.
 The `loop_only.aql` control does the same per-iteration `Bytes` build +
 `convert`/`join` work with no sockets: **~68 ms for 20,000 iterations
-(~3.4 µs/iter)**. The full round-trip costs ~1,065 µs/iter, so **~99.7% of
-the cost is in the networking word layer per call**, not in AQL's evaluation
-of the loop body. The read path is already buffered (`bufio`), so it is
-per-word overhead — socket handle lookup + signature matching, the per-`recv`
-read-deadline syscall, the read mutex, and the forked-registry output syncing
-on the server goroutine — rather than byte-by-byte I/O.
+(~3.4 µs/iter)**. The interpreted round-trip cost ~1,065 µs/iter, so **~99.7%
+of it was in the networking word layer per call** — socket handle lookup +
+signature matching, the per-`recv` read-deadline syscall, the read mutex, and
+the forked-registry output syncing on the server goroutine — not the loop body.
+Compiling the handler body to a VM unit removes the interpreter's per-word
+dispatch overhead and is what lifts AQL to ~18 µs/RT (~55,000 req/s).
 
 ### Caveats
 
 - Latency-bound (ping-pong). A pipelined/bulk-throughput test would narrow the
-  gap somewhat but not change the ordering.
-- AQL is an interpreted, strongly-typed query language; a ~50–125× gap versus
-  compiled Go / JIT'd V8 on a tight network loop is expected and is not the
-  workload AQL is optimized for.
+  gaps somewhat but not change the ordering.
+- Best-of-3 on a single loopback box; treat the figures as order-of-magnitude,
+  not precise. Compiled AQL (~2× Go, ahead of Node, ~4× ahead of Python/Ruby)
+  vs the interpreter (~176× Go) is the headline the numbers support.
 
 ## Root-cause analysis
 
