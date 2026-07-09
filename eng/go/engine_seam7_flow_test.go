@@ -6,7 +6,10 @@ package eng
 // read/rewrite the tape directly, so a constructed *Engine reaches their
 // edge arms without a full Run(). See design/TEST-SEAMS.10.md.
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // --- stepMove orphan ------------------------------------------------------
 
@@ -53,6 +56,115 @@ func TestS7StepMoveContMoreIterationsNilMarks(t *testing.T) {
 	}
 	if e.marks == nil {
 		t.Error("marks map should have been initialised for the next iteration")
+	}
+}
+
+// --- trace-note gating (only built when a trace hook is installed) --------
+
+// TestS7TraceNotesGated pins the F1 optimization: every e.traceNote builder
+// on the mark/move/loop/if resolvers is wrapped in `if e.trace != nil`, so
+// the (fmt.Sprintf / concat) string is built ONLY when a trace hook is
+// installed. The positive arms assert the note IS produced under trace; the
+// negative arm asserts stepMark leaves the note EMPTY with tracing off (the
+// whole point — no dead string on the hot path).
+func TestS7TraceNotesGated(t *testing.T) {
+	noop := func(int, int, []Value, string) {}
+
+	// stepMark → "mark <id>"
+	{
+		e := NewTop(covRegistry(t, nil))
+		e.SetTrace(noop)
+		e.tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
+		e.stepMark(e.tape.At(0))
+		if e.traceNote != "mark m1" {
+			t.Errorf("stepMark note = %q, want %q", e.traceNote, "mark m1")
+		}
+	}
+
+	// negative: stepMark with NO trace hook leaves the note empty.
+	{
+		e := NewTop(covRegistry(t, nil))
+		e.tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
+		e.stepMark(e.tape.At(0))
+		if e.traceNote != "" {
+			t.Errorf("stepMark built a note with tracing off: %q", e.traceNote)
+		}
+	}
+
+	// stepMove orphan → "move orphan <id>"
+	{
+		e := engWithTape(t, []Value{NewMove("m1", "for loop")}, 0)
+		e.SetTrace(noop)
+		e.marks = map[string]bool{"m1": true}
+		if err := e.stepMove(e.tape.At(0)); err != nil {
+			t.Fatalf("orphan move: %v", err)
+		}
+		if e.traceNote != "move orphan m1" {
+			t.Errorf("orphan note = %q", e.traceNote)
+		}
+	}
+
+	// stepMove replaying a mark body → "move→mark <id>"
+	{
+		e := NewTop(covRegistry(t, nil))
+		e.SetTrace(noop)
+		e.tape = NewTape([]Value{NewMark("m2", NewInteger(7)), NewMove("m2", "r")}, stackHeadroom)
+		e.marks = map[string]bool{"m2": true}
+		e.pointer = 1
+		if err := e.stepMove(e.tape.At(1)); err != nil {
+			t.Fatalf("move→mark: %v", err)
+		}
+		if e.traceNote != "move→mark m2" {
+			t.Errorf("move→mark note = %q", e.traceNote)
+		}
+	}
+
+	// stepMoveCont next iteration → "for next <id> i=<n>"
+	{
+		r := covRegistry(t, nil)
+		cont := &ForCont{Registry: r, IterName: "i", Current: 0, End: 3, Step: 1, Body: []Value{NewInteger(1)}}
+		e := NewTop(r)
+		e.SetTrace(noop)
+		e.tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
+		e.marks = map[string]bool{"m1": true}
+		if err := e.stepMoveCont(0, 1, MoveInfo{To: "m1", Cont: cont}); err != nil {
+			t.Fatalf("for next: %v", err)
+		}
+		if !strings.HasPrefix(e.traceNote, "for next ") {
+			t.Errorf("for-next note = %q", e.traceNote)
+		}
+	}
+
+	// stepMoveCont final iteration → "for done"
+	{
+		r := covRegistry(t, nil)
+		cont := &ForCont{Registry: r, IterName: "i", Current: 3, End: 3, Step: 1, Body: []Value{NewInteger(1)}}
+		e := NewTop(r)
+		e.SetTrace(noop)
+		e.tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
+		e.marks = map[string]bool{"m1": true}
+		if err := e.stepMoveCont(0, 1, MoveInfo{To: "m1", Cont: cont}); err != nil {
+			t.Fatalf("for done: %v", err)
+		}
+		if e.traceNote != "for done" {
+			t.Errorf("for-done note = %q", e.traceNote)
+		}
+	}
+
+	// stepMoveIf → "if <bool>"
+	{
+		ifc := &IfCont{Then: []Value{NewInteger(1)}, Else: []Value{NewInteger(2)}}
+		e := NewTop(covRegistry(t, nil))
+		e.SetTrace(noop)
+		e.tape = NewTape([]Value{NewMark("m1"), NewBoolean(true), NewMoveIf("m1", "if", ifc)}, stackHeadroom)
+		e.marks = map[string]bool{"m1": true}
+		e.pointer = 2
+		if err := e.stepMove(e.tape.At(2)); err != nil {
+			t.Fatalf("if: %v", err)
+		}
+		if e.traceNote != "if true" {
+			t.Errorf("if note = %q", e.traceNote)
+		}
 	}
 }
 

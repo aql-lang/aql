@@ -33,14 +33,14 @@ func TestInterpAllocCeilings(t *testing.T) {
 		ceiling     int64
 		byteCeiling int64
 	}{
-		{"arith_chain64", "", arithChain(64), 3650, 600_000},
-		{"compare_loop", "", `for 200 [gt i 100]`, 14800, 1_850_000},
-		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 29500, 3_700_000},
-		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 27000, 2_950_000},
-		{"each_list", `def xs100 ` + intList(100), `each [mul 2] xs100`, 5200, 850_000},
-		{"fold_int", `def xs100b ` + intList(100), `fold [add] xs100b 0`, 3200, 620_000},
-		{"map_get", `def mg {a: {b: {c: {d: 1}}}}`, `for 100 [mg.a.b.c.d]`, 39000, 3_300_000},
-		{"string_join", `def ws ['alpha' 'beta' 'gamma' 'delta']`, `for 50 [join '-' ws]`, 20500, 2_050_000},
+		{"arith_chain64", "", arithChain(64), 1980, 600_000},
+		{"compare_loop", "", `for 200 [gt i 100]`, 8350, 1_850_000},
+		{"if_scalar", "", `for 200 [if (gt i 100) [1] [0]]`, 16400, 3_700_000},
+		{"for_tight", "", `for 200 [add (mul i 3) 7]`, 15550, 2_950_000},
+		{"each_list", `def xs100 ` + intList(100), `each [mul 2] xs100`, 3070, 850_000},
+		{"fold_int", `def xs100b ` + intList(100), `fold [add] xs100b 0`, 2490, 620_000},
+		{"map_get", `def mg {a: {b: {c: {d: 1}}}}`, `for 100 [mg.a.b.c.d]`, 27700, 3_300_000},
+		{"string_join", `def ws ['alpha' 'beta' 'gamma' 'delta']`, `for 50 [join '-' ws]`, 19100, 2_050_000},
 	}
 	for _, g := range guards {
 		a, err := New()

@@ -3372,8 +3372,10 @@ func (e *Engine) stepLiteral() error {
 	fwd.CollectedArgs++
 	fwd.FuncIndex = funcIdx
 
-	e.traceNote = fmt.Sprintf("collect %s %d/%d",
-		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("collect %s %d/%d",
+			fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+	}
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All forward args collected. Remove forward, force stack, retry.
@@ -4460,7 +4462,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			// `Math.sqrt` otherwise shows only the `get` expansion, never the
 			// function it resolves to. Gated on a module origin so ordinary
 			// user-fn and bare-word traces are unaffected.
-			if fnDef.Module != "" {
+			if fnDef.Module != "" && e.trace != nil {
 				e.traceNote = "call " + fnDef.Name
 			}
 			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
@@ -5466,7 +5468,9 @@ func (e *Engine) stepMark(val Value) {
 		e.marks = make(map[string]bool)
 	}
 	e.marks[info.ID] = true
-	e.traceNote = "mark " + info.ID
+	if e.trace != nil {
+		e.traceNote = "mark " + info.ID
+	}
 	e.pointer++
 }
 
@@ -5499,7 +5503,9 @@ func (e *Engine) stepMove(val Value) error {
 		// signalling loop completion). Remove this orphaned move quietly.
 		delete(e.marks, info.To)
 		e.tape.Remove(e.pointer)
-		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		if e.trace != nil {
+			e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		}
 		return nil
 	}
 
@@ -5524,7 +5530,9 @@ func (e *Engine) stepMove(val Value) error {
 	copy(body, markInfo.Body)
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, body...)
 
-	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+	}
 
 	// Set pointer to where the mark was (now the start of the replayed body).
 	e.pointer = markIdx
@@ -5580,7 +5588,9 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 
 		// Set pointer to the new mark so stepMark processes it.
 		e.pointer = markIdx
-		e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		if e.trace != nil {
+			e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		}
 		return nil
 	}
 
@@ -5589,7 +5599,9 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	delete(e.marks, info.To)
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
-	e.traceNote = "for done"
+	if e.trace != nil {
+		e.traceNote = "for done"
+	}
 	return nil
 }
 
@@ -5628,7 +5640,9 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	// Splice chosen branch (or nothing) in place of mark+condition+move.
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, branch...)
 	e.pointer = markIdx
-	e.traceNote = fmt.Sprintf("if %v", cond)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("if %v", cond)
+	}
 	return nil
 }
 
