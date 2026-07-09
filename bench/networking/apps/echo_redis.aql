@@ -1,6 +1,13 @@
 # App-level throughput probe: mini-redis (SET/GET round-trips over the aql:net
 # service+codec tier). Run compiled vs -no-compile to compare. See ../README.md.
-# Run from the repo root: cmd/go/bin/aql run -no-check -install network bench/networking/apps/echo_redis.aql
+# Run from the repo root: cmd/go/bin/aql run -install network bench/networking/apps/echo_redis.aql
+#
+# The `;` statement separators inside and after the `for` body are load-bearing
+# for the DEFAULT pre-flight check: without them, the check-mode analysis carries
+# the first dispatch's residual into the next statement and the endpoint `ep`
+# mis-types as a Function, tripping a spurious no_signature. `;` forces the
+# statement-boundary commit that clears the residual. See
+# design/CHECK-FALSE-POSITIVES.0.md — the underlying checker bug is tracked there.
 import "./design/examples/apps/mini-redis.aql"
 import "aql:net"
 import "aql:time-util"
@@ -9,6 +16,6 @@ def port (Net.addr ln).port
 def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String port)]))
 MiniRedis.cmd ep "SET k hello" drop
 def start (TimeUtil.now)
-for 5000 [ MiniRedis.cmd ep "SET k hello" drop  MiniRedis.cmd ep "GET k" drop ]
+for 5000 [ MiniRedis.cmd ep "SET k hello" drop ; MiniRedis.cmd ep "GET k" drop ] ;
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
 print (join "" ["mini-redis 10000 ops  " (convert String dur) " ms  " (convert String (div dur 10000000.0)) " req/s"])

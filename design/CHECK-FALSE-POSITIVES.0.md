@@ -59,6 +59,40 @@ not clear it). The diagnostic site is DELIBERATELY not suspend-gated
 just silence the report — silencing risks dropping the genuine errors that gate
 guards.
 
+### Confirmed: an implicit-statement-boundary residual (with a workaround)
+
+The trigger is narrower than "loops" in general: it is a **statement boundary
+inside a body that is not committed**. Two dispatches in one `for` body separated
+by an explicit `;` check CLEAN; without the `;` they trip. Likewise a `def` right
+after a `for` trips unless the `for` statement is `;`-terminated:
+
+```
+for 3 [ MiniRedis.cmd ep "a" drop   MiniRedis.cmd ep "b" drop ]     → no_signature
+for 3 [ MiniRedis.cmd ep "a" drop ; MiniRedis.cmd ep "b" drop ] ;   → clean
+```
+
+So the first dispatch leaves a residual — the module fn-VALUE produced by the
+`MiniRedis.cmd` dot-access, not fully consumed in check mode — on the analysis
+stack, and the next statement's collection mis-grabs it as `ep`. The `;` (an
+`end` marker) forces the `commitBarrierForward` that clears it; an IMPLICIT
+statement boundary inside a `for`/list body does not. Top-level statements don't
+share the residual (each is committed), which is why the bug only shows inside a
+body. This only bites the service `call` path (mini-redis); the serve-raw `req`
+path (mini-s3) and single-statement loop bodies (todo-api) stay clean.
+
+**Workaround (shipped for the benchmark drivers):** put `;` between statements in
+a loop body and after a `for` that a later statement reads across. This lets the
+`bench/networking/apps/echo_redis.aql` driver pass the DEFAULT pre-flight gate
+(dropping `-no-check`). It is a workaround, not the fix.
+
+**The fix (Stage 2):** make an IMPLICIT statement boundary inside a `for`/list
+body commit the forward residual exactly as an explicit `;`/`end` does — i.e. a
+module fn-value dispatch must not leave its fn value on the check-mode stack
+across a statement boundary. Localised to the body-analysis statement stepping /
+`commitBarrierForward`, but soundness-critical (it is the forward-collection path
+every dispatch uses), so it must land gated by `TestCheckAccuracyRatchet` +
+`verify-bytecode` + the corpus, and is not attempted in this pass.
+
 ## The design tension (must respect)
 
 The emit gate (`engine.go:7369`, the `recoverableUnknownType` computation)

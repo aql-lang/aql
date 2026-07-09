@@ -89,10 +89,14 @@ equivalents), so they are measured **compiled vs. interpreted**, not
 cross-language. Drivers live in `apps/`; run each from the repo root:
 
 ```bash
-cmd/go/bin/aql run -no-check -install network bench/networking/apps/echo_redis.aql
-cmd/go/bin/aql run -no-check -no-compile -install network bench/networking/apps/echo_redis.aql
+cmd/go/bin/aql run -install network bench/networking/apps/echo_redis.aql
+cmd/go/bin/aql run -no-compile -install network bench/networking/apps/echo_redis.aql
 # …and echo_s3.aql / echo_todo.aql
 ```
+
+(The drivers pass the default pre-flight check. `echo_redis.aql` uses `;`
+statement separators in and after its `for` body to avoid a checker
+false-positive — see `design/CHECK-FALSE-POSITIVES.0.md`.)
 
 | App | tier | compiled | interpreted | speedup |
 |---|---|--:|--:|--:|
