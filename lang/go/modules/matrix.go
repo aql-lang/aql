@@ -118,9 +118,9 @@ func (tensorFormatBehavior) Size(v native.Value) int {
 // report their kind through their ancestry.
 func tensorKindName(vt *eng.Type) string {
 	for t := vt; t != nil; t = t.Parent {
-		switch t.Name {
+		switch t.Name() {
 		case "Vector", "Matrix", "Tensor":
-			return t.Name
+			return t.Name()
 		}
 	}
 	return "Tensor"

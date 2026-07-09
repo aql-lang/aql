@@ -45,8 +45,8 @@ func genMemoKey(schemaID string, canon string) string {
 // memo key and the instantiation node's display name. A named node
 // renders by name; everything else by CanonValue.
 func canonTypeArg(arg Value) string {
-	if node := typeArgNode(arg); node != nil && node.Name != "" {
-		return node.Name
+	if node := typeArgNode(arg); node != nil && node.Name() != "" {
+		return node.Name()
 	}
 	return CanonValue(arg)
 }
@@ -490,7 +490,7 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 func schemaShortName(info *TypeSchemaInfo) string {
 	name := info.Name
 	if name == "" && info.Type != nil {
-		name = info.Type.Name
+		name = info.Type.Name()
 	}
 	if i := strings.LastIndexByte(name, '/'); i >= 0 {
 		name = name[i+1:]

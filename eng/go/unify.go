@@ -157,8 +157,8 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 	case v.Parent != nil && v.Parent.ConformsTo(TAtom) && v.Data != nil:
 		w, _ := AsAtom(v)
 		name = w
-	case IsBareTypeNode(v) && v.ID != "" && v.Name != "":
-		name = v.Name
+	case IsBareTypeNode(v) && v.ID != "" && v.Name() != "":
+		name = v.Name()
 	case isPredicateFnValue(v):
 		// Direct FnDef body — try the FnDef's Name field. Predicate
 		// types installed via `def Pos fn […]` carry Name="Pos" on

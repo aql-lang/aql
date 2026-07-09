@@ -752,7 +752,7 @@ func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool
 	}
 	if kind != nil && kind.Origin != eng.OriginUserDef {
 		return nil, native.Value{}, r.AqlErrorHint("micron_literal",
-			fmt.Sprintf("MiniLang.micron: %s is a builtin Micron — its literal shape is fixed", kind.Name),
+			fmt.Sprintf("MiniLang.micron: %s is a builtin Micron — its literal shape is fixed", kind.Name()),
 			"micron",
 			"register shapes for USER kinds only (def Nameon refine Micron {…})")
 	}
@@ -874,7 +874,7 @@ func micronGrammarFor(kind *native.Type, shape native.Value, r *native.Registry)
 					"MiniLang.micron: the grammar must not set options.tag", "micron",
 					"the merge tag is the Micron kind's name — the bridge sets it")
 			}
-			g.j.SetOptions(tabnas.Options{Tag: kind.Name})
+			g.j.SetOptions(tabnas.Options{Tag: kind.Name()})
 			return g, nil
 		}
 		if shape.Parent.ConformsTo(native.TMap) {
@@ -882,7 +882,7 @@ func micronGrammarFor(kind *native.Type, shape native.Value, r *native.Registry)
 				return nil, err
 			}
 			g := &parseGrammar{
-				j:           tabnas.Make(tabnas.Options{Tag: kind.Name}),
+				j:           tabnas.Make(tabnas.Options{Tag: kind.Name()}),
 				markActions: tabnasabnf.ActionsMap{},
 			}
 			if err := applySpecMap(g, shape, r, false); err != nil {
@@ -932,7 +932,7 @@ func micronGrammarFinalize(st *micronLitState, kind *native.Type, g *parseGramma
 	for _, step := range g.steps {
 		if serr := step(); serr != nil {
 			return nil, r.AqlErrorHint("micron_literal",
-				fmt.Sprintf("MiniLang.micron %s: %s", kind.Name, serr.Error()),
+				fmt.Sprintf("MiniLang.micron %s: %s", kind.Name(), serr.Error()),
 				"micron", "check the grammar is well-formed")
 		}
 	}
@@ -940,7 +940,7 @@ func micronGrammarFinalize(st *micronLitState, kind *native.Type, g *parseGramma
 	g.registered = true // consumed — single-use, like Parse.register
 
 	opts := g.j.Options()
-	if opts.Tag != kind.Name {
+	if opts.Tag != kind.Name() {
 		return nil, r.AqlErrorHint("micron_literal",
 			"MiniLang.micron: the grammar must not set options.tag", "micron",
 			"the merge tag is the Micron kind's name — the bridge sets it")
@@ -977,7 +977,7 @@ func micronGrammarFinalize(st *micronLitState, kind *native.Type, g *parseGramma
 	for _, tok := range tokens {
 		gateTins[g.j.Token(tok)] = true // idempotent by name
 	}
-	kindName := kind.Name
+	kindName := kind.Name()
 	ruled := false
 	g.j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
 		for _, alt := range rs.OpenAlts() {
@@ -1101,9 +1101,9 @@ func miniMicronLitHandlerFor(parent *native.Registry) native.Handler {
 		st := micronLitStateFor(parent, true)
 		st.mu.Lock()
 		defer st.mu.Unlock()
-		if st.kinds[kind.Name] {
+		if st.kinds[kind.Name()] {
 			return nil, r.AqlError("micron_literal",
-				fmt.Sprintf("MiniLang.micron: a literal shape for %s is already registered", kind.Name), "micron")
+				fmt.Sprintf("MiniLang.micron: a literal shape for %s is already registered", kind.Name()), "micron")
 		}
 		g, err := micronGrammarFor(kind, args[1], r)
 		if err != nil {
@@ -1114,13 +1114,13 @@ func miniMicronLitHandlerFor(parent *native.Registry) native.Handler {
 			return nil, err
 		}
 
-		st.kinds[kind.Name] = true
+		st.kinds[kind.Name()] = true
 		for _, tok := range tokens {
-			st.tokens[tok] = kind.Name
+			st.tokens[tok] = kind.Name()
 		}
-		st.builders[kind.Name] = &micronLitBuilder{kind: kind, fn: fn, g: g}
+		st.builders[kind.Name()] = &micronLitBuilder{kind: kind, fn: fn, g: g}
 		st.specs = append(st.specs, eng.MicronLiteralSpec{
-			Tag:    kind.Name,
+			Tag:    kind.Name(),
 			Tokens: tokens,
 			// The grammar is pre-built and carries NO TokenOrder of its
 			// own — the merge adopts the builtin leaves' computed order,
@@ -1199,11 +1199,11 @@ func miniMicronHandlerFor(parent *native.Registry) native.Handler {
 			}
 			out, berr := callParseFn(r, b.fn, []native.Value{native.AnyToValue(node)})
 			if berr == nil && (len(out) != 1 || !out[0].Parent.ConformsTo(b.kind)) {
-				berr = fmt.Errorf("the %s builder must return one %s instance", b.kind.Name, b.kind.Name)
+				berr = fmt.Errorf("the %s builder must return one %s instance", b.kind.Name(), b.kind.Name())
 			}
 			if berr != nil {
 				return nil, r.AqlError("mini_parse_error",
-					fmt.Sprintf("micron: %s literal %q: %v", b.kind.Name, src, berr), "lang_micron")
+					fmt.Sprintf("micron: %s literal %q: %v", b.kind.Name(), src, berr), "lang_micron")
 			}
 			return []native.Value{out[0]}, nil
 		}

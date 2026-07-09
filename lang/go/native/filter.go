@@ -118,7 +118,7 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 		}
 		top := res[len(res)-1]
 		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
-			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate must produce a Boolean, got %s", k, top.Parent.Name), "filter")
+			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate must produce a Boolean, got %s", k, top.Parent.Name()), "filter")
 		}
 		if b, _ := AsBoolean(top); b {
 			out.Set(k, v)
@@ -174,7 +174,7 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		}
 		top := res[len(res)-1]
 		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
-			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body must produce a Boolean, got %s", label, top.Parent.Name), "filter")
+			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body must produce a Boolean, got %s", label, top.Parent.Name()), "filter")
 		}
 		b, _ := AsBoolean(top)
 		return b, nil

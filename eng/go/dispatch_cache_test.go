@@ -142,4 +142,12 @@ func TestTypeMetaAccessorsNilValue(t *testing.T) {
 		t.Fatalf("nil-tmeta accessors not all 0: FixedID=%d Rank=%d Depth=%d In=%d Out=%d",
 			v.FixedID(), v.Rank(), v.Depth(), v.In(), v.Out())
 	}
+	if v.Name() != "" {
+		t.Fatalf("nil-tmeta Name = %q, want empty", v.Name())
+	}
+	// SetName lazily allocates the tmeta on a value that had none.
+	v.SetName("x")
+	if v.Name() != "x" {
+		t.Fatalf("after SetName, Name = %q, want x", v.Name())
+	}
 }

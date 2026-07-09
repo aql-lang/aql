@@ -30,7 +30,7 @@ func compareTypes(a, b *Type) int {
 	if c := cmpInt(typeDepth(a), typeDepth(b)); c != 0 {
 		return c
 	}
-	if c := strings.Compare(a.Name, b.Name); c != 0 {
+	if c := strings.Compare(a.Name(), b.Name()); c != 0 {
 		return c
 	}
 	return strings.Compare(a.ID, b.ID)

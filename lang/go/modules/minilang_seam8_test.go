@@ -48,7 +48,7 @@ func TestW8MicronFinalizeNoMatchToken(t *testing.T) {
 	st := micronLitStateFor(r, true)
 	// Tag matches the kind so the tag guard passes; no match tokens declared.
 	g := &parseGrammar{
-		j:           tabnas.Make(tabnas.Options{Tag: kind.Name}),
+		j:           tabnas.Make(tabnas.Options{Tag: kind.Name()}),
 		markActions: tabnasabnf.ActionsMap{},
 	}
 	if _, err := micronGrammarFinalize(st, kind, g, r); err == nil {

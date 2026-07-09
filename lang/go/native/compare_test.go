@@ -219,8 +219,10 @@ func TestCompareValuesSameBranchBySize(t *testing.T) {
 // Record < Table), then depth (a type before its subtype),
 // then name (siblings Foo and Bar).
 func TestCompareTypes(t *testing.T) {
-	foo := &Type{Name: "Foo", Parent: TList}
-	bar := &Type{Name: "Bar", Parent: TList}
+	foo := &Type{Parent: TList}
+	foo.SetName("Foo")
+	bar := &Type{Parent: TList}
+	bar.SetName("Bar")
 	tests := []struct {
 		name string
 		a, b Value
@@ -453,7 +455,8 @@ func (revPathBehavior) Compare(a, b Value) (int, error) {
 // proving a subtype can override an inherited capability and that
 // CompareValues' lattice walk picks the most-specific Comparer.
 func TestRevPathComparator(t *testing.T) {
-	revPath := &Type{Name: "RevPath", Parent: TPathon, Behavior: revPathBehavior{}}
+	revPath := &Type{Parent: TPathon, Behavior: revPathBehavior{}}
+	revPath.SetName("RevPath")
 	rev := func(parts ...string) Value {
 		p := NewPathon(parts, false)
 		p.Parent = revPath

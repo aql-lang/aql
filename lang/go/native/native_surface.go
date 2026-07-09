@@ -97,7 +97,7 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	if len(gaps) > 0 {
 		return nil, r.AqlError("surface_unsatisfied",
 			fmt.Sprintf("exposes: %s does not expose %s:\n  %s",
-				node.Name, sinfo.Name, strings.Join(gaps, "\n  ")), "exposes")
+				node.Name(), sinfo.Name, strings.Join(gaps, "\n  ")), "exposes")
 	}
 	sinfo.Conform[node.ID] = true
 	return nil, nil
@@ -129,12 +129,12 @@ func renderSpec(spec FnSigSpec) string {
 	var params, returns []string
 	for _, p := range spec.Params {
 		if p.Type != nil {
-			params = append(params, p.Type.Name)
+			params = append(params, p.Type.Name())
 		}
 	}
 	for _, t := range spec.Returns {
 		if t != nil {
-			returns = append(returns, t.Name)
+			returns = append(returns, t.Name())
 		}
 	}
 	return fmt.Sprintf("fn [[%s] [%s]]", strings.Join(params, " "), strings.Join(returns, " "))

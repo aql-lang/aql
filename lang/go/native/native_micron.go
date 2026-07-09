@@ -44,7 +44,7 @@ func getrMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return []Value{val}, nil
 	}
 	return nil, r.AqlError("not_found",
-		fmt.Sprintf("getr: %s has no property %q", recv.Parent.Name, k), "getr")
+		fmt.Sprintf("getr: %s has no property %q", recv.Parent.Name(), k), "getr")
 }
 
 func hasMicronHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {

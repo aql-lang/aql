@@ -134,10 +134,10 @@ func TypeNameByID(id string) string {
 	}
 	// Only return a name for types that participate in user-facing
 	// name resolution (present in byName).
-	if _, ok := Builtin.byName[def.Name]; !ok {
+	if _, ok := Builtin.byName[def.Name()]; !ok {
 		return ""
 	}
-	return def.Name
+	return def.Name()
 }
 
 // mustType resolves a well-known builtin type constant at init time. An
@@ -278,7 +278,7 @@ func (t *Type) Leaf() string {
 	if t == nil {
 		return ""
 	}
-	return t.Name
+	return t.Name()
 }
 
 // IsSubtypeOf reports whether t is a strict subtype of parent.

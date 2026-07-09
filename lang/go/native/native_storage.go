@@ -329,7 +329,7 @@ func setClassInstanceReturns(args []Value, r *Registry) []Value {
 	if !declared {
 		name := info.Name
 		if name == "" {
-			name = args[2].Parent.Name
+			name = args[2].Parent.Name()
 		}
 		eng.CheckAddUniqueDiagnostic(r, "sealed_field",
 			fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
@@ -362,7 +362,7 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		if !declared {
 			name := oi.TypeRef.Name
 			if name == "" {
-				name = container.Parent.Name
+				name = container.Parent.Name()
 			}
 			return nil, r.AqlErrorHint("sealed_field",
 				fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),

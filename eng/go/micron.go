@@ -642,9 +642,9 @@ func micronAccepts(v Value) bool {
 // of any Micron kind rides the ordinary refine-prefab path instead.
 func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 	if !(IsBareTypeNode(base) && base.Equal(TMicron)) {
-		name := base.Parent.Name
+		name := base.Parent.Name()
 		if IsBareTypeNode(base) {
-			name = base.Name
+			name = base.Name()
 		} else if info, err := AsMicronType(base); err == nil && info.Name != "" {
 			name = info.Name
 		}
@@ -715,5 +715,5 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return []Value{ReparentValue(out[0], kind)}, nil
 	}
 	return nil, &AqlError{Code: "type_error",
-		Detail: "make: " + kind.Name + " has no field schema — define one with refine Micron {fields}"}
+		Detail: "make: " + kind.Name() + " has no field schema — define one with refine Micron {fields}"}
 }

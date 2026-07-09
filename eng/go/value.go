@@ -1065,22 +1065,19 @@ type Value struct {
 	// type node it is the supertype. nil only for lattice roots.
 	Parent *Type
 
-	// Type-lattice metadata — populated on type nodes, zero on
-	// ordinary values. A non-nil Behavior is the marker of a type
-	// node.
-	Name string // type-node leaf name (e.g. "ProperString")
-	// tmeta holds the five integer lattice fields (FixedID, Rank, Depth,
-	// In, Out) behind ONE pointer instead of 40 inline bytes on every
-	// Value — the struct is copied by value on every stack push, arg, and
-	// tape cell, so shrinking it cuts the interpreter's ~15% duffcopy cost
-	// (design/INTERPRETER-SPEED-PLAN.10.md #1A). These fields are set once
-	// at type registration and never mutated, so a Value copy shares the
-	// SAME *typeMeta (an orphan `&v`-derived *Type reads the identical
-	// values as its canonical node — the property the old inline fields
-	// gave for free). Nil on ordinary runtime values; the FixedID/Rank/
-	// Depth/In/Out accessors return 0 for nil, matching the old zero
-	// fields. Writers go through ensureTMeta so a mint site that forgets to
-	// allocate one cannot nil-panic.
+	// tmeta holds type-node metadata — the leaf Name and the five integer
+	// lattice fields (FixedID, Rank, Depth, In, Out) — behind ONE pointer
+	// instead of ~56 inline bytes on every Value. The struct is copied by
+	// value on every stack push, arg, and tape cell, so shrinking it cuts
+	// the interpreter's ~15% duffcopy cost (design/
+	// INTERPRETER-SPEED-PLAN.10.md #1A). These fields are set once at type
+	// registration and never mutated, so a Value copy shares the SAME
+	// *typeMeta (an orphan `&v`-derived *Type reads the identical metadata
+	// as its canonical node — the property the old inline fields gave for
+	// free). Nil on ordinary runtime values; the Name/FixedID/Rank/Depth/
+	// In/Out accessors return the zero value for nil. Writers go through
+	// ensureTMeta so a mint site that forgets to allocate one cannot
+	// nil-panic.
 	tmeta      *typeMeta
 	IsInternal bool         // Word/__XX runtime markers — not user-facing
 	Origin     OriginKind   // builtin / userdef
@@ -1124,6 +1121,8 @@ type Value struct {
 // labelIntervals) and never mutated, so sharing one *typeMeta across
 // every copy of a type Value is sound.
 type typeMeta struct {
+	// Name is the type-node leaf name (e.g. "ProperString").
+	Name string
 	// FixedID is >0 for builtin type nodes; 0 otherwise. Baked into the
 	// serialised Value ID (formatFixedID).
 	FixedID int
@@ -1154,6 +1153,23 @@ func (v *Value) ensureTMeta() *typeMeta {
 		v.tmeta = &typeMeta{}
 	}
 	return v.tmeta
+}
+
+// SetName sets the type-node leaf name, allocating the typeMeta if
+// needed. Exported because the leaf name now lives behind the unexported
+// tmeta pointer, so external packages (lang, tests) that build or rename
+// an ad-hoc *Type node cannot assign the field directly.
+func (v *Value) SetName(name string) {
+	v.ensureTMeta().Name = name
+}
+
+// Name is the nil-safe read of the type-node leaf name — "" for an
+// ordinary value (no tmeta), matching the old empty inline field.
+func (v Value) Name() string {
+	if v.tmeta == nil {
+		return ""
+	}
+	return v.tmeta.Name
 }
 
 // FixedID / Rank / Depth / In / Out are nil-safe reads of the lattice
@@ -1264,7 +1280,7 @@ func IDPrefixForType(t *Type) string {
 	}
 	for d := t; d != nil; d = d.Parent {
 		if d.Parent == nil || d.Parent.FixedID() == anyFixedID {
-			switch d.Name {
+			switch d.Name() {
 			case "Scalar":
 				return "S_"
 			case "Node":
