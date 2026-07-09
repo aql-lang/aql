@@ -79,6 +79,48 @@ An earlier revision of this file reported ~940 req/s for the "compiler
 handler ran interpreted regardless of the compile flag. That row is superseded
 by the callback-compilation work.
 
+### The other net examples (app-level, AQL-only)
+
+Echo is a deliberately minimal microbenchmark — its handler body is exactly the
+compilable subset (`for`, `def`, `convert`, `join`, socket words), which is why
+it captures the full compiled-vs-interpreted swing. The realistic `aql:net`
+examples in `design/examples/apps/` are heavier and AQL-only (no other-language
+equivalents), so they are measured **compiled vs. interpreted**, not
+cross-language. Drivers live in `apps/`; run each from the repo root:
+
+```bash
+cmd/go/bin/aql run -no-check -install network bench/networking/apps/echo_redis.aql
+cmd/go/bin/aql run -no-check -no-compile -install network bench/networking/apps/echo_redis.aql
+# …and echo_s3.aql / echo_todo.aql
+```
+
+| App | tier | compiled | interpreted | speedup |
+|---|---|--:|--:|--:|
+| `mini-redis` | `Net.listen` service + RESP codec | ~460 req/s | ~480 req/s | **~1.0×** |
+| `mini-s3`    | `serve-raw` + streaming HTTP      | ~100 req/s | ~101 req/s | **~1.0×** |
+| `todo-api`   | service + `Net.http` codec + JSON | ~1,130 req/s | ~1,170 req/s | **~1.0×** |
+
+**None of the realistic apps get the compiled speedup yet** — their handler
+bodies still run on the interpreter, so `-compile` and `-no-compile` are within
+noise. This is *not* the echo bug (an under-typed `Any` param); each app's
+handler refuses to compile for a distinct, still-open compiler-frontier reason
+(`aql run -force-compile` names it):
+
+- **mini-s3** — `operand of unknown provenance or not statically materialisable
+  at serve-raw` (the handler threads a mutable/`flex` value the store-fn bake
+  cannot materialise as a const).
+- **todo-api** — `branch leaves extra values (Stage 2 lowers single-result
+  branches)` (a handler `if`-arm nets more than one value — the same lowering
+  leaf tracked for the sort library).
+- **mini-redis** — a check diagnostic blocks the whole-program compile.
+
+So the compilation win is currently **narrow**: it applies to callback bodies in
+the compilable subset (echo, spawn/service handlers with core bodies), not yet to
+the full apps. Closing these is the remaining frontier — the same lowering /
+materialisation walls the compiler work elsewhere is chipping at, now surfaced by
+real network handlers. The drivers above make the app numbers repeatable so the
+gap can be re-measured as those land.
+
 ### Where AQL's time goes (the interpreter path)
 
 This analysis was done on the **interpreted** handler (the `-no-compile` /
