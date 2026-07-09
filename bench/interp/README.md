@@ -33,13 +33,24 @@ are sized so execution dominates on the AQL-interp column).
 
 ## Reference snapshot (2026-07, 4-core Xeon 2.80GHz)
 
+Original baseline (before the interpreter-perf work):
+
 | workload | aql-interp | aql-compiled | python | ruby | node |
 |---|---:|---:|---:|---:|---:|
-| fib      | 20,757 ms | 418 ms | 23 ms | 83 ms | 51 ms |
-| loopsum  |  3,429 ms | 115 ms | 25 ms | 80 ms | 47 ms |
-| nestloop |  3,116 ms | 110 ms | 22 ms | 84 ms | 48 ms |
+| fib      | ~22,000 ms | 418 ms | 23 ms | 83 ms | 51 ms |
+| loopsum  |  ~3,950 ms | 115 ms | 25 ms | 80 ms | 47 ms |
+| nestloop |  ~3,330 ms | 110 ms | 22 ms | 84 ms | 48 ms |
 
-Interpreter is ~28–50× slower than the compiled VM and ~140–900× slower
-than CPython (execution-only, after subtracting startup, fib is ~3,000×).
-Root-cause analysis and recommendations:
-`design/INTERPRETER-SPEED-INVESTIGATION.10.md`.
+After the six-cause fix series (`design/INTERPRETER-SPEED-PLAN.10.md`):
+
+| workload | aql-interp | aql-compiled | python | ruby | node |
+|---|---:|---:|---:|---:|---:|
+| fib      | ~9,100 ms | 380 ms | 20 ms | 68 ms | 38 ms |
+| loopsum  | ~2,430 ms |  93 ms | 21 ms | 66 ms | 36 ms |
+| nestloop | ~2,160 ms |  86 ms | 18 ms | 65 ms | 37 ms |
+
+The interpreter is now ~1.5–2.4× faster; the interp↔compiled gap dropped
+from ~28–50× to ~16–36× (roughly halved on recursion). Root-cause
+analysis, results, and per-fix notes:
+`design/INTERPRETER-SPEED-INVESTIGATION.10.md` and
+`design/INTERPRETER-SPEED-PLAN.10.md`.

@@ -1,5 +1,21 @@
 # Interpreter-speed fix plan — root causes 1–6
 
+> **Status: DONE.** All six root causes landed as individually gated
+> commits (fmt/vet/lint/test + 100% cover-gate each). Measured outcome —
+> interpreter ~1.5–2.4× faster end-to-end, interp↔compiled gap roughly
+> halved, allocs/op down 30–50%; see the Results section of
+> `INTERPRETER-SPEED-INVESTIGATION.10.md`. Commits, in order: #2 dispatch
+> cache, #6 trace gating, #1B lock-free/single-alloc IDs, #3
+> forward-collection scratch reuse, #5 frame-snapshot skip, #4 loop
+> re-splice buffer, #1A Value shrink (184→152 B). The allowlist churn a
+> mid-`engine.go` edit causes was handled by a diff-hunk delta
+> re-anchor rather than the proposed `covergate -reanchor` subcommand
+> (kept the coverage tool unchanged). #1A moved only the five immutable
+> integer lattice fields behind a shared `*typeMeta` (the safe,
+> orphan-pointer-proof subset); moving `Behavior`/`Name`/`Pos` or
+> packing the bool flags remains available as a follow-up for further
+> duffcopy reduction.
+
 Companion to `design/INTERPRETER-SPEED-INVESTIGATION.10.md` (the data +
 diagnosis). This note is the **implementation plan**: for each root
 cause, the grounded diagnosis (file:line), the fix, blast radius, risk,

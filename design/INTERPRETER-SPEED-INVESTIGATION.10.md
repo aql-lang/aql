@@ -1,5 +1,35 @@
 # Why interpreted AQL is slow — investigation & data (2026-07)
 
+## Results after the fixes (all six root causes landed)
+
+The plan in `design/INTERPRETER-SPEED-PLAN.10.md` was implemented in
+full (causes #2, #6, #1B, #3, #5, #4, #1A). Cross-language wall-clock,
+best-of-5, same box:
+
+| workload | interp BEFORE | interp AFTER | speedup | AFTER ÷ compiled | AFTER ÷ python |
+|---|---:|---:|---:|---:|---:|
+| fib(24)          | 22,162 ms | 9,079 ms | 2.4× | ~24× | ~450× |
+| loopsum (100k)   |  3,951 ms | 2,427 ms | 1.6× | ~26× | ~115× |
+| nestloop (300²)  |  3,330 ms | 2,160 ms | 1.5× | ~25× | ~120× |
+
+Interpreter-vs-compiled microbenchmarks (`BenchmarkStage6`, execution
+only) — the gap roughly **halved**, worst on the recursion shapes:
+
+| shape | interp/compiled BEFORE | AFTER | interp allocs/op BEFORE→AFTER |
+|---|---:|---:|---:|
+| arith_chain64 | ~25× | ~17× | 3,360 → 1,768 |
+| for_tight | ~20× | ~16× | 24,903 → 15,285 |
+| map_get | ~43× | ~36× | 35,573 → 25,056 |
+| recursion_nontail | ~53× | ~28× | 73,076 → 40,960 |
+| recursion_tail | ~46× | ~21× | 334,307 → 191,026 |
+| do_body | ~23× | ~21× | 5,963 → 3,750 |
+
+Net: the interpreter is ~1.5–2.4× faster end-to-end, the interp↔compiled
+gap dropped from ~1.5–1.7 orders of magnitude to ~1.2–1.4, and
+allocations per op fell 30–50%. Each fix landed as its own gated commit
+(fmt/vet/lint/test + 100% cover-gate); see the plan doc for the
+per-cause implementation notes and the commit log.
+
 ## Question
 
 Interpreted AQL (`AQL_NO_COMPILE=1`, the tree-walking engine) runs
