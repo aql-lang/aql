@@ -91,6 +91,12 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Micron/Ipon":     114,
 		"Scalar/Micron/Hoston":   115,
 		"Scalar/Micron/Semveron": 116,
+		"Scalar/Micron/Cidron":   117,
+		"Scalar/Micron/Macon":    118,
+		"Scalar/Micron/Coloron":  119,
+		"Scalar/Micron/Mimon":    120,
+		"Scalar/Micron/Qion":     121,
+		"Scalar/Micron/Phonon":   122,
 		// Tensor family (former FixedIDs 2000-2002) moved to
 		// aql:matrix-util as per-import module mints with no FixedID —
 		// see MintTensorTypes and design/OPEN-WORDS.0.md.

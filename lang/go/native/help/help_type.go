@@ -29,12 +29,18 @@ func init() {
 		Summary: "Create a value conforming to a type.",
 		Description: "Constructs a value of the given type from the provided data. " +
 			"For tables, creates table rows from list data. The Scalar/Micron " +
-			"structured scalars (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron " +
-			"and user Microns) construct from a validated string OR a map of named " +
+			"structured scalars (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron / " +
+			"Cidron / Macon / Coloron / Mimon / Qion / Phonon and user Microns) " +
+			"construct from a validated string OR a map of named " +
 			"fields — `make Emailon 'a@b.co'` ≡ `make Emailon {user:'a' host:'b.co'}`, " +
 			"`make Ipon '2001:db8::1'`, `make Hoston 'example.com:8080'` (host:port, " +
 			"optional port), `make Semveron '1.2.3-rc.1'` (SemVer 2.0.0, ordered by " +
-			"precedence) — and expose read-only properties via dot " +
+			"precedence), `make Cidron '10.0.0.0/8'` (CIDR block), " +
+			"`make Macon '00:1a:2b:3c:4d:5e'` (MAC address), " +
+			"`make Coloron '#ff0000'` (sRGB colour), `make Mimon 'text/html'` " +
+			"(media type), `make Qion 'USD 12.50'` (money — exact Decimal + ISO 4217), " +
+			"`make Phonon '+14155552671'` (E.164 phone number) — and expose " +
+			"read-only properties via dot " +
 			"(`e.host`, `u.port`, `i.addr`, `h.authority`, `s.major`, `s.stable`).",
 		Examples: []string{
 			`make Point {}          ;# fresh instance, all fields at their defaults`,
@@ -55,7 +61,8 @@ func init() {
 			"`def Baron refine Micron {foo:String}` mints a user structured scalar " +
 			"(content-equal, immutable, property-readable); every name bound under " +
 			"Scalar/Micron must end in the suffix 'on'. A Micron LEAF (Emailon, " +
-			"Urlon, Pathon, Ipon, Hoston, Semveron) only refines nominally " +
+			"Urlon, Pathon, Ipon, Hoston, Semveron, Cidron, Macon, Coloron, Mimon, " +
+			"Qion, Phonon) only refines nominally " +
 			"(`def Workon refine Emailon`) — its field set is its validation contract.",
 	})
 

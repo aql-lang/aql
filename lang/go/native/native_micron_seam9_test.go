@@ -144,6 +144,61 @@ func TestW9GetMicronReturnsSemveronCarrier(t *testing.T) {
 	}
 }
 
+func TestW9GetMicronReturnsNewLeafCarriers(t *testing.T) {
+	r := seam5Reg(t)
+	// Each new leaf's carrier receiver narrows typed keys and defaults an
+	// unknown key to None (covers the per-leaf carrier switch arms).
+	check := func(kind *Value, key string, want *Value) {
+		out := getMicronReturns([]Value{NewString(key), NewCarrier(kind)}, r)
+		if len(out) != 1 || !out[0].Parent.Equal(want) {
+			t.Fatalf("%s.%s: expected %s carrier, got %v", kind.Name, key, want.Name, out)
+		}
+	}
+	checkDyn := func(kind *Value, key string) {
+		out := getMicronReturns([]Value{NewString(key), NewCarrier(kind)}, r)
+		if len(out) != 1 || !out[0].Dynamic {
+			t.Fatalf("%s.%s: expected dynamic carrier, got %v", kind.Name, key, out)
+		}
+	}
+	checkNone := func(kind *Value) {
+		out := getMicronReturns([]Value{NewString("zzz"), NewCarrier(kind)}, r)
+		if len(out) != 1 || !out[0].Parent.Equal(TNone) {
+			t.Fatalf("%s default: expected None carrier, got %v", kind.Name, out)
+		}
+	}
+
+	check(TCidron, "cidr", TString)
+	check(TCidron, "prefix", TInteger)
+	checkDyn(TCidron, "count")
+	checkNone(TCidron)
+
+	check(TMacon, "oui", TString)
+	check(TMacon, "bits", TInteger)
+	check(TMacon, "eui64", TBoolean)
+	checkNone(TMacon)
+
+	check(TColoron, "r", TInteger)
+	check(TColoron, "hex", TString)
+	check(TColoron, "opaque", TBoolean)
+	check(TColoron, "alpha", TFloat)
+	checkNone(TColoron)
+
+	check(TMimon, "essence", TString)
+	checkDyn(TMimon, "params")
+	checkNone(TMimon)
+
+	check(TQion, "code", TString)
+	check(TQion, "amount", TBigDecimal)
+	check(TQion, "minor", TInteger)
+	check(TQion, "negative", TBoolean)
+	checkDyn(TQion, "units")
+	checkNone(TQion)
+
+	check(TPhonon, "e164", TString)
+	check(TPhonon, "length", TInteger)
+	checkNone(TPhonon)
+}
+
 func TestW9GetMicronReturnsUserSchema(t *testing.T) {
 	r := seam5Reg(t)
 	// Define a user Micron kind carrying a schema, then obtain its type

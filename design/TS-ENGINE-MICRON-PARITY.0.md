@@ -10,7 +10,13 @@ The Go kernel gained three Scalar/Micron changes that the TypeScript engine
 | `Ipon` — IPv4/IPv6 address leaf (FixedID 114) | #237 | absent |
 | `Pathon` Windows **drive** parsing (`C:/x` → `volume`) | #239 | absent |
 | `Hoston` — host:port authority leaf (FixedID 115) | #240 | absent |
-| `Semveron` — SemVer 2.0.0 leaf (FixedID 116), **custom precedence order** | (this PR) | absent |
+| `Semveron` — SemVer 2.0.0 leaf (FixedID 116), **custom precedence order** | #244 | absent |
+| `Cidron` — CIDR block (FixedID 117), **custom numeric order** (net/netip) | (this PR) | absent |
+| `Macon` — MAC-48/EUI-64 leaf (FixedID 118) | (this PR) | absent |
+| `Coloron` — sRGB colour (FixedID 119), **custom (r,g,b,a) order** | (this PR) | absent |
+| `Mimon` — media type (FixedID 120), canonical params | (this PR) | absent |
+| `Qion` — money (FixedID 121), apd Decimal + ISO 4217, **custom order** | (this PR) | absent |
+| `Phonon` — E.164 phone (FixedID 122) | (this PR) | absent |
 
 `eng/ts/src/type.ts::typeNameTable()` still declares only `TMicron`, `TPathon`,
 `TEmailon`, `TUrlon`.
@@ -21,9 +27,11 @@ The cross-engine differential (`test/go/engspec`) fails only on a **divergence**
 — both engines succeed but return different values. It permits a **gap** — one
 engine errors where the other succeeds.
 
-- `Ipon` / `Hoston` / `Semveron` are **new** types: `make Ipon …` /
-  `make Hoston …` / `make Semveron …` succeed in Go and raise `undefined_word`
-  in TS → a permitted gap, not a divergence.
+- `Ipon` / `Hoston` / `Semveron` / `Cidron` / `Macon` / `Coloron` / `Mimon` /
+  `Qion` / `Phonon` are **new** types: `make <Leaf> …` succeeds in Go and raises
+  `undefined_word` in TS → a permitted gap, not a divergence. The four with a
+  **custom Comparer** (Semveron, Cidron, Coloron, Qion) must port that ordering,
+  not just the constructor, to close the gap correctly.
 - The `Pathon` drive change was deliberately made **POSIX-preserving** (only a
   `C:` drive prefix switches on Windows parsing; `//a//b//` stays `/a/b`), so no
   existing corpus input diverges.

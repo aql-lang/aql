@@ -34,11 +34,19 @@ package eng
 import (
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
+	"mime"
 	"net"
 	"net/mail"
+	"net/netip"
 	"net/url"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/apd/v3"
 )
 
 // MicronTypeInfo is the type body produced by `refine Micron {fields}`
@@ -195,6 +203,15 @@ func (mb micronBehavior) Compare(a, b Value) (int, error) {
 	if mb.kind.ConformsTo(TSemveron) {
 		return compareSemverons(a, b), nil
 	}
+	if mb.kind.ConformsTo(TCidron) {
+		return compareCidrons(a, b), nil
+	}
+	if mb.kind.ConformsTo(TColoron) {
+		return compareColorons(a, b), nil
+	}
+	if mb.kind.ConformsTo(TQion) {
+		return compareQions(a, b), nil
+	}
 	return strings.Compare(micronCompareKey(a), micronCompareKey(b)), nil
 }
 
@@ -243,6 +260,18 @@ func micronRender(v Value) string {
 		return micronHostonAuthority(fields)
 	case v.Parent.ConformsTo(TSemveron):
 		return micronSemveronRender(fields)
+	case v.Parent.ConformsTo(TCidron):
+		return micronFieldString(fields, "cidr")
+	case v.Parent.ConformsTo(TMacon):
+		return micronFieldString(fields, "addr")
+	case v.Parent.ConformsTo(TColoron):
+		return micronColoronHex(fields)
+	case v.Parent.ConformsTo(TMimon):
+		return micronMimonRender(fields)
+	case v.Parent.ConformsTo(TQion):
+		return micronQionRender(fields)
+	case v.Parent.ConformsTo(TPhonon):
+		return "+" + micronFieldString(fields, "digits")
 	default:
 		return NewMap(fields).String()
 	}
@@ -311,6 +340,12 @@ func init() {
 	TIpon.Behavior = micronBehavior{kind: TIpon}
 	THoston.Behavior = micronBehavior{kind: THoston}
 	TSemveron.Behavior = micronBehavior{kind: TSemveron}
+	TCidron.Behavior = micronBehavior{kind: TCidron}
+	TMacon.Behavior = micronBehavior{kind: TMacon}
+	TColoron.Behavior = micronBehavior{kind: TColoron}
+	TMimon.Behavior = micronBehavior{kind: TMimon}
+	TQion.Behavior = micronBehavior{kind: TQion}
+	TPhonon.Behavior = micronBehavior{kind: TPhonon}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -363,6 +398,87 @@ func MicronProperty(v Value, key string) (Value, bool) {
 			return NewBoolean(micronFieldString(fields, "prerelease") == ""), true
 		case "version":
 			return NewString(micronSemveronRender(fields)), true
+		}
+	case v.Parent.ConformsTo(TCidron):
+		switch key {
+		case "hostbits":
+			return NewInteger(cidronHostbits(fields)), true
+		case "count":
+			n := new(big.Int).Lsh(big.NewInt(1), uint(cidronHostbits(fields)))
+			if n.IsInt64() {
+				return NewInteger(n.Int64()), true
+			}
+			return NewBigInteger(n), true
+		}
+	case v.Parent.ConformsTo(TMacon):
+		hw, ok := maconBytes(fields)
+		if !ok {
+			return Value{}, false
+		}
+		switch key {
+		case "bits":
+			return NewInteger(int64(len(hw) * 8)), true
+		case "eui64":
+			return NewBoolean(len(hw) == 8), true
+		case "oui":
+			return NewString(hw[:3].String()), true
+		case "multicast":
+			return NewBoolean(hw[0]&1 != 0), true
+		case "local":
+			return NewBoolean(hw[0]&2 != 0), true
+		case "broadcast":
+			return NewBoolean(maconAllOnes(hw)), true
+		}
+	case v.Parent.ConformsTo(TColoron):
+		switch key {
+		case "hex":
+			return NewString(micronColoronHex(fields)), true
+		case "opaque":
+			return NewBoolean(micronFieldInt(fields, "a") == 255), true
+		case "alpha":
+			return NewFloat(float64(micronFieldInt(fields, "a")) / 255), true
+		case "css":
+			return NewString(coloronCSS(fields)), true
+		}
+	case v.Parent.ConformsTo(TMimon):
+		switch key {
+		case "essence":
+			return NewString(micronFieldString(fields, "type") + "/" + micronFieldString(fields, "subtype")), true
+		case "mime":
+			return NewString(micronMimonRender(fields)), true
+		case "suffix":
+			sub := micronFieldString(fields, "subtype")
+			if i := strings.LastIndexByte(sub, '+'); i >= 0 && i < len(sub)-1 {
+				return NewString(sub[i+1:]), true
+			}
+			return Value{}, false
+		case "facet":
+			sub := micronFieldString(fields, "subtype")
+			if i := strings.IndexByte(sub, '.'); i > 0 {
+				return NewString(sub[:i]), true
+			}
+			return Value{}, false
+		}
+	case v.Parent.ConformsTo(TQion):
+		switch key {
+		case "units":
+			return qionUnits(fields)
+		case "negative":
+			amt, ok := fields.Get("amount")
+			if !ok {
+				return Value{}, false
+			}
+			d, derr := AsBigDecimal(amt)
+			return NewBoolean(derr == nil && d.Negative && !d.IsZero()), true
+		case "display":
+			return NewString(micronQionRender(fields)), true
+		}
+	case v.Parent.ConformsTo(TPhonon):
+		switch key {
+		case "e164":
+			return NewString("+" + micronFieldString(fields, "digits")), true
+		case "length":
+			return NewInteger(int64(len(micronFieldString(fields, "digits")))), true
 		}
 	}
 	return Value{}, false
@@ -1076,6 +1192,883 @@ func semveronErr(detail string) error {
 	return &AqlError{Code: "type_error", Detail: "make: " + detail}
 }
 
+// ---- Cidron (CIDR block) ----
+
+// makeCidron builds a Cidron — an IPv4/IPv6 CIDR block — from a string
+// ("10.0.0.0/8", "2001:db8::/32") or an {addr prefix version?} map. Host
+// bits are masked away (10.0.0.5/8 → 10.0.0.0/8). Backed by net/netip,
+// which (unlike net.ParseCIDR) preserves an IPv4-mapped IPv6 prefix.
+func makeCidron(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return cidronFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Cidron")
+		if err != nil {
+			return nil, err
+		}
+		var addr string
+		var prefix int64
+		var haveAddr, havePrefix bool
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "addr":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, cidronErr(fmt.Sprintf("Cidron field addr must be a String, got %s", v.String()))
+				}
+				addr, haveAddr = sv, true
+			case "prefix":
+				pv, perr := v.AsConcreteInteger()
+				if perr != nil {
+					return nil, cidronErr(fmt.Sprintf("Cidron field prefix must be an Integer, got %s", v.String()))
+				}
+				prefix, havePrefix = pv, true
+			case "version":
+				// version is derived from addr; accept and ignore.
+				if _, verr := v.AsConcreteInteger(); verr != nil {
+					return nil, cidronErr(fmt.Sprintf("Cidron field version must be an Integer, got %s", v.String()))
+				}
+			default:
+				return nil, cidronErr("Cidron has no field " + k + " (fields: addr, prefix, version)")
+			}
+		}
+		if !haveAddr || !havePrefix {
+			return nil, cidronErr("Cidron requires addr and prefix fields")
+		}
+		return cidronFromString(fmt.Sprintf("%s/%d", addr, prefix))
+	}
+	return nil, cidronErr(fmt.Sprintf("Cidron source must be a string or map, got %s", src.String()))
+}
+
+func cidronFromString(s string) ([]Value, error) {
+	p, err := netip.ParsePrefix(s)
+	if err != nil {
+		return nil, cidronErr(fmt.Sprintf("invalid CIDR block %q: %v", s, err))
+	}
+	p = p.Masked()
+	version := int64(6)
+	if p.Addr().Is4() {
+		version = 4
+	}
+	fields := NewOrderedMap()
+	fields.Set("cidr", NewString(p.String()))
+	fields.Set("addr", NewString(p.Addr().String()))
+	fields.Set("prefix", NewInteger(int64(p.Bits())))
+	fields.Set("version", NewInteger(version))
+	return []Value{NewValueRaw(TCidron, MicronPayload{Fields: fields})}, nil
+}
+
+// cidronHostbits is the number of host bits in the block.
+func cidronHostbits(fields *OrderedMap) int64 {
+	total := int64(128)
+	if micronFieldInt(fields, "version") == 4 {
+		total = 32
+	}
+	return total - micronFieldInt(fields, "prefix")
+}
+
+// cidronPrefixOf re-parses the stored canonical cidr for numeric compare
+// (infallible in practice — the string was validated at construction).
+func cidronPrefixOf(v Value) (netip.Prefix, bool) {
+	fields, err := AsMicronFields(v)
+	if err != nil {
+		return netip.Prefix{}, false
+	}
+	p, perr := netip.ParsePrefix(micronFieldString(fields, "cidr"))
+	if perr != nil {
+		return netip.Prefix{}, false
+	}
+	return p, true
+}
+
+// compareCidrons orders CIDR blocks numerically: family (v4 before v6),
+// then network address ascending, then prefix length ascending (the
+// larger, less-specific block first). netip.Addr.Compare already orders
+// the v4 family below the v6 family.
+func compareCidrons(a, b Value) int {
+	pa, oka := cidronPrefixOf(a)
+	pb, okb := cidronPrefixOf(b)
+	if !oka || !okb {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	if c := pa.Addr().Compare(pb.Addr()); c != 0 {
+		return c
+	}
+	return cmpInt64(int64(pa.Bits()), int64(pb.Bits()))
+}
+
+func cidronErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
+// ---- Macon (IEEE 802 hardware address) ----
+
+// makeMacon builds a Macon — a MAC-48/EUI-48 or EUI-64 address — from a
+// string (any form net.ParseMAC accepts) or an {addr} map. The 20-octet
+// InfiniBand form net.ParseMAC also accepts is rejected: a Macon is 48-
+// or 64-bit only. Canonical form is lowercase colon-separated hex.
+func makeMacon(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return maconFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Macon")
+		if err != nil {
+			return nil, err
+		}
+		var addr string
+		var have bool
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			if k != "addr" {
+				return nil, maconErr("Macon has no field " + k + " (field: addr)")
+			}
+			sv, serr := v.AsConcreteString()
+			if serr != nil {
+				return nil, maconErr(fmt.Sprintf("Macon field addr must be a String, got %s", v.String()))
+			}
+			addr, have = sv, true
+		}
+		if !have {
+			return nil, maconErr("Macon requires an addr field")
+		}
+		return maconFromString(addr)
+	}
+	return nil, maconErr(fmt.Sprintf("Macon source must be a string or map, got %s", src.String()))
+}
+
+func maconFromString(s string) ([]Value, error) {
+	hw, err := net.ParseMAC(s)
+	if err != nil {
+		return nil, maconErr(fmt.Sprintf("invalid MAC address %q: %v", s, err))
+	}
+	if len(hw) != 6 && len(hw) != 8 {
+		return nil, maconErr(fmt.Sprintf("Macon must be a 48-bit or 64-bit address, got %d octets", len(hw)))
+	}
+	fields := NewOrderedMap()
+	fields.Set("addr", NewString(hw.String()))
+	return []Value{NewValueRaw(TMacon, MicronPayload{Fields: fields})}, nil
+}
+
+// maconBytes re-parses the stored canonical addr into its octets for the
+// derived properties (never stored, so equality stays a pure-addr
+// comparison).
+func maconBytes(fields *OrderedMap) (net.HardwareAddr, bool) {
+	hw, err := net.ParseMAC(micronFieldString(fields, "addr"))
+	if err != nil {
+		return nil, false
+	}
+	return hw, true
+}
+
+func maconAllOnes(hw net.HardwareAddr) bool {
+	for _, b := range hw {
+		if b != 0xff {
+			return false
+		}
+	}
+	return len(hw) > 0
+}
+
+func maconErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
+// ---- Coloron (sRGB colour with alpha) ----
+
+// makeColoron builds a Coloron from a #hex spelling (#rgb / #rgba /
+// #rrggbb / #rrggbbaa), an rgb()/rgba() function (legacy comma or modern
+// slash-alpha), or an {r g b a?} channel map. Canonical form is
+// lowercase hex, 6 digits when opaque else 8.
+func makeColoron(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return coloronFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Coloron")
+		if err != nil {
+			return nil, err
+		}
+		r, g, b, a := int64(0), int64(0), int64(0), int64(255)
+		var haveR, haveG, haveB bool
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			n, nerr := v.AsConcreteInteger()
+			if nerr != nil {
+				return nil, coloronErr(fmt.Sprintf("Coloron field %s must be an Integer, got %s", k, v.String()))
+			}
+			switch k {
+			case "r":
+				r, haveR = n, true
+			case "g":
+				g, haveG = n, true
+			case "b":
+				b, haveB = n, true
+			case "a":
+				a = n
+			default:
+				return nil, coloronErr("Coloron has no field " + k + " (fields: r, g, b, a)")
+			}
+		}
+		if !haveR || !haveG || !haveB {
+			return nil, coloronErr("Coloron requires r, g and b fields")
+		}
+		for _, ch := range []struct {
+			name string
+			val  int64
+		}{{"r", r}, {"g", g}, {"b", b}, {"a", a}} {
+			if ch.val < 0 || ch.val > 255 {
+				return nil, coloronErr(fmt.Sprintf("Coloron field %s must be in 0..255, got %d", ch.name, ch.val))
+			}
+		}
+		return coloronValue(int(r), int(g), int(b), int(a)), nil
+	}
+	return nil, coloronErr(fmt.Sprintf("Coloron source must be a string or map, got %s", src.String()))
+}
+
+func coloronValue(r, g, b, a int) []Value {
+	fields := NewOrderedMap()
+	fields.Set("r", NewInteger(int64(r)))
+	fields.Set("g", NewInteger(int64(g)))
+	fields.Set("b", NewInteger(int64(b)))
+	fields.Set("a", NewInteger(int64(a)))
+	return []Value{NewValueRaw(TColoron, MicronPayload{Fields: fields})}
+}
+
+func coloronFromString(s string) ([]Value, error) {
+	t := strings.TrimSpace(s)
+	if strings.HasPrefix(t, "#") {
+		return coloronFromHex(t)
+	}
+	lower := strings.ToLower(t)
+	if strings.HasPrefix(lower, "rgb(") || strings.HasPrefix(lower, "rgba(") {
+		return coloronFromFunc(t)
+	}
+	return nil, coloronErr(fmt.Sprintf("invalid colour %q (want #hex or rgb()/rgba())", s))
+}
+
+func coloronFromHex(t string) ([]Value, error) {
+	h := t[1:]
+	for i := 0; i < len(h); i++ {
+		if !isHexDigit(h[i]) {
+			return nil, coloronErr(fmt.Sprintf("invalid hex colour %q", t))
+		}
+	}
+	r, g, b, a := 0, 0, 0, 255
+	switch len(h) {
+	case 3:
+		r, g, b = hexNibble(h[0]), hexNibble(h[1]), hexNibble(h[2])
+	case 4:
+		r, g, b, a = hexNibble(h[0]), hexNibble(h[1]), hexNibble(h[2]), hexNibble(h[3])
+	case 6:
+		r, g, b = hexByte(h[0:2]), hexByte(h[2:4]), hexByte(h[4:6])
+	case 8:
+		r, g, b, a = hexByte(h[0:2]), hexByte(h[2:4]), hexByte(h[4:6]), hexByte(h[6:8])
+	default:
+		return nil, coloronErr(fmt.Sprintf("hex colour %q must have 3, 4, 6, or 8 digits", t))
+	}
+	return coloronValue(r, g, b, a), nil
+}
+
+func coloronFromFunc(t string) ([]Value, error) {
+	open := strings.IndexByte(t, '(')
+	if open < 0 || !strings.HasSuffix(t, ")") {
+		return nil, coloronErr(fmt.Sprintf("invalid colour function %q", t))
+	}
+	inner := t[open+1 : len(t)-1]
+	hasComma := strings.ContainsRune(inner, ',')
+	hasSlash := strings.ContainsRune(inner, '/')
+	if hasComma && hasSlash {
+		return nil, coloronErr(fmt.Sprintf("colour %q mixes ',' and '/' separators", t))
+	}
+	var chanToks []string
+	alphaTok := ""
+	haveAlpha := false
+	if hasComma {
+		parts := splitTrim(inner, ",")
+		if len(parts) == 4 {
+			alphaTok, haveAlpha = parts[3], true
+			parts = parts[:3]
+		}
+		chanToks = parts
+	} else {
+		body := inner
+		if hasSlash {
+			i := strings.IndexByte(inner, '/')
+			body = inner[:i]
+			alphaTok, haveAlpha = strings.TrimSpace(inner[i+1:]), true
+		}
+		chanToks = strings.Fields(body)
+	}
+	if len(chanToks) != 3 {
+		return nil, coloronErr(fmt.Sprintf("colour %q needs exactly 3 channels", t))
+	}
+	r, err := coloronChannel(chanToks[0])
+	if err != nil {
+		return nil, err
+	}
+	g, err := coloronChannel(chanToks[1])
+	if err != nil {
+		return nil, err
+	}
+	b, err := coloronChannel(chanToks[2])
+	if err != nil {
+		return nil, err
+	}
+	a := 255
+	if haveAlpha {
+		a, err = coloronAlpha(alphaTok)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return coloronValue(r, g, b, a), nil
+}
+
+// coloronChannel parses one r/g/b channel: a number (0..255) or a
+// percentage (0..100%), or `none` (→0), rounded to the nearest byte.
+func coloronChannel(tok string) (int, error) {
+	tok = strings.TrimSpace(tok)
+	if strings.EqualFold(tok, "none") {
+		return 0, nil
+	}
+	if pct, ok := strings.CutSuffix(tok, "%"); ok {
+		f, err := strconv.ParseFloat(strings.TrimSpace(pct), 64)
+		if err != nil {
+			return 0, coloronErr(fmt.Sprintf("invalid colour channel %q", tok))
+		}
+		return int(math.Round(clampFloat(f, 0, 100) / 100 * 255)), nil
+	}
+	f, err := strconv.ParseFloat(tok, 64)
+	if err != nil {
+		return 0, coloronErr(fmt.Sprintf("invalid colour channel %q", tok))
+	}
+	return int(math.Round(clampFloat(f, 0, 255))), nil
+}
+
+// coloronAlpha parses the optional alpha: a number in 0..1, a percentage
+// in 0..100%, or `none` (→0).
+func coloronAlpha(tok string) (int, error) {
+	tok = strings.TrimSpace(tok)
+	if strings.EqualFold(tok, "none") {
+		return 0, nil
+	}
+	if pct, ok := strings.CutSuffix(tok, "%"); ok {
+		f, err := strconv.ParseFloat(strings.TrimSpace(pct), 64)
+		if err != nil {
+			return 0, coloronErr(fmt.Sprintf("invalid alpha %q", tok))
+		}
+		return int(math.Round(clampFloat(f, 0, 100) / 100 * 255)), nil
+	}
+	f, err := strconv.ParseFloat(tok, 64)
+	if err != nil {
+		return 0, coloronErr(fmt.Sprintf("invalid alpha %q", tok))
+	}
+	return int(math.Round(clampFloat(f, 0, 1) * 255)), nil
+}
+
+// micronColoronHex is the canonical Coloron render.
+func micronColoronHex(fields *OrderedMap) string {
+	r, g, b, a := micronFieldInt(fields, "r"), micronFieldInt(fields, "g"), micronFieldInt(fields, "b"), micronFieldInt(fields, "a")
+	if a == 255 {
+		return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+	}
+	return fmt.Sprintf("#%02x%02x%02x%02x", r, g, b, a)
+}
+
+// coloronCSS is the derived modern rgb() render.
+func coloronCSS(fields *OrderedMap) string {
+	r, g, b, a := micronFieldInt(fields, "r"), micronFieldInt(fields, "g"), micronFieldInt(fields, "b"), micronFieldInt(fields, "a")
+	if a == 255 {
+		return fmt.Sprintf("rgb(%d %d %d)", r, g, b)
+	}
+	return fmt.Sprintf("rgb(%d %d %d / %s)", r, g, b, strconv.FormatFloat(float64(a)/255, 'f', -1, 64))
+}
+
+// compareColorons orders colours by the (r,g,b,a) channel tuple.
+func compareColorons(a, b Value) int {
+	af, aerr := AsMicronFields(a)
+	bf, berr := AsMicronFields(b)
+	if aerr != nil || berr != nil {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	for _, k := range []string{"r", "g", "b", "a"} {
+		if c := cmpInt64(micronFieldInt(af, k), micronFieldInt(bf, k)); c != 0 {
+			return c
+		}
+	}
+	return 0
+}
+
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+func hexVal(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10
+	default:
+		return int(c-'A') + 10
+	}
+}
+
+func hexNibble(c byte) int { n := hexVal(c); return n*16 + n }
+func hexByte(s string) int { return hexVal(s[0])*16 + hexVal(s[1]) }
+
+func clampFloat(f, lo, hi float64) float64 {
+	if f < lo {
+		return lo
+	}
+	if f > hi {
+		return hi
+	}
+	return f
+}
+
+func splitTrim(s, sep string) []string {
+	parts := strings.Split(s, sep)
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func coloronErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
+// ---- Mimon (MIME / media type) ----
+
+// makeMimon builds a Mimon — a canonical media type (type/subtype with
+// optional parameters) — from a string or a {type subtype params?} map.
+// Backed by the stdlib mime package plus an RFC 6838 restricted-name
+// strict layer (rejects a bare type, wildcards / ranges, and empty
+// parameter values).
+func makeMimon(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return mimonFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Mimon")
+		if err != nil {
+			return nil, err
+		}
+		var typ, sub string
+		var haveType, haveSub bool
+		params := map[string]string{}
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "type":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, mimonErr(fmt.Sprintf("Mimon field type must be a String, got %s", v.String()))
+				}
+				typ, haveType = sv, true
+			case "subtype":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, mimonErr(fmt.Sprintf("Mimon field subtype must be a String, got %s", v.String()))
+				}
+				sub, haveSub = sv, true
+			case "params":
+				pm, perr := RequireConcreteMap(v, "make Mimon params")
+				if perr != nil {
+					return nil, mimonErr(fmt.Sprintf("Mimon field params must be a Map, got %s", v.String()))
+				}
+				for _, pk := range pm.Keys() {
+					pv, _ := pm.Get(pk)
+					psv, pserr := pv.AsConcreteString()
+					if pserr != nil {
+						return nil, mimonErr(fmt.Sprintf("Mimon param %s must be a String, got %s", pk, pv.String()))
+					}
+					params[pk] = psv
+				}
+			default:
+				return nil, mimonErr("Mimon has no field " + k + " (fields: type, subtype, params)")
+			}
+		}
+		if !haveType || !haveSub {
+			return nil, mimonErr("Mimon requires type and subtype fields")
+		}
+		rendered := mime.FormatMediaType(typ+"/"+sub, params)
+		if rendered == "" {
+			return nil, mimonErr(fmt.Sprintf("Mimon invalid media type %s/%s", typ, sub))
+		}
+		return mimonFromString(rendered)
+	}
+	return nil, mimonErr(fmt.Sprintf("Mimon source must be a string or map, got %s", src.String()))
+}
+
+func mimonFromString(s string) ([]Value, error) {
+	mt, params, err := mime.ParseMediaType(s)
+	if err != nil {
+		return nil, mimonErr(fmt.Sprintf("invalid media type %q: %v", s, err))
+	}
+	i := strings.IndexByte(mt, '/')
+	if i <= 0 || i >= len(mt)-1 {
+		return nil, mimonErr(fmt.Sprintf("media type %q must be type/subtype", s))
+	}
+	typ, sub := mt[:i], mt[i+1:]
+	if !validRestrictedName(typ) {
+		return nil, mimonErr(fmt.Sprintf("media type %q has an invalid type %q", s, typ))
+	}
+	if !validRestrictedName(sub) {
+		return nil, mimonErr(fmt.Sprintf("media type %q has an invalid subtype %q", s, sub))
+	}
+	for name, val := range params {
+		if val == "" {
+			return nil, mimonErr(fmt.Sprintf("media type %q parameter %q has an empty value", s, name))
+		}
+	}
+	fields := NewOrderedMap()
+	fields.Set("type", NewString(typ))
+	fields.Set("subtype", NewString(sub))
+	if len(params) > 0 {
+		names := make([]string, 0, len(params))
+		for n := range params {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		pm := NewOrderedMap()
+		for _, n := range names {
+			pm.Set(n, NewString(params[n]))
+		}
+		fields.Set("params", NewMap(pm))
+	}
+	return []Value{NewValueRaw(TMimon, MicronPayload{Fields: fields})}, nil
+}
+
+// validRestrictedName enforces the RFC 6838 restricted-name grammar on a
+// media type or subtype: first char ALPHA/DIGIT, rest from the restricted
+// set, length ≤ 127. This rejects wildcard ranges ('*').
+func validRestrictedName(name string) bool {
+	if name == "" || len(name) > 127 || !isAlphaNum(name[0]) {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		if isAlphaNum(c) || strings.IndexByte("!#$&-^_.+", c) >= 0 {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isAlphaNum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// mimonParams rebuilds the plain string map from the stored params Map.
+func mimonParams(fields *OrderedMap) map[string]string {
+	pv, ok := fields.Get("params")
+	if !ok {
+		return nil
+	}
+	pm, err := AsMap(pv)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, k := range pm.Keys() {
+		v, _ := pm.Get(k)
+		s, _ := AsString(v)
+		out[k] = s
+	}
+	return out
+}
+
+// micronMimonRender is the canonical Mimon render: essence plus canonical
+// (name-sorted, minimally-quoted) parameters via mime.FormatMediaType.
+func micronMimonRender(fields *OrderedMap) string {
+	essence := micronFieldString(fields, "type") + "/" + micronFieldString(fields, "subtype")
+	params := mimonParams(fields)
+	if len(params) == 0 {
+		return essence
+	}
+	if rendered := mime.FormatMediaType(essence, params); rendered != "" {
+		return rendered
+	}
+	return essence
+}
+
+func mimonErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
+// ---- Qion (monetary amount) ----
+
+// makeQion builds a Qion — an exact decimal amount in a currency — from a
+// "CODE AMOUNT" string ("USD 12.50") or a {code amount} map. The amount
+// is scaled to the currency's ISO 4217 minor-unit precision (an input
+// with MORE fractional digits is rejected, not rounded).
+func makeQion(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return qionFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Qion")
+		if err != nil {
+			return nil, err
+		}
+		var code, amount string
+		var haveCode, haveAmount bool
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "code":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, qionErr(fmt.Sprintf("Qion field code must be a String, got %s", v.String()))
+				}
+				code, haveCode = sv, true
+			case "amount":
+				av, aerr := qionAmountText(v)
+				if aerr != nil {
+					return nil, aerr
+				}
+				amount, haveAmount = av, true
+			default:
+				return nil, qionErr("Qion has no field " + k + " (fields: code, amount)")
+			}
+		}
+		if !haveCode || !haveAmount {
+			return nil, qionErr("Qion requires code and amount fields")
+		}
+		return qionFromString(code + " " + amount)
+	}
+	return nil, qionErr(fmt.Sprintf("Qion source must be a string or map, got %s", src.String()))
+}
+
+// qionAmountText renders a map-supplied amount (Decimal, Integer, or a
+// String) to plain-decimal text for the single string validator.
+func qionAmountText(v Value) (string, error) {
+	switch {
+	case v.Parent.ConformsTo(TBigDecimal):
+		d, err := AsBigDecimal(v)
+		if err != nil {
+			return "", qionErr("Qion amount is not a valid decimal")
+		}
+		return d.Text('f'), nil
+	case v.Parent.ConformsTo(TInteger) && IsConcrete(v):
+		n, _ := AsInteger(v)
+		return strconv.FormatInt(n, 10), nil
+	case v.Parent.ConformsTo(TString) && IsConcrete(v):
+		s, _ := AsString(v)
+		return s, nil
+	}
+	return "", qionErr(fmt.Sprintf("Qion amount must be a Decimal, Integer or String, got %s", v.String()))
+}
+
+var qionAmountRe = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
+
+func qionFromString(s string) ([]Value, error) {
+	toks := strings.Fields(strings.TrimSpace(s))
+	if len(toks) != 2 {
+		return nil, qionErr(fmt.Sprintf("Qion %q must be 'CODE AMOUNT'", s))
+	}
+	code := strings.ToUpper(toks[0])
+	if !isThreeLetters(code) {
+		return nil, qionErr(fmt.Sprintf("Qion currency code %q must be 3 letters", toks[0]))
+	}
+	minor, ok := iso4217[code]
+	if !ok {
+		return nil, qionErr(fmt.Sprintf("Qion %q is not a known ISO 4217 currency code", code))
+	}
+	amountStr := toks[1]
+	if !qionAmountRe.MatchString(amountStr) {
+		return nil, qionErr(fmt.Sprintf("Qion amount %q must be a plain decimal (optional '-', no grouping or exponent)", amountStr))
+	}
+	neg := strings.HasPrefix(amountStr, "-")
+	body := strings.TrimPrefix(amountStr, "-")
+	intPart, fracPart := body, ""
+	if dot := strings.IndexByte(body, '.'); dot >= 0 {
+		intPart, fracPart = body[:dot], body[dot+1:]
+	}
+	if len(fracPart) > minor {
+		return nil, qionErr(fmt.Sprintf("Qion amount %q has more than %d fractional digits for %s", amountStr, minor, code))
+	}
+	// Zero-pad the fractional part up to the minor-unit scale, building the
+	// canonical amount text directly (exact — no rounding needed).
+	fracPart += strings.Repeat("0", minor-len(fracPart))
+	canon := intPart
+	if minor > 0 {
+		canon = intPart + "." + fracPart
+	}
+	if neg {
+		canon = "-" + canon
+	}
+	d, _, derr := apd.NewFromString(canon)
+	if derr != nil || d.Form != apd.Finite {
+		return nil, qionErr(fmt.Sprintf("Qion amount %q is not a finite decimal", amountStr))
+	}
+	if d.IsZero() {
+		d.Negative = false // normalise negative zero
+	}
+	fields := NewOrderedMap()
+	fields.Set("code", NewString(code))
+	fields.Set("amount", NewBigDecimal(d))
+	fields.Set("minor", NewInteger(int64(minor)))
+	return []Value{NewValueRaw(TQion, MicronPayload{Fields: fields})}, nil
+}
+
+// micronQionRender is the canonical Qion render: "CODE AMOUNT" with the
+// amount at exactly the minor-unit scale.
+func micronQionRender(fields *OrderedMap) string {
+	code := micronFieldString(fields, "code")
+	amt, ok := fields.Get("amount")
+	if !ok {
+		return code
+	}
+	d, err := AsBigDecimal(amt)
+	if err != nil {
+		return code
+	}
+	return code + " " + d.Text('f')
+}
+
+// qionUnits returns the integer count of minor units (amount × 10^minor),
+// derived from the canonical render. Absent when it overflows int64.
+func qionUnits(fields *OrderedMap) (Value, bool) {
+	amt, ok := fields.Get("amount")
+	if !ok {
+		return Value{}, false
+	}
+	d, err := AsBigDecimal(amt)
+	if err != nil {
+		return Value{}, false
+	}
+	s := d.Text('f')
+	neg := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+	s = strings.Replace(s, ".", "", 1)
+	n, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return Value{}, false
+	}
+	if neg {
+		n.Neg(n)
+	}
+	if !n.IsInt64() {
+		return Value{}, false
+	}
+	return NewInteger(n.Int64()), true
+}
+
+// compareQions orders money by currency code (lexical) then, within the
+// same code, by exact decimal magnitude.
+func compareQions(a, b Value) int {
+	af, aerr := AsMicronFields(a)
+	bf, berr := AsMicronFields(b)
+	if aerr != nil || berr != nil {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	if c := strings.Compare(micronFieldString(af, "code"), micronFieldString(bf, "code")); c != 0 {
+		return c
+	}
+	amtA, okA := af.Get("amount")
+	amtB, okB := bf.Get("amount")
+	if !okA || !okB {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	c, err := CompareValues(amtA, amtB)
+	if err != nil {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	return c
+}
+
+func isThreeLetters(s string) bool {
+	if len(s) != 3 {
+		return false
+	}
+	for i := 0; i < 3; i++ {
+		if s[i] < 'A' || s[i] > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func qionErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
+// ---- Phonon (E.164 telephone number) ----
+
+var phononRe = regexp.MustCompile(`^\+[1-9][0-9]{1,14}$`)
+
+// phononSep strips the visual separators permitted in presentation forms;
+// the '+' must be present literally (an "00"/"011" access prefix is NOT
+// mapped to '+').
+var phononSep = strings.NewReplacer(" ", "", "\t", "", "-", "", ".", "", "(", "", ")", "", "\u00a0", "")
+
+// makePhonon builds a Phonon — a strict ITU-T E.164 number — from a
+// string (presentation separators stripped) or a {cc subscriber} map.
+func makePhonon(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return phononFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Phonon")
+		if err != nil {
+			return nil, err
+		}
+		var cc, sub string
+		var haveCC, haveSub bool
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "cc":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, phononErr(fmt.Sprintf("Phonon field cc must be a String, got %s", v.String()))
+				}
+				cc, haveCC = sv, true
+			case "subscriber":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, phononErr(fmt.Sprintf("Phonon field subscriber must be a String, got %s", v.String()))
+				}
+				sub, haveSub = sv, true
+			default:
+				return nil, phononErr("Phonon has no field " + k + " (fields: cc, subscriber)")
+			}
+		}
+		if !haveCC || !haveSub {
+			return nil, phononErr("Phonon requires cc and subscriber fields")
+		}
+		return phononFromString("+" + cc + sub)
+	}
+	return nil, phononErr(fmt.Sprintf("Phonon source must be a string or map, got %s", src.String()))
+}
+
+func phononFromString(s string) ([]Value, error) {
+	stripped := phononSep.Replace(strings.TrimSpace(s))
+	if !phononRe.MatchString(stripped) {
+		return nil, phononErr(fmt.Sprintf("Phonon %q is not valid E.164 (want '+' then 2..15 digits, first non-zero)", s))
+	}
+	fields := NewOrderedMap()
+	fields.Set("digits", NewString(stripped[1:])) // stored without the leading '+'
+	return []Value{NewValueRaw(TPhonon, MicronPayload{Fields: fields})}, nil
+}
+
+func phononErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
 // urlonFieldOrder is the canonical field layout of an Urlon map source
 // (and of the stored payload — optional fields are simply absent).
 var urlonFieldOrder = []string{"scheme", "host", "port", "path", "query", "fragment"}
@@ -1356,7 +2349,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 	switch {
 	case kind.Equal(TMicron):
 		return nil, &AqlError{Code: "type_error",
-			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron) or a user-defined Micron kind",
+			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron / Cidron / Macon / Coloron / Mimon / Qion / Phonon) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
 		return makePathon(data, false)
@@ -1370,6 +2363,18 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return makeHoston(data)
 	case kind.Equal(TSemveron):
 		return makeSemveron(data)
+	case kind.Equal(TCidron):
+		return makeCidron(data)
+	case kind.Equal(TMacon):
+		return makeMacon(data)
+	case kind.Equal(TColoron):
+		return makeColoron(data)
+	case kind.Equal(TMimon):
+		return makeMimon(data)
+	case kind.Equal(TQion):
+		return makeQion(data)
+	case kind.Equal(TPhonon):
+		return makePhonon(data)
 	}
 	// A newtype (bare nominal refine) of a builtin leaf or of a user
 	// kind: construct the base, then tag the result with the newtype —
@@ -1390,6 +2395,18 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 			out, err = makeHoston(data)
 		case t.Equal(TSemveron):
 			out, err = makeSemveron(data)
+		case t.Equal(TCidron):
+			out, err = makeCidron(data)
+		case t.Equal(TMacon):
+			out, err = makeMacon(data)
+		case t.Equal(TColoron):
+			out, err = makeColoron(data)
+		case t.Equal(TMimon):
+			out, err = makeMimon(data)
+		case t.Equal(TQion):
+			out, err = makeQion(data)
+		case t.Equal(TPhonon):
+			out, err = makePhonon(data)
 		default:
 			if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)
