@@ -1,7 +1,7 @@
 .PHONY: all build install test test-race test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
-        publish publish-eng publish-lang publish-cmd tags \
+        publish publish-eng publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
@@ -290,6 +290,14 @@ publish:
 	$(MAKE) -C eng/go  publish V=$(V)
 	$(MAKE) -C lang/go publish V=$(V) ENG=$(V)
 	$(MAKE) -C cmd/go  publish V=$(V) ENG=$(V) LANG=$(V)
+
+# release — the versioned release flow (see RELEASING.md and scripts/release.sh):
+# runs the full test suite, then auto-bumps the PATCH of eng/go, lang/go and
+# cmd/go, strips the local sibling `replace` directives, pins real versions,
+# and tags/pushes each in dependency order so `go install …@latest` works.
+# Use `DRY_RUN=1 make release` to preview without tagging or pushing.
+release:
+	@scripts/release.sh
 
 publish-eng:
 	$(MAKE) -C eng/go publish V=$(V)
