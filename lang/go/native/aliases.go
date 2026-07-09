@@ -501,6 +501,7 @@ var (
 	NewOrderedMap         = eng.NewOrderedMap
 	NewParenExpr          = eng.NewParenExpr
 	NewPathon             = eng.NewPathon
+	NewPathonVol          = eng.NewPathonVol
 	NewRecordType         = eng.NewRecordType
 	NewRegistry           = eng.NewRegistry
 	NewReturnCheck        = eng.NewReturnCheck

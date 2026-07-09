@@ -481,8 +481,8 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 func makePathon(srcVal Value, abs bool) ([]Value, error) {
 	switch {
 	case srcVal.Parent.ConformsTo(TString) && srcVal.Data != nil:
-		// The string form recognises Windows drive ("C:\..." / "C:/...")
-		// and UNC ("\\server\share\...") volumes in addition to POSIX.
+		// The string form recognises a Windows drive ("C:\..." / "C:/...")
+		// in addition to POSIX; a driveless path parses POSIX-style.
 		s, _ := AsString(srcVal)
 		info := parsePathonString(s)
 		if abs { // an { abs:true } option forces it absolute regardless
@@ -490,17 +490,16 @@ func makePathon(srcVal Value, abs bool) ([]Value, error) {
 		}
 		return []Value{NewValueRaw(TPathon, PathonPayload{Info: info})}, nil
 	case srcVal.Parent.ConformsTo(TList) && srcVal.Data != nil:
-		// The list form is explicit driveless segments; each element is
-		// still split on either separator, and a leading separator on the
-		// first element marks the path absolute.
+		// The list form is explicit driveless (POSIX) segments; each element
+		// is split on "/", and a leading "/" on the first marks it absolute.
 		elems, _ := AsList(srcVal)
 		var parts []string
 		for i := 0; i < elems.Len(); i++ {
 			r := ValToString(elems.Get(i))
-			if i == 0 && len(r) > 0 && isPathonSep(r[0]) {
+			if i == 0 && strings.HasPrefix(r, "/") {
 				abs = true
 			}
-			parts = append(parts, splitPathonSegs(r)...)
+			parts = append(parts, splitPosixSegs(r)...)
 		}
 		return []Value{NewPathon(parts, abs)}, nil
 	default:
@@ -514,9 +513,18 @@ func makePathon(srcVal Value, abs bool) ([]Value, error) {
 func isPathonSep(c byte) bool { return c == '/' || c == '\\' }
 
 // splitPathonSegs splits s on either separator, dropping empty segments
-// (so "a//b", "a\\b", and "a/b\\" all yield ["a", "b"]).
+// (so "a//b", "a\\b", and "a/b\\" all yield ["a", "b"]). Used for the
+// segments of a Windows DRIVE path, where "\" is a separator.
 func splitPathonSegs(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '\\' })
+}
+
+// splitPosixSegs splits s on "/" only, dropping empty segments. Used for a
+// driveless path, where "\" is an ordinary character — so POSIX paths (the
+// only kind the cross-engine differential exercises) parse exactly as they
+// did before Windows-drive support: "//a//b//" → ["a","b"], not a UNC root.
+func splitPosixSegs(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == '/' })
 }
 
 // isDriveLetter reports whether c is an ASCII drive letter (a-z / A-Z).
@@ -524,14 +532,14 @@ func isDriveLetter(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-// parsePathonString parses a path string into a PathonInfo, recognising a
-// Windows drive volume ("C:", optionally followed by a separator) and a
-// UNC volume ("\\server\share") in addition to a POSIX / driveless path.
-// A drive path is absolute when a separator follows the colon ("C:\x")
-// and drive-relative otherwise ("C:x"); a UNC path is always absolute; a
-// driveless path is absolute when it begins with a separator.
+// parsePathonString parses a path string into a PathonInfo. A Windows DRIVE
+// prefix ("C:", optionally followed by a separator) switches on Windows
+// parsing: either slash separates segments and the drive is recorded as the
+// volume (rendered "C:\a\b", or "C:a\b" when drive-relative). Any other
+// string stays POSIX: "/" separates segments, "\" is an ordinary character,
+// and the path is absolute iff it begins with "/". (UNC "\\server\share" is
+// not special-cased — forward-slash "//x" is a POSIX path, not a volume.)
 func parsePathonString(s string) PathonInfo {
-	// Drive-letter volume: X:[sep]...
 	if len(s) >= 2 && isDriveLetter(s[0]) && s[1] == ':' {
 		rest := s[2:]
 		return PathonInfo{
@@ -540,22 +548,9 @@ func parsePathonString(s string) PathonInfo {
 			Parts:  splitPathonSegs(rest),
 		}
 	}
-	// UNC volume: \\server\share\... (or //server/share/...).
-	if len(s) >= 2 && isPathonSep(s[0]) && isPathonSep(s[1]) {
-		segs := splitPathonSegs(s[2:])
-		switch {
-		case len(segs) >= 2:
-			return PathonInfo{Volume: `\\` + segs[0] + `\` + segs[1], Abs: true, Parts: segs[2:]}
-		case len(segs) == 1:
-			return PathonInfo{Volume: `\\` + segs[0], Abs: true}
-		default:
-			return PathonInfo{Abs: true} // bare "\\" / "//": rooted, volume-less
-		}
-	}
-	// Driveless / POSIX.
 	return PathonInfo{
-		Abs:   len(s) > 0 && isPathonSep(s[0]),
-		Parts: splitPathonSegs(s),
+		Abs:   strings.HasPrefix(s, "/"),
+		Parts: splitPosixSegs(s),
 	}
 }
 

@@ -578,7 +578,7 @@ func doFolder(p PathonInfo, parents bool, reg *Registry) ([]Value, error) {
 		}
 	}
 
-	return []Value{NewPathon(p.Parts, p.Abs)}, nil
+	return []Value{NewPathonVol(p.Volume, p.Parts, p.Abs)}, nil
 }
 
 // stackCollectHandler runs at execution time: wraps the top N stack

@@ -484,27 +484,17 @@ func TestMakePathonWindows(t *testing.T) {
 	if p := mk("C:/"); p.Volume != "C:" || !p.Abs || len(p.Parts) != 0 || p.String() != `C:\` {
 		t.Errorf("drive root = %+v (%q)", p, p.String())
 	}
-	// UNC: full, volume-only, single-component, and the bare "//" degenerate.
-	if p := mk("//host/share/a/b"); p.Volume != `\\host\share` || !p.Abs ||
-		len(p.Parts) != 2 || p.String() != `\\host\share\a\b` {
-		t.Errorf("UNC = %+v (%q)", p, p.String())
-	}
-	if p := mk("//host/share"); p.Volume != `\\host\share` || len(p.Parts) != 0 ||
-		p.String() != `\\host\share` {
-		t.Errorf("UNC volume-only = %+v (%q)", p, p.String())
-	}
-	if p := mk("//host"); p.Volume != `\\host` || !p.Abs {
-		t.Errorf("UNC single-component = %+v", p)
-	}
-	if p := mk("//"); p.Volume != "" || !p.Abs || len(p.Parts) != 0 {
-		t.Errorf("bare // = %+v", p)
-	}
-	// Driveless: POSIX unchanged; backslash still splits and renders "/".
+	// Driveless paths stay POSIX (only "/" splits; "\" is an ordinary
+	// character), so nothing that isn't drive-prefixed changes behaviour —
+	// in particular a forward-slash root is NOT parsed as a Windows volume.
 	if p := mk("/usr/bin"); p.Volume != "" || !p.Abs || p.String() != "/usr/bin" {
 		t.Errorf("posix = %+v (%q)", p, p.String())
 	}
-	if p := mk(`a\b\c`); p.Volume != "" || p.Abs || len(p.Parts) != 3 || p.String() != "a/b/c" {
-		t.Errorf("driveless backslash = %+v (%q)", p, p.String())
+	if p := mk("//a//b//"); p.Volume != "" || !p.Abs || len(p.Parts) != 2 || p.String() != "/a/b" {
+		t.Errorf("redundant-slash root must stay POSIX, got %+v (%q)", p, p.String())
+	}
+	if p := mk(`a\b\c`); p.Volume != "" || p.Abs || len(p.Parts) != 1 || p.String() != `a\b\c` {
+		t.Errorf("driveless backslash must be one literal segment, got %+v (%q)", p, p.String())
 	}
 
 	// Content equality: spelling-insensitive within a volume; drive-sensitive.
@@ -518,9 +508,10 @@ func TestMakePathonWindows(t *testing.T) {
 		t.Error("a drive path must not equal the driveless path")
 	}
 
-	// List form: a leading separator on the first element marks absolute,
-	// and each element still splits on either separator.
-	labs, err := makePathon(NewList([]Value{NewString(`\a`), NewString("b/c")}), false)
+	// List form is POSIX: a leading "/" on the first element marks absolute,
+	// each element splits on "/" (a backslash is an ordinary character), and
+	// the result never carries a volume.
+	labs, err := makePathon(NewList([]Value{NewString("/a"), NewString("b/c")}), false)
 	if err != nil {
 		t.Fatalf("list makePathon: %v", err)
 	}

@@ -609,7 +609,7 @@ through `.` / `get`. Three leaves are built in:
 
 | Type | Construct from | Properties (derived in bold) |
 |---|---|---|
-| `Pathon` | a `String` (`'a/b'`, or a Windows `'C:/Windows'` / `'//host/share'`) or a `List` of segments | `parts`, `abs`, `volume` |
+| `Pathon` | a `String` (`'a/b'`, or a Windows drive `'C:/Windows'`) or a `List` of segments | `parts`, `abs`, `volume` |
 | `Emailon` | a plain `user@host` string, or a `{user host}` map | `user`, `host`, **`address`** |
 | `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
 
@@ -617,14 +617,15 @@ through `.` / `get`. Three leaves are built in:
 new name — the bare `Path` name no longer resolves; change `make Path`
 to `make Pathon`.)
 
-`Pathon` also parses **Windows paths**: a drive (`'C:/Windows'` →
-`volume` `'C:'`) or a UNC root (`'//host/share/dir'` → `volume`
-`'\\host\share'`). Either slash separates segments, so a drive path
-renders in canonical backslash form (`C:\Windows`) and `C:/x` is
-content-equal to `C:\x`. A drive path is absolute when a separator
-follows the colon (`C:\x`) and drive-relative otherwise (`C:x`). A
-POSIX path has an empty `volume`. (Write drive paths with `/` in AQL
-source — single-quoted strings treat `\` as an escape.)
+`Pathon` also parses **Windows drive paths**: a `C:` drive prefix is
+recorded as the `volume` (`'C:/Windows'` → `volume` `'C:'`), either
+slash separates segments, and the path renders in canonical backslash
+form (`C:\Windows`), so `C:/x` is content-equal to `C:\x`. A drive path
+is absolute when a separator follows the colon (`C:\x`) and
+drive-relative otherwise (`C:x`). Anything without a drive prefix stays
+POSIX — only `/` splits, `\` is an ordinary character, and the `volume`
+is empty (so `'//a//b'` is `/a/b`, never a volume). (Write drive paths
+with `/` in AQL source — single-quoted strings treat `\` as an escape.)
 
 Both construction forms run the *same* validator — the map form
 re-renders through the string parser — and the derived properties
