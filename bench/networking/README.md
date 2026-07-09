@@ -100,34 +100,33 @@ mini-redis's connection parameter being typed `Any`; it is now typed `Service`
 (its real type), which resolves the check — see
 `design/CHECK-FALSE-POSITIVES.0.md`.)
 
-| App | tier | compiled | interpreted | speedup |
+| App | tier | interpreted | compiled | speedup |
 |---|---|--:|--:|--:|
-| `mini-redis` | `Net.listen` service + RESP codec | ~460 req/s | ~480 req/s | **~1.0×** |
-| `mini-s3`    | `serve-raw` + streaming HTTP      | ~100 req/s | ~101 req/s | **~1.0×** |
-| `todo-api`   | service + `Net.http` codec + JSON | ~1,130 req/s | ~1,170 req/s | **~1.0×** |
+| `todo-api`   | service + `Net.http` codec + JSON | ~1,140 req/s | ~13,000 req/s | **~11.5×** |
+| `mini-redis` | `Net.listen` service + RESP codec | ~460 req/s | ~680 req/s | **~1.5×** |
+| `mini-s3`    | `serve-raw` + streaming HTTP      | ~100 req/s | ~100 req/s | **~1.0×** |
 
-**None of the realistic apps get the compiled speedup yet** — their handler
-bodies still run on the interpreter, so `-compile` and `-no-compile` are within
-noise. This is *not* the echo bug (an under-typed `Any` param); each app's
-handler refuses to compile for a distinct, still-open compiler-frontier reason
-(`aql run -force-compile` names it):
+**Two of the three now compile their handlers.** `todo-api`'s handlers hit the VM
+(~11.5× over the interpreter — the CPU-bound service+JSON path); `mini-redis`'s do
+too (~1.5×; the RESP path is lighter). `mini-s3` does not yet: it is I/O-bound
+(streaming HTTP over `serve-raw`), and its actor uses two constructs the compiler
+still deliberately islands. Progress and the exact remaining blockers are tracked
+in `design/NET-COMPILE-FRONTIER.0.md`:
 
-- **mini-s3** — `operand of unknown provenance or not statically materialisable
-  at serve-raw` (the handler threads a mutable/`flex` value the store-fn bake
-  cannot materialise as a const).
-- **todo-api** — `branch leaves extra values (Stage 2 lowers single-result
-  branches)` (a handler `if`-arm nets more than one value — the same lowering
-  leaf tracked for the sort library).
-- **mini-redis** — the compile pass still trips a distinct false positive
-  (`undefined_word: expires` inside a `state:Any` service-handler lambda; see
-  `design/CHECK-FALSE-POSITIVES.0.md` "Remaining"). It does not block `aql run`.
+- **todo-api** — was `branch leaves extra values (Stage 2)`. **Fixed**: a
+  fragment-internal arm-result value-def that is also consumed as an operand
+  within its arm is now promoted to a frame local (`fragResultStaysOnSim`), plus a
+  semantics-preserving `(set …) drop` cleanup.
+- **mini-redis** — was `branch reads enclosing computation (Stage 3)`. **Fixed**:
+  the scopeFloor guard now skips operands delivered via a promoted frame local
+  (an arm-out re-resolved by `lowerFragment`), plus `(set …) drop` grouping.
+- **mini-s3** — still open. Its per-connection actor uses `do [ … ] error [ … ]`
+  (both `CompileFallbackBody` — deliberate interpreter islands) and its LIST
+  handler uses higher-order `filter`; compiling either is a substantial VM feature
+  and mini-s3 is I/O-bound, so the payoff is small.
 
-So the compilation win is currently **narrow**: it applies to callback bodies in
-the compilable subset (echo, spawn/service handlers with core bodies), not yet to
-the full apps. Closing these is the remaining frontier — the same lowering /
-materialisation walls the compiler work elsewhere is chipping at, now surfaced by
-real network handlers. The drivers above make the app numbers repeatable so the
-gap can be re-measured as those land.
+The drivers above make the app numbers repeatable, so the remaining gap can be
+re-measured as mini-s3's constructs land.
 
 ### Where AQL's time goes (the interpreter path)
 
