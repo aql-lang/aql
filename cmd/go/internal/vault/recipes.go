@@ -97,6 +97,14 @@ var publishRecipes = map[string]publishRecipe{
 		return map[string]string{"HEX_API_KEY": s}
 	}},
 
+	// --- Haskell ---
+	"hackage": {name: "hackage", env: func(s, _ string) map[string]string {
+		// Hackage API token (revocable, replaces the account password),
+		// consumed as `cabal upload --token $HACKAGE_KEY` — HACKAGE_KEY is
+		// the env var Haskell CI setups conventionally read.
+		return map[string]string{"HACKAGE_KEY": s}
+	}},
+
 	// --- Swift / iOS ---
 	"swift": {name: "swift", env: func(s, _ string) map[string]string {
 		return map[string]string{"SWIFTPM_REGISTRY_TOKEN": s}

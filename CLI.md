@@ -829,6 +829,7 @@ tool reads:
 | `npm` · `yarn` · `pnpm` · `bun` | Node | per-registry `_authToken` / `YARN_NPM_AUTH_TOKEN` / `NPM_CONFIG_TOKEN` |
 | `pypi`/`twine` · `uv` · `poetry` · `hatch` · `flit` | Python | `TWINE_*` / `UV_PUBLISH_TOKEN` / `POETRY_PYPI_TOKEN_PYPI` / `HATCH_INDEX_*` / `FLIT_*` |
 | `cargo` · `gem` · `hex` | Rust/Ruby/Elixir | `CARGO_REGISTRY_TOKEN` / `GEM_HOST_API_KEY` / `HEX_API_KEY` |
+| `hackage` | Haskell | `HACKAGE_KEY` (`cabal upload --token $HACKAGE_KEY`) |
 | `swift` · `cocoapods`/`pod` | Swift/iOS | `SWIFTPM_REGISTRY_TOKEN` / `COCOAPODS_TRUNK_TOKEN` |
 | `composer`/`packagist` | PHP | `COMPOSER_AUTH` (http-basic JSON) |
 | `github`/`gh` · `gitlab`/`glab` · `terraform`/`tf` | CLI tokens | `GH_TOKEN`+`GITHUB_TOKEN` / `GITLAB_TOKEN` / `TF_TOKEN_<host>` |

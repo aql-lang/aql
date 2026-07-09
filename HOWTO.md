@@ -1042,8 +1042,8 @@ aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
 ```
 
 Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
-`pypi`/`uv`/`poetry`/`hatch`/`flit`, `cargo`, `gem`, `hex`, `swift`,
-`cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
+`pypi`/`uv`/`poetry`/`hatch`/`flit`, `cargo`, `gem`, `hex`, `hackage`,
+`swift`, `cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
 `--registry=HOST` for the registry-scoped ones). The full table is in
 [CLI.md → Publishing](CLI.md#publishing-a-package-with-a-vault-held-token).
 
