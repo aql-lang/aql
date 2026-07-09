@@ -80,7 +80,11 @@ func TestInitEdges(t *testing.T) {
 		!strings.Contains(errOut, "did not match") {
 		t.Errorf("mismatch: %q", errOut)
 	}
-	// A host backend that cannot be probed fails init loudly.
+	// A host backend that cannot be probed fails init loudly. Empty PATH so the
+	// keychain tool (`security`) is unresolvable on any host — otherwise a real
+	// macOS keychain would probe successfully, initialize the vault, and make
+	// the later "unknown backend" and --force arms see an already-init vault.
+	t.Setenv("PATH", t.TempDir())
 	if code, _, errOut := runVault(t, "", "init", "--backend=keychain"); code == 0 || errOut == "" {
 		t.Errorf("keychain init on this host should fail: %q", errOut)
 	}

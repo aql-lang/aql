@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -160,25 +161,50 @@ func TestAddErrorArms(t *testing.T) {
 	})
 }
 
-// w4ClipStub installs an xclip PATH stub whose paste output is script,
-// forcing the Linux/X11 clipboard toolchain.
-func w4ClipStub(t *testing.T, script string) {
+// clipStubScripts installs a clipboard toolchain into dir that
+// detectClipboard will pick up on the CURRENT platform: the paste side runs
+// pasteScript (which must exit) and the clear/copy side runs clearScript. It
+// returns the label detectClipboard reports for that toolchain, so callers can
+// assert on the announced tool name portably. On platforms whose real tool
+// cannot be stubbed as a shell script (Windows/PowerShell) the test is
+// skipped rather than left to fail spuriously. detectClipboard branches on
+// runtime.GOOS, so the stub has to match the real OS — a single xclip stub
+// (the old approach) is invisible to the macOS pbpaste/pbcopy branch.
+func clipStubScripts(t *testing.T, dir, pasteScript, clearScript string) (label string) {
+	t.Helper()
+	switch runtime.GOOS {
+	case "darwin":
+		// pbpaste reads the clipboard; pbcopy consumes stdin (copy/clear).
+		stubBin(t, dir, "pbpaste", pasteScript)
+		stubBin(t, dir, "pbcopy", clearScript)
+		return "pbpaste/pbcopy"
+	case "windows":
+		t.Skip("clipboard integration cannot be stubbed as a shell script on windows")
+		return ""
+	default: // linux, *bsd — one xclip binary serves both selections.
+		stubBin(t, dir, "xclip", "case \"$*\" in\n*-o*) "+pasteScript+" ;;\n*) "+clearScript+" ;;\nesac\n")
+		t.Setenv("WAYLAND_DISPLAY", "")
+		t.Setenv("DISPLAY", ":0")
+		return "xclip"
+	}
+}
+
+// w4ClipStub installs a clipboard PATH stub whose paste output is produced by
+// pasteScript (which must exit); the clear/copy side always succeeds. It is
+// platform-portable via clipStubScripts.
+func w4ClipStub(t *testing.T, pasteScript string) {
 	t.Helper()
 	dir := t.TempDir()
-	stubBin(t, dir, "xclip", script)
+	clipStubScripts(t, dir, pasteScript, "cat > /dev/null; exit 0")
 	t.Setenv("PATH", dir)
-	t.Setenv("WAYLAND_DISPLAY", "")
-	t.Setenv("DISPLAY", ":0")
 }
 
 func TestAddFromClipboardArms(t *testing.T) {
 	t.Run("success wipes clipboard", func(t *testing.T) {
 		testHome(t)
 		mustInit(t)
-		// paste (-o) prints a value; clear consumes stdin.
-		w4ClipStub(t, `for a in "$@"; do if [ "$a" = "-o" ]; then printf 'clip-secret\n'; exit 0; fi; done
-cat > /dev/null; exit 0
-`)
+		// paste prints the stored secret; clear consumes stdin.
+		w4ClipStub(t, "printf 'clip-secret\\n'; exit 0")
 		code, out, e := runVault(t, "", "add", "--from-clipboard", "clipk")
 		if code != 0 {
 			t.Fatalf("add --from-clipboard: %s", e)
@@ -193,7 +219,7 @@ cat > /dev/null; exit 0
 	t.Run("paste fails", func(t *testing.T) {
 		testHome(t)
 		mustInit(t)
-		w4ClipStub(t, "exit 1\n")
+		w4ClipStub(t, "exit 1")
 		if code, _, e := runVault(t, "", "add", "--from-clipboard", "k"); code == 0 ||
 			!strings.Contains(e, "clipboard") {
 			t.Errorf("failing paste = %d, %q", code, e)
@@ -202,9 +228,7 @@ cat > /dev/null; exit 0
 	t.Run("clipboard empty", func(t *testing.T) {
 		testHome(t)
 		mustInit(t)
-		w4ClipStub(t, `for a in "$@"; do if [ "$a" = "-o" ]; then exit 0; fi; done
-cat > /dev/null; exit 0
-`)
+		w4ClipStub(t, "exit 0")
 		if code, _, e := runVault(t, "", "add", "--from-clipboard", "k"); code == 0 ||
 			!strings.Contains(e, "clipboard is empty") {
 			t.Errorf("empty clipboard = %d, %q", code, e)
@@ -475,9 +499,7 @@ func TestRotateErrorArms(t *testing.T) {
 		if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "k"); code != 0 {
 			t.Fatalf("seed: %s", e)
 		}
-		w4ClipStub(t, `for a in "$@"; do if [ "$a" = "-o" ]; then printf 'rotated-clip\n'; exit 0; fi; done
-cat > /dev/null; exit 0
-`)
+		w4ClipStub(t, "printf 'rotated-clip\\n'; exit 0")
 		code, out, e := runVault(t, "", "rotate", "--yes", "--from-clipboard", "k")
 		if code != 0 {
 			t.Fatalf("rotate --from-clipboard: %s", e)

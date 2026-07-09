@@ -78,22 +78,23 @@ func TestClearClipboardAfterStore(t *testing.T) {
 	if !strings.Contains(errb.String(), "could not clear clipboard") {
 		t.Errorf("missing warning: %q", errb.String())
 	}
-	// With a working stub tool the clipboard is wiped and announced.
+	// With a working stub tool the clipboard is wiped and announced. The stub
+	// matches the host's real clipboard toolchain (pbcopy on macOS, xclip on
+	// Linux) so this is portable rather than Linux-only.
 	dir := t.TempDir()
-	stubBin(t, dir, "xclip", "cat > /dev/null\nexit 0\n")
+	label := clipStubScripts(t, dir, "exit 0", "cat > /dev/null; exit 0")
 	t.Setenv("PATH", dir)
-	t.Setenv("DISPLAY", ":0")
 	out.Reset()
 	errb.Reset()
 	clearClipboardAfterStore(&out, &errb)
-	if !strings.Contains(out.String(), "clipboard cleared (xclip)") {
+	if !strings.Contains(out.String(), "clipboard cleared ("+label+")") {
 		t.Errorf("clear not announced: %q / %q", out.String(), errb.String())
 	}
 	if !strings.Contains(out.String(), "clipboard manager") {
 		t.Errorf("missing the clipboard-manager caveat: %q", out.String())
 	}
 	// A tool that fails to clear degrades to a warning too.
-	stubBin(t, dir, "xclip", "exit 1\n")
+	clipStubScripts(t, dir, "exit 0", "exit 1")
 	out.Reset()
 	errb.Reset()
 	clearClipboardAfterStore(&out, &errb)
@@ -155,6 +156,11 @@ exit 3
 		kr.Name() != BackendSecretService {
 		t.Errorf("selectKeyring with stub: %v", err)
 	}
+	// autoBackend's precedence is GOOS-specific — Linux prefers secret-service
+	// when secret-tool is present, macOS prefers its native keychain. Force the
+	// Linux dispatch so the stubbed secret-tool is what gets detected (on a
+	// real macOS host the `security` keychain would otherwise win).
+	p7swapGoos(t, "linux")
 	if got := autoBackend(); got != BackendSecretService {
 		t.Errorf("autoBackend with stub secret-tool = %q", got)
 	}
@@ -477,7 +483,10 @@ func TestAuthenticateWithBackendResolution(t *testing.T) {
 		t.Fatalf("legacy session: %+v, %v", sess, err)
 	}
 	sess.Close()
-	// A host backend that cannot be opened propagates the error.
+	// A host backend that cannot be opened propagates the error. Empty PATH so
+	// the keychain tool (`security`) is unresolvable on any host — otherwise a
+	// real macOS keychain would open and the arm would not be exercised.
+	t.Setenv("PATH", t.TempDir())
 	broken := &Store{Backend: BackendKeychain}
 	if _, err := authenticateWith(broken, home, ""); err == nil {
 		t.Error("unavailable host backend should error")
@@ -513,8 +522,10 @@ func TestOpenKeyringPromptPath(t *testing.T) {
 		!strings.Contains(err.Error(), "requires a passphrase") {
 		t.Errorf("no source: %v", err)
 	}
-	// A host backend skips the passphrase entirely (and errors here since
-	// none is available on this host).
+	// A host backend skips the passphrase entirely (and errors here since none
+	// is available). Empty PATH so the keychain tool is unresolvable on any
+	// host — otherwise a real macOS keychain would open successfully.
+	t.Setenv("PATH", t.TempDir())
 	if _, err := openKeyring(&Store{Backend: BackendKeychain}, home, nil, &sink, ""); err == nil {
 		t.Error("host backend should fail on this machine")
 	}
