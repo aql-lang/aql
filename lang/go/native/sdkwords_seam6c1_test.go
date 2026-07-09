@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // Wave-6 coverage for the SDK-backed API words (create.go, load.go,

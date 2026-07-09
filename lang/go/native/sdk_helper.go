@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // getSDK extracts the spec and entity name from an API map ({kind:"api", spec:..., entity:...}),

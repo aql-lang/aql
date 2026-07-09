@@ -3,7 +3,7 @@ package native
 import (
 	"encoding/json"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // Shared test seams (design/TEST-SEAMS.10.md). Every var here defaults

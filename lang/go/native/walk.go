@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "walk" word is registered via the consolidated Natives slice in

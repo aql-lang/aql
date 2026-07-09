@@ -1,7 +1,7 @@
 package native
 
 import (
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "pad" word is registered via the consolidated Natives slice in

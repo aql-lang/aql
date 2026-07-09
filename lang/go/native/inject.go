@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "inject" word is registered via the consolidated Natives slice in

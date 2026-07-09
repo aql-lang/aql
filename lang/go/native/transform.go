@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "transform" word is registered via the consolidated Natives slice

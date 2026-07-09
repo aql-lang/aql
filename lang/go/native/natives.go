@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // Natives is the consolidated NativeFunc slice for the data-manipulation
