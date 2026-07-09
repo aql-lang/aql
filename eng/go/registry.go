@@ -173,6 +173,18 @@ type Registry struct {
 	// scope; forks inherit the field and pass THEMSELVES.
 	Invoker func(reg *Registry, body Value, inputs []Value) ([]Value, error)
 
+	// nestedRunner runs a compiled fn UNIT nested within the currently-active
+	// VM run on this registry — the live-run twin of RunUnit (which starts a
+	// FRESH run and so cannot be used mid-run, where vmRunning is already 1). It
+	// is installed alongside Invoker for the duration of a RunProgram and lets a
+	// stamped callback invoked synchronously during the run (a service handler)
+	// execute on the VM instead of falling to CallAQL. Returns handled=false when
+	// the ref belongs to a different program than the running one (a defensive,
+	// normally-unreachable case), so InvokeCallback falls back to the interpreter.
+	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
+	// idle, so InvokeCallback takes the RunUnit path there, not this one).
+	nestedRunner func(ref *CompiledFnRef, args []Value) (result []Value, handled bool, err error)
+
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the
 	// shared Invoker (and the run mutates other shared scopes — Contexts, Defs,

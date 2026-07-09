@@ -44,8 +44,21 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// sig is the matched signature (callers dispatch it via MatchFnSig and check
 	// it non-nil first — serve-raw's handler dispatch is the canonical caller).
-	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil && r.canHostVM() {
-		return RunUnit(ref, r, args)
+	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil {
+		// Idle registry (a per-connection / per-process fork) → start a fresh VM
+		// run for the handler.
+		if r.canHostVM() {
+			return RunUnit(ref, r, args)
+		}
+		// Mid-run on this registry (a service handler invoked synchronously
+		// during the enclosing compiled run) → run the unit NESTED in that run,
+		// since a fresh RunUnit would trip the concurrency guard. handled=false
+		// (a cross-program ref) falls through to the interpreter below.
+		if r.nestedRunner != nil {
+			if res, handled, err := r.nestedRunner(ref, args); handled {
+				return res, err
+			}
+		}
 	}
 	return r.CallAQL(sig, args, captures)
 }

@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"fmt"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -154,6 +155,40 @@ func TestStoredFnNonCompilingBodyFallsBack(t *testing.T) {
 	}
 	if n, _ := out[0].AsConcreteInteger(); n != 5 {
 		t.Fatalf("fallback result = %v, want 5", out[0])
+	}
+}
+
+// A service handler invoked synchronously DURING a compiled run exercises the
+// nested-VM path (runUnitNested): the handler is stamped (service `add` is a
+// CompileStoresFn slot), and `call` runs it on the VM nested in the enclosing
+// run (canHostVM is false mid-run, so RunUnit can't be used). Compiled and
+// interpreted results must match.
+func TestServiceCallNestedVMDifferential(t *testing.T) {
+	src := `def svc (service {n: 0})
+add {cmd: "inc"} ([req:Any state:Any] => [42]) svc
+call {cmd: "inc"} svc`
+	// The handler is stamped at compile time.
+	a, _ := New()
+	prog, reason, _, err := a.CompileCheck(src)
+	if err != nil || prog == nil {
+		t.Fatalf("compile: reason=%q err=%v", reason, err)
+	}
+	if firstStampedHandler(prog) == nil {
+		t.Fatal("service handler was not compiled + stamped")
+	}
+	// Byte-identical compiled (nested-VM) vs interpreted.
+	ai, _ := New()
+	interp, ierr := ai.Run(src)
+	ac, _ := New()
+	comp, cerr := ac.RunCompiledStrict(src)
+	if ierr != nil || cerr != nil {
+		t.Fatalf("run errors: interp=%v compiled=%v", ierr, cerr)
+	}
+	if fmt.Sprint(interp) != fmt.Sprint(comp) {
+		t.Fatalf("compiled %v != interpreted %v", comp, interp)
+	}
+	if fmt.Sprint(comp) != "[42]" {
+		t.Fatalf("result = %v, want [42]", comp)
 	}
 }
 
