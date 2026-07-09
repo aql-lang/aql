@@ -10,11 +10,17 @@
 > re-splice buffer, #1A Value shrink (184→152 B). The allowlist churn a
 > mid-`engine.go` edit causes was handled by a diff-hunk delta
 > re-anchor rather than the proposed `covergate -reanchor` subcommand
-> (kept the coverage tool unchanged). #1A moved only the five immutable
+> (kept the coverage tool unchanged). #1A first moved the five immutable
 > integer lattice fields behind a shared `*typeMeta` (the safe,
-> orphan-pointer-proof subset); moving `Behavior`/`Name`/`Pos` or
-> packing the bool flags remains available as a follow-up for further
-> duffcopy reduction.
+> orphan-pointer-proof subset), then a **follow-up also moved the leaf
+> `Name`** into the same `*typeMeta` (adding exported `SetName`/`Name`
+> accessors since external packages can no longer touch the field) —
+> Value is now **136 bytes** (184 → 152 → 136, −26%). Still available for
+> further duffcopy reduction: `Behavior` (16 B; type-node marker read at
+> ~100 dispatch-critical sites and mutated by `behave` — same `*typeMeta`
+> mechanism, higher risk), `Pos` (32 B, the largest single field; move
+> behind a pointer), and packing the seven bool flags + `Origin` into a
+> bitfield.
 
 Companion to `design/INTERPRETER-SPEED-INVESTIGATION.10.md` (the data +
 diagnosis). This note is the **implementation plan**: for each root
