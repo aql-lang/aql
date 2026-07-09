@@ -54,6 +54,29 @@ make Urlon {scheme:'https' host:'x.com' bogus:'y'}	ERROR:Urlon has no field bogu
 make Urlon {scheme:'https' host:'x.com' port:'80'}	ERROR:port must be an Integer	port is Integer-typed
 
 # ─────────────────────────────────────────────────────────────────────
+# §2b Construction — Ipon. An IPv4 or IPv6 address, validated and
+#     canonicalized via net.ParseIP; the {addr} map form re-parses.
+make Ipon '203.0.113.7'	203.0.113.7
+make Ipon {addr:'203.0.113.7'}	203.0.113.7
+make Ipon '203.0.113.7' typeof	Ipon
+pathof Ipon	[Scalar Micron Ipon]
+def i (make Ipon '203.0.113.7') i.addr	'203.0.113.7'
+def i (make Ipon '203.0.113.7') i.version	4	IPv4 → version 4
+def i (make Ipon '2001:db8::1') i.version	6	IPv6 → version 6
+# canonicalization — alternate spellings collapse to one stored addr
+def i (make Ipon '2001:0DB8::1') i.addr	'2001:db8::1'	lowercased / zero-compressed
+def i (make Ipon '::ffff:10.0.0.7') i.addr	'10.0.0.7'	IPv4-mapped renders as IPv4
+(make Ipon '2001:0db8::1') eq (make Ipon '2001:db8::1')	true	content-equal after canonicalization
+# paired negatives — net.ParseIP validates ranges and shape
+make Ipon 'not-an-ip'	ERROR:invalid IP address	not an address
+make Ipon '999.1.1.1'	ERROR:invalid IP address	octet out of range
+make Ipon '10.0.0'	ERROR:invalid IP address	three octets is not IPv4
+make Ipon 42	ERROR:Ipon source must be a string or map	wrong source type
+make Ipon {addr:'x' extra:'y'}	ERROR:Ipon has no field extra	unknown field
+make Ipon {addr:42}	ERROR:field addr must be a String	non-string field value
+make Ipon {}	ERROR:Ipon requires an addr field	missing addr
+
+# ─────────────────────────────────────────────────────────────────────
 # §3  Construction — the abstract root and Pathon under make.
 make Micron 1	ERROR:Micron is abstract	the root is not constructible
 make Pathon 'a/b/c'	a/b/c	Pathon keeps its forms under the new name
@@ -184,6 +207,10 @@ def Workon refine Emailon end make Workon 'a@b.c' typeof	Workon
 def Workon refine Emailon end (make Workon 'a@b.c').host	'b.c'
 def Workon refine Emailon end make Workon 'nope'	ERROR:invalid email address	newtype inherits validation
 def Workon refine Emailon end (make Workon 'a@b.c') is Emailon	true
+def Endpointon refine Ipon end make Endpointon '203.0.113.7' typeof	Endpointon	nominal newtype of a leaf constructs through the leaf validator
+def Endpointon refine Ipon end (make Endpointon '203.0.113.7').addr	'203.0.113.7'	derived properties read through the newtype tag
+def Endpointon refine Ipon end make Endpointon 'not-an-ip'	ERROR:invalid IP address	newtype inherits validation
+def Endpointon refine Ipon end (make Endpointon '203.0.113.7') is Ipon	true	…and widens to the leaf
 refine Emailon {x:String}	ERROR:validation contract	a leaf's field set is sealed
 def Nudon refine Micron end typeof Nudon	Micron	bare nominal refine of the root is legal at def time…
 def Nudon refine Micron end make Nudon 1	ERROR:no field schema	…but has no constructor

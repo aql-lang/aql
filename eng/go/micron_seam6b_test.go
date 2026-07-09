@@ -57,7 +57,7 @@ func s6b5MustEmailon(t *testing.T, s string) Value {
 
 // --- micron.go: constructor guard arms --------------------------------------
 
-func TestS6b5MakeEmailonUrlonBadMapPayload(t *testing.T) {
+func TestS6b5MakeEmailonUrlonIponBadMapPayload(t *testing.T) {
 	// Parent says Map and the value is "concrete", but the payload is not
 	// readable as a map: RequireConcreteMap's error must surface.
 	bad := Value{Parent: TMap, Data: ListPayload{}}
@@ -66,6 +66,9 @@ func TestS6b5MakeEmailonUrlonBadMapPayload(t *testing.T) {
 	}
 	if _, err := makeUrlon(bad); err == nil {
 		t.Error("makeUrlon must fail on an unreadable map payload")
+	}
+	if _, err := makeIpon(bad); err == nil {
+		t.Error("makeIpon must fail on an unreadable map payload")
 	}
 }
 

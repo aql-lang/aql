@@ -431,6 +431,62 @@ func TestMakeUrlon(t *testing.T) {
 	}
 }
 
+func TestMakeIpon(t *testing.T) {
+	out, err := makeIpon(NewString("203.0.113.7"))
+	if err != nil {
+		t.Fatalf("makeIpon: %v", err)
+	}
+	v := out[0]
+	if !v.Parent.Equal(TIpon) {
+		t.Fatalf("ipon = %v", v)
+	}
+	if got := v.String(); got != "203.0.113.7" {
+		t.Errorf("render = %q", got)
+	}
+	fields, _ := AsMicronFields(v)
+	if a := micronFieldString(fields, "addr"); a != "203.0.113.7" {
+		t.Errorf("addr = %q", a)
+	}
+
+	// IPv6 canonicalizes (lowercase, zero-compressed).
+	out, err = makeIpon(NewString("2001:0DB8::1"))
+	if err != nil {
+		t.Fatalf("ipv6 ipon: %v", err)
+	}
+	if got := out[0].String(); got != "2001:db8::1" {
+		t.Errorf("ipv6 render = %q", got)
+	}
+
+	// Map form re-validates through the string path.
+	out, err = makeIpon(mapOf("addr", NewString("10.0.0.1")))
+	if err != nil {
+		t.Fatalf("map ipon: %v", err)
+	}
+	if got := out[0].String(); got != "10.0.0.1" {
+		t.Errorf("map render = %q", got)
+	}
+
+	// Negative space.
+	if _, err := makeIpon(NewString("not-an-ip")); err == nil {
+		t.Error("bad address accepted")
+	}
+	if _, err := makeIpon(NewString("10.0.0")); err == nil {
+		t.Error("short IPv4 accepted")
+	}
+	if _, err := makeIpon(mapOf("addr", NewString("1.2.3.4"), "extra", NewString("x"))); err == nil {
+		t.Error("unknown field accepted")
+	}
+	if _, err := makeIpon(mapOf("addr", NewInteger(1))); err == nil {
+		t.Error("non-string addr accepted")
+	}
+	if _, err := makeIpon(mapOf()); err == nil {
+		t.Error("empty map (missing addr) accepted")
+	}
+	if _, err := makeIpon(NewBoolean(true)); err == nil {
+		t.Error("boolean source accepted")
+	}
+}
+
 func TestMicronTypePredicates(t *testing.T) {
 	if _, err := AsMicronType(NewInteger(1)); err == nil {
 		t.Error("AsMicronType accepted an integer")
@@ -568,6 +624,10 @@ func TestMicronInstantiateKinds(t *testing.T) {
 	if err != nil || !IsPathon(out[0]) {
 		t.Errorf("Pathon make = %v (%v)", out, err)
 	}
+	out, err = micronInstantiate(NewTypeLiteral(TIpon), NewString("203.0.113.7"), r)
+	if err != nil || !out[0].Parent.Equal(TIpon) {
+		t.Errorf("Ipon make = %v (%v)", out, err)
+	}
 	// A newtype of a builtin leaf constructs the base then retags.
 	newt := r.Types.MintType("W4bMailon", TEmailon)
 	out, err = micronInstantiate(NewTypeLiteral(newt), NewString("c@d.io"), r)
@@ -576,6 +636,15 @@ func TestMicronInstantiateKinds(t *testing.T) {
 	}
 	if !out[0].Parent.Equal(newt) {
 		t.Errorf("newtype instance parent = %v, want W4bMailon", out[0].Parent)
+	}
+	// A newtype of Ipon likewise constructs the base then retags.
+	newIp := r.Types.MintType("W4bIpon", TIpon)
+	out, err = micronInstantiate(NewTypeLiteral(newIp), NewString("203.0.113.7"), r)
+	if err != nil {
+		t.Fatalf("ipon newtype make: %v", err)
+	}
+	if !out[0].Parent.Equal(newIp) {
+		t.Errorf("ipon newtype instance parent = %v, want W4bIpon", out[0].Parent)
 	}
 	// A kind with no schema anywhere on its chain errors.
 	bare := r.Types.MintType("W4bBareon", TMicron)

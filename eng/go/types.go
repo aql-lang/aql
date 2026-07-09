@@ -30,6 +30,7 @@ var (
 	TPathon         = mustType("Scalar/Micron/Pathon")
 	TEmailon        = mustType("Scalar/Micron/Emailon")
 	TUrlon          = mustType("Scalar/Micron/Urlon")
+	TIpon           = mustType("Scalar/Micron/Ipon")
 	TNode           = mustType("Node")
 	TIdeal          = mustType("Ideal")
 	TList           = mustType("Node/List")
