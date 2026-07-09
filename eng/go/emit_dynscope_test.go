@@ -122,7 +122,11 @@ func TestLowerDynBindArms(t *testing.T) {
 // keeps the map bake.
 func TestActiveTokenMapConstGate(t *testing.T) {
 	r := seam7Reg(t)
-	r.Check.Mode = true
+	// Begin (not a bare Mode write) so the values this test mints carry
+	// compile identities — runtime mints elide IDs (value.go
+	// checkPassDepth), and an identity-less compound is deliberately NOT
+	// bakeable inside a fn unit.
+	defer r.Check.Begin()()
 	mkMap := func() Value {
 		om := NewOrderedMap()
 		om.Set("line", NewWord("src"))

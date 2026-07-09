@@ -125,8 +125,21 @@ func (c *CheckState) Begin() func() {
 	// a proper per-pass flag — a later plain check on a reused registry
 	// must not inherit a prior compile's true.
 	c.Compiling = false
+	// Arm process-wide ID minting for the pass's lifetime: the emit
+	// recorder keys provenance on Value.IDs minted at creation, so every
+	// value created while ANY pass is live must carry one (see
+	// checkPassDepth in value.go). The decrement is once-guarded — done
+	// closures ride defer AND t.Cleanup in places, and a double decrement
+	// would drive the counter negative, eliding IDs inside a later
+	// legitimate pass.
+	checkPassDepth.Add(1)
+	ended := false
 	return func() {
 		c.Mode = false
+		if !ended {
+			ended = true
+			checkPassDepth.Add(-1)
+		}
 	}
 }
 

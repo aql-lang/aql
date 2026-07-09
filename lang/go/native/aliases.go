@@ -383,6 +383,7 @@ var (
 	MintTestType              = eng.MintTestType
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
+	BeginIDMintScope          = eng.BeginIDMintScope
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
 	ResetModuleExportGrowth   = eng.ResetModuleExportGrowth

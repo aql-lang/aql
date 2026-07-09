@@ -365,8 +365,12 @@ func TestBuiltinTypeFixedIDs(t *testing.T) {
 	}
 }
 
-// TestValueIDPrefixes verifies that all value categories get the correct ID prefix.
+// TestValueIDPrefixes verifies that all value categories get the correct ID
+// prefix. IDs are minted only inside a check/compile pass or an explicit mint
+// scope (runtime mints elide them — eng mode-gated ID elision), so the test
+// arms a scope; the prefix machinery it pins is unchanged.
 func TestValueIDPrefixes(t *testing.T) {
+	defer native.BeginIDMintScope()()
 	// Scalar values get S_ prefix
 	str := native.NewString("hello")
 	if !strings.HasPrefix(str.ID, "S_") {

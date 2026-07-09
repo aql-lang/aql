@@ -2178,8 +2178,12 @@ func (e *Engine) stepWord(val Value) error {
 			// Remember which NAME produced this value (compile passes): if the
 			// value later has no compiled home in a fn unit, the read was a
 			// dynamic-scope reference and lowers to a runtime name lookup
-			// (resolveOperand's dynScopeRescue).
-			e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
+			// (resolveOperand's dynScopeRescue). Gated on an active check —
+			// NoteDefRead is a no-op outside a pass, but the bare call still
+			// evaluated top.ID unconditionally on the run-mode hot path.
+			if e.registry.Check.IsActive() {
+				e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
+			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
 			// at def time (so `size xs` → 3). To splice a list's elements

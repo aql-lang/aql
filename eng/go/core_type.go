@@ -406,6 +406,11 @@ func InstallType(r *Registry, name string, body Value) error {
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
+		// NOTE: the FnDef payload's Name is deliberately NOT stamped here
+		// — canon renders predicate bodies, and a stamped name would
+		// change their canonical ordering (compare.tsv §predicate-kind).
+		// resolvePredicateRef finds the type for a body COPY via the
+		// shared-construction reverse lookup (sameFnConstruction).
 		// Attach a Unifier so the predicate runs at every Unify call
 		// site (signature matching, options fields, record fields,
 		// `make` constraints, the `unify` word). Without this, Unify
