@@ -173,6 +173,18 @@ type Registry struct {
 	// scope; forks inherit the field and pass THEMSELVES.
 	Invoker func(reg *Registry, body Value, inputs []Value) ([]Value, error)
 
+	// nestedRunner runs a compiled fn UNIT nested within the currently-active
+	// VM run on this registry — the live-run twin of RunUnit (which starts a
+	// FRESH run and so cannot be used mid-run, where vmRunning is already 1). It
+	// is installed alongside Invoker for the duration of a RunProgram and lets a
+	// stamped callback invoked synchronously during the run (a service handler)
+	// execute on the VM instead of falling to CallAQL. Returns handled=false when
+	// the ref belongs to a different program than the running one (a defensive,
+	// normally-unreachable case), so InvokeCallback falls back to the interpreter.
+	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
+	// idle, so InvokeCallback takes the RunUnit path there, not this one).
+	nestedRunner func(ref *CompiledFnRef, args []Value) (result []Value, handled bool, err error)
+
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the
 	// shared Invoker (and the run mutates other shared scopes — Contexts, Defs,
@@ -383,6 +395,16 @@ func (r *Registry) CurrentStack() ([]Value, bool) {
 // a concurrent misuse — not the compiled run's own islands.
 func (r *Registry) interpRunActive() bool {
 	return r != nil && atomic.LoadInt32(&r.interpRunDepth) > 0
+}
+
+// canHostVM reports whether r can start a FRESH compiled run right now: no
+// compiled run and no interpreter run is already in flight on it. A per-
+// connection / per-process fork (ForkConcurrent) is idle, so a callback fires a
+// VM run cleanly; the main registry mid-run is busy, so InvokeCallback routes
+// the callback to the interpreter (CallAQL) instead — never racing the shared
+// invoker/scopes a live run owns.
+func (r *Registry) canHostVM() bool {
+	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
@@ -1911,7 +1933,11 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(predSig, []Value{candidate}, fnDef.Captured)
+	// InvokeCallback runs the predicate body on the VM when it compiled to a unit
+	// (nested in a live run, or fresh on an idle registry) and falls back to
+	// CallAQL — the interpreter — otherwise. The predicate sandbox (above) wraps
+	// either engine identically.
+	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}

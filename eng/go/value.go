@@ -459,6 +459,15 @@ const (
 	// The flag scopes the "0 results ⇒ diverges" inference to these words: a
 	// genuinely void word (print/set, declared 0-result) is unaffected.
 	CompileValueDiverges
+	// CompileStoresBody marks a word that STORES a NoEvalArgs CODE-BODY list to run
+	// LATER on its own registry — `spawn`'s process body. Like CompileStoresFn but
+	// for a code list rather than a fn value: the recorder compiles the body's
+	// tokens to a 0-param unit and hands the word a synthetic fn-value carrier
+	// (raw Body tokens + a CompiledFnRef), so the word runs the compiled unit via
+	// RunUnit on its fork instead of a fresh interpreter sub-engine. A body that
+	// refuses to compile rides as the plain inert const list and the word runs it
+	// on the interpreter, unchanged.
+	CompileStoresBody
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
