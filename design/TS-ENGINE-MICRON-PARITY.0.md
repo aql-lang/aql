@@ -10,6 +10,7 @@ The Go kernel gained three Scalar/Micron changes that the TypeScript engine
 | `Ipon` — IPv4/IPv6 address leaf (FixedID 114) | #237 | absent |
 | `Pathon` Windows **drive** parsing (`C:/x` → `volume`) | #239 | absent |
 | `Hoston` — host:port authority leaf (FixedID 115) | #240 | absent |
+| `Semveron` — SemVer 2.0.0 leaf (FixedID 116), **custom precedence order** | (this PR) | absent |
 
 `eng/ts/src/type.ts::typeNameTable()` still declares only `TMicron`, `TPathon`,
 `TEmailon`, `TUrlon`.
@@ -20,8 +21,9 @@ The cross-engine differential (`test/go/engspec`) fails only on a **divergence**
 — both engines succeed but return different values. It permits a **gap** — one
 engine errors where the other succeeds.
 
-- `Ipon` / `Hoston` are **new** types: `make Ipon …` / `make Hoston …` succeed
-  in Go and raise `undefined_word` in TS → a permitted gap, not a divergence.
+- `Ipon` / `Hoston` / `Semveron` are **new** types: `make Ipon …` /
+  `make Hoston …` / `make Semveron …` succeed in Go and raise `undefined_word`
+  in TS → a permitted gap, not a divergence.
 - The `Pathon` drive change was deliberately made **POSIX-preserving** (only a
   `C:` drive prefix switches on Windows parsing; `//a//b//` stays `/a/b`), so no
   existing corpus input diverges.
@@ -40,6 +42,12 @@ drive path is not understood by the TS engine.
    - `Hoston`: `SplitHostPort` bracketing + optional port; `host`, `port`,
      derived `authority`; reject URL delimiters in the host.
    - `Pathon`: drive-prefix parsing + `volume`; keep driveless paths POSIX.
+   - `Semveron`: SemVer 2.0.0 parse (no leading `v`, no leading zeros, numeric
+     prerelease unbounded); `major`/`minor`/`patch`/`prerelease`/`build` +
+     derived `prereleaseParts`/`buildParts`/`release`/`stable`/`version`; and
+     the **custom SemVer precedence Comparer** (mirror `compareSemverons`) —
+     lexical render order is semantically wrong here, so the TS port must carry
+     the same precedence logic, not just the constructor.
 3. Add cross-engine differential rows for each so parity is enforced, not
    assumed.
 

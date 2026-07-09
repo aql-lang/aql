@@ -84,12 +84,13 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Store":        42,
 		"Ideal/Store/System": 43,
 		// FixedID 44 retired with Ideal/Array (removed); not recycled.
-		"Ideal/Error":           45,
-		"Scalar/Micron/Pathon":  47,
-		"Scalar/Micron/Emailon": 112,
-		"Scalar/Micron/Urlon":   113,
-		"Scalar/Micron/Ipon":    114,
-		"Scalar/Micron/Hoston":  115,
+		"Ideal/Error":            45,
+		"Scalar/Micron/Pathon":   47,
+		"Scalar/Micron/Emailon":  112,
+		"Scalar/Micron/Urlon":    113,
+		"Scalar/Micron/Ipon":     114,
+		"Scalar/Micron/Hoston":   115,
+		"Scalar/Micron/Semveron": 116,
 		// Tensor family (former FixedIDs 2000-2002) moved to
 		// aql:matrix-util as per-import module mints with no FixedID —
 		// see MintTensorTypes and design/OPEN-WORDS.0.md.

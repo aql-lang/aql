@@ -32,6 +32,7 @@ var (
 	TUrlon          = mustType("Scalar/Micron/Urlon")
 	TIpon           = mustType("Scalar/Micron/Ipon")
 	THoston         = mustType("Scalar/Micron/Hoston")
+	TSemveron       = mustType("Scalar/Micron/Semveron")
 	TNode           = mustType("Node")
 	TIdeal          = mustType("Ideal")
 	TList           = mustType("Node/List")

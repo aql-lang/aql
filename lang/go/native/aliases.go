@@ -172,6 +172,7 @@ var (
 	TUrlon          = eng.TUrlon
 	TIpon           = eng.TIpon
 	THoston         = eng.THoston
+	TSemveron       = eng.TSemveron
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity

@@ -192,6 +192,9 @@ func (mb micronBehavior) Compare(a, b Value) (int, error) {
 	if mb.kind.ConformsTo(TPathon) {
 		return comparePathons(a, b), nil
 	}
+	if mb.kind.ConformsTo(TSemveron) {
+		return compareSemverons(a, b), nil
+	}
 	return strings.Compare(micronCompareKey(a), micronCompareKey(b)), nil
 }
 
@@ -238,6 +241,8 @@ func micronRender(v Value) string {
 		return micronFieldString(fields, "addr")
 	case v.Parent.ConformsTo(THoston):
 		return micronHostonAuthority(fields)
+	case v.Parent.ConformsTo(TSemveron):
+		return micronSemveronRender(fields)
 	default:
 		return NewMap(fields).String()
 	}
@@ -305,6 +310,7 @@ func init() {
 	TUrlon.Behavior = micronBehavior{kind: TUrlon}
 	TIpon.Behavior = micronBehavior{kind: TIpon}
 	THoston.Behavior = micronBehavior{kind: THoston}
+	TSemveron.Behavior = micronBehavior{kind: TSemveron}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -342,8 +348,38 @@ func MicronProperty(v Value, key string) (Value, bool) {
 		return NewString(micronURLHref(fields)), true
 	case v.Parent.ConformsTo(THoston) && key == "authority":
 		return NewString(micronHostonAuthority(fields)), true
+	case v.Parent.ConformsTo(TSemveron):
+		switch key {
+		case "prereleaseParts":
+			return semveronParts(micronFieldString(fields, "prerelease")), true
+		case "buildParts":
+			return semveronParts(micronFieldString(fields, "build")), true
+		case "release":
+			return NewString(fmt.Sprintf("%d.%d.%d",
+				micronFieldInt(fields, "major"),
+				micronFieldInt(fields, "minor"),
+				micronFieldInt(fields, "patch"))), true
+		case "stable":
+			return NewBoolean(micronFieldString(fields, "prerelease") == ""), true
+		case "version":
+			return NewString(micronSemveronRender(fields)), true
+		}
 	}
 	return Value{}, false
+}
+
+// semveronParts splits a dot-separated prerelease/build string into a
+// List of String identifiers; an empty string yields an empty list.
+func semveronParts(s string) Value {
+	if s == "" {
+		return NewList(nil)
+	}
+	segs := strings.Split(s, ".")
+	elems := make([]Value, len(segs))
+	for i, seg := range segs {
+		elems[i] = NewString(seg)
+	}
+	return NewList(elems)
 }
 
 // MicronSchemaFor returns the field schema of the nearest user-defined
@@ -656,6 +692,390 @@ func hostonErr(detail string) error {
 	return &AqlError{Code: "type_error", Detail: "make: " + detail}
 }
 
+// ---- Semveron (Semantic Versioning 2.0.0) ----
+
+// semveronFieldOrder is the canonical field layout of a Semveron map
+// source (major/minor/patch are required; prerelease/build optional).
+var semveronFieldOrder = []string{"major", "minor", "patch", "prerelease", "build"}
+
+// makeSemveron builds a Semveron — a Semantic Versioning 2.0.0 version —
+// from a string ("1.2.3", "1.0.0-rc.1+build.5") or a
+// {major minor patch prerelease? build?} map. The map form re-renders
+// to the canonical string and re-parses through the single validator.
+func makeSemveron(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return semveronFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Semveron")
+		if err != nil {
+			return nil, err
+		}
+		var major, minor, patch int64
+		var haveMajor, haveMinor, havePatch bool
+		var prerelease, build string
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "major", "minor", "patch":
+				n, nerr := v.AsConcreteInteger()
+				if nerr != nil {
+					return nil, semveronErr(fmt.Sprintf("Semveron field %s must be an Integer, got %s", k, v.String()))
+				}
+				if n < 0 {
+					return nil, semveronErr(fmt.Sprintf("Semveron field %s must be non-negative, got %d", k, n))
+				}
+				switch k {
+				case "major":
+					major, haveMajor = n, true
+				case "minor":
+					minor, haveMinor = n, true
+				case "patch":
+					patch, havePatch = n, true
+				}
+			case "prerelease":
+				sv, serr := semveronIdentField(v, "prerelease")
+				if serr != nil {
+					return nil, serr
+				}
+				prerelease = sv
+			case "build":
+				sv, serr := semveronIdentField(v, "build")
+				if serr != nil {
+					return nil, serr
+				}
+				build = sv
+			default:
+				return nil, semveronErr("Semveron has no field " + k +
+					" (fields: " + strings.Join(semveronFieldOrder, ", ") + ")")
+			}
+		}
+		if !haveMajor || !haveMinor || !havePatch {
+			return nil, semveronErr("Semveron requires major, minor and patch fields")
+		}
+		// Re-render to the canonical string and re-validate through the
+		// single string parser — one validator for both forms.
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "%d.%d.%d", major, minor, patch)
+		if prerelease != "" {
+			sb.WriteString("-")
+			sb.WriteString(prerelease)
+		}
+		if build != "" {
+			sb.WriteString("+")
+			sb.WriteString(build)
+		}
+		return semveronFromString(sb.String())
+	}
+	return nil, semveronErr(fmt.Sprintf("Semveron source must be a string or map, got %s", src.String()))
+}
+
+// semveronFromString parses a Semantic Versioning 2.0.0 string
+// (semver.org grammar, no leading 'v') into a Semveron payload. The
+// stored primary fields are major/minor/patch (Integer) and the
+// optional prerelease/build (String); prereleaseParts, buildParts,
+// release, stable and version are derived at read time.
+func semveronFromString(s string) ([]Value, error) {
+	if s == "" {
+		return nil, semveronErr("Semveron requires a version, e.g. 1.2.3 or 1.0.0-rc.1+build.5")
+	}
+	if s[0] == 'v' || s[0] == 'V' {
+		return nil, semveronErr(fmt.Sprintf("Semveron %q must not carry a leading 'v' (use %q)", s, s[1:]))
+	}
+	rest := s
+	// Split off build at the first '+'. Build identifiers are
+	// [0-9A-Za-z-] with no '+', so a second '+' fails identifier
+	// validation below. A '+' with nothing after it (hasBuild but empty)
+	// is a loud error, not an absent build.
+	build, hasBuild := "", false
+	if i := strings.IndexByte(rest, '+'); i >= 0 {
+		build, hasBuild = rest[i+1:], true
+		rest = rest[:i]
+	}
+	// Split off prerelease at the first '-'. The version core is digits
+	// and dots only, so the first '-' necessarily begins the prerelease;
+	// a trailing '-' with nothing after it is an error, not an absence.
+	prerelease, hasPre := "", false
+	if i := strings.IndexByte(rest, '-'); i >= 0 {
+		prerelease, hasPre = rest[i+1:], true
+		rest = rest[:i]
+	}
+	// Version core: exactly major.minor.patch, each a numeric identifier.
+	core := strings.Split(rest, ".")
+	if len(core) != 3 {
+		return nil, semveronErr(fmt.Sprintf("Semveron %q core must be major.minor.patch", s))
+	}
+	nums := make([]int64, 3)
+	for i, part := range core {
+		n, err := parseSemverNumeric(part)
+		if err != nil {
+			return nil, semveronErr(fmt.Sprintf("Semveron %q: %v", s, err))
+		}
+		nums[i] = n
+	}
+	if hasPre {
+		if err := validSemverPrerelease(prerelease); err != nil {
+			return nil, semveronErr(fmt.Sprintf("Semveron %q prerelease: %v", s, err))
+		}
+	}
+	if hasBuild {
+		if err := validSemverBuild(build); err != nil {
+			return nil, semveronErr(fmt.Sprintf("Semveron %q build: %v", s, err))
+		}
+	}
+	fields := NewOrderedMap()
+	fields.Set("major", NewInteger(nums[0]))
+	fields.Set("minor", NewInteger(nums[1]))
+	fields.Set("patch", NewInteger(nums[2]))
+	if hasPre {
+		fields.Set("prerelease", NewString(prerelease))
+	}
+	if hasBuild {
+		fields.Set("build", NewString(build))
+	}
+	return []Value{NewValueRaw(TSemveron, MicronPayload{Fields: fields})}, nil
+}
+
+// parseSemverNumeric parses a SemVer numeric identifier — digits only,
+// no leading zeros (except "0" itself) — fitting an int64.
+func parseSemverNumeric(s string) (int64, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty numeric identifier")
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, fmt.Errorf("%q is not a number", s)
+		}
+	}
+	if len(s) > 1 && s[0] == '0' {
+		return 0, fmt.Errorf("%q has a leading zero", s)
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%q is out of range", s)
+	}
+	return n, nil
+}
+
+// isSemverIdentChar reports whether c is a legal SemVer identifier
+// character ([0-9A-Za-z-]).
+func isSemverIdentChar(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c == '-'
+}
+
+// isSemverNumericIdent reports whether every character of s is a digit.
+func isSemverNumericIdent(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+// validSemverPrerelease validates a dot-separated prerelease: each
+// identifier is non-empty, drawn from [0-9A-Za-z-], and a purely
+// numeric identifier carries no leading zero.
+func validSemverPrerelease(s string) error {
+	for _, id := range strings.Split(s, ".") {
+		if id == "" {
+			return fmt.Errorf("empty identifier")
+		}
+		for i := 0; i < len(id); i++ {
+			if !isSemverIdentChar(id[i]) {
+				return fmt.Errorf("identifier %q has an invalid character", id)
+			}
+		}
+		if isSemverNumericIdent(id) && len(id) > 1 && id[0] == '0' {
+			return fmt.Errorf("numeric identifier %q has a leading zero", id)
+		}
+	}
+	return nil
+}
+
+// validSemverBuild validates a dot-separated build: each identifier is
+// non-empty and drawn from [0-9A-Za-z-]. Leading zeros are allowed
+// (build metadata is opaque and never ordered).
+func validSemverBuild(s string) error {
+	for _, id := range strings.Split(s, ".") {
+		if id == "" {
+			return fmt.Errorf("empty identifier")
+		}
+		for i := 0; i < len(id); i++ {
+			if !isSemverIdentChar(id[i]) {
+				return fmt.Errorf("identifier %q has an invalid character", id)
+			}
+		}
+	}
+	return nil
+}
+
+// micronSemveronRender renders a Semveron payload as its canonical
+// string: major.minor.patch[-prerelease][+build].
+func micronSemveronRender(fields *OrderedMap) string {
+	var sb strings.Builder
+	sb.WriteString(strconv.FormatInt(micronFieldInt(fields, "major"), 10))
+	sb.WriteString(".")
+	sb.WriteString(strconv.FormatInt(micronFieldInt(fields, "minor"), 10))
+	sb.WriteString(".")
+	sb.WriteString(strconv.FormatInt(micronFieldInt(fields, "patch"), 10))
+	if pre := micronFieldString(fields, "prerelease"); pre != "" {
+		sb.WriteString("-")
+		sb.WriteString(pre)
+	}
+	if build := micronFieldString(fields, "build"); build != "" {
+		sb.WriteString("+")
+		sb.WriteString(build)
+	}
+	return sb.String()
+}
+
+// micronFieldInt reads an Integer field, defaulting to 0 when absent.
+func micronFieldInt(fields *OrderedMap, key string) int64 {
+	v, ok := fields.Get(key)
+	if !ok {
+		return 0
+	}
+	n, _ := AsInteger(v)
+	return n
+}
+
+// compareSemverons orders two Semveron values by SemVer 2.0.0
+// precedence: major, minor, patch numerically; a version WITH a
+// prerelease ranks below the same core without one; prerelease
+// identifiers compare field-by-field (numeric < alphanumeric, numeric
+// by value, alphanumeric by ASCII, a longer identifier set ranking
+// above a shorter prefix). Build metadata does not affect precedence
+// per the spec, but a final ASCII tiebreak on build keeps the order a
+// strict total order consistent with content equality (two Semverons
+// are equal iff their canonical renders match).
+func compareSemverons(a, b Value) int {
+	af, aerr := AsMicronFields(a)
+	bf, berr := AsMicronFields(b)
+	if aerr != nil || berr != nil {
+		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
+	}
+	for _, k := range []string{"major", "minor", "patch"} {
+		if c := cmpInt64(micronFieldInt(af, k), micronFieldInt(bf, k)); c != 0 {
+			return c
+		}
+	}
+	apre := micronFieldString(af, "prerelease")
+	bpre := micronFieldString(bf, "prerelease")
+	if c := comparePrerelease(apre, bpre); c != 0 {
+		return c
+	}
+	// Precedence-equal; break the remaining tie on build metadata so the
+	// order is total and agrees with content equality (absent < present).
+	return compareSemverBuild(micronFieldString(af, "build"), micronFieldString(bf, "build"))
+}
+
+func cmpInt64(a, b int64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	}
+	return 0
+}
+
+// comparePrerelease implements SemVer §11 prerelease precedence. An
+// empty prerelease (a release) ranks ABOVE a non-empty one.
+func comparePrerelease(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return 1 // release > prerelease
+	}
+	if b == "" {
+		return -1
+	}
+	ai := strings.Split(a, ".")
+	bi := strings.Split(b, ".")
+	for i := 0; i < len(ai) && i < len(bi); i++ {
+		if c := comparePrereleaseIdent(ai[i], bi[i]); c != 0 {
+			return c
+		}
+	}
+	// All shared identifiers equal — the larger set has higher precedence.
+	return cmpInt64(int64(len(ai)), int64(len(bi)))
+}
+
+// comparePrereleaseIdent orders one pair of prerelease identifiers:
+// both numeric compare by value; both non-numeric by ASCII; a numeric
+// identifier always ranks below an alphanumeric one.
+func comparePrereleaseIdent(a, b string) int {
+	aNum := isSemverNumericIdent(a)
+	bNum := isSemverNumericIdent(b)
+	switch {
+	case aNum && bNum:
+		// Both fit is not guaranteed (numeric prerelease is unbounded),
+		// so compare by length then lexically rather than by int64.
+		if len(a) != len(b) {
+			return cmpInt64(int64(len(a)), int64(len(b)))
+		}
+		return strings.Compare(a, b)
+	case aNum && !bNum:
+		return -1 // numeric < alphanumeric
+	case !aNum && bNum:
+		return 1
+	default:
+		return strings.Compare(a, b)
+	}
+}
+
+// compareSemverBuild is the final total-order tiebreak on build
+// metadata: absent sorts below present, otherwise ASCII lexical. Build
+// does NOT participate in SemVer precedence — this only disambiguates
+// two otherwise precedence-equal versions so ordering agrees with
+// content equality.
+func compareSemverBuild(a, b string) int {
+	switch {
+	case a == b:
+		return 0
+	case a == "":
+		return -1
+	case b == "":
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
+// semveronIdentField reads a Semveron prerelease/build map field, which
+// may be given as a String ("rc.1") or a List of String identifiers
+// (["rc" "1"]); the List is joined with '.' so both forms re-validate
+// through the single string parser identifier-by-identifier.
+func semveronIdentField(v Value, field string) (string, error) {
+	if v.Parent.ConformsTo(TString) && IsConcrete(v) {
+		s, _ := AsString(v)
+		return s, nil
+	}
+	if v.Parent.ConformsTo(TList) && IsConcrete(v) {
+		lst, lerr := RequireConcreteList(v, "make Semveron")
+		if lerr != nil {
+			return "", semveronErr(fmt.Sprintf("Semveron field %s: %v", field, lerr))
+		}
+		parts := make([]string, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			el := lst.Get(i)
+			s, serr := el.AsConcreteString()
+			if serr != nil {
+				return "", semveronErr(fmt.Sprintf("Semveron field %s list element %d must be a String, got %s", field, i, el.String()))
+			}
+			parts[i] = s
+		}
+		return strings.Join(parts, "."), nil
+	}
+	return "", semveronErr(fmt.Sprintf("Semveron field %s must be a String or a List of String, got %s", field, v.String()))
+}
+
+func semveronErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+}
+
 // urlonFieldOrder is the canonical field layout of an Urlon map source
 // (and of the stored payload — optional fields are simply absent).
 var urlonFieldOrder = []string{"scheme", "host", "port", "path", "query", "fragment"}
@@ -936,7 +1356,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 	switch {
 	case kind.Equal(TMicron):
 		return nil, &AqlError{Code: "type_error",
-			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston) or a user-defined Micron kind",
+			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
 		return makePathon(data, false)
@@ -948,6 +1368,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return makeIpon(data)
 	case kind.Equal(THoston):
 		return makeHoston(data)
+	case kind.Equal(TSemveron):
+		return makeSemveron(data)
 	}
 	// A newtype (bare nominal refine) of a builtin leaf or of a user
 	// kind: construct the base, then tag the result with the newtype —
@@ -966,6 +1388,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 			out, err = makeIpon(data)
 		case t.Equal(THoston):
 			out, err = makeHoston(data)
+		case t.Equal(TSemveron):
+			out, err = makeSemveron(data)
 		default:
 			if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)

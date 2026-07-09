@@ -415,7 +415,8 @@ Any
 │   │   ├── Emailon                  -- email address
 │   │   ├── Urlon                    -- absolute URL
 │   │   ├── Ipon                     -- IPv4 / IPv6 address (net.ParseIP)
-│   │   └── Hoston                   -- host:port authority (optional port)
+│   │   ├── Hoston                   -- host:port authority (optional port)
+│   │   └── Semveron                 -- SemVer 2.0.0 version (ordered by precedence)
 │   └── Time
 │       ├── Date, DateTime, Instant
 │       └── (aql:time-util owns TimeOfDay, Duration
@@ -616,6 +617,7 @@ through `.` / `get`. Five leaves are built in:
 | `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
 | `Ipon` | an IPv4/IPv6 address string (`net.ParseIP`-validated), or an `{addr}` map | `addr` (canonical), `version` (`4`/`6`) |
 | `Hoston` | a `host:port` string (optional port; IPv6 bracketed `[::1]:80`), or a `{host port?}` map | `host`, `port` (optional), **`authority`** |
+| `Semveron` | a SemVer 2.0.0 string (`'1.2.3-rc.1+b.5'`, no leading `v`), or a `{major minor patch prerelease? build?}` map (prerelease/build as a String or a `List` of identifiers) | `major`, `minor`, `patch`, `prerelease` (opt), `build` (opt), **`prereleaseParts`**, **`buildParts`**, **`release`**, **`stable`**, **`version`** |
 
 (`Pathon` is the former `Scalar/Path`, moved into the family under its
 new name — the bare `Path` name no longer resolves; change `make Path`
@@ -682,10 +684,12 @@ def Bad refine Micron {x:String}         # returns error: micron_name
 ```
 
 **Ordering.** Same-kind Microns order by content (`Pathon` keeps its
-historical segment order; other kinds order by canonical render), and
-newtype-vs-base pairs compare across the nominal tag. Different Micron
-kinds are `cmp`-incomparable — use `tcmp` for the cross-kind total
-order (`Micron` < `Pathon` < `Emailon` < `Urlon` < `Ipon` < `Hoston` < user kinds).
+historical segment order; `Semveron` orders by SemVer 2.0.0 precedence —
+`1.9.0 < 1.10.0`, `1.0.0-rc.1 < 1.0.0`; other kinds order by canonical
+render), and newtype-vs-base pairs compare across the nominal tag.
+Different Micron kinds are `cmp`-incomparable — use `tcmp` for the
+cross-kind total order (`Micron` < `Pathon` < `Emailon` < `Urlon` <
+`Ipon` < `Hoston` < `Semveron` < user kinds).
 
 ```
 (make Emailon 'a@b.co') cmp (make Emailon 'b@b.co')   # returns -1

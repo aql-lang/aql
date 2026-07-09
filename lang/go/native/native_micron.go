@@ -166,6 +166,20 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 			return dyn // optional per instance — Integer or none
 		}
 		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TSemveron):
+		switch key {
+		case "major", "minor", "patch":
+			return []Value{NewCarrier(TInteger)}
+		case "release", "version":
+			return []Value{NewCarrier(TString)}
+		case "stable":
+			return []Value{NewCarrier(TBoolean)}
+		case "prereleaseParts", "buildParts":
+			return []Value{NewCarrierTypedList(TString)}
+		case "prerelease", "build":
+			return dyn // optional per instance — String or none
+		}
+		return []Value{NewCarrier(TNone)}
 	}
 	if schema, ok := eng.MicronSchemaFor(t); ok {
 		if fv, ok := schema.Get(key); ok {

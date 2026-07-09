@@ -107,6 +107,54 @@ make Hoston 'example.com/path'	ERROR:must not contain	a host is not a URL
 make Hoston {host:'a.com:80'}	ERROR:only allowed in an IPv6 literal	host field must not carry a port
 
 # ─────────────────────────────────────────────────────────────────────
+# §2d Construction — Semveron. A Semantic Versioning 2.0.0 version
+#     (major.minor.patch with optional -prerelease and +build), ordered
+#     by SemVer precedence. String form is the canonical validator; the
+#     map form re-renders through it (prerelease/build as a String or a
+#     List of identifiers).
+make Semveron '1.2.3'	1.2.3
+make Semveron '1.0.0-rc.1+build.5'	1.0.0-rc.1+build.5	prerelease and build
+make Semveron '1.2.3+001'	1.2.3+001	build metadata keeps leading zeros
+make Semveron '1.2.3-alpha-1.a-b'	1.2.3-alpha-1.a-b	hyphens are legal identifier chars
+make Semveron {major:1 minor:2 patch:3}	1.2.3	map form
+make Semveron {major:1 minor:0 patch:0 prerelease:'rc.1'}	1.0.0-rc.1	map prerelease as String
+make Semveron {major:1 minor:0 patch:0 prerelease:['rc' '1'] build:['b' '5']}	1.0.0-rc.1+b.5	map prerelease/build as List
+make Semveron '1.2.3' typeof	Semveron
+pathof Semveron	[Scalar Micron Semveron]
+def s (make Semveron '1.2.3-rc.1+b.2') s.major	1
+def s (make Semveron '1.2.3-rc.1+b.2') s.minor	2
+def s (make Semveron '1.2.3-rc.1+b.2') s.patch	3
+def s (make Semveron '1.2.3-rc.1+b.2') s.prerelease	'rc.1'
+def s (make Semveron '1.2.3-rc.1+b.2') s.build	'b.2'
+def s (make Semveron '1.2.3-rc.1+b.2') s.prereleaseParts	['rc' '1']	derived — split identifiers
+def s (make Semveron '1.2.3-rc.1+b.2') s.buildParts	['b' '2']	derived
+def s (make Semveron '1.2.3-rc.1+b.2') s.release	'1.2.3'	derived — core only
+def s (make Semveron '1.2.3-rc.1') s.stable	false	a prerelease is not stable
+def s (make Semveron '1.2.3+b.2') s.stable	true	build-only is stable
+def s (make Semveron '1.2.3+b.2') s.version	'1.2.3+b.2'	derived — full canonical render
+(make Semveron '1.2.3') has 'prerelease'	false	absent optional field
+def s (make Semveron '1.2.3') s.prerelease	None	miss reads none
+(make Semveron '1.2.3+a') eq (make Semveron '1.2.3+a')	true	content-equal
+(make Semveron '1.2.3+a') eq (make Semveron '1.2.3+b')	false	build participates in equality
+# a nominal newtype constructs through the leaf validator
+def Releaseon refine Semveron end make Releaseon '2.0.0' typeof	Releaseon
+# paired negatives
+make Semveron 'v1.2.3'	ERROR:leading 'v'	no v-prefix
+make Semveron '1.2'	ERROR:core must be major.minor.patch	needs three fields
+make Semveron '01.2.3'	ERROR:leading zero	no leading zeros in core
+make Semveron '1.2.3-01'	ERROR:leading zero	no leading zeros in numeric prerelease
+make Semveron '1.2.3-rc..1'	ERROR:empty identifier	no empty prerelease identifier
+make Semveron '1.2.3-rc_1'	ERROR:invalid character	underscore is not allowed
+make Semveron '1.2.3-'	ERROR:empty identifier	trailing '-' with no prerelease
+make Semveron '1.2.3+'	ERROR:empty identifier	trailing '+' with no build
+make Semveron 42	ERROR:Semveron source must be a string or map	wrong source type
+make Semveron {major:1 minor:2}	ERROR:requires major, minor and patch	missing patch
+make Semveron {major:1 minor:2 patch:3 extra:'y'}	ERROR:Semveron has no field extra	unknown field
+make Semveron {major:-1 minor:0 patch:0}	ERROR:must be non-negative	negative core
+make Semveron {major:'1' minor:2 patch:3}	ERROR:field major must be an Integer	non-integer core
+make Semveron {major:1 minor:2 patch:3 prerelease:42}	ERROR:must be a String or a List	bad prerelease type
+
+# ─────────────────────────────────────────────────────────────────────
 # §3  Construction — the abstract root and Pathon under make.
 make Micron 1	ERROR:Micron is abstract	the root is not constructible
 make Pathon 'a/b/c'	a/b/c	Pathon keeps its forms under the new name
@@ -194,6 +242,19 @@ Micron tcmp Pathon	-1
 (make Emailon 'a@b.c') lt (make Emailon 'b@b.c')	true
 (make Emailon 'b@b.c') lt (make Emailon 'c@b.c')	true
 (make Emailon 'a@b.c') lt (make Emailon 'c@b.c')	true
+# Semveron orders by SemVer 2.0.0 precedence, NOT by lexical render
+(make Semveron '1.9.0') lt (make Semveron '1.10.0')	true	numeric, not lexical
+(make Semveron '1.0.0-rc.1') lt (make Semveron '1.0.0')	true	a prerelease precedes its release
+(make Semveron '1.0.0-alpha') lt (make Semveron '1.0.0-alpha.1')	true	fewer identifiers precede more
+(make Semveron '1.0.0-alpha.1') lt (make Semveron '1.0.0-alpha.beta')	true	numeric precedes alphanumeric
+(make Semveron '1.0.0-alpha.beta') lt (make Semveron '1.0.0-beta')	true	ASCII order of identifiers
+(make Semveron '1.0.0-beta.2') lt (make Semveron '1.0.0-beta.11')	true	numeric identifiers compare by value
+(make Semveron '1.0.0-beta.11') lt (make Semveron '1.0.0-rc.1')	true	full precedence chain
+(make Semveron '1.2.3') cmp (make Semveron '1.2.3')	0	equal precedence
+# cross-kind: Semveron is cmp-incomparable with other leaves, tcmp by Rank
+(make Semveron '1.2.3') cmp (make Emailon 'a@b.c')	ERROR:incomparable
+(make Hoston 'a.com') tcmp (make Semveron '1.2.3')	-1	Hoston ranks below Semveron
+Semveron cmp (make Semveron '1.2.3')	-1	the literal sorts below any instance
 
 # ─────────────────────────────────────────────────────────────────────
 # §8  typeof / pathof / is.
@@ -208,6 +269,11 @@ pathof Micron	[Scalar Micron]
 (make Emailon 'a@b.c') is Scalar	true
 5 is Micron	false
 Emailon is Type	true
+typeof (make Semveron '1.2.3')	Semveron
+typeof Semveron	Micron
+(make Semveron '1.2.3') is Semveron	true
+(make Semveron '1.2.3') is Micron	true
+(make Semveron '1.2.3') is Ipon	false	sibling leaf
 
 # ─────────────────────────────────────────────────────────────────────
 # §9  User refinements and the naming rule. Schema-carrying refinement
