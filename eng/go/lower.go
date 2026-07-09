@@ -423,9 +423,24 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		if scopeFloor > 0 {
 			var crossed bool
 			forEachOperand(ev, func(op emitOperand) {
-				if op.kind == opEvent && op.idx <= scopeFloor {
-					crossed = true
+				if op.kind != opEvent || op.idx > scopeFloor {
+					return
 				}
+				// A PROMOTED enclosing value is delivered via a FRAME LOCAL, not the
+				// enclosing simulated stack the Stage-2 floor guards. Its CONSUMING
+				// references (cond / thenVal / elsVal / call operands) were already
+				// rewritten to local pushes by rewritePromotedRefs, so an opEvent
+				// reference to a promoted producer that still reaches here is an arm-OUT
+				// designation (thenOut / elsOut / condOut) — the shapes rewritePromotedRefs
+				// deliberately leaves for lowerFragment to re-resolve to the local. Either
+				// way the value crosses via the frame, not the sim, so it does not trip
+				// the floor. Without this a handler with nested `if` arms reading an
+				// enclosing value-def (mini-redis LRANGE: `def start …; if (start gte …)
+				// [ … slice start … ]`) refused to compile.
+				if _, prom := lw.promoted[op.idx]; prom {
+					return
+				}
+				crossed = true
 			})
 			if crossed {
 				return "branch reads enclosing computation (Stage 3)"

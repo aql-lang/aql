@@ -5,9 +5,10 @@ compile their bodies to bytecode units (like the echo benchmark handler does),
 not just run interpreted. This note maps every remaining blocker precisely so the
 work can proceed one capability at a time.
 
-Status: **mapped, not yet closed.** The echo microbenchmark handler compiles
-(~55k req/s vs ~620 interpreted). The three realistic apps still fall back to the
-interpreter, each for a DISTINCT compiler-frontier reason surfaced by
+Status: **2 of 3 closed.** The echo microbenchmark handler compiles (~55k req/s
+vs ~620 interpreted). **todo-api** and **mini-redis** now compile their handlers
+(see the per-app sections below); **mini-s3** remains, blocked on serve-raw
+materialization. Each blocker was surfaced by
 `aql run -force-compile -install network bench/networking/apps/<app>.aql`.
 
 None of these block `aql run` (the apps run fine interpreted, default gate green,
@@ -15,30 +16,25 @@ per design/CHECK-FALSE-POSITIVES.0.md). They block only the compiled speedup.
 
 ## The walls (each app, exact blocker)
 
-### mini-redis — TWO walls
+### mini-redis — TWO walls — **CLOSED**, compiles (~680 vs ~442 req/s)
 
-1. **Unparenthesised `set … drop` residual (check-mode, a genuine defect).**
-   The handlers use the idiom `X set (k) v` newline `drop` (flex `set` returns its
-   receiver; the `drop` discards it). Unparenthesised, followed by a `def`, the
-   set's dispatch residual corrupts the following `def`'s binding in the COMPILE
-   pass (`a.CompileCheck`), so a later read is `undefined_word` (mini-redis
-   handlers: `undefined_word: expires`). Same forward-collection-residual class as
-   the `redis-cmd ep:Any` bug (design/CHECK-FALSE-POSITIVES.0.md). `(X set (k) v)
-   drop` grouping clears it (verified: all 11 sites grouped → 0 check errors).
-   Plain `Check` (the `aql run` gate) is unaffected — this is compile-pass only.
-   Fixable either by grouping the idiom in the example or by fixing the
-   forward-collection residual in the kernel (higher-leverage, higher-risk —
-   matchSignature/insertForward).
+1. **Unparenthesised `set … drop` residual (check-mode).** The handlers use the
+   idiom `X set (k) v` newline `drop` (flex `set` returns its receiver; the `drop`
+   discards it). Unparenthesised, followed by a `def`, the set's dispatch residual
+   corrupts the following `def`'s binding in the compile pass (`undefined_word:
+   expires`). **Fixed** by grouping all 11 sites as `(X set (k) v) drop`
+   (semantics-preserving — verified by TestAppMiniRedis).
 
-2. **Stage-3 "branch reads enclosing computation"** (`eng/go/lower.go:431`). After
-   wall 1 is cleared, the lowerer refuses because a handler `if`-arm references a
-   value computed OUTSIDE the branch (an enclosing body-local — e.g. kv-read's
-   `def expired (if …); if expired [ … kv … ] [ 0 ]`, whose arm reads `kv`/`k`).
-   `lowerEvents` refuses when a branch-arm operand references an event at
-   `op.idx <= scopeFloor`. Closing it needs the lowerer to reference an
-   enclosing-scope value from inside an arm (promote the enclosing event to a
-   local/slot the arm can PUSH_LOCAL — the `lw.promoted` mechanism exists for the
-   main stream; extend it across the scope floor).
+2. **Stage-3 "branch reads enclosing computation"** (was `eng/go/lower.go:431`).
+   A handler `if`-arm references a value-def computed OUTSIDE the branch (LRANGE:
+   `def start …; if … [ … if (start gte n) [ … ] [ slice start n cur ] ]`). The
+   enclosing value-defs ARE promoted to frame locals, and their consuming
+   references rewrite to local pushes — but an arm-OUT designation referencing a
+   promoted producer is left for `lowerFragment` to re-resolve, and the scopeFloor
+   guard treated that residual `opEvent` as a forbidden enclosing read. **Fixed**:
+   the guard now skips operands whose producer is in `lw.promoted` (delivered via
+   the frame, not the enclosing sim). Regression:
+   `TestBranchArmReadsEnclosingValueDef`.
 
 ### mini-s3 — serve-raw materialization
 
@@ -49,38 +45,35 @@ in `moduleScopeMutableCaptures` (`eng/go/callable_words.go`); this handler's sha
 is not yet covered. Closing it needs the materialiser to capture (or otherwise
 make VM-referenceable) the specific mutable value this handler threads.
 
-### todo-api — Stage-2 "branch leaves extra values"
+### todo-api — Stage-2 "branch leaves extra values" — **CLOSED**, compiles (~12x)
 
-`fn storedfn$body: branch leaves extra values (Stage 2 lowers single-result
-branches)` (`eng/go/lower.go:1600`). One handler `if`-arm nets more than one value
-in a non-variadic position; the single-operand arm model records only the top
-operand, so the inert/local values below it cannot be reconstructed. The
-`allowVariadic`/`fragMulti` path already absorbs a multi-value arm in a
-variadic-consuming position; closing this needs that absorption extended to the
-handler's arm position (or the specific arm restructured to net one value where
-that preserves semantics).
+`fn storedfn$body: branch leaves extra values (Stage 2 …)`. Two parts. (a) Several
+handlers left their flex `set` receivers un-dropped (unlike mini-redis) — grouped
++ dropped, semantics-preserving. (b) The PUT arm `def t2 {…}; (todos set (id) t2)
+drop; t2` has t2 as BOTH the `set` argument and the arm result; the intra-arm use
+popped its single sim slot, leaving nothing to seat as the result. **Fixed**:
+`planValueDefLocals` now promotes a fragment-internal arm-result value-def that is
+also consumed as an operand within its arm (the `fragResultStaysOnSim` helper).
+Regression: `TestBranchArmResultSelfConsumed`.
 
-## Assessment
+## Remaining — mini-s3 serve-raw materialization
 
-Wall 1 is a genuine residual defect (the recurring forward-collection class). The
-other three are UNIMPLEMENTED lowering/materialization CAPABILITIES — the exact
-"Stage 2 / Stage 3 lowering + serve-raw materialization" frontier the benchmark
-README names. Each is substantial, soundness-critical bytecode-compiler work,
-gated by `make verify-bytecode` (differential + property-fuzz + -race) and
-`cover-gate` 100%: a wrong lowering that MISCOMPILES is the one outcome the
-codebase forbids, so none can be rushed.
+The deepest of the three: the streaming HTTP handler threads a mutable/`flex`
+value the store-fn bake cannot materialise as a const
+(`moduleScopeMutableCaptures` in `eng/go/callable_words.go` covers the accumulator
+shape but not this one). Closing it needs the materialiser to make the threaded
+mutable value VM-referenceable. Not yet done.
 
-## Recommended sequence (one capability per focused, fully-gated change)
+## What landed (each a focused, fully-gated change)
 
-1. **Stage-2 multi-value branch** (todo-api) — most self-contained; the
-   `fragMulti` machinery is the closest to done.
-2. **Stage-3 enclosing-read** (mini-redis wall 2) — extend the `promoted` slot
-   mechanism across the scope floor; pair with wall-1 grouping (or the kernel
-   residual fix) so mini-redis compiles end-to-end.
-3. **serve-raw materialization** (mini-s3) — the deepest; needs the materialiser
-   to handle the handler's threaded mutable value.
+- **todo-api** (Stage-2 self-consumed arm result) — `fragResultStaysOnSim`
+  promotion + example set-drop cleanup. Compiles ~12x.
+- **mini-redis** (Stage-3 promoted-operand scopeFloor skip) — the guard skips
+  operands delivered via a frame local + example set-drop grouping. Compiles.
 
-Each lands only when `verify-bytecode` + `cover-gate` + `TestCheckAccuracyRatchet`
-stay green and the app's compiled run matches its interpreted run
-(`-force-compile` vs `-no-compile`). The `bench/networking/apps/` drivers make the
-before/after measurable.
+Each landed only after `verify-bytecode` (differential + property-fuzz + -race),
+`cover-gate` 100%, `TestCheckAccuracyRatchet` unchanged, and the app's compiled
+run matched its interpreted run (`-force-compile` vs `-no-compile` / the app
+functional tests). A wrong lowering that MISCOMPILES is the one outcome the
+codebase forbids, so none was rushed. The `bench/networking/apps/` drivers make
+the before/after measurable.
