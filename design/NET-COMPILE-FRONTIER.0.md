@@ -6,9 +6,10 @@ not just run interpreted. This note maps every remaining blocker precisely so th
 work can proceed one capability at a time.
 
 Status: **2 of 3 closed.** The echo microbenchmark handler compiles (~55k req/s
-vs ~620 interpreted). **todo-api** and **mini-redis** now compile their handlers
-(see the per-app sections below); **mini-s3** remains, blocked on serve-raw
-materialization. Each blocker was surfaced by
+vs ~620 interpreted). **todo-api** (~12x) and **mini-redis** now compile their
+handlers (see the per-app sections below); **mini-s3** remains, blocked on two
+deliberate-frontier capabilities (`do`/`error` trap-region lowering + higher-order
+`filter`) for an I/O-bound app. Each blocker was surfaced by
 `aql run -force-compile -install network bench/networking/apps/<app>.aql`.
 
 None of these block `aql run` (the apps run fine interpreted, default gate green,
@@ -36,14 +37,36 @@ per design/CHECK-FALSE-POSITIVES.0.md). They block only the compiled speedup.
    the frame, not the enclosing sim). Regression:
    `TestBranchArmReadsEnclosingValueDef`.
 
-### mini-s3 — serve-raw materialization
+### mini-s3 — MULTIPLE walls, not yet closed
 
-`operand of unknown provenance or not statically materialisable at serve-raw`. The
-streaming HTTP handler threads a MUTABLE/`flex` value that the store-fn bake cannot
-materialise as a const. Machinery that already handles the accumulator shape lives
-in `moduleScopeMutableCaptures` (`eng/go/callable_words.go`); this handler's shape
-is not yet covered. Closing it needs the materialiser to capture (or otherwise
-make VM-referenceable) the specific mutable value this handler threads.
+The top-level `operand of unknown provenance … at serve-raw` is a CONSEQUENCE:
+the `serve-raw` handler `([conn] => [ s3-conn conn store ])` fails its compile
+probe because `s3-conn`'s body refuses. Attributing every refusal to its fn
+(instrument `MarkUncompilable` with `es.unitNames`) shows FOUR distinct blockers,
+two of them deliberate frontier islands:
+
+- **`s3-conn`: `code-body word do (Stage 2)`.** The per-connection actor is
+  `def ok (do [ s3-handle-one conn store drop true ] error [ drop false ]); if ok
+  [ s3-conn conn store ] [ 0 ]`. Both `do` and `error` carry
+  `CompileEffect: CompileFallbackBody` (`lang/go/native/native_control.go`) — they
+  DELIBERATELY island to the interpreter. Compiling this means lowering a
+  `do`/`error` trap region (bytecode exception handling) — a large, deliberate
+  VM feature, not a bug.
+- **store `list` handler: `function-valued operand at filter (Stage 3)`.** The
+  LIST handler runs `filter ([e:Any] => […]) (keys objects)` — higher-order
+  compilation of a lambda operand. A separate large frontier.
+- **`s3-handle-one`: `unmatched dispatch recovered at convert`** and the store
+  handlers' `unmatched dispatch recovered at drop` (×2). The drop ones are the
+  set/drop residual class — clearable by grouping `(objects set …) drop` (as
+  mini-redis/todo-api). The `convert` one sits inside the deeply-nested method
+  `if` chain and needs its own look.
+
+So mini-s3 requires TWO deliberate-frontier capabilities (`do`/`error` body
+lowering + higher-order `filter`) on top of the residual cleanups. Each is a
+substantial, soundness-critical VM feature the compiler team has intentionally
+deferred (the CompileFallbackBody islands). mini-s3 is also I/O-bound —
+`-force-compile` vs `-no-compile` are within noise (~100 req/s both) — so the
+payoff is small. Left for dedicated follow-ups; NOT closed.
 
 ### todo-api — Stage-2 "branch leaves extra values" — **CLOSED**, compiles (~12x)
 
@@ -56,13 +79,15 @@ popped its single sim slot, leaving nothing to seat as the result. **Fixed**:
 also consumed as an operand within its arm (the `fragResultStaysOnSim` helper).
 Regression: `TestBranchArmResultSelfConsumed`.
 
-## Remaining — mini-s3 serve-raw materialization
+## Remaining — mini-s3 (`do`/`error` body + higher-order `filter`)
 
-The deepest of the three: the streaming HTTP handler threads a mutable/`flex`
-value the store-fn bake cannot materialise as a const
-(`moduleScopeMutableCaptures` in `eng/go/callable_words.go` covers the accumulator
-shape but not this one). Closing it needs the materialiser to make the threaded
-mutable value VM-referenceable. Not yet done.
+See the mini-s3 section above for the full attribution. Two deliberate-frontier
+capabilities block it — `do`/`error` trap-region lowering (the per-connection
+actor) and higher-order `filter` compilation (the LIST handler) — plus set/drop
+grouping + a `convert` residual. Each capability is a substantial, soundness-
+critical VM feature the compiler deliberately islands today; mini-s3 is also
+I/O-bound (compiled ≈ interpreted), so the payoff is small. Not yet done — these
+are dedicated follow-ups, not a quick fix.
 
 ## What landed (each a focused, fully-gated change)
 
