@@ -132,8 +132,13 @@ type FrameTailSpec struct {
 	// Snapshot is the def-depth snapshot taken AFTER captures+params
 	// were installed (so DefCleanup tears down only body-local defs —
 	// and the generic type-param bindings installed after it, see
-	// buildFnBodyHandler).
+	// buildFnBodyHandler). Nil when SkipCleanup is set.
 	Snapshot map[string]int
+	// SkipCleanup marks a body that provably installs no body-local defs:
+	// the DefCleanup marker is still emitted (frame shape unchanged) but
+	// carries SkipCleanup so stepDefCleanup and TCO short-circuit without a
+	// Snapshot map. See buildFnBodyHandler's bodyNeedsFrameState.
+	SkipCleanup bool
 	// Names are the installed captures+params in install order; the
 	// tail undefs them in reverse.
 	Names []string
@@ -155,8 +160,9 @@ type FrameTailSpec struct {
 // frame's close paren is NOT appended — callers own the (ₘ … ) pair.
 func AppendFrameTail(tokens []Value, spec FrameTailSpec) []Value {
 	tokens = append(tokens, NewDefCleanup(DefCleanupInfo{
-		Snapshot: spec.Snapshot,
-		Registry: spec.Registry,
+		Snapshot:    spec.Snapshot,
+		Registry:    spec.Registry,
+		SkipCleanup: spec.SkipCleanup,
 	}))
 	tokens = append(tokens, NewWord("__pa"))
 	for i := len(spec.Names) - 1; i >= 0; i-- {

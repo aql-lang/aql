@@ -221,6 +221,16 @@ func UninstallDef(r *Registry, name string) {
 // paren (the same pointer the compile boundary stores in
 // Signature.FnFrame — see eng/go/fn_frame.go).
 func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, meta *FnFrameMeta) Handler {
+	// Computed ONCE at construction: does this body install any body-local
+	// def or construct an inner fn? A generic fn always does (it installs
+	// inferred type-param bindings per call). When false — the common
+	// leaf-fn / recursion case (fib, a tail-accumulator) — every call skips
+	// BOTH per-call DefTable.Snapshot maps (each O(all bound names)) and the
+	// def-cleanup name scan, the dominant term behind the ~340 allocs/frame
+	// (design/INTERPRETER-SPEED-PLAN.10.md #5). Stack balance is preserved:
+	// the fn baseline still pushes/pops (a nil entry) and the DefCleanup
+	// marker still rides the tape (carrying SkipCleanup).
+	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(s.body())
 	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
 		// Reached from a FOREIGN registry (callReg != the install registry r) — a
 		// module fn dispatched through the unified execMatch path from an outer
@@ -265,7 +275,15 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// captures + named params + body-local defs) are
 		// capturable; names already present at module/global
 		// scope are dynamic.
-		r.PushFnBaseline(r.Defs.Snapshot())
+		// Skip the (O(all names)) snapshot for a body that constructs no
+		// inner fn — the baseline is read only by inner-fn capture
+		// detection. Still push a (nil) entry so __pa's paired pop stays
+		// balanced.
+		if needsFrameState {
+			r.PushFnBaseline(r.Defs.Snapshot())
+		} else {
+			r.PushFnBaseline(nil)
+		}
 
 		// Push args list onto the args stack for access via the
 		// "args" word (args.0, args.1, etc.). Paired with __pa
@@ -312,8 +330,13 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		}
 		// Snapshot DefStacks lengths after installing named params
 		// so we can clean up any defs created during body execution
-		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
-		defSnapshot := r.Defs.Snapshot()
+		// (fixes def leakage from fn bodies — DX-REPORT Issue 2). Skipped
+		// (nil) when the body installs no body-local defs; the DefCleanup
+		// marker then rides with SkipCleanup and allocates no map.
+		var defSnapshot map[string]int
+		if needsFrameState {
+			defSnapshot = r.Defs.Snapshot()
+		}
 
 		// Generic fn: install the inferred type-parameter bindings for
 		// the body (`of [T]`, `make (Box of [T])`). AFTER the snapshot,
@@ -334,6 +357,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		result = AppendFrameTail(result, FrameTailSpec{
 			Registry:     r,
 			Snapshot:     defSnapshot,
+			SkipCleanup:  !needsFrameState,
 			Names:        names,
 			Returns:      s.Returns,
 			UnnamedCount: unnamedCount,

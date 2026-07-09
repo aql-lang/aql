@@ -1817,6 +1817,14 @@ func NewReturnCheck(info ReturnCheckInfo) Value {
 type DefCleanupInfo struct {
 	Snapshot map[string]int
 	Registry *Registry
+	// SkipCleanup marks a frame whose body provably installs no
+	// body-local defs (buildFnBodyHandler's bodyNeedsFrameState analysis):
+	// the marker stays on the tape so the frame shape and the
+	// break/continue unwind and TCO paths are unchanged, but stepDefCleanup
+	// short-circuits and no Snapshot map is allocated. With no body-local
+	// defs the truncation would remove nothing, so TCO treats the frame as
+	// eagerly-teardown-eligible without consulting the (nil) Snapshot.
+	SkipCleanup bool
 }
 
 // NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.

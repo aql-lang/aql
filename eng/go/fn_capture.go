@@ -4,6 +4,43 @@ import (
 	"sort"
 )
 
+// frameStateWords are the words whose execution can install a binding in
+// the CURRENT def scope, construct an inner fn (which reads the enclosing
+// fn baseline), or run opaque dynamic code in scope. A fn body that
+// contains none of them (scanning through code lists, parens and interp
+// expressions, but not quoted data or already-built inner closures)
+// provably creates no body-local defs and constructs no inner fn — so its
+// frame needs neither the def-cleanup snapshot nor the fn baseline
+// snapshot. The set is deliberately generous: an omission would over-skip
+// and leak, so err toward keeping frame state (the closure/def/each tests
+// exercise every entry). See buildFnBodyHandler and
+// design/INTERPRETER-SPEED-PLAN.10.md #5.
+var frameStateWords = map[string]bool{
+	"def": true, "undef": true, // bind / unbind in scope
+	"fn": true, "afn": true, // construct an inner fn (reads baseline)
+	"do": true, "call": true, "eval": true, // run code in the current scope
+	"var":    true,                                 // scoped temporaries desugar to def
+	"word":   true,                                 // splice unevaluated code into the stream
+	"module": true, "import": true, "export": true, // module-scope binding
+	"usurp": true, "behave": true, // word / type-behavior modification
+}
+
+// bodyNeedsFrameState reports whether a fn body may install a body-local
+// def or construct an inner fn during execution — i.e. whether its frame
+// needs the two DefTable snapshots (fn baseline + def-cleanup). It is a
+// conservative over-approximation: any frameStateWords occurrence, at any
+// code depth, forces the snapshots. Reuses the vetted WalkBodyWords
+// recursion (skips quoted data and nested closures).
+func bodyNeedsFrameState(body []Value) bool {
+	needs := false
+	WalkBodyWords(body, func(w WordInfo, _ Value) {
+		if frameStateWords[w.Name] {
+			needs = true
+		}
+	})
+	return needs
+}
+
 // WalkBodyWords recursively visits every bare Word in a fn body's
 // value stream, invoking callback for each. Used by computeCaptures
 // to enumerate the names a body references at construction time.

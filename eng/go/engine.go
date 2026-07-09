@@ -5438,6 +5438,11 @@ func (e *Engine) stepEnd() error {
 // the body ran. Any defs added since are popped via UninstallDef.
 func (e *Engine) stepDefCleanup(val Value) {
 	info, _ := AsDefCleanup(val)
+	if info.SkipCleanup {
+		// The frame installs no body-local defs — nothing to truncate,
+		// and no Names() scan to pay (design/INTERPRETER-SPEED-PLAN.10.md #5).
+		return
+	}
 	reg := info.Registry
 	for _, name := range reg.Defs.Names() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
