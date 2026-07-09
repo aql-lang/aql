@@ -1,0 +1,47 @@
+# TS engine parity for the new Micron leaves — DEFERRED
+
+**Status:** deferred (tracked). **Owner:** unassigned.
+
+The Go kernel gained three Scalar/Micron changes that the TypeScript engine
+(`eng/ts/`) does not yet mirror:
+
+| Change | PR | TS state |
+|---|---|---|
+| `Ipon` — IPv4/IPv6 address leaf (FixedID 114) | #237 | absent |
+| `Pathon` Windows **drive** parsing (`C:/x` → `volume`) | #239 | absent |
+| `Hoston` — host:port authority leaf (FixedID 115) | #240 | absent |
+
+`eng/ts/src/type.ts::typeNameTable()` still declares only `TMicron`, `TPathon`,
+`TEmailon`, `TUrlon`.
+
+## Why this is not blocking CI
+
+The cross-engine differential (`test/go/engspec`) fails only on a **divergence**
+— both engines succeed but return different values. It permits a **gap** — one
+engine errors where the other succeeds.
+
+- `Ipon` / `Hoston` are **new** types: `make Ipon …` / `make Hoston …` succeed
+  in Go and raise `undefined_word` in TS → a permitted gap, not a divergence.
+- The `Pathon` drive change was deliberately made **POSIX-preserving** (only a
+  `C:` drive prefix switches on Windows parsing; `//a//b//` stays `/a/b`), so no
+  existing corpus input diverges.
+
+So CI is green, but TS users cannot construct the new scalars and a Windows
+drive path is not understood by the TS engine.
+
+## To close the gap
+
+1. Add `Ipon` and `Hoston` to `eng/ts/src/type.ts` (type table + FixedIDs
+   114/115, matching `eng/go/typetable.go`).
+2. Port the constructors/renderers/properties to the TS micron implementation,
+   matching Go byte-for-byte:
+   - `Ipon`: `net.ParseIP`-equivalent validation + canonical form; `addr`,
+     `version` (4/6).
+   - `Hoston`: `SplitHostPort` bracketing + optional port; `host`, `port`,
+     derived `authority`; reject URL delimiters in the host.
+   - `Pathon`: drive-prefix parsing + `volume`; keep driveless paths POSIX.
+3. Add cross-engine differential rows for each so parity is enforced, not
+   assumed.
+
+Until then, keep new kernel scalars **POSIX/behaviour-preserving for existing
+inputs** so they can only ever produce permitted gaps, never divergences.
