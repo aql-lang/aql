@@ -1,11 +1,76 @@
 package lang
 
 import (
+	"bytes"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 )
+
+// syncBuf is a goroutine-safe writer for capturing a spawned process's async
+// output (the process body runs on its own goroutine).
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// A spawn body is compiled to a 0-param unit when it is reducible, and left as a
+// raw list (interpreter fallback) when it is empty or refuses.
+func TestSpawnBodyCompilation(t *testing.T) {
+	cases := []struct {
+		src      string
+		wantUnit bool
+	}{
+		{`spawn [print 42]`, true}, // reducible → compiled to a unit + carrier
+		{`spawn []`, false},        // empty body → no unit
+		{`spawn [dup]`, false},     // stack-shuffle refuses → no unit, falls back
+	}
+	for _, c := range cases {
+		a, _ := New()
+		prog, reason, _, err := a.CompileCheck(c.src)
+		if err != nil || prog == nil {
+			t.Fatalf("%s: compile reason=%q err=%v", c.src, reason, err)
+		}
+		if got := len(prog.Fns) > 0; got != c.wantUnit {
+			t.Errorf("%s: body compiled=%v, want %v", c.src, got, c.wantUnit)
+		}
+	}
+}
+
+// A compiled spawn runs its body on the VM (RunUnit on the process fork): the
+// spawned `print 42` output appears.
+func TestSpawnCompiledRunsBodyOnVM(t *testing.T) {
+	a, _ := New()
+	buf := &syncBuf{}
+	a.NativeRegistry().Output = buf
+	if _, err := a.RunCompiledStrict(`spawn [print 42]`); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buf.String(), "42") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("spawned body output = %q, want it to contain 42", buf.String())
+}
 
 // A CompileStoresFn word stashes a handler to invoke LATER (like Net.serve-raw's
 // connection handler). The compiler compiles a capture-free handler body to its

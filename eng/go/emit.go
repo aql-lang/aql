@@ -1428,6 +1428,47 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	return unit, true
 }
 
+// compileStoredBody compiles a NoEvalArgs CODE-BODY list (spawn's process body) to
+// a 0-param unit and returns a synthetic fn-value carrier holding both the raw
+// Body tokens (interpreter fallback) and a CompiledFnRef (registered for the
+// Finalize back-stamp). The storing word runs the carrier's unit via RunUnit on
+// its own registry. Returns ok=false when the body is empty, carries a flow
+// sentinel, or refuses to compile — the caller then bakes the plain const list
+// and the word runs it on the interpreter, unchanged. Mirrors compileStoredFnUnit
+// but for a bare token body rather than a fn value's sig body.
+func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
+	if es == nil || es.reg == nil {
+		return Value{}, false
+	}
+	lst, err := AsList(bodyList)
+	if err != nil || lst.IsNil() {
+		return Value{}, false
+	}
+	tokens := lst.Slice()
+	if len(tokens) == 0 || bodyToksHaveSentinel(tokens) {
+		return Value{}, false
+	}
+	r := es.reg
+	probe := NewEmitState()
+	probe.reg = r
+	r.Check.Emit = probe
+	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos)
+	r.Check.Emit = es
+	if !probeOK {
+		return Value{}, false
+	}
+	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos)
+	if !realOK || unit < 0 {
+		return Value{}, false
+	}
+	ref := &CompiledFnRef{Unit: unit}
+	es.storedFnRefs = append(es.storedFnRefs, ref)
+	carrier := Value{Parent: TFunction, Data: FnDefInfo{
+		Signatures: []Signature{{Impl: &AQLImpl{Body: tokens, Compiled: ref}}},
+	}}
+	return carrier, true
+}
+
 // stampCompiledRef records ref on the fn value's first own (non-fallback) AQL
 // body sig, so the runtime FnDefInfo the store-fn word receives carries the VM
 // edge alongside its raw Body. Mutates the shared *AQLImpl pointer, so the
@@ -3464,6 +3505,18 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 						es.storedFnRefs = append(es.storedFnRefs, ref)
 					}
 				}
+			}
+		}
+		// STORE-BODY edge: a word that stashes a NoEvalArgs code-body to run later
+		// on its own registry (spawn) gets that body compiled to a 0-param unit,
+		// and receives a synthetic fn-value carrier (raw tokens + CompiledFnRef) in
+		// place of the raw list — so it runs the unit via RunUnit on its fork. A
+		// body that refuses to compile falls through to the plain list const and
+		// the word runs it on the interpreter, unchanged.
+		if sig.CompileEffect.Has(CompileStoresBody) && sig.NoEvalArgs != nil && sig.NoEvalArgs[i] {
+			if carrier, cok := es.compileStoredBody(a); cok {
+				ops[i] = constOperand(es.intern(carrier))
+				continue
 			}
 		}
 		op, ok := es.resolveOperand(a)

@@ -98,6 +98,27 @@ func TestRunUnitRejectsConcurrentRun(t *testing.T) {
 	}
 }
 
+// compileStoredBody declines (fails safe) without a live EmitState / registry,
+// and for a non-list body operand — the defensive guards on the spawn code-body
+// compile path.
+func TestCompileStoredBodyGuards(t *testing.T) {
+	var nilES *EmitState
+	if _, ok := nilES.compileStoredBody(NewInteger(1)); ok {
+		t.Fatal("nil EmitState must decline")
+	}
+	if _, ok := (&EmitState{}).compileStoredBody(NewInteger(1)); ok {
+		t.Fatal("reg-less EmitState must decline")
+	}
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.InitRootContext()
+	if _, ok := (&EmitState{reg: r}).compileStoredBody(NewInteger(1)); ok {
+		t.Fatal("a non-list body must decline")
+	}
+}
+
 // compileStoredFnUnit declines (fails safe) when it has no live EmitState /
 // registry to compile against — the defensive guards on the recorder-internal
 // path. A nil receiver and a reg-less state both return (0, false).

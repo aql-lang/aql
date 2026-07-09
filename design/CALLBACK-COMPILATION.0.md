@@ -34,6 +34,12 @@ with a recording side-effect" architecture (no rewrite):
   `Finalize` back-stamps `.Prog` over a `Program.storedFnRefs` side-list once the
   `*Program` exists. A body that refuses to compile is left un-stamped and falls
   back to the interpreter, per-body and sound.
+- **Store-body bake (`eng/go/emit.go`, `compileStoredBody`; `CompileStoresBody`)**
+  — the code-list twin, for `spawn`: a `NoEvalArgs` process body is compiled to a
+  0-param unit and the word receives a synthetic fn-value carrier (raw tokens +
+  `CompiledFnRef`) in place of the raw list, so `spawnHandler` runs the unit via
+  `RunUnit` on the process fork. A body that refuses rides as the plain list const
+  and runs on the interpreter, unchanged.
 - **`RunUnit` (`eng/go/vm.go`)** — starts a *fresh* VM run entered at a unit, on
   an idle (forked) registry. The durable-callback path: a serve-raw connection
   handler on its per-connection `connFork` runs compiled even though it fires
@@ -51,16 +57,17 @@ with a recording side-effect" architecture (no rewrite):
   prove unit execution ≡ interpreter when it is.
 
 Wired callers: `serveRawHandler` (`net_socket.go`), service `call`
-(`native_service.go`), codec `callCodecFn` (`net_codec.go`), and `RunPredicate`
-(`registry.go`).
+(`native_service.go`), codec `callCodecFn` (`net_codec.go`), `RunPredicate`
+(`registry.go`), and `spawnHandler` (`native_process.go`, via `CompileStoresBody`).
 
 ## Retirement scope (precise)
 
 - **Retired from the interpreter (run on the VM when the body compiles):**
-  serve-raw connection handlers, service handlers, codec endpoints — durable and
-  live-run alike. Verified end-to-end (a service program's handler runs via
-  `runUnitNested` byte-identically to the interpreter;
-  `TestServiceCallNestedVMDifferential`).
+  serve-raw connection handlers, service handlers, codec endpoints, and **spawn
+  process bodies** — durable and live-run alike. Verified end-to-end (a service
+  program's handler runs via `runUnitNested` byte-identically to the interpreter,
+  `TestServiceCallNestedVMDifferential`; a compiled `spawn [print 42]` runs its
+  body on the VM via `RunUnit` on the fork, `TestSpawnCompiledRunsBodyOnVM`).
 - **Uniform seam, currently no-op:** `RunPredicate` routes through
   `InvokeCallback`, but predicate fns are **not stamped** (refine / is / typed-def
   are not `CompileStoresFn` slots), so predicates still interpret. The routing is
@@ -91,9 +98,6 @@ module socket-word compilation** — out of scope here. A pure-core handler body
   non-islanding higher-order **recording** for fn-value callbacks plus an
   `invokeClosureOn` extension — it touches the VM hot path (corpus-differential
   risk), so it was left for a dedicated change.
-- **`spawn`**: its body is a **code-list, not a fn value**, so the fn-value edge
-  doesn't apply; it needs a code-body→unit bake plus a carrier value
-  (`OpPushStoredFn`-style).
 - **Predicate compilation**: stamping refine / is / typed-def predicate fns so
   `RunPredicate` runs them on the VM. `is`-over-predicate is a current refusal
   class; high risk.
