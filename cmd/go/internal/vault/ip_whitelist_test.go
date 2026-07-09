@@ -163,3 +163,40 @@ func TestProxyEnforcesIPWhitelist(t *testing.T) {
 		t.Errorf("loopback-whitelisted IP wrongly denied: status=%d", resp2.StatusCode)
 	}
 }
+
+func TestIPWhitelistIPv6(t *testing.T) {
+	// Parse: IPv6 literals and CIDRs are valid and canonicalized.
+	got, err := parseIPWhitelist("::1, 2001:DB8::1, 2001:db8:abcd::/48, fe80::/10")
+	if err != nil {
+		t.Fatalf("ipv6 parse: %v", err)
+	}
+	// 2001:DB8::1 lowercases; the /48 masks to its network.
+	want := []string{"::1", "2001:db8::1", "2001:db8:abcd::/48", "fe80::/10"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("ipv6 parse got %v, want %v", got, want)
+	}
+
+	// Match: exact v6, v6 CIDR in/out, and IPv6 loopback.
+	for _, c := range []struct {
+		ip, list string
+		want     bool
+	}{
+		{"2001:db8::5", "2001:db8::/32", true},
+		{"2001:db9::5", "2001:db8::/32", false},
+		{"::1", "::1", true},
+		{"fe80::1234", "fe80::/10", true},
+		// Dual-stack: an IPv4-mapped-IPv6 client (::ffff:10.0.0.5, as a
+		// dual-stack listener may report) still matches an IPv4 rule.
+		{"::ffff:10.0.0.5", "10.0.0.0/8", true},
+		{"::ffff:127.0.0.1", "127.0.0.1", true},
+	} {
+		if got := ipAllowed(c.ip, []string{c.list}); got != c.want {
+			t.Errorf("ipAllowed(%q, %q) = %v, want %v", c.ip, c.list, got, c.want)
+		}
+	}
+
+	// clientIP extracts a bracketed IPv6 host (proxy RemoteAddr form).
+	if got := clientIP("[::1]:8787"); got != "::1" {
+		t.Errorf("clientIP ipv6 loopback = %q", got)
+	}
+}
