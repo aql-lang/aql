@@ -18,6 +18,10 @@ def f fn [[b:Boolean] [Any] [ if b [None] [None] ]] f true	None	both-None arms i
 # §2  do — run a body as a sub-program, leaving its results
 do [1 add 2]	3	evaluates the body
 do [10 20 30]	10 20 30	all body results remain on the stack
+def x 5  do [x 1 add 2]	5 3	a multi-value body mixing a binding read and a computed result compiles as one closure
+do [1 add 2 10 mul 4]	1 48	an out-of-order residual (result above a literal) promotes to frame locals and re-pushes in order
+do [(1 add 2) (3 mul 4)]	3 12	two computed results both remain, in order
+do [10 20 30] add 5	10 20 35	a downstream word consumes the top of the multi-value residual
 #
 # §3  for count body — repeat a body N times
 for 3 ['x']	'x' 'x' 'x'	the body runs three times

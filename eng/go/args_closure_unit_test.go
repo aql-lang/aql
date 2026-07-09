@@ -72,3 +72,64 @@ func TestBodyFreeForFallbackContextWords(t *testing.T) {
 		t.Errorf("body [true]: want island-free")
 	}
 }
+
+// closureResidualExact / stripResidualShapeOK — the whole-residual and
+// strip-input closure screens' classifier branches. White-box: defensive
+// shapes report false (never compile a unit whose runtime count could
+// diverge); the admitted shapes report true.
+func TestClosureResidualScreens(t *testing.T) {
+	// Defensive: nil state / out-of-range unit.
+	if closureResidualExact(nil, 0, 1) {
+		t.Errorf("nil EmitState: want false")
+	}
+	if stripResidualShapeOK(nil, 0) {
+		t.Errorf("nil EmitState: want false")
+	}
+	es := NewEmitState()
+	if closureResidualExact(es, 3, 1) || stripResidualShapeOK(es, 3) {
+		t.Errorf("out-of-range unit: want false")
+	}
+
+	// Exactness: count match required; variadic / dynamic tails decline.
+	es.fnRecs = append(es.fnRecs, &fnUnitRec{name: "u", outOps: []emitOperand{{kind: opConst}, {kind: opConst}}})
+	if !closureResidualExact(es, 0, 2) {
+		t.Errorf("2-op residual, want=2: want true")
+	}
+	if closureResidualExact(es, 0, 3) {
+		t.Errorf("2-op residual, want=3: want false (count mismatch)")
+	}
+	es.fnRecs[0].variadic = true
+	if closureResidualExact(es, 0, 2) {
+		t.Errorf("variadic residual: want false")
+	}
+
+	// Strip shapes: 1 op admits; 2 ops admit only with the input (param
+	// local 0) at the bottom; deeper/variadic/dyn shapes decline.
+	rec := &fnUnitRec{name: "s", outOps: []emitOperand{{kind: opConst}}}
+	es.fnRecs = append(es.fnRecs, rec)
+	if !stripResidualShapeOK(es, 1) {
+		t.Errorf("1-op residual: want true")
+	}
+	rec.outOps = []emitOperand{{kind: opLocal, idx: 0}, {kind: opConst}}
+	if !stripResidualShapeOK(es, 1) {
+		t.Errorf("2-op residual with input bottom: want true")
+	}
+	rec.outOps = []emitOperand{{kind: opConst}, {kind: opConst}}
+	if stripResidualShapeOK(es, 1) {
+		t.Errorf("2-op residual with non-input bottom: want false")
+	}
+	rec.outOps = []emitOperand{{kind: opLocal, idx: 0}, {kind: opConst}, {kind: opConst}}
+	if stripResidualShapeOK(es, 1) {
+		t.Errorf("3-op residual: want false")
+	}
+	rec.outOps = []emitOperand{{kind: opConst}}
+	rec.dynTrailArity = 2
+	if stripResidualShapeOK(es, 1) {
+		t.Errorf("dynTrail residual: want false")
+	}
+	rec.dynTrailArity = 0
+	rec.variadic = true
+	if stripResidualShapeOK(es, 1) {
+		t.Errorf("variadic strip residual: want false")
+	}
+}

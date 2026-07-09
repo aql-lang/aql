@@ -18,6 +18,9 @@ raise 42	ERROR:no matching signature	a non-string/map operand has no raise sig
 #
 # §2  catching — one error [handler] form for native AND user errors
 do [raise "boom"] error [dot message] end	'boom'	a raised error is caught like a native one
+do [raise "boom"] error ['fallback']	'fallback'	an error-ignoring handler compiles as a closure; the unconsumed error strips from the residual bottom
+do [1 div 0] error [drop -1]	-1	a consuming handler over a value-divergent body
+do [raise "boom"] error []	error(boom)	an empty handler passes the caught error through as the result
 def e (do [raise bad_input "nope"]) e dot code	bad_input/q	the code is dispatchable on the caught value
 def e (do [raise bad_input "nope"]) e.message	'nope'	…and the message reads via dot access
 def e (do [raise {code: bad_input/q, message: "m", got: 42}]) e dot got	42	extra spec-map keys ride along for the handler

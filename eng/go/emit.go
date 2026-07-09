@@ -758,6 +758,41 @@ func NewEmitState() *EmitState {
 	}
 }
 
+// residualForceOrder returns the fn-unit residual's promotion set when it is
+// OUT OF ORDER — an event result above a non-event bottom — so the finish can
+// force every residual event to a frame local (the per-unit mirror of
+// Finalize's program-residual forceOrder) and the RET reconciliation re-pushes
+// the whole residual in exact order. Returns nil for an in-order residual and
+// for any residual carrying a fn value or dynamic value (the auto-apply
+// boundary's territory: its stack layout is the apply's contract).
+func residualForceOrder(ops []emitOperand, vals []Value) map[int]bool {
+	for _, v := range vals {
+		if v.Dynamic || isFnValueResidual(v) {
+			return nil
+		}
+	}
+	seenNonEvent, outOfOrder := false, false
+	for _, op := range ops {
+		if op.kind == opEvent && op.resIdx == 0 {
+			if seenNonEvent {
+				outOfOrder = true
+			}
+		} else {
+			seenNonEvent = true
+		}
+	}
+	if !outOfOrder {
+		return nil
+	}
+	forceOrder := map[int]bool{}
+	for _, op := range ops {
+		if op.kind == opEvent && op.resIdx == 0 {
+			forceOrder[op.idx] = true
+		}
+	}
+	return forceOrder
+}
+
 // forkForProbe returns a throwaway recording state for compiling a closure body
 // speculatively (recordClosureDispatch's probe), seeded so a RECURSIVE call
 // inside the body resolves to the enclosing in-progress unit. The closure body's
@@ -2498,6 +2533,11 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	finish = func(bodyStk []Value) {
 		resume()
 		rec.frag = es.TakeFragment()
+		// forceOrder mirrors Finalize's program-residual promotion for THIS
+		// unit: when the residual is out of order (an event result above an
+		// inert bottom), every residual event is promoted to a frame local so
+		// the reconciliation re-pushes the whole residual in exact order.
+		var forceOrder map[int]bool
 		if !fragDiverges(rec.frag) {
 			// Resolve every residual value to an operand, in stack order
 			// (bottom→top), so the unit leaves the body's N results for its
@@ -2664,6 +2704,19 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 			if n := len(ops); n > 0 && ops[n-1].kind == opEvent && es.eventInfo[ops[n-1].idx].variadicResult {
 				rec.variadic = true
 			}
+			// Out-of-order residual (an event result above an inert bottom —
+			// `do [x 1 add 2]` → [const-x, event]): the in-order RET
+			// reconciliation would refuse "result above a literal". Mirror
+			// Finalize's program-residual promotion: force EVERY residual
+			// event to a frame local, so the reconciliation pushes the whole
+			// residual (locals + consts + types) in exact order. Guarded off
+			// the fn-value / dynamic-apply shapes, whose stack layout IS the
+			// apply's contract and must not reorder — and off a trimmed
+			// residual (len(ops) != len(vals) after trimToTopResult, which is
+			// in-order by construction).
+			if dynTrail == 0 && rec.dynFrameW == 0 && len(ops) == len(vals) {
+				forceOrder = residualForceOrder(ops, vals)
+			}
 		}
 		// Value-def locals for THIS unit (the top-level program's promotion,
 		// scoped to a fn body): a computed result referenced more than once, read
@@ -2681,7 +2734,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				outSeqs = append(outSeqs, op.idx)
 			}
 		}
-		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, nil)
+		rec.promoted, rec.dead = es.planValueDefLocals(u, rec.frag.events, outSeqs, forceOrder)
 		for i := range rec.outOps {
 			promoteOperand(&rec.outOps[i], rec.promoted)
 		}
@@ -4375,7 +4428,12 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // opClosure operand. Returns false, leaving es UNTOUCHED, when an operand is
 // dynamic or of unknown provenance — the caller then keeps the island path.
 func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value, bodyPos, unit int, capOps []emitOperand, extraOps map[int]emitOperand, outs []Value, pos SrcPos) bool {
-	if !es.active() || sig == nil || len(outs) > 1 {
+	// A whole-residual word (CallableSpec.BodyOutResidual — `do`) may seat
+	// N > 1 results: recordClosureDispatch has already asserted the unit's
+	// compiled residual count equals len(outs), and the multi-result seating
+	// below mirrors the generic RecordCall tail. Other callers stay 0/1-out.
+	if !es.active() || sig == nil ||
+		(len(outs) > 1 && (sig.Callable == nil || sig.Callable.BodyOut != BodyOutResidual)) {
 		return false
 	}
 	// A dynamic OUTPUT is fine — the body is compiled and the result type being
@@ -4404,8 +4462,8 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
-	if len(outs) == 1 {
-		es.setProduced(outs[0], seq)
+	for i := range outs {
+		es.setProducedAt(outs[i], seq, i)
 	}
 	return true
 }

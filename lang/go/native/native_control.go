@@ -10,9 +10,13 @@ package native
 var controlNatives = []NativeFunc{
 	{
 		Name: "do",
-		// do [body] — runs the body with no inputs and returns its single residual
-		// value (a multi-value body nets != 1 and refuses to the island).
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
+		// do [body] — runs the body with no inputs and returns its ENTIRE
+		// residual (doListHandler returns InvokeBody's full result), so the
+		// closure compiles count-agnostic (BodyOutResidual) and a multi-value
+		// literal body (`do [10 20 30]`) lowers to a true closure whose unit
+		// RETs all N values — no longer a baked-const list re-run through an
+		// interpreter sub-engine at run time.
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: BodyOutResidual, Inputs: func(_ []Value) []Value {
 			return []Value{}
 		}},
 
@@ -165,11 +169,12 @@ var controlNatives = []NativeFunc{
 		// caught Error pushed as its one input (BodyPos 0, BodyOut 1). A handler
 		// that CONSUMES the error (`[get message]`, `[get code case …]`) nets 1
 		// and compiles; one that IGNORES it (`["fallback"]`) leaves error+result
-		// (nets 2), refuses the closure, and the CompileFallbackBody island owns
-		// it — where the InvokeBody sub-engine + the stack-neutrality strip run,
-		// exactly as before.
+		// (nets 2) — StripsUnconsumedInput admits that shape too: the handler's
+		// runtime identity probe strips the unconsumed error from the residual
+		// bottom (errorHandler), so the closure nets ONE value either way and
+		// compiles natively instead of islanding.
 		CompileEffect: CompileFallbackBody,
-		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, StripsUnconsumedInput: true, Inputs: func(_ []Value) []Value {
 			return []Value{NewCarrier(TError)}
 		}},
 
