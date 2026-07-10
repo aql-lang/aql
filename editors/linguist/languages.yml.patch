@@ -1,0 +1,68 @@
+# languages.yml.patch — the AQL entry for github-linguist.
+#
+# HOW TO APPLY
+# ------------
+# github-linguist keeps every language in ONE big YAML map in
+# `lib/linguist/languages.yml`, sorted ALPHABETICALLY by language name.
+# There is no automated patch tool: you paste the block below into that
+# file in the right alphabetical slot. "AQL" sorts after "APL" and before
+# "ARM" / "ASL" / "ASN.1" (linguist compares names case-insensitively and
+# treats the whole name as the sort key). Find the `APL:` block, and add
+# the block below immediately after APL's closing line.
+#
+# Everything below (from `AQL:` to the final `ace_mode`) is the literal
+# YAML to insert. Keep the two-space indentation — languages.yml uses two
+# spaces per level and the key is indented two spaces under the document
+# root.
+
+AQL:
+  type: programming
+  color: "#4a7dbf"
+  extensions:
+    - ".aql"
+  tm_scope: source.aql
+  ace_mode: text
+  # language_id: <ASSIGNED-BY-MAINTAINERS>
+  #
+  # `language_id` is a STABLE integer that github-linguist maintainers
+  # allocate when the PR is accepted — contributors must NOT invent one.
+  # It is generated with the script linguist ships for exactly this:
+  #
+  #     script/update-ids
+  #
+  # (or `bundle exec rake check_language_ids`). Run it after adding the
+  # block, commit the resulting id, and mention in the PR that the id was
+  # produced by the tool. Leave this line commented until then; CI's
+  # language-id check will otherwise fail on a hand-picked value.
+
+# NOTES ON EACH FIELD
+# -------------------
+# type: programming
+#   AQL is a general-purpose concatenative programming/query language, so
+#   it is `programming` (not `data`, `markup`, or `prose`).
+#
+# color: "#4a7dbf"
+#   Repo language-bar / linguist swatch colour. A calm slate-blue,
+#   distinct from the reds/greens/yellows crowding the popular languages.
+#   Must be a quoted 6-digit hex string. Change freely to taste before
+#   submitting — maintainers only require that it is a valid, reasonably
+#   distinct hex colour.
+#
+# extensions: [".aql"]
+#   The canonical (and currently only) source extension. Leading dot,
+#   lower-case; linguist matches case-insensitively.
+#
+# tm_scope: source.aql
+#   The TextMate/Sublime grammar scope that github-linguist's syntax
+#   highlighter (currently the tree-sitter / TextMate bridge) uses to
+#   colourise blobs. This MUST match the top-level `scopeName` of whatever
+#   grammar you register as the linguist grammar submodule (see README.md,
+#   "Grammar submodule"). If no grammar is submitted, set this to `none`
+#   and blobs classify as AQL but render un-highlighted — but a grammar is
+#   strongly preferred and required for highlighting.
+#
+# ace_mode: text
+#   The Ace editor mode used by the in-browser code editor. AQL has no
+#   dedicated Ace mode upstream, so `text` is the correct honest value
+#   (linguist requires a real Ace mode name; `text` is the fallback).
+#   If/when an Ace mode named `aql` is contributed to ace, bump this.

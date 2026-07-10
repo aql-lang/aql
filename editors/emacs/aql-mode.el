@@ -124,9 +124,15 @@ Point the first element at an absolute path if `aql' is not on PATH."
 
 (defvar aql-mode-syntax-table
   (let ((table (make-syntax-table)))
-    ;; `#' starts a line comment; newline ends it.
+    ;; Comments: `#' starts a line comment (the dominant style); `/* … */'
+    ;; is a block comment (`/' is comment-start-1 / comment-end-2, `*' is
+    ;; comment-start-2 / comment-end-1).  Newline ends the line comment.
+    ;; (`//' line comments are also valid AQL but are left un-fontified —
+    ;; a second line-comment style collides with the block-comment `/'.)
     (modify-syntax-entry ?# "<" table)
     (modify-syntax-entry ?\n ">" table)
+    (modify-syntax-entry ?/ ". 14" table)
+    (modify-syntax-entry ?* ". 23" table)
     ;; Strings: single-quote, double-quote and backtick template strings.
     (modify-syntax-entry ?\' "\"" table)
     (modify-syntax-entry ?\" "\"" table)
@@ -141,8 +147,9 @@ Point the first element at an absolute path if `aql' is not on PATH."
     (modify-syntax-entry ?\] ")[" table)
     (modify-syntax-entry ?\{ "(}" table)
     (modify-syntax-entry ?\} "){" table)
-    ;; Everyday operators / separators are punctuation.
-    (dolist (ch '(?. ?\; ?: ?/ ?| ?! ?, ?@ ?$ ?%))
+    ;; Everyday operators / separators are punctuation (`/' and `*' are set
+    ;; above for the block-comment syntax).
+    (dolist (ch '(?. ?\; ?: ?| ?! ?, ?@ ?$ ?%))
       (modify-syntax-entry ch "." table))
     table)
   "Syntax table for `aql-mode'.")

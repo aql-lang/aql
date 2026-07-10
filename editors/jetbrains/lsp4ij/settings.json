@@ -1,0 +1,34 @@
+{
+  "//": "LSP4IJ per-server settings for the AQL language server. This mirrors the",
+  "//2": "toggles under Settings > Languages & Frameworks > Language Servers > AQL",
+  "//3": "for a user-defined server started with `aql lsp` (stdio). LSP4IJ enables all",
+  "//4": "of these features by default; the block below documents the wiring explicitly.",
+  "//5": "The AQL server advertises: diagnostics (publishDiagnostics), hover, completion,",
+  "//6": "and whole-document formatting. It does NOT advertise signatureHelp, document",
+  "//7": "symbols, rename, code actions, or go-to-definition, so leave those off.",
+
+  "debug": {
+    "startStopLevel": "off",
+    "traceLevel": "off"
+  },
+  "client": {
+    "completion": {
+      "enabled": true,
+      "useContextAwareSorting": false
+    }
+  },
+  "features": {
+    "diagnostics": true,
+    "hover": true,
+    "completion": true,
+    "formatting": true,
+    "rangeFormatting": false,
+    "signatureHelp": false,
+    "documentSymbol": false,
+    "definition": false,
+    "references": false,
+    "rename": false,
+    "codeAction": false,
+    "documentHighlight": false
+  }
+}
