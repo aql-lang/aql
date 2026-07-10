@@ -149,3 +149,34 @@ wrap ([req:Map state:Any prior:Any] => [ add 1 (prior req) ]) svc
 		t.Fatalf("wrapped chain answered %d, want 11", n)
 	}
 }
+
+// The mini-redis KEYS shape — a handler whose body runs a CAPTURING filter
+// lambda over a COMPUTED collection — stamps at the store site (Phase 3
+// closed both closure gates: lexical captures on the body lambda, typed
+// carrier data operands).
+func TestServiceAddStampsFilterLambdaHandler(t *testing.T) {
+	const src = `
+def svc (service {kv: {}})
+add {cmd:"KEYS"} ([req:Map state:Any] => [
+  def kv state.kv
+  filter ([e:Any] => [ ((kv get e.value) eq None) not ]) (keys kv)
+]) svc
+(state-of svc).kv set "a" 1;
+`
+	r := stampSvcReg(t, true)
+	if _, err := seam5Run(r, src); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	refs := storedHandlerRefs(t, r, "svc")
+	if len(refs) != 1 || refs[0] == nil || refs[0].Prog == nil {
+		t.Fatalf("the KEYS-shape handler must stamp, got %v", refs)
+	}
+	out, err := seam5Run(r, `(call {cmd:"KEYS"} svc)`)
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	got := out[len(out)-1].String()
+	if got != `['a']` && got != `[a]` {
+		t.Fatalf("KEYS reply = %s, want the ['a'] key list", got)
+	}
+}

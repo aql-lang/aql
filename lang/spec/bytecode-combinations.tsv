@@ -110,3 +110,13 @@ def P class {a: 0} make P {a: "x"}	ERROR:expected Integer	make enforces the fiel
 0 or "default"	'default'	or yields the second operand
 5 otherwise 9	5	otherwise yields the value operand
 (3 and "x") add 1	'x1'	join carrier stays polymorphic, not int-specialized
+# Filter-lambda closures with LEXICAL captures + computed data operands
+# (design/RUNTIME-STAMPING.0.md Phase 3): the body lambda admits captures
+# (threaded at OpPushClosure, bound to trailing unit slots) and a typed
+# non-dynamic carrier collection. Each positive row runs compiled ==
+# interpreted through the differential gates.
+def f (fn [[y:Integer] [List] [ filter ([e:Any] => [ e.value gte y ]) [3 7 9] ]]) f 5	[7 9]	filter lambda captures an enclosing-fn param (list pair shape)
+def f (fn [[m:Map] [List] [ filter ([e:Any] => [ (e.value eq "b") not ]) (keys m) ]]) f {a:1 b:2 c:3}	['a' 'c']	filter lambda over a COMPUTED collection (keys result carrier)
+def f (fn [[y:Integer] [Map] [ filter ([kv:Any] => [ kv.v gte y ]) {a:3 b:7} ]]) f 5	{b:7}	filter lambda captures over a MAP (KeyVal shape)
+def f (fn [[y:Integer] [Integer] [ 0 fold ([acc:Any kv:Any] => [ acc add (kv.v mul y) ]) {a:2 b:3} ]]) f 10	50	fold lambda captures an enclosing-fn param (KeyVal shape)
+def g (fn [[m:Map k:String] [List] [ def kv m  filter ([e:Any] => [ ((kv get e.value) eq None) not ]) (keys kv) ]]) g {x:1} "x"	['x']	the mini-redis KEYS shape: body-local capture + computed keys
