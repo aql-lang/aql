@@ -23,6 +23,14 @@ func TestParseIPWhitelist(t *testing.T) {
 	if g, _ := parseIPWhitelist("10.1.2.3/8"); len(g) != 1 || g[0] != "10.0.0.0/8" {
 		t.Errorf("CIDR normalize: %v", g)
 	}
+	// Empty CSV parts are skipped; an all-empty (comma-only) list yields no
+	// entries and returns (nil,nil) like an absent whitelist.
+	if got, err := parseIPWhitelist(","); err != nil || got != nil {
+		t.Errorf("comma-only should be (nil,nil): got %v err %v", got, err)
+	}
+	if g, _ := parseIPWhitelist("203.0.113.7,,10.0.0.0/8"); len(g) != 2 {
+		t.Errorf("empty middle part must be skipped, keeping the rest: %v", g)
+	}
 	// A typo must be an error, never a silent widening.
 	for _, bad := range []string{"not-an-ip", "999.1.1.1", "10.0.0.0/99", "1.2.3.4,garbage"} {
 		if _, err := parseIPWhitelist(bad); err == nil {
@@ -95,6 +103,18 @@ func TestAddRejectsBadIPWhitelist(t *testing.T) {
 	code, _, errOut := runVault(t, "v\n", "add", "--from-stdin", "--ip-whitelist=not-an-ip", "k")
 	if code == 0 || !strings.Contains(errOut, "ip-whitelist") {
 		t.Errorf("bad ip-whitelist should error, got code=%d err=%q", code, errOut)
+	}
+}
+
+func TestRotateRejectsBadIPWhitelist(t *testing.T) {
+	testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	code, _, errOut := runVault(t, "v2\n", "rotate", "--from-stdin", "-y", "--ip-whitelist=not-an-ip", "k")
+	if code == 0 || !strings.Contains(errOut, "ip-whitelist") {
+		t.Errorf("bad ip-whitelist on rotate should error, got code=%d err=%q", code, errOut)
 	}
 }
 
