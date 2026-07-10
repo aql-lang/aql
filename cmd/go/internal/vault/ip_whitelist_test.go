@@ -106,18 +106,6 @@ func TestAddRejectsBadIPWhitelist(t *testing.T) {
 	}
 }
 
-func TestRotateRejectsBadIPWhitelist(t *testing.T) {
-	testHome(t)
-	mustInit(t)
-	if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "k"); code != 0 {
-		t.Fatalf("add: %s", e)
-	}
-	code, _, errOut := runVault(t, "v2\n", "rotate", "--from-stdin", "-y", "--ip-whitelist=not-an-ip", "k")
-	if code == 0 || !strings.Contains(errOut, "ip-whitelist") {
-		t.Errorf("bad ip-whitelist on rotate should error, got code=%d err=%q", code, errOut)
-	}
-}
-
 func TestRotateIPWhitelistSetClearPreserve(t *testing.T) {
 	home := testHome(t)
 	mustInit(t)
@@ -239,5 +227,37 @@ func TestIPWhitelistIPv6(t *testing.T) {
 	// clientIP extracts a bracketed IPv6 host (proxy RemoteAddr form).
 	if got := clientIP("[::1]:8787"); got != "::1" {
 		t.Errorf("clientIP ipv6 loopback = %q", got)
+	}
+}
+
+// TestParseIPWhitelistSkipsEmptyParts — an interior/trailing empty part is
+// skipped (a trailing comma is not a typo that widens access), and an
+// ALL-empty but non-blank csv ("," / ", ,") yields (nil, nil) exactly like
+// absent input.
+func TestParseIPWhitelistSkipsEmptyParts(t *testing.T) {
+	got, err := parseIPWhitelist("203.0.113.7,,")
+	if err != nil || len(got) != 1 || got[0] != "203.0.113.7" {
+		t.Errorf("trailing empty part must be skipped: got=%v err=%v", got, err)
+	}
+	if got, err := parseIPWhitelist(", ,"); err != nil || got != nil {
+		t.Errorf("all-empty parts must yield (nil, nil): got=%v err=%v", got, err)
+	}
+}
+
+// TestRotateRejectsBadIPWhitelist — rotate's --ip-whitelist gate matches
+// add's: a typo errors (exit 1) instead of silently widening access, and
+// the stored whitelist is left untouched.
+func TestRotateRejectsBadIPWhitelist(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "v\n", "add", "--from-stdin", "--ip-whitelist=10.0.0.0/8", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	code, _, errOut := runVault(t, "v2\n", "rotate", "--from-stdin", "-y", "--ip-whitelist=not-an-ip", "k")
+	if code == 0 || !strings.Contains(errOut, "ip-whitelist") {
+		t.Errorf("rotate bad ip-whitelist should error, got code=%d err=%q", code, errOut)
+	}
+	if s, _ := LoadStore(home); func() bool { a, _ := s.FindAlias("k"); return a == nil || len(a.IPWhitelist) != 1 }() {
+		t.Error("failed rotate must not touch the stored whitelist")
 	}
 }

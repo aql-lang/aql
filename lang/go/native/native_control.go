@@ -42,6 +42,11 @@ var controlNatives = []NativeFunc{
 				Args:    []*Type{TMap},
 				Impl:    Go(doMapHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
+				// CompileDynBody here too: a GRADUAL operand can commit to
+				// this sig at check time while the runtime value is a List —
+				// the dyn-body poly re-match picks the real overload at run
+				// time (tryRecordDynBody's body.Dynamic branch).
+				CompileEffect: CompileDynBody,
 			},
 		},
 	},

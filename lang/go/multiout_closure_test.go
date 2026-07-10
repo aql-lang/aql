@@ -143,3 +143,77 @@ func TestDoSentinelBodyStaysUncompiled(t *testing.T) {
 		t.Errorf("%q: engine divergence: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
 	}
 }
+
+// TestDynBodyVariadicAndSpliceShapes — Phase E increment 2 pins:
+//   - a NESTED multi-out dyn-body do inside a closure unit seats its
+//     contiguous variadic residual (sameEventRunToEnd) and compiles;
+//   - a variadic run followed by ANOTHER value declines the unit residual
+//     (conservative; fallback parity holds);
+//   - a splice over a COMPUTED payload inside a do body compiles via the
+//     dyn-body backstop with the interpreter's SPREAD semantics (the
+//     captured-carrier closure previously baked identity — [7 8] against
+//     the interpreter's 7 8, a miscompile);
+//   - the bare top-level splice-of-computed refuses (recording poisoned)
+//     with fallback parity.
+func TestDynBodyVariadicAndSpliceShapes(t *testing.T) {
+	compiles := []string{
+		`def b true  do [do [1 2 (if b [] [9 9])]]`,
+		`def mk fn [[] [List] [[7 8]]]  def xs (mk)  do [word xs]`,
+		`def b true  do [1 2 (if b [] [9 9])]`,
+		`def i 0  def ops [quote [1 add 2]]  do (ops get (i add 0))`,
+		`def xs [add 1 2]  do [word xs]`,
+		// A LOOP inside a do body: the unrolled model repeats ONE value
+		// ([1 1 1] as the same Value), so tryRecordDynBody's intra-event ID
+		// de-collision mints fresh result identities — without it, producedBy
+		// collapsed to the last index and the residual refused "call results
+		// reordered". Value above / below the run, and a computed range.
+		`do [for 3 [1]]`,
+		`do [for 3 [1] 7]`,
+		`do [7 for 3 [1]]`,
+		`def n 3  do [for n [1]]`,
+		// forceOrder ∪ dynBind-source merge (planValueDefLocals): the SECOND
+		// do's closure unit has an out-of-order residual (inert x below the
+		// computed result — residualForceOrder) AND a dyn-bound computed
+		// body-local (`def q (1 add 2)` under the DynEnv armed by the first
+		// do) — both promotion triggers drive one merged set.
+		`def ys [mul 2 3]  do [word ys]  def x 5  do [def q (1 add 2)  x  q add 10]`,
+	}
+	for _, src := range compiles {
+		a, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: must compile; reason=%q err=%v", src, reason, cerr)
+			continue
+		}
+		requireEngineParity(t, src, true)
+	}
+	// The variadic-run-then-value body also compiles: the closure declines
+	// (exactness screen) and the dyn-body CALL_NATIVE takes the whole body.
+	requireEngineParity(t, `def b true  do [do [1 2 (if b [] [9 9])] 7]`, true)
+	refusals := []string{
+		// bare top-level splice over a computed payload (runtime spread)
+		`def mk fn [[] [List] [[7 8]]]  def xs (mk)  word xs`,
+		// A variadic loop value MID-residual in a fn body: the RET cannot
+		// seat a runtime-variable count with a fixed value above it
+		// (seatResults' sameEventRunToEnd screen), so the fn refuses
+		// "result is a variadic loop value (Stage 3)" — fallback parity.
+		`def f fn [[] [] [for 3 [1] 7]]  f`,
+	}
+	for _, src := range refusals {
+		a, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		prog, reason, _, cerr := a.CompileCheck(src)
+		if cerr != nil {
+			t.Fatalf("CompileCheck(%q): %v", src, cerr)
+		}
+		if prog != nil || reason == "" {
+			t.Errorf("%q: must refuse with a named reason; got prog=%v reason=%q", src, prog != nil, reason)
+		}
+		requireEngineParity(t, src, false)
+	}
+}

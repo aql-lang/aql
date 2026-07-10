@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/apd/v3"
+)
 
 // TestMicronNewtypeLeaves covers the newtype (bare-refine) construction
 // path for every new builtin leaf: minting a subtype and instantiating it
@@ -604,4 +608,26 @@ func qionAmountValue(t *testing.T, s string) Value {
 	f, _ := AsMicronFields(out[0])
 	amt, _ := f.Get("amount")
 	return amt
+}
+
+// TestQionInfiniteAmountHasNoUnits — a hand-built Qion payload whose stored
+// amount is an INFINITE Decimal (constructible only by hand: the parser
+// mints finite Decimals exclusively) defeats the units derivation — the
+// Text('f') render is "Infinity", which the big.Int parse rejects.
+func TestQionInfiniteAmountHasNoUnits(t *testing.T) {
+	inf := NewValueRaw(TQion, MicronPayload{Fields: micronFields(
+		NewString("code"), NewString("USD"),
+		NewString("amount"), NewBigDecimal(&apd.Decimal{Form: apd.Infinite}),
+		NewString("minor"), NewInteger(2))})
+	if _, ok := qionUnits(fieldsOf(t, inf)); ok {
+		t.Error("infinite-amount qion must have no units")
+	}
+	// POSITIVE pair: the finite path still derives units and orders by
+	// magnitude.
+	if n, _ := AsInteger(prop(t, mkLeaf(t, TQion, makeQion, "USD 1.50"), "units")); n != 150 {
+		t.Errorf("finite qion units = %d, want 150", n)
+	}
+	if compareQions(mkLeaf(t, TQion, makeQion, "USD 1.00"), mkLeaf(t, TQion, makeQion, "USD 2.00")) != -1 {
+		t.Error("finite same-code qions must order by amount")
+	}
 }

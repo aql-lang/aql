@@ -31,6 +31,21 @@ includes process start + parse; startup is ~20 ms for `aql`, ~17 ms for
 Python, so subtract it before quoting execution-only ratios (fixtures
 are sized so execution dominates on the AQL-interp column).
 
+### Watch out for Ruby: its wall-clock is almost all startup
+
+Ruby is the one column where subtracting startup is *not* optional — it
+changes the conclusion. Empty-program startup here is ~14 ms for `aql`
+and ~63 ms for `ruby` (RubyGems loading; `ruby --disable-gems` drops it
+back to ~14 ms). These fixtures run in only ~4 ms of actual Ruby (timed
+with an internal `Process.clock_gettime` best-of-5: fib 4.5 ms, loopsum
+3.9 ms, nestloop 3.8 ms), so a "62 ms" Ruby wall-clock cell is ~95 %
+overhead. Taken at face value the wall-clock table makes the AQL
+compiled VM look as fast as Ruby (55 ms vs 62 ms) — but that is a
+startup artifact. On **execution only** (startup subtracted, this
+container): the AQL interpreter is ~320–980× slower than Ruby (worst on
+recursive `fib`) and the compiled VM is ~11–46× slower. Do not read the
+raw Ruby column as an execution ratio.
+
 ## Reference snapshot (2026-07, 4-core Xeon 2.80GHz)
 
 Original baseline (before the interpreter-perf work):
@@ -66,3 +81,25 @@ second-pass start. The compiled VM also gained (~15–20 %) from the
 ID-elision and type-equality work. Analysis, per-fix notes, and the
 closing assessment of what remains (and why the VM is the performance
 story): `design/INTERPRETER-PYTHON-PARITY.10.md`.
+
+After the `Type.Equal` interval-label fast path (2026-07, same box;
+best-of-5, wall-clock incl. ~14 ms startup):
+
+| workload | aql-interp (before → after) | Δ |
+|---|---:|---:|
+| fib      | 4,387 ms → 4,028 ms | −8.2 % |
+| loopsum  | 1,454 ms → 1,350 ms | −7.1 % |
+| nestloop | 1,219 ms → 1,147 ms | −5.9 % |
+
+A fresh CPU profile put `Type.Equal` at the top of the interpreter flat
+profile (~13 %), driven almost entirely by the per-token marker-predicate
+cascade (`IsWord` / `IsOpenParen` / `IsForward` / …): each predicate did
+a `v.Parent.Equal(TMarker)` that, on the overwhelmingly common *mismatch*,
+fell through to a 14-char ID **string** compare. `Equal` now settles
+labelled-builtin pairs with an int compare on the DFS interval label
+(`In`) it already carries, so the string compare is skipped on every such
+step. Pure-CPU, allocation-neutral, semantics-identical (the `In` path is
+only taken when both nodes are labelled builtins, where `In`-equality is
+exactly `ID`-equality). This is why the Ruby gap on these shapes is
+mostly *fixed per-token dispatch overhead* a tree-walker re-pays every
+step — see the top-of-file Ruby note for the startup-adjusted comparison.

@@ -235,36 +235,30 @@ func TestCodeEffectCompileDiscipline(t *testing.T) {
 			t.Errorf("%q: want %s compiled; got %v compiled=%v err=%v", cc.src, cc.want, got, compiled, rerr)
 		}
 	}
-	// A GRADUAL-Any collection operand stays refused: do's List and Map sigs
-	// are genuinely ambiguous over it (the Map handler is a different
-	// semantics), so no static commit is sound — interpreter fallback parity.
-	refusals := []struct {
+	// A GRADUAL-Any collection operand compiles as a dyn-body POLY: the
+	// runtime re-match over do's own List/Map sigs picks the overload exactly
+	// as the interpreter's dispatch does (tryRecordDynBody's body.Dynamic
+	// branch), so no static commit is needed.
+	graduals := []struct {
 		src  string
 		want string
 	}{
 		{`def i 0 def ops [quote [1 add 2]] do (ops get (i add 0))`, "[3]"},
 	}
-	for _, rc := range refusals {
+	for _, rc := range graduals {
 		d, err := New()
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
 		prog, reason, _, cerr := d.CompileCheck(rc.src)
-		if cerr != nil {
-			t.Errorf("%q: CompileCheck error %v", rc.src, cerr)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: the dyn-body poly must compile a gradual do operand; reason=%q err=%v", rc.src, reason, cerr)
 			continue
-		}
-		if prog != nil || reason == "" {
-			t.Errorf("%q: do over a non-foldable body carrier must REFUSE to compile; got prog=%v reason=%q",
-				rc.src, prog != nil, reason)
 		}
 		e, _ := New()
 		got, compiled, rerr := e.RunCompiled(rc.src)
-		if compiled {
-			t.Errorf("%q: RunCompiled reported compiled=true; expected interpreter fallback", rc.src)
-		}
-		if rerr != nil || fmt.Sprint(got) != rc.want {
-			t.Errorf("%q: fallback run got %v err=%v, want %s", rc.src, got, rerr, rc.want)
+		if !compiled || rerr != nil || fmt.Sprint(got) != rc.want {
+			t.Errorf("%q: want %s compiled; got %v compiled=%v err=%v", rc.src, rc.want, got, compiled, rerr)
 		}
 	}
 }
