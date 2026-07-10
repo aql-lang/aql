@@ -2151,6 +2151,49 @@ modules keep plain names.
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
 
+## Diagnostic reports
+
+Every engine error renders as a structured diagnostic report, designed
+to help fix the problem rather than merely name it:
+
+```
+[aql/signature_error]: cannot call `wp` — no signature matches the arguments
+  --> 2:1
+  1 | def wp fn [[policy:String n:Integer] [Integer] [n]]
+  2 | wp 3 "collect"
+      ^^ cannot call `wp` — no signature matches the arguments
+  = note: the arguments were 3 (an Integer) and 'collect' (a ProperString)
+  = note: candidate `wp (String, Integer)` — argument 1: expected String, got 3 (an Integer)
+  = note: stack: >>>word(wp)<<< 3 'collect'
+  = help: no signature matches (Integer, ProperString); one exists for
+    (String, Integer) — did you swap the arguments? expected: wp policy:String n:Integer
+```
+
+The shape is always: the `[aql/<code>]` header with the detail line, a
+`-->` position (or the honest `source position unknown` — locations are
+never guessed), the source excerpt with a `^^^` caret under the failing
+token, then zero or more of:
+
+* **secondary spans** — additional labeled locations with `---`
+  underlines: where a violated return contract was *declared*, where
+  the offending value was *produced*. Cross-file spans (a declaration
+  inside an imported module) render with their own `--> file:row:col`
+  header and that file's excerpt.
+* **`= note:` lines** — explanations: the argument tuple a failed call
+  received, per-candidate verdicts for each rejected overload
+  (nearest-first, capped at three), a stack snapshot.
+* **`= help:` lines** — actionable fixes: ``did you mean `upper`?``
+  (near-miss suggestions for undefined words, misspelt keys, and
+  unknown type names), "did you swap the arguments?", the
+  forward-grouping parens fix, and `see aql describe <word>` pointers.
+
+`error.Error()` (and every string-matching surface: spec rows, logs,
+JSON, the wasm playground) is always the plain rendering; interactive
+terminals opt into the ANSI palette via `--color` (see CLI.md). Hosts
+embedding the engine reach the structure itself — code, positions,
+spans, notes, suggestions — via `errors.As` with `*lang.AqlError` and
+re-render with `Render(lang.RenderOpts{Color: true})`.
+
 ## Error codes
 
 Errors are values of type `Ideal/Error` with a `code` atom and a
@@ -2184,7 +2227,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |
-| `div_zero` | Division by zero. |
+| `arith_error` | Arithmetic failure — division/modulo by zero on an exact numeric leaf, an arbitrary-precision fault. |
 | `out_of_range` | Index or numeric value outside the legal range. |
 | `unify_fail` | Two values cannot unify. |
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,18 +57,26 @@ var langNew = lang.New
 // writes the residual stack (carriers joined by spaces) to w. This is the body
 // the run subcommand's EvalOptionsMode forwards to.
 func Eval(w io.Writer, source string, o lang.Options, mode CompileMode) error {
+	return EvalColor(w, source, o, mode, false)
+}
+
+// EvalColor is Eval with the color decision resolved by the caller
+// (lang.ResolveColor over the stream the error will be printed to):
+// a structured AqlError renders through the diagnostic renderer with
+// the ANSI palette; color=false keeps the byte-identical plain text.
+func EvalColor(w io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
 	a, err := langNew(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
-	return runAndPrint(w, a, source, mode)
+	return runAndPrint(w, a, source, mode, color)
 }
 
 // runAndPrint executes source on an already-constructed instance (so callers
 // that need to configure the instance first — e.g. seed an in-memory file
 // system for bundled imports — can do so before running) and prints the
 // residual stack exactly as the run subcommand does.
-func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode) error {
+func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode, color bool) error {
 	var result []any
 	var err error
 	switch mode {
@@ -79,6 +88,13 @@ func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode) erro
 		result, err = a.Run(source)
 	}
 	if err != nil {
+		// A structured diagnostic re-renders with the ANSI palette when
+		// the caller resolved color for the output stream; anything else
+		// (and the color-off path) keeps the historical plain text.
+		var ae *lang.AqlError
+		if color && errors.As(err, &ae) {
+			return fmt.Errorf("error: %s", ae.Render(lang.RenderOpts{Color: true}))
+		}
 		return fmt.Errorf("error: %s", err)
 	}
 
@@ -156,7 +172,7 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		a.SetFileOps(mem)
 	}
 
-	if err := runAndPrint(stdout, a, cfg.Source, cfg.Compile); err != nil {
+	if err := runAndPrint(stdout, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

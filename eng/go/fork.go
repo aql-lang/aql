@@ -39,6 +39,19 @@ func (r *Registry) ForkConcurrent() *Registry {
 	fork := *r // shallow copy inherits the shared read-only pointers
 	fork.Defs = r.Defs.Clone()
 	fork.Types = r.Types.CloneDynamic()
+	// builtinWords is read-MOSTLY, not read-only: a host Register call
+	// on the parent ((*AQL).Register) writes it while a fork's failure
+	// path may be ITERATING it for did-you-mean candidates
+	// (RegisteredWordNames via SuggestionCandidates) — a fatal
+	// concurrent map fault. Snapshot it here (on the parent-owning
+	// goroutine, like the Defs clone) so the fork's view is immutable;
+	// words the host registers after the fork simply don't appear in
+	// the fork's suggestions.
+	bw := make(map[string]bool, len(r.builtinWords))
+	for name := range r.builtinWords {
+		bw[name] = true
+	}
+	fork.builtinWords = bw
 	fork.Contexts = NewContextStack()
 	// A private child layer over the inherited context chain: reads walk
 	// down into the (parked) parent's stores, writes land in the child.

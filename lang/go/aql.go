@@ -814,3 +814,30 @@ const (
 
 // CheckDiagnostic is a single finding from the static checker.
 type CheckDiagnostic = native.CheckDiagnostic
+
+// AqlError is the structured diagnostic every engine failure surfaces
+// as (design/DIAGNOSTICS.0.md): code, detail, primary position,
+// secondary labeled spans, notes, and suggestions. Hosts reach it with
+// errors.As and re-render with color via Render(RenderOpts{Color:true});
+// Error() is always the plain (ANSI-free) rendering.
+type AqlError = native.AqlError
+
+// RenderOpts controls diagnostic rendering (color on/off).
+type RenderOpts = native.RenderOpts
+
+// DiagSpan / DiagSuggestion are the structured payload of an AqlError
+// or CheckDiagnostic: secondary labeled source locations and
+// actionable fixes.
+type (
+	DiagSpan       = native.DiagSpan
+	DiagSuggestion = native.DiagSuggestion
+)
+
+// ResolveColor decides whether to color output written to w for a
+// --color mode of "always", "never", or "auto" (the default: color
+// only a real terminal, honoring NO_COLOR).
+var ResolveColor = native.ResolveColor
+
+// RenderCheckDiagnostic renders the rich block (source excerpt, notes,
+// suggestions) that sits under a check diagnostic's stable one-liner.
+var RenderCheckDiagnostic = native.RenderCheckDiagnostic

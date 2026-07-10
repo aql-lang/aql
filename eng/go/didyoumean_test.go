@@ -1,6 +1,7 @@
 package eng
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -193,5 +194,36 @@ func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 	d = e.undefinedWordCheckDiag("qqqqqqqq", SrcPos{})
 	if len(d.Suggestions) != 0 {
 		t.Errorf("far name must carry no suggestions, got %+v", d.Suggestions)
+	}
+}
+
+// TestForkSuggestionsSafeAgainstParentRegister pins the fork isolation
+// contract for the did-you-mean candidate enumeration: a concurrent
+// fork's failure path iterates ITS OWN builtinWords snapshot, so a
+// host Register call on the parent can never fault the iteration (the
+// fatal "concurrent map iteration and map write" a timer callback hit
+// when its undefined-word error raced (*AQL).Register).
+func TestForkSuggestionsSafeAgainstParentRegister(t *testing.T) {
+	r := covRegistry(t, nil)
+	fork := r.ForkConcurrent()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		e := NewTop(fork)
+		for i := 0; i < 300; i++ {
+			_ = e.didYouMeanSuggestions("xyzzy-nope")
+		}
+	}()
+	for i := 0; i < 300; i++ {
+		r.Register(fmt.Sprintf("host-word-%d", i), Signature{BarrierPos: 0})
+	}
+	<-done
+	// The fork's snapshot predates the registrations: none of the new
+	// names are candidates there, while the parent sees them all.
+	if fork.IsBuiltinWord("host-word-0") {
+		t.Error("fork snapshot must not see post-fork registrations")
+	}
+	if !r.IsBuiltinWord("host-word-0") {
+		t.Error("parent must see its own registration")
 	}
 }

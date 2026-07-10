@@ -91,6 +91,17 @@ func toLSPDiagnostic(d lang.CheckDiagnostic) Diagnostic {
 		sev = severityWarning
 	}
 
+	// Notes and suggestions (did-you-mean, candidate verdicts —
+	// design/DIAGNOSTICS.0.md) append as extra Message lines: LSP has no
+	// dedicated field for them, and editors render multi-line messages.
+	msg := d.Detail
+	for _, n := range d.Notes {
+		msg += "\nnote: " + n
+	}
+	for _, s := range d.Suggestions {
+		msg += "\nhelp: " + s.Message
+	}
+
 	return Diagnostic{
 		Range: Range{
 			Start: Position{Line: row, Character: col},
@@ -99,6 +110,6 @@ func toLSPDiagnostic(d lang.CheckDiagnostic) Diagnostic {
 		Severity: sev,
 		Code:     d.Code,
 		Source:   "aql",
-		Message:  d.Detail,
+		Message:  msg,
 	}
 }
