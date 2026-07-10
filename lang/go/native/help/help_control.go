@@ -138,6 +138,14 @@ func init() {
 			"def accepts a word or string as the name.",
 			"Use fn with def to define typed functions with parameters.",
 			"Use undef to remove the most recent definition.",
+			"The fn form `def name fn [...]` is its own signature: the " +
+				"literal word fn is a keyword slot, so the function is " +
+				"constructed structurally at dispatch.",
+		},
+		Examples: []string{
+			`def x 5  x mul 2                                           ;# 10`,
+			`def xs [1 add 2]  xs                                       ;# [3]`,
+			`def double fn [[n:Integer] [Integer] [n mul 2]]  double 4  ;# 8`,
 		},
 	})
 

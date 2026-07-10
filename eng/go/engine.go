@@ -1361,13 +1361,34 @@ func bindsReferent(name string) bool {
 // def binding, so the `f w ≡ f (w)` equivalence deliberately does not apply
 // there (`quote vs` captures the NAME vs even when vs is splice-bound —
 // word-splice spec §3).
-func capturesForward(fn *FnDefInfo, pos int) bool {
+// capturesForwardToken reports whether any of fn's signatures captures
+// THIS token structurally at position pos. A /q slot carrying a
+// concrete Atom PATTERN (a KEYWORD slot — it admits only that one
+// literal word, e.g. def's `fn` form) captures only a token with that
+// exact name; every other word keeps its barrier/expansion treatment
+// at this position. Unpatterned /q slots and raw/form/type slots
+// capture unconditionally. Without the token check, one keyword
+// signature would flip the per-word capture gate and disable the
+// function-word barrier at its position for EVERY statement of that
+// word — the cross-barrier pre-evaluation bug class the scan's
+// barrier stop exists to prevent.
+func capturesForwardToken(fn *FnDefInfo, pos int, tok Value) bool {
 	if fn == nil {
 		return false
+	}
+	tokName := ""
+	if w, err := AsWord(tok); err == nil {
+		tokName = w.Name
 	}
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
 		if sig.QuoteArgs != nil && sig.QuoteArgs[pos] {
+			if pat, ok := sigPattern(sig, pos); ok && IsAtom(pat) {
+				if pn, err := AsAtom(pat); err == nil && pn == tokName {
+					return true
+				}
+				continue
+			}
 			return true
 		}
 		if sigRawSlot(sig, pos) {
@@ -1423,14 +1444,65 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 // 1 the paren is consumed by no viable overload, so it is left raw — import
 // selects `[String]`, installs the namespace, and the paren then runs as an
 // ordinary trailing statement.
+// viableSig pairs a forward-eligible signature with its effective
+// barrier during resolveForwardArgs' pre-evaluation scan.
+type viableSig struct {
+	sig     *Signature
+	barrier int
+}
+
+// sigsHaveKeywordSlot reports whether any viable signature carries a
+// KEYWORD slot — a /q position with a concrete Atom pattern, admitting
+// exactly one literal word (see patternsOk).
+func sigsHaveKeywordSlot(viable []viableSig) bool {
+	for _, vs := range viable {
+		if vs.sig.QuoteArgs == nil {
+			continue
+		}
+		for p := range vs.sig.QuoteArgs {
+			if pat, ok := sigPattern(vs.sig, p); ok && IsAtom(pat) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pruneKeywordViable filters the viable set in place, dropping every
+// signature whose slot at pos is a KEYWORD slot this token cannot
+// satisfy: only a Word token bearing the pattern's name matches, and
+// the match is binding-agnostic like every /q capture. Without this
+// prune a keyword overload keeps the viable set wide past its own
+// miss, raising the scan's reach so a LATER paren group is
+// pre-evaluated across the true dispatch's barrier.
+func pruneKeywordViable(viable []viableSig, pos int, tok Value) []viableSig {
+	tokName := ""
+	if IsWord(tok) {
+		if wi, err := AsWord(tok); err == nil {
+			tokName = wi.Name
+		}
+	}
+	kept := viable[:0]
+	for _, vs := range viable {
+		keep := true
+		if pos < vs.barrier && vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos] {
+			if pat, ok := sigPattern(vs.sig, pos); ok && IsAtom(pat) {
+				if pn, err := AsAtom(pat); err != nil || pn != tokName {
+					keep = false
+				}
+			}
+		}
+		if keep {
+			kept = append(kept, vs)
+		}
+	}
+	return kept
+}
+
 func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// Forward-eligible signatures paired with their effective barrier
 	// (the /s and /f modifiers override the declared BarrierPos, mirroring
 	// matchSignature's forwardLimit computation).
-	type viableSig struct {
-		sig     *Signature
-		barrier int
-	}
 	viable := make([]viableSig, 0, len(fn.Signatures))
 	maxBarrier := 0
 	for si := range fn.Signatures {
@@ -1487,6 +1559,11 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		viable = kept
 	}
 
+	// scanHasKeyword: computed once so the per-token keyword prune below
+	// is zero-cost for the overwhelming majority of words, which carry
+	// no keyword slots.
+	scanHasKeyword := sigsHaveKeywordSlot(viable)
+
 	pos := 0
 	scanIdx := e.pointer + 1
 	for pos < maxBarrier && scanIdx < e.tape.Len() {
@@ -1501,6 +1578,16 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// Boundary tokens: end / ) stop the scan.
 		if IsEnd(tok) || IsCloseParen(tok) {
 			break
+		}
+
+		// Keyword slots are decided by the raw token at their position —
+		// prune before any group evaluation or word expansion below, so a
+		// keyword overload's larger arity never widens the scan past the
+		// dispatch the non-keyword overloads will actually make: `def g
+		// (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
+		// 2-arg def binds g.
+		if scanHasKeyword {
+			viable = pruneKeywordViable(viable, pos, tok)
 		}
 
 		// Open paren: a forward group of unknown type.
@@ -1615,11 +1702,11 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// collapse, and raw-capture handling are byte-identical to a
 		// written (w). Two exemptions: structural-capture slots (/q takes
 		// the word's NAME, form/raw/type slots take the raw token — see
-		// capturesForward), code-bearing splices (Forth-style macros
+		// capturesForwardToken), code-bearing splices (Forth-style macros
 		// that must run against the live stack — see spliceIsData), and
 		// binder operands (`def y xs` rebinds the MARKER so y aliases the
 		// splice — see bindsReferent).
-		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
+		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
@@ -1645,11 +1732,12 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// simulated stack and the operand layout refused "not adjacent on
 		// top". Stop so each dispatch pre-evaluates only the groups IT
 		// collects, in source order. Lookup mirrors commitBarrierForward's own
-		// function-word test. The capturesForward guard preserves a word the
-		// collecting sig takes STRUCTURALLY as an operand (a /q name like
-		// `undef foo`, a raw/form/type slot) — there the function word is the
-		// argument, not a barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForward(fn, pos) {
+		// function-word test. The capturesForwardToken guard preserves a word
+		// the collecting sig takes STRUCTURALLY as an operand (a /q name like
+		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
+		// def's `fn`) — there the function word is the argument, not a
+		// barrier, and the scan must walk past it.
+		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil {
 				break
 			}
@@ -5501,15 +5589,6 @@ func (e *Engine) strandedForwardError(boundary string) *AqlError {
 		return nil
 	}
 	fwd, _ := AsForward(e.tape.At(fwdIdx))
-	// A waiting slot DECLARED as statement-rest collection is allowed to
-	// collect through the boundary: the parked word's matched signature
-	// marks the position (Signature.RestArgs — today `def`'s body slot,
-	// so `def f fn [...]` and `def x add 1 2` stay legal). This replaces
-	// the earlier hardcoded by-name def exemption: the policy is now
-	// visible on the signature rather than special-cased in the engine.
-	if fwd.Sig != nil && fwd.Sig.RestArgs[fwd.StackArgs+fwd.CollectedArgs] {
-		return nil
-	}
 	missing := fwd.ExpectedArgs - fwd.CollectedArgs
 	detail := fmt.Sprintf(
 		"%s is still waiting for %d argument(s) when `%s` begins its own dispatch — "+

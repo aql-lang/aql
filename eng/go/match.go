@@ -30,6 +30,30 @@ func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registr
 		}
 		isForward := idx < fwd
 		val := tape.At(positions[idx])
+		// KEYWORD slot: a /q position whose pattern is a concrete Atom
+		// matches the raw token NAME. A /q capture is binding-agnostic
+		// ("capture trumps binding" — FnParam.Quote), so the pattern
+		// must NOT unify against a resolved binding: a Defs-bound
+		// native like `fn` would never match its own name (its binding
+		// is an FnDefInfo, not an Atom). Word and Atom tokens compare
+		// by name; anything else fails the slot. This is what lets a
+		// signature admit one specific literal word — `def`'s
+		// `[name/q fn/q sigs]` form, and the AQL-authorable equivalent
+		// for macros/binders (syntax-rules-style keyword literals).
+		if sig.QuoteArgs != nil && sig.QuoteArgs[idx] && IsAtom(pattern) {
+			name := ""
+			if w, werr := AsWord(val); werr == nil {
+				name = w.Name
+			} else if a, aerr := AsAtom(val); aerr == nil {
+				name = a
+			} else {
+				return false
+			}
+			if pn, perr := AsAtom(pattern); perr != nil || pn != name {
+				return false
+			}
+			continue
+		}
 		// A forward position may still hold the unresolved Word token
 		// for a def-bound value (the forward scan plans against
 		// Defs.Top but does not rewrite the tape). Resolve it the same

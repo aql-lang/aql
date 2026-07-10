@@ -27,18 +27,30 @@ var definitionNatives = []NativeFunc{
 				// raw / spliced body use `def name word value`.
 				Args:          []*Type{TMap, TAny},
 				NoEvalMapArgs: map[int]bool{0: true},
-				// The body slot is statement-rest collection: `def x:T add 1 2`
-				// legitimately collects through the following function word.
-				// See Signature.RestArgs (eng/go/value.go) and the strict-
-				// barrier rule in design/STRICT-FORWARD-BARRIER.0.md.
-				RestArgs:   map[int]bool{1: true},
-				Impl:       Go(defTypedHandler, RunInCheck()),
+				Impl:          Go(defTypedHandler, RunInCheck()),
+				Returns:       []*Type{},
+				BarrierPos:    -1,
+			},
+			{
+				// The fn-definition FORM: `def name fn [in out body …]`.
+				// The middle slot is a KEYWORD slot — a /q position whose
+				// concrete Atom pattern admits only the literal word `fn`,
+				// captured as data (binding-agnostic, like every /q slot;
+				// see patternsOk, eng/go/match.go). The idiom is thereby
+				// ordinary structural dispatch: all three operands resolve
+				// at plan time and nothing parks, so under the strict
+				// barrier rule (design/STRICT-FORWARD-BARRIER.0.md) the
+				// form stays legal while `def x add 1 2` is stranded.
+				Args:       []*Type{TAtom, TAtom, TList},
+				QuoteArgs:  map[int]bool{0: true, 1: true},
+				Patterns:   map[int]Value{1: NewAtom("fn")},
+				NoEvalArgs: map[int]bool{2: true},
+				Impl:       Go(defFnFormHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TString, TAny},
-				RestArgs:   map[int]bool{1: true},
 				Impl:       Go(defHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -46,7 +58,6 @@ var definitionNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAtom, TAny},
 				QuoteArgs:  map[int]bool{0: true},
-				RestArgs:   map[int]bool{1: true},
 				Impl:       Go(defHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -253,6 +264,24 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// lookup finds the binding the interpreter's def stack would hold.
 	r.Check.Recorder().RecordDynBind(name, value, pos)
 	return nil, nil
+}
+
+// defFnFormHandler implements the `def name fn [sigs…]` FORM: the
+// keyword signature captured the literal word `fn` at position 1 and
+// the raw sig list at position 2, so the Function is constructed HERE
+// — via the builtin fn constructor, since a keyword capture is
+// binding-agnostic like every /q slot (an open-words extension of `fn`
+// changes `fn` calls, not the def form) — and the binding then
+// delegates to the ordinary defHandler path, so the capitalised-name /
+// extension / value-bind branches behave identically to a Function
+// value that arrived at a parked def.
+func defFnFormHandler(args []Value, named map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	fnVals, err := fnHandler([]Value{args[2]}, nil, nil, r)
+	if err != nil {
+		return nil, err
+	}
+	// fnHandler's sole success return is exactly one Function value.
+	return defHandler([]Value{args[0], fnVals[0]}, named, stack, r)
 }
 
 func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

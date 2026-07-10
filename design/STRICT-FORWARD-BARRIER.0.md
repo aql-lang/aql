@@ -40,62 +40,77 @@ gives, instead of waiting.
 
 `AQL_STRICT_BARRIER=1` (engine.go: `strictForwardBarrier`,
 `strandedForwardError`, called from the two `commitBarrierForward` call
-sites — `stepWord` and `stepWordUsurp`). Two exemptions:
+sites — `stepWord` and `stepWordUsurp`). One exemption: engine-internal
+boundary words (`__`-prefixed frame-tail words) are not source-level
+statement boundaries. There is deliberately NO def exemption — see the
+ruling below.
 
-- **A waiting slot declared `Signature.RestArgs`** — statement-rest
-  collection. The slot's value may legitimately be produced by the
-  following function word(s); today `def`'s body slot (position 1 of
-  all three def signatures, `native_definition.go`) declares it, so
-  `def f fn [...]`, `def x add 1 2`, and `def x:T add 1 2` stay legal.
-  This began as a hardcoded `FuncName == "def"` exemption and was
-  promoted to the signature attribute after the fn/q investigation
-  (below): the policy is now visible per-signature, per-position, and
-  any future binder opts in by declaring it rather than by engine
-  special-case. Without SOME def story, `def f fn [...]` — every fn
-  definition in the language — is an error: `def` parks waiting for
-  its value slot and `fn` is a function word.
-- **Engine-internal boundary words** (`__`-prefixed frame-tail words):
-  they are not source-level statement boundaries.
+## The ruling: `def foo add 1 2` is an error; keyword slots carry the idiom
 
-## Why not a literal-token overload (`def [Name/q fn/q SigList]`)?
+An earlier revision exempted `def` — first by name, then via a
+`Signature.RestArgs` "statement-rest slot" attribute — so that ANY
+function word could keep feeding def's body slot. Both were rejected:
+`def foo add 1 2` silently binding `3` is exactly the wait-through
+class the strict rule exists to kill, and a Go-only signature
+attribute violates the language's expressibility principle — AQL has
+macros, so whatever def can declare, an AQL-authored binder must be
+able to declare too.
 
-The tempting alternative — give def a 3-arg overload whose middle slot
-matches the literal word `fn`, so the fn-definition idiom is ordinary
-structural dispatch — was investigated and rejected on three findings:
+What survives instead is the **KEYWORD slot** — the language-native
+way to say "this argument position matches the literal word `fn`":
 
-1. **The corpus is bigger than `fn`.** Bare-word def bodies ≈ 4,480
-   occurrences repo-wide: fn 2,296, refine 485, class 463, `word`
-   311, gen 261, Module.word 82, enum 42, make 40, surface 41, fnsig
-   28, quote 24 … plus open-ended shapes (`def x add 1 2`,
-   `def s range 2 5`, `def my-mod module […]`). Worse, the `def
-   Name<T>` generics sugar desugars in the PARSER to `def Name gen
-   [params]` (eng/go/parser/parse.go:448) — a chain of TWO dispatches
-   (`gen`, then `fn` via the pending-gen protocol) that no 3-slot
-   signature can match. Enumerating constructor overloads turns an
-   open set into a closed one and still misses these.
-2. **No slot kind can match a literal token today.** The natural
-   composition — `QuoteArgs` + `Patterns{1: Atom("fn")}` — provably
-   never matches: `patternsOk` (eng/go/match.go:39) resolves a
-   def-bound forward word through `r.Defs.Top` BEFORE unifying, and
-   `fn` IS Defs-bound (natives live in the DefTable), so the
-   FnDefInfo value never unifies with `Atom("fn")`. An unpatterned
-   `/q` slot at position 1 instead FALSE-matches every
-   `def NAME <word> <list>` row (`def doub word [dup addq]`,
-   `def Color enum [red green blue]`, …) — a silent-meaning-change
-   class. A literal-word slot would be a NEW kernel slot kind
-   threaded through ~10 matcher/planner/emit seams.
-3. **`QuoteArgs[1]` leaks plan-time.** `capturesForward`
-   (engine.go:1364) ORs capture flags across ALL of a word's sigs —
-   per-word, not per-matched-sig — so one new capturing sig at
-   position 1 would disable the function-word barrier at position 1
-   for EVERY def statement, re-opening the documented cross-barrier
-   pre-evaluation bug class.
+> A signature position with `/q` (QuoteArgs) AND a concrete **Atom
+> pattern** admits exactly one literal word, matched by raw token
+> NAME, binding-agnostically ("capture trumps binding" — the same
+> rule every /q capture follows). Any other token makes the
+> signature non-viable at that position.
 
-`RestArgs` avoids all three: it changes nothing at plan time (it is
-not a capture flag), it keeps the whole existing corpus legal (the
-body slot stays `Any` — any constructor, any chain, any arity), and
-it is consulted at exactly one point (the strict-rule stranding check
-at the runtime boundary).
+def declares the fn-definition FORM as an ordinary overload
+(native_definition.go):
+
+```
+[ name:Atom/q  fn:Atom/q=fn  sigs:List ]     ;# def name fn [in out body …]
+```
+
+All three operands resolve at plan time — nothing parks, no
+wait-through — so `def f fn [...]` is pure structural dispatch and
+works identically under the strict rule, while `def x add 1 2`,
+`def s size [1 2 3]`, and `def x:T add 1 2` are stranded (write
+`def x (add 1 2)`). This is Scheme's syntax-rules literals arriving
+in AQL signatures: the same mechanism is what user macros/binders
+need for DSL keywords (`for x in xs […]`).
+
+Three kernel seams make keyword slots sound (all in this change):
+
+1. **`patternsOk` quote-slot fix** (eng/go/match.go): a /q position's
+   Atom pattern matches the raw token name (Word or Atom). It must
+   NOT resolve the binding first — `fn` is Defs-bound to an
+   FnDefInfo, which would never unify with `Atom("fn")`; the
+   pre-existing resolve-then-unify order made keyword patterns
+   dead-on-arrival.
+2. **Token-aware capture** (`capturesForwardToken`, engine.go): the
+   plan scan's function-word barrier consults the TOKEN — a keyword
+   slot captures only its own literal; every other word stays a
+   barrier. Without this, one keyword sig would disable the barrier
+   at its position for every def statement (the cross-barrier
+   pre-evaluation bug class).
+3. **Keyword viability pruning** (`resolveForwardArgs`): the keyword
+   overload's larger arity must not widen the pre-evaluation scan —
+   `def g (fn […]) (g 3)` must not evaluate `(g 3)` before the 2-arg
+   def binds g. A signature whose keyword slot cannot match the token
+   at its position is pruned before any group evaluation.
+
+### Known strict-mode fallout of the ruling (accepted, migration due)
+
+Bare-word def bodies OTHER than `fn` now strand under the strict rule:
+`refine` 485, `class` 463, `word` 311, `gen` 261 (including the
+`def Name<T>` parser sugar, which desugars to `def Name gen [params]`
+— eng/go/parser/parse.go:448), `Module.word` 82, `enum` 42, `make`
+40, `surface` 41, `fnsig` 28, `quote` 24, plus open-ended shapes
+(`def x add 1 2`). Each closed-set constructor can get its own
+keyword overload (`gen` needs the 5-slot chain
+`[name/q gen/q List fn/q List]`); open-ended shapes parenthesize.
+Default (gate off) behaviour is unchanged for all of these.
 
 Known gap: dot-access dispatch (`Rand.int …`) routes around `stepWord`,
 so module-export words are not strict-checked by the prototype.
@@ -142,11 +157,14 @@ Against:
 
 ## If adopted
 
-1. ~~Promote the `def` exemption to a declared signature attribute.~~
-   Done: `Signature.RestArgs` (see above). Open follow-ups: surface
-   the attribute in `aql describe def` (help.SigInfo carries no
-   per-slot markers today), decide whether `var` declares it too, and
-   pick a signature-literal notation for AQL-authored binders.
+1. ~~def story~~ Done: the keyword-slot `[name/q fn/q sigs]` overload
+   (see the ruling above). Open follow-ups: keyword overloads for the
+   other closed-set constructors (`gen` — 5-slot chain — `refine`,
+   `class`, `word`, `enum`, `make`, `surface`, `fnsig`, `quote`);
+   surface keyword slots in `aql describe def` (help.SigInfo carries
+   no per-slot markers today); the AQL-authored surface — ParseFnParams
+   already carries value patterns and `FnParam.Quote`, so `fn/q` as a
+   bare patterned param in a sig literal is the natural spelling.
 2. Extend the check to the dot-access dispatch path.
 3. Update the 18 spec rows (parenthesise) and pin the new errors as
    negative rows; update forward-barrier.tsv §6's "keeps waiting" rows.

@@ -44,45 +44,14 @@ func TestStrictBarrierParenScopeStops(t *testing.T) {
 	}
 }
 
-// fwdMarkerRest parks a forward whose matched signature declares its
-// second slot as statement-rest collection (Signature.RestArgs) — the
-// shape def's body slot presents.
-func fwdMarkerRest(name string, funcIdx, collected, stack int) Value {
-	sig := &Signature{
-		Args:       []*Type{TAtom, TAny},
-		RestArgs:   map[int]bool{1: true},
-		BarrierPos: -1,
-	}
-	return NewForward(ForwardInfo{
-		FuncName: name, Sig: sig, FuncIndex: funcIdx,
-		CollectedArgs: collected, StackArgs: stack,
-	})
-}
-
-func TestStrictBarrierRestSlotExempt(t *testing.T) {
-	// A waiting slot DECLARED statement-rest collects through the
-	// boundary (def's body slot: `def f fn [...]`).
-	e := engWithTape(t, []Value{fwdMarkerRest("def", 0, 1, 0)}, 1)
-	if err := e.strandedForwardError("fn"); err != nil {
-		t.Errorf("rest-declared slot must be exempt, got %v", err)
-	}
-}
-
-func TestStrictBarrierRestSlotPositional(t *testing.T) {
-	// The rest declaration is per-POSITION: the same sig waiting at
-	// slot 0 (nothing collected) is NOT exempt.
-	e := engWithTape(t, []Value{fwdMarkerRest("def", 0, 0, 0)}, 1)
-	if err := e.strandedForwardError("fn"); err == nil {
-		t.Error("waiting at a non-rest position must strand")
-	}
-}
-
-func TestStrictBarrierDefNameAloneNotExempt(t *testing.T) {
-	// The exemption is signature-declared, not by-name: a word named
-	// "def" parked on a sig WITHOUT RestArgs is stranded like any other.
+func TestStrictBarrierParkedDefStrands(t *testing.T) {
+	// There is NO def exemption: `def x add 1 2` must strand under the
+	// strict rule. The fn-definition idiom survives structurally instead
+	// — def's keyword signature (`[name/q fn/q sigs]`) matches at plan
+	// time and never parks, so it never reaches this error path.
 	e := engWithTape(t, []Value{fwdMarker("def", 0, 1, 0)}, 1)
-	if err := e.strandedForwardError("fn"); err == nil {
-		t.Error("name alone must not exempt — RestArgs is the policy")
+	if err := e.strandedForwardError("add"); err == nil {
+		t.Error("a parked def waiting on a value slot must strand")
 	}
 }
 

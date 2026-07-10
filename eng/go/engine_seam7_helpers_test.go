@@ -32,8 +32,8 @@ func TestS7RawForwardNilFn(t *testing.T) {
 	if rawFormForward(nil, 0) {
 		t.Error("rawFormForward(nil) must be false")
 	}
-	if capturesForward(nil, 0) {
-		t.Error("capturesForward(nil) must be false")
+	if capturesForwardToken(nil, 0, NewWord("x")) {
+		t.Error("capturesForwardToken(nil) must be false")
 	}
 }
 

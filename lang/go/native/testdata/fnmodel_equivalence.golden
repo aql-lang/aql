@@ -116,6 +116,7 @@ WORD create
   [Ideal/Resource/Entity] barrier=1 returns=[Any]
   [Node/Map] barrier=1 returns=[Any]
 WORD def
+  [Scalar/Atom Scalar/Atom Node/List] barrier=3 runcheck noeval={2} quote={0,1}
   [Node/Map Any] barrier=2 runcheck noevalmap={0}
   [Scalar/String Any] barrier=2 runcheck
   [Scalar/Atom Any] barrier=2 runcheck quote={0}
