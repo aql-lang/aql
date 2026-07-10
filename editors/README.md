@@ -36,12 +36,12 @@ before the upstream change lands).
 `aql lsp` speaks stdio by default (every client below); `aql lsp -p <port>`
 serves TCP for debugging/remote-attach. It provides:
 
-| Capability  | Backed by                            |
-| ----------- | ------------------------------------ |
-| Diagnostics | `lang.Check` (errors + warnings)     |
-| Hover       | `help.FormatDynamic` / `help.Format` |
-| Completion  | `help.Words` (all registered words)  |
-| Formatting  | `formatter.Format` (whole buffer)    |
+| Capability  | Backed by                                                    |
+| ----------- | ------------------------------------------------------------ |
+| Diagnostics | `lang.Check` (errors + warnings)                             |
+| Hover       | `help.FormatDynamic` / `help.Format`                         |
+| Completion  | member-aware after `RECV.` (Micron properties, class/record/table fields, module exports, map keys); the full word list otherwise |
+| Formatting  | `formatter.Format` (whole buffer)                            |
 
 | Editor                 | Where                                                 |
 | ---------------------- | ----------------------------------------------------- |

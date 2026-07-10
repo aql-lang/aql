@@ -116,9 +116,13 @@ type Hover struct {
 	Range    *Range        `json:"range,omitempty"`
 }
 
-// CompletionItemKind values used by the spec. We only need Function (3).
+// CompletionItemKind values used by the spec.
 const (
+	completionKindMethod   = 2
 	completionKindFunction = 3
+	completionKindField    = 5
+	completionKindModule   = 9
+	completionKindProperty = 10
 )
 
 // CompletionItem is one entry in a completion response.
