@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>codemirror-lang-aql — demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem;
+        max-width: 60rem;
+        margin-inline: auto;
+        line-height: 1.4;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.25rem;
+      }
+      p.sub {
+        margin: 0 0 1rem;
+        opacity: 0.75;
+        font-size: 0.9rem;
+      }
+      #editor {
+        border: 1px solid rgba(128, 128, 128, 0.4);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .cm-editor {
+        max-height: 34rem;
+        font-size: 13px;
+      }
+      #status {
+        margin-top: 0.75rem;
+        font-size: 0.85rem;
+        opacity: 0.8;
+        min-height: 1.2em;
+      }
+      code {
+        background: rgba(128, 128, 128, 0.18);
+        padding: 0 0.25em;
+        border-radius: 3px;
+      }
+    </style>
+
+    <!-- Resolve the bare `@codemirror/*` specifiers used by ./aql.js (and by
+         this page) against esm.sh. Versions are pinned to the CodeMirror 6
+         line. No build step required. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1",
+          "@codemirror/view": "https://esm.sh/@codemirror/view@6.26.3",
+          "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.6.0",
+          "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.2",
+          "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.0"
+        }
+      }
+    </script>
+  </head>
+
+  <body>
+    <h1>codemirror-lang-aql</h1>
+    <p class="sub">
+      A CodeMirror 6 <code>StreamLanguage</code> mode for AQL. Edit below — the
+      highlighting is produced by the local <code>aql.js</code>.
+    </p>
+
+    <div id="editor"></div>
+    <div id="status">loading CodeMirror…</div>
+
+    <script type="module">
+      import { EditorState } from "@codemirror/state";
+      import { EditorView, keymap, lineNumbers, highlightActiveLine }
+        from "@codemirror/view";
+      import {
+        syntaxHighlighting,
+        defaultHighlightStyle,
+        HighlightStyle,
+        bracketMatching,
+      } from "@codemirror/language";
+      import { tags as t } from "@lezer/highlight";
+      import { defaultKeymap, history, historyKeymap }
+        from "https://esm.sh/@codemirror/commands@6.6.0";
+      // The language mode under test — imported from this directory.
+      import { aql } from "./aql.js";
+
+      const status = document.getElementById("status");
+
+      // A small explicit highlight style so every AQL token class is visibly
+      // distinct (the built-in default style also works — this just makes the
+      // demo pop and shows how token classes map to colours).
+      const aqlHighlight = HighlightStyle.define([
+        { tag: t.comment, color: "#6a7381", fontStyle: "italic" },
+        { tag: t.string, color: "#2a9d3a" },
+        { tag: t.number, color: "#b5651d" },
+        { tag: t.bool, color: "#b5651d" },
+        { tag: t.atom, color: "#b5651d" },
+        { tag: t.keyword, color: "#a626a4", fontWeight: "600" },
+        { tag: t.typeName, color: "#c18401" },
+        { tag: t.variableName, color: "#383a42" },
+        { tag: t.definition(t.variableName), color: "#4078f2", fontWeight: "600" },
+        { tag: t.standard(t.variableName), color: "#0184bc" },
+        { tag: t.operator, color: "#0184bc" },
+        { tag: t.bracket, color: "#7a7a7a" },
+      ]);
+
+      const sample = [
+        "# todo.aql — a taste of AQL (mirrors design/examples/todo).",
+        "// both '#' and '//' start line comments.",
+        "/* block comments",
+        "   span multiple lines */",
+        "",
+        'import "aql:serve"',
+        "",
+        'export "TodoStore" {',
+        "  New: New/r          # /r parks a function reference",
+        "}",
+        "",
+        "def New fn [[opts:Map] [Service] [",
+        "  def svc ( service {users: {}  notify: (opts dot notify ? None)} )",
+        "",
+        '  add {op: "create"} [ [req state] => [',
+        "      def id   ( bucket dot next )",
+        "      def todo {id: id  text: req.text  done: false}",
+        '      emit state req.user {tag: "created"  id: id}',
+        "      todo",
+        "  ] ] svc",
+        "",
+        "  svc",
+        "]]",
+        "",
+        "def add-two fn [[x:Integer] [Integer] [ x 2 add ]]",
+        "",
+        "# numbers: big / hex / binary / float, and a negative constant",
+        "def nums [ 0d1234  0xFF_00  0b1010_1  -1_000.5e-3  -inf  math-pi ]",
+        "",
+        "# a backtick template string with ${ ... } interpolation",
+        "def msg `no todo ${req.id} for ${ (user dot name) ? \"anon\" }`",
+        "",
+        "MathUtil.sqrt   add/s   sub/2   x !. y   a.b.c",
+      ].join("\n");
+
+      try {
+        const view = new EditorView({
+          parent: document.getElementById("editor"),
+          state: EditorState.create({
+            doc: sample,
+            extensions: [
+              lineNumbers(),
+              highlightActiveLine(),
+              history(),
+              bracketMatching(),
+              aql(),
+              syntaxHighlighting(aqlHighlight),
+              // Fall back to the default style for any tag not themed above.
+              syntaxHighlighting(defaultHighlightStyle),
+              keymap.of([...defaultKeymap, ...historyKeymap]),
+            ],
+          }),
+        });
+        status.textContent =
+          "ready — this is the same mode that drives the AQL web playground.";
+        window.__view = view; // handy for poking at from the console
+      } catch (err) {
+        status.textContent = "failed to load: " + (err && err.message);
+        throw err;
+      }
+    </script>
+  </body>
+</html>

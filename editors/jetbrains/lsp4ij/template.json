@@ -1,0 +1,23 @@
+{
+  "name": "AQL",
+  "programArgs": {
+    "default": "aql lsp"
+  },
+  "languageMappings": [
+    {
+      "language": "AQL",
+      "languageId": "aql"
+    }
+  ],
+  "fileTypeMappings": [
+    {
+      "fileType": {
+        "name": "AQL",
+        "patterns": [
+          "*.aql"
+        ]
+      },
+      "languageId": "aql"
+    }
+  ]
+}
