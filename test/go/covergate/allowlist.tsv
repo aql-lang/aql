@@ -1,6 +1,6 @@
+# covergate allowlist — provably-unreachable defensive guards excluded from the 100%% floor.
 # Each line: <profile block key>\t<reason>. See ADR-008 and design/COVERAGE-ALLOWLIST.10.md.
 # The gate FAILS if an entry becomes covered (graduate it) or goes stale (remove it).
-# covergate allowlist — provably-unreachable defensive guards excluded from the 100%% floor.
 github.com/aql-lang/aql/cmd/go/internal/serve/factories.go:110.16,112.3	error arm after exec.NewServer, which only ever returns (s, nil) (§misc)
 github.com/aql-lang/aql/cmd/go/internal/vault/password.go:113.32,116.3	crypto defense-in-depth: decode/guard of a self-minted value (§crypto)
 github.com/aql-lang/aql/cmd/go/internal/vault/password.go:398.18,400.5	crypto defense-in-depth: decode/guard of a self-minted value (§crypto)
@@ -27,8 +27,8 @@ github.com/aql-lang/aql/eng/go/core_flex.go:147.10,149.4	shared-assertion / gate
 github.com/aql-lang/aql/eng/go/core_flex.go:171.2,171.15	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/core_make.go:372.17,374.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/core_make.go:398.29,400.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
-github.com/aql-lang/aql/eng/go/core_make.go:912.17,914.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
-github.com/aql-lang/aql/eng/go/core_make.go:918.17,920.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
+github.com/aql-lang/aql/eng/go/core_make.go:958.17,960.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
+github.com/aql-lang/aql/eng/go/core_make.go:964.17,966.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/core_type.go:498.17,503.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/define_type.go:35.14,40.3	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/depscalar.go:294.16,296.3	shared-assertion / gate-guaranteed kernel guard (§kernel)
@@ -119,8 +119,8 @@ github.com/aql-lang/aql/eng/go/method_shape.go:303.55,305.3	compiler/VM defensiv
 github.com/aql-lang/aql/eng/go/method_shape.go:311.22,313.4	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/method_shape.go:315.42,317.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/method_shape.go:323.20,325.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-github.com/aql-lang/aql/eng/go/micron.go:1944.41,1946.3	qion parse defensive guard: the regex-validated plain-decimal canon (digits, one optional dot, optional '-') always parses finite via apd.NewFromString — no exponent or special form can reach it (§kernel)
-github.com/aql-lang/aql/eng/go/micron.go:2017.16,2019.3	qion compare defensive fallback: stored amounts are Decimals (or hand-degenerate scalars), whose comparers are total — CompareValues errors only via a Comparer returning a real error, and no scalar/micron Comparer does (micronBehavior opts out with ErrNoComparer) (§kernel)
+github.com/aql-lang/aql/eng/go/micron.go:1948.41,1950.3	Qion: apd.NewFromString over a regex-validated plain-decimal `canon` is always finite, so the parse/Form guard cannot fire (§kernel)
+github.com/aql-lang/aql/eng/go/micron.go:2021.16,2023.3	Qion: CompareValues over two stored BigDecimal amounts never errors (cross-family pairs fall back to Rank, not error) (§kernel)
 github.com/aql-lang/aql/eng/go/micron_grammar.go:109.18,111.5	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/micron_grammar.go:172.16,174.3	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/micron_grammar.go:212.17,214.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
@@ -134,7 +134,7 @@ github.com/aql-lang/aql/eng/go/unify_map.go:129.4,130.12	shared-assertion / gate
 github.com/aql-lang/aql/eng/go/unify_map.go:153.3,153.27	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/user_poly.go:222.18,224.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/user_poly.go:225.27,227.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-github.com/aql-lang/aql/eng/go/value.go:1422.2,1422.13	shared-assertion / gate-guaranteed kernel guard (§kernel)
+github.com/aql-lang/aql/eng/go/value.go:1441.2,1441.13	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/vm.go:1061.93,1063.3	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/vm.go:1347.26,1349.5	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 github.com/aql-lang/aql/eng/go/vm.go:1533.23,1535.5	compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
