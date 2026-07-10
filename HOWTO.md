@@ -1027,9 +1027,10 @@ convention, use a recipe — `--for=<tool>` presents the secret exactly
 how that publisher reads it (npm needs no `~/.npmrc` at all):
 
 ```
-aql vault exec --for=npm   npm_token  -- npm publish
-aql vault exec --for=cargo crates_tok -- cargo publish
-aql vault exec --for=pypi  pypi_token -- twine upload dist/*
+aql vault exec --for=npm     npm_token   -- npm publish
+aql vault exec --for=cargo   crates_tok  -- cargo publish
+aql vault exec --for=pypi    pypi_token  -- twine upload dist/*
+aql vault exec --for=hackage hackage_key -- stack upload .   # Stack reads HACKAGE_KEY from env
 ```
 
 `--for` is **repeatable**, and each entry can name its own secret as

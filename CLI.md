@@ -799,6 +799,7 @@ aql vault exec --for=cargo   crates_tok  -- cargo publish
 aql vault exec --for=pypi    pypi_token  -- twine upload dist/*
 aql vault exec --for=poetry  pypi_token  -- poetry publish
 aql vault exec --for=github  gh_pat      -- gh release upload v1 dist/*
+aql vault exec --for=hackage hackage_key -- stack upload .
 aql vault exec --for=terraform tfc_token -- terraform apply
 
 # Scoped / GitHub Packages npm registry (works for npm/pnpm/composer/terraform):
