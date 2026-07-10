@@ -680,6 +680,13 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	// the mutable scopes before the check pass and roll them back on the
 	// fallback path; keep them on the compiled path.
 	snap := a.registry.SnapshotForCompile()
+	// Compiled execution requested: arm detached fn-unit stamping so
+	// runtime-constructed callbacks (service handlers, custom codec fns)
+	// compile to units at their store sites (eng.StampDetachedFn). The flag
+	// stays armed on the interpreter FALLBACK below — the top level then
+	// interprets but stored callbacks still earn the VM path, which is the
+	// compiled mode's contract; a plain Run (-no-compile) never arms it.
+	a.registry.EnableRuntimeStamping()
 	prog, _, _, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
 		a.registry.RestoreForCompile(snap)
@@ -724,6 +731,9 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 // registry is rolled back to its pre-check state.
 func (a *AQL) RunCompiledStrict(src string) ([]any, error) {
 	snap := a.registry.SnapshotForCompile()
+	// Same arming as RunCompiled: force mode is compiled execution, so
+	// runtime-constructed callbacks stamp at their store sites too.
+	a.registry.EnableRuntimeStamping()
 	prog, reason, _, err := a.CompileCheck(src)
 	if err != nil {
 		a.registry.RestoreForCompile(snap)

@@ -1520,14 +1520,8 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	if es == nil || es.reg == nil {
 		return 0, false
 	}
-	own := 0
-	for i := range fd.Signatures {
-		if !fd.Signatures[i].Fallback {
-			own++
-		}
-	}
-	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+	lam, ok := storedFnUnitEligible(fd)
+	if !ok {
 		return 0, false
 	}
 	inputs, paramNames := fnValueInputs(lam.Params)
@@ -1547,6 +1541,27 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		return 0, false
 	}
 	return unit, true
+}
+
+// storedFnUnitEligible reports whether fd is the SHAPE a stored-fn unit
+// compile accepts — exactly one own (non-fallback) signature carrying a
+// non-empty body with no flow-control sentinel — returning that signature.
+// Shared by the compile-time store-fn bake (compileStoredFnUnit) and the
+// runtime detached stamp (StampDetachedFn) so the two gates cannot drift.
+// Capture-freedom is the CALLER's gate (recordCallOperands / StampFnValue):
+// it is a property of the storing context, not of the unit shape.
+func storedFnUnitEligible(fd FnDefInfo) (*Signature, bool) {
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+		return nil, false
+	}
+	return lam, true
 }
 
 // compileStoredBody compiles a NoEvalArgs CODE-BODY list (spawn's process body) to

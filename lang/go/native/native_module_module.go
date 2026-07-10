@@ -35,6 +35,13 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
+	// A compiled execution arms runtime stamping on the top registry; module
+	// bodies (and the store words their fns execute later — service `add`,
+	// codec resolution) run on THIS sub-registry, so the policy must ride
+	// along or module-constructed callbacks would never stamp.
+	if parent.RuntimeStampingEnabled() {
+		modReg.EnableRuntimeStamping()
+	}
 	// Inherit host-installed capabilities so the module body can read
 	// files, encode/decode formats, and query the SQLite store using
 	// the same backends as the parent registry.

@@ -197,6 +197,11 @@ type Registry struct {
 	// stays copyable for ForkConcurrent's shallow clone.
 	vmRunning int32
 
+	// runtimeStamping arms detached fn-unit compilation (StampDetachedFn):
+	// see EnableRuntimeStamping. Set only by the compiled execution entry
+	// points; default false keeps plain interpreter runs stamp-free.
+	runtimeStamping bool
+
 	// interpRunDepth counts live interpreter Engine.Run activations on this
 	// registry — the top-level run AND every re-entrant sub-engine run (module
 	// loads, islands, higher-order bodies). It exists so a compiled RunProgram
@@ -405,6 +410,26 @@ func (r *Registry) interpRunActive() bool {
 // invoker/scopes a live run owns.
 func (r *Registry) canHostVM() bool {
 	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
+}
+
+// EnableRuntimeStamping arms detached fn-unit compilation (StampDetachedFn /
+// StampFnValue): store words and codec resolution may then compile a
+// runtime-constructed, capture-free fn body to a standalone unit so
+// InvokeCallback runs it on the VM. Armed only by the COMPILED execution
+// entry points (RunCompiled / RunCompiledStrict and the CLI's default mode)
+// and inherited by module sub-registries — a plain interpreter run
+// (`-no-compile`, `Run`) never stamps, keeping the mode contract exact.
+// ForkConcurrent's shallow copy carries the flag to per-connection forks.
+func (r *Registry) EnableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = true
+	}
+}
+
+// RuntimeStampingEnabled reports whether detached fn-unit compilation is
+// armed on this registry (see EnableRuntimeStamping).
+func (r *Registry) RuntimeStampingEnabled() bool {
+	return r != nil && r.runtimeStamping
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
