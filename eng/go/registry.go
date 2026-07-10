@@ -912,6 +912,19 @@ type CheckDiagnostic struct {
 	// flag — the information (the expression always raises, and where the
 	// trap is) survives without a false error verdict.
 	CaughtAtRuntime bool `json:"caughtAtRuntime,omitempty"`
+
+	// --- Structured diagnostic payload (design/DIAGNOSTICS.0.md). ---
+	// The additive rich layer rendered by RenderCheckDiagnostic beneath
+	// the stable one-line `check:` header; every field omitempty so the
+	// JSON/LSP wire shape only grows.
+
+	// Src is the offending token's source text — the caret width for
+	// the rich source excerpt (falls back to Word when empty).
+	Src string `json:"src,omitempty"`
+	// Notes are freestanding explanatory lines (`= note: …`).
+	Notes []string `json:"notes,omitempty"`
+	// Suggestions are actionable fixes (`= help: …`).
+	Suggestions []DiagSuggestion `json:"suggestions,omitempty"`
 }
 
 // NewRegistry creates an empty registry.
