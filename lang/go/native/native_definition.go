@@ -27,12 +27,18 @@ var definitionNatives = []NativeFunc{
 				// raw / spliced body use `def name word value`.
 				Args:          []*Type{TMap, TAny},
 				NoEvalMapArgs: map[int]bool{0: true},
-				Impl:          Go(defTypedHandler, RunInCheck()),
-				Returns:       []*Type{},
-				BarrierPos:    -1,
+				// The body slot is statement-rest collection: `def x:T add 1 2`
+				// legitimately collects through the following function word.
+				// See Signature.RestArgs (eng/go/value.go) and the strict-
+				// barrier rule in design/STRICT-FORWARD-BARRIER.0.md.
+				RestArgs:   map[int]bool{1: true},
+				Impl:       Go(defTypedHandler, RunInCheck()),
+				Returns:    []*Type{},
+				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TString, TAny},
+				RestArgs:   map[int]bool{1: true},
 				Impl:       Go(defHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
@@ -40,6 +46,7 @@ var definitionNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAtom, TAny},
 				QuoteArgs:  map[int]bool{0: true},
+				RestArgs:   map[int]bool{1: true},
 				Impl:       Go(defHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,

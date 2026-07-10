@@ -42,13 +42,60 @@ gives, instead of waiting.
 `strandedForwardError`, called from the two `commitBarrierForward` call
 sites — `stepWord` and `stepWordUsurp`). Two exemptions:
 
-- **The parked word `def`.** Without this, `def f fn [...]` — every fn
-  definition in the language — is an error: `def` parks waiting for its
-  value slot and `fn` is a function word. The exemption encodes a real
-  design distinction: def's body slot is *statement-rest collection*
-  (low-precedence bind), not ordinary forward collection.
+- **A waiting slot declared `Signature.RestArgs`** — statement-rest
+  collection. The slot's value may legitimately be produced by the
+  following function word(s); today `def`'s body slot (position 1 of
+  all three def signatures, `native_definition.go`) declares it, so
+  `def f fn [...]`, `def x add 1 2`, and `def x:T add 1 2` stay legal.
+  This began as a hardcoded `FuncName == "def"` exemption and was
+  promoted to the signature attribute after the fn/q investigation
+  (below): the policy is now visible per-signature, per-position, and
+  any future binder opts in by declaring it rather than by engine
+  special-case. Without SOME def story, `def f fn [...]` — every fn
+  definition in the language — is an error: `def` parks waiting for
+  its value slot and `fn` is a function word.
 - **Engine-internal boundary words** (`__`-prefixed frame-tail words):
   they are not source-level statement boundaries.
+
+## Why not a literal-token overload (`def [Name/q fn/q SigList]`)?
+
+The tempting alternative — give def a 3-arg overload whose middle slot
+matches the literal word `fn`, so the fn-definition idiom is ordinary
+structural dispatch — was investigated and rejected on three findings:
+
+1. **The corpus is bigger than `fn`.** Bare-word def bodies ≈ 4,480
+   occurrences repo-wide: fn 2,296, refine 485, class 463, `word`
+   311, gen 261, Module.word 82, enum 42, make 40, surface 41, fnsig
+   28, quote 24 … plus open-ended shapes (`def x add 1 2`,
+   `def s range 2 5`, `def my-mod module […]`). Worse, the `def
+   Name<T>` generics sugar desugars in the PARSER to `def Name gen
+   [params]` (eng/go/parser/parse.go:448) — a chain of TWO dispatches
+   (`gen`, then `fn` via the pending-gen protocol) that no 3-slot
+   signature can match. Enumerating constructor overloads turns an
+   open set into a closed one and still misses these.
+2. **No slot kind can match a literal token today.** The natural
+   composition — `QuoteArgs` + `Patterns{1: Atom("fn")}` — provably
+   never matches: `patternsOk` (eng/go/match.go:39) resolves a
+   def-bound forward word through `r.Defs.Top` BEFORE unifying, and
+   `fn` IS Defs-bound (natives live in the DefTable), so the
+   FnDefInfo value never unifies with `Atom("fn")`. An unpatterned
+   `/q` slot at position 1 instead FALSE-matches every
+   `def NAME <word> <list>` row (`def doub word [dup addq]`,
+   `def Color enum [red green blue]`, …) — a silent-meaning-change
+   class. A literal-word slot would be a NEW kernel slot kind
+   threaded through ~10 matcher/planner/emit seams.
+3. **`QuoteArgs[1]` leaks plan-time.** `capturesForward`
+   (engine.go:1364) ORs capture flags across ALL of a word's sigs —
+   per-word, not per-matched-sig — so one new capturing sig at
+   position 1 would disable the function-word barrier at position 1
+   for EVERY def statement, re-opening the documented cross-barrier
+   pre-evaluation bug class.
+
+`RestArgs` avoids all three: it changes nothing at plan time (it is
+not a capture flag), it keeps the whole existing corpus legal (the
+body slot stays `Any` — any constructor, any chain, any arity), and
+it is consulted at exactly one point (the strict-rule stranding check
+at the runtime boundary).
 
 Known gap: dot-access dispatch (`Rand.int …`) routes around `stepWord`,
 so module-export words are not strict-checked by the prototype.
@@ -90,15 +137,16 @@ Against:
   mechanism that makes `print add 1 2` fragile is the one that gives
   AQL its partial Polish-notation feel on `Any` slots. A stricter
   language is a more parenthesised language.
-- `def` needs a principled story, not an exemption by name — perhaps a
-  signature-level "statement-rest slot" attribute that `def` (and any
-  future binder) declares.
 - The checker must mirror the rule for words whose binding kind is
   unknown at check time (forward references) — stays gradual there.
 
 ## If adopted
 
-1. Promote the `def` exemption to a declared signature attribute.
+1. ~~Promote the `def` exemption to a declared signature attribute.~~
+   Done: `Signature.RestArgs` (see above). Open follow-ups: surface
+   the attribute in `aql describe def` (help.SigInfo carries no
+   per-slot markers today), decide whether `var` declares it too, and
+   pick a signature-literal notation for AQL-authored binders.
 2. Extend the check to the dot-access dispatch path.
 3. Update the 18 spec rows (parenthesise) and pin the new errors as
    negative rows; update forward-barrier.tsv §6's "keeps waiting" rows.

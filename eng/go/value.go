@@ -293,6 +293,19 @@ type FnSig struct {
 	// Word→Atom coercion. The macro definer sets it on every param so a macro
 	// receives its operands as code. See design/MACROS-PHASE1.10.md §3.
 	FormArgs map[int]bool
+	// RestArgs marks arg positions declared as STATEMENT-REST collection:
+	// the slot's value may legitimately be produced by the following
+	// function word(s), so a Forward parked waiting at this position is
+	// allowed to collect THROUGH a function-word statement boundary
+	// (`def f fn [...]`, `def x add 1 2` — the binder's body slot is
+	// "the rest of the statement"). Consulted by the strict-barrier rule
+	// (engine.go strandedForwardError, AQL_STRICT_BARRIER): a waiting
+	// slot NOT declared RestArgs is stranded when a function word begins
+	// its own dispatch. Declared today by `def`'s body slot (position 1
+	// of all three def signatures); it replaces the earlier hardcoded
+	// by-name def exemption so the behaviour is signature-visible policy,
+	// not engine special-casing. See design/STRICT-FORWARD-BARRIER.0.md.
+	RestArgs map[int]bool
 
 	// --- Run implementation + dispatch metadata. ---
 

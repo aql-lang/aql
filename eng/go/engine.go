@@ -5501,13 +5501,13 @@ func (e *Engine) strandedForwardError(boundary string) *AqlError {
 		return nil
 	}
 	fwd, _ := AsForward(e.tape.At(fwdIdx))
-	// The `def name …` body slot is exempt: def is a BINDER whose value
-	// slot idiomatically collects the rest of the statement (`def f fn
-	// [...]`, `def r Rand.with-seed 42`). Without this exemption the
-	// strict rule outlaws every fn definition in the language. The
-	// design question the exemption encodes: def is low-precedence
-	// statement-rest collection, not ordinary forward collection.
-	if fwd.FuncName == "def" {
+	// A waiting slot DECLARED as statement-rest collection is allowed to
+	// collect through the boundary: the parked word's matched signature
+	// marks the position (Signature.RestArgs — today `def`'s body slot,
+	// so `def f fn [...]` and `def x add 1 2` stay legal). This replaces
+	// the earlier hardcoded by-name def exemption: the policy is now
+	// visible on the signature rather than special-cased in the engine.
+	if fwd.Sig != nil && fwd.Sig.RestArgs[fwd.StackArgs+fwd.CollectedArgs] {
 		return nil
 	}
 	missing := fwd.ExpectedArgs - fwd.CollectedArgs
