@@ -234,6 +234,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// the new value into its frame slot at THIS site, so a conditional rebind
 	// updates the cell exactly when its arm runs. No-op for every other def.
 	r.Check.Recorder().RecordDefRebind(name, value, pos)
+	// A def of a name that some ALREADY-COMPILED stored handler / spawn body
+	// reads makes that frozen unit stale (the interpreter resolves the new
+	// binding at CALL time). Poison such refs so Finalize leaves them unstamped
+	// and InvokeCallback falls back to CallAQL. A first-time def of a fresh name
+	// poisons nothing (no existing ref lists it as a dep).
+	r.Check.Recorder().NotifyNameRebound(name)
 	// Record the def site for the dynamic-scope binder pass: if some fn body
 	// READS this name with no lexical home (OpLookupDynScope), the lowering
 	// installs a registry-visible OpBindDynScope twin here so the runtime
@@ -281,6 +287,19 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // `word`) refuse inside InstallWordExtension.
 func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, error) {
 	if !body.Parent.Equal(TFnDef) && !body.Parent.Equal(TFunction) {
+		return false, nil
+	}
+	// A FailedDispatch fn value is here because a CALL matched no signature and
+	// was left on the stack as data (a genuine dispatch failure — a concrete
+	// type mismatch, e.g. `def y (Net.recv-until nl nl)` feeding Bytes to the
+	// Socket slot). `def` consumes it as a plain value binding, exactly as
+	// value.go documents. It is never a deliberate `def <word> fn […]`
+	// extension, yet it carries the dispatched native's LOCKED signatures;
+	// without this guard a re-analysis (a def inside a `for` loop) finds the name
+	// already bound to it and misfires the open-words merge as a spurious
+	// `locked_signature` refusal instead of the real dispatch diagnostic. Fall
+	// through to the ordinary value binding.
+	if body.FailedDispatch {
 		return false, nil
 	}
 	fnDef, ok := body.Data.(FnDefInfo)
@@ -770,6 +789,11 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// carried frame slot still holds the rebound value — compiled reads would
 	// diverge; refuse and let the interpreter own the shape.
 	r.Check.Recorder().RefuseCarriedUndef(name)
+	// An undef of a name that some ALREADY-COMPILED stored handler / spawn body
+	// reads makes that frozen unit stale (the interpreter resolves the exposed
+	// or re-established binding at CALL time). Poison such refs so InvokeCallback
+	// falls back to CallAQL. Mirrors the def-site NotifyNameRebound.
+	r.Check.Recorder().NotifyNameRebound(name)
 	UninstallDef(r, name)
 	return nil, nil
 }

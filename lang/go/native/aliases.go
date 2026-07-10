@@ -226,6 +226,7 @@ const (
 	CompileQuoteInert       = eng.CompileQuoteInert
 	CompileDiverges         = eng.CompileDiverges
 	CompileValueDiverges    = eng.CompileValueDiverges
+	CompileStoresBody       = eng.CompileStoresBody
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 )

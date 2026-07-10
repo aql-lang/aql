@@ -52,6 +52,13 @@ type AQLImpl struct {
 	Body     []Value
 	FnFrame  *FnFrameMeta
 	dispatch Handler
+	// Compiled is the durable reference to this body's AOT-compiled unit, when
+	// the enclosing program compiled it (a store-fn handler bake). It rides
+	// ALONGSIDE Body: the value keeps both representations, so a callback runs
+	// the compiled unit via RunUnit when the registry can host a VM run and
+	// falls back to splicing Body on the interpreter otherwise. Nil for a body
+	// the compiler never armed (a plain interpreter run, or a refused body).
+	Compiled *CompiledFnRef
 }
 
 func (a *AQLImpl) dispatchHandler() Handler { return a.dispatch }
@@ -140,6 +147,17 @@ func (s *Signature) dispatchHandler() Handler {
 func (s *Signature) body() []Value {
 	if a, ok := s.Impl.(*AQLImpl); ok {
 		return a.Body
+	}
+	return nil
+}
+
+// CompiledRef returns the sig's durable compiled-unit reference, or nil when
+// the body was never compiled (a Go sig, an un-armed AQL body, a refused body).
+// It is the read surface the callback-invocation seam consults to choose the VM
+// path over CallAQL.
+func (s *Signature) CompiledRef() *CompiledFnRef {
+	if a, ok := s.Impl.(*AQLImpl); ok {
+		return a.Compiled
 	}
 	return nil
 }
