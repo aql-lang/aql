@@ -175,6 +175,7 @@ func TestMakeMacon(t *testing.T) {
 	}
 	for _, bad := range []Value{
 		NewString("00:1A:2B:3C:4D"), NewString("0:1:2:3:4:5"), NewString("GG:1A:2B:3C:4D:5E"),
+		NewString("00gg2b3c4d5e"), // 12 chars, non-hex → not normalized, ParseMAC rejects
 		NewString("00:00:00:00:fe:80:00:00:00:00:00:00:02:00:5e:10:00:00:00:01"), // 20-octet InfiniBand
 		NewInteger(42), mapOf("x", NewString("y")), mapOf("addr", NewInteger(1)),
 		mapOf(), {Parent: TMap, Data: ListPayload{}},

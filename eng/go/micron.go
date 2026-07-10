@@ -1348,7 +1348,7 @@ func makeMacon(src Value) ([]Value, error) {
 }
 
 func maconFromString(s string) ([]Value, error) {
-	hw, err := net.ParseMAC(s)
+	hw, err := net.ParseMAC(maconNormalizeBareHex(s))
 	if err != nil {
 		return nil, maconErr(fmt.Sprintf("invalid MAC address %q: %v", s, err))
 	}
@@ -1358,6 +1358,31 @@ func maconFromString(s string) ([]Value, error) {
 	fields := NewOrderedMap()
 	fields.Set("addr", NewString(hw.String()))
 	return []Value{NewValueRaw(TMacon, MicronPayload{Fields: fields})}, nil
+}
+
+// maconNormalizeBareHex rewrites a separator-less hex MAC ("001a2b3c4d5e")
+// into the colon-separated form net.ParseMAC accepts. Only a bare run of
+// exactly 12 or 16 hex digits (a 48- or 64-bit address) is rewritten; any
+// string carrying a separator, or of another length, is returned verbatim
+// so net.ParseMAC renders the authoritative error.
+func maconNormalizeBareHex(s string) string {
+	if len(s) != 12 && len(s) != 16 {
+		return s
+	}
+	for i := 0; i < len(s); i++ {
+		if !isHexDigit(s[i]) {
+			return s
+		}
+	}
+	var sb strings.Builder
+	sb.Grow(len(s) + len(s)/2 - 1)
+	for i := 0; i < len(s); i += 2 {
+		if i > 0 {
+			sb.WriteByte(':')
+		}
+		sb.WriteString(s[i : i+2])
+	}
+	return sb.String()
 }
 
 // maconBytes re-parses the stored canonical addr into its octets for the
