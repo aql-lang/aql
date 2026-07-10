@@ -54,25 +54,32 @@ never touched by `make fmt/vet/lint/test/cover-gate`.
 
 ## Results
 
-Best of 3 runs each (Go 1.24.7, Node 22, Python 3.11, Ruby 3.3, loopback
-Linux, single box):
+Best of 3 runs each (Go 1.24.7, Node 22 / bun 1.3, Python 3.11, Ruby 3.3,
+loopback Linux, single box; re-measured 2026-07-10):
 
 | Runtime | req/s | µs / round-trip | vs. Go |
 |---|--:|--:|--:|
-| Go (`net` + `bufio`)                    | ~109,000 | ~9.1   | 1× (baseline) |
-| **AQL — bytecode compiler (default)**   | **~55,000** | **~18** | **~2.0× slower** |
-| TypeScript (Node `net`)                 | ~48,000  | ~21    | ~2.3× slower |
-| Python (`socket`)                       | ~14,600  | ~69    | ~7.5× slower |
-| Ruby (`socket`)                         | ~13,500  | ~74    | ~8.1× slower |
-| AQL — interpreter (`-no-compile`)       | ~620     | ~1,610 | ~176× slower |
+| Go (`net` + `bufio`)                    | ~81,800 | ~12.2  | 1× (baseline) |
+| TypeScript (`bun`, Node `net`)          | ~50,400 | ~19.8  | ~1.6× slower |
+| **AQL — bytecode compiler (default)**   | **~46,800** | **~21.4** | **~1.75× slower** |
+| TypeScript (`ts-node` / Node)           | ~34,700 | ~28.8  | ~2.4× slower |
+| Python (`socket`)                       | ~13,800 | ~72    | ~5.9× slower |
+| Ruby (`socket`)                         | ~12,600 | ~80    | ~6.5× slower |
+| AQL — interpreter (`-no-compile`)       | ~866    | ~1,155 | ~94× slower |
 
 The **compiled** AQL server runs its per-connection handler on the bytecode VM
-and lands within ~2× of Go — **ahead of Node, and ~4× ahead of Python and
-Ruby**. Only hand-written Go is faster. That is a **~90× jump over AQL's own
-tree-walking interpreter** (~620 → ~55,000 req/s), the payoff of compiling the
+and lands within ~1.75× of Go — **level with the JS runtimes (ahead of Node's
+`ts-node`, a hair behind `bun`), and ~3.4× ahead of Python and Ruby**. Only
+hand-written Go is clearly faster. That is a **~54× jump over AQL's own
+tree-walking interpreter** (~866 → ~46,800 req/s), the payoff of compiling the
 `serve-raw` handler body to a unit (see *Resolution* below). The handler
 compiles whether its connection param is typed `Socket` or `Any` (an earlier
 revision required `Socket`; two compiler fixes removed that — see below).
+
+The compiled-vs-interpreted multiplier and the AQL-vs-Go ratio are the durable
+findings; absolute req/s track the box (this run's Go baseline of ~82k is lower
+than an earlier box's ~109k, and the JS ordering flips between `bun` and Node,
+so both are listed).
 
 An earlier revision of this file reported ~940 req/s for the "compiler
 (default)" row: at that time function-body compilation did not exist, so the
@@ -102,9 +109,14 @@ mini-redis's connection parameter being typed `Any`; it is now typed `Service`
 
 | App | tier | interpreted | compiled | speedup |
 |---|---|--:|--:|--:|
-| `todo-api`   | service + `Net.http` codec + JSON | ~1,140 req/s | ~13,000 req/s | **~11.5×** |
-| `mini-redis` | `Net.listen` service + RESP codec | ~460 req/s | ~680 req/s | **~1.5×** |
-| `mini-s3`    | `serve-raw` + streaming HTTP      | ~100 req/s | ~100 req/s | **~1.0×** |
+| `todo-api`   | service + `Net.http` codec + JSON | ~1,740 req/s | ~13,200 req/s | **~7.6×** |
+| `mini-redis` | `Net.listen` service + RESP codec | ~800 req/s | ~1,170 req/s | **~1.5×** |
+| `mini-s3`    | `serve-raw` + streaming HTTP      | ~174 req/s | ~176 req/s | **~1.0×** |
+
+(Re-measured 2026-07-10; `todo-api` 5,000 GETs, `mini-redis` 10,000 ops,
+`mini-s3` 6,000 ops. Absolute numbers track the box; the per-app speedup
+pattern — big for the CPU-bound service+JSON path, small for the I/O-bound
+`serve-raw` path — is the durable finding.)
 
 **Two of the three now compile their handlers.** `todo-api`'s handlers hit the VM
 (~11.5× over the interpreter — the CPU-bound service+JSON path); `mini-redis`'s do
