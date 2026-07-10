@@ -23,8 +23,11 @@ func TestEvalParseError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "parse error") {
-		t.Errorf("expected 'parse error', got %q", err.Error())
+	// Parse failures surface as AQL-voice syntax_errors
+	// (design/DIAGNOSTICS.0.md phase 2).
+	if !strings.Contains(err.Error(), "[aql/syntax_error]") ||
+		!strings.Contains(err.Error(), "this string is never closed") {
+		t.Errorf("expected an AQL-voice syntax_error, got %q", err.Error())
 	}
 }
 
