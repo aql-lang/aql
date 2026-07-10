@@ -1300,6 +1300,11 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		Impl:       AQL(bodyElems),
 		BarrierPos: barrierPos,
 		QuoteArgs:  eng.QuoteArgsFromParams(params),
+		// The lambda dispatches from this authored FnSig directly (no
+		// normalizeSig), so carry value/keyword patterns onto it too —
+		// otherwise a keyword param (`in/q`) would capture any word
+		// instead of only its literal. See eng.PatternsFromParams.
+		Patterns: eng.PatternsFromParams(params),
 	}
 	fnDef := FnDefInfo{
 		Signatures: []FnSig{sig},

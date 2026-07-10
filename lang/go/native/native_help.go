@@ -161,6 +161,32 @@ func FnDefFromValue(v Value) (*FnDefInfo, bool) {
 // module wrappers declare them explicitly — falling back to inferReturns for
 // core words whose Returns are derived. Shared by the qualified-name path
 // above and any caller that already holds an FnDefInfo (e.g. the CLI).
+// sigKeywordSlots returns the KEYWORD-slot render overrides for a
+// signature: a position with a /q flag AND a concrete Atom pattern
+// admits exactly one literal word, and displays as `<word>/q` (e.g.
+// def's `def name fn [...]` form shows position 1 as `fn/q`). Nil when
+// the signature has no keyword slots. Shared by the two SigInfo
+// builders so describe/help render both def-form paths identically.
+func sigKeywordSlots(sig Signature) map[int]string {
+	var kw map[int]string
+	for i, pat := range sig.Patterns {
+		// A keyword slot is a /q position with a CONCRETE Atom pattern.
+		// IsConcrete filters bare atom nodes / type literals, so the
+		// AsAtom below always yields the name (err path is a plain skip,
+		// no separate branch).
+		if !sig.QuoteArgs[i] || !IsConcrete(pat) || !pat.Parent.ConformsTo(TAtom) {
+			continue
+		}
+		if name, err := AsAtom(pat); err == nil {
+			if kw == nil {
+				kw = map[int]string{}
+			}
+			kw[i] = name + "/q"
+		}
+	}
+	return kw
+}
+
 func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
 	info := &help.FuncInfo{
 		Name:        display,
@@ -177,7 +203,7 @@ func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
 		if sig.Fallback {
 			continue
 		}
-		si := help.SigInfo{BarrierPos: sig.BarrierPos}
+		si := help.SigInfo{BarrierPos: sig.BarrierPos, Keywords: sigKeywordSlots(sig)}
 		for _, t := range sig.ArgTypes() {
 			si.Args = append(si.Args, t.String())
 		}
@@ -232,7 +258,7 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 		if sig.Fallback {
 			continue
 		}
-		si := help.SigInfo{BarrierPos: sig.BarrierPos}
+		si := help.SigInfo{BarrierPos: sig.BarrierPos, Keywords: sigKeywordSlots(sig)}
 		for _, t := range sig.ArgTypes() {
 			si.Args = append(si.Args, t.String())
 		}

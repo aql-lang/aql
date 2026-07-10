@@ -1025,6 +1025,23 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// or a codequote'd one (Quoted) is data — left via stepLiteral.
 			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
 				info, _ := AsReach(val)
+				// Strict barrier (AQL_STRICT_BARRIER): a dot-access chain
+				// beginning its own dispatch is a forward-collection
+				// barrier, like a plain function word — but it lowers to a
+				// paren-wrapped `( recv dot key )` span, so the per-word
+				// check in stepWord runs INSIDE that paren and can't see
+				// the outer parked forward. Check HERE, before the wrap,
+				// where the parked forward is still in scope (mirrors the
+				// stepWord hook): commit a committable guard first,
+				// otherwise strand. design/STRICT-FORWARD-BARRIER.0.md.
+				if strictForwardBarrier {
+					if e.commitBarrierForward() {
+						break // pointer moved to the committed word; loop re-steps it
+					}
+					if serr := e.strandedForwardError(reachBoundaryLabel(info)); serr != nil {
+						return nil, serr
+					}
+				}
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil {
@@ -1687,6 +1704,17 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				pos++
 				scanIdx++
 				continue
+			}
+			// Strict barrier (AQL_STRICT_BARRIER): a dot-access chain is a
+			// forward-collection barrier like a function word — do NOT
+			// pre-evaluate it into the collecting word's slot. Stop the
+			// scan; the collecting word parks, the Reach dispatches on its
+			// own, and the statement-level Reach hook (main loop) strands
+			// the parked word. Without this the paren-wrapped chain would
+			// be evaluated here and its result fed as a forward arg,
+			// silently bypassing the rule. design/STRICT-FORWARD-BARRIER.0.md.
+			if strictForwardBarrier {
+				break
 			}
 			info, _ := AsReach(tok)
 			e.tape.Splice(scanIdx, 1, expandReach(info)...)
@@ -3971,6 +3999,28 @@ func (e *Engine) expandParenExprScratch(items []Value) []Value {
 // evaluator (design/REACH.10.md §4): the chain is identical to the former
 // dot-access ParenExpr, so wrapping it with expandParenExpr and running it
 // in place reproduces exact get/getr semantics.
+// reachBoundaryLabel renders a readable dot-access label for the
+// strict-barrier stranded-forward error — e.g. `Rand.int` for the reach
+// `Rand.int 0 10`. Best-effort: a single-word receiver plus the first
+// literal segment key; falls back to "<dot-access>" for computed or
+// multi-token receivers.
+func reachBoundaryLabel(info ReachInfo) string {
+	recv := "<dot-access>"
+	if len(info.Receiver) == 1 {
+		if w, err := AsWord(info.Receiver[0]); err == nil {
+			recv = w.Name
+		} else if a, err := AsAtom(info.Receiver[0]); err == nil {
+			recv = a
+		}
+	}
+	if len(info.Segments) > 0 && !info.Segments[0].Computed {
+		if a, err := AsAtom(info.Segments[0].KeyLit); err == nil {
+			return recv + "." + a
+		}
+	}
+	return recv
+}
+
 func lowerReach(info ReachInfo) []Value {
 	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
 	out = append(out, info.Receiver...)

@@ -100,7 +100,7 @@ Three kernel seams make keyword slots sound (all in this change):
    def binds g. A signature whose keyword slot cannot match the token
    at its position is pruned before any group evaluation.
 
-### Constructor keyword forms (DONE) — strict-mode fallout is now zero
+### Constructor keyword forms (DONE) — the def-idiom corpus is strict-clean
 
 Every closed-set constructor now has a synthesized def keyword
 overload, so all the `def name <ctor> …` idioms are structural
@@ -120,8 +120,13 @@ that grows an overload propagates to def automatically:
   placeholders, so its evaluation is DEFERRED until the placeholders
   are bound — `defFormVia`).
 
-The result: **`TestSpecProd` under `AQL_STRICT_BARRIER=1` passes
-with zero failures** — the entire spec corpus is strict-clean.
+The result: the whole `def name <ctor> …` family is structural
+dispatch, so none of it strands under strict. (This is NOT the same
+as the whole spec corpus being strict-clean — see "Remaining
+strict-mode fallout" below. An earlier revision of this note claimed
+zero corpus fallout; that was a mismeasurement against a stale binary.
+The def-idiom family is clean; the non-def wait-through idioms are
+not, and the dot-access barrier below adds more.)
 
 Two constructors are deliberately NOT mirrored:
 
@@ -147,23 +152,44 @@ runs a captured constructor's own signature over the operands after
 the keyword, so the constructor's handler stays the single
 implementation.
 
-Known gap: dot-access dispatch (`Rand.int …`) routes around `stepWord`,
-so module-export words are not strict-checked by the prototype.
+### Dot-access is barrier'd too (DONE)
 
-## Measured fallout (lang/spec, TestSpecProd)
+A dot-access chain (`Rand.int …`, `m.a.b`) is a forward-collection
+barrier just like a plain function word: `print Rand.int 0 10` strands
+under strict; write `print (Rand.int 0 10)`. This closed a real gap —
+a Reach lowers to a paren-wrapped `( recv dot key )` span, so the
+per-word `stepWord` barrier check runs INSIDE that paren and never sees
+the outer parked forward, and the chain's result silently fed the
+forward. Two gated hooks fix it (`engine.go`): the forward-collection
+scan treats a Reach as a barrier (does not pre-evaluate it into the
+collecting word's slot — the collecting word parks), and the
+statement-level Reach branch runs the same commit-or-strand check as
+`stepWord` before the paren wrap, where the parked forward is still in
+scope. Both are gated on `strictForwardBarrier`, so default behaviour
+is byte-identical.
 
-Baseline: green. Strict: **18 rows across 11 files** — the entire
-dependent surface of the wait-through in the language's own spec corpus:
+## Remaining strict-mode fallout (lang/spec, TestSpecProd)
 
-| Idiom | Rows |
-|---|---|
-| Unary `Any` collector fed by a following call (`size iota 3`, `typeof iota 3`, `size range 2 5`, `not iota 3`, `not not 5`, `size/typeof/not def x 5 x`) | 8 |
-| Nullary fn word as an argument (`context eq context`, `context deq context`, `gensym eq gensym`, `typeof gensym`, `typeof tw2`) | 5 |
-| `quote` feeding a waiting slot (`foo/q eq quote foo`, `None dot quote x` ×2) | 3 |
-| def's bound value feeding a waiting bigger-arity fn (`g 1 def x 5 x` — forward-barrier.tsv §6, edge-forward-2) | 2 |
+Default (gate off): green. Under `AQL_STRICT_BARRIER=1`:
+
+- After the def constructor keyword forms (but before the dot-access
+  barrier): **~38 rows**. The def-idiom family is clean; what remains
+  is the genuinely non-def wait-through — unary `Any` collectors fed
+  by a following call (`size iota 3`, `not not 5`, `typeof iota 3`),
+  nullary fn words as arguments (`context eq context`, `typeof
+  gensym`), `quote` feeding a slot, `def s context` (a bare nullary
+  word as a def body), and the `context`/store idioms.
+- After the dot-access barrier landed: **~181 rows**. The jump is
+  correct — every `X.y` dot-access used in a forward position (a
+  pervasive idiom across the spec) was silently bypassing the rule
+  before and is now caught. These are genuine wait-through sites, not
+  regressions; each strands with the intended parens-hint error.
 
 Every failure is the intended kind (stranded-forward signature error
-with a parens hint); no silent meaning changes were observed.
+with a parens hint); no silent meaning changes. The migration is
+mechanical (wrap the collected call in parens), but it is ~181 spec
+rows plus any doc/README examples — the real cost of flipping the
+default (see "If adopted" #3).
 
 ## Assessment
 
@@ -190,22 +216,69 @@ Against:
 - The checker must mirror the rule for words whose binding kind is
   unknown at check time (forward references) — stays gradual there.
 
-## If adopted
+## Follow-ups
 
-1. ~~def story~~ ~~keyword overloads for the other closed-set
-   constructors~~ Both DONE (see the ruling and the constructor-forms
-   section above). Strict-mode spec fallout is zero. Remaining
-   follow-ups: a `make` keyword form (needs recorder plumbing so the
-   instance dispatch stays visible to the compiler); surface keyword
-   slots in `aql describe def` (help.SigInfo carries no per-slot
-   markers today); the AQL-authored surface — ParseFnParams already
-   carries value patterns and `FnParam.Quote`, so `fn/q` as a bare
-   patterned param in a sig literal is the natural spelling.
-2. Extend the check to the dot-access dispatch path.
-3. Flip the default (or keep the env gate for a migration window) —
-   the corpus is now strict-clean, so this is the remaining decision.
-3. Update the 18 spec rows (parenthesise) and pin the new errors as
-   negative rows; update forward-barrier.tsv §6's "keeps waiting" rows.
-4. Checker mirror + compile-pipeline parity (CompileCheck).
-5. Migration: the error message already teaches the fix; a `fmt`
-   auto-fix (insert parens) is mechanical.
+**Done:**
+
+- ~~def story~~ / ~~keyword overloads for the other closed-set
+  constructors~~ — the keyword-slot mechanism and the def constructor
+  forms (see the ruling and the constructor-forms section).
+- ~~Surface keyword slots in `aql describe`~~ — `help.SigInfo.Keywords`
+  renders a keyword slot as `fn/q` / `gen/q` / `<ctor>/q` instead of a
+  bare `Atom`, so `aql describe def` distinguishes every overload
+  (`native_help.go::sigKeywordSlots`, `help.go::writeSigs`). A
+  capture-any `/q` slot (no pattern, e.g. `quote`'s `[Atom]`) stays
+  bare.
+- ~~The AQL-authored surface~~ — a `/q` param whose atom names no type
+  is a KEYWORD slot: `def between fn [[a:Integer in/q b:Integer] …]`
+  matches only the literal word `in` (`fn_params.go::keywordParam`,
+  spec `lang/spec/keyword-slot.tsv`). This is the source spelling of
+  the def constructor forms — the syntax-rules-literal mechanism, for
+  user binder/DSL keywords — so keyword slots are now expressible in
+  the language itself, not a Go-only capability. (In `afn` the keyword
+  MATCHES correctly but the captured atom leaks onto the stack like any
+  afn unnamed param — a pre-existing afn arg-handling limitation,
+  orthogonal to keyword slots; the `fn` form is the canonical spelling.)
+- ~~Extend the check to the dot-access dispatch path~~ — the dot-access
+  barrier (above) fires in the check/compile passes too (shared step
+  loop), so `aql check` and the compiler agree with the interpreter.
+
+**Not done — and why:**
+
+- **`make` keyword form** — deliberately left paren-only. `make` is the
+  one INSTANCE constructor (fresh per-call identity, `OpMakeMap`
+  recorder events, `ReturnsFreshInstance`). The composite-form seam
+  `eng.DispatchSig` calls the handler directly, bypassing `execMatch`'s
+  check-mode intercept — so it misses the make-body auto-eval
+  (`RecordMakeMap`), the fresh-instance carrier, AND the `RecordCall`
+  that registers the instance's per-value provenance. A `make` routed
+  that way binds an instance of "unknown provenance" and any downstream
+  `(p0 add p1)` refuses to compile (`TestMergedWordSeam_ClassTuple`). A
+  correct make keyword form must route the inner construction through
+  `execMatch` (or desugar `def name make T {…}` → `def name (make T
+  {…})` at the parser). Both are more than the payoff: `def p (make P
+  {…})` already works everywhere, and under strict that paren is the
+  one-token cost. So make stays the single constructor without a
+  keyword form, by design.
+
+- **Check-mode diagnostic (vs hard error)** — the strand is a hard
+  `signature_error` in ALL modes (interp, check, compile), which is
+  already CONSISTENT (check and compile both fail at the same point).
+  Downgrading it to a "diagnostic + continue" in check mode — the usual
+  guaranteed-error-mirror treatment — is UNSOUND here: continuing past
+  the strand re-enables the wait-through the rule forbids, so the check
+  pass would compute the non-strict result while reporting a strand.
+  The barrier can't cleanly downgrade-and-continue, so the abort is
+  correct; left as-is.
+
+**The remaining decision:**
+
+- **Flip the default** vs keep the env gate. The corpus is NOT
+  strict-clean (~181 rows, see "Remaining strict-mode fallout"), so
+  flipping is a real migration: parenthesise ~181 spec rows plus any
+  doc/README examples, pin the new errors as negative rows, revisit
+  `forward-barrier.tsv` §6's "keeps waiting" rows, and (optionally) add
+  a `fmt` auto-fix that inserts the parens. This is a language-default
+  semantics change for all users — it removes the partial-Polish feel
+  (`not not 5`, `size iota 3`) — so it is a maintainer decision, not a
+  mechanical follow-up.

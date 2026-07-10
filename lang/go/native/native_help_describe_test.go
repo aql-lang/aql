@@ -96,3 +96,72 @@ func TestFormatDynamicModuleHeader(t *testing.T) {
 		t.Errorf("expected forward precedence:\n%s", out)
 	}
 }
+
+// TestBuildFuncInfoKeywordSlots pins that BuildFuncInfo carries the
+// keyword-slot render overrides for def's synthesized constructor
+// forms — position 1 of the `def name fn [...]` form is `fn/q`, while
+// the name-capture /q slot at position 0 (no pattern) stays bare.
+func TestBuildFuncInfoKeywordSlots(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := BuildFuncInfo(r, "def")
+	if info == nil {
+		t.Fatal("BuildFuncInfo(def) = nil")
+	}
+	var sawFnForm, sawGenChain bool
+	for _, s := range info.Sigs {
+		// The plain fn form: [Atom fn/q List] — pos 1 is the `fn` keyword.
+		if len(s.Args) == 3 && s.Keywords[1] == "fn/q" {
+			sawFnForm = true
+			if _, ok := s.Keywords[0]; ok {
+				t.Error("position 0 (name capture, no pattern) must NOT be a keyword slot")
+			}
+		}
+		// A gen chain: [Atom gen/q List <ctor>/q ...] — pos 1 is `gen`.
+		if len(s.Args) >= 4 && s.Keywords[1] == "gen/q" && s.Keywords[3] != "" {
+			sawGenChain = true
+		}
+	}
+	if !sawFnForm {
+		t.Error("no `def name fn [...]` form rendered position 1 as fn/q")
+	}
+	if !sawGenChain {
+		t.Error("no gen-chain form rendered gen/q + a ctor keyword")
+	}
+}
+
+// TestSigKeywordSlotsHelper unit-tests the shared populate helper: a /q
+// slot with an Atom pattern is a keyword; a /q slot with no pattern and
+// a non-/q slot are not.
+func TestSigKeywordSlotsHelper(t *testing.T) {
+	kwAtom := NewAtom("fn")
+	sig := Signature{
+		Args:      []*Type{TAtom, TAtom, TList},
+		QuoteArgs: map[int]bool{0: true, 1: true},
+		Patterns:  map[int]Value{1: kwAtom},
+	}
+	kw := sigKeywordSlots(sig)
+	if kw[1] != "fn/q" {
+		t.Errorf("position 1 = %q, want fn/q", kw[1])
+	}
+	if _, ok := kw[0]; ok {
+		t.Error("position 0 (/q, no pattern) must not be a keyword slot")
+	}
+	// A sig with no keyword slots yields nil.
+	plain := Signature{Args: []*Type{TInteger}}
+	if sigKeywordSlots(plain) != nil {
+		t.Error("a plain sig must yield nil keyword slots")
+	}
+	// Defensive: a /q slot whose pattern conforms to Atom but is a BARE
+	// atom type literal (no payload) is skipped, not rendered.
+	bareLit := Signature{
+		Args:      []*Type{TAtom},
+		QuoteArgs: map[int]bool{0: true},
+		Patterns:  map[int]Value{0: NewTypeLiteral(TAtom)},
+	}
+	if sigKeywordSlots(bareLit) != nil {
+		t.Error("a bare-atom-literal pattern must not render as a keyword")
+	}
+}

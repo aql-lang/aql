@@ -92,17 +92,20 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 		// whose name is a type therefore IS the quote declaration: the
 		// slot captures an upcoming bare Word as its Atom name during
 		// collection (presented as if quoted), like a native QuoteArgs
-		// slot. An atom that does NOT name a type falls through to the
-		// invalid-parameter error below, preserving that space.
-		// DepScalars are excluded (a dependent atom type like
-		// `(Atom gt foo/q)` shares Parent=TAtom but is a predicate
-		// constraint, handled by ResolveSigType's pattern path).
+		// slot. An atom that does NOT name a type is a KEYWORD slot —
+		// it matches exactly the literal word `tn` (see keywordParam and
+		// patternsOk's keyword branch). DepScalars are excluded (a
+		// dependent atom type like `(Atom gt foo/q)` shares Parent=TAtom
+		// but is a predicate constraint, handled by ResolveSigType's
+		// pattern path).
 		if elem.Parent.Equal(TAtom) && IsConcrete(elem) && !elem.IsDepScalar() {
 			if tn, aerr := AsAtom(elem); aerr == nil {
 				if qt, qerr := lookupTypeNameInRegistry(r, tn); qerr == nil {
 					params = append(params, FnParam{Type: qt, Quote: true})
 					continue
 				}
+				params = append(params, keywordParam("", tn))
+				continue
 			}
 		}
 
@@ -179,12 +182,17 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 				if typeVal.Parent.Equal(TAtom) && IsConcrete(typeVal) && !typeVal.IsDepScalar() {
 					tn, aerr := AsAtom(typeVal)
 					if aerr == nil {
-						qt, qerr := lookupTypeNameInRegistry(r, tn)
-						if qerr != nil {
-							return nil, 0, fmt.Errorf("function spec: invalid type for %q: %w", name, qerr)
-						}
 						if err := ValidateWordName(name); err != nil {
 							return nil, 0, fmt.Errorf("function spec: %w", err)
+						}
+						qt, qerr := lookupTypeNameInRegistry(r, tn)
+						if qerr != nil {
+							// `name:kw/q` where kw names no type — a KEYWORD
+							// slot bound to `name` (see keywordParam).
+							kp := keywordParam(name, tn)
+							kp.Optional = optional
+							params = append(params, kp)
+							continue
 						}
 						params = append(params, FnParam{Name: name, Type: qt, Optional: optional, Quote: true})
 						continue
@@ -232,12 +240,19 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					typeName = strings.TrimSuffix(typeName, "/q")
 					quote = true
 				}
-				paramType, err := lookupTypeNameInRegistry(r, typeName)
-				if err != nil {
-					return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
-				}
 				if err := ValidateWordName(paramName); err != nil {
 					return nil, 0, fmt.Errorf("function spec: %w", err)
+				}
+				paramType, err := lookupTypeNameInRegistry(r, typeName)
+				if err != nil {
+					// `name:kw/q` where kw names no type — a KEYWORD slot.
+					if quote {
+						kp := keywordParam(paramName, typeName)
+						kp.Optional = optional
+						params = append(params, kp)
+						continue
+					}
+					return nil, 0, fmt.Errorf("function spec: invalid type %q: %w", typeName, err)
 				}
 				params = append(params, FnParam{Name: paramName, Type: paramType, Optional: optional, Quote: quote})
 				continue
@@ -290,6 +305,37 @@ func QuoteArgsFromParams(params []FnParam) map[int]bool {
 		}
 	}
 	return qa
+}
+
+// PatternsFromParams collects the per-position value patterns from a
+// param list into the Signature.Patterns shape. The afn/lambda path
+// builds its FnSig directly (no normalizeSig), so it needs this to
+// carry a keyword slot's Atom pattern (or any value pattern) onto the
+// dispatch-side sig; the `fn`/`def` path gets it for free from
+// normalizeSig.
+func PatternsFromParams(params []FnParam) map[int]Value {
+	var pats map[int]Value
+	for i, p := range params {
+		if p.Pattern != nil {
+			if pats == nil {
+				pats = make(map[int]Value)
+			}
+			pats[i] = *p.Pattern
+		}
+	}
+	return pats
+}
+
+// keywordParam builds a KEYWORD-slot param: a /q slot whose concrete
+// Atom pattern (`kw`) admits exactly the literal word `kw` at dispatch
+// (patternsOk's keyword branch, eng/go/match.go). It is the AQL-source
+// spelling of the def constructor forms' keyword slots — an atom `kw/q`
+// (or `name:kw/q`) whose name is NOT a type. Binding-agnostic like every
+// /q slot: the captured value is the Atom `kw`, bound to `name` when
+// named.
+func keywordParam(name, kw string) FnParam {
+	pat := NewAtom(kw)
+	return FnParam{Name: name, Type: TAtom, Quote: true, Pattern: &pat}
 }
 
 // ParseFnReturns extracts return types from an output signature.
