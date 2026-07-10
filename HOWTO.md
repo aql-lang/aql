@@ -1027,9 +1027,10 @@ convention, use a recipe — `--for=<tool>` presents the secret exactly
 how that publisher reads it (npm needs no `~/.npmrc` at all):
 
 ```
-aql vault exec --for=npm   npm_token  -- npm publish
-aql vault exec --for=cargo crates_tok -- cargo publish
-aql vault exec --for=pypi  pypi_token -- twine upload dist/*
+aql vault exec --for=npm     npm_token   -- npm publish
+aql vault exec --for=cargo   crates_tok  -- cargo publish
+aql vault exec --for=pypi    pypi_token  -- twine upload dist/*
+aql vault exec --for=hackage hackage_key -- stack upload .   # Stack reads HACKAGE_KEY from env
 ```
 
 `--for` is **repeatable**, and each entry can name its own secret as
@@ -1042,8 +1043,8 @@ aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
 ```
 
 Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
-`pypi`/`uv`/`poetry`/`hatch`/`flit`, `cargo`, `gem`, `hex`, `swift`,
-`cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
+`pypi`/`uv`/`poetry`/`hatch`/`flit`, `cargo`, `gem`, `hex`, `hackage`,
+`swift`, `cocoapods`, `composer`, `github`, `gitlab`, `terraform` (use
 `--registry=HOST` for the registry-scoped ones). The full table is in
 [CLI.md → Publishing](CLI.md#publishing-a-package-with-a-vault-held-token).
 

@@ -26,6 +26,7 @@ func TestPublishRecipeEnv(t *testing.T) {
 		{"cargo", map[string]string{"CARGO_REGISTRY_TOKEN": "S"}},
 		{"gem", map[string]string{"GEM_HOST_API_KEY": "S"}},
 		{"hex", map[string]string{"HEX_API_KEY": "S"}},
+		{"hackage", map[string]string{"HACKAGE_KEY": "S"}},
 		{"swift", map[string]string{"SWIFTPM_REGISTRY_TOKEN": "S"}},
 		{"cocoapods", map[string]string{"COCOAPODS_TRUNK_TOKEN": "S"}},
 		{"github", map[string]string{"GH_TOKEN": "S", "GITHUB_TOKEN": "S"}},

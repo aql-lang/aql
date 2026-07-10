@@ -97,6 +97,16 @@ var publishRecipes = map[string]publishRecipe{
 		return map[string]string{"HEX_API_KEY": s}
 	}},
 
+	// --- Haskell ---
+	"hackage": {name: "hackage", env: func(s, _ string) map[string]string {
+		// Hackage API token (revocable, replaces the account password).
+		// `stack upload` reads HACKAGE_KEY from the environment directly —
+		// the pure-env case. `cabal upload` instead takes the token as an
+		// argument, so a Cabal user passes `--token "$HACKAGE_KEY"` (which
+		// puts the secret in argv — see the argv note in CLI.md).
+		return map[string]string{"HACKAGE_KEY": s}
+	}},
+
 	// --- Swift / iOS ---
 	"swift": {name: "swift", env: func(s, _ string) map[string]string {
 		return map[string]string{"SWIFTPM_REGISTRY_TOKEN": s}
