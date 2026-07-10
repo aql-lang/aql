@@ -6,7 +6,7 @@ import (
 
 	"github.com/aql-lang/aql/lang/go"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // makeTestSDKForDirect creates a UniversalSDK in test mode with entity data.

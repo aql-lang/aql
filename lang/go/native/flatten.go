@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "flatten" word is registered via the consolidated Natives slice in

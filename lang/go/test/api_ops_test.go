@@ -6,7 +6,7 @@ import (
 
 	"github.com/aql-lang/aql/lang/go"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // makeTestSDKForOps creates a UniversalSDK in test mode with inline entity data

@@ -1,0 +1,16 @@
+go 1.24.7
+
+// Development workspace. Sibling modules build from in-tree source here.
+// Before the first tagged release the module go.mods still carry local
+// `replace ../…` directives (which take precedence); `make release` strips
+// those and pins real versions, after which this workspace is what lets the
+// clean, replace-free go.mods still build locally.
+use (
+	./eng/go
+	./lang/go
+	./cmd/go
+	./calc/go
+	./wpg
+	./test/go
+	./test/solardemo
+)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aql-lang/aql/eng/go"
-	voxgigstruct "github.com/voxgig/struct"
+	voxgigstruct "github.com/voxgig/struct/go"
 )
 
 // The "jsonify" word is registered via the consolidated Natives slice in

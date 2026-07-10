@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	udk "voxgiguniversalsdk"
+	udk "github.com/voxgig/udk/go"
 )
 
 // Seam-7 coverage for prepare.go (design/TEST-SEAMS.10.md).

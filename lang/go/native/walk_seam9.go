@@ -1,6 +1,6 @@
 package native
 
-import voxgigstruct "github.com/voxgig/struct"
+import voxgigstruct "github.com/voxgig/struct/go"
 
 // w9ItemsFn seams voxgigstruct.Items for items.go's non-string-key
 // fallback (itemsHandler stringifies a non-string key). voxgigstruct.Items
