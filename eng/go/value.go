@@ -136,11 +136,30 @@ func (m *OrderedMap) Delete(key string) bool {
 // Absolute paths start from the root (Abs = true).
 type PathonInfo struct {
 	Parts []string // path segments (e.g. ["usr", "local", "bin"])
-	Abs   bool     // true for absolute paths (e.g. /usr/local/bin)
+	Abs   bool     // true for absolute/rooted paths (e.g. /usr/local/bin, C:\Windows)
+	// Volume is a Windows drive prefix ("C:"), or empty for a POSIX /
+	// driveless path. When set, the path renders in canonical Windows
+	// (backslash) form.
+	Volume string
 }
 
-// String returns the OS path string for this path.
+// String returns the canonical path string. A driveless path renders
+// POSIX-style with "/"; a drive path renders with "\" — "C:\a\b", or
+// "C:a\b" when drive-relative (no separator after the colon).
 func (p PathonInfo) String() string {
+	if p.Volume != "" {
+		body := strings.Join(p.Parts, `\`)
+		if p.Abs {
+			if body == "" {
+				return p.Volume + `\`
+			}
+			return p.Volume + `\` + body
+		}
+		if body == "" {
+			return p.Volume
+		}
+		return p.Volume + body // drive-relative: C:a\b
+	}
 	joined := strings.Join(p.Parts, "/")
 	if p.Abs {
 		return "/" + joined
@@ -1774,9 +1793,17 @@ func SetAtomReferent(v Value, ref Value) Value {
 
 // NewPathon creates a Pathon value from parts and an absolute flag.
 func NewPathon(parts []string, abs bool) Value {
+	return NewPathonVol("", parts, abs)
+}
+
+// NewPathonVol builds a Pathon carrying a Windows drive volume ("C:"), or ""
+// for a POSIX / driveless path. Use this (not NewPathon) whenever a Pathon is
+// reconstructed from an existing PathonInfo, so a drive path's volume is not
+// silently dropped (e.g. an IO word returning its input path).
+func NewPathonVol(volume string, parts []string, abs bool) Value {
 	p := make([]string, len(parts))
 	copy(p, parts)
-	return NewValueRaw(TPathon, PathonPayload{Info: PathonInfo{Parts: p, Abs: abs}})
+	return NewValueRaw(TPathon, PathonPayload{Info: PathonInfo{Volume: volume, Parts: p, Abs: abs}})
 }
 
 // NewTypeLiteral returns the type t expressed as a Value. After the

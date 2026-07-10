@@ -618,7 +618,7 @@ through `.` / `get`. Five leaves are built in:
 
 | Type | Construct from | Properties (derived in bold) |
 |---|---|---|
-| `Pathon` | a `String` (`'a/b'`) or a `List` of segments | `parts`, `abs` |
+| `Pathon` | a `String` (`'a/b'`, or a Windows drive `'C:/Windows'`) or a `List` of segments | `parts`, `abs`, `volume` |
 | `Emailon` | a plain `user@host` string, or a `{user host}` map | `user`, `host`, **`address`** |
 | `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
 | `Ipon` | an IPv4/IPv6 address string (`net.ParseIP`-validated), or an `{addr}` map | `addr` (canonical), `version` (`4`/`6`) |
@@ -634,6 +634,16 @@ through `.` / `get`. Five leaves are built in:
 (`Pathon` is the former `Scalar/Path`, moved into the family under its
 new name — the bare `Path` name no longer resolves; change `make Path`
 to `make Pathon`.)
+
+`Pathon` also parses **Windows drive paths**: a `C:` drive prefix is
+recorded as the `volume` (`'C:/Windows'` → `volume` `'C:'`), either
+slash separates segments, and the path renders in canonical backslash
+form (`C:\Windows`), so `C:/x` is content-equal to `C:\x`. A drive path
+is absolute when a separator follows the colon (`C:\x`) and
+drive-relative otherwise (`C:x`). Anything without a drive prefix stays
+POSIX — only `/` splits, `\` is an ordinary character, and the `volume`
+is empty (so `'//a//b'` is `/a/b`, never a volume). (Write drive paths
+with `/` in AQL source — single-quoted strings treat `\` as an escape.)
 
 Both construction forms run the *same* validator — the map form
 re-renders through the string parser — and the derived properties

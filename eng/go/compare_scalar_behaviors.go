@@ -406,9 +406,10 @@ func comparePathons(a, b Value) int {
 		return -1
 	case ap.Abs && !bp.Abs:
 		return 1
-	default:
-		return 0
 	}
+	// Otherwise identical structure — order by volume so drive/UNC paths
+	// stay distinct and totally ordered (driveless "" sorts first).
+	return strings.Compare(ap.Volume, bp.Volume)
 }
 
 // init attaches the scalar Comparers to their owning kernel types.
