@@ -7,12 +7,12 @@ binary path if `aql` is not on your PATH.
 
 ## What the server provides
 
-| Capability    | Backed by                                |
-| ------------- | ---------------------------------------- |
-| Diagnostics   | `lang.Check` (errors + warnings)         |
-| Hover         | `help.FormatDynamic` / `help.Format`     |
-| Completion    | `help.Words` (all registered words)      |
-| Formatting    | `formatter.Format` (whole-buffer)        |
+| Capability    | Backed by                                                       |
+| ------------- | --------------------------------------------------------------- |
+| Diagnostics   | `lang.Check` (errors + warnings)                                |
+| Hover         | `help.FormatDynamic` / `help.Format`                            |
+| Completion    | member-aware after `RECV.` (Micron properties, class/record/table fields, module exports, map keys); the full word list otherwise |
+| Formatting    | `formatter.Format` (whole-buffer)                               |
 
 ## Transports
 
