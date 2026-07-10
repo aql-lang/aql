@@ -360,6 +360,9 @@ var (
 	TypePathOf                = eng.TypePathOf
 	ValueType                 = eng.ValueType
 	NewNone                   = eng.NewNone
+	NewNegation               = eng.NewNegation
+	IsNegation                = eng.IsNegation
+	AsNegation                = eng.AsNegation
 	FormatFloat               = eng.FormatFloat
 	NewTypedListWithElements  = eng.NewTypedListWithElements
 	NewTypedMapWithEntries    = eng.NewTypedMapWithEntries

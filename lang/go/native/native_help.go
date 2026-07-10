@@ -178,8 +178,8 @@ func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
 			continue
 		}
 		si := help.SigInfo{BarrierPos: sig.BarrierPos}
-		for _, t := range sig.ArgTypes() {
-			si.Args = append(si.Args, t.String())
+		for j, t := range sig.ArgTypes() {
+			si.Args = append(si.Args, sigArgDisplay(&sig, j, t))
 		}
 		if len(sig.Returns) > 0 {
 			for _, t := range sig.Returns {
@@ -191,6 +191,40 @@ func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
 		info.Sigs = append(info.Sigs, si)
 	}
 	return info
+}
+
+// sigArgDisplay renders the declared type at sig position i for the
+// describe listing. A negation Pattern on the slot (e.g. fn's triple
+// form, whose input slot is `Any` constrained by `tnot List`) IS the
+// dispatch-visible contract, so it displays as `(tnot List)` instead of
+// the bare slot type. All other patterns keep the historical bare-type
+// rendering.
+func sigArgDisplay(sig *Signature, i int, t *Type) string {
+	pat, ok := sigDisplayPattern(sig, i)
+	if !ok || !IsNegation(pat) {
+		return t.String()
+	}
+	ni, _ := AsNegation(pat) // payload presence guaranteed by IsNegation
+	inner := ni.Inner
+	if IsBareTypeNode(inner) {
+		return "(tnot " + (&inner).Leaf() + ")"
+	}
+	return "(tnot " + inner.String() + ")"
+}
+
+// sigDisplayPattern returns the Pattern declared at sig position i,
+// consulting Params first (the normalized store) and falling back to
+// the positional Patterns mirror for a sig that has not been
+// normalized (mirrors eng's unexported sigPattern).
+func sigDisplayPattern(sig *Signature, i int) (Value, bool) {
+	if i < len(sig.Params) && sig.Params[i].Pattern != nil {
+		return *sig.Params[i].Pattern, true
+	}
+	if len(sig.Params) == 0 && sig.Patterns != nil {
+		p, ok := sig.Patterns[i]
+		return p, ok
+	}
+	return Value{}, false
 }
 
 // fnDefForwardEligible reports whether any signature can collect forward
@@ -233,8 +267,8 @@ func BuildFuncInfo(r *Registry, name string) *help.FuncInfo {
 			continue
 		}
 		si := help.SigInfo{BarrierPos: sig.BarrierPos}
-		for _, t := range sig.ArgTypes() {
-			si.Args = append(si.Args, t.String())
+		for j, t := range sig.ArgTypes() {
+			si.Args = append(si.Args, sigArgDisplay(&sig, j, t))
 		}
 		// Infer return types from the handler by running with zero values
 		// is not feasible, so we use the arg types as hints.

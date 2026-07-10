@@ -1456,13 +1456,19 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// pruneViable drops every signature that a concrete forward value at
 	// position pos definitely rules out (parity with matchSignature's
 	// per-position rejection). Raw/Form/TypeArg slots and Any slots are
-	// never used to prune (conservative — keep the signature viable).
+	// never used to prune (conservative — keep the signature viable);
+	// a concrete Pattern on the slot prunes exactly as patternsOk would
+	// reject the position (forwardPatternRejects) — fn's `tnot List`
+	// triple sig must fall out of the viable set on a spec-list token,
+	// or its 3-token window pre-evaluates groups past the call.
 	pruneViable := func(pos int, v Value) {
 		kept := viable[:0]
 		for _, vs := range viable {
 			keep := true
 			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) {
 				if et := sigArgType(vs.sig, pos); !et.Equal(TAny) && !sigArgMatches(vs.sig, pos, v) {
+					keep = false
+				} else if forwardPatternRejects(vs.sig, pos, v) {
 					keep = false
 				}
 			}
@@ -1471,6 +1477,47 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			}
 		}
 		viable = kept
+	}
+
+	// prunePatterns is the PATTERN-ONLY prune for values whose TYPE must
+	// not prune (a collapsed paren result — multi-value accounting — or a
+	// def-bound word's binding, whose matchSignature treatment is
+	// contextual). The pattern verdict is position-exact either way: the
+	// value tested is what matchSignature's patternsOk will test at this
+	// position, so a definite concrete-pattern rejection (the same
+	// forwardPatternRejects parity pruneViable uses) is sound. Quote slots
+	// are exempt — a /q position captures the word's NAME, not its
+	// binding.
+	prunePatterns := func(pos int, v Value) {
+		kept := viable[:0]
+		for _, vs := range viable {
+			keep := true
+			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) &&
+				!(vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos]) &&
+				forwardPatternRejects(vs.sig, pos, v) {
+				keep = false
+			}
+			if keep {
+				kept = append(kept, vs)
+			}
+		}
+		viable = kept
+	}
+
+	// pruneResolvedPatterns applies prunePatterns to a token, resolving a
+	// WORD through Defs.Top first — the same resolution patternsOk applies
+	// before unifying — so the pattern is tested against the binding the
+	// matcher will actually see. An unbound word never prunes.
+	pruneResolvedPatterns := func(pos int, tok Value) {
+		if IsWord(tok) {
+			if wi, werr := AsWord(tok); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					prunePatterns(pos, top)
+				}
+			}
+			return
+		}
+		prunePatterns(pos, tok)
 	}
 
 	pos := 0
@@ -1510,7 +1557,16 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			// it as one resolved position and advance, exactly as the
 			// former scan did. (The result's runtime type is not used to
 			// prune further: a group can collapse to zero or many values,
-			// so we keep the conservative one-slot accounting.)
+			// so we keep the conservative one-slot accounting.) A concrete
+			// PATTERN mismatch does prune: whatever now sits at scanIdx is
+			// exactly what matchSignature will test at this sig position,
+			// so a sig whose pattern definitely rejects it can never be
+			// selected here — without this, a paren-spelled spec list
+			// (`fn (quote [[…]]) …`) left fn's 3-token triple window open
+			// and pre-evaluated the NEXT statement's groups. A WORD at
+			// scanIdx (the group collapsed to zero values and the next
+			// token slid in) prunes only through its resolved binding.
+			pruneResolvedPatterns(pos, e.tape.At(scanIdx))
 			pos++
 			scanIdx++
 			continue
@@ -1649,6 +1705,15 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// former scan, groups beyond a NON-FUNCTION word remain reachable.
 		if mt, kind := e.staticForwardType(tok); kind == fwdValue {
 			pruneViable(pos, mt)
+		} else if IsWord(tok) {
+			// A def-bound word's TYPE stays un-pruned (contextual), but
+			// its concrete-PATTERN verdict is exact — patternsOk resolves
+			// the word through Defs.Top the same way before unifying — so
+			// a sig whose pattern rejects the binding can never be
+			// selected with this word at this position. Without this, a
+			// word-spelled spec list (`def sw quote [[…]]  fn sw …`) left
+			// fn's 3-token triple window open past the call.
+			pruneResolvedPatterns(pos, tok)
 		}
 		pos++
 		scanIdx++
@@ -6883,6 +6948,16 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					for j := 0; j < remaining; j++ {
 						ri := len(resolvedIdx) - 1 - j
 						positions[fwd+j] = resolvedIdx[ri]
+					}
+					// Pattern gate — this selection point must enforce
+					// Patterns exactly like the full-forward (above) and
+					// normal-stack (below) returns, or a sig whose
+					// pattern rejects a filled position is selected
+					// anyway (fn's tnot-List triple sig would claim a
+					// spec-list call made inside an enclosing pending
+					// forward with stack values available).
+					if !patternsOk(sig, positions, e.tape, fwd, e.registry) {
+						continue
 					}
 					if preferWordSig && !isPreferred {
 						if bestDeferred == nil {

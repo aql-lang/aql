@@ -1228,6 +1228,30 @@ bad                           # returns [aql/type_error] return value 1: expecte
 Multiple triples declare overloads (the engine tries each in order);
 multiple output types declare multiple return values.
 
+**The 3-arg single-triple form.** For the common single-signature
+case, `fn` also accepts one triple directly, without the wrapping
+list: `fn input output body`. Its signature is
+`[(tnot List) Any Any]` — the input must NOT be a list, so the two
+forms stay disjoint: a list following `fn` always means the spec-list
+form. The non-list input is auto-wrapped as a one-param list (the
+same abbreviation `afn` uses), so a bare type, a `name:Type` pair, or
+a literal value pattern all work:
+
+```
+def inc fn n:Integer [Integer] [add n 1]     # ≡ fn [[n:Integer] [Integer] [add n 1]]
+inc 5                         # returns 6
+
+def add10 fn Integer [Integer] [10 add]     # unnamed param, body reads the stack
+add10 5                       # returns 15
+```
+
+Multi-param triples, overloads, bare positional `?` markers, and `|`
+barriers need the spec-list form (the input list is where they live);
+the `x?:Type` optional suffix works in both forms. Like every
+forward-collecting word, a *truncated* triple (`fn input output` with
+no body) keeps collecting into the following code — end the statement
+with `;` to get the missing-operand error at the right place.
+
 **`/q` params capture names.** A param typed `Atom/q` takes the next
 *bare word* as its atom name — the argument is presented as if quoted,
 exactly like the built-in name-takers (`def`, `inspect`, `quote`) —
@@ -1303,8 +1327,9 @@ The body must be **one** token — wrap multi-token bodies as `[…]` or
 associatively, as in `make-adder` above: each inner lambda is
 constructed at call time with the outer params bound and captured.
 The arrow produces exactly one signature with return type `Any`; for
-declared returns or multiple overloads use the full
-`fn [[input] [output] [body] …]` form.
+a declared return use the 3-arg triple form `fn input output body`
+(non-list input, see [`fn` shape](#fn-shape)), and for multiple
+overloads use the full `fn [[input] [output] [body] …]` form.
 
 Parameter and return annotations may name **any** type — builtins,
 and user-defined types introduced with `def NAME refine …`. A value
