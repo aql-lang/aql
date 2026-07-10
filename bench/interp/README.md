@@ -81,3 +81,25 @@ second-pass start. The compiled VM also gained (~15–20 %) from the
 ID-elision and type-equality work. Analysis, per-fix notes, and the
 closing assessment of what remains (and why the VM is the performance
 story): `design/INTERPRETER-PYTHON-PARITY.10.md`.
+
+After the `Type.Equal` interval-label fast path (2026-07, same box;
+best-of-5, wall-clock incl. ~14 ms startup):
+
+| workload | aql-interp (before → after) | Δ |
+|---|---:|---:|
+| fib      | 4,387 ms → 4,028 ms | −8.2 % |
+| loopsum  | 1,454 ms → 1,350 ms | −7.1 % |
+| nestloop | 1,219 ms → 1,147 ms | −5.9 % |
+
+A fresh CPU profile put `Type.Equal` at the top of the interpreter flat
+profile (~13 %), driven almost entirely by the per-token marker-predicate
+cascade (`IsWord` / `IsOpenParen` / `IsForward` / …): each predicate did
+a `v.Parent.Equal(TMarker)` that, on the overwhelmingly common *mismatch*,
+fell through to a 14-char ID **string** compare. `Equal` now settles
+labelled-builtin pairs with an int compare on the DFS interval label
+(`In`) it already carries, so the string compare is skipped on every such
+step. Pure-CPU, allocation-neutral, semantics-identical (the `In` path is
+only taken when both nodes are labelled builtins, where `In`-equality is
+exactly `ID`-equality). This is why the Ruby gap on these shapes is
+mostly *fixed per-token dispatch overhead* a tree-walker re-pays every
+step — see the top-of-file Ruby note for the startup-adjusted comparison.

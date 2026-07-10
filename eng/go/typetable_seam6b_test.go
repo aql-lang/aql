@@ -399,3 +399,76 @@ func TestS6b1PrevBehaviorChain(t *testing.T) {
 		t.Errorf("PrevBehavior(plain) = %v %v, want nil false", prev, ok)
 	}
 }
+
+// TestEqualIntervalLabelInvariant pins the soundness contract of the
+// interval-label fast path in (*Type).Equal: among nodes carrying a DFS
+// interval label (In > 0), In is a UNIQUE per-node identity and In-equality
+// is EXACTLY ID-equality. If either invariant ever breaks — a future change
+// to labelIntervals, or a labelled node minted outside the builtin table —
+// the fast path would silently mis-answer identity, so this test guards it
+// directly rather than relying on downstream dispatch to notice.
+func TestEqualIntervalLabelInvariant(t *testing.T) {
+	var nodes []*Type
+	for _, n := range Builtin.byID {
+		nodes = append(nodes, n)
+	}
+	if len(nodes) == 0 {
+		t.Fatal("no builtin nodes")
+	}
+
+	// Every labelled node has a unique In (the fast path treats In-equality
+	// as node identity, which is only sound if In never collides).
+	seen := map[int]string{}
+	labelled := 0
+	for _, n := range nodes {
+		in := n.In()
+		if in <= 0 {
+			continue
+		}
+		labelled++
+		if prev, dup := seen[in]; dup {
+			t.Errorf("In=%d shared by two nodes: %q and %q", in, prev, n.ID)
+		}
+		seen[in] = n.ID
+	}
+	if labelled == 0 {
+		t.Fatal("no labelled builtin nodes — labelIntervals did not run")
+	}
+
+	// Equal (which uses the In fast path) must agree with pure ID/tmeta
+	// identity for every pair — both the equal case and, crucially, the
+	// mismatch case (the negative half of the contract).
+	idIdentity := func(a, b *Type) bool {
+		if a == b {
+			return true
+		}
+		if a.tmeta != nil && a.tmeta == b.tmeta {
+			return true
+		}
+		return a.ID != "" && a.ID == b.ID
+	}
+	sawMismatchPair := false
+	for _, a := range nodes {
+		for _, b := range nodes {
+			want := idIdentity(a, b)
+			if got := a.Equal(b); got != want {
+				t.Errorf("Equal(%q,%q)=%v, ID-identity=%v (In %d vs %d)",
+					a.ID, b.ID, got, want, a.In(), b.In())
+			}
+			if !want {
+				sawMismatchPair = true
+			}
+		}
+	}
+	if !sawMismatchPair {
+		t.Fatal("no distinct-node pair exercised — negative case unverified")
+	}
+
+	// Spot-check the two labelled builtins the marker predicates hit hottest.
+	if !TInteger.Equal(TInteger) {
+		t.Error("TInteger.Equal(TInteger) = false, want true")
+	}
+	if TInteger.Equal(TOpenParen) {
+		t.Error("TInteger.Equal(TOpenParen) = true, want false (distinct builtins)")
+	}
+}
