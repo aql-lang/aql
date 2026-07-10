@@ -269,7 +269,9 @@ func isStaticZeroIntDivisor(v Value) bool {
 func apdBin(fn func(d, x, y *apd.Decimal) (apd.Condition, error), x, y *apd.Decimal) (Value, error) {
 	out := new(apd.Decimal)
 	if _, err := fn(out, x, y); err != nil {
-		return Value{}, err
+		// Normalise the library error into the arith_error taxonomy the
+		// check pass already uses for the same failures (phase 5).
+		return Value{}, eng.MakeAqlError("arith_error", err.Error(), "", "", "")
 	}
 	return NewBigDecimal(out), nil
 }

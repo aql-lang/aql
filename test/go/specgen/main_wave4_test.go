@@ -18,7 +18,7 @@ import (
 // flags it statically (design/CHECKER-COMPLETION.0.md) so it classifies
 // classCheck now; the div is moved inside a fn body, where the mirror's
 // reachability gate keeps the checker silent: the program checks clean
-// and compiles, yet fails at run with a bare "division by zero" —
+// and compiles, yet fails at run with a bare out-of-bounds read —
 // errorClass yields the generic "ERROR:", and the classifier
 // substitutes the "error" detail.
 func TestW4ClassifyFrontierBareErrorDetail(t *testing.T) {
@@ -28,7 +28,7 @@ func TestW4ClassifyFrontierBareErrorDetail(t *testing.T) {
 	}
 	a.SetClock(specClock)
 
-	cl, detail, compiled := classifyFrontier(a, "def w4d fn [[n:Integer] [Integer] [1 div n]] w4d 0")
+	cl, detail, compiled := classifyFrontier(a, "def w4d fn [[n:Integer] [Integer] [[1 2] getr n]] w4d 5")
 	if cl != classRuntime {
 		t.Fatalf("class = %d, want classRuntime", cl)
 	}
@@ -36,7 +36,7 @@ func TestW4ClassifyFrontierBareErrorDetail(t *testing.T) {
 		t.Errorf("detail = %q, want the generic \"error\"", detail)
 	}
 	if !compiled {
-		t.Error("expected 1 0 div to compile")
+		t.Error("expected the OOB getr to compile")
 	}
 }
 
@@ -47,8 +47,8 @@ func TestW4ErrorClassBareMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, runErr := a.Run("1 0 div"); runErr == nil {
-		t.Fatal("1 0 div ran clean, want a runtime error")
+	if _, runErr := a.Run("[1 2] 5 getr"); runErr == nil {
+		t.Fatal("[1 2] 5 getr ran clean, want a runtime error")
 	} else if got := errorClass(runErr); got != "ERROR:" {
 		t.Errorf("errorClass = %q, want the bare ERROR: sentinel", got)
 	}

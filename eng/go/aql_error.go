@@ -76,6 +76,19 @@ type DiagSpan struct {
 	Source string
 }
 
+// DeclSite records where a contract was DECLARED — the fn output
+// signature a return check enforces — so the enforcing error can label
+// that location as a secondary span (design/DIAGNOSTICS.0.md, phase 5).
+// Source/File pin the text Pos indexes into, captured at declaration
+// time, because the declaring program (an imported module) may differ
+// from the one executing when the check fires. A zero DeclSite means
+// the declaration site is unknown (Go-registered sigs, tests).
+type DeclSite struct {
+	Pos    SrcPos
+	Source string
+	File   string
+}
+
 // DiagSuggestion is one actionable fix attached to an AqlError.
 type DiagSuggestion struct {
 	Message string `json:"message"` // "did you mean `upper`?"

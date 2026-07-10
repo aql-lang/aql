@@ -288,6 +288,40 @@ func TestErrorFormatReturnType(t *testing.T) {
 	_ = ae
 }
 
+func TestErrorFormatReturnTypeTwoSpans(t *testing.T) {
+	// The rich report labels BOTH the declaration and the produced
+	// value alongside the primary call-site caret (phase 5).
+	err := runWithSource(t, "def f fn [[n:Integer] String [n]]\n42 f")
+	ae := assertAqlError(t, err, "type_error")
+	if len(ae.Spans) == 0 {
+		t.Fatalf("expected secondary spans, got none:\n%s", err.Error())
+	}
+	assertErrorContains(t, err,
+		"the declaration says `f` returns String",
+		"the returned value was produced here",
+	)
+}
+
+func TestErrorFormatReturnCountDeclSpan(t *testing.T) {
+	err := runWithSource(t, "def f fn [[n:Integer] [Integer Integer] [n]]\n42 f")
+	assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "the declaration of `f` expects 2 return value(s)")
+}
+
+// =====================================================================
+// Arithmetic error taxonomy
+// =====================================================================
+
+func TestErrorFormatArithCode(t *testing.T) {
+	err := runWithSource(t, `20 div 0`)
+	assertAqlError(t, err, "arith_error")
+	assertErrorContains(t, err, "[aql/arith_error]", "division by zero")
+
+	err = runWithSource(t, `20 mod 0`)
+	assertAqlError(t, err, "arith_error")
+	assertErrorContains(t, err, "modulo by zero")
+}
+
 func TestErrorFormatReturnCount(t *testing.T) {
 	// Function returns wrong number of values
 	err := runWithSource(t, `def f fn [[n:Integer] [Integer Integer] [n]] 42 f`)

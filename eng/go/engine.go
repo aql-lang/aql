@@ -726,10 +726,14 @@ func (e *Engine) stampErrPos(err error) error {
 }
 
 // returnCountError builds a detailed AqlError for wrong number of return
-// values. The detail text is shared with the VM via returnCountErrorText.
-func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
+// values. The detail text is shared with the VM via returnCountErrorText;
+// the declaration span is interpreter-side enrichment (phase 5).
+func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *AqlError {
 	src := e.effectiveSource()
-	return makeAqlErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, src, "", pos)
+	ae := makeAqlErrorAt("type_error", returnCountErrorText(rc.FuncName, expected, got), rc.FuncName, src, "", rc.Pos)
+	attachDeclSpan(ae, rc.Decl,
+		fmt.Sprintf("the declaration of `%s` expects %d return value(s)", rc.FuncName, expected))
+	return ae
 }
 
 // validateReturnTypes checks the top nret residual values (results[extra:])
@@ -760,18 +764,44 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 			continue
 		}
 		if !got.Is(exp) {
-			return e.returnTypeError(rc.FuncName, k+1, exp, got, rc.Pos)
+			return e.returnTypeError(rc, k+1, exp, got)
 		}
 	}
 	return nil
 }
 
 // returnTypeError builds a detailed AqlError for a return type mismatch. The
-// detail/hint text is shared with the VM via returnTypeErrorText.
-func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
-	detail, hint := returnTypeErrorText(funcName, index, expected, got)
+// detail/hint text is shared with the VM via returnTypeErrorText; the two
+// secondary spans — where the offending value was produced, and where the
+// return contract was declared — are interpreter-side enrichment (phase 5).
+func (e *Engine) returnTypeError(rc ReturnCheckInfo, index int, expected *Type, got Value) *AqlError {
+	detail, hint := returnTypeErrorText(rc.FuncName, index, expected, got)
 	src := e.effectiveSource()
-	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
+	ae := makeAqlErrorAt("type_error", detail, rc.FuncName, src, hint, rc.Pos)
+	if gp := got.Pos(); gp.Row > 0 && (gp.Row != rc.Pos.Row || gp.Col != rc.Pos.Col) {
+		ae.Spans = append(ae.Spans, DiagSpan{
+			Pos:   gp,
+			Label: "the returned value was produced here",
+		})
+	}
+	attachDeclSpan(ae, rc.Decl,
+		"the declaration says `"+rc.FuncName+"` returns "+expected.String())
+	return ae
+}
+
+// attachDeclSpan labels the return contract's declaration site as a
+// secondary span. A zero declaration site attaches nothing — the
+// no-guessed-locations rule; the declared type is already in the Detail.
+func attachDeclSpan(ae *AqlError, decl DeclSite, label string) {
+	if decl.Pos.Row <= 0 {
+		return
+	}
+	ae.Spans = append(ae.Spans, DiagSpan{
+		Pos:    decl.Pos,
+		Label:  label,
+		Source: decl.Source,
+		File:   decl.File,
+	})
 }
 
 // currentPos returns the source position of the value at the pointer — the
@@ -5359,6 +5389,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		Snapshot:     defSnapshot,
 		Names:        names,
 		Returns:      sig.Returns,
+		Decl:         sig.Decl,
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
@@ -6182,11 +6213,11 @@ func (e *Engine) stepCloseParen() error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return e.returnCountError(rc.FuncName, nret, len(results), rc.Pos)
+				return e.returnCountError(rc, nret, len(results))
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount, rc.Pos)
+				return e.returnCountError(rc, nret, len(results)-rc.UnnamedCount)
 			}
 
 			// Validate the top nret values match declared return types.

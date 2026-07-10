@@ -247,6 +247,11 @@ const BarrierAllForward = -1
 type FnSig struct {
 	Params  []FnParam
 	Returns []*Type // declared return types (nil = unchecked)
+	// Decl is where the return contract was declared — the output-sig
+	// token of this triple, plus the declaring program's source/file —
+	// threaded onto ReturnCheck markers so a return error can label the
+	// declaration as a secondary span. Zero for Go-registered sigs.
+	Decl DeclSite
 	// BarrierPos is the forward/stack boundary expressed by `|` in
 	// an AQL fn parameter list. Three values carry distinct meaning:
 	//
@@ -786,6 +791,10 @@ type ReturnCheckInfo struct {
 	Returns      []*Type
 	UnnamedCount int    // number of unnamed params pushed onto the stack before the body
 	Pos          SrcPos // source position of the fn call site, for return errors
+	// Decl is where the return contract was declared (the fn's output
+	// signature), rendered as a secondary span on return errors. Zero
+	// when unknown (Go-registered sigs).
+	Decl DeclSite
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.

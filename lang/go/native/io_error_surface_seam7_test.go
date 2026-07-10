@@ -36,6 +36,22 @@ func TestB3GetErrorFieldNotError(t *testing.T) {
 	if err != nil || len(out) != 1 {
 		t.Fatalf("getErrorField(message): unexpected %v / %v", out, err)
 	}
+	// A BARE (code-less) error reads `code` as the None literal — the
+	// branch used to be covered by div-by-zero rows, which now carry
+	// arith_error (phase-5 taxonomy normalisation).
+	out, err = getErrorFieldHandler([]Value{NewString("code"), ev}, nil, nil, r)
+	if err != nil || len(out) != 1 || !ValueType(out[0]).Equal(TNone) {
+		t.Fatalf("getErrorField(code) on a bare error: want the None literal, got %v / %v", out, err)
+	}
+	// And a CODED error reads its code as an atom.
+	cv := NewError(MakeAqlError("arith_error", "division by zero", "div", "", ""))
+	out, err = getErrorFieldHandler([]Value{NewString("code"), cv}, nil, nil, r)
+	if err != nil || len(out) != 1 {
+		t.Fatalf("getErrorField(code) on a coded error: unexpected %v / %v", out, err)
+	}
+	if a, aerr := AsAtom(out[0]); aerr != nil || a != "arith_error" {
+		t.Fatalf("coded error code = %v, want arith_error atom", out[0])
+	}
 }
 
 func TestB3SurfaceHandlerNonMap(t *testing.T) {

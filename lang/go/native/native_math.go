@@ -261,14 +261,14 @@ var mathNatives = []NativeFunc{
 					// (there is no integer infinity) — it stays a hard
 					// error. The Float path below follows IEEE-754 instead.
 					if a == 0 {
-						return Value{}, fmt.Errorf("division by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
 					}
 					return NewInteger(b / a), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
 					// BigInteger division truncates toward zero (like Integer).
 					if a.Sign() == 0 {
-						return Value{}, fmt.Errorf("division by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
 					}
 					return NewBigInteger(new(big.Int).Quo(b, a)), nil
 				},
@@ -301,13 +301,13 @@ var mathNatives = []NativeFunc{
 					// Integer modulo by zero stays a hard error (no
 					// integer infinity / NaN). The Float path is IEEE.
 					if a == 0 {
-						return Value{}, fmt.Errorf("modulo by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
 					}
 					return NewInteger(b % a), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
 					if a.Sign() == 0 {
-						return Value{}, fmt.Errorf("modulo by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
 					}
 					return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
 				},
