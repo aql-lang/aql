@@ -23,21 +23,88 @@ measured impact.
   (~43.5k → ~36k allocs/op on `recursion_nontail`). The *full* F5 —
   memoizing the whole frame skeleton / a real call frame — is NOT done
   (see below).
-- **Cumulative end-to-end** (cross-language, best-of-3, same box): fib
-  7030 → 6113 ms (−13 %), nestloop 1637 → 1503 ms (−8 %), loopsum
-  1905 → 1815 ms (−5 %). The wall-clock gains trail the allocation cuts
-  because GC is only ~⅓ of CPU; the large remaining gap to Python needs
-  the two big structural findings still open below (F2, F3).
+- **F5-full — frame-skeleton memoization.** DONE. `buildFnBodyHandler`
+  builds the constant leaf-frame token skeleton ONCE per signature
+  (frame-open + body + `__DC __pa undef…[__RC]` + close) and per call
+  does one copy with the arg cells patched via a precomputed
+  `unnamedIdx`; the per-call args list is elided (a shared empty list)
+  when the new `bodyReferencesArgs` scan proves the body never reads
+  `args` (sound under the `!needsFrameState` gate). Plus F3 Stage 1: one
+  per-INVOCATION positions buffer in `matchSignature` instead of one per
+  candidate (get/dot carry 18 overloads — map_get allocs −59 %), and an
+  `IsSplice` guard on the def-substitution probe.
+- **F2 — mode-gated ID elision.** DONE, via a different route than the
+  one feared above: a process-wide pass counter (`checkPassDepth`).
+  Runtime concrete mints skip `GenerateID` entirely; `CheckState.Begin`
+  / the parser's `BeginIDMintScope` re-arm minting for the passes whose
+  provenance maps need IDs; the emit layer treats `""` as "no identity"
+  (skip / refuse / rescue — four new guards; the miss path degrades to
+  `dynScopeRescue` → interpreter fallback, never a miscompile).
+  `resolvePredicateRef`'s reverse lookup now keys on shared fn
+  construction (`sameFnConstruction`) instead of value IDs.
+- **Phase C round 1.** DONE: `Type.Equal` tmeta-pointer fast path
+  (copies of one node share `*typeMeta`; the 14-char ID string compare
+  was ~7 % of CPU), paren/end **marker** ID elision (markers follow the
+  pass rule, not the data==nil literal rule), and a single per-invocation
+  int buffer backing both `positions` and `resolvedIdx` in
+  `matchSignature`.
 
-**Still open (large, land in dedicated focused work, NOT rushed under the
-100 % coverage + differential-correctness gate):** F2 (lazy IDs — blocked
-on `Value` being a by-value type, so a lazy read cannot cache; the viable
-route decouples runtime IDs from creation and materializes them at
-`emit.go`'s ~73 provenance sites, a miscompilation-risk refactor), F3
-(per-call-site inline cache — needs a stable call-site identity across the
-gap-buffer splice model plus a guard/deopt state machine), F5-full (frame
-skeleton memoization / real call frame — coordinated with the per-call
-stacks; the highest-risk area per `eng/go/CLAUDE.md`), F6 (tagged values).
+### Final measured state (2026-07, this box)
+
+Cross-language wall-clock (best-of-3): **fib 5081 ms, loopsum 1513 ms,
+nestloop 1313 ms** — vs the session start (7030/1905/1637) −28 %/−21 %/
+−20 %, and vs the original pre-work baseline (22,000/3,950/3,330)
+**−77 %/−62 %/−61 %**. Compiled mode also gained from F2 + the Equal
+fast path: fib 275 → 232 ms, loopsum 79 → 65 ms, nestloop 73 → 59 ms.
+
+`BenchmarkStage6` (execution only) vs session start:
+
+| shape | interp ns/op | Δtime | allocs/op | Δallocs | interp÷compiled |
+|---|--:|--:|--:|--:|--:|
+| arith_chain64     | 393,671    | −32 % |    906 | −52 % | 19× |
+| compare_loop      | 1,979,769  | −23 % |  4,443 | −50 % | 14× |
+| if_scalar         | 3,445,636  | −21 % |  8,247 | −52 % | 23× |
+| for_tight         | 3,071,471  | −21 % |  7,475 | −54 % | 18× |
+| map_get           | 5,013,838  | −19 % |  6,444 | **−75 %** | 38× |
+| recursion_nontail | 8,184,958  | −35 % | 17,467 | −60 % | 23× |
+| recursion_tail    | 32,535,398 | −33 % | 81,853 | −59 % | 19× |
+| do_body           | 999,937    | −20 % |  2,342 | −41 % | 16× |
+
+GC fell from ~35 % of CPU to ~11 %; the profile is now diffuse (no
+single item above ~6 % flat — `Value.Equal` residual, `IsAncestor`,
+`matchSignature` internals, `scanobject`).
+
+### Closing assessments (Phase C/D decisions)
+
+- **F3 Stage 2 (per-call-site inline cache): assessed, declined.** The
+  plan gated it on "the candidate scan still dominates" — it no longer
+  does. Its allocation cost is gone (the per-candidate positions buffer
+  was the 17 %-of-objects line; now one per invocation), and the
+  remaining `matchSignature` CPU (~19 % cum) is mostly the per-candidate
+  `sigArgMatches`/`ConformsTo` type walks, which a sound cache can only
+  skip behind a guard that re-checks most of the same inputs (arg
+  Parent/flags, future-token window, `preferWordSig`, `insideForward`,
+  per-name generation — see the guard-surface analysis earlier in this
+  note). Expected win single-digit % wall for the largest remaining risk
+  surface. If revisited: attach `*inlineCache` slots to the durable body
+  slices (`AQLImpl.Body`, `ForCont.Body`, `MarkInfo.Body`) via a
+  WordInfo pointer field, scope to per-word "plain sigs" precomputed at
+  `aggregateDispatch`, all-stack matches only.
+- **F6 (tagged values): assessed, declined** within the tree-walker-only
+  scope. With GC at ~11 % and `Value` at 72 B, a tagged-word
+  representation attacks copy/scan costs that are no longer dominant;
+  the churn (every payload access in eng+lang) is far out of proportion
+  to the plausible ~10–20 % return.
+- **The remaining gap is the model, not waste.** At fib ~230× / loops
+  ~60–65× Python, the interpreter now spends its time in genuine
+  tree-walking work: per-token dispatch over 72-byte values, per-call
+  overload matching, paren re-expansion. CPython is a bytecode VM — the
+  equivalent AQL execution model is the existing compiled mode, already
+  at ~3× Python wall-clock (~10× execution-only, startup-dominated).
+  Per the maintainers' scope decision the tree-walker stays a
+  tree-walker; the VM is the performance story, and the interpreter is
+  the fidelity/REPL reference — now ~4.3× faster than where it started
+  on recursion and ~2.5× on loops.
 
 Companion reading (read these first — this note assumes them):
 `INTERPRETER-SPEED-INVESTIGATION.10.md` (the original diagnosis),
