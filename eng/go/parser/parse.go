@@ -159,6 +159,14 @@ func Parse(src string) ([]eng.Value, error) {
 		List:  &jsonic.ListOptions{Pair: boolPtr(true), Child: boolPtr(true)},
 		Map:   &jsonic.MapOptions{Child: boolPtr(true)},
 		Value: &jsonic.ValueOptions{Lex: boolPtr(false)},
+		// The library's own error rendering is silenced at the source:
+		// parse failures are translated into AQL syntax_errors
+		// (translateParseError), so the always-on ANSI palette, the
+		// `--internal:` suffix, and the library docs link must never
+		// reach a user (they used to leak raw into the REPL and the
+		// wasm playground DOM).
+		ErrMsg: &parseErrMsgOptions,
+		Color:  &jsonic.ColorOptions{Active: &parseColorOff},
 	})
 
 	// Stage 1: Lex setup — register tokens and custom matchers.
@@ -180,7 +188,7 @@ func Parse(src string) ([]eng.Value, error) {
 	// Stage 3: Parse and convert to engine values.
 	result, err := j.Parse(src)
 	if err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
+		return nil, translateParseError(err, src)
 	}
 
 	if result == nil {

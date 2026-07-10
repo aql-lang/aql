@@ -111,6 +111,15 @@ func MakeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlError(code, detail, word, fullSource, hint)
 }
 
+// MakeAqlErrorAt creates an AqlError at an explicit source position — the
+// exported twin of makeAqlErrorAt for packages outside eng that hold a
+// real position (the parser translating a lexer failure, hosts embedding
+// the engine). When pos is unknown (Row 0) the error renders "source
+// position unknown"; there is no text-search fallback.
+func MakeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *AqlError {
+	return makeAqlErrorAt(code, detail, word, fullSource, hint, pos)
+}
+
 // makeAqlError creates an AqlError with no source position (Row 0).
 func makeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlErrorAt(code, detail, word, fullSource, hint, SrcPos{})

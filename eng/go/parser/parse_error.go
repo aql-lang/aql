@@ -1,0 +1,93 @@
+package parser
+
+import (
+	"errors"
+	"fmt"
+
+	eng "github.com/aql-lang/aql/eng/go"
+	jsonic "github.com/tabnas/jsonic/go"
+)
+
+// This file translates tabnas/jsonic lexer-and-grammar failures into
+// AQL-voice AqlErrors (design/DIAGNOSTICS.0.md, phase 2). The library's
+// own rendering is disabled at the source (parseErrMsgOptions /
+// parseColorOff below kill the always-on ANSI palette, the
+// `--internal:` suffix block, and the library docs link), and every
+// *JsonicError is rebuilt as an [aql/syntax_error] carrying the same
+// position, an AQL-phrased detail line, and a plain-language note — so
+// parse failures render through the shared diagnostic renderer exactly
+// like every other AQL error, on every surface (CLI, REPL, LSP, wasm).
+
+// parseColorOff pins the library renderer's color off; the translated
+// AqlError owns presentation (color is caller-resolved there).
+var parseColorOff = false
+
+// parseErrMsgOptions brands and quiets the library error format for the
+// rare failure that escapes translation untyped.
+var parseErrMsgOptions = jsonic.ErrMsgOptions{
+	Name:   "aql",
+	Suffix: false,
+}
+
+// translateParseError rebuilds a jsonic parse failure as an AQL
+// syntax_error at the same source position. Errors of any other type
+// keep the historical `parse error: %w` wrap.
+func translateParseError(err error, src string) error {
+	var te *jsonic.JsonicError
+	if !errors.As(err, &te) {
+		return fmt.Errorf("parse error: %w", err)
+	}
+	detail, note, help := parseErrText(te)
+	ae := eng.MakeAqlErrorAt("syntax_error", detail, te.Src, src, "",
+		eng.SrcPos{Row: te.Row, Col: te.Col, Src: te.Src})
+	if note != "" {
+		ae.Notes = append(ae.Notes, note)
+	}
+	if help != "" {
+		ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: help})
+	}
+	return ae
+}
+
+// parseErrText maps a tabnas error code to the AQL-voice detail line,
+// an explanatory note, and an actionable help suggestion (either may be
+// empty). The code set is the library's errorMessages table; unknown
+// codes keep the library detail with an honest parser-internal note.
+func parseErrText(te *jsonic.JsonicError) (detail, note, help string) {
+	q := func(s string) string { return "`" + s + "`" }
+	switch te.Code {
+	case "unexpected":
+		return "unexpected " + q(te.Src) + " — nothing valid can appear here",
+			"AQL's grammar allows no continuation with " + q(te.Src) + " at this position",
+			"check for a missing bracket, quote, or value just before it"
+	case "unterminated_string":
+		return "this string is never closed: " + te.Src,
+			"",
+			"add the closing quote"
+	case "unterminated_comment":
+		return "this comment is never closed",
+			"",
+			"close the comment before the end of the source"
+	case "end_of_source":
+		return "the source ends in the middle of an expression",
+			"an unclosed `[` list, `{` map, `(` group, or string earlier is the usual cause",
+			""
+	case "invalid_unicode":
+		return "invalid unicode escape: " + te.Src,
+			"the escape sequence " + q(te.Src) + " does not encode a valid unicode code point",
+			""
+	case "invalid_ascii":
+		return "invalid ascii escape: " + te.Src,
+			"the escape sequence " + q(te.Src) + " does not encode a valid ASCII character",
+			""
+	case "unprintable":
+		return "unprintable character inside a string",
+			"a raw control character (code point below 32) is not allowed in a string literal",
+			"use an escape sequence instead"
+	}
+	// unknown_rule / internal / unknown / future codes: the failure is in
+	// the parser, not the program — keep the library detail and say so.
+	return te.Detail,
+		"this is a parser-internal failure — likely a bug in AQL's grammar, not in your program",
+		""
+}
