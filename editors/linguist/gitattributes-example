@@ -1,0 +1,29 @@
+# gitattributes-example — force GitHub to classify .aql files as AQL.
+#
+# Drop these lines into a file named `.gitattributes` at the ROOT of your
+# repository (create it if it does not exist), commit, and push. GitHub's
+# Linguist reads `.gitattributes` per-repo, so this takes effect even
+# before AQL is merged into github/linguist upstream — it is the local
+# fallback while the upstream PR is in flight, and a permanent override if
+# you want to be explicit.
+#
+# `linguist-language=AQL` overrides detection and forces every matching
+# path to be reported as AQL in the repository language bar and rendered
+# with the AQL grammar (once linguist ships one). The name on the right
+# MUST match the language key added to linguist's languages.yml ("AQL").
+
+*.aql linguist-language=AQL
+
+# --- optional extras -------------------------------------------------------
+#
+# Mark generated / vendored .aql fixtures so they do NOT count toward the
+# repo's language stats (and are collapsed in diffs). Adjust the globs to
+# your layout; these are examples, not required.
+#
+# testdata/**/*.aql linguist-generated=true
+# vendor/**/*.aql   linguist-vendored=true
+#
+# Treat a docs/example directory as documentation rather than code, so it
+# is excluded from the language bar:
+#
+# examples/**/*.aql linguist-documentation=true

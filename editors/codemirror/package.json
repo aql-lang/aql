@@ -1,0 +1,44 @@
+{
+  "name": "codemirror-lang-aql",
+  "version": "0.1.0",
+  "description": "CodeMirror 6 language mode for AQL — the concatenative, strongly-typed query language.",
+  "type": "module",
+  "license": "MIT",
+  "author": "AQL contributors",
+  "homepage": "https://github.com/aql-lang/aql/tree/main/editors/codemirror",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aql-lang/aql.git",
+    "directory": "editors/codemirror"
+  },
+  "keywords": [
+    "aql",
+    "codemirror",
+    "codemirror6",
+    "language",
+    "syntax-highlighting",
+    "editor"
+  ],
+  "main": "aql.js",
+  "module": "aql.js",
+  "exports": {
+    ".": "./aql.js"
+  },
+  "files": [
+    "aql.js",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check aql.js"
+  },
+  "peerDependencies": {
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@codemirror/view": {
+      "optional": true
+    }
+  }
+}

@@ -28,6 +28,13 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "grammars": [
+      {
+        "language": "aql",
+        "scopeName": "source.aql",
+        "path": "./syntaxes/aql.tmLanguage.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "AQL",

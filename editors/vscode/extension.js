@@ -2,7 +2,7 @@
 // it up as a Language Server Protocol client for *.aql files.
 //
 // Build/install:
-//   cd cmd/go/internal/lsp/editors/vscode
+//   cd editors/vscode
 //   npm install
 //   npx vsce package
 //   code --install-extension aql-0.1.0.vsix
