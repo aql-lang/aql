@@ -172,6 +172,13 @@ var (
 	TUrlon          = eng.TUrlon
 	TIpon           = eng.TIpon
 	THoston         = eng.THoston
+	TSemveron       = eng.TSemveron
+	TCidron         = eng.TCidron
+	TMacon          = eng.TMacon
+	TColoron        = eng.TColoron
+	TMimon          = eng.TMimon
+	TQion           = eng.TQion
+	TPhonon         = eng.TPhonon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity

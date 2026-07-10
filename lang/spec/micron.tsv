@@ -107,6 +107,210 @@ make Hoston 'example.com/path'	ERROR:must not contain	a host is not a URL
 make Hoston {host:'a.com:80'}	ERROR:only allowed in an IPv6 literal	host field must not carry a port
 
 # ─────────────────────────────────────────────────────────────────────
+# §2d Construction — Semveron. A Semantic Versioning 2.0.0 version
+#     (major.minor.patch with optional -prerelease and +build), ordered
+#     by SemVer precedence. String form is the canonical validator; the
+#     map form re-renders through it (prerelease/build as a String or a
+#     List of identifiers).
+make Semveron '1.2.3'	1.2.3
+make Semveron '1.0.0-rc.1+build.5'	1.0.0-rc.1+build.5	prerelease and build
+make Semveron '1.2.3+001'	1.2.3+001	build metadata keeps leading zeros
+make Semveron '1.2.3-alpha-1.a-b'	1.2.3-alpha-1.a-b	hyphens are legal identifier chars
+make Semveron {major:1 minor:2 patch:3}	1.2.3	map form
+make Semveron {major:1 minor:0 patch:0 prerelease:'rc.1'}	1.0.0-rc.1	map prerelease as String
+make Semveron {major:1 minor:0 patch:0 prerelease:['rc' '1'] build:['b' '5']}	1.0.0-rc.1+b.5	map prerelease/build as List
+make Semveron '1.2.3' typeof	Semveron
+pathof Semveron	[Scalar Micron Semveron]
+def s (make Semveron '1.2.3-rc.1+b.2') s.major	1
+def s (make Semveron '1.2.3-rc.1+b.2') s.minor	2
+def s (make Semveron '1.2.3-rc.1+b.2') s.patch	3
+def s (make Semveron '1.2.3-rc.1+b.2') s.prerelease	'rc.1'
+def s (make Semveron '1.2.3-rc.1+b.2') s.build	'b.2'
+def s (make Semveron '1.2.3-rc.1+b.2') s.prereleaseParts	['rc' '1']	derived — split identifiers
+def s (make Semveron '1.2.3-rc.1+b.2') s.buildParts	['b' '2']	derived
+def s (make Semveron '1.2.3-rc.1+b.2') s.release	'1.2.3'	derived — core only
+def s (make Semveron '1.2.3-rc.1') s.stable	false	a prerelease is not stable
+def s (make Semveron '1.2.3+b.2') s.stable	true	build-only is stable
+def s (make Semveron '1.2.3+b.2') s.version	'1.2.3+b.2'	derived — full canonical render
+(make Semveron '1.2.3') has 'prerelease'	false	absent optional field
+def s (make Semveron '1.2.3') s.prerelease	None	miss reads none
+(make Semveron '1.2.3+a') eq (make Semveron '1.2.3+a')	true	content-equal
+(make Semveron '1.2.3+a') eq (make Semveron '1.2.3+b')	false	build participates in equality
+# a nominal newtype constructs through the leaf validator
+def Releaseon refine Semveron end make Releaseon '2.0.0' typeof	Releaseon
+# paired negatives
+make Semveron 'v1.2.3'	ERROR:leading 'v'	no v-prefix
+make Semveron '1.2'	ERROR:core must be major.minor.patch	needs three fields
+make Semveron '01.2.3'	ERROR:leading zero	no leading zeros in core
+make Semveron '1.2.3-01'	ERROR:leading zero	no leading zeros in numeric prerelease
+make Semveron '1.2.3-rc..1'	ERROR:empty identifier	no empty prerelease identifier
+make Semveron '1.2.3-rc_1'	ERROR:invalid character	underscore is not allowed
+make Semveron '1.2.3-'	ERROR:empty identifier	trailing '-' with no prerelease
+make Semveron '1.2.3+'	ERROR:empty identifier	trailing '+' with no build
+make Semveron 42	ERROR:Semveron source must be a string or map	wrong source type
+make Semveron {major:1 minor:2}	ERROR:requires major, minor and patch	missing patch
+make Semveron {major:1 minor:2 patch:3 extra:'y'}	ERROR:Semveron has no field extra	unknown field
+make Semveron {major:-1 minor:0 patch:0}	ERROR:must be non-negative	negative core
+make Semveron {major:'1' minor:2 patch:3}	ERROR:field major must be an Integer	non-integer core
+make Semveron {major:1 minor:2 patch:3 prerelease:42}	ERROR:must be a String or a List	bad prerelease type
+
+# ─────────────────────────────────────────────────────────────────────
+# §2e Construction — Cidron. An IPv4/IPv6 CIDR block; host bits are
+#     masked to the network address. Backed by net/netip.
+make Cidron '10.0.0.0/8'	10.0.0.0/8
+make Cidron '10.0.0.5/8'	10.0.0.0/8	host bits masked to the network address
+make Cidron '192.168.1.100/24'	192.168.1.0/24
+make Cidron '2001:0DB8::/32'	2001:db8::/32	IPv6 lowercased + zero-compressed
+make Cidron '::ffff:1.2.3.0/120'	::ffff:1.2.3.0/120	IPv4-mapped stays v6 (netip, not net.ParseCIDR)
+make Cidron {addr:'10.0.0.0' prefix:8}	10.0.0.0/8	map form
+make Cidron '10.0.0.0/8' typeof	Cidron
+pathof Cidron	[Scalar Micron Cidron]
+def c (make Cidron '10.0.0.0/8') c.addr	'10.0.0.0'
+def c (make Cidron '10.0.0.0/8') c.prefix	8
+def c (make Cidron '10.0.0.0/8') c.version	4
+def c (make Cidron '2001:db8::/32') c.version	6
+def c (make Cidron '192.168.1.0/24') c.hostbits	8	derived — 32 minus prefix
+def c (make Cidron '0.0.0.0/0') c.count	4294967296	derived — 2^hostbits
+(make Cidron '10.0.0.5/8') eq (make Cidron '10.0.0.0/8')	true	masking makes them content-equal
+def Neton refine Cidron end make Neton '10.0.0.0/8' typeof	Neton
+make Cidron '10.0.0.0/33'	ERROR:invalid CIDR block	prefix out of range for IPv4
+make Cidron '2001:db8::/129'	ERROR:invalid CIDR block	prefix out of range for IPv6
+make Cidron '10.0.0.0'	ERROR:invalid CIDR block	a CIDR requires an explicit prefix
+make Cidron '192.168.001.000/24'	ERROR:invalid CIDR block	leading-zero octet rejected
+make Cidron 'not-a-cidr'	ERROR:invalid CIDR block
+make Cidron 42	ERROR:Cidron source must be a string or map
+make Cidron {addr:'10.0.0.0' prefix:8 extra:'y'}	ERROR:Cidron has no field extra
+make Cidron {prefix:8}	ERROR:Cidron requires addr and prefix
+
+# ─────────────────────────────────────────────────────────────────────
+# §2f Construction — Macon. An IEEE 802 MAC-48/EUI-64 address; every
+#     input form canonicalizes to lowercase colon-separated hex.
+make Macon '00:1A:2B:3C:4D:5E'	00:1a:2b:3c:4d:5e	colon MAC-48, lowercased
+make Macon '00-1a-2b-3c-4d-5e'	00:1a:2b:3c:4d:5e	hyphen form normalizes to colon
+make Macon '001A.2B3C.4D5E'	00:1a:2b:3c:4d:5e	Cisco dot form
+make Macon '001a2b3c4d5e'	00:1a:2b:3c:4d:5e	bare 12-hex-digit form
+make Macon '00:1a:2b:3c:4d:5e:6f:70'	00:1a:2b:3c:4d:5e:6f:70	EUI-64 (8 octets)
+make Macon {addr:'00:1a:2b:3c:4d:5e'}	00:1a:2b:3c:4d:5e	map form
+make Macon '00:1a:2b:3c:4d:5e' typeof	Macon
+pathof Macon	[Scalar Micron Macon]
+def m (make Macon '00:1a:2b:3c:4d:5e') m.bits	48	derived
+def m (make Macon '00:1a:2b:3c:4d:5e:6f:70') m.eui64	true	derived — 8 octets
+def m (make Macon '00:1a:2b:3c:4d:5e') m.oui	'00:1a:2b'	derived — first 3 octets
+def m (make Macon 'ff:ff:ff:ff:ff:ff') m.broadcast	true	all-ones
+def m (make Macon '01:00:5e:10:00:00') m.multicast	true	I/G bit set
+def m (make Macon '00:1a:2b:3c:4d:5e') m.local	false	U/L bit clear
+(make Macon '001A.2B3C.4D5E') eq (make Macon '00:1a:2b:3c:4d:5e')	true	spellings dedup
+make Macon '00:1A:2B:3C:4D'	ERROR:invalid MAC address	five octets
+make Macon '0:1:2:3:4:5'	ERROR:invalid MAC address	single-digit groups
+make Macon 'GG:1A:2B:3C:4D:5E'	ERROR:invalid MAC address	non-hex
+make Macon 42	ERROR:Macon source must be a string or map
+make Macon {addr:'x' extra:'y'}	ERROR:Macon has no field extra
+
+# ─────────────────────────────────────────────────────────────────────
+# §2g Construction — Coloron. An sRGB colour with alpha, canonicalized
+#     to lowercase hex (6 digits when opaque, else 8).
+make Coloron '#f00'	#ff0000	3-digit shorthand, opaque
+make Coloron '#FF0000'	#ff0000	uppercase lowercased
+make Coloron '#abc8'	#aabbcc88	4-digit RGBA shorthand
+make Coloron '#11223344'	#11223344	8-digit preserved
+make Coloron (quote "rgb(255, 0, 0)")	#ff0000	legacy comma function
+make Coloron (quote "rgb(255 0 0 / 0.5)")	#ff000080	modern slash-alpha
+make Coloron (quote "rgba(0, 128, 255, 0.8)")	#0080ffcc	rgba alias, legacy alpha
+make Coloron (quote "rgb(50%, 100%, 0%)")	#80ff00	percentage channels
+make Coloron {r:255 g:0 b:0}	#ff0000	map form, alpha defaults to opaque
+make Coloron {r:17 g:34 b:51 a:68}	#11223344	map with alpha
+make Coloron '#ff0000' typeof	Coloron
+pathof Coloron	[Scalar Micron Coloron]
+def k (make Coloron '#11223344') k.r	17
+def k (make Coloron '#11223344') k.a	68
+def k (make Coloron '#ff0000') k.opaque	true	derived — a==255
+def k (make Coloron '#00000080') k.alpha	0.5019607843137255	derived — a/255 as Float
+def k (make Coloron '#ff0000') k.css	'rgb(255 0 0)'	derived — modern rgb()
+(make Coloron '#f00') eq (make Coloron '#ff0000')	true	shorthand dedup
+make Coloron '#12345'	ERROR:3, 4, 6, or 8 digits	bad digit count
+make Coloron '#gg0000'	ERROR:invalid hex colour	non-hex
+make Coloron 'ff0000'	ERROR:want #hex	missing leading #
+make Coloron (quote "rgb(255, 0, 0 / 0.5)")	ERROR:mixes	legacy+modern separators
+make Coloron (quote "rgb(255, 0)")	ERROR:exactly 3 channels	too few channels
+make Coloron 42	ERROR:Coloron source must be a string or map
+
+# ─────────────────────────────────────────────────────────────────────
+# §2h Construction — Mimon. A canonical MIME / media type; parameter
+#     names lowercased and sorted, values case-preserved.
+make Mimon 'text/html; charset=utf-8'	text/html; charset=utf-8
+make Mimon 'Text/HTML; Charset="utf-8"'	text/html; charset=utf-8	names lowercased, token value unquoted
+make Mimon 'text/html ; charset = utf-8'	text/html; charset=utf-8	OWS trimmed
+make Mimon 'application/vnd.api+json'	application/vnd.api+json	no parameters
+make Mimon 'a/b; z=1; a=2; m=3'	a/b; a=2; m=3; z=1	parameters name-sorted
+make Mimon {type:'text' subtype:'html' params:{charset:'utf-8'}}	text/html; charset=utf-8	map form
+make Mimon 'text/html' typeof	Mimon
+pathof Mimon	[Scalar Micron Mimon]
+def t (make Mimon 'text/html; charset=utf-8') t.type	'text'
+def t (make Mimon 'text/html; charset=utf-8') t.subtype	'html'
+def t (make Mimon 'text/html; charset=utf-8') t.essence	'text/html'	derived
+def t (make Mimon 'text/html; charset=utf-8') t.mime	'text/html; charset=utf-8'	derived — full render
+def t (make Mimon 'image/svg+xml') t.suffix	'xml'	derived — after last '+'
+def t (make Mimon 'application/vnd.api+json') t.facet	'vnd'	derived — before first '.'
+(make Mimon 'Text/HTML') eq (make Mimon 'text/html')	true	case folds
+make Mimon 'text'	ERROR:must be type/subtype	no subtype
+make Mimon '*/*'	ERROR:invalid type	wildcard range rejected
+make Mimon 'text/html; charset=utf-8; charset=ascii'	ERROR:invalid media type	duplicate parameter
+make Mimon 42	ERROR:Mimon source must be a string or map
+make Mimon {type:'text' subtype:'html' extra:'x'}	ERROR:Mimon has no field extra
+
+# ─────────────────────────────────────────────────────────────────────
+# §2i Construction — Qion. A monetary amount: exact Decimal amount at
+#     the currency's ISO 4217 minor-unit scale, ordered numerically.
+make Qion 'USD 12.50'	USD 12.50
+make Qion 'usd 12.5'	USD 12.50	code uppercased, fraction zero-padded to minor
+make Qion 'JPY 500'	JPY 500	minor=0 currency has no fractional part
+make Qion 'BHD 1.250'	BHD 1.250	minor=3 currency
+make Qion 'USD -3.05'	USD -3.05	negative amount
+make Qion 'USD -0.00'	USD 0.00	negative zero normalized
+make Qion 'CLF 0.0001'	CLF 0.0001	minor=4 fund code
+make Qion {code:'USD' amount:'12.5'}	USD 12.50	map form, string amount
+make Qion 'USD 12.50' typeof	Qion
+pathof Qion	[Scalar Micron Qion]
+def q (make Qion 'USD 12.50') q.code	'USD'
+def q (make Qion 'USD 12.50') q.minor	2
+def q (make Qion 'USD 12.50') q.units	1250	derived — amount * 10^minor
+def q (make Qion 'USD -3.05') q.negative	true	derived
+def q (make Qion 'USD 0.00') q.negative	false	zero is non-negative
+def q (make Qion 'JPY 500') q.units	500	derived — minor=0
+(make Qion 'usd 12.5') eq (make Qion 'USD 12.50')	true	content-equal at shared scale
+make Qion 'USD 12.999'	ERROR:more than 2 fractional digits	over-precision rejected, not rounded
+make Qion 'JPY 5.0'	ERROR:more than 0 fractional digits	minor=0 admits no fraction
+make Qion 'ZZZ 5.00'	ERROR:not a known ISO 4217	unknown code
+make Qion 'US 5.00'	ERROR:must be 3 letters	code not 3 letters
+make Qion 'USD 1,000.00'	ERROR:plain decimal	grouping separator rejected
+make Qion 'USD 1e2'	ERROR:plain decimal	scientific notation rejected
+make Qion 'USD +5.00'	ERROR:plain decimal	leading + rejected
+make Qion 42	ERROR:Qion source must be a string or map
+make Qion {code:'USD' amount:12 extra:'y'}	ERROR:Qion has no field extra
+
+# ─────────────────────────────────────────────────────────────────────
+# §2j Construction — Phonon. A strict ITU-T E.164 telephone number;
+#     presentation separators are stripped, canonical is '+' then digits.
+make Phonon '+14155552671'	+14155552671
+make Phonon '+1 (415) 555-2671'	+14155552671	presentation separators stripped
+make Phonon '+44 20 7183 8750'	+442071838750	UK number
+make Phonon '+81-3-1234-5678'	+81312345678	Japan, hyphens stripped
+make Phonon {cc:'1' subscriber:'4155552671'}	+14155552671	map form
+make Phonon '+14155552671' typeof	Phonon
+pathof Phonon	[Scalar Micron Phonon]
+def p (make Phonon '+14155552671') p.digits	'14155552671'
+def p (make Phonon '+14155552671') p.e164	'+14155552671'	derived
+def p (make Phonon '+14155552671') p.length	11	derived
+(make Phonon '+1 (415) 555-2671') eq (make Phonon '+14155552671')	true	spellings dedup
+make Phonon '14155552671'	ERROR:not valid E.164	no leading +
+make Phonon '+0415552671'	ERROR:not valid E.164	leading zero in country code
+make Phonon '+1'	ERROR:not valid E.164	too short (min 2 digits)
+make Phonon '+1234567890123456'	ERROR:not valid E.164	too long (max 15 digits)
+make Phonon '+1800FLOWERS'	ERROR:not valid E.164	letters not allowed
+make Phonon '004415552671'	ERROR:not valid E.164	00 access prefix is not +
+make Phonon 42	ERROR:Phonon source must be a string or map
+
+# ─────────────────────────────────────────────────────────────────────
 # §3  Construction — the abstract root and Pathon under make.
 make Micron 1	ERROR:Micron is abstract	the root is not constructible
 make Pathon 'a/b/c'	a/b/c	Pathon keeps its forms under the new name
@@ -194,6 +398,30 @@ Micron tcmp Pathon	-1
 (make Emailon 'a@b.c') lt (make Emailon 'b@b.c')	true
 (make Emailon 'b@b.c') lt (make Emailon 'c@b.c')	true
 (make Emailon 'a@b.c') lt (make Emailon 'c@b.c')	true
+# Semveron orders by SemVer 2.0.0 precedence, NOT by lexical render
+(make Semveron '1.9.0') lt (make Semveron '1.10.0')	true	numeric, not lexical
+(make Semveron '1.0.0-rc.1') lt (make Semveron '1.0.0')	true	a prerelease precedes its release
+(make Semveron '1.0.0-alpha') lt (make Semveron '1.0.0-alpha.1')	true	fewer identifiers precede more
+(make Semveron '1.0.0-alpha.1') lt (make Semveron '1.0.0-alpha.beta')	true	numeric precedes alphanumeric
+(make Semveron '1.0.0-alpha.beta') lt (make Semveron '1.0.0-beta')	true	ASCII order of identifiers
+(make Semveron '1.0.0-beta.2') lt (make Semveron '1.0.0-beta.11')	true	numeric identifiers compare by value
+(make Semveron '1.0.0-beta.11') lt (make Semveron '1.0.0-rc.1')	true	full precedence chain
+(make Semveron '1.2.3') cmp (make Semveron '1.2.3')	0	equal precedence
+# cross-kind: Semveron is cmp-incomparable with other leaves, tcmp by Rank
+(make Semveron '1.2.3') cmp (make Emailon 'a@b.c')	ERROR:incomparable
+(make Hoston 'a.com') tcmp (make Semveron '1.2.3')	-1	Hoston ranks below Semveron
+Semveron cmp (make Semveron '1.2.3')	-1	the literal sorts below any instance
+# Cidron orders numerically (family, then network address, then prefix)
+(make Cidron '10.0.0.0/8') lt (make Cidron '10.0.0.0/16')	true	larger block first at the same base
+(make Cidron '10.0.0.0/8') lt (make Cidron '2001:db8::/32')	true	all v4 before all v6
+Cidron cmp (make Cidron '10.0.0.0/8')	-1	the literal sorts below any instance
+# Coloron orders by the (r,g,b,a) channel tuple, not by hex-render lex
+(make Coloron '#ff0000') lt (make Coloron '#ff0001')	true	blue channel tiebreak
+(make Coloron '#00000010') lt (make Coloron '#ff0000')	true	red dominates alpha (not lexical)
+# Qion orders by currency code, then exact decimal magnitude
+(make Qion 'USD 9.00') lt (make Qion 'USD 100.00')	true	numeric, not lexical
+(make Qion 'USD -3.05') lt (make Qion 'USD 0.00')	true	signed magnitude
+(make Qion 'EUR 100.00') lt (make Qion 'USD 1.00')	true	currency code first
 
 # ─────────────────────────────────────────────────────────────────────
 # §8  typeof / pathof / is.
@@ -208,6 +436,11 @@ pathof Micron	[Scalar Micron]
 (make Emailon 'a@b.c') is Scalar	true
 5 is Micron	false
 Emailon is Type	true
+typeof (make Semveron '1.2.3')	Semveron
+typeof Semveron	Micron
+(make Semveron '1.2.3') is Semveron	true
+(make Semveron '1.2.3') is Micron	true
+(make Semveron '1.2.3') is Ipon	false	sibling leaf
 
 # ─────────────────────────────────────────────────────────────────────
 # §9  User refinements and the naming rule. Schema-carrying refinement

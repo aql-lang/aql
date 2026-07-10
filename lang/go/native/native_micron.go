@@ -166,6 +166,82 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 			return dyn // optional per instance — Integer or none
 		}
 		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TSemveron):
+		switch key {
+		case "major", "minor", "patch":
+			return []Value{NewCarrier(TInteger)}
+		case "release", "version":
+			return []Value{NewCarrier(TString)}
+		case "stable":
+			return []Value{NewCarrier(TBoolean)}
+		case "prereleaseParts", "buildParts":
+			return []Value{NewCarrierTypedList(TString)}
+		case "prerelease", "build":
+			return dyn // optional per instance — String or none
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TCidron):
+		switch key {
+		case "cidr", "addr":
+			return []Value{NewCarrier(TString)}
+		case "prefix", "version", "hostbits":
+			return []Value{NewCarrier(TInteger)}
+		case "count":
+			return dyn // Integer or BigInteger per instance
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TMacon):
+		switch key {
+		case "addr", "oui":
+			return []Value{NewCarrier(TString)}
+		case "bits":
+			return []Value{NewCarrier(TInteger)}
+		case "eui64", "multicast", "local", "broadcast":
+			return []Value{NewCarrier(TBoolean)}
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TColoron):
+		switch key {
+		case "r", "g", "b", "a":
+			return []Value{NewCarrier(TInteger)}
+		case "hex", "css":
+			return []Value{NewCarrier(TString)}
+		case "opaque":
+			return []Value{NewCarrier(TBoolean)}
+		case "alpha":
+			return []Value{NewCarrier(TFloat)}
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TMimon):
+		switch key {
+		case "type", "subtype", "essence", "mime":
+			return []Value{NewCarrier(TString)}
+		case "params", "suffix", "facet":
+			return dyn // optional per instance — Map/String or none
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TQion):
+		switch key {
+		case "code", "display":
+			return []Value{NewCarrier(TString)}
+		case "amount":
+			return []Value{NewCarrier(TBigDecimal)}
+		case "minor":
+			return []Value{NewCarrier(TInteger)}
+		case "negative":
+			return []Value{NewCarrier(TBoolean)}
+		case "units":
+			return dyn // Integer or none (overflow) per instance
+		}
+		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(TPhonon):
+		switch key {
+		case "e164", "digits":
+			return []Value{NewCarrier(TString)}
+		case "length":
+			return []Value{NewCarrier(TInteger)}
+		}
+		return []Value{NewCarrier(TNone)}
 	}
 	if schema, ok := eng.MicronSchemaFor(t); ok {
 		if fv, ok := schema.Get(key); ok {
