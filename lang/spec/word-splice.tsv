@@ -123,3 +123,4 @@ def xs (quote [1 add 2])  do [word xs]	3	a quoted-binding payload splices into a
 def op (quote [mul 2])  do [5 word op]	10	the spliced tokens compose with the body's preceding stack
 def twice word [dup add]  do [5 twice]	10	a bare macro reference (splice-bound def) fires inside the body
 def op (quote [mul 2])  [1 2 3] each [word op]	[2 4 6]	a splice in an each body compiles per element
+def xs [add 1 2]  do [word xs]	3	a RUNTIME-computed payload (the def evaluates its list body) splices via the dyn-body backstop's live binding
