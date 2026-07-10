@@ -1,11 +1,12 @@
 package test
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
 	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runWithSource parses and runs AQL source, returning the error.
@@ -185,6 +186,88 @@ func TestErrorFormatSignatureStackContext(t *testing.T) {
 	// Should mention the actual values present
 	if !strings.Contains(stackNote, "'hello'") || !strings.Contains(stackNote, "42") {
 		t.Errorf("stack note should describe the actual values, got: %s", stackNote)
+	}
+}
+
+// =====================================================================
+// Undefined words + did-you-mean
+// =====================================================================
+
+func TestErrorFormatUndefinedWordDidYouMean(t *testing.T) {
+	err := runWithSource(t, "def counter 1\ncountr")
+	ae := assertAqlError(t, err, "undefined_word")
+	assertErrorContains(t, err,
+		"undefined word: countr",
+		"did you mean `counter`?",
+	)
+	if len(ae.Suggestions) == 0 {
+		t.Error("expected structured Suggestions")
+	}
+}
+
+func TestErrorFormatUndefinedWordBuiltinDescribe(t *testing.T) {
+	// A typo'd BUILTIN also points at its describe entry.
+	err := runWithSource(t, `filtr [1 2 3] [true]`)
+	assertAqlError(t, err, "undefined_word")
+	assertErrorContains(t, err, "did you mean", "aql describe ")
+}
+
+func TestErrorFormatUndefinedWordNoWildGuess(t *testing.T) {
+	// Nothing plausible nearby → no did-you-mean at all (never guess).
+	err := runWithSource(t, `zzqzzqzz`)
+	assertAqlError(t, err, "undefined_word")
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("far name must not produce a guess:\n%s", err.Error())
+	}
+}
+
+func TestErrorFormatUndefinedTypeNameDidYouMean(t *testing.T) {
+	// A misspelt TYPE name in a binding suggests the type.
+	err := runWithSource(t, `def x:Intger 5`)
+	assertAqlError(t, err, "def_error")
+	assertErrorContains(t, err,
+		"type annotation must be a type value",
+		"did you mean `Integer`",
+	)
+}
+
+// =====================================================================
+// Strict-read key misses + did-you-mean
+// =====================================================================
+
+func TestErrorFormatKeyMissDidYouMean(t *testing.T) {
+	err := runWithSource(t, `{color:1 size:2} "colour" getr`)
+	ae := assertAqlError(t, err, "not_found")
+	assertErrorContains(t, err,
+		`key "colour" not found in map`,
+		"did you mean `color`?",
+	)
+	_ = ae
+}
+
+func TestErrorFormatKeyMissNoWildGuess(t *testing.T) {
+	err := runWithSource(t, `{color:1 size:2} "zzz" getr`)
+	assertAqlError(t, err, "not_found")
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("far key must not produce a guess:\n%s", err.Error())
+	}
+}
+
+func TestErrorFormatModuleExportMissDidYouMean(t *testing.T) {
+	// Native module imports need the full lang.New wiring (module
+	// resolver), not the bare DefaultRegistry fixture.
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run("import \"aql:math-util\"\nMathUtil \"sqrtt\" getr")
+	if err == nil {
+		t.Fatal("expected an export-miss error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `export "sqrtt" not found in module`) ||
+		!strings.Contains(msg, "did you mean `sqrt`?") {
+		t.Errorf("missing export did-you-mean:\n%s", msg)
 	}
 }
 

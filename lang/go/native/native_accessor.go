@@ -275,6 +275,19 @@ func getrNoneReturns(args []Value, r *Registry) []Value {
 	return []Value{}
 }
 
+// notFoundKeyError builds the strict-read not_found error with a
+// did-you-mean suggestion over the container's actual keys (the
+// diagnostics phase-4 hook: a typo'd key suggests its neighbours).
+func notFoundKeyError(r *Registry, detail, key string, keys []string) error {
+	err := r.AqlError("not_found", detail, "getr")
+	if ae, ok := err.(*eng.AqlError); ok {
+		if s := eng.DidYouMean(key, keys); s != "" {
+			ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+		}
+	}
+	return err
+}
+
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
@@ -299,7 +312,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in map", k), "getr")
+		return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in map", k), k, m.Keys())
 	}
 	return []Value{val}, nil
 }
@@ -314,21 +327,21 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
-			return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in object", k), "getr")
+			return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in object", k), k, m.Keys())
 		}
 		return []Value{val}, nil
 	}
 	if ri, err := AsResourceInstance(container); err == nil {
 		val, ok := ri.GetField(k)
 		if !ok {
-			return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in resource", k), "getr")
+			return nil, notFoundKeyError(r, fmt.Sprintf("getr: field %q not found in resource", k), k, ri.Fields.Keys())
 		}
 		return []Value{val}, nil
 	}
 	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in object", k), "getr")
+		return nil, notFoundKeyError(r, fmt.Sprintf("getr: field %q not found in object", k), k, oi.Fields.Keys())
 	}
 	return []Value{val}, nil
 }

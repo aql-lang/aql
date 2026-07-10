@@ -91,14 +91,16 @@ func TestDXDefBareWordHint(t *testing.T) {
 	}
 }
 
-// §5.3 — a plain undefined word does NOT get the def-specific hint.
+// §5.3 — a plain undefined word does NOT get the def-specific hint
+// (the near-miss did-you-mean, e.g. `for` for `foo`, is a different
+// suggestion and is allowed).
 func TestDXPlainUndefinedNoDefHint(t *testing.T) {
 	err := dxErr(t, `foo`)
 	if err == nil {
 		t.Fatal("expected an undefined-word error")
 	}
-	if strings.Contains(err.Error(), "did you mean") {
-		t.Errorf("plain undefined word should not dot the def hint:\n%s", err.Error())
+	if strings.Contains(err.Error(), "to bind its value") {
+		t.Errorf("plain undefined word should not get the def hint:\n%s", err.Error())
 	}
 }
 

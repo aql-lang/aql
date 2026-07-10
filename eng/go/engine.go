@@ -563,6 +563,58 @@ func (e *Engine) undefinedWordHint(name string) string {
 	return ""
 }
 
+// undefinedWordError builds the runtime undefined_word diagnostic: the
+// stable grep-friendly Detail (undefinedWordDetail), the context
+// suggestion for the two known blame-shift shapes (undefinedWordHint),
+// the did-you-mean near-miss over everything nameable in this registry,
+// and the describe pointer when the nearest miss is a builtin word.
+func (e *Engine) undefinedWordError(name string, pos SrcPos) *AqlError {
+	ae := &AqlError{
+		Code:       "undefined_word",
+		Detail:     undefinedWordDetail(name),
+		Src:        name,
+		Row:        pos.Row,
+		Col:        pos.Col,
+		fullSource: e.effectiveSource(),
+	}
+	if hint := e.undefinedWordHint(name); hint != "" {
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: hint})
+	}
+	ae.Suggestions = append(ae.Suggestions, e.didYouMeanSuggestions(name)...)
+	return ae
+}
+
+// undefinedWordCheckDiag is undefinedWordError's check-mode twin — the
+// same Detail and did-you-mean, carried on the CheckDiagnostic wire
+// type (the context hint is runtime-shaped and stays off it).
+func (e *Engine) undefinedWordCheckDiag(name string, pos SrcPos) CheckDiagnostic {
+	return CheckDiagnostic{
+		Code:        "undefined_word",
+		Detail:      undefinedWordDetail(name),
+		Word:        name,
+		Row:         pos.Row,
+		Col:         pos.Col,
+		Suggestions: e.didYouMeanSuggestions(name),
+	}
+}
+
+// didYouMeanSuggestions builds the near-miss suggestion(s) for an
+// unbound name: the did-you-mean line, plus the describe pointer when
+// the nearest miss is a builtin word (so the fix and its documentation
+// arrive together). Failure-path only — the candidate enumeration is
+// never paid on a successful step.
+func (e *Engine) didYouMeanSuggestions(name string) []DiagSuggestion {
+	matches := SuggestNames(name, e.registry.SuggestionCandidates())
+	if len(matches) == 0 {
+		return nil
+	}
+	out := []DiagSuggestion{{Message: didYouMeanMessage(matches)}}
+	if e.registry.IsBuiltinWord(matches[0]) {
+		out = append(out, DiagSuggestion{Message: describeSuggestion(matches[0])})
+	}
+	return out
+}
+
 // voidArgErrorFor reports the §3 "argument expression produced no
 // value" error when the failing word was a candidate consumer of a
 // paren group that resolved to ZERO values in the current statement;
@@ -1977,27 +2029,14 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	v, ok := ResolveUsurp(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + w.Name,
-				Word:   w.Name,
-				Row:    val.Pos().Row,
-				Col:    val.Pos().Col,
-			})
+			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + w.Name,
-			Src:        w.Name,
-			Row:        val.Pos().Row,
-			Col:        val.Pos().Col,
-			fullSource: e.effectiveSource(),
-		}
+		return e.undefinedWordError(w.Name, val.Pos())
 	}
 	// /u may usurp only function words — a non-fn binding has no
 	// signature to reverse. ResolveUsurp returns the raw binding in
@@ -2072,27 +2111,14 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + w.Name,
-				Word:   w.Name,
-				Row:    val.Pos().Row,
-				Col:    val.Pos().Col,
-			})
+			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + w.Name,
-			Src:        w.Name,
-			Row:        val.Pos().Row,
-			Col:        val.Pos().Col,
-			fullSource: e.effectiveSource(),
-		}
+		return e.undefinedWordError(w.Name, val.Pos())
 	}
 	// /r may reference only function words. A non-fn binding (plain
 	// value, type body) has no call/value asymmetry for /r to break,
@@ -2379,24 +2405,9 @@ func (e *Engine) stepWord(val Value) error {
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
 		if !e.registry.Check.IsActive() {
-			hint := e.undefinedWordHint(w.Name)
-			return &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + w.Name,
-				Src:        w.Name,
-				Row:        val.Pos().Row,
-				Col:        val.Pos().Col,
-				Hint:       hint,
-				fullSource: e.effectiveSource(),
-			}
+			return e.undefinedWordError(w.Name, val.Pos())
 		}
-		e.registry.Check.AddDiagnostic(CheckDiagnostic{
-			Code:   "undefined_word",
-			Detail: "undefined word: " + w.Name,
-			Word:   w.Name,
-			Row:    val.Pos().Row,
-			Col:    val.Pos().Col,
-		})
+		e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 		v := NewAtom(w.Name)
 		v.pos = val.pos
 		v.Undefined = true

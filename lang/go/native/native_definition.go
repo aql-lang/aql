@@ -510,7 +510,18 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {
-		return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
+		err := r.AqlError("def_error",
+			fmt.Sprintf("def %s: type annotation must be a type value, got %s", name, constraint.String()), "def")
+		// An unresolved WORD annotation is almost always a misspelt type
+		// name — suggest the near-miss (diagnostics phase 4).
+		if ae, ok := err.(*eng.AqlError); ok && eng.IsWord(constraint) {
+			if w, werr := eng.AsWord(constraint); werr == nil {
+				if s := eng.DidYouMean(w.Name, r.SuggestionCandidates()); s != "" {
+					ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+				}
+			}
+		}
+		return nil, err
 	}
 	describeType := func() string {
 		if typeName != "" {

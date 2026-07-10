@@ -148,6 +148,40 @@ func candidateNotes(name string, fails []CandidateFailure, totalSigs, nWritten i
 	return notes
 }
 
+// undefinedWordDetail is the Detail line for an unbound word — the
+// grep-friendly head every undefined_word surface shares (86 spec rows
+// pin it); the Elm voice lives in the did-you-mean suggestion.
+func undefinedWordDetail(name string) string {
+	return "undefined word: " + name
+}
+
+// DidYouMean renders a near-miss suggestion for name over candidates —
+// "did you mean `length`?" — or "" when nothing plausible is close
+// enough (SuggestNames' distance cap). Exported for the language layer
+// (strict-read key misses suggest the container's actual keys).
+func DidYouMean(name string, candidates []string) string {
+	return didYouMeanMessage(SuggestNames(name, candidates))
+}
+
+// didYouMeanMessage renders an already-ranked near-miss list.
+func didYouMeanMessage(matches []string) string {
+	if len(matches) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(matches))
+	for i, m := range matches {
+		quoted[i] = "`" + m + "`"
+	}
+	switch len(quoted) {
+	case 1:
+		return "did you mean " + quoted[0] + "?"
+	case 2:
+		return "did you mean " + quoted[0] + " or " + quoted[1] + "?"
+	default:
+		return "did you mean " + quoted[0] + ", " + quoted[1] + ", or " + quoted[2] + "?"
+	}
+}
+
 // pluralArg / pluralSig — grammatical number for the two nouns the
 // dispatch notes count.
 func pluralArg(n int) string {

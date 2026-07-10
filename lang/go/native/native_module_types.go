@@ -230,7 +230,11 @@ func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if val, ok := moduleExportGet(args[1], k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("not_found", fmt.Sprintf("getr: export %q not found in module", k), "getr")
+	var keys []string
+	if me, ok := asModuleExportInfo(args[1]); ok && me.Fields != nil {
+		keys = me.Fields.Keys()
+	}
+	return nil, notFoundKeyError(r, fmt.Sprintf("getr: export %q not found in module", k), k, keys)
 }
 
 // moduleExportGetReturns is the check-mode counterpart for `get`/`getr`
