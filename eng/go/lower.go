@@ -965,6 +965,24 @@ func (es *EmitState) fragResultStaysOnSim(seq int, refs map[int]int, fragResult,
 func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
+	// DynEnv: every dyn-bound def's COMPUTED source event must be promoted —
+	// lowerDynBind re-pushes the value from its slot for the OpBindDynScope
+	// install (an unpromoted computed value has no re-pushable home and
+	// refused "unpromoted computed value" — the `def xs [add 1 2]` OpMakeList
+	// shape). Collected up front; joins every promote trigger below.
+	// Merged into forceOrder: a dyn-bound source needs exactly the forced
+	// promotion forceOrder describes (store once, re-push per use), so one
+	// set drives every trigger below without extra per-site conditions.
+	if dynBindSrc := es.collectDynBindSources(events); len(dynBindSrc) > 0 {
+		merged := make(map[int]bool, len(forceOrder)+len(dynBindSrc))
+		for k := range forceOrder {
+			merged[k] = true
+		}
+		for k := range dynBindSrc {
+			merged[k] = true
+		}
+		forceOrder = merged
+	}
 	for i := range events {
 		forEachOperand(&events[i], func(op emitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
@@ -1050,34 +1068,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
 		// program-residual-only value the dead-drop must not touch.
 		if ev.kind == evBranch {
-			// DynEnv: no def is dead — a dynamic code body may read any binding
-			// at run time, so its OpBindDynScope twin needs the value live.
-			if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
-				if dead == nil {
-					dead = map[int]bool{}
-				}
-				dead[ev.seq] = true
-				continue
-			}
-			// A 2-arm if-RESULT bound to a name and read MORE THAN ONCE (or across a
-			// fragment floor) — `def bi (if …); … (… get bi) … set bi …` — must be
-			// STORED to a frame local: a single sim copy is consumed by the first use,
-			// so the second (here a later `set` key) cannot find it ("operands of set
-			// not adjacent on top", bucket's `bcount set bi ((bcount get bi) add 1)`).
-			// Promote like a call result; lowerEvents stores the merge after the branch
-			// and the rewritten references re-push from the slot. Gated to a SINGLE-value
-			// merge (both arms net <=1) so the store seats exactly one value — a
-			// multi-value / variadic merge is refused at the store hook (sound fallback).
-			if branchSingleValue(ev.br) && es.eventInfo[ev.seq].valueDef &&
-				(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
-				if promoted == nil {
-					promoted = map[int]int{}
-				}
-				if _, done := promoted[ev.seq]; !done {
-					promoted[ev.seq] = unit.numLocals
-					unit.numLocals++
-				}
-			}
+			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, forceOrder, promoted, dead)
 			continue
 		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
@@ -1162,7 +1153,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		switch {
 		case isUser && !promoteUser && !deadValueDef:
 			// leave the user-call result on the simulated stack (Stage-3 layout)
-		case refs[ev.seq] == 0 && (!isUser || deadValueDef):
+		case refs[ev.seq] == 0 && !forceOrder[ev.seq] && (!isUser || deadValueDef):
 			// A single-result value-def bound to a name referenced zero times (a
 			// dead binding, e.g. `def b (make C {…})` with b never used) — never the
 			// program residual or a fragment read, both of which count toward refs.
@@ -1383,8 +1374,12 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 				// RET leaves whatever the body left, exactly like the program
 				// residual. Permit a variadic event in the LAST position only — a
 				// variadic with fixed values ABOVE it cannot seat (the count is
-				// runtime-variable).
-				if !(allowVariadicTail && i == len(ops)-1) {
+				// runtime-variable) — OR a CONTIGUOUS run of the SAME variadic
+				// event's results reaching the end (a multi-out dyn-body `do`
+				// whose whole runtime residual lands together; the fixed static
+				// model above it is unaffected, and anything pushed after would
+				// sit above the runtime run exactly as recorded).
+				if !(allowVariadicTail && i == len(ops)-1) && !sameEventRunToEnd(ops[i:], op.idx) {
 					return msgs.variadic
 				}
 			}
@@ -1406,6 +1401,67 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 		lw.pushOperand(op, pos)
 	}
 	return ""
+}
+
+// planBranchPromotion classifies one evBranch merge result for
+// planValueDefLocals: a DEAD 2-arm value-def (`def _ (if c [t] [e])`, never
+// read) drops its result — the interpreter binds the merge OFF the residual
+// stack — EXCEPT under DynEnv, where no def is dead (a dynamic code body may
+// read any binding, so its OpBindDynScope twin needs the value live). A
+// 2-arm if-RESULT bound to a name and read more than once / across a
+// fragment floor / under DynEnv promotes to a frame local: a single sim copy
+// is consumed by the first use (bucket's `bcount set bi ((bcount get bi) add
+// 1)`). Gated to a SINGLE-value merge so the store seats exactly one value —
+// a multi-value / variadic merge is refused at the store hook.
+func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
+	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
+		if dead == nil {
+			dead = map[int]bool{}
+		}
+		dead[ev.seq] = true
+		return promoted, dead
+	}
+	if branchSingleValue(ev.br) && (es.eventInfo[ev.seq].valueDef || forceOrder[ev.seq]) &&
+		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
+		if promoted == nil {
+			promoted = map[int]int{}
+		}
+		if _, done := promoted[ev.seq]; !done {
+			promoted[ev.seq] = unit.numLocals
+			unit.numLocals++
+		}
+	}
+	return promoted, dead
+}
+
+// collectDynBindSources returns the COMPUTED source-event seqs of every
+// dyn-bound def under DynEnv (empty otherwise) — the promotion set
+// planValueDefLocals feeds into its triggers so lowerDynBind can re-push
+// each value from a frame slot for its OpBindDynScope install.
+func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
+	dynBindSrc := map[int]bool{}
+	if !es.dynEnv {
+		return dynBindSrc
+	}
+	for i := range events {
+		if events[i].kind == evDynBind && events[i].dyn != nil && events[i].dyn.srcSeq >= 0 {
+			dynBindSrc[events[i].dyn.srcSeq] = true
+		}
+	}
+	return dynBindSrc
+}
+
+// sameEventRunToEnd reports whether ops is entirely the SAME event's results
+// in ascending result order — the contiguous multi-out variadic run the
+// seatResults relaxation admits (all of a dyn-body do's outputs land together
+// at run time, whatever their count).
+func sameEventRunToEnd(ops []emitOperand, idx int) bool {
+	for i, op := range ops {
+		if op.kind != opEvent || op.idx != idx || op.resIdx != i {
+			return false
+		}
+	}
+	return true
 }
 
 // reconcileResults arranges a unit's N result operands (bottom→top) as the

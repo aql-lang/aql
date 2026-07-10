@@ -113,17 +113,20 @@ func TestStaticSpliceBodiesCompile(t *testing.T) {
 				c.src, c.want, compiled, gotC, errC, gotI, errI)
 		}
 	}
-	// NEGATIVE: a RUNTIME-computed payload (non-foldable) keeps refusing with
-	// interpreter parity — Phase E (runtime JIT) territory.
+	// A RUNTIME-computed payload (the def evaluates its list body) compiles
+	// via the dyn-body backstop: the def's OpBindDynScope twin re-binds the
+	// RUNTIME value (its computed source event promotes to a frame local
+	// under DynEnv — the OpMakeList shape), and the body's sub-run splices
+	// the live binding exactly as the interpreter does.
 	src := `def xs [add 1 2]  do [word xs]`
 	b, _ := New()
-	prog, _, _, _ := b.CompileCheck(src)
-	if prog != nil {
-		t.Errorf("%q: a computed (carrier) splice payload must keep refusing", src)
+	prog, reason, _, _ := b.CompileCheck(src)
+	if prog == nil {
+		t.Errorf("%q: the dyn-body backstop must compile a computed splice payload; reason=%q", src, reason)
 	}
 	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
-	if compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
+	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[3]" {
+		t.Errorf("%q: want [3] compiled with parity: compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
 			src, compiled, gotC, errC, gotI, errI)
 	}
 }

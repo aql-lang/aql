@@ -1520,7 +1520,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es, _ := r.Check.Recorder().(*EmitState)
 	if es == nil || !es.active() || sig == nil || sig.Callable == nil ||
-		!sig.CompileEffect.Has(CompileDynBody) || len(outs) != 1 {
+		!sig.CompileEffect.Has(CompileDynBody) || len(outs) == 0 {
 		return false
 	}
 	bp := sig.Callable.BodyPos
@@ -1549,11 +1549,43 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	// A GRADUAL (Any-widened) operand could be either overload (do's List
+	// code-body vs Map value-eval): record a POLY re-match over the word's
+	// own sigs — the runtime value picks the overload exactly as the
+	// interpreter's dispatch does. A strictly-List operand bakes the sig.
+	call := emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}
+	if body.Dynamic {
+		call.sig = nil
+		call.poly = true
+	}
+	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
 	f.variadicResult = true
 	es.eventInfo[seq] = f
-	es.setProduced(outs[0], seq)
+	// Carrier-identity de-collision, extended to INTRA-event repeats: the
+	// modeled outs of a dyn-body sub-run may repeat one value — an unrolled
+	// loop body (`do [for 3 [1]]`) models [1 1 1] as the SAME Value, whose
+	// shared ID would collapse producedBy to the LAST result index and refuse
+	// "call results reordered" at the residual. Unlike the generic RecordCall
+	// (which skips same-event collisions — dup/swap identity is the DUP
+	// lowering's job), a dyn-body CALL_NATIVE's results are N distinct runtime
+	// stack values, so every repeated out mints a fresh ID; an out that IS one
+	// of the call's inputs keeps its ID (a pass-through resolves to its
+	// operand). The outs slice is the dispatch's live result values, so the
+	// fresh IDs flow to the downstream consumers exactly as in RecordCall.
+	argIDs := make(map[string]bool, len(args))
+	for _, a := range args {
+		argIDs[a.ID] = true
+	}
+	seen := make(map[string]bool, len(outs))
+	for i := range outs {
+		_, prior := es.producedBy[outs[i].ID]
+		if (prior || seen[outs[i].ID]) && !argIDs[outs[i].ID] {
+			outs[i].ID = GenerateID(IDPrefixForType(outs[i].Parent))
+		}
+		seen[outs[i].ID] = true
+		es.setProducedAt(outs[i], seq, i)
+	}
 	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc).
 	es.dynEnv = true
 	return true

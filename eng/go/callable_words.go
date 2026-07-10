@@ -241,6 +241,12 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	_, bodyIsLambda := body.Data.(FnDefInfo)
 	tokenShapeGeneric := spec.CrossCollectionTokenShape && IsConcrete(body) && !bodyIsLambda
 	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
+		// A CompileDynBody word DECLINES instead: tryRecordDynBody records a
+		// POLY re-match over the word's own sigs — the runtime value picks
+		// the overload exactly as the interpreter's dispatch does.
+		if sig.CompileEffect.Has(CompileDynBody) {
+			return false
+		}
 		es.MarkUncompilable("higher-order `" + word + "` over a gradual-Any collection: ambiguous overload (List vs Map), no static commit and no poly re-match")
 		return true
 	}

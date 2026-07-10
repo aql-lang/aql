@@ -74,6 +74,51 @@ func TestSwapTailArgsBranches(t *testing.T) {
 	}
 }
 
+// tryRecordClosure's gradual-ambiguity gate: a multi-overload Callable word
+// WITHOUT a poly re-match (no CompileDynBody) and WITHOUT the
+// CrossCollectionTokenShape robustness flag must OWN the dispatch with an
+// uncompilable mark — the checker's single committed overload may not be the
+// one the runtime value needs, and there is no runtime re-match to correct
+// it. Every shipping Callable word now carries one of the two escapes (do:
+// CompileDynBody poly re-match; each/fold/scan: CrossCollectionTokenShape),
+// so the arm is pinned white-box against a synthetic word. The positive twin
+// (a CompileDynBody sig DECLINES here so the dyn-body poly takes the funnel)
+// is pinned end-to-end by lang's TestDynBodyVariadicAndSpliceShapes gradual
+// row.
+func TestGradualAmbiguityMarksUncompilable(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	h := func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return nil, nil
+	}
+	r.Register("grady",
+		Signature{Args: []*Type{TList, TList}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(h), Returns: []*Type{TList}, BarrierPos: -1},
+		Signature{Args: []*Type{TList, TMap}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(h), Returns: []*Type{TMap}, BarrierPos: -1},
+	)
+	done := r.Check.BeginCompilePass()
+	defer done()
+	sig := &Signature{
+		Args:       []*Type{TList, TList},
+		NoEvalArgs: map[int]bool{0: true},
+		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, Inputs: func(_ []Value) []Value {
+			return []Value{NewCarrier(TAny)}
+		}},
+	}
+	body := NewList([]Value{NewInteger(1)})
+	data := NewCarrier(TAny)
+	data.Dynamic = true
+	outs := []Value{NewCarrier(TList)}
+	if !tryRecordClosure(r, "grady", sig, []Value{body, data}, outs, SrcPos{}) {
+		t.Fatalf("gradual ambiguity without a poly re-match must be OWNED (true)")
+	}
+	es, _ := r.Check.Recorder().(*EmitState)
+	if es == nil || es.Compilable || es.Reason == "" {
+		t.Errorf("gradual ambiguity must mark uncompilable with a named reason; got es=%v", es)
+	}
+}
+
 // tryRecordDynBody decline guards: a Callable whose BodyPos exceeds the args
 // (a malformed dispatch shape) and an unresolvable operand both decline,
 // leaving the ordinary refusal path.

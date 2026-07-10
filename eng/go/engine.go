@@ -3320,6 +3320,28 @@ func (e *Engine) stepLiteral() error {
 		// value via the TAny match in the collection branch below).
 		if IsSplice(e.tape.At(valIdx)) {
 			info, _ := AsSplice(e.tape.At(valIdx))
+			// A splice over a COMPUTED (carrier) payload that MIGHT BE A LIST
+			// cannot RECORD: the runtime marker SPREADS a list's elements, but
+			// the analysis can only step the carrier as itself, so a compiled
+			// unit would bake IDENTITY where the runtime spreads (`def xs (mk)
+			// do [word xs]` compiled [7 8] against the interpreter's 7 8 — the
+			// captured-carrier closure shape). A carrier PROVABLY not a list
+			// (a strict Integer/Atom/None result — `word (1 add 2)`) is safe:
+			// both engines contribute the value ITSELF, and the carrier keeps
+			// its event provenance, so the recording is faithful. A Dynamic
+			// carrier's type is a bound, not a proof — it stays poisoned.
+			// Poisoning marks the program uncompilable; the check proceeds
+			// with the carrier approximation, and the dyn-body backstop (or
+			// the whole-program fallback) owns the shape with the
+			// interpreter's own runtime semantics. Suspended analyses (a
+			// ReturnsFn body run) stay silent — only a LIVE recording is
+			// poisoned.
+			if rec, isEmit := e.registry.Check.Recorder().(*EmitState); isEmit && rec.active() &&
+				!IsConcrete(info.Data) && !IsBareTypeNode(info.Data) &&
+				(info.Data.Dynamic || info.Data.Parent == nil ||
+					TList.ConformsTo(info.Data.Parent) || info.Data.Parent.ConformsTo(TList)) {
+				rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
+			}
 			e.tape.Splice(valIdx, 1, spliceExpand(info.Data)...)
 			return nil
 		}
