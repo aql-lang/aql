@@ -1912,23 +1912,40 @@ func NewForward(info ForwardInfo) Value {
 	return NewValueRaw(TForward, info)
 }
 
+// newMarkerValue mints a payload-less STRUCTURAL marker (paren / end).
+// Markers are recognised by Parent identity and carry no payload, so
+// NewValueRaw's data==nil "always mint" rule — which exists for type
+// literals, whose IDs canon and the type registry read at runtime —
+// does not apply; a marker's ID follows the pass rule instead. The
+// interpreter re-expands paren groups per evaluation (expandParenExpr),
+// so eager marker IDs were a per-op allocation for nothing; during a
+// parse or check/compile pass (checkPassDepth > 0) markers mint exactly
+// as before.
+func newMarkerValue(t *Type) Value {
+	v := Value{Parent: t}
+	if checkPassDepth.Load() > 0 {
+		v.ID = GenerateID(IDPrefixForType(t))
+	}
+	return v
+}
+
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
-	return NewValueRaw(TOpenParen, nil)
+	return newMarkerValue(TOpenParen)
 }
 
 // NewCloseParen creates a close-paren marker value. Emitted by the
 // parser for `)` so the engine can recognise it by Parent identity
 // instead of by string compare.
 func NewCloseParen() Value {
-	return NewValueRaw(TCloseParen, nil)
+	return newMarkerValue(TCloseParen)
 }
 
 // NewEnd creates an end-marker value (the `end` / `;` keyword).
 // Emitted by the parser so the engine can recognise it by Parent
 // identity instead of by string compare.
 func NewEnd() Value {
-	return NewValueRaw(TEnd, nil)
+	return newMarkerValue(TEnd)
 }
 
 // NewParenExpr creates a paren expression value containing items to evaluate.

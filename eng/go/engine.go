@@ -3121,7 +3121,16 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 // resolvedIndicesBefore returns the indices of the last n resolved values
 // before the current pointer, stopping at open-paren barriers.
 func (e *Engine) resolvedIndicesBefore(n int) []int {
-	var indices []int
+	return e.resolvedIndicesBeforeInto(nil, n)
+}
+
+// resolvedIndicesBeforeInto is resolvedIndicesBefore appending into a
+// caller-supplied buffer (matchSignature's per-invocation int buffer —
+// its cap must be ≥ n to stay allocation-free; a nil buf allocates as
+// before). The buffer collects at most n indices, so a cap-n tail
+// region never reallocates.
+func (e *Engine) resolvedIndicesBeforeInto(buf []int, n int) []int {
+	indices := buf
 	for i := e.pointer - 1; i >= 0 && len(indices) < n; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			break
@@ -6511,10 +6520,6 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		}
 	}
 
-	// Build a map from resolved values to their absolute stack indices.
-	// This lets us record exact positions for stack-matched args.
-	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
-
 	// Track the best non-preferred match so that if no preferred sig
 	// matches, we can fall back to it without a second pass.
 	type matchResult struct {
@@ -6524,23 +6529,29 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	}
 	var bestDeferred *matchResult
 
-	// One positions buffer per matchSignature INVOCATION, re-sliced (and
-	// re-zeroed, preserving the old make()'s zero-fill) per candidate —
-	// the previous per-candidate make([]int, nArgs) was ~17% of all
-	// interpreter allocations (design/INTERPRETER-PYTHON-PARITY.10.md F3
-	// Stage 1). Per-invocation (NOT engine-level) is load-bearing: a
+	// ONE int buffer per matchSignature INVOCATION backs both the
+	// per-candidate positions (first maxSigArgs cells, re-sliced and
+	// re-zeroed per candidate — the previous per-candidate make was ~17%
+	// of all interpreter allocations) and the resolved-index map (tail
+	// cells). Per-invocation (NOT engine-level) is load-bearing: a
 	// predicate-typed param runs AQL during sigTypeMatches (RunPredicate),
 	// so matchSignature can nest — each nested call owns its own buffer.
-	// A success return hands the buffer to the caller (ownership
-	// transfers; this call never touches it again); bestDeferred keeps
-	// its explicit copy since later candidates overwrite the buffer.
+	// A success return hands the positions slice to the caller (ownership
+	// transfers; this call never touches the buffer again and the
+	// resolvedIdx region is dead after return); bestDeferred keeps its
+	// explicit copy since later candidates overwrite the buffer.
 	maxSigArgs := 0
 	for si := range fn.Signatures {
 		if n := fn.Signatures[si].TotalArgs(); n > maxSigArgs {
 			maxSigArgs = n
 		}
 	}
-	posBuf := make([]int, maxSigArgs)
+	intBuf := make([]int, maxSigArgs, maxSigArgs+len(resolved))
+	posBuf := intBuf[:maxSigArgs]
+
+	// Absolute stack indices of the resolved values — the positions of
+	// stack-matched args. Filled into the tail region of intBuf.
+	resolvedIdx := e.resolvedIndicesBeforeInto(intBuf[maxSigArgs:maxSigArgs], len(resolved))
 
 	// ── 0.1: one outer loop over sorted signatures ───────────────
 	for si := range fn.Signatures {
