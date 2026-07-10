@@ -141,6 +141,12 @@ func TestSeam5AbsDirError(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
+	// Some platforms (notably macOS) keep resolving a removed working
+	// directory, so os.Getwd — and therefore AbsDir's error arm — never
+	// fails. Skip rather than fail spuriously where the arm is unreachable.
+	if _, err := os.Getwd(); err == nil {
+		t.Skip("this platform still resolves a removed working directory; AbsDir's getwd-error arm is unreachable here")
+	}
 
 	if _, err := AbsDir("rel/prog.aql"); err == nil {
 		t.Fatal("AbsDir must fail when the working directory is gone")
