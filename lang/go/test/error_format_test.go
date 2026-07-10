@@ -88,8 +88,15 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 	assertErrorContains(t, err,
 		"the argument was 99 (an Integer)",
 		"candidate `upper (String)` — argument 1: expected String, got 99 (an Integer)",
-		"stack:",
 	)
+	// The dispatch diagnostic carries NO tape-internal "stack:" note —
+	// it has no compiled-mode equivalent, so it is deliberately absent
+	// (design/DIAGNOSTICS.0.md phase 7 cross-engine parity).
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "stack:") {
+			t.Errorf("dispatch error must not carry a tape-internal stack note, got %q", n)
+		}
+	}
 }
 
 func TestErrorFormatSignatureMissingArg(t *testing.T) {
@@ -170,22 +177,32 @@ func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
 	}
 }
 
-func TestErrorFormatSignatureStackContext(t *testing.T) {
-	// A note should describe what values are actually on the stack.
+func TestErrorFormatSignatureReceivedArg(t *testing.T) {
+	// The received-arguments note names the value the failed dispatch
+	// actually saw, in plain language — the plain-English successor to
+	// the old tape-internal "stack:" dump (which had no compiled-mode
+	// equivalent and was removed for cross-engine parity, phase 7).
+	// `upper` is 1-arg, so it dispatches on 42; the unrelated 'hello'
+	// leftover below it is not the argument and is not reported.
 	err := runWithSource(t, `"hello" 42 upper`)
 	ae := assertAqlError(t, err, "signature_error")
-	stackNote := ""
+	argNote := ""
 	for _, n := range ae.Notes {
-		if strings.HasPrefix(n, "stack:") {
-			stackNote = n
+		if strings.HasPrefix(n, "the argument") {
+			argNote = n
 		}
 	}
-	if stackNote == "" {
-		t.Fatalf("expected a 'stack:' note, notes = %v", ae.Notes)
+	// The note names the values in the failing window, top-first — the
+	// same context the old stack note gave, in plain language, and
+	// reproduced identically by the compiled path.
+	if argNote != "the arguments were 42 (an Integer) and 'hello' (a ProperString)" {
+		t.Errorf("received-argument note = %q, want the plain-language arg description", argNote)
 	}
-	// Should mention the actual values present
-	if !strings.Contains(stackNote, "'hello'") || !strings.Contains(stackNote, "42") {
-		t.Errorf("stack note should describe the actual values, got: %s", stackNote)
+	// And no tape-internal stack note survives.
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "stack:") {
+			t.Errorf("dispatch error must not carry a stack note, got %q", n)
+		}
 	}
 }
 

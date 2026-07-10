@@ -40,16 +40,20 @@ func TestReturnTypeErrorSpans(t *testing.T) {
 
 func TestReturnTypeErrorSpanNegatives(t *testing.T) {
 	e := engWithTape(t, nil, 0)
-	// No declaration site, and the value sits AT the error position:
-	// neither span attaches.
+	// No declaration site: no decl span. The value carries a position, so
+	// the produced-value span DOES attach — the attachment is decided by
+	// the value's own position alone (engine-independent), which is what
+	// keeps the compiled and interpreted span sets identical even though
+	// the primary caret sits at different places in the two engines
+	// (design/DIAGNOSTICS.0.md phase 7).
 	rc := ReturnCheckInfo{FuncName: "f", Pos: SrcPos{Row: 2, Col: 4}}
 	got := NewInteger(42)
 	got.pos = &SrcPos{Row: 2, Col: 4}
 	ae := e.returnTypeError(rc, 1, TString, got)
-	if len(ae.Spans) != 0 {
-		t.Errorf("no spans expected, got %+v", ae.Spans)
+	if len(ae.Spans) != 1 || ae.Spans[0].Label != "the returned value was produced here" {
+		t.Errorf("want exactly the value span, got %+v", ae.Spans)
 	}
-	// A positionless value attaches no value span either.
+	// A positionless value attaches no span at all (no location to point at).
 	ae = e.returnTypeError(rc, 1, TString, NewInteger(42))
 	if len(ae.Spans) != 0 {
 		t.Errorf("positionless value must attach no span, got %+v", ae.Spans)

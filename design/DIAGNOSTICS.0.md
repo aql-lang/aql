@@ -49,24 +49,29 @@ render their rich block via `RenderCheckDiagnostic` UNDER the stable
 
 Generalizes the return_check_msg.go precedent: every family's text is
 built in one place and shared by the interpreter, the VM's compiled
-guards, the check-pass trap, and the checker.
+guards, the check-pass trap, and the checker. The shared builders
+(`noMatchDiag`, `buildReturnTypeError`, `buildReturnCountError`,
+`buildNotFoundKeyError`) take DATA, not an Engine — so any surface with
+the failing values in hand rebuilds the byte-identical error.
 
-LOAD-BEARING CONSTRAINT: `noMatchDetail(name)` (and every Detail a
-compiled guard bakes at compile time) is a function of the word name
-ALONE — the compiled_fullcorpus gate compares interpreter-vs-VM Detail
-EQUALITY, and the VM bakes Detail at compile time while the
-interpreter builds it at the runtime failure. Everything operand- or
-stack-dependent rides in interpreter-side Notes/Suggestions, which the
-gate does not compare (the latitude Hint always had).
+`noMatchDetail(name)` is a function of the word name ALONE — every
+surface raises the same head, so the Detail-equality half of the
+compiled_fullcorpus gate holds trivially. The RICH payload (received
+arguments, per-candidate verdicts, spans, suggestions) is engineered to
+be byte-identical across engines too — see **Compiled-mode parity**
+below; that is the phase-7 contract, enforced by the extended gate.
 
 ## Family contracts
 
 - **Dispatch** (`signature_error` / check `no_signature`): head
   ``cannot call `w` — no signature matches the arguments``; notes =
   received-tuple line, ≤3 per-candidate verdicts from the explain pass
-  (below), `…and N more signatures`, stack snapshot; suggestions =
-  swap probe ("did you swap the arguments?"), forward-parens fix,
-  `aql describe` pointer (≥4 overloads or truncated list).
+  (below), `…and N more signatures`; suggestions = swap probe ("did you
+  swap the arguments?"), forward-parens fix, `aql describe` pointer (≥4
+  overloads or truncated list). There is deliberately NO tape-snapshot
+  ("stack: …") note — it was interpreter-tape-internal and had no
+  compiled-mode equivalent (see Compiled-mode parity); the received-tuple
+  note carries the same "what was here" information in plain language.
 - **Explain pass** (eng/go/dispatch_explain.go): failure-path-only
   positional probe of every non-fallback overload against the failing
   tuple — arity / slot-type / pattern verdicts, Score-ranked
@@ -104,6 +109,49 @@ gate does not compare (the latitude Hint always had).
 - LSP: notes/suggestions append to Diagnostic.Message as
   `note:`/`help:` lines.
 - wasm/serve: always plain (pinned by TestEvalErrorsArePlain).
+
+## Compiled-mode parity (phase 7)
+
+A compiled-mode error is BYTE-IDENTICAL to the interpreted one — same
+Detail, notes, suggestions, and secondary spans (the only tolerated
+difference is the primary caret position on a return error: the VM
+points inside the shared fn unit where the interpreter points at the
+call site). The rule was "errors from compiled mode must be exactly the
+same." Three mechanisms achieve it, one per way a compiled program can
+error:
+
+1. **Runtime param-contract guards** (vm.go `checkParamContract`,
+   `checkNativeParamContract`) rebuild the full dispatch diagnostic at
+   run time from the failing values via `runtimeNoMatch` → the shared
+   `noMatchDiag`. They hold the same concrete runtime values the
+   interpreter's `sigError` sees, so the rebuilt error is identical by
+   construction.
+2. **The compile-time OpTrap** (`tryRecordUnmatchedDispatchTrap`,
+   strict-read miss) serialises the interpreter's OWN error — the full
+   `AqlError` including spans/notes/suggestions — into the `TrapSpec`
+   via `RecordTrapErr`; the VM rebuilds it at `OpTrap`. Sound only when
+   the trap's operands are CONCRETE at compile time (definiteness),
+   because then check-time values == runtime values. A trap whose window
+   contains a CARRIER declines (falls back to the interpreter): the
+   carrier is not concrete at compile time, so a baked error could not
+   match the interpreter's runtime (concrete-value) one. This supersedes
+   the Phase-6 M4 carrier-disjointness trap, which is removed — a trap
+   is terminal, so the fallback costs only the (error-path) compilation
+   of a tail that never runs.
+3. **Return errors** thread the declaration site (`FnSig.Decl` →
+   `CompiledFn.Decl`) and share `buildReturnTypeError` /
+   `buildReturnCountError`, so the VM's RET raises the same two spans
+   (produced value + declaration) as the interpreter's ReturnCheck.
+
+The interpreter was made UNIFORMLY rich to match: a fallback-dispatch
+failure now routes through `sigError` (not the barer `fnFallbackSig`
+error) unless the fn courtesy-dispatches a 0-arg overload.
+
+Enforcement: `compiled_fullcorpus_test.go` compares aeC vs aeI Detail,
+notes, suggestion messages, and span labels+positions — tolerating only
+the primary-caret difference and the incidental value-rendering
+non-determinism (counter-based IDs, pre/post-eval operand forms) the
+result comparison already tolerates.
 
 ## Gallery (generated from real runs)
 

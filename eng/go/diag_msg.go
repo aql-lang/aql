@@ -18,17 +18,81 @@ import (
 
 // noMatchDetail is the Detail line for an unmatched dispatch.
 //
-// CONSTRAINT (load-bearing): the text is a function of the word name
-// ALONE. The VM's param-contract guards and the check pass's OpTrap
-// bake this Detail at COMPILE time, while the interpreter builds it at
-// the runtime failure — any operand- or stack-dependent content here
-// would desync the two and fail the compiled_fullcorpus
-// Detail-equality gate. Everything richer (the received arguments,
-// per-candidate verdicts, the stack snapshot, fix suggestions) rides
-// in interpreter-side Notes/Suggestions, which the gate does not
-// compare (the same latitude Hint has always had).
+// It is a function of the word name ALONE. The interpreter, the VM's
+// runtime param-contract guards, the check pass's OpTrap, and the
+// checker all raise this same head, so the compiled_fullcorpus
+// Detail-equality gate holds by construction.
 func noMatchDetail(name string) string {
 	return "cannot call `" + name + "` — no signature matches the arguments"
+}
+
+// noMatchDiag builds the COMPLETE unmatched-dispatch diagnostic —
+// Detail, the received-arguments note, per-candidate verdicts, and the
+// fix suggestions — from data alone (no Engine, no tape), so the
+// interpreter (sigError) and the compiled VM's runtime guards produce
+// a byte-identical error over the same failing tuple. `written` is the
+// failing arguments in sig order (sig[i] ↔ written[i]); `reorder` is
+// the precomputed swap-probe message ("" when none applies).
+//
+// Design note (compiled-mode parity): the diagnostic deliberately
+// carries NO tape-snapshot note. The interpreter's old "stack: …" note
+// dumped engine-internal tape state (markers, the >>>word<<< pointer)
+// that the compiled VM has no equivalent for, so it could never match
+// across engines; the received-arguments note conveys the same "what
+// values were here" information in plain language instead.
+func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *AqlError {
+	ae := makeAqlErrorAt("signature_error", noMatchDetail(name), name, source, "", pos)
+
+	if n := callArgsNote(written); n != "" {
+		ae.Notes = append(ae.Notes, n)
+	}
+	totalSigs := 0
+	if fn != nil {
+		for i := range fn.Signatures {
+			if !fn.Signatures[i].Fallback {
+				totalSigs++
+			}
+		}
+	}
+	fails := explainCandidates(fn, written)
+	notes := candidateNotes(name, fails, totalSigs, len(written))
+	if len(notes) == 0 && totalSigs > 0 {
+		// The probe could not blame any overload (or had no tuple to
+		// probe) — fall back to the compact signature overview.
+		notes = []string{"expected: " + name + " " + describeAllSigs(fn)}
+	}
+	ae.Notes = append(ae.Notes, notes...)
+
+	switch {
+	case reorder != "":
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: reorder})
+	case fn != nil && fn.HasForwardSigs():
+		// Forward-precedence fix: when the word has forward-collecting
+		// signatures, the most common cause of this error is that forward
+		// collection ran into a following word before it could gather
+		// enough arguments — see forwardParensSuggestion.
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: forwardParensSuggestion(name)})
+	}
+	if totalSigs >= 4 || len(fails) > diagMaxCandidates {
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: describeSuggestion(name)})
+	}
+	return ae
+}
+
+// runtimeNoMatch is the compiled VM's twin of the interpreter's
+// sigError: a runtime param-contract guard (checkParamContract /
+// checkNativeParamContract) that rejects `written` (the actual runtime
+// argument values, sig order) rebuilds the SAME rich diagnostic the
+// interpreter would raise over those values. It runs on the failure
+// path only; the VM stamps the source position afterward (stampAt).
+func runtimeNoMatch(r *Registry, name string, written []Value) *AqlError {
+	var fn *FnDefInfo
+	src := ""
+	if r != nil {
+		fn = r.Lookup(name)
+		src = r.Source
+	}
+	return noMatchDiag(src, name, fn, written, SrcPos{}, reorderHintFor(name, fn, written))
 }
 
 // insufficientArgsDetail is the Detail line for a forward collection

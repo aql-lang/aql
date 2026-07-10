@@ -26,6 +26,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -52,6 +53,107 @@ func asAqlError(e error) *eng.AqlError {
 		return ae
 	}
 	return nil
+}
+
+// diagPayloadMismatch compares the RICH diagnostic payload of the compiled and
+// interpreted errors — the notes, the suggestion messages, and the secondary
+// span labels + positions — and returns a human-readable divergence, or "" when
+// they match. This is the phase-7 parity enforcement: compiled-mode errors must
+// carry the SAME structured diagnostic as the interpreter, not merely the same
+// Detail. The PRIMARY caret position is deliberately excluded (the VM points
+// inside the shared fn unit where the interpreter points at the call site — the
+// documented return-error difference, gated separately by position PRESENCE).
+func diagPayloadMismatch(aeC, aeI *eng.AqlError) string {
+	if !normSliceEq(aeC.Notes, aeI.Notes) {
+		return "notes:\n  compiled=" + strings.Join(aeC.Notes, " | ") +
+			"\n  interpreted=" + strings.Join(aeI.Notes, " | ")
+	}
+	sc, si := suggestionMsgs(aeC), suggestionMsgs(aeI)
+	if !normSliceEq(sc, si) {
+		return "suggestions:\n  compiled=" + strings.Join(sc, " | ") +
+			"\n  interpreted=" + strings.Join(si, " | ")
+	}
+	lc, li := spanKeys(aeC), spanKeys(aeI)
+	if !strSliceEq(lc, li) {
+		return "spans:\n  compiled=" + strings.Join(lc, " | ") +
+			"\n  interpreted=" + strings.Join(li, " | ")
+	}
+	return ""
+}
+
+// volatileValueRender strips the two incidental value-rendering
+// differences the two engines legitimately have when a diagnostic
+// EMBEDS a value — the same non-determinism the result comparison
+// already tolerates, orthogonal to diagnostic quality:
+//   - counter-based provenance IDs (`fn foo#162` vs `#163`): the engines
+//     mint IDs at different points, so the numbers differ;
+//   - an operand held pre- vs post-evaluation (`{k:word(true)}` vs
+//     `{k:true}`): a map literal captured before/after auto-eval.
+//
+// The diagnostic STRUCTURE (candidate verdicts, suggestions, spans) is
+// what the gate enforces; the embedded value's incidental form is not.
+var volatileID = regexp.MustCompile(`#\d+`)
+var volatileWord = regexp.MustCompile(`word\(([^)]*)\)`)
+
+func volatileValueRender(s string) string {
+	s = volatileID.ReplaceAllString(s, "#N")
+	s = volatileWord.ReplaceAllString(s, "$1")
+	return s
+}
+
+// normSliceEq compares two note/suggestion slices with the incidental
+// value-rendering differences normalised away.
+func normSliceEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if volatileValueRender(a[i]) != volatileValueRender(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func strSliceEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func suggestionMsgs(ae *eng.AqlError) []string {
+	out := make([]string, len(ae.Suggestions))
+	for i, s := range ae.Suggestions {
+		out[i] = s.Message
+	}
+	return out
+}
+
+// spanKeys renders each secondary span as "label@row:col" so both the label
+// and the location are compared (the produced-value and declaration spans must
+// point at the same place in both engines).
+func spanKeys(ae *eng.AqlError) []string {
+	out := make([]string, len(ae.Spans))
+	for i, s := range ae.Spans {
+		out[i] = s.Label + "@" + itoa(s.Pos.Row) + ":" + itoa(s.Pos.Col)
+	}
+	return out
+}
+
+func itoa(n int) string {
+	if n < 0 {
+		return "-" + itoa(-n)
+	}
+	if n < 10 {
+		return string(rune('0' + n))
+	}
+	return itoa(n/10) + string(rune('0'+n%10))
 }
 
 func TestSpecCompiledOrFallback(t *testing.T) {
@@ -122,6 +224,15 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 						mismatches++
 						t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error position lost in compiled mode: interpreter at %d:%d, compiled has no position\n  detail=%q",
 							e.Name(), lineNum, wasCompiled, input, aeI.Row, aeI.Col, aeC.Detail)
+						continue
+					}
+					// Phase-7 rich-diagnostic parity: the compiled error must carry
+					// the SAME notes, suggestions, and secondary spans as the
+					// interpreter, not just the same Detail.
+					if diff := diagPayloadMismatch(aeC, aeI); diff != "" {
+						mismatches++
+						t.Errorf("%s:L%d (wasCompiled=%v): %s\n  diagnostic payload divergence — %s",
+							e.Name(), lineNum, wasCompiled, input, diff)
 						continue
 					}
 				}

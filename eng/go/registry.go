@@ -1315,11 +1315,15 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 			if !ok {
 				return nil, fmt.Errorf("undefined: %s", name)
 			}
-			// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
+			// A 0-arg fn courtesy-dispatches its 0-arg sig. Every other
 			// shape (no 0-arg sig, a plain Function, any other binding)
-			// is an unmatched call returning the same signature error,
-			// so that return is hoisted out of the branches.
-			hasForwardSig := false
+			// is an unmatched call. A fn that TAKES arguments and reached
+			// this 0-arg fallback (e.g. `inc inc 5`, `f a g b` — forward
+			// collection could not gather them) is intercepted UPSTREAM:
+			// stepWord raises the rich sigError before the fallback is
+			// dispatched (the fnCourtesyDispatches guard in engine.go), so
+			// the only shape reaching the Impl without a 0-arg handler
+			// falls straight through to the shared no-match error.
 			if _, ok := top.Data.(FnDefInfo); ok {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
@@ -1327,24 +1331,8 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
 							return sig.dispatchHandler()(nil, nil, nil, r)
 						}
-						if sig.TotalArgs() > 0 {
-							hasForwardSig = true
-						}
 					}
 				}
-			}
-			// A fn that takes arguments reached its 0-arg fallback,
-			// which means forward collection couldn't gather them —
-			// almost always because the next word (another call, a
-			// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
-			// (Swapped-argument tuples are intercepted with a
-			// dedicated hint BEFORE this fallback dispatches — see
-			// the reorder probe in engine.go.)
-			if hasForwardSig {
-				ae := makeAqlError("signature_error", noMatchDetail(name), name, r.Source, "")
-				ae.Suggestions = append(ae.Suggestions,
-					DiagSuggestion{Message: forwardParensSuggestion(name)})
-				return nil, ae
 			}
 			return nil, r.AqlError("signature_error", noMatchDetail(name), name)
 		}),

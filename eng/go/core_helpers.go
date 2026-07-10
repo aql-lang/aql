@@ -950,6 +950,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 	if fnDef.Anonymous {
 		declaredReturns = nil
 	}
+	declSite := s.Decl
 	bodyCopy := append([]Value(nil), s.body()...)
 	nameCopy := name
 	capturesCopy := fnDef.Captured
@@ -1146,6 +1147,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					pats[i] = sigParams[i].Pattern
 				}
 				es.SetUnitParamTypes(fnUnit, pts, pats)
+				// The return-contract declaration site, so a compiled RET
+				// return error labels the declaration exactly as the
+				// interpreter's ReturnCheck does.
+				es.SetUnitDecl(fnUnit, declSite)
 			}
 			if finishFn != nil {
 				// A fresh compilation must RECORD the body into THIS unit — drop any
