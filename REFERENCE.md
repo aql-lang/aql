@@ -1231,11 +1231,12 @@ multiple output types declare multiple return values.
 **The 3-arg single-triple form.** For the common single-signature
 case, `fn` also accepts one triple directly, without the wrapping
 list: `fn input output body`. Its signature is
-`[(tnot List) Any Any]` — the input must NOT be a list, so the two
+`[(tnot List) Any List]` — the input must NOT be a list (so the two
 forms stay disjoint: a list following `fn` always means the spec-list
-form. The non-list input is auto-wrapped as a one-param list (the
-same abbreviation `afn` uses), so a bare type, a `name:Type` pair, or
-a literal value pattern all work:
+form) and the body MUST be a `[…]` code list. The non-list input is
+auto-wrapped as a one-param list (the same abbreviation `afn` uses),
+so a bare type, a `name:Type` pair, or a literal value pattern all
+work:
 
 ```
 def inc fn n:Integer [Integer] [add n 1]     # ≡ fn [[n:Integer] [Integer] [add n 1]]
@@ -1247,10 +1248,10 @@ add10 5                       # returns 15
 
 Multi-param triples, overloads, bare positional `?` markers, and `|`
 barriers need the spec-list form (the input list is where they live);
-the `x?:Type` optional suffix works in both forms. Like every
-forward-collecting word, a *truncated* triple (`fn input output` with
-no body) keeps collecting into the following code — end the statement
-with `;` to get the missing-operand error at the right place.
+the `x?:Type` optional suffix works in both forms. The List-typed
+body slot keeps the form honest: a truncated triple (`fn input
+output` with no body) or a non-list body fails loudly with a
+signature error instead of collecting into the following code.
 
 **`/q` params capture names.** A param typed `Atom/q` takes the next
 *bare word* as its atom name — the argument is presented as if quoted,

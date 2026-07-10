@@ -1655,13 +1655,17 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// ParenExpr([w]) and reprocessing routes it through the ParenExpr/
 		// OpenParen branches above, so evaluation gating, multi-value
 		// collapse, and raw-capture handling are byte-identical to a
-		// written (w). Two exemptions: structural-capture slots (/q takes
-		// the word's NAME, form/raw/type slots take the raw token — see
-		// capturesForward), code-bearing splices (Forth-style macros
-		// that must run against the live stack — see spliceIsData), and
-		// binder operands (`def y xs` rebinds the MARKER so y aliases the
-		// splice — see bindsReferent).
-		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
+		// written (w). Exemptions: positions no still-viable overload
+		// consumes (viableConsumes — the rewrite is a TAPE MUTATION that
+		// outlives this dispatch, so a word in the window of a pruned
+		// overload must stay a word for the NEXT word to capture; the
+		// paren/interp branches above gate the same way), structural-
+		// capture slots (/q takes the word's NAME, form/raw/type slots
+		// take the raw token — see capturesForward), code-bearing splices
+		// (Forth-style macros that must run against the live stack — see
+		// spliceIsData), and binder operands (`def y xs` rebinds the
+		// MARKER so y aliases the splice — see bindsReferent).
+		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
 			if wi, werr := AsWord(tok); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {

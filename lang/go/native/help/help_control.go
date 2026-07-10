@@ -175,7 +175,7 @@ func init() {
 		Notes: []string{
 			"Spec-list form: fn takes a single list argument whose length is divisible by 3.",
 			"Each triple is: [input-params] [output-types] [body].",
-			"3-arg form: fn input output body — one triple, non-list input only ((tnot List) in the signature). fn x:Integer [Integer] [x mul 2] ≡ fn [[x:Integer] [Integer] [x mul 2]].",
+			"3-arg form: fn input output body — one triple; the input must be non-list and the body must be a […] list ([(tnot List) Any List] in the signature). fn x:Integer [Integer] [x mul 2] ≡ fn [[x:Integer] [Integer] [x mul 2]].",
 			"Named params use pair syntax: name:Type. Unnamed params are bare types. (An explicit map like {x: Integer} declares a single Map-typed param, not a named binding.)",
 			"Literal values (like 0) can be used as type constraints for pattern matching.",
 			"Use with def to bind: def name fn [...] or fn [...] def name.",

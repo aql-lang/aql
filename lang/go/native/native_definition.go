@@ -136,16 +136,19 @@ var definitionNatives = []NativeFunc{
 		// means the spec-list form, so a list following `fn` fails the
 		// triple candidate at patternsOk and dispatch falls through to
 		// the 1-arg sig — existing spec-list calls keep their meaning
-		// even with extra values on the stack. NoEvalArgs on all three
-		// slots (the input pair, the output types, and the body are
-		// spec/code, not data); RawParens on the body slot mirrors afn
-		// so a paren body stays raw code and evaluates per call.
+		// even with extra values on the stack. The body slot is
+		// List-typed (not Any): a triple-form body is always a `[…]`
+		// code list, which keeps the greedy 3-slot window from
+		// claiming a non-list value as a body in mixed/stack
+		// arrangements and makes a truncated `fn input output` fail
+		// loudly instead of absorbing a following value. NoEvalArgs on
+		// all three slots (the input pair, the output types, and the
+		// body are spec/code, not data).
 		Signatures: []Signature{
 			{
-				Args:       []*Type{TAny, TAny, TAny},
+				Args:       []*Type{TAny, TAny, TList},
 				Patterns:   map[int]Value{0: NewNegation(NewTypeLiteral(TList))},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
-				RawParens:  map[int]bool{2: true},
 				Impl:       Go(fnTripleHandler, RunInCheck()),
 				Returns:    []*Type{TFunction},
 				BarrierPos: -1,

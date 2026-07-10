@@ -6,7 +6,7 @@ import (
 )
 
 // Tests for the fn 3-arg single-triple form (`fn input output body`,
-// sig [(tnot List) Any Any]) and its handler branches. The dispatch-
+// sig [(tnot List) Any List]) and its handler branches. The dispatch-
 // level behaviour (form equivalence, the tnot-List input rule, mirror
 // forms, spec-list regression pins) lives in lang/spec/fn-triple.tsv;
 // these tests pin the handler-level contracts covergate needs.
@@ -180,6 +180,9 @@ func TestDescribeFnShowsTripleSig(t *testing.T) {
 	// spec-list sig second.
 	if len(info.Sigs[0].Args) != 3 || info.Sigs[0].Args[0] != "(tnot List)" {
 		t.Fatalf("fn sig 0: want triple form with (tnot List) input, got %v", info.Sigs[0].Args)
+	}
+	if info.Sigs[0].Args[2] != TList.String() {
+		t.Fatalf("fn sig 0: want a List-typed body slot, got %v", info.Sigs[0].Args)
 	}
 	if len(info.Sigs[1].Args) != 1 {
 		t.Fatalf("fn sig 1: want the 1-arg spec-list form, got %v", info.Sigs[1].Args)
