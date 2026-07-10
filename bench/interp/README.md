@@ -31,6 +31,21 @@ includes process start + parse; startup is ~20 ms for `aql`, ~17 ms for
 Python, so subtract it before quoting execution-only ratios (fixtures
 are sized so execution dominates on the AQL-interp column).
 
+### Watch out for Ruby: its wall-clock is almost all startup
+
+Ruby is the one column where subtracting startup is *not* optional — it
+changes the conclusion. Empty-program startup here is ~14 ms for `aql`
+and ~63 ms for `ruby` (RubyGems loading; `ruby --disable-gems` drops it
+back to ~14 ms). These fixtures run in only ~4 ms of actual Ruby (timed
+with an internal `Process.clock_gettime` best-of-5: fib 4.5 ms, loopsum
+3.9 ms, nestloop 3.8 ms), so a "62 ms" Ruby wall-clock cell is ~95 %
+overhead. Taken at face value the wall-clock table makes the AQL
+compiled VM look as fast as Ruby (55 ms vs 62 ms) — but that is a
+startup artifact. On **execution only** (startup subtracted, this
+container): the AQL interpreter is ~320–980× slower than Ruby (worst on
+recursive `fib`) and the compiled VM is ~11–46× slower. Do not read the
+raw Ruby column as an execution ratio.
+
 ## Reference snapshot (2026-07, 4-core Xeon 2.80GHz)
 
 Original baseline (before the interpreter-perf work):
