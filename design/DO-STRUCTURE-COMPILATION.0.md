@@ -6,6 +6,18 @@ signatures (`do [List]` and `do {Map}`), every distinct compile strategy the
 recorder picks, why each is chosen, and a differential-parity check of
 compiled vs. interpreted execution.
 
+> **July 2026 update — the always-compile goal (§7).** Sections 2–5 below
+> describe the state when this note was first written; the tranche-1 work
+> (see §7, appended) has since closed most of the refusal classes: a
+> multi-value body now compiles to a TRUE closure (whole-residual units,
+> `BodyOutResidual`), `error`'s ignore-handler compiles via
+> `StripsUnconsumedInput`, out-of-order residuals promote to frame locals,
+> compile-time-known `word` splices compile natively inside closure bodies,
+> and three MISCOMPILES were found and fixed (`do [args]` in a fn,
+> empty-body `each []`/`fold []`/`scan []`, and the module-read
+> rebind-after-fn divergence). §7 has the current frontier and the runtime
+> JIT (Phase E) roadmap for what remains.
+
 All disassembly below is reproducible with:
 
 ```bash
@@ -234,3 +246,59 @@ when it can, and the interpreter is the correctness backstop when it can't. The
 single `InvokeBody`/`doListHandler` seam is what keeps the trap-and-return
 semantics byte-identical across the interpreter and the VM. No defects were
 found during this investigation.
+
+## 7. The always-compile goal — tranche 1 (July 2026)
+
+Maintainer directive: `do` must ALWAYS compile — natively, for performance
+(network servers in AQL need full compilation to be credible; correctness via
+interpreter fallback is not enough). Measured stakes (200k-iteration hot
+loop): a closure-compiled `do` body runs **10.3×** the interpreter; the old
+baked-const path (a runtime `RunResolved` sub-engine per call) recovered only
+3.4×; a whole-program refusal recovers nothing.
+
+### What landed (branch claude/do-structure-compilation-o662y4)
+
+| Change | Effect |
+|---|---|
+| **`do [args]` miscompile fix** — the `specialWordResults` args projection read the CLOSURE analysis frame (the CallableSpec inputs, `[]` for do) and const-baked it; the island path reproduced the divergence. Fixed via `EmitState.inClosureUnit` (an `openUnitRecs` stack) + an args/`__pa` screen in `bodyFreeForFallback`. | interp `[7]` / compiled `[]` → refuses honestly, fallback parity |
+| **Multi-out closures** (`CallableSpec.BodyOutResidual`) — `do` returns its body's whole residual, so the unit RETs all N values (the VM always supported it; only recorder gates blocked it). `RecordClosureCall` seats N results; `closureResidualExact` screens variadic / mismatched counts. | `do [10 20 30]`: 1.12s → **0.31s** (12× interpreter); class-8 shapes (`def x 5 do [x 1 add 2]`) compile |
+| **Out-of-order residual promotion** — the fn-unit finish mirrors Finalize's `forceOrder`: an event result above an inert bottom promotes to a frame local and re-pushes in exact order (was: "result above a literal" refusal). | benefits every fn unit, not just do |
+| **`error` ignore-handler closures** (`CallableSpec.StripsUnconsumedInput`) — the runtime identity-probe strip nets one value from the `[error, result]` residual; `stripResidualShapeOK` admits exactly the two nets-one shapes. | `do […] error ["fallback"]` fully closure-lowered; corpus islands stay 0 |
+| **Empty-body parity fix** — an empty body's compiled closure now returns its pushed inputs verbatim, matching InvokeBody. | fixed pre-existing miscompiles: `[1 2] each []` compiled to `each_error` against the interpreter's identity map (fold/scan likewise); `error []` compiles as pass-through |
+| **Static splice coverage** — the check engine fires `__SP` during body analysis (`word` is a non-emitting projection), so compile-time-known payloads compile natively into closure units. Unblocked by the residual work above; a dedicated token-walk expander prototyped for this proved redundant and was dropped. | `do [word xs]`, bare macro refs, `each [word op]` all force-compile |
+| **Frozen-module-read discipline** — `NoteFrozenRead` records a concrete module-scope read baked inside an open unit; `NotifyNameRebound` refuses the program on a later module rebind. Stored-ref units (service handlers, spawn bodies) stay on their precise per-ref poisoning. | fixed a pre-existing miscompile of the DOCUMENTED module-dynamic semantics: `def x 1 def f […x…] f 0 def x 2 f 0` compiled `1 1` vs interpreted `1 2` |
+
+Every gate holds: differential 0 mismatches (5144+ rows), corpus islands 0,
+refusals 3 (≤ gate 4), ADR-008 coverage 100%.
+
+### Current frontier (all refuse HONESTLY with fallback parity — no miscompiles)
+
+1. **Computed bodies** — `do b` over a runtime list value (a fn param, a
+   non-foldable expression), and the equivalent runtime-computed splice
+   payload (`def xs [add 1 2] do [word xs]` — the binding is a check-time
+   carrier). THE remaining class that matters for servers.
+2. **`args` in a closure body** — no VM representation of the interpreter's
+   per-call args stack; refuses (was: silently wrong).
+3. **Variadic multi-out bodies** — `do [1 2 (if b [] [9 9])]`: the residual
+   count is runtime-variable, so exact seating is impossible today.
+
+### Phase E roadmap — runtime JIT for computed bodies (the universal backstop)
+
+Designed this session (full detail in the session plan; reusable pieces all
+exist): (1) a `CompileJITBody` CompileEffect on do's List sig + a
+`tryRecordJITBody` funnel specialist records a plain CALL_NATIVE over the
+dynamic list operand with a variadic-flagged result; (2) a Registry-held JIT
+cache keyed by `CanonValue(body)` + input types, entries carrying a
+`CompiledFnRef` + (name, gen) deps with negative caching — compile on first
+miss via `SnapshotForCompile` → `BeginCompilePass` → the probe-then-real
+`compileClosureBody` shape `compileStoredBody` already uses → Finalize
+back-stamp → `RestoreForCompile`; (3) execution hooks `invokeClosureOn`'s
+non-closure branch (the InvokeBody seam, so every body-running word
+benefits) via a `runUnitCross` that runs a foreign Program's unit on a fresh
+vmContext sharing the registry (no vmRunning CAS — synchronous nesting);
+(4) a JIT-refused body falls to today's RunResolved in-handler (not an
+island); (5) ship behind `Options.JIT`, default-OFF, flip after a soak.
+`args`-bearing bodies additionally need the VM to bracket the CALL_NATIVE
+with `r.PushArgs(frame params)` — the same bracket later enables compiling
+`args` everywhere. Variadic multi-out needs count-carrying RET seating — a
+separate, smaller feature.
