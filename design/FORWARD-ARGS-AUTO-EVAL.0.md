@@ -29,9 +29,10 @@ differs per rule:
    (engine.go:6709-6742) and otherwise stops (:6743-6767, the
    "function word — boundary" break). Since `mul` has
    no smaller overload, VERIFIED `2 mul add 3 4` → `signature_error` —
-   with a dedicated hint ("group the call in parens so its RESULT becomes
-   the argument"). It does not "stop and take what it has"; it fails at
-   plan time. Pinned: `lang/spec/forward-barrier.tsv:74`.
+   with a dedicated hint on the interpreter path ("group the call in
+   parens so its RESULT becomes the argument"). It does not "stop and
+   take what it has"; it fails at plan time. The class is pinned at
+   `lang/spec/forward-barrier.tsv:74` (`add 1 def x 5 x → ERROR:signature`).
 2. **Any slot → speculative fill, already paren-equivalent for
    value-producing statements.** A Defs-bound word is planned as an
    operand when `sigArgMatches(…) || expectedType.Equal(TAny)`
@@ -80,9 +81,9 @@ if (1 eq 1) [99] (add 1 2)                                # paren form: 99 — t
 ```
 
 Classifying every row of the four pinned corpora (`forward-barrier.tsv`,
-`control.tsv` §6, `word-splice.tsv` §7, `usurp.tsv` barrier rows — 85
-data rows) against the unconditional proposal: **65 SAME, 19 CHANGED,
-1 UNDECIDABLE** — and ~12 of the SAME verdicts hold only if the exemption
+`control.tsv` §6, `word-splice.tsv` splice rows L100-117, `usurp.tsv`
+barrier rows — ~85 data rows examined) against the unconditional
+proposal: **65 SAME, 19 CHANGED, 1 UNDECIDABLE** — and ~12 of the SAME verdicts hold only if the exemption
 sub-rules of §2.3 are adopted. The changed set includes every else-less
 guard row, the `/u` barrier-hook row (`usurp.tsv:110`, `99 7` → `99`),
 the exact-smaller-overload commit rows (`forward-barrier.tsv:72-73`,
@@ -152,9 +153,9 @@ freeze/rebind discipline covers its own units — §5 — but fmt/LSP have no
 such pass).
 
 **C4 — the zero-value silent-skip surface expands (Trap 1 gets worse).**
-Today a void call in a *typed* slot fails loudly (`add 1 noop 5` →
-signature error); the auto-paren form silently vanishes it — VERIFIED
-`add 1 (noop) 5` → `6`. Every void fn in any argument position becomes a
+With `def noop fn [[] [] []]`: today a void call in a *typed* slot fails
+loudly (`add 1 noop 5` → signature error); the auto-paren form silently
+vanishes it — VERIFIED `add 1 (noop) 5` → `6`. Every void fn in any argument position becomes a
 legal no-op arrival, mass-producing the exact silent-failure class
 `design/FORWARD-COLLECTION-TRAPS.0.md` flags as the costliest, and
 making its recommended fix (loud error at binders) harder to land.
@@ -236,7 +237,7 @@ combinatorial, and no backtracking machinery exists.
 pre-scans on every dispatching word step go down (fewer barrier commits);
 speculative parks that today idle across a following statement resolve
 promptly; and the proposal deletes a **verified pre-existing corruption**:
-`5 6 d add 1` (d = 1-arg Any fn) → `[5 6 1]` with *neither* d's body nor
+`5 6 d add 1` (d = 1-arg Any fn) → stack `5 6 1` with *neither* d's body nor
 a correct add running — the "inner completes from the live stack while an
 outer forward pends" path mis-pairs `effectiveResolved()`
 (engine.go:6235-6289, excludes the parked word) with
@@ -276,8 +277,8 @@ diagnostics and survive untouched.
 
 - **Prerequisite: the zero-arrival model fix.** Check mode models a
   void paren result as one strict `Any` value; the runtime produces zero
-  arrivals. VERIFIED divergence today: `add 1 (noop) 5` runs to `6` but
-  checks `no_signature`. Under the proposal every interleaved-def idiom
+  arrivals. VERIFIED divergence today (`noop` a declared-void fn):
+  `add 1 (noop) 5` runs to `6` but checks `no_signature`. Under the proposal every interleaved-def idiom
   (`g 1 def x 5 x` → `g 1 (def x 5) x`) routes through this broken model,
   so the ratchet's `pinnedFalsePositives = 0` breaks on day one unless
   this pre-existing bug is fixed first.
@@ -327,12 +328,12 @@ parking/arrival/rearrangement have happened over carriers, and the VM has
 no Forward opcode at all (a Forward marker reaching the VM is a hard
 `tapeCoupled` bug — vm.go:151-166). Parked forwards, barrier commits,
 speculative fills, and zero-value collapse all compile now (VERIFIED with
-`-force-compile`); the corpus-wide refusal state is **4 rows, 0 islands**
-across 6,216 spec expressions (`refusalGate = 4` / `islandGate = 0`,
-compiled_coverage_test.go:204-205 — value-row refusals and islands are
-separately pinned at 0, lines 30/37). The proposal does not materially
-expand the compilable subset — there is almost nothing left to expand
-into.
+`-force-compile`); the corpus-wide refusal state is **3 refused rows,
+0 islands** measured across 6,216 spec expressions (gates
+`refusalGate = 4` / `islandGate = 0`, compiled_coverage_test.go:204-205;
+value-row refusals and islands separately pinned at 0, lines 30/37). The
+proposal does not materially expand the compilable subset — there is
+almost nothing left to expand into.
 
 What it *does* buy the compiler:
 
