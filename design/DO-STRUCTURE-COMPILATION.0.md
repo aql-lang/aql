@@ -271,34 +271,59 @@ baked-const path (a runtime `RunResolved` sub-engine per call) recovered only
 Every gate holds: differential 0 mismatches (5144+ rows), corpus islands 0,
 refusals 3 (≤ gate 4), ADR-008 coverage 100%.
 
-### Current frontier (all refuse HONESTLY with fallback parity — no miscompiles)
+### Tranche-1 frontier — CLOSED by Phase E (see §8)
 
-1. **Computed bodies** — `do b` over a runtime list value (a fn param, a
-   non-foldable expression), and the equivalent runtime-computed splice
-   payload (`def xs [add 1 2] do [word xs]` — the binding is a check-time
-   carrier). THE remaining class that matters for servers.
-2. **`args` in a closure body** — no VM representation of the interpreter's
-   per-call args stack; refuses (was: silently wrong).
-3. **Variadic multi-out bodies** — `do [1 2 (if b [] [9 9])]`: the residual
-   count is runtime-variable, so exact seating is impossible today.
+The three classes that remained after tranche 1 (computed bodies `do b`,
+`args`-bearing bodies, variadic multi-out bodies) all compile as of Phase E
+increments 1–2. Kept for the record; the mechanism is §8.
 
-### Phase E roadmap — runtime JIT for computed bodies (the universal backstop)
+## 8. Phase E — the dyn-body backstop (July 2026): frontier EMPTY
 
-Designed this session (full detail in the session plan; reusable pieces all
-exist): (1) a `CompileJITBody` CompileEffect on do's List sig + a
-`tryRecordJITBody` funnel specialist records a plain CALL_NATIVE over the
-dynamic list operand with a variadic-flagged result; (2) a Registry-held JIT
-cache keyed by `CanonValue(body)` + input types, entries carrying a
-`CompiledFnRef` + (name, gen) deps with negative caching — compile on first
-miss via `SnapshotForCompile` → `BeginCompilePass` → the probe-then-real
-`compileClosureBody` shape `compileStoredBody` already uses → Finalize
-back-stamp → `RestoreForCompile`; (3) execution hooks `invokeClosureOn`'s
-non-closure branch (the InvokeBody seam, so every body-running word
-benefits) via a `runUnitCross` that runs a foreign Program's unit on a fresh
-vmContext sharing the registry (no vmRunning CAS — synchronous nesting);
-(4) a JIT-refused body falls to today's RunResolved in-handler (not an
-island); (5) ship behind `Options.JIT`, default-OFF, flip after a soak.
-`args`-bearing bodies additionally need the VM to bracket the CALL_NATIVE
-with `r.PushArgs(frame params)` — the same bracket later enables compiling
-`args` everywhere. Variadic multi-out needs count-carrying RET seating — a
-separate, smaller feature.
+The universal backstop shipped in two increments (commits `7838403` and the
+increment-2 follow-up). Mechanism — `CompileDynBody` on do's List AND Map
+sigs; `tryRecordDynBody` (funnel specialist after the closure path) records
+a plain CALL_NATIVE over the body operand with a VARIADIC-flagged result
+(poly re-matched when the operand is gradual), and arms the program-wide
+**DynEnv** mode: every def lowers an OpBindDynScope twin, every named unit
+param dyn-binds, value-defs always promote (never dead-drop), tail calls
+disable, and `Program.DynEnv` makes the VM bracket every CALL_USER frame
+with an args-stack push so a body's sub-run reads `args` and the live
+name environment exactly as the interpreter provides them. Costs land only
+on programs using dynamic code bodies.
+
+**The 19-shape frontier sweep force-compiles with byte parity**: computed
+bodies (`do b` over fn params — the server class), `do [args]` (fn and top
+level), runtime-computed splice payloads (`def xs [add 1 2] do [word xs]`),
+variadic multi-out (`do [1 2 (if b [] [9 9])]`, nested, and
+run-then-value), gradual List-vs-Map operands (`do (ops get (i add 0))` —
+poly re-match), body-local def+splice, and loops inside do bodies
+(`do [for 3 [1] 7]` — intra-event result-ID de-collision in
+tryRecordDynBody; the unrolled model repeats one Value whose shared ID
+collapsed producedBy).
+
+Two more real miscompiles found and fixed on the way (four total across the
+session): the splice-of-computed-payload closure baked the splice as
+identity (`[7 8]` vs the interpreter's `7 8`) — the splice fire now poisons
+recording for list-possible computed payloads, so the dyn-body backstop
+owns the do-body form and the bare top-level form refuses honestly; and the
+tranche-1 empty-body/args/module-rebind fixes listed above.
+
+Still refusing honestly, with parity, both non-do fn-contract limits: a
+variadic loop value mid-residual in a fn RET (Stage 3), and the bare
+top-level computed splice. Gates: differential 0 mismatches, corpus islands
+0, refusals ≤ 4, type-soundness 0, ADR-008 coverage 100%.
+
+### Follow-ups — performance only, no coverage gaps
+
+1. **JIT cache layer** — a dyn-body site executes through InvokeBody's
+   pooled sub-engine today. A Registry-held cache keyed by
+   `CanonValue(body)` + input types (entries carrying a `CompiledFnRef` +
+   (name, gen) deps, negative caching) would compile the body once via the
+   probe-then-real `compileClosureBody` shape `compileStoredBody` already
+   uses, and run it via a `runUnitCross` on a fresh vmContext sharing the
+   registry — upgrading hot dyn-body sites from sub-engine execution to
+   compiled units. Ship behind `Options.JIT`, default-OFF, soak first.
+2. **DynEnv cost profiling** — DynEnv is program-wide once armed; measure
+   the OpBindDynScope + args-bracket overhead on programs that mix one
+   dyn-body site with hot static code, and consider scoping the mirror to
+   the reachable-call subgraph if it shows.
