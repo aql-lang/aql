@@ -2,9 +2,23 @@ package eng
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
+
+// strictForwardBarrier gates the PROTOTYPE strict-barrier rule
+// (AQL_STRICT_BARRIER=1): a function word beginning its own dispatch is
+// ALWAYS a forward-collection barrier. Today, when the nearest parked
+// forward cannot commit with the args it already holds
+// (commitBarrierForward's exact-arity probe fails), the parked word
+// keeps WAITING and the fn word's result arrives into the open slot —
+// this is what makes `print add 1 2` work while `get`'s typed slots
+// error. Under the strict rule the stranded word raises the same
+// signature error the plan-time walk gives typed natives, so typed and
+// Any slots behave identically: a function word never feeds forward
+// collection; group the call in parens.
+var strictForwardBarrier = os.Getenv("AQL_STRICT_BARRIER") != ""
 
 // stackHeadroom is the extra capacity allocated beyond current need,
 // so that most insert/splice operations avoid heap allocation.
@@ -1967,6 +1981,11 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	if e.commitBarrierForward() {
 		return nil
 	}
+	if strictForwardBarrier {
+		if serr := e.strandedForwardError(w.Name); serr != nil {
+			return serr
+		}
+	}
 	e.tape.Set(e.pointer, v)
 	// Dispatch the unquoted wrapper now: stepLiteral routes it through
 	// execFnDefLiteral, which forward-collects any trailing args.
@@ -2236,6 +2255,11 @@ func (e *Engine) stepWord(val Value) error {
 		// commitBarrierForward.
 		if e.commitBarrierForward() {
 			return nil
+		}
+		if strictForwardBarrier {
+			if serr := e.strandedForwardError(w.Name); serr != nil {
+				return serr
+			}
 		}
 		// Macro dispatch (design/MACROS-PHASE1.10.md §5): a macro word is
 		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
@@ -5343,7 +5367,11 @@ func (e *Engine) policyGateWord(name string) error {
 // value-producing statement could be swallowed into the else slot. A
 // pending forward that CANNOT yet fire keeps waiting, since its
 // missing args may be the very results the stepping word produces
-// (`add 1 def x 5 x` still binds x and completes add).
+// (with `def g fn [[a:Any b:Any] [Any] [add a b]]`, `g 1 def x 5 x`
+// keeps g waiting through the boundary and def's bound value feeds
+// the second slot — forward-barrier.tsv §6; the same shape on a
+// typed native like `add 1 def x 5 x` never parks at all, it fails
+// loudly at plan time).
 //
 // Returns true when a forward was committed; the caller must return
 // to the engine loop (the pointer has moved to the committed word).
@@ -5444,6 +5472,52 @@ func (e *Engine) commitBarrierForward() bool {
 	e.pointer = funcIdx
 	e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
 	return true
+}
+
+// strandedForwardError implements the strict-barrier rule's failure
+// case (PROTOTYPE, see strictForwardBarrier): called from stepWord
+// after commitBarrierForward has declined, it reports the nearest
+// pending forward in the current paren scope as STRANDED — the
+// boundary word will never feed it under the strict rule, and no
+// overload can fire with what it holds. Returns nil when no forward
+// is pending (the normal case). Engine-internal frame-tail words
+// (__pa and friends) are exempt: they are not source-level statement
+// boundaries.
+func (e *Engine) strandedForwardError(boundary string) *AqlError {
+	if strings.HasPrefix(boundary, "__") {
+		return nil
+	}
+	fwdIdx := -1
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.tape.At(i)) {
+			break
+		}
+		if IsForward(e.tape.At(i)) {
+			fwdIdx = i
+			break
+		}
+	}
+	if fwdIdx < 0 {
+		return nil
+	}
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
+	// The `def name …` body slot is exempt: def is a BINDER whose value
+	// slot idiomatically collects the rest of the statement (`def f fn
+	// [...]`, `def r Rand.with-seed 42`). Without this exemption the
+	// strict rule outlaws every fn definition in the language. The
+	// design question the exemption encodes: def is low-precedence
+	// statement-rest collection, not ordinary forward collection.
+	if fwd.FuncName == "def" {
+		return nil
+	}
+	missing := fwd.ExpectedArgs - fwd.CollectedArgs
+	detail := fmt.Sprintf(
+		"%s is still waiting for %d argument(s) when `%s` begins its own dispatch — "+
+			"a function word is a barrier and never feeds forward collection (strict rule); "+
+			"group the call in parens so its RESULT becomes the argument: %s (%s …)",
+		fwd.FuncName, missing, boundary, fwd.FuncName, boundary)
+	return makeAqlErrorAt("signature_error", detail, fwd.FuncName,
+		e.effectiveSource(), "", fwd.Pos)
 }
 
 // noteSpeculativeBarrierCommit emits the speculative_forward_commit
