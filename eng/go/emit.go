@@ -545,6 +545,16 @@ type EmitState struct {
 	// closure's analysis args frame is the CallableSpec inputs, not the
 	// enclosing fn's per-call args the interpreter reads at run time.
 	openUnitRecs []int
+	// frozenReads holds the module-scope binding names whose CONCRETE values
+	// a fn/closure UNIT analysis read (NoteFrozenRead) — the value bakes into
+	// the unit (a const, or splice-fired tokens) that re-runs on every call,
+	// where the interpreter re-resolves the name per call. A LATER module-
+	// scope rebind of such a name (NotifyNameRebound) therefore marks the
+	// program uncompilable: `def x 1  def f fn [… [x add y]]  f 0  def x 2
+	// f 0` compiled to 1 1 against the interpreter's documented 1 2 (module-
+	// level dynamic reads, lang/go/CLAUDE.md "Closures and Capture") before
+	// this freeze discipline. Nil until the first unit-baked read.
+	frozenReads map[string]bool
 
 	// eventInfo holds the per-event compile flags, keyed by event seq. It
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
@@ -664,6 +674,15 @@ type fnUnitRec struct {
 	// differs from the check registry (see emitUnit.reg).
 	reg  *Registry
 	frag *EmitFragment
+	// storedRefUnit marks a unit compiled for a STORED-REF carrier
+	// (compileStoredFnUnit's "storedfn" / compileStoredBody's "spawnbody"):
+	// it is reachable at run time only through its CompiledFnRef, whose
+	// module-dep rebinds are handled PRECISELY by per-ref poisoning
+	// (NotifyNameRebound → poisoned → InvokeCallback falls to CallAQL).
+	// NoteFrozenRead therefore skips reads attributed to it — the whole-
+	// program frozen-read hammer is for ordinary CALL_USER units, which
+	// have no per-unit fallback.
+	storedRefUnit bool
 	// variadic marks a VARIADIC-RETURNING fn: its body residual leaves a
 	// runtime-variable count (a `[]`-declared recursive accumulator, an
 	// `if c [] [a b]`). A call to it marks the call result variadic (lowerUserCall)
@@ -1610,6 +1629,20 @@ func (es *EmitState) NotifyNameRebound(name string) {
 		if ref.depNames[name] {
 			ref.poisoned = true
 		}
+	}
+	// A splice-expanded binding (expandStaticSplices) is FROZEN inside an
+	// OpPushClosure unit, which — unlike a spawn ref — cannot be unstamped
+	// post-hoc. Rebinding it means the interpreter would re-resolve where the
+	// unit holds the old tokens: refuse the whole program (interpreter
+	// fallback) rather than diverge. Macro-style defs never rebind in
+	// practice, so this hammer stays cold on real programs.
+	// A MODULE-SCOPE rebind (no unit open — a body-local def inside another
+	// unit's analysis shadows independently and must not poison) of a name
+	// some already-analysed unit baked CONCRETELY (frozenReads): the frozen
+	// unit would keep the old value where the interpreter re-resolves, so
+	// refuse the whole program (interpreter fallback) rather than diverge.
+	if len(es.openUnitRecs) == 0 && es.frozenReads[name] {
+		es.MarkUncompilable("module binding " + name + " rebound after a fn unit baked its value")
 	}
 }
 
@@ -3881,6 +3914,42 @@ func zeroArgFnOut(outs []Value) bool {
 // NoteDefRead records that value ID was produced by reading binding `name`
 // (stepWord's simple-value substitution). Consulted by resolveOperand's
 // dynamic-scope rescue when the value has no compiled home.
+// NoteFrozenRead records a CONCRETE module-scope binding read that happened
+// INSIDE an open fn/closure unit analysis: the value bakes into the unit
+// (const / splice-fired tokens) and is frozen across calls, so a later
+// module-scope rebind must refuse the program (NotifyNameRebound). No-op at
+// top level, where analysis order equals program order and the bake is the
+// read the interpreter makes.
+func (es *EmitState) NoteFrozenRead(name string) {
+	if !es.active() || name == "" || len(es.openUnitRecs) == 0 {
+		return
+	}
+	// A read attributed to a STORED-REF unit (a service/minilang handler, a
+	// spawn body) is already rebind-safe: NotifyNameRebound poisons the ref
+	// itself and InvokeCallback falls back to CallAQL for just that handler,
+	// keeping the rest of the program compiled (the PR #243 discipline).
+	// Only ordinary CALL_USER units need the whole-program hammer.
+	if rec := es.openUnitRecs[len(es.openUnitRecs)-1]; rec >= 0 && rec < len(es.fnRecs) && es.fnRecs[rec].storedRefUnit {
+		return
+	}
+	if es.frozenReads == nil {
+		es.frozenReads = map[string]bool{}
+	}
+	es.frozenReads[name] = true
+}
+
+// ModuleScopeBinding reports whether name's active binding sits at module /
+// global scope — NOT an enclosing fn's param or body-local (the
+// ComputeCaptures depth rule: Depth > baseline means enclosing-fn-local). A
+// nil baseline (no enclosing fn) makes every binding module scope.
+func ModuleScopeBinding(r *Registry, name string) bool {
+	baseline := r.TopFnBaseline()
+	if baseline == nil {
+		return true
+	}
+	return r.Defs.Depth(name) <= baseline[name]
+}
+
 func (es *EmitState) NoteDefRead(id, name string) {
 	if !es.active() || id == "" || name == "" {
 		return

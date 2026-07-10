@@ -64,6 +64,10 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
 	es.fnRecs[unit].takesTop = takesTop
+	// The two stored-ref compile paths use these eng-internal synthetic
+	// names; their rebind safety is the per-ref poisoning, so the frozen-
+	// read discipline skips them (see fnUnitRec.storedRefUnit).
+	es.fnRecs[unit].storedRefUnit = word == "storedfn" || word == "spawnbody"
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.active()

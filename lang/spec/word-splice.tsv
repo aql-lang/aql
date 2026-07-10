@@ -115,3 +115,11 @@ def vs word [2,3] quote vs	vs/q	/q exemption: quote captures the NAME, binding n
 def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p	ERROR:signature	code splice is NOT spread (live-stack macro semantics)
 def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f (p)	30	…group a code splice explicitly to use its result
 def inc word [1 add] 1 inc inc inc	4	code-splice macro chain: each add sees the live stack
+#
+# §9  splices inside CLOSURE bodies — the check engine fires the marker
+# during body analysis, so a compile-time-known payload compiles NATIVELY
+# into the do/each$body unit (no island, no whole-program fallback).
+def xs (quote [1 add 2])  do [word xs]	3	a quoted-binding payload splices into a compiled do body
+def op (quote [mul 2])  do [5 word op]	10	the spliced tokens compose with the body's preceding stack
+def twice word [dup add]  do [5 twice]	10	a bare macro reference (splice-bound def) fires inside the body
+def op (quote [mul 2])  [1 2 3] each [word op]	[2 4 6]	a splice in an each body compiles per element
