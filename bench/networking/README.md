@@ -55,31 +55,30 @@ never touched by `make fmt/vet/lint/test/cover-gate`.
 ## Results
 
 Best of 3 runs each (Go 1.24.7, Node 22 / bun 1.3, Python 3.11, Ruby 3.3,
-loopback Linux, single box; re-measured 2026-07-10):
+loopback Linux, single box; re-measured 2026-07-10 after the
+runtime-stamping work — `design/RUNTIME-STAMPING.0.md`):
 
 | Runtime | req/s | µs / round-trip | vs. Go |
 |---|--:|--:|--:|
-| Go (`net` + `bufio`)                    | ~81,800 | ~12.2  | 1× (baseline) |
-| TypeScript (`bun`, Node `net`)          | ~50,400 | ~19.8  | ~1.6× slower |
-| **AQL — bytecode compiler (default)**   | **~46,800** | **~21.4** | **~1.75× slower** |
-| TypeScript (`ts-node` / Node)           | ~34,700 | ~28.8  | ~2.4× slower |
-| Python (`socket`)                       | ~13,800 | ~72    | ~5.9× slower |
-| Ruby (`socket`)                         | ~12,600 | ~80    | ~6.5× slower |
-| AQL — interpreter (`-no-compile`)       | ~866    | ~1,155 | ~94× slower |
+| Go (`net` + `bufio`)                    | ~112,000 | ~8.9  | 1× (baseline) |
+| TypeScript (`bun`, Node `net`)          | ~71,900 | ~13.9  | ~1.6× slower |
+| **AQL — bytecode compiler (default)**   | **~65,100** | **~15.4** | **~1.7× slower** |
+| Python (`socket`)                       | ~15,300 | ~65    | ~7.3× slower |
+| Ruby (`socket`)                         | ~15,200 | ~66    | ~7.4× slower |
+| AQL — interpreter (`-no-compile`)       | ~884    | ~1,131 | ~127× slower |
 
 The **compiled** AQL server runs its per-connection handler on the bytecode VM
-and lands within ~1.75× of Go — **level with the JS runtimes (ahead of Node's
-`ts-node`, a hair behind `bun`), and ~3.4× ahead of Python and Ruby**. Only
-hand-written Go is clearly faster. That is a **~54× jump over AQL's own
-tree-walking interpreter** (~866 → ~46,800 req/s), the payoff of compiling the
-`serve-raw` handler body to a unit (see *Resolution* below). The handler
-compiles whether its connection param is typed `Socket` or `Any` (an earlier
-revision required `Socket`; two compiler fixes removed that — see below).
+and lands within ~1.7× of Go — **within ~10% of `bun`, and ~4× ahead of Python
+and Ruby**. Only hand-written Go is clearly faster. That is a **~74× jump over
+AQL's own tree-walking interpreter** (~884 → ~65,100 req/s), the payoff of
+compiling the `serve-raw` handler body to a unit (see *Resolution* below). The
+handler compiles whether its connection param is typed `Socket` or `Any` (an
+earlier revision required `Socket`; two compiler fixes removed that — see
+below).
 
 The compiled-vs-interpreted multiplier and the AQL-vs-Go ratio are the durable
-findings; absolute req/s track the box (this run's Go baseline of ~82k is lower
-than an earlier box's ~109k, and the JS ordering flips between `bun` and Node,
-so both are listed).
+findings; absolute req/s track the box (an earlier same-day run on a busier
+box measured Go ~82k / AQL ~47k — the same ~1.75× ratio).
 
 An earlier revision of this file reported ~940 req/s for the "compiler
 (default)" row: at that time function-body compilation did not exist, so the
@@ -109,36 +108,52 @@ mini-redis's connection parameter being typed `Any`; it is now typed `Service`
 
 | App | tier | interpreted | compiled | speedup |
 |---|---|--:|--:|--:|
-| `todo-api`   | service + `Net.http` codec + JSON | ~1,740 req/s | ~13,200 req/s | **~7.6×** |
-| `mini-redis` | `Net.listen` service + RESP codec | ~800 req/s | ~1,170 req/s | **~1.5×** |
-| `mini-s3`    | `serve-raw` + streaming HTTP      | ~174 req/s | ~176 req/s | **~1.0×** |
+| `todo-api`   | service + `Net.http` codec + JSON | ~1,660 req/s | ~17,700 req/s | **~10.7×** |
+| `mini-redis` | `Net.listen` service + RESP codec | ~840 req/s | ~10,500 req/s | **~12.5×** |
+| `mini-s3`    | `serve-raw` + streaming HTTP      | ~205 req/s | ~211 req/s | **~1.0×** |
 
-(Re-measured 2026-07-10; `todo-api` 5,000 GETs, `mini-redis` 10,000 ops,
-`mini-s3` 6,000 ops. Absolute numbers track the box; the per-app speedup
-pattern — big for the CPU-bound service+JSON path, small for the I/O-bound
-`serve-raw` path — is the durable finding.)
+(Re-measured 2026-07-10 after the runtime-stamping work — see below;
+`todo-api` 5,000 GETs, `mini-redis` 10,000 ops, `mini-s3` 6,000 ops;
+medians, `-force-compile` ≡ default for all three. Absolute numbers track
+the box; the per-app speedup pattern — order-of-magnitude for the
+service-tier apps, ~1× for the I/O-bound `serve-raw` app — is the durable
+finding.)
 
-**Two of the three now compile their handlers.** `todo-api`'s handlers hit the VM
-(~11.5× over the interpreter — the CPU-bound service+JSON path); `mini-redis`'s do
-too (~1.5×; the RESP path is lighter). `mini-s3` does not yet: it is I/O-bound
-(streaming HTTP over `serve-raw`), and its actor uses two constructs the compiler
-still deliberately islands. Progress and the exact remaining blockers are tracked
-in `design/NET-COMPILE-FRONTIER.0.md`:
+**mini-redis and todo-api now run their whole request path on the VM.** An
+earlier revision of this table showed mini-redis at ~1.5×: its handlers
+passed the compile PROBE, but at runtime the custom AQL codec, most
+handlers, the nested helpers, and the per-iteration client `MiniRedis.cmd`
+apply all still executed on the interpreter (a pprof of the compiled run
+put ~97% of callback CPU in `Registry.CallAQL`; `-force-compile` cannot
+surface this — stored-handler refusals are probed in a throwaway state and
+decline silently). The runtime-stamping work
+(`design/RUNTIME-STAMPING.0.md`) closed the gap end to end:
 
-- **todo-api** — was `branch leaves extra values (Stage 2)`. **Fixed**: a
-  fragment-internal arm-result value-def that is also consumed as an operand
-  within its arm is now promoted to a frame local (`fragResultStaysOnSim`), plus a
-  semantics-preserving `(set …) drop` cleanup.
-- **mini-redis** — was `branch reads enclosing computation (Stage 3)`. **Fixed**:
-  the scopeFloor guard now skips operands delivered via a promoted frame local
-  (an arm-out re-resolved by `lowerFragment`), plus `(set …) drop` grouping.
-- **mini-s3** — still open. Its per-connection actor uses `do [ … ] error [ … ]`
-  (both `CompileFallbackBody` — deliberate interpreter islands) and its LIST
-  handler uses higher-order `filter`; compiling either is a substantial VM feature
-  and mini-s3 is I/O-bound, so the payoff is small.
+- **detached fn-unit stamping** at the codec-resolution, service-store, and
+  module-load sites compiles runtime-constructed callbacks the whole-program
+  pass can never see, with invoke-time dep-freshness (a rebound module dep
+  falls back to live interpreter resolution);
+- **gradual-Any nesting** fixed the class that blocked the `kv-read`-calling
+  handlers ("unmatched dispatch recovered at dot" — a nested callee's `Any`
+  param was generalised strictly where the handler's own params are gradual);
+- **filter-lambda closures** now admit lexical captures and computed
+  collections, so the KEYS handler compiles (this also benefits every
+  filter/each/fold/scan lambda user);
+- the **module-export apply seam** runs stamped module fns on the VM, so the
+  client loop compiles too.
 
-The drivers above make the app numbers repeatable, so the remaining gap can be
-re-measured as mini-s3's constructs land.
+After all four: a pprof of the compiled mini-redis run shows **zero
+`CallAQL` samples on the steady-state path** (verify with
+`go tool pprof -peek 'CallAQL$'` over a profiled run). The only interpreted
+mini-redis callback left is the unknown-command catch-all ("body result of
+unknown provenance"), which is off the hot path. todo-api picked up ~34%
+on top of its previous ~13k from the same work (its handlers are now on
+the VM, not just its native `Net.http` codec).
+
+**mini-s3 stays ~1.0×**, as before: it is I/O-bound (streaming HTTP over
+`serve-raw`), and its per-connection actor uses `do [ … ] error [ … ]` —
+both `CompileFallbackBody`, deliberate interpreter islands. Remaining
+blockers are tracked in `design/NET-COMPILE-FRONTIER.0.md`.
 
 ### Where AQL's time goes (the interpreter path)
 

@@ -266,3 +266,86 @@ func TestStampFnValueInPlace(t *testing.T) {
 		t.Fatalf("an unarmed registry must not stamp in place")
 	}
 }
+
+// The stamp-attribution collector (stamp_report.go): armed attempts record
+// (stamped and refusal-with-reason), shape noise does not, forks and
+// InheritRuntimeStamping share one log, and unarmed registries report nil.
+func TestStampReportCollector(t *testing.T) {
+	r := stampReg(t)
+	if r.StampEvents() != nil {
+		t.Fatalf("unarmed registry must report nil events")
+	}
+	r.EnableRuntimeStamping()
+
+	// A successful stamp records Stamped=true.
+	v := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(1))}
+	if _, ok := StampFnValue(r, v); !ok {
+		t.Fatalf("stamp failed")
+	}
+	// A capturing fn records its refusal reason.
+	captured := aqlBodyFd(NewInteger(1))
+	captured.Name = "grabby"
+	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
+	if _, ok := StampDetachedFn(r, captured, SrcPos{Row: 3, Col: 7}); ok {
+		t.Fatalf("capturing fn must decline")
+	}
+	// Shape noise (multi-own-sig) records NOTHING.
+	multi := FnDefInfo{Signatures: []Signature{
+		{Impl: AQL([]Value{NewInteger(1)})},
+		{Impl: AQL([]Value{NewInteger(2)})},
+	}}
+	if _, ok := StampDetachedFn(r, multi, SrcPos{}); ok {
+		t.Fatalf("multi-sig must decline")
+	}
+
+	events := r.StampEvents()
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2 (stamped + capture refusal): %v", len(events), events)
+	}
+	if !events[0].Stamped || events[0].Reason != "" {
+		t.Fatalf("first event must be the successful stamp: %+v", events[0])
+	}
+	if events[1].Stamped || events[1].Name != "grabby" ||
+		events[1].Pos.Row != 3 || events[1].Reason == "" {
+		t.Fatalf("second event must be grabby's capture refusal: %+v", events[1])
+	}
+
+	// Forks and module-style inheritance feed the SAME log.
+	fork := r.ForkConcurrent()
+	if _, ok := StampFnValue(fork, Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(2))}); !ok {
+		t.Fatalf("fork stamp failed")
+	}
+	child, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	child.InitRootContext()
+	child.InheritRuntimeStamping(r)
+	if _, ok := StampFnValue(child, Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(3))}); !ok {
+		t.Fatalf("inherited-child stamp failed")
+	}
+	if got := len(r.StampEvents()); got != 4 {
+		t.Fatalf("shared log must hold 4 events, got %d", got)
+	}
+
+	// Inheriting from an UNARMED parent is a no-op.
+	plain := stampReg(t)
+	orphan := stampReg(t)
+	orphan.InheritRuntimeStamping(plain)
+	if orphan.RuntimeStampingEnabled() {
+		t.Fatalf("inheriting from an unarmed parent must not arm")
+	}
+	// nil receivers stay inert.
+	var nilR *Registry
+	nilR.InheritRuntimeStamping(r)
+	if nilR.StampEvents() != nil {
+		t.Fatalf("nil registry must report nil events")
+	}
+	nilR.recordStampEvent(StampEvent{})
+	// An UNARMED (nil-log) registry's record is inert too — the nil-receiver
+	// guard on stampLog.record.
+	plain.recordStampEvent(StampEvent{})
+	if plain.StampEvents() != nil {
+		t.Fatalf("unarmed record must stay inert")
+	}
+}

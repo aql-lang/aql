@@ -1,5 +1,23 @@
 # NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
 
+> **ADDENDUM (2026-07-10, supersedes the per-app status below —
+> see design/RUNTIME-STAMPING.0.md).** This note conflated two different
+> claims: "the handler bodies pass their compile probe" and "the handlers
+> execute on the VM at runtime". The ~442→~680 req/s bump cited under
+> mini-redis came from the top-level DRIVER loop compiling — profiling
+> showed ~97% of per-request callback CPU still in `Registry.CallAQL`
+> (`-force-compile` cannot surface stored-handler refusals: the probe is
+> a throwaway EmitState and declines silently). The runtime-stamping work
+> closed the gap end to end: detached fn-unit compilation at the codec /
+> service / module-load trigger sites, gradual-Any generalisation for
+> nested user-fn compiles, filter-lambda closures with lexical captures,
+> and the module-export apply reroute. mini-redis now runs **~8,100-8,400
+> req/s compiled vs ~700-745 interpreted (~11x)** with ZERO CallAQL
+> samples on the steady-state path; every callback except the off-hot-path
+> catch-all ("body result of unknown provenance") executes on the VM.
+> mini-s3's blockers (do/error trap lowering, its remaining higher-order
+> shapes) stay open as described below.
+
 Goal: get the realistic `aql:net` example handlers (`design/examples/apps/`) to
 compile their bodies to bytecode units (like the echo benchmark handler does),
 not just run interpreted. This note maps every remaining blocker precisely so the

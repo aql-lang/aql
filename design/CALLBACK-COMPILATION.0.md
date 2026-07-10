@@ -1,5 +1,20 @@
 # CALLBACK-COMPILATION — runtime independence for callback bodies
 
+
+> **ADDENDUM (2026-07-10).** The "wired slot stamps whenever the body
+> compiles" assumption below holds only for fn values that are concrete
+> consts in a compile pass. Runtime-constructed callbacks (custom codec
+> fns inside a codec map, handlers added from interpreted module-fn
+> bodies, module fns applied through the export seam) needed a second
+> stamping mechanism: DETACHED fn-unit compilation at the store /
+> resolve / module-load sites, with invoke-time (Depth, Gen) dep
+> freshness — see design/RUNTIME-STAMPING.0.md. Of the frontier items
+> listed below, higher-order fn-value callbacks are now PARTIALLY closed
+> (filter/each/fold/scan lambda closures compile, including lexical
+> captures and computed collections; multi-overload lambdas and dynamic
+> collections still refuse), and the module-export apply island now runs
+> stamped bodies on the VM.
+
 Status: implemented (foundation + Stages 1–4 routing), gate-green. The echo
 networking benchmark that motivated the work now runs its handler compiled on
 the VM at **~58,000 req/s (~97× over the interpreter, ~1.9× off Go)** — see "The

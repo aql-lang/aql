@@ -1,0 +1,164 @@
+# RUNTIME-STAMPING — detached fn-unit compilation for runtime-constructed callbacks
+
+Status: **landed** (four phases, 2026-07-10). This note records the design,
+the discoveries that reshaped it mid-flight, and the invariants the
+implementation pins.
+
+## The problem
+
+The callback-compilation seam (design/CALLBACK-COMPILATION.0.md) made
+`InvokeCallback` run a stored fn body on the VM **when its matched signature
+carries a stamped `CompiledFnRef`**. But stamping happened in exactly one
+place — `recordCallOperands` during a whole-program compile pass, on a
+concrete capture-free `FnDefInfo` const sitting directly in a
+`CompileStoresFn` slot. Anything else permanently interpreted:
+
+- **custom AQL codec fns** (`redis-decode`/`redis-encode`): nested inside
+  the codec MAP — `recordCallOperands` never descends into Map operands, so
+  no compile pass could ever reach them;
+- **service handlers whose bodies refused** the stored-fn probe (silently —
+  `compileStoredFnUnit` probes in a throwaway EmitState and just declines,
+  which is why `-force-compile` success proves nothing about handlers);
+- **module fns applied through the module-export seam** (`MiniRedis.cmd` per
+  client-loop iteration): the apply is a deliberate `OpCallDynamic` island
+  whose body ran via `CallAQL`.
+
+Measured on `bench/networking/apps/echo_redis.aql`: ~97% of per-request CPU
+in `CallAQL`, compiled ≈ 1.5× interpreted (~1,170 vs ~730 req/s), while the
+echo microbenchmark (whose handler IS a top-level store-fn const) got ~50×.
+
+## The primitive
+
+`eng/go/stamp_runtime.go`:
+
+- `StampDetachedFn(r, fd, pos) (*CompiledFnRef, bool)` — compiles a
+  runtime-constructed, capture-free fn body to a standalone one-unit
+  `*Program` OUTSIDE any whole-program pass. Isolation: a `ForkConcurrent`
+  copy of r carrying a **fresh `CheckState`** (`Registry.Check` is a shared
+  pointer the fork's shallow copy would alias — a compile pass on the alias
+  would trash the parent's live check state), then the standard
+  `BeginCompilePass` ritual, `compileStoredFnUnit` (probe-then-real,
+  unchanged), and `Finalize(nil)` whose back-stamp loop sets `ref.Prog`.
+  The Program lives on the ref — GC'd with the value; no global registry.
+- `StampFnValue(r, v) (Value, bool)` — the value-level entry for
+  POST-publication values: returns a stamped CLONE (fresh sig slice, fresh
+  `*AQLImpl`) so a store word never mutates a shared impl under concurrent
+  readers. Declines return the input unchanged.
+- `StampFnValueInPlace(r, v) bool` — the PRE-publication twin (module load
+  only): stamps via `stampCompiledRef` on the value's own shared impl, so a
+  module's def binding and its export map — which share impl pointers — both
+  see the stamp.
+
+Policy: `Registry.EnableRuntimeStamping()`, default OFF. Armed by
+`RunCompiled` / `RunCompiledStrict` (kept armed on their interpreter
+fallback — still compiled-mode requests), inherited by `ForkConcurrent`
+(shallow copy) and by module sub-registries (`RunModuleBody`). Plain `Run` /
+`-no-compile` never stamp — the mode contract stays exact.
+
+Trigger sites:
+
+1. `resolveCodec` (`lang/go/modules/net_codec.go`) — the four codec-map fn
+   slots (decode/encode stamped before the client-side defaulting so a
+   symmetric codec's aliases share one stamped clone).
+2. `serviceAddHandler` / `serviceWrapHandler`
+   (`lang/go/native/native_service.go`) — store the stamped clone;
+   already-stamped values (the compile-time bake) skip: first stamp wins.
+3. `RunModuleBody` (`lang/go/native/native_module_module.go`) — after the
+   module body runs, every module-scope def holding an eligible fn stamps
+   IN PLACE; `execFnDefSig`'s foreign-registry branch then routes a stamped
+   module-fn application through `InvokeCallback` at RUNTIME (check mode
+   keeps the pure `CallAQL` analysis path — running a unit during static
+   analysis would execute real side effects).
+
+## Dep freshness — invoke-time (Depth, Gen) snapshots
+
+A detached ref outlives its compile fork, so the compile-time
+`NotifyNameRebound` poisoning cannot observe later rebinds of the module
+names the body reads. Freshness moves to invoke time:
+
+- `CompiledFnRef.depSnap` maps each dep name to `{Depth, Gen}` at stamp
+  time — `DefTable.Gen` is the existing per-name mutation generation,
+  bumped by every push/pop/replace/truncate/delete/set. nil = compile-time
+  ref (no validation); an empty non-nil map = dep-free runtime ref.
+- `InvokeCallback` gates the VM path on `ref.depsFresh(r)`; any mismatch
+  falls to `CallAQL`, which resolves the live binding exactly as the
+  interpreter. Fail-safe direction only.
+- Gen (not value ID) is load-bearing: runtime values can carry EMPTY IDs,
+  so an undef+redef landing at the same depth would be invisible to a
+  depth+ID probe. Gen also catches live shadowing (a body-local def of the
+  dep name active at invoke time) that compile-time poisoning structurally
+  cannot see.
+- `DefTable.Clone` now COPIES the gen map so per-connection forks continue
+  the stamp registry's generation timeline (an untouched module binding
+  must read fresh on arrival at a fork); dispatchCache — the only other gen
+  consumer — is reset on fork either way.
+
+## The two compiler fixes the work surfaced
+
+Discovery reshaped the plan: instrumentation showed the compile-time bake
+ALREADY reached mini-redis's `add` sites (through the module-fn island's
+check-mode analysis) and stamped the 10 handlers whose bodies compiled. The
+7 refusals had two real causes, both fixed:
+
+1. **Strict-Any generalisation in nested user-fn compiles** (Phase 2's real
+   unlock). A stored handler calling an `st:Any` helper that reads `st.kv`
+   refused "unmatched dispatch recovered at dot": `buildFnBodyReturnsFn`'s
+   genArgs generalised the handler's GRADUAL Any param (a
+   `ParamInputCarrier`) into a STRICT `NewCarrier(TAny)`. Fix
+   (`eng/go/core_helpers.go`): a Dynamic arg generalises to
+   `NewDynamicCarrier(a.Parent)` — the same modality `fnValueInputs` gives
+   the unit's own params — and `carrierTypeName` appends `/dyn` for Dynamic
+   carriers so strict/gradual units never share a memo key
+   (`FnAnalysisKey`).
+2. **Filter-lambda closure gates** (Phase 3). `lambdaHookCompatible` gained
+   `allowCaptures`: the BODY-lambda path admits LEXICAL captures (merged
+   into the closure captures, resolved to compiled homes, threaded at
+   `OpPushClosure`, bound to trailing unit slots by `invokeClosureOn` —
+   value-identical to the interpreter's construction-time snapshot); the
+   extras/hook path keeps refusing. `lambdaCallbackInputs` admits a typed
+   NON-dynamic List/Map carrier as the data operand (a computed `keys`
+   result); Dynamic carriers still refuse (pair-vs-KeyVal ambiguity).
+
+## Measured result (echo_redis, 10k SET/GET ops, loopback)
+
+| stage | compiled req/s | notes |
+|---|--:|---|
+| baseline | ~1,170 | ~97% of callback CPU in CallAQL |
+| Phase 1 (codec) | ~2,500 | invokeFn 45%→12% of CPU |
+| Phase 2 (handlers + gradual nesting) | ~7,300 | 15/17 handlers on the VM |
+| Phase 3+4 (KEYS closure, client loop) | ~8,100-11,700 | **CallAQL: zero samples on the steady-state path** |
+| `-no-compile` (unchanged throughout) | ~700-860 | the interpreter contract |
+
+(The Phase-3+4 range spans a busy and a quiet box; the final quiet-box
+medians are ~10,500 req/s compiled vs ~840 interpreted — ~12.5×. todo-api
+rises to ~17,700 req/s (~10.7×) from the same machinery; the `-compile-report`
+flag prints the per-callback attribution behind these numbers.)
+
+The one remaining interpreted mini-redis callback is the catch-all handler
+("body result of unknown provenance" — a map literal whose computed field is
+the body result), which never fires on the hot path. Known follow-ups, all
+out of scope here: that provenance shape; mini-s3's `do`/`error` trap
+lowering and its higher-order LIST handler patterns beyond filter-lambda;
+Model/check-prop stamping (the store-word trigger likely covers Model
+actions nearly for free).
+
+## Invariants pinned by tests
+
+- Mode contract: unarmed registries never stamp
+  (`TestStampDetachedFnPolicyGate`, unarmed twins in every trigger test).
+- Isolation: a mid-run stamp leaves the parent's Defs depths/gens,
+  CheckState identity, and diagnostics untouched
+  (`TestStampFnValueParentStateUntouched`).
+- Fail-safe: refusing bodies, capturing fns, multi-overload fns, Go-backed
+  fns all decline with byte-identical behaviour; a stale dep falls back to
+  the LIVE interpreter resolution (`TestStampFnValueDepRebindFallsBackLive`,
+  `TestInvokeCallbackStaleDepFallsBack`, `TestDepsFresh` incl. the
+  same-depth undef+redef and fork-continuity cases).
+- End-to-end: stamped codec differential over real sockets incl. the
+  `{need:1}` split-write path (`net_stamp_test.go`); service store-site
+  stamping positives/negatives (`native_service_stamp_test.go` incl. the
+  KEYS shape); module-load stamping + apply reroute
+  (`TestModuleFnStampedAtLoadAndRerouted`); filter-lambda capture parity
+  rows (`bytecode-combinations.tsv`) + `TestFilterLambdaCaptureCompiles`.
+- Gates: every phase landed with `make fmt/vet/lint/test`,
+  `verify-bytecode`, `fuzz-bytecode` (P2-P4), and `cover-gate` 100% green.

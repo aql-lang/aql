@@ -45,9 +45,13 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 		// A capturing fn needs its captures resolved to compiled homes in the
 		// constructing scope — the OpPushClosure path's territory, not a
 		// detached unit's. Deferred; the interpreter handles it unchanged.
+		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "lexical captures (interpreter keeps the body)"})
 		return nil, false
 	}
 	if _, ok := storedFnUnitEligible(fd); !ok {
+		// Not recorded: multi-overload fns and native-word bindings swept by
+		// the module-load loop land here — a shape that was never a compile
+		// candidate is report noise, not an attempt.
 		return nil, false
 	}
 	fork := r.ForkConcurrent()
@@ -80,6 +84,10 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	deps := es.storedFnDeps(fd)
 	unit, ok := es.compileStoredFnUnit(fd, pos)
 	if !ok {
+		// The probe's latched reason when it gave one; the report printer
+		// substitutes a generic text for an empty reason (a refusal path
+		// that never reached MarkUncompilable).
+		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: es.storedFnProbeReason})
 		return nil, false
 	}
 	ref := &CompiledFnRef{Unit: unit, depNames: deps}
@@ -88,6 +96,7 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	if !ok || prog == nil || ref.Prog == nil {
 		// Finalize refused (the real compile marked the state uncompilable)
 		// or left the ref unstamped — the value stays plain and interprets.
+		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
 		return nil, false
 	}
 	if len(deps) > 0 {
@@ -101,6 +110,7 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 		// keeps "detached ref" distinguishable from "compile-time ref".
 		ref.depSnap = map[string]depSnapEntry{}
 	}
+	r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
 }
 

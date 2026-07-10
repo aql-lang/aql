@@ -279,6 +279,19 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 // design/aql-bytecode-plan.0.md).
 type Program = eng.Program
 
+// StampEvent is one detached-stamp attempt (re-exported for hosts and the
+// CLI's -compile-report surface).
+type StampEvent = eng.StampEvent
+
+// StampReport returns the detached-stamp attribution recorded on this
+// instance's registry (design/RUNTIME-STAMPING.0.md Phase 5): one event per
+// stamp ATTEMPT — runtime-constructed codec fns, service handlers, and
+// module fns — with the refusal reason when the compile declined. Nil when
+// runtime stamping was never armed (a plain Run / -no-compile execution).
+func (a *AQL) StampReport() []eng.StampEvent {
+	return a.registry.StampEvents()
+}
+
 // CompileCheck runs the source through the checker with the bytecode
 // recording pass enabled (Stage 1: straight-line, monomorphic native
 // calls only) and linearises the trace into a Program. When the

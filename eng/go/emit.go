@@ -498,7 +498,12 @@ type EmitState struct {
 	// Prog once the *Program exists and copies the slice onto Program. Nil
 	// until the first store-fn handler is compiled.
 	storedFnRefs []*CompiledFnRef
-	producedBy   map[string]producer // value ID → producing (event seq, result idx)
+	// storedFnProbeReason holds the LAST stored-fn probe's refusal reason
+	// (compileStoredFnUnit), for the -compile-report attribution
+	// (stamp_report.go). Set only on a probe failure; the compile-time
+	// bake ignores it.
+	storedFnProbeReason string
+	producedBy          map[string]producer // value ID → producing (event seq, result idx)
 	// trailingApplies maps a Function VALUE's ID → the arg count of a paren-bounded
 	// TRAILING fn-value apply (`(prev key comp)`), registered at the paren-collapse
 	// boundary (registerTrailingApply) where the paren-group size is known. The body
@@ -1552,6 +1557,9 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
+		// Surface the probe's refusal for the -compile-report attribution
+		// (stamp_report.go); the compile-time bake ignores the field.
+		es.storedFnProbeReason = probe.Reason
 		return 0, false
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)

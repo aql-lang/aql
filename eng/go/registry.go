@@ -201,6 +201,10 @@ type Registry struct {
 	// see EnableRuntimeStamping. Set only by the compiled execution entry
 	// points; default false keeps plain interpreter runs stamp-free.
 	runtimeStamping bool
+	// stampLog collects stamp attempts for the -compile-report surface
+	// (stamp_report.go). Created at arming; SHARED (pointer) with forks and
+	// module sub-registries so one report covers the whole execution.
+	stampLog *stampLog
 
 	// interpRunDepth counts live interpreter Engine.Run activations on this
 	// registry — the top-level run AND every re-entrant sub-engine run (module
@@ -423,7 +427,21 @@ func (r *Registry) canHostVM() bool {
 func (r *Registry) EnableRuntimeStamping() {
 	if r != nil {
 		r.runtimeStamping = true
+		if r.stampLog == nil {
+			r.stampLog = &stampLog{}
+		}
 	}
+}
+
+// InheritRuntimeStamping arms r exactly like parent — including SHARING the
+// parent's stamp-attribution log, so a module sub-registry's stamps land in
+// the one report. A no-op when the parent is unarmed.
+func (r *Registry) InheritRuntimeStamping(parent *Registry) {
+	if r == nil || parent == nil || !parent.runtimeStamping {
+		return
+	}
+	r.runtimeStamping = true
+	r.stampLog = parent.stampLog
 }
 
 // RuntimeStampingEnabled reports whether detached fn-unit compilation is
