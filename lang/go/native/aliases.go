@@ -170,6 +170,7 @@ var (
 	TMicron         = eng.TMicron
 	TEmailon        = eng.TEmailon
 	TUrlon          = eng.TUrlon
+	TIpon           = eng.TIpon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity

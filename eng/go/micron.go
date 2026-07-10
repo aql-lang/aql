@@ -34,6 +34,7 @@ package eng
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/mail"
 	"net/url"
 	"strconv"
@@ -233,6 +234,8 @@ func micronRender(v Value) string {
 		return micronEmailAddress(fields)
 	case v.Parent.ConformsTo(TUrlon):
 		return micronURLHref(fields)
+	case v.Parent.ConformsTo(TIpon):
+		return micronFieldString(fields, "addr")
 	default:
 		return NewMap(fields).String()
 	}
@@ -286,6 +289,7 @@ func init() {
 	TPathon.ensureTMeta().Behavior = micronBehavior{kind: TPathon}
 	TEmailon.ensureTMeta().Behavior = micronBehavior{kind: TEmailon}
 	TUrlon.ensureTMeta().Behavior = micronBehavior{kind: TUrlon}
+	TIpon.ensureTMeta().Behavior = micronBehavior{kind: TIpon}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -398,6 +402,60 @@ func emailonFromString(s string) ([]Value, error) {
 	fields.Set("user", NewString(s[:at]))
 	fields.Set("host", NewString(s[at+1:]))
 	return []Value{NewValueRaw(TEmailon, MicronPayload{Fields: fields})}, nil
+}
+
+// makeIpon builds an Ipon from an IPv4/IPv6 address string (validated
+// and canonicalized via net.ParseIP) or an {addr} map. Content-equal by
+// construction: alternate spellings of the same address —
+// `2001:0db8::1` / `2001:db8::1`, or an IPv4-mapped `::ffff:10.0.0.7` /
+// `10.0.0.7` — all canonicalize to one stored `addr`.
+func makeIpon(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return iponFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Ipon")
+		if err != nil {
+			return nil, err
+		}
+		var addr string
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			sv, serr := v.AsConcreteString()
+			if serr != nil {
+				return nil, &AqlError{Code: "type_error",
+					Detail: fmt.Sprintf("make: Ipon field %s must be a String, got %s", k, v.String())}
+			}
+			if k != "addr" {
+				return nil, &AqlError{Code: "type_error",
+					Detail: "make: Ipon has no field " + k + " (field: addr)"}
+			}
+			addr = sv
+		}
+		if addr == "" {
+			return nil, &AqlError{Code: "type_error", Detail: "make: Ipon requires an addr field"}
+		}
+		return iponFromString(addr)
+	}
+	return nil, &AqlError{Code: "type_error",
+		Detail: fmt.Sprintf("make: Ipon source must be a string or map, got %s", src.String())}
+}
+
+func iponFromString(s string) ([]Value, error) {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return nil, &AqlError{Code: "type_error",
+			Detail: fmt.Sprintf("make: invalid IP address %q (want IPv4 or IPv6, e.g. 203.0.113.7 or 2001:db8::1)", s)}
+	}
+	version := int64(6)
+	if ip.To4() != nil {
+		version = 4
+	}
+	fields := NewOrderedMap()
+	fields.Set("addr", NewString(ip.String())) // canonical form
+	fields.Set("version", NewInteger(version))
+	return []Value{NewValueRaw(TIpon, MicronPayload{Fields: fields})}, nil
 }
 
 // urlonFieldOrder is the canonical field layout of an Urlon map source
@@ -680,7 +738,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 	switch {
 	case kind.Equal(TMicron):
 		return nil, &AqlError{Code: "type_error",
-			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon) or a user-defined Micron kind",
+			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
 		return makePathon(data, false)
@@ -688,6 +746,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return makeEmailon(data)
 	case kind.Equal(TUrlon):
 		return makeUrlon(data)
+	case kind.Equal(TIpon):
+		return makeIpon(data)
 	}
 	// A newtype (bare nominal refine) of a builtin leaf or of a user
 	// kind: construct the base, then tag the result with the newtype —
@@ -702,6 +762,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 			out, err = makeEmailon(data)
 		case t.Equal(TUrlon):
 			out, err = makeUrlon(data)
+		case t.Equal(TIpon):
+			out, err = makeIpon(data)
 		default:
 			if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)

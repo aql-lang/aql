@@ -682,6 +682,7 @@ var builtinDecls = []builtinDecl{
 	{Path: "Scalar/Micron/Pathon", FixedID: 47, Rank: 20_510_000_000},
 	{Path: "Scalar/Micron/Emailon", FixedID: 112, Rank: 20_520_000_000},
 	{Path: "Scalar/Micron/Urlon", FixedID: 113, Rank: 20_530_000_000},
+	{Path: "Scalar/Micron/Ipon", FixedID: 114, Rank: 20_540_000_000},
 	// Scalar/Time and descendants live in lang/go/native/native_temporal.go.
 
 	// Node branch.
