@@ -1827,7 +1827,7 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		// here — see design/PARAM-GUARD-SKIP-MISCOMPILE.0.md; this guard catches the
 		// plain-type laundering (the reported bug) without over-raising.
 		if !sigTypeMatches(locals[i], pt) {
-			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+			return r.AqlError("signature_error", noMatchDetail(fn.Name), fn.Name)
 		}
 	}
 	// An inline disjunct / predicate / bounded / structural param carries its
@@ -1847,7 +1847,7 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 			_, ok = Unify(v, pat)
 		}
 		if !ok {
-			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+			return r.AqlError("signature_error", noMatchDetail(fn.Name), fn.Name)
 		}
 	}
 	return nil
@@ -1876,7 +1876,7 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 			continue
 		}
 		if !sigTypeMatches(args[i], at) {
-			return r.AqlError("signature_error", "no matching signature for "+s.Word, s.Word)
+			return r.AqlError("signature_error", noMatchDetail(s.Word), s.Word)
 		}
 	}
 	return nil

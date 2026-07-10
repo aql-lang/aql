@@ -200,7 +200,7 @@ func TestSigMatch_BarrierStackOnlyArgFootgun(t *testing.T) {
 	// fails — a genuine footgun worth pinning.
 	def := "def sl fn [[a:Integer | b:Integer][Integer][b sub a]]\n"
 	eq(t, mustRun(t, def+"10 sl 3 end"), []interface{}{int64(7)})
-	mustErr(t, def+"sl 3 10 end", "no matching signature")
+	mustErr(t, def+"sl 3 10 end", "no signature matches")
 }
 
 func TestSigMatch_PrunedToNoViableOverloadErrors(t *testing.T) {
@@ -209,5 +209,5 @@ func TestSigMatch_PrunedToNoViableOverloadErrors(t *testing.T) {
 	// failure is loud (identical to the pre-change behaviour).
 	mustErr(t,
 		"def f fn [[a:Integer b:Integer][String][\"II\"]]\nf \"x\" (add 1 2) end",
-		"no matching signature")
+		"no signature matches")
 }

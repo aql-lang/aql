@@ -54,7 +54,7 @@ func TestDXOptionsParamAcceptsMap(t *testing.T) {
 // §4.1 — an Options param still rejects a non-map.
 func TestDXOptionsParamRejectsNonMap(t *testing.T) {
 	err := dxErr(t, `def f fn [[opts:Options] [Any] [opts]]  f 42`)
-	if err == nil || !strings.Contains(err.Error(), "no matching signature") {
+	if err == nil || !strings.Contains(err.Error(), "no signature matches") {
 		t.Fatalf("expected no-matching-signature for non-map arg, got %v", err)
 	}
 }

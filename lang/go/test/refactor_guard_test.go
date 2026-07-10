@@ -49,8 +49,8 @@ func TestGuardFnWrongArgFallbackErrors(t *testing.T) {
 	// Negative: invoking a typed fn with a non-matching arg falls through
 	// to the synthesized fallback handler, which returns a signature error.
 	msg := mustErr(t, `def f fn [[n:Integer] Integer [n]] "x" f`)
-	if !strings.Contains(msg, "no matching signature for f") {
-		t.Errorf("expected 'no matching signature for f', got: %s", msg)
+	if !strings.Contains(msg, "cannot call `f`") {
+		t.Errorf("expected 'cannot call `f`', got: %s", msg)
 	}
 }
 

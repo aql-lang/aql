@@ -69,7 +69,8 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 
 	assertErrorContains(t, err,
 		"[aql/signature_error]",
-		"no matching signature for upper",
+		"cannot call `upper`",
+		"no signature matches the arguments",
 		"-->",
 	)
 
@@ -78,11 +79,16 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 		t.Error("expected non-zero Row in error")
 	}
 
-	// Should include hint with expected signatures and stack
-	if ae.Hint == "" {
-		t.Error("expected non-empty Hint")
+	// Structured notes: the received argument, the candidate verdict
+	// (expected-vs-found), and the stack snapshot.
+	if len(ae.Notes) == 0 {
+		t.Error("expected structured Notes")
 	}
-	assertErrorContains(t, err, "expected:", "stack:")
+	assertErrorContains(t, err,
+		"the argument was 99 (an Integer)",
+		"candidate `upper (String)` — argument 1: expected String, got 99 (an Integer)",
+		"stack:",
+	)
 }
 
 func TestErrorFormatSignatureMissingArg(t *testing.T) {
@@ -91,11 +97,16 @@ func TestErrorFormatSignatureMissingArg(t *testing.T) {
 	ae := assertAqlError(t, err, "signature_error")
 	assertErrorContains(t, err,
 		"[aql/signature_error]",
-		"no matching signature for add",
+		"cannot call `add`",
+		"candidate `add ",
+		"were supplied",
 	)
-	if ae.Hint == "" {
-		t.Error("expected non-empty Hint")
+	if len(ae.Notes) == 0 {
+		t.Error("expected candidate-verdict Notes")
 	}
+	// add carries many overloads — the error must point at describe
+	// rather than listing them all.
+	assertErrorContains(t, err, "more signatures", "aql describe add")
 }
 
 func TestErrorFormatSignatureMultiLine(t *testing.T) {
@@ -123,7 +134,7 @@ func TestErrorFormatSignatureFnDef(t *testing.T) {
 	// Function signature mismatch at call time
 	err := runWithSource(t, `def f fn [[n:Integer] Integer [n]] "hello" f`)
 	ae := assertAqlError(t, err, "signature_error")
-	assertErrorContains(t, err, "no matching signature for f")
+	assertErrorContains(t, err, "cannot call `f`")
 	_ = ae
 }
 
@@ -152,23 +163,28 @@ func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
 		"f 5"
 	err := runWithSource(t, src)
 	ae := assertAqlError(t, err, "signature_error")
-	assertErrorContains(t, err, "no matching signature for upper")
+	assertErrorContains(t, err, "cannot call `upper`")
 	if ae.Row != 1 {
 		t.Errorf("expected Row=1 (the failing `upper` in f's body), got %d", ae.Row)
 	}
 }
 
 func TestErrorFormatSignatureStackContext(t *testing.T) {
-	// The hint should describe what types are actually on the stack
+	// A note should describe what values are actually on the stack.
 	err := runWithSource(t, `"hello" 42 upper`)
 	ae := assertAqlError(t, err, "signature_error")
-	// Stack should show the types around the word
-	if !strings.Contains(ae.Hint, "stack:") {
-		t.Error("expected 'stack:' in hint")
+	stackNote := ""
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "stack:") {
+			stackNote = n
+		}
 	}
-	// Should mention the actual types present
-	if !strings.Contains(ae.Hint, "'hello'") || !strings.Contains(ae.Hint, "42") {
-		t.Errorf("stack hint should describe the actual values, got: %s", ae.Hint)
+	if stackNote == "" {
+		t.Fatalf("expected a 'stack:' note, notes = %v", ae.Notes)
+	}
+	// Should mention the actual values present
+	if !strings.Contains(stackNote, "'hello'") || !strings.Contains(stackNote, "42") {
+		t.Errorf("stack note should describe the actual values, got: %s", stackNote)
 	}
 }
 

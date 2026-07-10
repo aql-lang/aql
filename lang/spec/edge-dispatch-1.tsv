@@ -35,24 +35,24 @@ add false ""	'false'	String + Boolean via the empty string: coercion, not truthi
 add 2.5 "x"	'x2.5'	Float + String: the Float's string form is spliced in
 #
 # §2  add concat lattice — negatives ([aql/signature_error]: no overload)
-add true 1	ERROR:no matching signature	Boolean + Integer: neither operand is a String
-1 add true	ERROR:no matching signature	mixed split of the same pair fails identically
-true add 1	ERROR:no matching signature	and the other mixed split too — no slot order admits it
-add false true	ERROR:no matching signature	two Booleans: no String, no Number — no overload
-add cat/q 1	ERROR:no matching signature	Atom + Integer: Atom is a Scalar but not a String
-1 add cat/q	ERROR:no matching signature	mixed split of Atom + Integer fails identically
-add cat/q dog/q	ERROR:no matching signature	two Atoms: still no String operand
-add cat/q true	ERROR:no matching signature	Atom + Boolean: same story
-add true 2.5	ERROR:no matching signature	Boolean + Float: a Number operand does not rescue a Boolean
-add none 1	ERROR:no matching signature	none is not a Number
-add none "x"	ERROR:no matching signature	…and not a Scalar either: even a String cannot concat none
-add none none	ERROR:no matching signature	none + none matches nothing
-add {a:1} 2	ERROR:no matching signature	Map + Integer: compounds are outside the add lattice
-add {a:1} "x"	ERROR:no matching signature	Map + String: a String does not admit a compound partner
-add [1 2] [3]	ERROR:no matching signature	List + List: no concat through add — lists have their own words
-add Integer 1	ERROR:no matching signature	a bare type literal is not a concrete Number
-add String "x"	ERROR:no matching signature	the String TYPE literal is not a concrete String — no concat
-add "x" Boolean	ERROR:no matching signature	type literal in the Scalar slot fails the same way
+add true 1	ERROR:no signature matches	Boolean + Integer: neither operand is a String
+1 add true	ERROR:no signature matches	mixed split of the same pair fails identically
+true add 1	ERROR:no signature matches	and the other mixed split too — no slot order admits it
+add false true	ERROR:no signature matches	two Booleans: no String, no Number — no overload
+add cat/q 1	ERROR:no signature matches	Atom + Integer: Atom is a Scalar but not a String
+1 add cat/q	ERROR:no signature matches	mixed split of Atom + Integer fails identically
+add cat/q dog/q	ERROR:no signature matches	two Atoms: still no String operand
+add cat/q true	ERROR:no signature matches	Atom + Boolean: same story
+add true 2.5	ERROR:no signature matches	Boolean + Float: a Number operand does not rescue a Boolean
+add none 1	ERROR:no signature matches	none is not a Number
+add none "x"	ERROR:no signature matches	…and not a Scalar either: even a String cannot concat none
+add none none	ERROR:no signature matches	none + none matches nothing
+add {a:1} 2	ERROR:no signature matches	Map + Integer: compounds are outside the add lattice
+add {a:1} "x"	ERROR:no signature matches	Map + String: a String does not admit a compound partner
+add [1 2] [3]	ERROR:no signature matches	List + List: no concat through add — lists have their own words
+add Integer 1	ERROR:no signature matches	a bare type literal is not a concrete Number
+add String "x"	ERROR:no signature matches	the String TYPE literal is not a concrete String — no concat
+add "x" Boolean	ERROR:no signature matches	type literal in the Scalar slot fails the same way
 #
 # §3  numeric promotion — Integer/Float
 add 1 2.0	3.0	Float partner promotes the result to Float
@@ -75,11 +75,11 @@ add 1.5 0d2	ERROR:cannot mix	pure forward form refuses too
 add 0d2 "x"	'x0d2'	but a String partner still concats a BigInteger — its 0d literal form is spliced in
 #
 # §5  concat is add-only — the other math words have no String overload
-sub "a" 1	ERROR:no matching signature	sub has only numeric signatures
-mul "ab" 2	ERROR:no matching signature	no Python-style string repetition through mul
-div "a" "b"	ERROR:no matching signature	two Strings do not divide
-mod true 1	ERROR:no matching signature	mod rejects Boolean like add does
-pow "a" 2	ERROR:no matching signature	pow rejects a String base
+sub "a" 1	ERROR:no signature matches	sub has only numeric signatures
+mul "ab" 2	ERROR:no signature matches	no Python-style string repetition through mul
+div "a" "b"	ERROR:no signature matches	two Strings do not divide
+mod true 1	ERROR:no signature matches	mod rejects Boolean like add does
+pow "a" 2	ERROR:no signature matches	pow rejects a String base
 #
 # §6  user-fn overloads — most-specific-first, NOT listing order
 def g fn [[x:Integer][String]["int"] [x:Number][String]["num"]] g 1	'int'	leaf listed first, leaf wins
@@ -90,7 +90,7 @@ def g fn [[x:Scalar][String]["S"] [x:Number][String]["N"]] g 1	'N'	deeper lattic
 def g fn [[x:Any][String]["A"] [x:Number][String]["N"]] g true	'A'	a Boolean misses Number and falls to Any
 def g fn [[x:Integer][String]["int"] [x:Any][String]["any"]] g true	'any'	Any catches what the leaf rejects
 def g fn [[x:Integer][String]["one"] [x:Integer][String]["two"]] g 1	'one'	exact tie: stable sort keeps listing order — first listed wins
-def g fn [[x:String][String]["s"] [x:Integer][String]["i"]] g [1]	ERROR:no matching signature	a List matches neither overload — no silent Any degrade
+def g fn [[x:String][String]["s"] [x:Integer][String]["i"]] g [1]	ERROR:no signature matches	a List matches neither overload — no silent Any degrade
 def g fn [[x:Integer y:Any][String]["IA"] [x:Any y:Integer][String]["AI"]] g 1 2	'IA'	per-position specificity is lexicographic: position 0 outranks position 1
 def g fn [[x:Any y:Integer][String]["AI"] [x:Integer y:Any][String]["IA"]] g 1 2	'IA'	…and reversing the listing does not change that
 def g fn [[x:Any][String]["one"] [x:Integer y:Integer][String]["two"]] g 1 2	'two'	longer arity sorts first: the 2-arg sig takes both args
@@ -101,7 +101,7 @@ def g fn [[x:Any][String]["any"] [x:Map][String]["map"]] g {a:1}	'map'	listing o
 # §6b  disjunct-typed params — `tor` unions in the overload order
 def g fn [[x:(Integer tor String)][String]["ok"]] g 1	'ok'	a disjunct param admits its first alternative
 def g fn [[x:(Integer tor String)][String]["ok"]] g "a"	'ok'	…and its second
-def g fn [[x:(Integer tor String)][String]["ok"]] g true	ERROR:no matching signature	…and rejects everything outside the union
+def g fn [[x:(Integer tor String)][String]["ok"]] g true	ERROR:no signature matches	…and rejects everything outside the union
 def g fn [[x:(Integer tor String)][String]["dis"] [x:Integer][String]["int"]] g 1	'dis'	a disjunct sig outranks a bare leaf sig for a value both admit
 def g fn [[x:Integer][String]["int"] [x:(Integer tor String)][String]["dis"]] g 1	'dis'	…independent of listing order — the sort decides
 #

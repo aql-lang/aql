@@ -1341,13 +1341,12 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 			// dedicated hint BEFORE this fallback dispatches — see
 			// the reorder probe in engine.go.)
 			if hasForwardSig {
-				return nil, r.AqlErrorHint("signature_error",
-					"no matching signature for "+name, name,
-					"forward args for "+name+" may have run into the next word; "+
-						"group the call in parens so its RESULT becomes the argument — ("+name+" …). "+
-						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
+				ae := makeAqlError("signature_error", noMatchDetail(name), name, r.Source, "")
+				ae.Suggestions = append(ae.Suggestions,
+					DiagSuggestion{Message: forwardParensSuggestion(name)})
+				return nil, ae
 			}
-			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
+			return nil, r.AqlError("signature_error", noMatchDetail(name), name)
 		}),
 	}
 }

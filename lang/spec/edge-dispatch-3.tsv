@@ -51,9 +51,9 @@ def R (refine Record [{n:Integer}]) make R {n:"5"}	ERROR:not a number	but a non-
 # (dropped) refine-Record predicate field read compiles-refuses (falls back sound); a compiler-coverage gap, not pinned here to keep the frontier gate pure
 def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {pretty:true}	true	a structurally-conforming plain map is admitted at the param
 def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {pretty:true extra:1}	true	extra keys are fine STRUCTURALLY at a param slot…
-def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {prety:true}	ERROR:no matching signature	…but a missing declared key fails dispatch
+def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {prety:true}	ERROR:no signature matches	…but a missing declared key fails dispatch
 def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {pretty:true}	true	an implicit map-shape param checks the same way
-def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {prety:true}	ERROR:no matching signature	…including the rejection
+def f fn [[o:{pretty:Boolean}][Boolean][o.pretty]] f {prety:true}	ERROR:no signature matches	…including the rejection
 #
 # §4  options maps pass through Any slots untouched
 def f fn [[x:Any][Any][x]] f {trim:true}	{trim:true}	an Any param takes an options-looking map as plain data
@@ -111,8 +111,8 @@ def g fn [[][Integer][42] [a:Integer][Integer][a add 1]] g 5	6	…and still take
 def g fn [[][Integer][7]] g 5	7 5	a 0-arg fn never swallows a forward value — 5 stays on the stack
 def q fn [[][String]["z"] [][Integer][9]] q	'z'	two 0-arg overloads tie — first listed wins the courtesy dispatch
 def p (fn [[][Integer][5]]) p	5	a def-bound anonymous Function value courtesy-dispatches 0-arg too
-def h fn [[a:Integer][Integer][a add 1]] h	ERROR:no matching signature	an arg-taking fn with nothing to collect raises the grouped-call hint
-def dbl fn [[n:Integer][Integer][n mul 2]] dbl dbl 5	ERROR:no matching signature	forward collection runs into the next word — the classic nesting mistake
+def h fn [[a:Integer][Integer][a add 1]] h	ERROR:no signature matches	an arg-taking fn with nothing to collect raises the grouped-call hint
+def dbl fn [[n:Integer][Integer][n mul 2]] dbl dbl 5	ERROR:no signature matches	forward collection runs into the next word — the classic nesting mistake
 def dbl fn [[n:Integer][Integer][n mul 2]] dbl (dbl 5)	20	…which parens fix by making the inner RESULT the argument
 #
 # §9  dispatch after guards — runtime narrowing of an Any param

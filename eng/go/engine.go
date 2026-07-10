@@ -368,9 +368,9 @@ func assignsPositionally(written []Value, sig *Signature, identity bool) bool {
 	return try(0)
 }
 
-// sigError builds a detailed AqlError for a signature mismatch.
-// It includes the word name, available signatures, and the actual
-// types found on the stack near the word.
+// sigError builds the full diagnostic for a signature mismatch: the
+// shared name-only Detail, the received-arguments note, per-candidate
+// verdicts, the stack snapshot, and the fix suggestions.
 func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	// A word starved by a VOID argument group (a parenthesised call in
 	// its argument range that produced no value, recorded by
@@ -379,54 +379,75 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	if verr := e.voidArgErrorFor(name, pos); verr != nil {
 		return verr
 	}
-	detail := "no matching signature for " + name
-
-	// Build hint with available signatures and actual stack types.
-	var hint strings.Builder
-	if fn != nil && len(fn.Signatures) > 0 {
-		hint.WriteString("expected: " + name + " " + describeAllSigs(fn))
+	// The failing tuple in assignment order: unclaimed forward tokens
+	// (source order) when present, else the stack prefix (top-first) —
+	// the same two views the swap probe reads.
+	written := reorderForwardCandidates(e.tape, e.pointer)
+	if len(written) == 0 {
+		written = reorderCandidates(e.tape.Prefix(e.pointer))
 	}
-
-	// Reorder hint: when the actual argument types match some declared
+	// Reorder probe: when the actual argument types match some declared
 	// signature under a PERMUTATION, the arguments are almost certainly
 	// swapped — say so, with the declared parameter order, and suppress
-	// the forward-grouping hint, which would point at parsing (the
-	// wrong fix). Decision DX report finding 2.
-	reorder := e.reorderHint(name, fn)
+	// the forward-grouping suggestion, which would point at parsing
+	// (the wrong fix). Decision DX report finding 2.
+	reorder := reorderHintFor(name, fn, written)
+	if reorder == "" {
+		reorder = e.reorderHint(name, fn)
+	}
+	ae := e.noMatchError(name, fn, written, pos, reorder)
+	return e.maybeAddFnShapeHint(ae).(*AqlError)
+}
+
+// noMatchError assembles the unmatched-dispatch diagnostic from the
+// shared builders (diag_msg.go): Detail is the name-only noMatchDetail
+// (the compiled/interpreted gate compares it — see its doc comment);
+// the received tuple, candidate verdicts (explainCandidates), and the
+// stack snapshot ride as notes; the swap probe (reorder, precomputed
+// by the caller), the forward-parens fix, and the describe pointer
+// ride as suggestions.
+func (e *Engine) noMatchError(name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *AqlError {
+	ae := makeAqlErrorAt("signature_error", noMatchDetail(name), name,
+		e.effectiveSource(), "", pos)
+
+	if n := callArgsNote(written); n != "" {
+		ae.Notes = append(ae.Notes, n)
+	}
+	totalSigs := 0
+	if fn != nil {
+		for i := range fn.Signatures {
+			if !fn.Signatures[i].Fallback {
+				totalSigs++
+			}
+		}
+	}
+	fails := explainCandidates(fn, written)
+	notes := candidateNotes(name, fails, totalSigs, len(written))
+	if len(notes) == 0 && totalSigs > 0 {
+		// The probe could not blame any overload (or had no tuple to
+		// probe) — fall back to the compact signature overview.
+		notes = []string{"expected: " + name + " " + describeAllSigs(fn)}
+	}
+	ae.Notes = append(ae.Notes, notes...)
+	if e.tape.Len() > 0 {
+		ae.Notes = append(ae.Notes, "stack: "+describeStackTypes(e.tape, e.pointer))
+	}
+
 	switch {
 	case reorder != "":
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString(reorder)
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: reorder})
 	case fn != nil && fn.HasForwardSigs():
-		// Forward-precedence hint: when the word has forward-collecting
+		// Forward-precedence fix: when the word has forward-collecting
 		// signatures, the most common cause of this error is that forward
 		// collection ran into a following word (another call, a builtin)
 		// before it could gather enough arguments — e.g. `inc inc 5` or
-		// `f a g b`. The fix is PARENS — group the call so its result becomes
-		// the argument; `end` / `;` only ends the statement and will NOT nest a
-		// following word into a sub-call (a trailing `;` does not rescue
-		// `print Decision.eval-cond c x`). Point at parens so they aren't left
-		// to guess from a bare "no matching signature".
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString("forward args for " + name +
-			" may have run into the next word; group the call in parens so its " +
-			"RESULT becomes the argument — (" + name + " …). `end` / `;` only ends " +
-			"the statement — it does NOT turn a following word into a nested call.")
+		// `f a g b`. The fix is PARENS — see forwardParensSuggestion.
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: forwardParensSuggestion(name)})
 	}
-
-	if e.tape.Len() > 0 {
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString("stack: " + describeStackTypes(e.tape, e.pointer))
+	if totalSigs >= 4 || len(fails) > diagMaxCandidates {
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: describeSuggestion(name)})
 	}
-
-	src := e.effectiveSource()
-	return e.maybeAddFnShapeHint(makeAqlErrorAt("signature_error", detail, name, src, hint.String(), pos)).(*AqlError)
+	return ae
 }
 
 // isFnShapeTypedBindingContext reports whether the failing word is
@@ -511,10 +532,10 @@ func (e *Engine) pendingForwardFunc() string {
 // insufficientArgsError builds a detailed AqlError for forward argument
 // collection failure (not enough arguments after the word).
 func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
-	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
-	hint := "stack: " + describeStackTypes(e.tape, e.pointer)
 	src := e.effectiveSource()
-	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
+	ae := makeAqlErrorAt("signature_error", insufficientArgsDetail(name, expected), name, src, "", pos)
+	ae.Notes = append(ae.Notes, "stack: "+describeStackTypes(e.tape, e.pointer))
+	return ae
 }
 
 // undefinedWordHint tailors the undefined_word hint to the two known
@@ -2433,16 +2454,18 @@ func (e *Engine) stepWord(val Value) error {
 	// permutation, the arguments are swapped. Raise the dedicated
 	// hint instead of dispatching the fallback's generic error.
 	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() {
-		hint := reorderHintFor(w.Name, fn, reorderForwardCandidates(e.tape, e.pointer))
+		written := reorderForwardCandidates(e.tape, e.pointer)
+		hint := reorderHintFor(w.Name, fn, written)
 		if hint == "" {
 			// Stack-form swap: the misordered values are already on
 			// the stack below the word.
-			hint = reorderHintFor(w.Name, fn, reorderCandidates(e.tape.Prefix(e.pointer)))
+			stackWritten := reorderCandidates(e.tape.Prefix(e.pointer))
+			if hint = reorderHintFor(w.Name, fn, stackWritten); hint != "" {
+				written = stackWritten
+			}
 		}
 		if hint != "" {
-			return makeAqlErrorAt("signature_error",
-				"no matching signature for "+w.Name, w.Name,
-				e.effectiveSource(), hint, val.Pos())
+			return e.noMatchError(w.Name, fn, written, val.Pos(), hint)
 		}
 	}
 
@@ -3101,12 +3124,9 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 	if !e.isFnShapeTypedBindingContext() {
 		return err
 	}
-	hint := "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?"
-	if aqlErr.Hint != "" {
-		aqlErr.Hint = aqlErr.Hint + "\n  = " + hint
-	} else {
-		aqlErr.Hint = hint
-	}
+	aqlErr.Suggestions = append(aqlErr.Suggestions, DiagSuggestion{
+		Message: "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?",
+	})
 	return aqlErr
 }
 
@@ -7529,7 +7549,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if !e.registry.Check.Compiling && bestMatch < 0 {
 			e.registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code:   "no_signature",
-				Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+				Detail: noMatchDetail(w.Name) + "; assuming best-fit candidate for analysis",
 				Word:   w.Name,
 				Row:    pos.Row,
 				Col:    pos.Col,
@@ -7639,9 +7659,9 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// the nearest candidate's declared types, so the user can see the
 		// mismatch without reconstructing the stack ("got (Map, Integer);
 		// nearest [Number Number]").
-		detail := "no matching signature for " + w.Name
+		detail := noMatchDetail(w.Name)
 		if got := argTypeSummary(args); got != "" {
-			detail += " — got (" + got + ")"
+			detail += "; got (" + got + ")"
 			if near := sigTypeSummary(sig); near != "" {
 				detail += "; nearest [" + near + "]"
 			}
@@ -7807,7 +7827,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 	if verr := e.voidArgErrorFor(w.Name, pos); verr != nil {
 		return es.RecordTrap(verr.Code, verr.Detail, w.Name, verr.Hint, pos)
 	}
-	return es.RecordTrap("signature_error", "no matching signature for "+w.Name, w.Name, "", pos)
+	return es.RecordTrap("signature_error", noMatchDetail(w.Name), w.Name, "", pos)
 }
 
 // sigDefinitelyUnmatched reports whether overload s of an already

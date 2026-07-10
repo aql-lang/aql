@@ -1367,7 +1367,7 @@ strict rule holds at parameters and returns:
 def Pos (refine Integer)
 42 is Pos                                          # returns false
 def g fn [[n:Pos] [Integer] [n]]
-42 g                                               # returns [aql/signature_error] no matching signature for g
+42 g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
 def x:Pos 42   x g                                 # returns 42
 
 def mk fn [[] [Pos] [7]]
@@ -1388,7 +1388,7 @@ def Big (Integer gt 10)
 5  is Big                                          # returns false
 def g fn [[n:Big] [Integer] [n]]
 50 g                                               # returns 50
-5  g                                               # returns [aql/signature_error] no matching signature for g
+5  g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
 
 def mk fn [[] [Big] [50]]
 mk                                                 # returns 50

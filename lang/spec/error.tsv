@@ -14,7 +14,7 @@ raise "boom"	ERROR:user_error	a bare message raises code user_error
 raise bad_input "expected a list"	ERROR:bad_input	a bare word names the code
 raise {code: nope/q, message: "m"}	ERROR:nope	the spec-map form
 raise {message: "no code"}	ERROR:raise_error	code and message are both required in the map form
-raise 42	ERROR:no matching signature	a non-string/map operand has no raise sig
+raise 42	ERROR:no signature matches	a non-string/map operand has no raise sig
 #
 # §2  catching — one error [handler] form for native AND user errors
 do [raise "boom"] error [dot message] end	'boom'	a raised error is caught like a native one

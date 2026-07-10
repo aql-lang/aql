@@ -46,7 +46,7 @@ def _ (need-map "not-a-map")`
 	res2, _ := b.Check(bad)
 	flagged := false
 	for _, d := range res2.Diagnostics {
-		if d.Code == "no_signature" || d.Code == "signature_error" || strings.Contains(d.Detail, "no matching signature") {
+		if d.Code == "no_signature" || d.Code == "signature_error" || strings.Contains(d.Detail, "no signature matches") {
 			flagged = true
 			break
 		}
@@ -76,7 +76,7 @@ def _ (g x 123)`
 	flagged := false
 	for _, d := range res.Diagnostics {
 		if d.Code == "no_signature" || d.Code == "signature_error" ||
-			strings.Contains(d.Detail, "no matching signature") {
+			strings.Contains(d.Detail, "no signature matches") {
 			flagged = true
 			break
 		}
