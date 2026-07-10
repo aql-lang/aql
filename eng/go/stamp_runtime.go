@@ -63,6 +63,16 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	// compileStoredFnUnit declines on a nil state.
 	es, _ := fork.Check.Recorder().(*EmitState)
 	es.bindRegistry(fork)
+	if es != nil {
+		// Detached compiles run in GRADUAL-Any nesting mode: an Any arg
+		// flowing into a nested callee's Any param binds a gradual carrier
+		// (see EmitState.storedGradualDepth), so a handler calling an
+		// `st:Any` helper that reads `st.kv` compiles instead of refusing
+		// on the first field access. Safe here and only here — this fork
+		// owns its program and Finalize, so any gradual-caused failure is
+		// one silently declined stamp.
+		es.storedGradualDepth = 1
+	}
 	// Deps are read off the PRE-analysis def table (the fork clone equals r
 	// here), so the snapshot below describes exactly what the body resolved
 	// against — the analysis inside compileStoredFnUnit installs and restores

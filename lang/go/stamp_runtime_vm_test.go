@@ -165,8 +165,8 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	checkBefore := r.Check
 	emitBefore := r.Check.Emit
 	diagsBefore := len(r.Check.Diagnostics)
-	depthBase, depthH := r.Defs.Depth("base"), r.Defs.Depth("h")
-	genBase := r.Defs.Gen("base")
+	depthBase, depthH := r.Defs.Depth("bump"), r.Defs.Depth("h")
+	genBase := r.Defs.Gen("bump")
 
 	if _, ok := eng.StampFnValue(r, v); !ok {
 		t.Fatalf("stamp declined")
@@ -181,10 +181,10 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	if len(r.Check.Diagnostics) != diagsBefore {
 		t.Fatalf("stamp leaked %d diagnostics into the parent", len(r.Check.Diagnostics)-diagsBefore)
 	}
-	if r.Defs.Depth("base") != depthBase || r.Defs.Depth("h") != depthH {
+	if r.Defs.Depth("bump") != depthBase || r.Defs.Depth("h") != depthH {
 		t.Fatalf("stamp changed parent def depths")
 	}
-	if r.Defs.Gen("base") != genBase {
+	if r.Defs.Gen("bump") != genBase {
 		t.Fatalf("stamp bumped a parent binding generation")
 	}
 	if r.Check.Mode {
@@ -278,5 +278,38 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	}
 	if fd2.Registry != nil && fd2.Registry.RuntimeStampingEnabled() {
 		t.Fatalf("unarmed parent must not arm the module sub-registry")
+	}
+}
+
+// The gradual-nesting mode (detached compiles only): a stored handler whose
+// body calls an `Any`-param helper that reads a FIELD of that param compiles
+// detached — the nested callee generalises the Any→Any arg as a GRADUAL
+// carrier, where a strict Any refused "unmatched dispatch recovered at dot".
+// Pins the probe-inherits-mode contract too (a strict probe would decline
+// before the gradual real compile ran).
+func TestStampFnValueGradualNestedCallee(t *testing.T) {
+	const src = `
+def helper (fn [[st:Any k:String] [Any] [ def kv2 st.kv  kv2 get k ]])
+def h (fn [[req:Map state:Any] [Any] [ helper state "a" ]])
+`
+	a, v := stampHarness(t, src, "h", true)
+	stamped, ok := eng.StampFnValue(a.registry, v)
+	if !ok {
+		t.Fatalf("gradual nesting must let the Any-param dot callee compile")
+	}
+
+	om := eng.NewOrderedMap()
+	om.Set("a", eng.NewInteger(42))
+	stOm := eng.NewOrderedMap()
+	stOm.Set("kv", eng.NewMap(om))
+	req := eng.NewMap(eng.NewOrderedMap())
+	state := eng.NewMap(stOm)
+
+	vm := invokeFnValue(t, a, stamped, req, state)
+	interp := invokeFnValue(t, a, v, req, state)
+	vn, _ := vm[len(vm)-1].AsConcreteInteger()
+	in, _ := interp[len(interp)-1].AsConcreteInteger()
+	if vn != in || vn != 42 {
+		t.Fatalf("vm=%d interp=%d, want both 42", vn, in)
 	}
 }
