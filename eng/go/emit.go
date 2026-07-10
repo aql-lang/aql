@@ -545,6 +545,17 @@ type EmitState struct {
 	// closure's analysis args frame is the CallableSpec inputs, not the
 	// enclosing fn's per-call args the interpreter reads at run time.
 	openUnitRecs []int
+	// dynEnv arms the program-wide DYNAMIC-ENVIRONMENT mode: a CompileDynBody
+	// dispatch was recorded (tryRecordDynBody — a computed or context-word
+	// `do` body lowered to a CALL_NATIVE whose handler re-runs the body at
+	// run time). The body's sub-run resolves names against r.Defs and reads
+	// r.Args, so the compiled program must mirror the interpreter's whole
+	// environment: EVERY def emits its OpBindDynScope twin, EVERY named unit
+	// param dyn-binds at frame entry, tail calls are disabled (binding
+	// lifetime), and the VM brackets each CALL_USER frame with an args-stack
+	// push (Program.DynEnv). Costs are paid only by programs that use
+	// dynamic code bodies.
+	dynEnv bool
 	// frozenReads holds the module-scope binding names whose CONCRETE values
 	// a fn/closure UNIT analysis read (NoteFrozenRead) — the value bakes into
 	// the unit (a const, or splice-fired tokens) that re-runs on every call,
@@ -5698,6 +5709,16 @@ func eventsBindDynScope(events []emitEvent, names map[string]bool) bool {
 // a body-local def of a dyn-read name (evDynBind in its fragment tree), or a
 // PARAM some fn reads dynamically.
 func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
+	// DynEnv mode: every unit with a NAMED param installs bindings at entry
+	// (emitDynParamBinds widens to all names), so tail calls are disabled
+	// exactly as for a targeted dyn-bound param.
+	if es.dynEnv {
+		for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
+			if rec.locals[i] != "" {
+				return true
+			}
+		}
+	}
 	if eventsBindDynScope(rec.frag.events, es.dynScopeNames) {
 		return true
 	}
@@ -5717,11 +5738,14 @@ func (es *EmitState) unitBindsDynScope(rec *fnUnitRec) bool {
 // where the interpreter's InstallFrameBinding makes them visible; the frame's
 // RET truncates them back.
 func (es *EmitState) emitDynParamBinds(flw *lowerer, rec *fnUnitRec) {
-	if len(es.dynScopeNames) == 0 {
+	if len(es.dynScopeNames) == 0 && !es.dynEnv {
 		return
 	}
 	for i := 0; i < rec.nParams && i < len(rec.locals); i++ {
-		if !es.dynScopeNames[rec.locals[i]] {
+		// DynEnv mode: every NAMED param dyn-binds (the interpreter's
+		// InstallFrameBinding makes all of them registry-visible; a dynamic
+		// code body may read any). Unnamed slots have no name to bind.
+		if rec.locals[i] == "" || (!es.dynEnv && !es.dynScopeNames[rec.locals[i]]) {
 			continue
 		}
 		flw.emit(OpPushLocal, i, rec.pos)
@@ -5748,7 +5772,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		es.frames[0] = eventsThroughSeq(es.frames[0], es.trapAt)
 		residual = nil
 	}
-	p := &Program{}
+	p := &Program{DynEnv: es.dynEnv}
 	lw := &lowerer{es: es, p: p, code: &p.Code, debug: &p.Debug, sigIdx: map[*Signature]int{}, variadic: map[int]bool{}}
 	// Value-def locals: a top-level computed result referenced more than once
 	// (counting the program residual) is promoted to a frame local so the
@@ -5967,7 +5991,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
 		if rec.reg != nil && rec.reg != es.progReg {
 			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
 			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):

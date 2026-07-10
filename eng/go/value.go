@@ -459,6 +459,19 @@ const (
 	// The flag scopes the "0 results ⇒ diverges" inference to these words: a
 	// genuinely void word (print/set, declared 0-result) is unaffected.
 	CompileValueDiverges
+	// CompileDynBody marks a body-running word (`do`) whose dispatch may lower
+	// to a plain CALL_NATIVE even when the closure path declines — a COMPUTED
+	// (carrier) body, or a concrete body carrying context-dependent words
+	// (args) — because the handler's runtime execution (InvokeBody →
+	// RunResolved, or a JIT-compiled unit) IS the interpreter's own semantics
+	// PROVIDED the name environment matches. Recording such a site therefore
+	// arms the program's DynEnv mode: every def and every named unit param
+	// emits an OpBindDynScope twin (registry-visible, frame-unwound) and the
+	// VM brackets each CALL_USER frame with an args-stack push, so the body's
+	// sub-run resolves names and `args` exactly as it does under the
+	// interpreter. The result is marked variadic (the runtime count is the
+	// body's own), so only variadic-absorbing positions consume it.
+	CompileDynBody
 	// CompileStoresBody marks a word that STORES a NoEvalArgs CODE-BODY list to run
 	// LATER on its own registry — `spawn`'s process body. Like CompileStoresFn but
 	// for a code list rather than a fn value: the recorder compiles the body's

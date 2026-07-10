@@ -1,18 +1,19 @@
 package lang
 
-// `args` inside a CLOSURE body (a higher-order word's do/each$body unit)
-// must not compile: the closure analysis's args frame holds the
-// CallableSpec inputs, while at run time the body executes through
+// `args` inside a CLOSURE body: the closure analysis's args frame holds
+// the CallableSpec inputs, while at run time the body executes through
 // InvokeBody in the ENCLOSING call context — the interpreter's `args`
 // reads the enclosing fn's per-call list. Projecting the closure frame
 // const-baked the wrong (often empty) list: `do [args]` inside a fn
-// compiled to PUSH_CONST [] against the interpreter's [7], and the
-// island path reproduced the divergence as error(args_error). The fix
-// declines the projection inside closure units (specialWordResults →
-// EmitState.inClosureUnit) and screens args/__pa out of island bodies
-// (bodyFreeForFallback), so the program refuses and the interpreter
-// fallback returns the correct value. Fn-UNIT args projection (args.N
-// folding to PUSH_LOCAL N) is untouched.
+// compiled to PUSH_CONST [] against the interpreter's [7]. The
+// projection now declines inside closure units (specialWordResults →
+// EmitState.inClosureUnit) and args/__pa are screened out of island
+// bodies (bodyFreeForFallback); for `do` specifically the dyn-body
+// backstop (CompileDynBody) then COMPILES the dispatch — the program's
+// DynEnv args bracket makes the runtime sub-run's `args` read identical
+// to the interpreter's. Non-CompileDynBody words (each) keep the
+// refusal with fallback parity. Fn-UNIT args projection (args.N folding
+// to PUSH_LOCAL N) is untouched.
 
 import (
 	"fmt"
@@ -36,53 +37,56 @@ func argsBothEngines(t *testing.T, src string) (interp, compiled string, wasComp
 	return fmt.Sprint(gotI), fmt.Sprint(gotC), was
 }
 
-// TestArgsInClosureBodyRefusesAndMatches — the negative pins: every
-// closure-body args shape refuses to compile (named reason) and the
-// interpreter fallback result matches a plain interpreter run.
-func TestArgsInClosureBodyRefusesAndMatches(t *testing.T) {
-	cases := []string{
-		// do body reading the enclosing fn's args (the original miscompile:
-		// compiled [] / islanded error(args_error) vs interpreted [7]).
-		`def g fn [[n:Integer] [Any] [do [args]]]  g 7`,
-		// each closure body reading args.N of the enclosing fn (the fold
-		// corollary: the closure's input must not satisfy the projection).
-		`def g fn [[n:Integer] [List] [[10 20] each [drop args.0]]]  g 7`,
+// TestArgsInDoBodyCompilesWithParity — a `do` body reading the enclosing
+// fn's args COMPILES via the dyn-body backstop (CompileDynBody): the
+// program's DynEnv mode brackets every CALL_USER frame with an args-stack
+// push, so the body's runtime sub-run reads `args` exactly as the
+// interpreter's per-call push provides — [7], byte-identical. (The
+// original miscompile const-baked the closure analysis frame's [].)
+func TestArgsInDoBodyCompilesWithParity(t *testing.T) {
+	src := `def g fn [[n:Integer] [Any] [do [args]]]  g 7`
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	for _, src := range cases {
-		a, err := New()
-		if err != nil {
-			t.Fatalf("New: %v", err)
-		}
-		prog, reason, _, cerr := a.CompileCheck(src)
-		if cerr != nil {
-			t.Fatalf("CompileCheck(%q): %v", src, cerr)
-		}
-		if prog != nil || reason == "" {
-			t.Errorf("%q: args inside a closure body must REFUSE to compile; got prog=%v reason=%q",
-				src, prog != nil, reason)
-		}
-		interp, compiled, was := argsBothEngines(t, src)
-		if was {
-			t.Errorf("%q: RunCompiled reported compiled=true; expected interpreter fallback", src)
-		}
-		if interp != compiled {
-			t.Errorf("%q: engine divergence: interpreted=%q fallback=%q", src, interp, compiled)
-		}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("%q: the dyn-body backstop must compile this; reason=%q err=%v", src, reason, cerr)
+	}
+	interp, compiled, was := argsBothEngines(t, src)
+	if !was {
+		t.Errorf("%q: expected the compiled path to run", src)
+	}
+	if interp != compiled || interp != "[[7]]" {
+		t.Errorf("%q: want [[7]] on both engines; interpreted=%q compiled=%q", src, interp, compiled)
+	}
+	// A NON-CompileDynBody higher-order word (each) keeps the refusal —
+	// its closure input must never satisfy the args projection — with
+	// interpreter-fallback parity.
+	srcEach := "def g fn [[n:Integer] [List] [[10 20] each [drop args.0]]]  g 7"
+	b, _ := New()
+	eProg, eReason, _, _ := b.CompileCheck(srcEach)
+	if eProg != nil || eReason == "" {
+		t.Errorf("%q: each-body args must keep refusing; got prog=%v reason=%q", srcEach, eProg != nil, eReason)
+	}
+	interp, compiled, was = argsBothEngines(t, srcEach)
+	if was || interp != compiled {
+		t.Errorf("%q: fallback parity broke: was=%v interpreted=%q compiled=%q", srcEach, was, interp, compiled)
 	}
 }
 
 // TestArgsAtTopLevelDoParity — top-level `do [args]`: args errors
 // ("not inside a function") and `do` traps it into an Error value in
-// BOTH engines. The program refuses to compile (context-dependent word)
-// and the fallback matches.
+// BOTH engines; the dyn-body backstop compiles it and the runtime
+// sub-run raises the identical trapped error.
 func TestArgsAtTopLevelDoParity(t *testing.T) {
 	src := `do [args]`
 	interp, compiled, was := argsBothEngines(t, src)
-	if was {
-		t.Errorf("%q: RunCompiled reported compiled=true; expected interpreter fallback", src)
+	if !was {
+		t.Errorf("%q: expected the dyn-body backstop to compile this", src)
 	}
 	if interp != compiled {
-		t.Errorf("%q: engine divergence: interpreted=%q fallback=%q", src, interp, compiled)
+		t.Errorf("%q: engine divergence: interpreted=%q compiled=%q", src, interp, compiled)
 	}
 	if !strings.Contains(interp, "args") {
 		t.Errorf("%q: expected the trapped args_error value, got %q", src, interp)

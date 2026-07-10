@@ -127,3 +127,28 @@ func TestStaticSpliceBodiesCompile(t *testing.T) {
 			src, compiled, gotC, errC, gotI, errI)
 	}
 }
+
+// TestComputedEachBodyStaysRefused — a COMPUTED body on a non-CompileDynBody
+// higher-order word (each) keeps the refusal with fallback parity: the island
+// cannot bake a carrier code body (its tokens carry the island's program), and
+// each declares no dyn-body backstop. Pins the island's non-bakeable
+// NoEvalArgs decline.
+func TestComputedEachBodyStaysRefused(t *testing.T) {
+	src := `def op (quote [mul 2])  def f fn [[b:List] [List] [[1 2 3] each b]]  f op`
+	a, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("CompileCheck(%q): %v", src, cerr)
+	}
+	if prog != nil || reason == "" {
+		t.Errorf("%q: computed each body must refuse; got prog=%v reason=%q", src, prog != nil, reason)
+	}
+	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
+	if compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("%q: fallback parity broke: compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
+			src, compiled, gotC, errC, gotI, errI)
+	}
+}

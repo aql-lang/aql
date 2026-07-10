@@ -715,6 +715,12 @@ type Program struct {
 	Debug      []SrcPos // 1:1 with Code
 	MaxStack   int      // a floor when the program loops (results accumulate)
 	NumLocals  int
+	// DynEnv marks a program containing a dynamic code-body dispatch
+	// (CompileDynBody — tryRecordDynBody): the VM brackets every CALL_USER
+	// frame with an args-stack push so a body's runtime sub-run reads `args`
+	// exactly as under the interpreter (name visibility rides the widened
+	// OpBindDynScope emission). Ordinary programs pay nothing.
+	DynEnv bool
 	// storedFnRefs is the set of CompiledFnRefs recorded during compilation
 	// (store-fn handler bakes) whose Prog pointer Finalize back-fills once the
 	// *Program exists. Not part of the executable program; a build-time
@@ -737,6 +743,12 @@ type CompiledFn struct {
 	// fn the captures still ride as trailing CALL_USER args, so NCaptures
 	// stays 0 there — it is closure-specific.)
 	NCaptures int
+	// NArgs is the fn's REAL argument count — the sig-matched args, excluding
+	// the trailing capture slots a user fn's call site pushes (NParams
+	// includes them; NCaptures stays 0 for user fns). The DynEnv args bracket
+	// pushes exactly locals[0:NArgs] as the frame's args list — the same list
+	// the interpreter's per-call args push holds.
+	NArgs int
 	// NUnnamed is how many of the params are UNNAMED (stack-flowing): the
 	// lowering re-pushes each unnamed param onto the operand stack at unit
 	// entry (mirroring the interpreter's frame, where unnamed args sit

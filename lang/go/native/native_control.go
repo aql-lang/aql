@@ -30,7 +30,13 @@ var controlNatives = []NativeFunc{
 				// re-enters the interpreter. The Map sig is a pure value eval
 				// whose arg auto-evaluates BEFORE the handler, so it bakes a
 				// plain CALL_NATIVE (do {a:1 b:2} no longer islands).
-				CompileEffect: CompileFallbackBody,
+				// CompileDynBody is the universal backstop: a body the closure
+				// path declines (computed carriers, args-bearing bodies) lowers
+				// to a CALL_NATIVE under the program's DynEnv mode instead of
+				// refusing — the handler's runtime execution is the
+				// interpreter's own semantics once names and args resolve
+				// identically (see eng CompileDynBody).
+				CompileEffect: CompileFallbackBody | CompileDynBody,
 			},
 			{
 				Args:    []*Type{TMap},

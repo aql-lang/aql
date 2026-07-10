@@ -229,6 +229,7 @@ const (
 	CompileStoresBody       = eng.CompileStoresBody
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
+	CompileDynBody          = eng.CompileDynBody
 
 	// CallableSpec.BodyOut's whole-residual sentinel (eng.BodyOutResidual):
 	// the driving handler returns the body's entire residual (`do`).

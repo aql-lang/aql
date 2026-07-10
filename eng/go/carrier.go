@@ -1029,6 +1029,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
+		!tryRecordDynBody(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
@@ -1500,6 +1501,62 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// core words too: poly only ever records BUILTINS (guarded above), which exist
 	// identically in every registry instance, so matchReg.Lookup always resolves.
 	return es.RecordPolyCall(word, args, outs, pos, matchReg)
+}
+
+// tryRecordDynBody is the universal `do` backstop (the always-compile goal):
+// a body the CLOSURE path declined — a COMPUTED (carrier) body whose tokens
+// exist only at run time, or a concrete body carrying context-dependent words
+// (`args`) — lowers to a plain CALL_NATIVE under the program's DynEnv mode
+// instead of refusing. Soundness: the handler's runtime execution (InvokeBody
+// → a pooled sub-engine over the concrete tokens) IS the interpreter's own
+// semantics, PROVIDED the name/args environment matches — which DynEnv
+// guarantees: every def emits its OpBindDynScope twin, every named unit param
+// dyn-binds at frame entry, and the VM brackets each CALL_USER frame with an
+// args-stack push. The result is marked VARIADIC (the runtime count is the
+// body's own residual), so only variadic-absorbing positions (the program
+// residual, a drop) consume it; a fixed-arity downstream consumer keeps the
+// refusal. A body with a flow-control sentinel stays refused: the sub-run
+// cannot propagate break/continue across the handler boundary.
+func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+	es, _ := r.Check.Recorder().(*EmitState)
+	if es == nil || !es.active() || sig == nil || sig.Callable == nil ||
+		!sig.CompileEffect.Has(CompileDynBody) || len(outs) != 1 {
+		return false
+	}
+	bp := sig.Callable.BodyPos
+	if bp >= len(args) {
+		return false
+	}
+	body := args[bp]
+	// A concrete body must be sentinel-free (break/continue target an
+	// enclosing loop the handler boundary cannot cross). A computed body's
+	// tokens are unknowable — the interpreter faces the same tokens through
+	// the same sub-engine, so a runtime sentinel behaves identically there;
+	// what differs is only tape-coupled RE-STEPPING, which the sub-run
+	// contains entirely.
+	if IsConcrete(body) && bodyHasSentinel(body) {
+		return false
+	}
+	// Every operand must have a compiled home: the body rides as a threaded
+	// runtime value (a param local / event result) or an inert const; other
+	// operands resolve normally. An unresolvable operand leaves the refusal.
+	ops := make([]emitOperand, len(args))
+	for i := range args {
+		op, ok := es.resolveOperand(args[i])
+		if !ok {
+			return false
+		}
+		ops[i] = op
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	f := es.eventInfo[seq]
+	f.variadicResult = true
+	es.eventInfo[seq] = f
+	es.setProduced(outs[0], seq)
+	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc).
+	es.dynEnv = true
+	return true
 }
 
 // The code-body higher-order words that may compile as Stage-5 interpreter
