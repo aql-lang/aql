@@ -297,12 +297,25 @@ func (t *Type) IsSubtypeOf(parent *Type) bool {
 // pointer compare would miss copies. Pointer equality is kept as the
 // fast path and as the fallback for ID-less types (raw &Type{} test
 // fixtures, where the empty ID makes ID comparison meaningless).
+//
+// The shared *typeMeta is a second fast path: every copy of one
+// lattice node shares its tmeta pointer (typeMeta is allocated once at
+// registration and never re-minted for the same node — TypeTable.Clone
+// copies the maps, not the nodes), so a pointer compare settles the
+// overwhelmingly common same-node case without touching the 14-char ID
+// strings — Equal runs on every ConformsTo step of every dispatch
+// (~7% of interpreter CPU was this string compare). tmeta inequality
+// is NOT node inequality (a node rebuilt around the same ID keeps
+// equality via the ID fallback below).
 func (t *Type) Equal(other *Type) bool {
 	if t == other {
 		return true
 	}
 	if t == nil || other == nil {
 		return false
+	}
+	if t.tmeta != nil && t.tmeta == other.tmeta {
+		return true
 	}
 	return t.ID != "" && t.ID == other.ID
 }

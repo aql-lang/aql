@@ -6,9 +6,15 @@ package native
 func spliceArg(v Value) []Value {
 	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		elems, _ := AsList(v)
+		// Append element-wise: Slice() would copy the backing once into a
+		// throwaway slice and append would copy it AGAIN into result —
+		// this runs per selected if/for branch, so the intermediate copy
+		// was a per-branch allocation.
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
-		result = append(result, elems.Slice()...)
+		for i := 0; i < elems.Len(); i++ {
+			result = append(result, elems.Get(i))
+		}
 		result = append(result, NewCloseParen())
 		return result
 	}

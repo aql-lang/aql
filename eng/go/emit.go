@@ -1053,6 +1053,15 @@ func (es *EmitState) setProduced(out Value, seq int) {
 // ambiguous consume (sound: the program falls back) until carrier-identity
 // (the next runtime-independence item) mints distinct ids.
 func (es *EmitState) setProducedAt(out Value, seq, idx int) {
+	// An identity-less value (a runtime mint under the mode-gated ID
+	// elision — value.go checkPassDepth) must NEVER key the provenance
+	// map: a "" insert would make every later ""-ID lookup a false hit
+	// (all identity-less values would alias one producer) — an active
+	// miscompile. Skipping keeps "" lookups guaranteed misses, which
+	// degrade to dynScopeRescue / refusal.
+	if out.ID == "" {
+		return
+	}
 	es.producedBy[out.ID] = producer{seq: seq, idx: idx}
 	if IsTypeBody(out) {
 		f := es.eventInfo[seq]
@@ -1155,6 +1164,16 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// resolution there is registry-identical.
 	if len(es.units) > 1 {
 		if _, isMap := lit.Data.(MapPayload); isMap && bearsActiveTokens(lit) {
+			return es.dynScopeRescue(v)
+		}
+		// A compound with NO identity (a runtime mint under the mode-gated
+		// ID elision) cannot be placed inside a fn unit: the per-call
+		// identity machinery below (freshen / share / embed detection) is
+		// keyed on value IDs, and an identity-less compound would slip past
+		// the enclosing-binding probe and be wrongly freshened (breaking
+		// member identity with the live runtime instance). Rescue —
+		// dynamic-scope read or refusal — never freshen.
+		if v.ID == "" && freshenableConst(lit) {
 			return es.dynScopeRescue(v)
 		}
 	}
@@ -2149,6 +2168,15 @@ func (es *EmitState) RegisterLocal(id string) int {
 	if es == nil {
 		return -1
 	}
+	// An identity-less value cannot own a local slot: registering two
+	// ""-ID values would collapse them onto ONE slot (the documented
+	// record-schema-carrier miscompile shape — see the eager ID mint in
+	// core_helpers.go's record path). -1 mirrors the inactive recorder's
+	// convention; every caller uses RegisterLocal for its side effect and
+	// resolves slots later via localByID, where "" now always misses.
+	if id == "" {
+		return -1
+	}
 	u := es.units[len(es.units)-1]
 	if slot, ok := u.localByID[id]; ok {
 		return slot
@@ -2457,8 +2485,15 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	// Capture slots: the body analysis binds each captured name to
 	// cb.Value (the construction-time snapshot — AnalyseFnBody pushes
 	// the SAME Value), so body references resolve to these slots by
-	// ID. Registered after params, locals nParams…nParams+nCaps-1.
+	// ID. Registered after params, locals nParams…nParams+nCaps-1 —
+	// the numbering is POSITIONAL, so an identity-less capture (a value
+	// minted at runtime under the mode-gated ID elision, later compiled)
+	// cannot be skipped without shifting every subsequent capture's slot:
+	// refuse the unit instead (conservative interpreter fallback).
 	for _, cb := range captures {
+		if cb.Value.ID == "" {
+			es.MarkUncompilable("closure captures a runtime-minted value (no compile identity)")
+		}
 		es.RegisterLocal(cb.Value.ID)
 		u.capID[cb.Value.ID] = true
 	}

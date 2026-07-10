@@ -1386,18 +1386,64 @@ func IDPrefixForType(t *Type) string {
 	return "T_"
 }
 
+// checkPassDepth counts the process's live check/compile passes
+// (CheckState.Begin / BeginCompilePass). Value IDs exist for exactly one
+// consumer class — the emit recorder's provenance maps, which key
+// producedBy / locals / captures on the ID minted at value creation and
+// shared across copies — and that machinery only runs during a pass. A
+// full audit (design/INTERPRETER-PYTHON-PARITY.10.md Phase B) found NO
+// run-mode reader of a concrete value's ID, so minting is gated: pure
+// runtime execution skips GenerateID entirely (~21% of all interpreter
+// allocations), while any live pass anywhere in the process keeps every
+// mint (a concurrent runtime engine then pays a mint it doesn't need —
+// a pure perf trade, never a correctness one). Bare lattice values
+// (data == nil: type literals, carriers) always mint — canon, unify and
+// the type registry read their IDs at runtime.
+var checkPassDepth atomic.Int64
+
+// CheckPassActive reports whether any check/compile pass is live in the
+// process — the condition under which runtime value mints carry IDs.
+func CheckPassActive() bool { return checkPassDepth.Load() > 0 }
+
+// BeginIDMintScope arms eager ID minting for a non-pass producer whose
+// values must still carry compile identities — the PARSER. Program tokens
+// are the compile pass's raw material (a handler that returns its inputs
+// hands the emitter the parsed literals themselves; captures snapshot
+// parse-minted binding values), yet parsing runs before any pass begins.
+// Parsing is once-per-program, so eager IDs there cost nothing on the
+// execution hot path. The returned closure disarms exactly once.
+func BeginIDMintScope() func() {
+	checkPassDepth.Add(1)
+	ended := false
+	return func() {
+		if !ended {
+			ended = true
+			checkPassDepth.Add(-1)
+		}
+	}
+}
+
 // NewValueRaw creates a Value with an auto-generated ID based on the
 // type category. data must be a Payload — the sealed interface
 // implemented by all kernel-known payload variants and by every
 // eng-defined struct/pointer type used as a payload. After Step 5g,
 // passing a raw int64 / string / time.Time / etc. is a compile error
 // — wrap it in IntPayload / StrPayload / TimePayload / etc. first.
+//
+// The ID is elided for concrete values minted outside any check/compile
+// pass — see checkPassDepth above. Emit-side consumers treat an empty ID
+// as "no identity" (skip, refuse, or dynamic-scope rescue — never a map
+// key), so a runtime-minted value flowing into a LATER pass degrades to
+// a conservative compile fallback rather than a miscompile.
 func NewValueRaw(t *Type, data Payload) Value {
-	return Value{
-		ID:     GenerateID(IDPrefixForType(t)),
+	v := Value{
 		Parent: t,
 		Data:   data,
 	}
+	if data == nil || checkPassDepth.Load() > 0 {
+		v.ID = GenerateID(IDPrefixForType(t))
+	}
+	return v
 }
 
 // NewString creates a string value tagged with the appropriate
@@ -1875,23 +1921,40 @@ func NewForward(info ForwardInfo) Value {
 	return NewValueRaw(TForward, info)
 }
 
+// newMarkerValue mints a payload-less STRUCTURAL marker (paren / end).
+// Markers are recognised by Parent identity and carry no payload, so
+// NewValueRaw's data==nil "always mint" rule — which exists for type
+// literals, whose IDs canon and the type registry read at runtime —
+// does not apply; a marker's ID follows the pass rule instead. The
+// interpreter re-expands paren groups per evaluation (expandParenExpr),
+// so eager marker IDs were a per-op allocation for nothing; during a
+// parse or check/compile pass (checkPassDepth > 0) markers mint exactly
+// as before.
+func newMarkerValue(t *Type) Value {
+	v := Value{Parent: t}
+	if checkPassDepth.Load() > 0 {
+		v.ID = GenerateID(IDPrefixForType(t))
+	}
+	return v
+}
+
 // NewOpenParen creates an open-paren marker value for sub-expression scoping.
 func NewOpenParen() Value {
-	return NewValueRaw(TOpenParen, nil)
+	return newMarkerValue(TOpenParen)
 }
 
 // NewCloseParen creates a close-paren marker value. Emitted by the
 // parser for `)` so the engine can recognise it by Parent identity
 // instead of by string compare.
 func NewCloseParen() Value {
-	return NewValueRaw(TCloseParen, nil)
+	return newMarkerValue(TCloseParen)
 }
 
 // NewEnd creates an end-marker value (the `end` / `;` keyword).
 // Emitted by the parser so the engine can recognise it by Parent
 // identity instead of by string compare.
 func NewEnd() Value {
-	return NewValueRaw(TEnd, nil)
+	return newMarkerValue(TEnd)
 }
 
 // NewParenExpr creates a paren expression value containing items to evaluate.

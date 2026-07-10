@@ -168,15 +168,19 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 		}
 		if name == "" {
 			// Anonymous fn — try reverse lookup: walk the def table
-			// for a typed binding whose body equals v. This is what
-			// catches record-field constraints stored as the FnDef
-			// value (not the *Type literal).
+			// for a typed binding whose body is a copy of THE SAME fn
+			// construction as v. This is what catches record-field
+			// constraints stored as the FnDef value (not the *Type
+			// literal). Identity is by shared construction (see
+			// sameFnConstruction) — the previous value-ID comparison
+			// (body.Equal(&v)) no longer works for runtime mints under
+			// the mode-gated ID elision.
 			for _, n := range r.Defs.Names() {
 				body, ok := r.TopTypeBody(n)
 				if !ok {
 					continue
 				}
-				if body.Equal(&v) {
+				if sameFnConstruction(body, v) {
 					name = n
 					break
 				}
@@ -194,6 +198,25 @@ func resolvePredicateRef(v Value, r *Registry) (*Type, bool) {
 		return nil, false
 	}
 	return def, true
+}
+
+// sameFnConstruction reports whether a and b are by-value copies of ONE
+// fn construction. FnDefInfo copies share the Signatures backing array,
+// so the first sig's address is a construction identity that survives
+// the mode-gated ID elision (runtime-minted fn VALUES carry no ID).
+// Value-ID equality is kept as a secondary probe for pass-minted values
+// whose payloads were rebuilt (aggregate clones re-slice Signatures).
+func sameFnConstruction(a, b Value) bool {
+	ai, aok := a.Data.(FnDefInfo)
+	bi, bok := b.Data.(FnDefInfo)
+	if !aok || !bok {
+		return false
+	}
+	if len(ai.Signatures) > 0 && len(bi.Signatures) > 0 &&
+		&ai.Signatures[0] == &bi.Signatures[0] {
+		return true
+	}
+	return a.ID != "" && a.ID == b.ID
 }
 
 // disjunctHasPredicate reports whether any alternative in the

@@ -144,6 +144,12 @@ func (d *parseDepth) leave() { d.cur-- }
 //   - Inside lists at the top level: unquoted text → words (quotation).
 //   - Inside lists inside maps: all text → scalar data.
 func Parse(src string) ([]eng.Value, error) {
+	// Program tokens must carry compile identities even though parsing
+	// runs outside any check/compile pass — the emitter's provenance
+	// tracking keys on the IDs of the parsed literals themselves. Runtime
+	// value mints elide IDs (eng mode-gated elision); this scope re-arms
+	// minting for the parse.
+	defer eng.BeginIDMintScope()()
 	j := SafeMake(jsonic.Options{
 		// tabnas groups the output-shaping flags under Info: Text wraps
 		// scalars in Text{Str,Quote} (quoted/unquoted distinction), List/Map
