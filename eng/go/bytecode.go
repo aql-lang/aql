@@ -523,6 +523,39 @@ func IsCompiledClosure(v Value) bool {
 	return ok
 }
 
+// CompiledFnRef is a DURABLE reference from a runtime fn VALUE to its AOT-
+// compiled body unit. Unlike a ClosurePayload — which OpPushClosure feeds
+// straight to a higher-order handler INSIDE the live VM run — a CompiledFnRef
+// rides on an FnDefInfo-shaped value that a native callback word (a serve-raw
+// connection handler, a spawned process) invokes AFTER the enclosing RunProgram
+// has returned, from its own forked registry. RunUnit uses it to start a fresh
+// VM run entered at the unit. Prog is the parent program whose Consts / Fns /
+// Sigs pools the unit's instructions index; Unit indexes Prog.Fns; Captures are
+// the construction-time lexical captures bound into the body's trailing local
+// slots (nil for a capture-free body).
+//
+// Prog is stamped at Finalize — the point the *Program first exists — over the
+// Program.storedFnRefs side-list, so a ref recorded before Finalize gets its
+// program back-filled once. A nil Prog (a ref that never reached Finalize)
+// means "no runnable unit": the invoke seam treats it as absent and falls back
+// to the interpreter, so a missed stamp is slow, never wrong.
+type CompiledFnRef struct {
+	Prog     *Program
+	Unit     int
+	Captures []Value
+	// depNames are the MODULE-LEVEL names the stored handler / spawn body reads
+	// (every body word bound as a user `def` when the ref was created at its
+	// store site). A stored unit is FROZEN at the definitions live when it was
+	// compiled; the interpreter resolves the same names at CALL time. So if any
+	// dep is undef'd or redefined LATER in the program — after this ref was
+	// created — NotifyNameRebound sets poisoned, Finalize leaves Prog nil, and
+	// InvokeCallback falls back to CallAQL, which resolves the live definition
+	// exactly as the interpreter does. Compile-time only; unused at run time (a
+	// stamped ref always has poisoned=false).
+	depNames map[string]bool
+	poisoned bool
+}
+
 // Instr is one fixed-width instruction.
 type Instr struct {
 	Op  Opcode
@@ -682,6 +715,12 @@ type Program struct {
 	Debug      []SrcPos // 1:1 with Code
 	MaxStack   int      // a floor when the program loops (results accumulate)
 	NumLocals  int
+	// storedFnRefs is the set of CompiledFnRefs recorded during compilation
+	// (store-fn handler bakes) whose Prog pointer Finalize back-fills once the
+	// *Program exists. Not part of the executable program; a build-time
+	// side-list so Finalize needn't re-scan Consts structurally. Nil for a
+	// program with no stored-fn callbacks.
+	storedFnRefs []*CompiledFnRef
 }
 
 // CompiledFn is one compiled AQL fn overload at one arg shape: its
@@ -788,6 +827,25 @@ func slotNames(names []string) string {
 		}
 	}
 	return " [" + strings.Join(parts, " ") + "]"
+}
+
+// StoredRefCount reports how many stored-fn callback refs (service/spawn/codec
+// handler bakes) were recorded during compilation, and StoredRefStampedCount how
+// many were back-stamped with the program (Prog != nil, so InvokeCallback runs
+// the compiled unit) rather than left unstamped for interpreter fallback — the
+// decline a later def/undef of a dependency name triggers to keep compile ==
+// interpret. Test-support introspection for the callback-freeze correctness gate;
+// not consulted by execution.
+func (p *Program) StoredRefCount() int { return len(p.storedFnRefs) }
+
+func (p *Program) StoredRefStampedCount() int {
+	n := 0
+	for _, ref := range p.storedFnRefs {
+		if ref.Prog != nil {
+			n++
+		}
+	}
+	return n
 }
 
 // Disassemble renders the program for golden tests and debugging.

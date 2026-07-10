@@ -506,7 +506,7 @@ func TestS6aNarrowDynamicUsesGuards(t *testing.T) {
 
 	// Unbound origin name: skipped.
 	a := NewDynamicCarrier(TAny)
-	a.DynFrom = "s6a_unbound"
+	a.SetDynFrom("s6a_unbound")
 	sig := &Signature{Args: []*Type{TInteger}}
 	narrowDynamicUses(r, "w", sig, []Value{a})
 	if _, ok := r.Defs.Top("s6a_unbound"); ok {
@@ -516,7 +516,7 @@ func TestS6aNarrowDynamicUsesGuards(t *testing.T) {
 	// Bound but no longer dynamic: skipped.
 	r.Defs.Push("s6a_rebound", NewInteger(3))
 	b := NewDynamicCarrier(TAny)
-	b.DynFrom = "s6a_rebound"
+	b.SetDynFrom("s6a_rebound")
 	narrowDynamicUses(r, "w", sig, []Value{b})
 	if got, _ := r.Defs.Top("s6a_rebound"); got.Dynamic {
 		t.Error("a since-rebound name must stay untouched")
@@ -525,7 +525,7 @@ func TestS6aNarrowDynamicUsesGuards(t *testing.T) {
 	// Nil slot type: skipped.
 	r.Defs.Push("s6a_dyn", NewDynamicCarrier(TAny))
 	c := NewDynamicCarrier(TAny)
-	c.DynFrom = "s6a_dyn"
+	c.SetDynFrom("s6a_dyn")
 	nilSlotSig := &Signature{Args: []*Type{nil}}
 	depth := r.Defs.Depth("s6a_dyn")
 	narrowDynamicUses(r, "w", nilSlotSig, []Value{c})

@@ -43,7 +43,7 @@ func (e exportCarrierW9) ExportFields() *OrderedMap { return e.m }
 
 // absenceArgsW9 builds the [moduleExportValue, keyAtom] operand pair.
 func absenceArgsW9(fields *OrderedMap, key string) []Value {
-	mt := &Type{Name: "Ideal/ModuleExport"}
+	mt := &Type{tmeta: &typeMeta{Name: "Ideal/ModuleExport"}}
 	mod := Value{Parent: mt, Data: ExtensionPayload{Body: exportCarrierW9{m: fields}}}
 	return []Value{mod, NewAtom(key)}
 }
@@ -52,7 +52,7 @@ func TestW9ModuleExportAbsenceStableDeclines(t *testing.T) {
 	r := newTestRegistry(t)
 
 	// A module-family value whose payload is NOT an ExportFieldsCarrier → decline.
-	mt := &Type{Name: "Ideal/Module"}
+	mt := &Type{tmeta: &typeMeta{Name: "Ideal/Module"}}
 	opaque := Value{Parent: mt, Data: ExtensionPayload{Body: 42}}
 	if moduleExportAbsenceStable(r, []Value{opaque, NewAtom("k")}) {
 		t.Error("an opaque module descriptor must decline")

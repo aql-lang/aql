@@ -73,3 +73,137 @@ def _ (bcount set bi ((bcount get bi) add 1)) end
 		})
 	}
 }
+
+// TestBranchArmResultSelfConsumed pins the fix for a value-def that is BOTH the
+// arm RESULT and consumed as an operand WITHIN the same arm — the todo-api PUT
+// handler shape `def t2 {…}; (todos set (id) t2) drop; t2`, where t2 is the
+// `set` argument and the arm's returned value. planValueDefLocals USED to skip
+// promotion for every fragment-internal arm result (assuming it stays on the
+// arm's simulated stack); but the intra-arm `set` consumed t2's single sim slot,
+// so nothing was left to seat as the result and the arm refused "branch leaves
+// extra values" (out=opEvent, vm=0). Such a self-consumed arm-result value-def is
+// now promoted to a frame local (stored once inside the arm, re-pushed for the
+// operand use AND re-resolved as the arm out). compile == interpret MUST hold.
+func TestBranchArmResultSelfConsumed(t *testing.T) {
+	strict := []struct{ name, src, want string }{
+		// the PUT shape: build t2, mutate a flex with it, return t2.
+		{"arm result also a set argument",
+			`def m (flex {b: 0})
+def out (if (3 gt 1) [
+  def t2 {a: 1}
+  (m set "k" t2) drop
+  t2
+] [ {a: 0} ])
+out`, "[{a:1}]"},
+		// the value feeds a plain call operand AND is the arm result.
+		{"arm result also a call operand",
+			`def out (if (2 gt 1) [
+  def xs [10 20 30]
+  (size xs) drop
+  xs
+] [ [] ])
+out`, "[[10 20 30]]"},
+	}
+	for _, c := range strict {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog == nil {
+				t.Fatalf("must compile natively, refused: %q", reason)
+			}
+			if strings.Contains(prog.Disassemble(), "FALLBACK") {
+				t.Errorf("%s must compile native (no island)", c.name)
+			}
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("RunCompiledStrict: %v", err)
+			}
+			b, _ := New()
+			want, _ := b.Run(c.src)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			}
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
+	}
+}
+
+// TestBranchArmReadsEnclosingValueDef pins the Stage-3 fix for a NESTED `if`
+// whose inner arm reads a value-def defined in an ENCLOSING scope — the
+// mini-redis LRANGE shape `def start …; def cur …; if … [ … if (start gte n)
+// [ … ] [ slice start n cur ] ]`. The enclosing value-defs are promoted to frame
+// locals; their CONSUMING references rewrite to local pushes, but an arm-OUT
+// designation referencing a promoted producer is left for lowerFragment to
+// re-resolve — and the scopeFloor guard USED to treat that residual opEvent as a
+// forbidden enclosing-scope read ("branch reads enclosing computation (Stage 3)").
+// The guard now skips promoted operands (delivered via the frame, not the sim).
+// compile == interpret MUST hold.
+func TestBranchArmReadsEnclosingValueDef(t *testing.T) {
+	strict := []struct{ name, src, want string }{
+		{"nested if inner arm reads enclosing start/n/cur",
+			`def cur [10 20 30]
+def start 1
+def out (if (2 gt 1) [
+  def n (size cur)
+  if (start gte n) [ "empty" ] [ slice start n cur ]
+] [ "x" ])
+out`, "[[20 30]]"},
+		// the inner arm-OUT is itself an enclosing computed value-def (bx),
+		// the shape rewritePromotedRefs leaves for lowerFragment to re-resolve.
+		{"inner arm-out is an enclosing computed value-def",
+			`def bx (10 add 5)
+def out (if (3 gt 1) [
+  def k (bx add 1)
+  if (k gt 100) [ 0 ] [ bx ]
+] [ 0 ])
+out`, "[15]"},
+	}
+	for _, c := range strict {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog == nil {
+				t.Fatalf("must compile natively, refused: %q", reason)
+			}
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("RunCompiledStrict: %v", err)
+			}
+			b, _ := New()
+			want, _ := b.Run(c.src)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			}
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
+	}
+}
+
+// TestBranchArmEnclosingLoopStillRefuses is the NEGATIVE guard for the Stage-3
+// scopeFloor fix: skipping PROMOTED enclosing operands must NOT silence a genuine
+// enclosing read that CANNOT be promoted. A nested `if` arm reading an enclosing
+// LOOP result (variadic — never promoted) still refuses "branch reads enclosing
+// computation (Stage 3)" and falls back to the interpreter, which runs correctly
+// (compile == interpret). Proves precision, not blanket suppression.
+func TestBranchArmEnclosingLoopStillRefuses(t *testing.T) {
+	src := `def f fn [[n:Integer] [Any] [ def xs (for 1 [ 7 ]) if (n gt 0) [ if (n gt 1) [ xs ] [ 0 ] ] [ 0 ] ]] 2 f`
+	a, _ := New()
+	prog, reason, _, _ := a.CompileCheck(src)
+	refused := prog == nil || strings.Contains(prog.Disassemble(), "FALLBACK")
+	if !refused {
+		t.Errorf("expected the enclosing loop-variadic read to refuse native compile; reason=%q", reason)
+	}
+	got, err := a.Run(src)
+	if err != nil {
+		t.Fatalf("run (fallback): %v", err)
+	}
+	b, _ := New()
+	want, _ := b.Run(src)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("fallback %v != interpreter %v", got, want)
+	}
+}

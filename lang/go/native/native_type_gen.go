@@ -129,7 +129,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			if err := validateGenParamName(r, w.Name, seen); err != nil {
 				return fail(err)
 			}
-			p := GenParam{Name: w.Name, Pos: entry.Pos}
+			p := GenParam{Name: w.Name, Pos: entry.Pos()}
 			p.Node = MintTypeParam(r, p)
 			r.Defs.PushType(p.Name, p.Node, NewTypeLiteral(p.Node))
 			spec.Bound = append(spec.Bound, p.Name)
@@ -147,7 +147,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			}
 			// Pre-bind a provisional (unconstrained) placeholder so the
 			// entry's own expression can reference it (F-bounds).
-			prov := GenParam{Name: w.Name, Pos: entry.Pos}
+			prov := GenParam{Name: w.Name, Pos: entry.Pos()}
 			prov.Node = MintTypeParam(r, prov)
 			r.Defs.PushType(prov.Name, prov.Node, NewTypeLiteral(prov.Node))
 			spec.Bound = append(spec.Bound, prov.Name)
@@ -174,7 +174,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 				return fail(r.AqlError("gen_error",
 					fmt.Sprintf("gen: parameter entry (%s …) must use `extends` / `default`, got %s", w.Name, out[0].String()), "gen"))
 			}
-			p.Pos = entry.Pos
+			p.Pos = entry.Pos()
 			p.Node = prov.Node
 			AttachGenBound(r, p.Node, p)
 			spec.Params = append(spec.Params, p)

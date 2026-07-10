@@ -251,7 +251,7 @@ func expandTemplate(r *Registry, toks []Value, bindings map[string]Value, rename
 			// binder → its fresh gensym (hygiene #1).
 			if g, ok := renames[w.Name]; ok {
 				gw := NewWord(g)
-				gw.Pos = t.Pos
+				gw.pos = t.pos
 				out = append(out, gw)
 				continue
 			}
@@ -299,7 +299,7 @@ func asTemplateNode(v Value) Value {
 	if IsAtom(v) {
 		name, _ := AsAtom(v)
 		w := NewWord(name)
-		w.Pos = v.Pos
+		w.pos = v.pos
 		return w
 	}
 	return v

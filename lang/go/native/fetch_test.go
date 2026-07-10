@@ -60,7 +60,7 @@ func TestFetchStringHandler(t *testing.T) {
 	}
 
 	resp := result[0]
-	if resp.Parent.Name != "Response" {
+	if resp.Parent.Name() != "Response" {
 		t.Errorf("expected a Fetch Response, got %s", resp.Parent)
 	}
 
@@ -385,7 +385,7 @@ func TestFetchResponseType(t *testing.T) {
 	if !resp.Parent.ConformsTo(TIdeal) {
 		t.Errorf("expected response to match Ideal, got %s", resp.Parent)
 	}
-	if resp.Parent.Name != "Response" {
+	if resp.Parent.Name() != "Response" {
 		t.Errorf("expected Ideal/Fetch/Response, got %s", resp.Parent)
 	}
 }

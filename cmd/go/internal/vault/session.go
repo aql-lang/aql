@@ -155,6 +155,43 @@ func vaultNeedsPassphrase(s *Store) bool {
 	return s.HasPasswordSlots() || resolveBackend(s) == BackendFile
 }
 
+// verifyPassphrase confirms pass can actually open s's secrets, so a caller
+// that caches the passphrase (the interactive TUI) never accepts a mistyped
+// one and then runs a mutation under it.
+//
+//   - Envelope vault: openSession authenticates pass against a keyslot's
+//     verifier; a wrong passphrase returns errSlotAuth.
+//   - Legacy FILE backend: authenticateWith builds the file keyring WITHOUT
+//     verifying (it defers to the first value read), so verify here by
+//     decrypting the AES-GCM keyring blob — a wrong passphrase fails the GCM
+//     tag. A vault with no encrypted keyring yet (no secrets stored) has no
+//     ciphertext to check against, so any passphrase is provisionally
+//     accepted (it becomes the key that encrypts the first secret) — the same
+//     first-use semantics the file backend has always had.
+//   - Host keychain / 1Password: the OS guards access and there is no
+//     passphrase to verify.
+func verifyPassphrase(s *Store, homeDir, pass string) error {
+	if s.HasPasswordSlots() {
+		sess, err := openSession(s, homeDir, pass)
+		if err != nil {
+			return err
+		}
+		sess.Close()
+		return nil
+	}
+	if resolveBackend(s) != BackendFile {
+		return nil
+	}
+	if pass == "" {
+		return errors.New("file backend requires a passphrase")
+	}
+	kr := &fileKeyring{folder: vaultFolder(homeDir), pass: pass}
+	if _, err := kr.load(); err != nil {
+		return fmt.Errorf("passphrase does not open this vault: %w", err)
+	}
+	return nil
+}
+
 // openSession runs the single scrypt over the shared VaultSalt, then
 // tries each slot's HKDF-derived KEK against its verifier. The matching
 // slot's private key and granted NDKs are unsealed. No match -> the

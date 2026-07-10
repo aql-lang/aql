@@ -328,7 +328,7 @@ func UnionCarrierForType(t *Type) (Value, bool) {
 	if t == nil {
 		return Value{}, false
 	}
-	du, ok := t.Behavior.(*disjunctUnifier)
+	du, ok := t.Behavior().(*disjunctUnifier)
 	if !ok || len(du.alternatives) == 0 {
 		return Value{}, false
 	}
@@ -2115,12 +2115,12 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		return
 	}
 	for i, a := range args {
-		if !a.Dynamic || a.DynFrom == "" {
+		if !a.Dynamic || a.DynFrom() == "" {
 			continue
 		}
 		// Only narrow a binding that is itself still dynamic (consistent
 		// with this value) — guards against a since-rebound name.
-		cur, ok := r.Defs.Top(a.DynFrom)
+		cur, ok := r.Defs.Top(a.DynFrom())
 		if !ok || !cur.Dynamic {
 			continue
 		}
@@ -2142,7 +2142,8 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 			continue
 		}
 		bound := cur
-		bound.Dynamic, bound.DynFrom = false, ""
+		bound.Dynamic = false
+		bound.SetDynFrom("")
 		narrowed := TandValues(bound, NewCarrier(slot))
 		// A successful match guarantees a non-disjoint intersection; skip
 		// when the bound did not actually tighten (no-op / avoids
@@ -2175,7 +2176,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		// the recorder's producedBy still resolves the rebound name to its
 		// original producer.
 		narrowed.ID = cur.ID
-		r.Defs.Push(a.DynFrom, NewDynamicCarrierValue(narrowed))
+		r.Defs.Push(a.DynFrom(), NewDynamicCarrierValue(narrowed))
 	}
 }
 
@@ -3314,8 +3315,8 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 						Code:   "redundant_guard",
 						Detail: detail,
 						Word:   "is",
-						Row:    condList.Pos.Row,
-						Col:    condList.Pos.Col,
+						Row:    condList.Pos().Row,
+						Col:    condList.Pos().Col,
 					})
 				}
 			}
@@ -3456,9 +3457,9 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	}
 	if len(body) > 0 {
 		sb.WriteByte('@')
-		sb.WriteString(strconv.Itoa(body[0].Pos.Row))
+		sb.WriteString(strconv.Itoa(body[0].Pos().Row))
 		sb.WriteByte(':')
-		sb.WriteString(strconv.Itoa(body[0].Pos.Col))
+		sb.WriteString(strconv.Itoa(body[0].Pos().Col))
 	}
 	return sb.String()
 }

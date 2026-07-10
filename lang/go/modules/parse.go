@@ -447,7 +447,7 @@ func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos)
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "Parse.spec", args[1].Pos())
 		}
 	}
 	return []native.Value{}

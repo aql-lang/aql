@@ -71,10 +71,10 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	if tColor.Path() != "Ideal/TestPluginColor" {
 		t.Errorf("path = %q, want %q", tColor.Path(), "Ideal/TestPluginColor")
 	}
-	if tColor.FixedID != 99001 {
-		t.Errorf("FixedID = %d, want 99001", tColor.FixedID)
+	if tColor.FixedID() != 99001 {
+		t.Errorf("FixedID = %d, want 99001", tColor.FixedID())
 	}
-	if tColor.Behavior != cb {
+	if tColor.Behavior() != cb {
 		t.Errorf("Behavior = %T, want funcBehavior", tColor.Behavior)
 	}
 	if tColor.Origin != OriginBuiltin {
@@ -86,24 +86,24 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	red := makeColor(255, 0, 0)
 	red.Parent = tColor
 
-	got := tColor.Behavior.Format(red)
+	got := tColor.Behavior().Format(red)
 	if got != "#ff0000" {
 		t.Errorf("Format(red) = %q, want %q", got, "#ff0000")
 	}
 
-	if !tColor.Behavior.Match(red, tColor) {
+	if !tColor.Behavior().Match(red, tColor) {
 		t.Error("Behavior.Match(red, TColor) returned false")
 	}
 
 	red2 := makeColor(255, 0, 0)
 	red2.Parent = tColor
-	if !tColor.Behavior.Equal(red, red2) {
+	if !tColor.Behavior().Equal(red, red2) {
 		t.Error("Behavior.Equal of two identical colors returned false")
 	}
 
 	blue := makeColor(0, 0, 255)
 	blue.Parent = tColor
-	if tColor.Behavior.Equal(red, blue) {
+	if tColor.Behavior().Equal(red, blue) {
 		t.Error("Behavior.Equal of red and blue returned true")
 	}
 }
@@ -154,7 +154,7 @@ func TestRegisterExternalBuiltin_DefaultBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if def.Behavior != DefaultBehavior {
+	if def.Behavior() != DefaultBehavior {
 		t.Errorf("nil Behavior should fall back to DefaultBehavior, got %T", def.Behavior)
 	}
 }

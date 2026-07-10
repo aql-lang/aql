@@ -151,19 +151,19 @@ func TestW9GetMicronReturnsNewLeafCarriers(t *testing.T) {
 	check := func(kind *Value, key string, want *Value) {
 		out := getMicronReturns([]Value{NewString(key), NewCarrier(kind)}, r)
 		if len(out) != 1 || !out[0].Parent.Equal(want) {
-			t.Fatalf("%s.%s: expected %s carrier, got %v", kind.Name, key, want.Name, out)
+			t.Fatalf("%s.%s: expected %s carrier, got %v", kind.Name(), key, want.Name(), out)
 		}
 	}
 	checkDyn := func(kind *Value, key string) {
 		out := getMicronReturns([]Value{NewString(key), NewCarrier(kind)}, r)
 		if len(out) != 1 || !out[0].Dynamic {
-			t.Fatalf("%s.%s: expected dynamic carrier, got %v", kind.Name, key, out)
+			t.Fatalf("%s.%s: expected dynamic carrier, got %v", kind.Name(), key, out)
 		}
 	}
 	checkNone := func(kind *Value) {
 		out := getMicronReturns([]Value{NewString("zzz"), NewCarrier(kind)}, r)
 		if len(out) != 1 || !out[0].Parent.Equal(TNone) {
-			t.Fatalf("%s default: expected None carrier, got %v", kind.Name, out)
+			t.Fatalf("%s default: expected None carrier, got %v", kind.Name(), out)
 		}
 	}
 

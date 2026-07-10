@@ -24,7 +24,7 @@ func makeObjReturns() ReturnsFunc {
 	fresh := ReturnsFreshInstance(0)
 	return func(args []Value, r *Registry) []Value {
 		if len(args) >= 2 {
-			eng.CheckMakeConstruction(r, args[0], args[1], args[0].Pos)
+			eng.CheckMakeConstruction(r, args[0], args[1], args[0].Pos())
 		}
 		return fresh(args, r)
 	}
@@ -41,7 +41,7 @@ func makeScalarReturns() ReturnsFunc {
 	fresh := ReturnsFreshInstance(0)
 	return func(args []Value, r *Registry) []Value {
 		if len(args) >= 2 {
-			eng.CheckMicronConstruction(r, args[0], args[1], args[0].Pos)
+			eng.CheckMicronConstruction(r, args[0], args[1], args[0].Pos())
 		}
 		return fresh(args, r)
 	}

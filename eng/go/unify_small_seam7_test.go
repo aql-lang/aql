@@ -62,7 +62,7 @@ func TestS7DispatchUnifierNilDenoted(t *testing.T) {
 func TestS7DispatchUnifierNilBehaviorInChain(t *testing.T) {
 	// Both operands denote an ad-hoc type whose Behavior is nil: the walk
 	// skips the nil-Behavior node and, finding no Unifier, declines.
-	adhoc := &Type{Name: "S7Adhoc", ID: "S7Adhoc"}
+	adhoc := &Type{tmeta: &typeMeta{Name: "S7Adhoc"}, ID: "S7Adhoc"}
 	a := Value{Parent: adhoc, Data: IntPayload{N: 1}}
 	b := Value{Parent: adhoc, Data: IntPayload{N: 2}}
 	if _, _, ok := dispatchUnifier(a, b); ok {
@@ -193,7 +193,7 @@ func TestS7NegationUnifierMatchBareLiteral(t *testing.T) {
 }
 
 func TestS7BareRefineUnifierMatchBareLiteral(t *testing.T) {
-	adhoc := &Type{Name: "S7Pos", ID: "S7Pos", Parent: TInteger}
+	adhoc := &Type{tmeta: &typeMeta{Name: "S7Pos"}, ID: "S7Pos", Parent: TInteger}
 	b := &bareRefineUnifier{
 		behaviorWrapper: behaviorWrapper{prev: DefaultBehavior},
 		typeName:        "S7Pos",

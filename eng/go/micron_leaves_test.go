@@ -20,13 +20,13 @@ func TestMicronNewtypeLeaves(t *testing.T) {
 		{TPhonon, "+14155552671"},
 	}
 	for _, c := range cases {
-		newt := r.Types.MintType("W4b"+c.base.Name, c.base)
+		newt := r.Types.MintType("W4b"+c.base.Name(), c.base)
 		out, err := micronInstantiate(NewTypeLiteral(newt), NewString(c.in), r)
 		if err != nil {
-			t.Fatalf("%s newtype make: %v", c.base.Name, err)
+			t.Fatalf("%s newtype make: %v", c.base.Name(), err)
 		}
 		if !out[0].Parent.Equal(newt) {
-			t.Errorf("%s newtype parent = %v, want %s", c.base.Name, out[0].Parent, newt.Name)
+			t.Errorf("%s newtype parent = %v, want %s", c.base.Name(), out[0].Parent, newt.Name())
 		}
 	}
 }
@@ -37,10 +37,10 @@ func mkLeaf(t *testing.T, kind *Type, make func(Value) ([]Value, error), s strin
 	t.Helper()
 	out, err := make(NewString(s))
 	if err != nil {
-		t.Fatalf("make %s %q: %v", kind.Name, s, err)
+		t.Fatalf("make %s %q: %v", kind.Name(), s, err)
 	}
 	if !out[0].Parent.Equal(kind) {
-		t.Fatalf("make %s %q: parent = %v", kind.Name, s, out[0].Parent)
+		t.Fatalf("make %s %q: parent = %v", kind.Name(), s, out[0].Parent)
 	}
 	return out[0]
 }
@@ -49,7 +49,7 @@ func prop(t *testing.T, v Value, key string) Value {
 	t.Helper()
 	p, ok := MicronProperty(v, key)
 	if !ok {
-		t.Fatalf("%s: no property %q", v.Parent.Name, key)
+		t.Fatalf("%s: no property %q", v.Parent.Name(), key)
 	}
 	return p
 }

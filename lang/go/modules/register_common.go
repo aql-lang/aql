@@ -34,7 +34,7 @@ type registerIdent struct {
 // registering fn value. Two calls over the same source token share it; "::"
 // (no Pos) is the zero identity and is never treated as idempotent.
 func registerIdentity(fn native.Value) string {
-	p := fn.Pos
+	p := fn.Pos()
 	return fmt.Sprintf("%d:%d:%s", p.Row, p.Col, p.Src)
 }
 
@@ -89,8 +89,8 @@ func surfaceRegisterCheckError(r *native.Registry, err error, at native.Value) {
 		Code:     code,
 		Detail:   detail,
 		Word:     "register",
-		Row:      at.Pos.Row,
-		Col:      at.Pos.Col,
+		Row:      at.Pos().Row,
+		Col:      at.Pos().Col,
 		Severity: native.SeverityError,
 	})
 }

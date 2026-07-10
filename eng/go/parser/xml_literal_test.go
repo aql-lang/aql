@@ -77,10 +77,10 @@ func TestXmlLiteralEquality(t *testing.T) {
 	a := parseOneXml(t, `<a x="1"><b/></a>`)
 	b := parseOneXml(t, `<a x="1"><b/></a>`)
 	c := parseOneXml(t, `<a x="2"><b/></a>`)
-	if !eng.TXml.Behavior.Equal(a, b) {
+	if !eng.TXml.Behavior().Equal(a, b) {
 		t.Errorf("equal elements compared unequal")
 	}
-	if eng.TXml.Behavior.Equal(a, c) {
+	if eng.TXml.Behavior().Equal(a, c) {
 		t.Errorf("different attrs compared equal")
 	}
 }

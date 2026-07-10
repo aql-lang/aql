@@ -6,9 +6,15 @@ package native
 func spliceArg(v Value) []Value {
 	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		elems, _ := AsList(v)
+		// Append element-wise: Slice() would copy the backing once into a
+		// throwaway slice and append would copy it AGAIN into result —
+		// this runs per selected if/for branch, so the intermediate copy
+		// was a per-branch allocation.
 		result := make([]Value, 0, elems.Len()+2)
 		result = append(result, NewOpenParen())
-		result = append(result, elems.Slice()...)
+		for i := 0; i < elems.Len(); i++ {
+			result = append(result, elems.Get(i))
+		}
 		result = append(result, NewCloseParen())
 		return result
 	}
@@ -177,7 +183,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 			if len(stk) == 0 {
 				es.RecordTrap("case_error",
 					"case: value expression produced no value to dispatch on",
-					"case", "", v.Pos)
+					"case", "", v.Pos())
 				return dynAny
 			}
 			if isCodeBody(clauses) {
@@ -205,7 +211,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		// nested case (RecordTrap declines, frames/units != 1) keeps the island.
 		r.Check.Recorder().RecordTrap("case_error",
 			"case: clause list must be a concrete list of match/block pairs (optional trailing default)",
-			"case", "", args[0].Pos)
+			"case", "", args[0].Pos())
 		return dynAny
 	}
 	lst, _ := AsList(clauses)

@@ -458,7 +458,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		taken := lit
 		es.Recorder().RecordBranch(BranchRecord{
 			ConstCond: &taken, HasElse: true,
-			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos,
+			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
 		return []Value{out}
 	}
@@ -524,7 +524,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		es.Recorder().RecordBranch(BranchRecord{
 			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
 		})
 		// The phantom None is only meaningful while bytecode recording is
 		// live (the lowering tracks the zeroOut slot and the top-level
@@ -550,7 +550,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
-		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos,
+		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
 	})
 	return []Value{out}
 }
@@ -737,7 +737,7 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	// guard — RecordBranch lowers that with no merge slot.
 	es.Recorder().RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
-		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos,
+		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos(),
 	})
 	// A 0-value statement guard's phantom None only belongs on the carrier
 	// stack while recording is live (mirrors if3ReturnsFn): a plain or
@@ -991,7 +991,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	}
 	if lowerable {
 		frag := es.TakeFragment()
-		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos)
+		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos())
 	}
 	// A body that nets ZERO values per iteration (every pass drops / is pure
 	// side effect) leaves the stack untouched at run time — BOTH engines net

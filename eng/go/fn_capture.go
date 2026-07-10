@@ -4,6 +4,123 @@ import (
 	"sort"
 )
 
+// frameStateWords are the words whose execution can install a binding in
+// the CURRENT def scope, construct an inner fn (which reads the enclosing
+// fn baseline), or run opaque dynamic code in scope. A fn body that
+// contains none of them (scanning through code lists, parens and interp
+// expressions, but not quoted data or already-built inner closures)
+// provably creates no body-local defs and constructs no inner fn — so its
+// frame needs neither the def-cleanup snapshot nor the fn baseline
+// snapshot. The set is deliberately generous: an omission would over-skip
+// and leak, so err toward keeping frame state (the closure/def/each tests
+// exercise every entry). See buildFnBodyHandler and
+// design/INTERPRETER-SPEED-PLAN.10.md #5.
+var frameStateWords = map[string]bool{
+	"def": true, "undef": true, // bind / unbind in scope
+	"fn": true, "afn": true, // construct an inner fn (reads baseline)
+	"do": true, "call": true, "eval": true, // run code in the current scope
+	"var":    true,                                 // scoped temporaries desugar to def
+	"word":   true,                                 // splice unevaluated code into the stream
+	"module": true, "import": true, "export": true, // module-scope binding
+	"usurp": true, "behave": true, // word / type-behavior modification
+}
+
+// bodyNeedsFrameState reports whether a fn body may install a body-local
+// def or construct an inner fn during execution — i.e. whether its frame
+// needs the two DefTable snapshots (fn baseline + def-cleanup). It is a
+// conservative over-approximation: any frameStateWords occurrence, at any
+// code depth, forces the snapshots. Reuses the vetted WalkBodyWords
+// recursion (skips quoted data and nested closures).
+//
+// A bare body Word can HIDE a frameStateWord: a `word`-macro (an __SP
+// splice binding, `def m word [fn …]`) splices its payload inline into
+// THIS frame and runs it against the live stack, so a macro whose
+// expansion constructs an inner fn or installs a def needs the baseline
+// exactly as a literal `fn`/`def` would — but the body only shows the
+// macro's name. So resolve each body Word against r: if it is bound to a
+// splice, walk the macro's payload too (recursively, with a cycle guard).
+// Macro-ness is judged at construction time, consistent with the rest of
+// the frame-state analysis; a word unbound or non-macro here is treated as
+// non-macro (the same assumption recursion's forward refs rely on).
+func bodyNeedsFrameState(r *Registry, body []Value) bool {
+	needs := false
+	seen := map[string]bool{} // guards mutually-recursive macros
+	var walk func([]Value)
+	walk = func(toks []Value) {
+		WalkBodyWords(toks, func(w WordInfo, _ Value) {
+			if needs {
+				return
+			}
+			if frameStateWords[w.Name] {
+				needs = true
+				return
+			}
+			if r == nil || seen[w.Name] {
+				return
+			}
+			bound, ok := r.Defs.Top(w.Name)
+			if !ok {
+				return
+			}
+			info, ok := bound.Data.(SpliceInfo)
+			if !ok {
+				return
+			}
+			seen[w.Name] = true
+			walk(spliceExpand(info.Data))
+		})
+	}
+	walk(body)
+	return needs
+}
+
+// bodyReferencesArgs reports whether a fn body may read the per-call
+// args list (the `args` word / `args.N` reach). Computed once at handler
+// construction; when false — AND the body already passed the
+// !bodyNeedsFrameState gate, which excludes every opaque-code word
+// (do/call/eval/word/…) that could reach `args` dynamically — the
+// handler pushes a shared empty list instead of copying the call's args
+// into a fresh list per call (design/INTERPRETER-SPEED-PLAN.10.md #5).
+// The WalkBodyWords token space is complete under that gate (it descends
+// into code lists, parens, interp/XML expressions and Reach receivers,
+// so `args.0` is seen), and macro splices are resolved recursively below.
+//
+// Same accepted gap as bodyNeedsFrameState: macro-ness is judged at
+// construction, so a word unbound now and later rebound to a `word`-macro
+// expanding to `args` would see the empty list — a visible empty `args`,
+// never a silently wrong value (args lists are value-semantics ListPayload).
+func bodyReferencesArgs(r *Registry, body []Value) bool {
+	refs := false
+	seen := map[string]bool{} // guards mutually-recursive macros
+	var walk func([]Value)
+	walk = func(toks []Value) {
+		WalkBodyWords(toks, func(w WordInfo, _ Value) {
+			if refs {
+				return
+			}
+			if w.Name == "args" {
+				refs = true
+				return
+			}
+			if r == nil || seen[w.Name] {
+				return
+			}
+			bound, ok := r.Defs.Top(w.Name)
+			if !ok {
+				return
+			}
+			info, ok := bound.Data.(SpliceInfo)
+			if !ok {
+				return
+			}
+			seen[w.Name] = true
+			walk(spliceExpand(info.Data))
+		})
+	}
+	walk(body)
+	return refs
+}
+
 // WalkBodyWords recursively visits every bare Word in a fn body's
 // value stream, invoking callback for each. Used by computeCaptures
 // to enumerate the names a body references at construction time.
