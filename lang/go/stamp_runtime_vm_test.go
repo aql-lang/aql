@@ -106,6 +106,43 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 	}
 }
 
+// A callback body whose trailing residual is a COMPUTED MAP (a field built
+// from the param — the mini-redis catch-all shape) stamps: the detached
+// stored-fn unit records the map's OpMakeMap assembly rather than refusing
+// "body result of unknown provenance". The VM re-assembles it per invoke,
+// value-identical to the interpreter. Recording is enabled ONLY for callback
+// bodies (isCallbackBodyName) — every callback is invoked in a live frame via
+// InvokeCallback / CallAQL, so the in-frame assembly matches both engines.
+func TestStampFnValueComputedMapBodyVMMatchesInterpreter(t *testing.T) {
+	const src = `def h (fn [[req:Map] [Map] [ {message: (join "" ["hi " req.who])} ]])`
+
+	a, plain := stampHarness(t, src, "h", false)
+	arg := func() Value {
+		om := eng.NewOrderedMap()
+		om.Set("who", eng.NewString("bob"))
+		return eng.NewMap(om)
+	}
+	interp := invokeFnValue(t, a, plain, arg())
+
+	a2, v2 := stampHarness(t, src, "h", true)
+	stamped, ok := eng.StampFnValue(a2.registry, v2)
+	if !ok {
+		t.Fatalf("armed registry must stamp the computed-map callback body")
+	}
+	ref := stamped.Data.(eng.FnDefInfo).Signatures[0].CompiledRef()
+	if ref == nil || ref.Prog == nil {
+		t.Fatalf("stamped value must carry a finalized CompiledFnRef")
+	}
+	vm := invokeFnValue(t, a2, stamped, arg())
+
+	if len(vm) != 1 || len(interp) != 1 {
+		t.Fatalf("result shape: vm=%v interp=%v", vm, interp)
+	}
+	if vm[0].String() != interp[0].String() || vm[0].String() != `{message:'hi bob'}` {
+		t.Fatalf("vm=%s interp=%s, want both {message:'hi bob'}", vm[0].String(), interp[0].String())
+	}
+}
+
 // A stamped body reading a module-level dep: after the dep is rebound the
 // depSnap goes stale and the invoke falls back to the interpreter, which
 // resolves the LIVE binding — never the frozen one.

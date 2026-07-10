@@ -13,10 +13,14 @@
 > nested user-fn compiles, filter-lambda closures with lexical captures,
 > and the module-export apply reroute. mini-redis now runs **~8,100-8,400
 > req/s compiled vs ~700-745 interpreted (~11x)** with ZERO CallAQL
-> samples on the steady-state path; every callback except the off-hot-path
-> catch-all ("body result of unknown provenance") executes on the VM.
-> mini-s3's blockers (do/error trap lowering, its remaining higher-order
-> shapes) stay open as described below.
+> samples on the steady-state path. A follow-on fix closed the last
+> callback — the catch-all, whose whole body is a computed map literal
+> (formerly "body result of unknown provenance"): a callback body's
+> trailing computed map/list now records its OpMakeMap/OpMakeList assembly
+> (scoped to callback bodies, where both engines evaluate the residual
+> in-frame), so **every** mini-redis callback — and `redis-serve`'s whole
+> body — now executes on the VM. mini-s3's blockers (do/error trap
+> lowering, its remaining higher-order shapes) stay open as described below.
 
 Goal: get the realistic `aql:net` example handlers (`design/examples/apps/`) to
 compile their bodies to bytecode units (like the echo benchmark handler does),

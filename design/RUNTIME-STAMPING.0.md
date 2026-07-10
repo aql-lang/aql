@@ -93,12 +93,12 @@ names the body reads. Freshness moves to invoke time:
   must read fresh on arrival at a fork); dispatchCache — the only other gen
   consumer — is reset on fork either way.
 
-## The two compiler fixes the work surfaced
+## The three compiler fixes the work surfaced
 
 Discovery reshaped the plan: instrumentation showed the compile-time bake
 ALREADY reached mini-redis's `add` sites (through the module-fn island's
 check-mode analysis) and stamped the 10 handlers whose bodies compiled. The
-7 refusals had two real causes, both fixed:
+refusals had three real causes, all fixed:
 
 1. **Strict-Any generalisation in nested user-fn compiles** (Phase 2's real
    unlock). A stored handler calling an `st:Any` helper that reads `st.kv`
@@ -118,6 +118,24 @@ check-mode analysis) and stamped the 10 handlers whose bodies compiled. The
    extras/hook path keeps refusing. `lambdaCallbackInputs` admits a typed
    NON-dynamic List/Map carrier as the data operand (a computed `keys`
    result); Dynamic carriers still refuse (pair-vs-KeyVal ambiguity).
+3. **Computed-container body residual** (the catch-all closer). The catch-all
+   handler `([req:Map state:Any] => [ {message: (join …)} ])` returns a
+   COMPUTED MAP as its whole-body trailing residual, and
+   `compileStoredFnUnit` refused "body result of unknown provenance": the
+   assembled map is not a const, not a local, not in `producedBy`, so
+   `resolveOperand` cannot place it. The fix records the map's `OpMakeMap`
+   (list's `OpMakeList`) assembly — `runFnBodyOnce` sets the body sub-engine's
+   `elemEvalRecordable` so `autoEvalMap`/`autoEvalList` record the container
+   instead of leaving an unresolvable residual. Scoped by `isCallbackBodyName`
+   to CALLBACK bodies only ("storedfn$body" / "spawnbody$body"): a callback is
+   invoked only via `InvokeCallback` / `CallAQL`, both of which evaluate the
+   residual IN the live frame, so the recorded assembly matches the
+   interpreter. A NORMAL user fn applied directly at top level leaves a
+   DEFERRED `autoEvalStack` residual the interpreter evaluates AFTER the frame
+   pops (frame-locals gone) — recording there would diverge (the hazard the
+   `consumed` gate in `autoEvalMap` guards), so those bodies keep refusing and
+   fall back byte-identically. Mirrors the branch-arm precedent
+   (`RunCarrierBodyWithDefs` sets `elemEvalRecordable` via `peekCaptureArm`).
 
 ## Measured result (echo_redis, 10k SET/GET ops, loopback)
 
@@ -134,13 +152,13 @@ medians are ~10,500 req/s compiled vs ~840 interpreted — ~12.5×. todo-api
 rises to ~17,700 req/s (~10.7×) from the same machinery; the `-compile-report`
 flag prints the per-callback attribution behind these numbers.)
 
-The one remaining interpreted mini-redis callback is the catch-all handler
-("body result of unknown provenance" — a map literal whose computed field is
-the body result), which never fires on the hot path. Known follow-ups, all
-out of scope here: that provenance shape; mini-s3's `do`/`error` trap
-lowering and its higher-order LIST handler patterns beyond filter-lambda;
-Model/check-prop stamping (the store-word trigger likely covers Model
-actions nearly for free).
+Every mini-redis callback now compiles: the catch-all handler (previously
+"body result of unknown provenance" — its computed map is the body's trailing
+residual) stamps via the computed-container fix above, so `redis-serve`'s
+whole body compiles as one unit too. Known follow-ups, all out of scope here:
+mini-s3's `do`/`error` trap lowering and its higher-order LIST handler
+patterns beyond filter-lambda; Model/check-prop stamping (the store-word
+trigger likely covers Model actions nearly for free).
 
 ## Invariants pinned by tests
 
@@ -157,8 +175,16 @@ actions nearly for free).
 - End-to-end: stamped codec differential over real sockets incl. the
   `{need:1}` split-write path (`net_stamp_test.go`); service store-site
   stamping positives/negatives (`native_service_stamp_test.go` incl. the
-  KEYS shape); module-load stamping + apply reroute
-  (`TestModuleFnStampedAtLoadAndRerouted`); filter-lambda capture parity
-  rows (`bytecode-combinations.tsv`) + `TestFilterLambdaCaptureCompiles`.
+  KEYS shape and the computed-map catch-all shape); module-load stamping +
+  apply reroute (`TestModuleFnStampedAtLoadAndRerouted`); filter-lambda
+  capture parity rows (`bytecode-combinations.tsv`) +
+  `TestFilterLambdaCaptureCompiles`.
+- Computed-container body residual: a callback whose trailing residual is a
+  computed map stamps and re-assembles value-identically on the VM
+  (`TestStampFnValueComputedMapBodyVMMatchesInterpreter`,
+  `TestServiceAddStampsComputedMapHandler`); the mini-redis `BOGUSCMD` row of
+  the app differential drives the real catch-all over sockets; the scoping to
+  callback bodies keeps a directly-applied user fn's computed-map residual
+  refusing byte-identically on both engines.
 - Gates: every phase landed with `make fmt/vet/lint/test`,
   `verify-bytecode`, `fuzz-bytecode` (P2-P4), and `cover-gate` 100% green.

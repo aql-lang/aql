@@ -150,6 +150,55 @@ wrap ([req:Map state:Any prior:Any] => [ add 1 (prior req) ]) svc
 	}
 }
 
+// The mini-redis CATCH-ALL shape — a handler whose whole body is a COMPUTED
+// MAP literal (`{message: (join …)}`, a field computed from the request) —
+// stamps at the store site. The map is the body's TRAILING residual, so the
+// stored-fn unit must record its OpMakeMap assembly instead of refusing "body
+// result of unknown provenance". runFnBodyOnce enables that recording only
+// for CALLBACK bodies (isCallbackBodyName), where both engines evaluate the
+// residual in the live frame via InvokeCallback / CallAQL — so the recorded
+// assembly matches the interpreter exactly. Armed stamps; unarmed stays plain
+// and answers identically (the -no-compile contract).
+func TestServiceAddStampsComputedMapHandler(t *testing.T) {
+	const src = `
+def svc (service {})
+add {} ([req:Map state:Any] => [ {message: (join "" ["unknown '" req.cmd "'"])} ]) svc
+`
+	probe := `((call {cmd:"BOGUS"} svc) get "message")`
+
+	armed := stampSvcReg(t, true)
+	if _, err := seam5Run(armed, src); err != nil {
+		t.Fatalf("armed setup: %v", err)
+	}
+	refs := storedHandlerRefs(t, armed, "svc")
+	if len(refs) != 1 || refs[0] == nil || refs[0].Prog == nil {
+		t.Fatalf("the computed-map catch-all handler must stamp, got %v", refs)
+	}
+	outA, err := seam5Run(armed, probe)
+	if err != nil {
+		t.Fatalf("armed call: %v", err)
+	}
+
+	plain := stampSvcReg(t, false)
+	if _, err := seam5Run(plain, src); err != nil {
+		t.Fatalf("unarmed setup: %v", err)
+	}
+	refsP := storedHandlerRefs(t, plain, "svc")
+	if len(refsP) != 1 || refsP[0] != nil {
+		t.Fatalf("unarmed add must store a plain handler, got %v", refsP)
+	}
+	outP, err := seam5Run(plain, probe)
+	if err != nil {
+		t.Fatalf("unarmed call: %v", err)
+	}
+
+	sA, _ := eng.AsString(outA[len(outA)-1])
+	sP, _ := eng.AsString(outP[len(outP)-1])
+	if sA != sP || sA != "unknown 'BOGUS'" {
+		t.Fatalf("stamped=%q interpreted=%q, want both \"unknown 'BOGUS'\"", sA, sP)
+	}
+}
+
 // The mini-redis KEYS shape — a handler whose body runs a CAPTURING filter
 // lambda over a COMPUTED collection — stamps at the store site (Phase 3
 // closed both closure gates: lexical captures on the body lambda, typed

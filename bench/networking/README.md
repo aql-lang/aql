@@ -144,10 +144,13 @@ decline silently). The runtime-stamping work
 
 After all four: a pprof of the compiled mini-redis run shows **zero
 `CallAQL` samples on the steady-state path** (verify with
-`go tool pprof -peek 'CallAQL$'` over a profiled run). The only interpreted
-mini-redis callback left is the unknown-command catch-all ("body result of
-unknown provenance"), which is off the hot path. todo-api picked up ~34%
-on top of its previous ~13k from the same work (its handlers are now on
+`go tool pprof -peek 'CallAQL$'` over a profiled run). A follow-on fix then
+closed the last interpreted callback — the unknown-command catch-all, whose
+whole body is a computed map literal (previously "body result of unknown
+provenance"): a callback body's trailing computed map/list now records its
+`OpMakeMap`/`OpMakeList` assembly, so **every** mini-redis callback compiles
+(and `redis-serve`'s whole body compiles as one unit). todo-api picked up
+~34% on top of its previous ~13k from the same work (its handlers are now on
 the VM, not just its native `Net.http` codec).
 
 **mini-s3 stays ~1.0×**, as before: it is I/O-bound (streaming HTTP over
