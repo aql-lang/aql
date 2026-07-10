@@ -155,3 +155,27 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 	out.Data = fd
 	return out, true
 }
+
+// StampFnValueInPlace is StampFnValue for PRE-PUBLICATION values: it stamps
+// the ref onto the value's own shared *AQLImpl (stampCompiledRef) instead of
+// cloning. Callers must guarantee the value has not escaped to concurrent
+// readers — the one sanctioned site is module load (RunModuleBody), where the
+// module's def bindings and its export map share impl pointers and both must
+// see the stamp, and nothing outside the loading goroutine holds the value
+// yet. Returns false on any decline, leaving the value untouched.
+func StampFnValueInPlace(r *Registry, v Value) bool {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return false
+	}
+	for i := range fd.Signatures {
+		if fd.Signatures[i].CompiledRef() != nil {
+			return false
+		}
+	}
+	ref, ok := StampDetachedFn(r, fd, v.Pos())
+	if !ok {
+		return false
+	}
+	return stampCompiledRef(fd, ref)
+}

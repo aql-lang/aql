@@ -189,6 +189,24 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 		return ModuleDesc{}, err
 	}
 
+	// Detached-stamp the module's fn bindings (design/RUNTIME-STAMPING.0.md
+	// Phase 4a): every module-scope def holding an eligible capture-free fn
+	// compiles to its own unit here, at load — the ONE pre-publication moment
+	// where the def binding and the export map still share each fn's impl
+	// pointer, so the in-place stamp reaches both. The module-export apply
+	// seam (execFnDefSig) then runs a stamped fn on the VM from any caller.
+	// StampFnValueInPlace declines silently per fn (policy off, capturing,
+	// refusing body), leaving that fn interpreting exactly as before. The
+	// stamps happen after the whole body ran so cross-fn deps resolve, and
+	// their dep snapshots freeze against the completed module scope.
+	if modReg.RuntimeStampingEnabled() {
+		for _, name := range modReg.Defs.Names() {
+			if v, ok := modReg.Defs.Top(name); ok {
+				StampFnValueInPlace(modReg, v)
+			}
+		}
+	}
+
 	modID := parent.Modules.NextID()
 	desc := ModuleDesc{
 		ID:      modID,

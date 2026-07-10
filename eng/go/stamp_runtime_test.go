@@ -238,3 +238,31 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 		t.Fatalf("fresh ref must run the VM unit (42), got %v", out[0])
 	}
 }
+
+// StampFnValueInPlace: the PRE-PUBLICATION twin — first stamp mutates the
+// shared impl (both aliases of the value see it), a second attempt declines
+// on already-stamped, and a non-fn declines outright.
+func TestStampFnValueInPlace(t *testing.T) {
+	r := stampReg(t)
+	r.EnableRuntimeStamping()
+	v := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(1))}
+	if !StampFnValueInPlace(r, v) {
+		t.Fatalf("first in-place stamp must succeed")
+	}
+	fd := v.Data.(FnDefInfo)
+	if ref := fd.Signatures[0].CompiledRef(); ref == nil || ref.Prog == nil {
+		t.Fatalf("in-place stamp must mutate the shared impl")
+	}
+	if StampFnValueInPlace(r, v) {
+		t.Fatalf("an already-stamped value must decline (first stamp wins)")
+	}
+	if StampFnValueInPlace(r, NewInteger(3)) {
+		t.Fatalf("a non-fn value must decline")
+	}
+	// Policy off: untouched.
+	r2 := stampReg(t)
+	w := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(2))}
+	if StampFnValueInPlace(r2, w) {
+		t.Fatalf("an unarmed registry must not stamp in place")
+	}
+}

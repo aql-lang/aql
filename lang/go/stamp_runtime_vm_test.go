@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"fmt"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -311,5 +312,94 @@ def h (fn [[req:Map state:Any] [Any] [ helper state "a" ]])
 	in, _ := interp[len(interp)-1].AsConcreteInteger()
 	if vn != in || vn != 42 {
 		t.Fatalf("vm=%d interp=%d, want both 42", vn, in)
+	}
+}
+
+// Module-load stamping + the module-export apply reroute (Phase 4): an
+// armed import compiles each eligible module fn to a detached unit IN PLACE
+// (def binding and export map share the impl), and execFnDefSig routes a
+// stamped module-export application through InvokeCallback at runtime. The
+// unarmed twin keeps everything plain.
+func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
+	src := `module [
+  def helper (fn [[x:Integer] [Integer] [x add 1]])
+  def alias (helper/r)
+  def refuser (fn [[x:Integer] [Integer] [ add 1 (((( {f: ([y:Integer] => [y add 1])} )) get "f") x) ]])
+  def fact (fn [[n:Integer] [Integer] [ if (n lte 1) [1] [n mul (fact (n sub 1))] ]])
+  def tbl {k: 1}
+  export "M" {helper: helper/r fact: fact/r refuser: refuser/r}
+]`
+
+	fetch := func(a *AQL, name string) Value {
+		t.Helper()
+		if _, err := a.Run(`def got M.` + name + `/r`); err != nil {
+			t.Fatalf("fetch %s: %v", name, err)
+		}
+		v, ok := a.registry.Defs.Top("got")
+		if !ok {
+			t.Fatalf("got not bound")
+		}
+		return v
+	}
+	refOf := func(v Value) *eng.CompiledFnRef {
+		fd, isFn := v.Data.(eng.FnDefInfo)
+		if !isFn {
+			t.Fatalf("not a fn value")
+		}
+		for i := range fd.Signatures {
+			if r := fd.Signatures[i].CompiledRef(); r != nil {
+				return r
+			}
+		}
+		return nil
+	}
+
+	// The export map holds a module-fn WRAPPER; dispatch matches the INNER
+	// def binding's signatures (execFnDefLiteral looks the name up in the
+	// wrapper's Registry), so the stamp must be asserted on the inner value.
+	inner := func(a *AQL, name string) Value {
+		t.Helper()
+		w := fetch(a, name)
+		fd, isFn := w.Data.(eng.FnDefInfo)
+		if !isFn || fd.Registry == nil {
+			t.Fatalf("%s: export is not a module fn wrapper", name)
+		}
+		v, ok := fd.Registry.Defs.Top(name)
+		if !ok {
+			t.Fatalf("%s: inner binding missing", name)
+		}
+		return v
+	}
+
+	armed, _ := New()
+	armed.registry.EnableRuntimeStamping()
+	if _, err := armed.Run(`import ` + src); err != nil {
+		t.Fatalf("armed import: %v", err)
+	}
+	if ref := refOf(inner(armed, "helper")); ref == nil || ref.Prog == nil {
+		t.Fatalf("armed load must stamp the module fn's inner binding")
+	}
+	if refOf(inner(armed, "refuser")) != nil {
+		t.Fatalf("a refusing body must stay unstamped at load")
+	}
+
+	// Applications route through the runtime seam and agree with the
+	// unarmed interpreter, including recursion through the module name.
+	plain, _ := New()
+	if _, err := plain.Run(`import ` + src); err != nil {
+		t.Fatalf("plain import: %v", err)
+	}
+	if refOf(inner(plain, "helper")) != nil {
+		t.Fatalf("an unarmed load must not stamp module fns")
+	}
+	for _, probe := range []string{`M.helper 41`, `M.fact 5`, `M.refuser 7`} {
+		gotA, errA := armed.Run(probe)
+		gotP, errP := plain.Run(probe)
+		if errA != nil || errP != nil {
+			t.Fatalf("%s: errs armed=%v plain=%v", probe, errA, errP)
+		}
+		if fmt.Sprint(gotA) != fmt.Sprint(gotP) {
+			t.Fatalf("%s: armed=%v plain=%v (must agree)", probe, gotA, gotP)
+		}
 	}
 }
