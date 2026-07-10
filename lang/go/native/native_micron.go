@@ -158,6 +158,14 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 			return []Value{NewCarrier(TInteger)}
 		}
 		return []Value{NewCarrier(TNone)}
+	case t.ConformsTo(THoston):
+		switch key {
+		case "host", "authority":
+			return []Value{NewCarrier(TString)}
+		case "port":
+			return dyn // optional per instance — Integer or none
+		}
+		return []Value{NewCarrier(TNone)}
 	}
 	if schema, ok := eng.MicronSchemaFor(t); ok {
 		if fv, ok := schema.Get(key); ok {

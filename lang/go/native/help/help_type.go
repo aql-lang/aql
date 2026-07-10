@@ -29,11 +29,12 @@ func init() {
 		Summary: "Create a value conforming to a type.",
 		Description: "Constructs a value of the given type from the provided data. " +
 			"For tables, creates table rows from list data. The Scalar/Micron " +
-			"structured scalars (Pathon / Emailon / Urlon / Ipon and user Microns) " +
-			"construct from a validated string OR a map of named fields — " +
+			"structured scalars (Pathon / Emailon / Urlon / Ipon / Hoston and user " +
+			"Microns) construct from a validated string OR a map of named fields — " +
 			"`make Emailon 'a@b.co'` ≡ `make Emailon {user:'a' host:'b.co'}`, " +
-			"`make Ipon '2001:db8::1'` (IPv4/IPv6, net.ParseIP-validated) — " +
-			"and expose read-only properties via dot (`e.host`, `u.port`, `i.addr`).",
+			"`make Ipon '2001:db8::1'`, `make Hoston 'example.com:8080'` (host:port, " +
+			"optional port) — and expose read-only properties via dot " +
+			"(`e.host`, `u.port`, `i.addr`, `h.authority`).",
 		Examples: []string{
 			`make Point {}          ;# fresh instance, all fields at their defaults`,
 			`make Point {x: 3 y: 4} ;# instance with field overrides`,
@@ -53,8 +54,8 @@ func init() {
 			"`def Baron refine Micron {foo:String}` mints a user structured scalar " +
 			"(content-equal, immutable, property-readable); every name bound under " +
 			"Scalar/Micron must end in the suffix 'on'. A Micron LEAF (Emailon, " +
-			"Urlon, Pathon, Ipon) only refines nominally (`def Workon refine Emailon`) — " +
-			"its field set is its validation contract.",
+			"Urlon, Pathon, Ipon, Hoston) only refines nominally " +
+			"(`def Workon refine Emailon`) — its field set is its validation contract.",
 	})
 
 	register(&Entry{

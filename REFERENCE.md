@@ -414,7 +414,8 @@ Any
 │   │   ├── Pathon                   -- filesystem-style path (was `Path`)
 │   │   ├── Emailon                  -- email address
 │   │   ├── Urlon                    -- absolute URL
-│   │   └── Ipon                     -- IPv4 / IPv6 address (net.ParseIP)
+│   │   ├── Ipon                     -- IPv4 / IPv6 address (net.ParseIP)
+│   │   └── Hoston                   -- host:port authority (optional port)
 │   └── Time
 │       ├── Date, DateTime, Instant
 │       └── (aql:time-util owns TimeOfDay, Duration
@@ -606,7 +607,7 @@ sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 identity rules of a scalar — equality by content (two values with the
 same fields *are* equal), immutability, a place in the total order —
 that are nevertheless object-like, exposing named read-only properties
-through `.` / `get`. Four leaves are built in:
+through `.` / `get`. Five leaves are built in:
 
 | Type | Construct from | Properties (derived in bold) |
 |---|---|---|
@@ -614,6 +615,7 @@ through `.` / `get`. Four leaves are built in:
 | `Emailon` | a plain `user@host` string, or a `{user host}` map | `user`, `host`, **`address`** |
 | `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
 | `Ipon` | an IPv4/IPv6 address string (`net.ParseIP`-validated), or an `{addr}` map | `addr` (canonical), `version` (`4`/`6`) |
+| `Hoston` | a `host:port` string (optional port; IPv6 bracketed `[::1]:80`), or a `{host port?}` map | `host`, `port` (optional), **`authority`** |
 
 (`Pathon` is the former `Scalar/Path`, moved into the family under its
 new name — the bare `Path` name no longer resolves; change `make Path`
@@ -683,7 +685,7 @@ def Bad refine Micron {x:String}         # returns error: micron_name
 historical segment order; other kinds order by canonical render), and
 newtype-vs-base pairs compare across the nominal tag. Different Micron
 kinds are `cmp`-incomparable — use `tcmp` for the cross-kind total
-order (`Micron` < `Pathon` < `Emailon` < `Urlon` < `Ipon` < user kinds).
+order (`Micron` < `Pathon` < `Emailon` < `Urlon` < `Ipon` < `Hoston` < user kinds).
 
 ```
 (make Emailon 'a@b.co') cmp (make Emailon 'b@b.co')   # returns -1

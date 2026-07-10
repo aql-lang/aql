@@ -236,6 +236,8 @@ func micronRender(v Value) string {
 		return micronURLHref(fields)
 	case v.Parent.ConformsTo(TIpon):
 		return micronFieldString(fields, "addr")
+	case v.Parent.ConformsTo(THoston):
+		return micronHostonAuthority(fields)
 	default:
 		return NewMap(fields).String()
 	}
@@ -280,6 +282,18 @@ func micronURLHref(fields *OrderedMap) string {
 	return sb.String()
 }
 
+// micronHostonAuthority synthesizes Hoston's derived authority property:
+// host[:port], bracketing an IPv6 host when a port is present
+// ([::1]:8080), matching net.JoinHostPort's convention.
+func micronHostonAuthority(fields *OrderedMap) string {
+	host := micronFieldString(fields, "host")
+	if p, ok := fields.Get("port"); ok {
+		n, _ := AsInteger(p)
+		return micronHostonRender(host, n, true)
+	}
+	return micronHostonRender(host, 0, false)
+}
+
 func init() {
 	// Attach the family Behavior to the root and every builtin leaf.
 	// Package vars (the T* nodes) initialise before init() runs, so
@@ -290,6 +304,7 @@ func init() {
 	TEmailon.ensureTMeta().Behavior = micronBehavior{kind: TEmailon}
 	TUrlon.ensureTMeta().Behavior = micronBehavior{kind: TUrlon}
 	TIpon.ensureTMeta().Behavior = micronBehavior{kind: TIpon}
+	THoston.ensureTMeta().Behavior = micronBehavior{kind: THoston}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -325,6 +340,8 @@ func MicronProperty(v Value, key string) (Value, bool) {
 		return NewString(micronEmailAddress(fields)), true
 	case v.Parent.ConformsTo(TUrlon) && key == "href":
 		return NewString(micronURLHref(fields)), true
+	case v.Parent.ConformsTo(THoston) && key == "authority":
+		return NewString(micronHostonAuthority(fields)), true
 	}
 	return Value{}, false
 }
@@ -456,6 +473,187 @@ func iponFromString(s string) ([]Value, error) {
 	fields.Set("addr", NewString(ip.String())) // canonical form
 	fields.Set("version", NewInteger(version))
 	return []Value{NewValueRaw(TIpon, MicronPayload{Fields: fields})}, nil
+}
+
+// makeHoston builds a Hoston — a "host:port" network authority with an
+// OPTIONAL port — from a string ("example.com:8080", "example.com",
+// "[::1]:8080", "2001:db8::1") or a {host port?} map. The map form
+// re-renders and re-validates through the string parser — one validator.
+func makeHoston(src Value) ([]Value, error) {
+	switch {
+	case src.Parent.ConformsTo(TString) && IsConcrete(src):
+		s, _ := AsString(src)
+		return hostonFromString(s)
+	case src.Parent.ConformsTo(TMap) && IsConcrete(src):
+		m, err := RequireConcreteMap(src, "make Hoston")
+		if err != nil {
+			return nil, err
+		}
+		host, hasHost := "", false
+		port, hasPort := int64(0), false
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			switch k {
+			case "host":
+				sv, serr := v.AsConcreteString()
+				if serr != nil {
+					return nil, hostonErr(fmt.Sprintf("Hoston field host must be a String, got %s", v.String()))
+				}
+				host, hasHost = sv, true
+			case "port":
+				pv, perr := v.AsConcreteInteger()
+				if perr != nil {
+					return nil, hostonErr(fmt.Sprintf("Hoston field port must be an Integer, got %s", v.String()))
+				}
+				port, hasPort = pv, true
+			default:
+				return nil, hostonErr("Hoston has no field " + k + " (fields: host, port)")
+			}
+		}
+		if !hasHost {
+			return nil, hostonErr("Hoston requires a host field")
+		}
+		// Build directly from the two named fields — do NOT re-parse the host
+		// as a full authority, or `{host:'a.com:80'}` would silently set a
+		// port the caller never supplied (violating the {host port?} shape).
+		if err := validHostonHostField(host); err != nil {
+			return nil, err
+		}
+		if hasPort && (port < 0 || port > 65535) {
+			return nil, hostonErr(fmt.Sprintf("Hoston port %d is not in 0..65535", port))
+		}
+		fields := NewOrderedMap()
+		fields.Set("host", NewString(host))
+		if hasPort {
+			fields.Set("port", NewInteger(port))
+		}
+		return []Value{NewValueRaw(THoston, MicronPayload{Fields: fields})}, nil
+	}
+	return nil, hostonErr(fmt.Sprintf("Hoston source must be a string or map, got %s", src.String()))
+}
+
+// hostonFromString parses "host[:port]" (optional port; IPv6 hosts
+// bracketed when a port is present) into a Hoston payload.
+func hostonFromString(s string) ([]Value, error) {
+	host, port, hasPort, err := splitHoston(s)
+	if err != nil {
+		return nil, err
+	}
+	fields := NewOrderedMap()
+	fields.Set("host", NewString(host))
+	if hasPort {
+		fields.Set("port", NewInteger(port))
+	}
+	return []Value{NewValueRaw(THoston, MicronPayload{Fields: fields})}, nil
+}
+
+// splitHoston splits a host authority into its host and optional port,
+// following net.SplitHostPort's bracketing rule for IPv6.
+func splitHoston(s string) (host string, port int64, hasPort bool, err error) {
+	if s == "" {
+		return "", 0, false, hostonErr("Hoston requires a non-empty host")
+	}
+	if s[0] == '[' { // bracketed IPv6: [addr] or [addr]:port
+		end := strings.IndexByte(s, ']')
+		if end < 0 {
+			return "", 0, false, hostonErr(fmt.Sprintf("Hoston has an unclosed '[' in %q", s))
+		}
+		host = s[1:end]
+		if net.ParseIP(host) == nil {
+			return "", 0, false, hostonErr(fmt.Sprintf("Hoston bracketed host %q is not a valid IP", host))
+		}
+		rest := s[end+1:]
+		if rest == "" {
+			return host, 0, false, nil
+		}
+		if rest[0] != ':' {
+			return "", 0, false, hostonErr(fmt.Sprintf("Hoston expected ':port' after ']' in %q", s))
+		}
+		if port, err = parseHostonPort(rest[1:]); err != nil {
+			return "", 0, false, err
+		}
+		return host, port, true, nil
+	}
+	switch strings.Count(s, ":") {
+	case 0: // bare host / IPv4 / hostname
+		if err = validHostonHost(s); err != nil {
+			return "", 0, false, err
+		}
+		return s, 0, false, nil
+	case 1: // host:port
+		i := strings.IndexByte(s, ':')
+		host = s[:i]
+		if err = validHostonHost(host); err != nil {
+			return "", 0, false, err
+		}
+		if port, err = parseHostonPort(s[i+1:]); err != nil {
+			return "", 0, false, err
+		}
+		return host, port, true, nil
+	default: // multiple colons, unbracketed → a bare IPv6 literal, no port
+		if net.ParseIP(s) == nil {
+			return "", 0, false, hostonErr(fmt.Sprintf(
+				"Hoston %q has multiple ':' but is not a valid IPv6 (bracket it as [addr]:port to add a port)", s))
+		}
+		return s, 0, false, nil
+	}
+}
+
+// validHostonHost rejects an empty or whitespace-bearing host.
+func validHostonHost(h string) error {
+	if h == "" {
+		return hostonErr("Hoston requires a non-empty host")
+	}
+	if strings.ContainsAny(h, " \t\r\n") {
+		return hostonErr(fmt.Sprintf("Hoston host %q must not contain whitespace", h))
+	}
+	// A Hoston is a network authority (host[:port]), not a URL: the
+	// authority delimiters end it, so a host must not contain them.
+	if i := strings.IndexAny(h, "/?#"); i >= 0 {
+		return hostonErr(fmt.Sprintf("Hoston host %q must not contain %q (it is a host, not a URL)", h, h[i:i+1]))
+	}
+	return nil
+}
+
+// validHostonHostField validates a Hoston map's `host` field as a HOST, not a
+// full authority: a ':' is allowed only inside an IPv6 literal, so a
+// "host:port" string in the host field is a loud error rather than quietly
+// populating the optional port.
+func validHostonHostField(h string) error {
+	if err := validHostonHost(h); err != nil {
+		return err
+	}
+	if strings.Contains(h, ":") && net.ParseIP(h) == nil {
+		return hostonErr(fmt.Sprintf(
+			"Hoston host %q is not valid (a ':' is only allowed in an IPv6 literal; put the port in the port field)", h))
+	}
+	return nil
+}
+
+// parseHostonPort parses a decimal port in the range 0..65535.
+func parseHostonPort(s string) (int64, error) {
+	p, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || p < 0 || p > 65535 {
+		return 0, hostonErr(fmt.Sprintf("Hoston port %q is not an integer in 0..65535", s))
+	}
+	return p, nil
+}
+
+// micronHostonRender joins a host and port back into the string form
+// (bracketing an IPv6 host), used to re-validate the map construction
+// form through the single string parser.
+func micronHostonRender(host string, port int64, hasPort bool) string {
+	if !hasPort {
+		return host
+	}
+	if strings.Contains(host, ":") {
+		return "[" + host + "]:" + strconv.FormatInt(port, 10)
+	}
+	return host + ":" + strconv.FormatInt(port, 10)
+}
+
+func hostonErr(detail string) error {
+	return &AqlError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // urlonFieldOrder is the canonical field layout of an Urlon map source
@@ -738,7 +936,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 	switch {
 	case kind.Equal(TMicron):
 		return nil, &AqlError{Code: "type_error",
-			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon) or a user-defined Micron kind",
+			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
 		return makePathon(data, false)
@@ -748,6 +946,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return makeUrlon(data)
 	case kind.Equal(TIpon):
 		return makeIpon(data)
+	case kind.Equal(THoston):
+		return makeHoston(data)
 	}
 	// A newtype (bare nominal refine) of a builtin leaf or of a user
 	// kind: construct the base, then tag the result with the newtype —
@@ -764,6 +964,8 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 			out, err = makeUrlon(data)
 		case t.Equal(TIpon):
 			out, err = makeIpon(data)
+		case t.Equal(THoston):
+			out, err = makeHoston(data)
 		default:
 			if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)

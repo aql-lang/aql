@@ -76,6 +76,36 @@ make Ipon {addr:'x' extra:'y'}	ERROR:Ipon has no field extra	unknown field
 make Ipon {addr:42}	ERROR:field addr must be a String	non-string field value
 make Ipon {}	ERROR:Ipon requires an addr field	missing addr
 
+# §2c Construction — Hoston. A host:port network authority with an
+#     OPTIONAL port; IPv6 hosts bracket when a port is present.
+make Hoston 'example.com:8080'	example.com:8080
+make Hoston 'example.com'	example.com	port is optional
+make Hoston {host:'example.com' port:443}	example.com:443	map form re-renders
+make Hoston 'example.com:8080' typeof	Hoston
+pathof Hoston	[Scalar Micron Hoston]
+def h (make Hoston 'example.com:8080') h.host	'example.com'
+def h (make Hoston 'example.com:8080') h.port	8080
+def h (make Hoston 'example.com:8080') h.authority	'example.com:8080'	derived authority
+(make Hoston 'example.com:80') has 'port'	true
+(make Hoston 'example.com') has 'port'	false	host-only carries no port
+def h (make Hoston '[::1]:8080') h.host	'::1'	IPv6 host unwrapped from brackets
+make Hoston '[::1]:8080'	[::1]:8080	IPv6 re-bracketed with a port
+make Hoston '2001:db8::1'	2001:db8::1	bare IPv6, no port
+(make Hoston 'a.com:80') eq (make Hoston {host:'a.com' port:80})	true	content-equal
+# a nominal newtype constructs through the leaf validator
+def Serviceon refine Hoston end make Serviceon 'a.com:80' typeof	Serviceon
+# paired negatives
+make Hoston 'host:99999'	ERROR:0..65535	port out of range
+make Hoston ''	ERROR:non-empty host	empty authority
+make Hoston '1:2:3'	ERROR:not a valid IPv6	ambiguous multi-colon
+make Hoston 42	ERROR:Hoston source must be a string or map	wrong source type
+make Hoston {host:'a' extra:'y'}	ERROR:Hoston has no field extra	unknown field
+make Hoston {port:80}	ERROR:Hoston requires a host	missing host
+make Hoston {host:42}	ERROR:field host must be a String	non-string host
+make Hoston {host:'a' port:'80'}	ERROR:field port must be an Integer	non-integer port
+make Hoston 'example.com/path'	ERROR:must not contain	a host is not a URL
+make Hoston {host:'a.com:80'}	ERROR:only allowed in an IPv6 literal	host field must not carry a port
+
 # ─────────────────────────────────────────────────────────────────────
 # §3  Construction — the abstract root and Pathon under make.
 make Micron 1	ERROR:Micron is abstract	the root is not constructible
