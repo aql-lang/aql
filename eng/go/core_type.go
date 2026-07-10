@@ -333,7 +333,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		def := r.Types.MintType(name, TMicron)
 		info.Name = name
 		info.Type = def
-		def.Behavior = micronBehavior{kind: def, info: &info}
+		def.ensureTMeta().Behavior = micronBehavior{kind: def, info: &info}
 		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if IsClassType(body) {
 		info, _ := AsClassType(body)
@@ -377,7 +377,7 @@ func InstallType(r *Registry, name string, body Value) error {
 			parent = TFnUndef
 		}
 		def := r.Types.MintType(name, parent)
-		info.Name = parent.Name + "/" + name
+		info.Name = parent.Name() + "/" + name
 		info.Type = def
 		InstallSchemaUnifier(def, info)
 		r.RegisterPart(name)
@@ -406,6 +406,11 @@ func InstallType(r *Registry, name string, body Value) error {
 		// fall through to the regular PushType path — they remain
 		// gates, not dispatch categories.
 		def := r.Types.MintType(name, inputT)
+		// NOTE: the FnDef payload's Name is deliberately NOT stamped here
+		// — canon renders predicate bodies, and a stamped name would
+		// change their canonical ordering (compare.tsv §predicate-kind).
+		// resolvePredicateRef finds the type for a body COPY via the
+		// shared-construction reverse lookup (sameFnConstruction).
 		// Attach a Unifier so the predicate runs at every Unify call
 		// site (signature matching, options fields, record fields,
 		// `make` constraints, the `unify` word). Without this, Unify
@@ -435,8 +440,8 @@ func InstallType(r *Registry, name string, body Value) error {
 				return err
 			}
 		}
-		def.Name = name
-		body.Name = name
+		def.ensureTMeta().Name = name
+		body.ensureTMeta().Name = name
 		// Attach a bareRefineUnifier so dispatch admits any value
 		// whose declared type satisfies the base. Without this, the
 		// fresh lattice node carries DefaultBehavior and the walk

@@ -74,6 +74,7 @@ type EmitRecorder interface {
 	RecordDynBind(name string, v Value, pos SrcPos)
 	NoteDefRead(id, name string)
 	RefuseCarriedUndef(name string)
+	NotifyNameRebound(name string)
 	RegisterLocal(id string) int
 	RememberOriginal(v Value)
 	RememberStrippedOriginals(pre, stripped []Value)
@@ -172,6 +173,7 @@ func (inactiveEmit) alreadyProduced(string) bool                            { re
 func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
 func (inactiveEmit) RefuseCarriedUndef(string)                  {}
+func (inactiveEmit) NotifyNameRebound(string)                   {}
 func (inactiveEmit) RegisterLocal(string) int                   { return -1 }
 func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}

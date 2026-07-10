@@ -227,6 +227,7 @@ const (
 	CompileQuoteInert       = eng.CompileQuoteInert
 	CompileDiverges         = eng.CompileDiverges
 	CompileValueDiverges    = eng.CompileValueDiverges
+	CompileStoresBody       = eng.CompileStoresBody
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 )
@@ -384,6 +385,7 @@ var (
 	MintTestType              = eng.MintTestType
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
+	BeginIDMintScope          = eng.BeginIDMintScope
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
 	ResetModuleExportGrowth   = eng.ResetModuleExportGrowth

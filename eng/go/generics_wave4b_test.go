@@ -489,7 +489,7 @@ func TestSchemaShortNameAndCanonArg(t *testing.T) {
 	if schemaShortName(&TypeSchemaInfo{Name: "Plain"}) != "Plain" {
 		t.Error("plain short name broken")
 	}
-	if schemaShortName(&TypeSchemaInfo{Type: &Type{Name: "NodeName"}}) != "NodeName" {
+	if schemaShortName(&TypeSchemaInfo{Type: &Type{tmeta: &typeMeta{Name: "NodeName"}}}) != "NodeName" {
 		t.Error("node-name fallback broken")
 	}
 	if schemaShortName(&TypeSchemaInfo{}) != "<schema>" {
@@ -509,7 +509,7 @@ func TestSchemaShortNameAndCanonArg(t *testing.T) {
 		t.Fatalf("class InstallType: %v", err)
 	}
 	body, _ := r.TopTypeBody("W4bCArg")
-	if node := typeArgNode(body); node == nil || node.Name != "W4bCArg" {
+	if node := typeArgNode(body); node == nil || node.Name() != "W4bCArg" {
 		t.Errorf("class typeArgNode = %v", node)
 	}
 	if got := canonTypeArg(body); got != "W4bCArg" {

@@ -28,7 +28,7 @@ func TestW9MicronFinalizeGrammarArms(t *testing.T) {
 	tk := map[string]*regexp.Regexp{"#W9TK": regexp.MustCompile("x")}
 
 	// 948: a grammar carrying a token order is rejected (the +m merge owns it).
-	gOrder := w9MicronGrammar(kind.Name, &tabnas.MatchOptions{Token: tk, TokenOrder: []string{"#W9TK"}})
+	gOrder := w9MicronGrammar(kind.Name(), &tabnas.MatchOptions{Token: tk, TokenOrder: []string{"#W9TK"}})
 	if _, err := micronGrammarFinalize(st, kind, gOrder, r); err == nil {
 		t.Error("948: a grammar with a token order should be rejected")
 	}
@@ -36,7 +36,7 @@ func TestW9MicronFinalizeGrammarArms(t *testing.T) {
 	// 984/994 + token-only path: a valid gate token but no val alternate
 	// references it, so every built-in val alternate is empty-S or ungated and
 	// the finalize falls to the token-only anchoring branch.
-	gTok := w9MicronGrammar(kind.Name, &tabnas.MatchOptions{Token: tk})
+	gTok := w9MicronGrammar(kind.Name(), &tabnas.MatchOptions{Token: tk})
 	// Pre-seed the val rule with an empty-S alternate and an alternate gated on
 	// a NON-gate token, so the finalize scan exercises both skip arms (984 the
 	// empty alt, 994 the ungated alt).

@@ -89,13 +89,13 @@ func CanonValue(v Value) string {
 			if t.Origin == OriginBuiltin {
 				continue
 			}
-			if t.Behavior == nil || t.Behavior == DefaultBehavior {
+			if t.Behavior() == nil || t.Behavior() == DefaultBehavior {
 				continue
 			}
-			if delegatesFormat(t.Behavior) {
+			if delegatesFormat(t.Behavior()) {
 				continue
 			}
-			return t.Behavior.Format(v)
+			return t.Behavior().Format(v)
 		}
 	}
 	switch {

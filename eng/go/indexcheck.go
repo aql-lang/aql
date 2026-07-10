@@ -154,7 +154,7 @@ func CheckListIndex(r *Registry, idx, container Value, word string) {
 		return
 	}
 	if detail, oob := indexProvablyOOB(idx, n); oob {
-		emitIndexOOB(r, word, detail, idx.Pos)
+		emitIndexOOB(r, word, detail, idx.Pos())
 	}
 }
 
@@ -178,7 +178,7 @@ func CheckAtIndices(r *Registry, indices, data Value, word string) {
 	for i := 0; i < list.Len(); i++ {
 		idx := list.Get(i)
 		if detail, oob := indexProvablyOOB(idx, n); oob {
-			emitIndexOOB(r, word, detail, idx.Pos)
+			emitIndexOOB(r, word, detail, idx.Pos())
 		}
 	}
 }

@@ -39,8 +39,8 @@ func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 // by InstallType when minting/renaming a bare-refinement prefab so the
 // nominal newtype rule governs every v.Is(def) boundary.
 func installBareRefineUnifier(def *Type, name string) {
-	def.Behavior = &bareRefineUnifier{
-		behaviorWrapper: behaviorWrapper{prev: def.Behavior},
+	def.ensureTMeta().Behavior = &bareRefineUnifier{
+		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		typeName:        name,
 	}
 }

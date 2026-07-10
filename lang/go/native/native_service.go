@@ -407,15 +407,18 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 		return nil, r.AqlError("service_error", "handler is not a function", "call")
 	}
 
-	// Try the layering arity first: [req state prior].
+	// Try the layering arity first: [req state prior]. InvokeCallback runs the
+	// handler on the VM when its body compiled to a unit (nested in the enclosing
+	// run, or fresh on an idle actor registry) and falls back to CallAQL — the
+	// interpreter — for a body that didn't compile (e.g. one that calls `prior`).
 	priorFn := makePriorFn(r, state, rest)
 	args3 := []Value{req, state, priorFn}
 	if sig := MatchFnSig(handler, args3); sig != nil {
-		return r.CallAQL(sig, args3, fnInfo.Captured)
+		return eng.InvokeCallback(r, sig, args3, fnInfo.Captured)
 	}
 	args2 := []Value{req, state}
 	if sig := MatchFnSig(handler, args2); sig != nil {
-		return r.CallAQL(sig, args2, fnInfo.Captured)
+		return eng.InvokeCallback(r, sig, args2, fnInfo.Captured)
 	}
 	return nil, r.AqlErrorHint("service_error",
 		"handler signature must be [req state] or [req state prior]",

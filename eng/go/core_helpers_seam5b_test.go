@@ -226,7 +226,7 @@ func TestS5bEBodySpanEndComputedReach(t *testing.T) {
 
 // s5beAt stamps a source position on a value.
 func s5beAt(v Value, row, col int) Value {
-	v.Pos = SrcPos{Row: row, Col: col}
+	v.pos = &SrcPos{Row: row, Col: col}
 	return v
 }
 

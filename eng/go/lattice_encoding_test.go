@@ -36,11 +36,11 @@ func walkLCA(a, b *Type) *Type {
 // fast path and the cached typeDepth.
 func TestBuiltinsFullyLabelled(t *testing.T) {
 	for _, ty := range Builtin.byID {
-		if ty.Depth <= 0 {
-			t.Errorf("builtin %q has unset Depth %d", ty.Path(), ty.Depth)
+		if ty.Depth() <= 0 {
+			t.Errorf("builtin %q has unset Depth %d", ty.Path(), ty.Depth())
 		}
-		if ty.In <= 0 || ty.Out < ty.In {
-			t.Errorf("builtin %q has invalid interval [%d,%d]", ty.Path(), ty.In, ty.Out)
+		if ty.In() <= 0 || ty.Out() < ty.In() {
+			t.Errorf("builtin %q has invalid interval [%d,%d]", ty.Path(), ty.In(), ty.Out())
 		}
 	}
 }
@@ -78,8 +78,8 @@ func TestDepthMatchesChainLength(t *testing.T) {
 		for x := ty; x != nil; x = x.Parent {
 			want++
 		}
-		if ty.Depth != want {
-			t.Errorf("%s: Depth=%d, chain length=%d", ty.Path(), ty.Depth, want)
+		if ty.Depth() != want {
+			t.Errorf("%s: Depth=%d, chain length=%d", ty.Path(), ty.Depth(), want)
 		}
 	}
 }
@@ -92,11 +92,11 @@ func TestMintedTypeRoutesThroughWalk(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	pos := tt.MintType("Pos", TInteger)
 
-	if pos.In != 0 {
-		t.Fatalf("minted type should be unlabelled, got In=%d", pos.In)
+	if pos.In() != 0 {
+		t.Fatalf("minted type should be unlabelled, got In=%d", pos.In())
 	}
-	if pos.Depth != TInteger.Depth+1 {
-		t.Errorf("minted Pos Depth=%d, want %d", pos.Depth, TInteger.Depth+1)
+	if pos.Depth() != TInteger.Depth()+1 {
+		t.Errorf("minted Pos Depth=%d, want %d", pos.Depth(), TInteger.Depth()+1)
 	}
 	// Positive: Pos descends from Integer, Number, Scalar, Any.
 	for _, anc := range []*Type{TInteger, TNumber, TScalar, TAny} {

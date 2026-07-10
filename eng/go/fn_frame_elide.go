@@ -112,7 +112,12 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	if dcInfo.Registry != e.registry {
 		return false
 	}
-	if !e.registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
+	// A SkipCleanup frame installs no body-local defs, so its (nil) Snapshot
+	// truncation removes nothing — trivially covered, no need to walk the
+	// def table. Without this shortcut the nil Snapshot would read every
+	// depth as 0 and spuriously decline eager teardown, regressing tail
+	// recursion (design/INTERPRETER-SPEED-PLAN.10.md #5).
+	if !dcInfo.SkipCleanup && !e.registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
 		return false
 	}
 	return true

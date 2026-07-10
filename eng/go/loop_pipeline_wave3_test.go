@@ -74,7 +74,7 @@ func cforReturns(args []Value, r *Registry) []Value {
 	}
 	if lowerable {
 		frag := es.TakeFragment()
-		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[0].Pos)
+		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[0].Pos())
 	}
 	return []Value{out}
 }

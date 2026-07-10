@@ -1175,11 +1175,11 @@ func convertScalarReturns(args []Value, r *Registry) []Value {
 		case ValueType(args[0]).ConformsTo(TBigInteger):
 			eng.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigInteger (a binary Float is inexact; convert to Integer first)",
-				"convert", args[1].Pos)
+				"convert", args[1].Pos())
 		case ValueType(args[0]).ConformsTo(TBigDecimal):
 			eng.CheckAddUniqueDiagnostic(r, "convert_error",
 				"convert: cannot convert Float to BigDecimal (a binary Float is already rounded; build the BigDecimal from a String or the 0d literal)",
-				"convert", args[1].Pos)
+				"convert", args[1].Pos())
 		}
 	}
 	return ReturnsFreshInstance(0)(args, r)

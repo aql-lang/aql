@@ -85,10 +85,10 @@ var processNatives = []NativeFunc{
 		Signatures: []Signature{
 			// spawn [body] {opts} — opts: {mailbox: Integer, overflow: "block"|"fail"|"drop"}.
 			{Args: []*Type{TList, TMap}, Impl: Go(spawnHandler), Returns: []*Type{TPid},
-				BarrierPos: -1, NoEvalArgs: map[int]bool{0: true}},
+				BarrierPos: -1, NoEvalArgs: map[int]bool{0: true}, CompileEffect: CompileStoresBody},
 			// spawn [body] — start a process running body; returns its Pid.
 			{Args: []*Type{TList}, Impl: Go(spawnHandler), Returns: []*Type{TPid},
-				BarrierPos: -1, NoEvalArgs: map[int]bool{0: true}},
+				BarrierPos: -1, NoEvalArgs: map[int]bool{0: true}, CompileEffect: CompileStoresBody},
 		},
 	},
 	{
@@ -201,9 +201,27 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if err := checkProcessPolicy(r); err != nil {
 		return nil, err
 	}
-	bodyList, err := RequireConcreteList(args[0], "spawn")
-	if err != nil {
-		return nil, err
+	// A COMPILED spawn body arrives as a synthetic fn-value carrier with a
+	// CompiledFnRef (CompileStoresBody); an interpreted / refused body arrives as
+	// a raw code-list. Run the former via RunUnit on the fork, the latter via a
+	// fresh interpreter sub-engine.
+	var compiledRef *eng.CompiledFnRef
+	if fd, ok := args[0].Data.(eng.FnDefInfo); ok {
+		for i := range fd.Signatures {
+			if ref := fd.Signatures[i].CompiledRef(); ref != nil && ref.Prog != nil {
+				compiledRef = ref
+				break
+			}
+		}
+	}
+	var tokens []Value
+	if compiledRef == nil {
+		bodyList, err := RequireConcreteList(args[0], "spawn")
+		if err != nil {
+			return nil, err
+		}
+		tokens = make([]Value, bodyList.Len())
+		copy(tokens, bodyList.Slice())
 	}
 	bound := eng.DefaultMailboxBound
 	overflow := eng.OverflowBlock
@@ -230,9 +248,6 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		}
 	}
 
-	tokens := make([]Value, bodyList.Len())
-	copy(tokens, bodyList.Slice())
-
 	rt := procRuntime(r)
 	// Fork now, on the caller's goroutine (the ForkConcurrent contract),
 	// so the body runs on an isolated registry.
@@ -255,8 +270,13 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			rt.Remove(p)
 			p.Close()
 		}()
-		sub := New(fork)
-		if _, runErr := sub.Run(tokens); runErr != nil {
+		var runErr error
+		if compiledRef != nil {
+			_, runErr = eng.RunUnit(compiledRef, fork, nil)
+		} else {
+			_, runErr = New(fork).Run(tokens)
+		}
+		if runErr != nil {
 			fmt.Fprintf(fork.ErrOutput, "[aql/process] %s exited with error: %v\n", p.ID, runErr)
 		}
 	}()

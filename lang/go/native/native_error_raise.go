@@ -109,7 +109,7 @@ func raiseReturns(args []Value, r *Registry) []Value {
 			}
 			detail = fmt.Sprintf("raise: unconditionally raises [aql/%s]: %s", code, msg)
 		}
-		eng.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos)
+		eng.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos())
 	}
 	return []Value{}
 }

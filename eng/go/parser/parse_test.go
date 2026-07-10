@@ -2678,9 +2678,9 @@ func TestSourcePositionWordRowCol(t *testing.T) {
 	// foo @ 1:1, bar @ 2:3, baz @ 2:7
 	want := []eng.SrcPos{{Row: 1, Col: 1}, {Row: 2, Col: 3}, {Row: 2, Col: 7}}
 	for i, w := range want {
-		if vals[i].Pos.Row != w.Row || vals[i].Pos.Col != w.Col {
+		if vals[i].Pos().Row != w.Row || vals[i].Pos().Col != w.Col {
 			t.Errorf("value %d: expected %d:%d, got %d:%d",
-				i, w.Row, w.Col, vals[i].Pos.Row, vals[i].Pos.Col)
+				i, w.Row, w.Col, vals[i].Pos().Row, vals[i].Pos().Col)
 		}
 	}
 }
