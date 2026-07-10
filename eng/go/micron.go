@@ -831,6 +831,7 @@ func makeSemveron(src Value) ([]Value, error) {
 		var major, minor, patch int64
 		var haveMajor, haveMinor, havePatch bool
 		var prerelease, build string
+		var havePrerelease, haveBuild bool
 		for _, k := range m.Keys() {
 			v, _ := m.Get(k)
 			switch k {
@@ -855,13 +856,13 @@ func makeSemveron(src Value) ([]Value, error) {
 				if serr != nil {
 					return nil, serr
 				}
-				prerelease = sv
+				prerelease, havePrerelease = sv, true
 			case "build":
 				sv, serr := semveronIdentField(v, "build")
 				if serr != nil {
 					return nil, serr
 				}
-				build = sv
+				build, haveBuild = sv, true
 			default:
 				return nil, semveronErr("Semveron has no field " + k +
 					" (fields: " + strings.Join(semveronFieldOrder, ", ") + ")")
@@ -871,14 +872,19 @@ func makeSemveron(src Value) ([]Value, error) {
 			return nil, semveronErr("Semveron requires major, minor and patch fields")
 		}
 		// Re-render to the canonical string and re-validate through the
-		// single string parser — one validator for both forms.
+		// single string parser — one validator for both forms. Gate the
+		// marker on field PRESENCE, not on a non-empty value: an explicit
+		// prerelease/build of '' (or an empty/all-empty identifier list)
+		// must reach the parser as a trailing '-'/'+' so validSemver*
+		// rejects it, exactly as the string form '1.2.3-' is rejected —
+		// never silently drop the field and construct the plain release.
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "%d.%d.%d", major, minor, patch)
-		if prerelease != "" {
+		if havePrerelease {
 			sb.WriteString("-")
 			sb.WriteString(prerelease)
 		}
-		if build != "" {
+		if haveBuild {
 			sb.WriteString("+")
 			sb.WriteString(build)
 		}

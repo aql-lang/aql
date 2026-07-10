@@ -126,6 +126,10 @@ func TestMakeSemveron(t *testing.T) {
 		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "prerelease", NewInteger(9)),                   // bad prerelease type
 		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "build", NewBoolean(true)),                     // bad build type
 		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "prerelease", NewList([]Value{NewInteger(5)})), // bad list element
+		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "prerelease", NewString("")),                   // explicit empty prerelease → '1.2.3-' rejected
+		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "build", NewString("")),                        // explicit empty build → '1.2.3+' rejected
+		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "prerelease", NewList([]Value{})),              // empty prerelease list
+		mapOf("major", NewInteger(1), "minor", NewInteger(2), "patch", NewInteger(3), "prerelease", NewList([]Value{NewString("")})), // single empty prerelease identifier
 	}
 	for i, m := range badMaps {
 		if _, err := makeSemveron(m); err == nil {
