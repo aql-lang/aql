@@ -58,6 +58,13 @@ type Engine struct {
 	// atomically before control returns, so a single engine-owned buffer is
 	// reentrancy-safe.
 	loopTokens []Value
+	// peScratch is the reusable span buffer for expandParenExprScratch:
+	// a ParenExpr expands to `( items… )` immediately before a
+	// Tape.Splice (which copies the tokens in), so the buffer is free the
+	// moment the splice returns — same lifetime argument as loopTokens.
+	// The runPooledSub expansion sites keep the allocating variant (a
+	// sub-engine run intervenes there).
+	peScratch []Value
 	// resolvedScratch / excludeScratch are reusable buffers for
 	// effectiveResolved's two per-dispatch allocations — the resolved-stack
 	// snapshot and the forward-exclusion set — which forward-collecting
@@ -585,8 +592,13 @@ func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
 // `fn`/`afn` value carries its construction site for downstream errors). Only
 // zero-Pos entries are touched, so values that already carry a position — a
 // stored fn passed through, a literal — are left alone.
-func stampResultPos(vals []Value, pos SrcPos) {
-	if pos.Row == 0 {
+//
+// pos arrives as the CALL-SITE TOKEN's own *SrcPos and is shared onto the
+// stamped values rather than re-escaped per dispatch (positions are minted
+// once at parse and never mutated — the documented sharing rule on
+// Value.pos). A nil pos means the token carries no position: nothing to stamp.
+func stampResultPos(vals []Value, pos *SrcPos) {
+	if pos == nil || pos.Row == 0 {
 		return
 	}
 	for i := range vals {
@@ -596,11 +608,11 @@ func stampResultPos(vals []Value, pos SrcPos) {
 		switch {
 		case IsReturnCheck(vals[i]):
 			if rc, err := AsReturnCheck(vals[i]); err == nil && rc.Pos.Row == 0 {
-				rc.Pos = pos
+				rc.Pos = *pos
 				vals[i] = NewReturnCheck(rc)
 			}
 		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
-			vals[i].pos = &pos
+			vals[i].pos = pos
 		}
 	}
 }
@@ -989,7 +1001,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				}
 			} else {
 				items, _ := AsParenExpr(val)
-				e.tape.Splice(e.pointer, 1, expandParenExpr(items)...)
+				e.tape.Splice(e.pointer, 1, e.expandParenExprScratch(items)...)
 			}
 
 		case IsReach(val):
@@ -1561,7 +1573,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				continue
 			}
 			peItems, _ := AsParenExpr(tok)
-			e.tape.Splice(scanIdx, 1, expandParenExpr(peItems)...)
+			e.tape.Splice(scanIdx, 1, e.expandParenExprScratch(peItems)...)
 			continue
 		}
 
@@ -2965,7 +2977,8 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// return-type error (named-fn body or anonymous fn value) points at the
 	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		stampResultPos(results, e.tape.At(e.pointer).Pos())
+		cur := e.tape.At(e.pointer)
+		stampResultPos(results, cur.pos)
 	}
 
 	// Full frame replacement: the callee's frame (the handler result,
@@ -3275,7 +3288,7 @@ func (e *Engine) stepLiteral() error {
 	// nested-paren case).
 	if IsParenExpr(e.tape.At(valIdx)) && !e.tape.At(valIdx).Quoted && !e.pendingForwardWantsRawParen() {
 		items, _ := AsParenExpr(e.tape.At(valIdx))
-		e.tape.Splice(valIdx, 1, expandParenExpr(items)...)
+		e.tape.Splice(valIdx, 1, e.expandParenExprScratch(items)...)
 		return nil
 	}
 	// A Reach reaching stepLiteral (nested in a collapsing span, or a
@@ -3777,6 +3790,19 @@ func expandParenExpr(items []Value) []Value {
 	span = append(span, NewOpenParen())
 	span = append(span, items...)
 	span = append(span, NewCloseParen())
+	return span
+}
+
+// expandParenExprScratch is expandParenExpr into the engine's reusable
+// span buffer, for the call sites that Splice the span into the tape
+// immediately (the splice copies the tokens, freeing the buffer). Not
+// for spans handed to a sub-engine run — those use the allocating
+// variant above.
+func (e *Engine) expandParenExprScratch(items []Value) []Value {
+	span := append(e.peScratch[:0], NewOpenParen())
+	span = append(span, items...)
+	span = append(span, NewCloseParen())
+	e.peScratch = span
 	return span
 }
 
