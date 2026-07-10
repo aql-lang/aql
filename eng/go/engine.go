@@ -3645,6 +3645,24 @@ func (e *Engine) autoEvalStack() error {
 // returning a new list containing the results. For example, [1 add 2] → [3].
 // consumed marks the list as a word/fn ARGUMENT being auto-evaluated (execMatch /
 // execFnDefSig), as opposed to the end-of-Run residual eval (autoEvalStack).
+// AutoEvalConsumedList evaluates a list operand exactly as execMatch
+// does for a consumed List argument. Exported for synthesized
+// composite forms whose gen-chain DEFERS a tail operand's evaluation
+// until after the pending-gen placeholder bindings are installed
+// (def's `gen [T] refine Record [v:T]` form): the chain signature
+// suppresses execMatch's eager evaluation, and the form handler
+// re-applies the tail constructor's own evaluation policy here.
+func AutoEvalConsumedList(r *Registry, v Value) (Value, error) {
+	return NewTop(r).autoEvalList(v, true)
+}
+
+// AutoEvalConsumedMap is AutoEvalConsumedList's map counterpart
+// (autoEvalMap with consumed=true; dataMap follows the caller's
+// constructor semantics — false for everything except `make`).
+func AutoEvalConsumedMap(r *Registry, v Value, dataMap bool) (Value, error) {
+	return NewTop(r).autoEvalMap(v, dataMap, true)
+}
+
 func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	elems, _ := AsList(val)
 	if elems.Len() == 0 {

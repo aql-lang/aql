@@ -171,9 +171,17 @@ func Register(r *Registry) {
 	for _, n := range serviceNatives {
 		r.RegisterNativeFunc(n)
 	}
+	// def's keyword-form overloads (`def name fn […]`, `def name gen
+	// [T] class {…}`, …) are synthesized from the constructors' live
+	// signature tables, so this must run AFTER every constructor slice
+	// above has registered — and again for module sub-registries, whose
+	// preambles use the same idioms.
+	registerDefKeywordForms(r)
+
 	r.Modules.InitFunc = func(child *Registry) {
 		for _, n := range Natives {
 			child.RegisterNativeFunc(n)
 		}
+		registerDefKeywordForms(child)
 	}
 }

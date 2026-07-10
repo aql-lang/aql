@@ -104,3 +104,98 @@ func TestCapturesForwardTokenNoCapture(t *testing.T) {
 		t.Error("a plain typed slot never captures a word structurally")
 	}
 }
+
+// --- DispatchSig -------------------------------------------------------------
+
+func TestDispatchSigNoImplementation(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A match-only shape (no Impl) must refuse loudly, not panic.
+	if _, err := DispatchSig(&Signature{Args: []*Type{TAny}}, nil, r); err == nil {
+		t.Fatal("a signature with no run implementation must error")
+	}
+}
+
+// --- scanMacroOperands paren folding -----------------------------------------
+
+func macroFnDef(arity int) *FnDefInfo {
+	params := make([]FnParam, arity)
+	for i := range params {
+		params[i] = FnParam{Type: TAny}
+	}
+	return &FnDefInfo{Name: "m", Macro: true,
+		Signatures: []Signature{{Params: params}}}
+}
+
+func TestScanMacroOperandsFoldsNestedGroup(t *testing.T) {
+	// (1 (2) 3): the fold tracks nesting depth and captures the whole
+	// balanced span as ONE ParenExpr operand.
+	e := engWithTape(t, []Value{
+		NewWord("m"), NewOpenParen(), NewInteger(1),
+		NewOpenParen(), NewInteger(2), NewCloseParen(),
+		NewInteger(3), NewCloseParen(),
+	}, 0)
+	ops, last, err := e.scanMacroOperands(macroFnDef(1), 1, 0)
+	if err != nil {
+		t.Fatalf("fold: %v", err)
+	}
+	if len(ops) != 1 || !IsParenExpr(ops[0]) {
+		t.Fatalf("want one ParenExpr operand, got %v", ops)
+	}
+	if last != 7 {
+		t.Errorf("operand span must end at the close paren, got %d", last)
+	}
+	toks, _ := AsParenExpr(ops[0])
+	// 1 ( 2 ) 3 — the nested markers ride inside; the outer pair is
+	// consumed by the fold.
+	if len(toks) != 5 {
+		t.Errorf("inner tokens preserved incl. nested markers, got %d", len(toks))
+	}
+}
+
+func TestScanMacroOperandsUnbalancedGroupIsBoundary(t *testing.T) {
+	// An unbalanced open paren cannot be an operand form — it is a
+	// structural boundary, so the macro is short an operand.
+	e := engWithTape(t, []Value{
+		NewWord("m"), NewOpenParen(), NewInteger(1),
+	}, 0)
+	if _, _, err := e.scanMacroOperands(macroFnDef(1), 1, 0); err == nil {
+		t.Fatal("unbalanced group must leave the macro short of operands")
+	}
+}
+
+// --- matchSignature: swap-form-inside-forward with a mismatched stack arg ---
+
+// TestMatchSignatureInsideForwardStackMismatch drives the arm where a
+// word dispatching INSIDE a pending forward has forward-collected some
+// args (fwd>0) but a remaining stack operand mismatches the sig type,
+// so the mixed forward+stack split is rejected (canStack=false). A
+// Forward marker parked above the pointer makes isInsidePendingForward
+// true; the forward token fills sig[0]; the mismatched resolved value
+// fails sig[1].
+func TestMatchSignatureInsideForwardStackMismatch(t *testing.T) {
+	r := covRegistry(t, nil)
+	e := NewTop(r)
+	// tape[0] = a parked Forward (an outer word still collecting), so
+	// isInsidePendingForward() is true at pointer 1. tape[2] is the
+	// forward arg that fills sig[0].
+	e.tape = NewTape([]Value{
+		fwdMarker("outer", 0, 1, 0),
+		NewWord("inner"),
+		NewInteger(1),
+	}, stackHeadroom)
+	e.pointer = 1
+	fn := mkFn(Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 2})
+	// resolved carries one stack value of the WRONG type for sig[1].
+	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewBoolean(true)})
+	if sig != nil {
+		t.Errorf("a mismatched stack operand must reject the swap split, got %v", sig)
+	}
+}
+
+// The positive twin (canStack=true → fill the remaining slots from the
+// stack) is exercised by ordinary swap-form dispatch in the spec suite
+// (e.g. `5 sub 2 add 1`); it needs the real resolvedIdx tape mapping a
+// hand-built matchSignature call cannot supply.

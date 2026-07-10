@@ -31,24 +31,12 @@ var definitionNatives = []NativeFunc{
 				Returns:       []*Type{},
 				BarrierPos:    -1,
 			},
-			{
-				// The fn-definition FORM: `def name fn [in out body …]`.
-				// The middle slot is a KEYWORD slot — a /q position whose
-				// concrete Atom pattern admits only the literal word `fn`,
-				// captured as data (binding-agnostic, like every /q slot;
-				// see patternsOk, eng/go/match.go). The idiom is thereby
-				// ordinary structural dispatch: all three operands resolve
-				// at plan time and nothing parks, so under the strict
-				// barrier rule (design/STRICT-FORWARD-BARRIER.0.md) the
-				// form stays legal while `def x add 1 2` is stranded.
-				Args:       []*Type{TAtom, TAtom, TList},
-				QuoteArgs:  map[int]bool{0: true, 1: true},
-				Patterns:   map[int]Value{1: NewAtom("fn")},
-				NoEvalArgs: map[int]bool{2: true},
-				Impl:       Go(defFnFormHandler, RunInCheck()),
-				Returns:    []*Type{},
-				BarrierPos: -1,
-			},
+			// The constructor FORMS — `def name fn [...]`, `def name
+			// class {…}`, `def name gen [T] fn [...]`, … — are NOT
+			// listed here: they are synthesized mechanically from the
+			// blessed constructors' own signature tables at the end of
+			// Register (registerDefKeywordForms), so a constructor
+			// overload added later propagates to def automatically.
 			{
 				Args:       []*Type{TString, TAny},
 				Impl:       Go(defHandler, RunInCheck()),
@@ -266,22 +254,229 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	return nil, nil
 }
 
-// defFnFormHandler implements the `def name fn [sigs…]` FORM: the
-// keyword signature captured the literal word `fn` at position 1 and
-// the raw sig list at position 2, so the Function is constructed HERE
-// — via the builtin fn constructor, since a keyword capture is
-// binding-agnostic like every /q slot (an open-words extension of `fn`
-// changes `fn` calls, not the def form) — and the binding then
-// delegates to the ordinary defHandler path, so the capitalised-name /
-// extension / value-bind branches behave identically to a Function
-// value that arrived at a parked def.
-func defFnFormHandler(args []Value, named map[string]Value, stack []Value, r *Registry) ([]Value, error) {
-	fnVals, err := fnHandler([]Value{args[2]}, nil, nil, r)
-	if err != nil {
-		return nil, err
+// defKeywordConstructors is the CLOSED SET of constructor words whose
+// bare form after a def name is a declared def signature — the KEYWORD
+// form `def name <ctor> …` (keyword slots: a /q position with a
+// concrete Atom pattern admits exactly one literal word; see
+// patternsOk, eng/go/match.go, and design/STRICT-FORWARD-BARRIER.0.md).
+// Each constructor's OWN signatures are mirrored mechanically, shifted
+// past the [name/q ctor/q] prefix, so the form is ordinary structural
+// dispatch: every operand resolves at plan time, nothing parks, and
+// the strict barrier rule needs no wait-through for these idioms.
+// `make` is deliberately ABSENT: it is the one INSTANCE constructor
+// (per-call fresh identity — ReturnsFreshInstance, OpMakeMap events),
+// and routing it through the composite form hides the inner dispatch
+// from the bytecode recorder, losing the operand provenance compiled
+// programs depend on (`def p0 make Pointer.Point {…} … (p0 add p1)`
+// refuses to compile). Its bare def form keeps today's wait-through
+// path; a keyword form needs recorder plumbing first.
+var defKeywordConstructors = []string{
+	"fn", "fnsig", "refine", "class", "surface", "enum", "quote", "word",
+}
+
+// defGenChainTails are the constructors that consume a pending `gen`
+// spec — `def name gen [params] <tail> …` mirrors as a chain form with
+// TWO keyword slots ([name/q gen/q List tail/q …]). The `def Name<T>`
+// angle sugar desugars to exactly this token shape (parser/parse.go).
+var defGenChainTails = []string{"fn", "class", "refine", "fnsig"}
+
+// defFormVia returns the run implementation for a synthesized def
+// keyword overload: construct the bound value by dispatching the
+// captured constructor's own signature over the operands after the
+// keyword — the capture is binding-agnostic like every /q slot, so
+// the builtin constructor semantics apply regardless of shadowing —
+// then delegate binding to the ordinary defHandler path (capitalised-
+// name / extension / value-bind branches behave identically to a
+// value that arrived at a parked def). genChain forms run gen's
+// handler over the params list first, so the tail constructor picks
+// up the pending gen spec exactly as in the wait-through sequence.
+func defFormVia(base *Signature, offset int, genChain bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+	return func(args []Value, named map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+		ctorArgs := args[offset:]
+		if genChain {
+			if _, err := genHandler([]Value{args[2]}, nil, nil, r); err != nil {
+				return nil, err
+			}
+			// The chain signature DEFERRED evaluation of the tail's
+			// operands (a schema map / list may reference the gen
+			// placeholders — `gen [T] class {value:T}`). Re-apply the
+			// tail constructor's own evaluation policy now that the
+			// placeholder bindings are installed, exactly as execMatch
+			// would have at the tail's own dispatch in the wait-through
+			// sequence — including execMatch's pending-gen suspension,
+			// so a constructor nested INSIDE an operand (a record
+			// field's `(fnsig […])`) cannot steal the spec destined
+			// for the tail constructor.
+			restore := r.SuspendPendingGen()
+			defer restore()
+			ctorArgs = append([]Value(nil), ctorArgs...)
+			for i := range ctorArgs {
+				if base.NoEvalArgs[i] || base.FormArgs[i] || base.NoEvalMapArgs[i] {
+					continue
+				}
+				v := ctorArgs[i]
+				// Mirror execMatch's auto-eval admission: unquoted concrete
+				// operands, and only REAL OrderedMap maps — Record/Options/
+				// typed-map payloads share Parent=TMap but are not
+				// evaluatable data (the documented AsMap-nil trap). The
+				// parser's Eval flag is NOT consulted: it is consumed on
+				// the deferred-collection path before the handler runs,
+				// and these positions are by construction parser operands
+				// the tail's own execMatch would have evaluated.
+				if v.Quoted || !IsConcrete(v) {
+					continue
+				}
+				var err error
+				switch {
+				case v.Parent.Equal(TMap) && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v):
+					ctorArgs[i], err = eng.AutoEvalConsumedMap(r, v, false)
+				case v.Parent.Equal(TList):
+					ctorArgs[i], err = eng.AutoEvalConsumedList(r, v)
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
+			// The tail constructor is the intended consumer — restore
+			// the spec before its handler runs (restore-once: the
+			// deferred call above becomes a no-op).
+			restore()
+		}
+		vals, err := eng.DispatchSig(base, ctorArgs, r)
+		if err != nil {
+			return nil, err
+		}
+		// Every blessed constructor signature returns exactly one value.
+		return defHandler([]Value{args[0], vals[0]}, named, stack, r)
 	}
-	// fnHandler's sole success return is exactly one Function value.
-	return defHandler([]Value{args[0], fnVals[0]}, named, stack, r)
+}
+
+// synthDefKeywordSig mirrors one constructor signature as a def
+// keyword overload: [name/q ctor/q …ctor-args], or the gen chain
+// [name/q gen/q params:List tail/q …tail-args]. The constructor's
+// per-position dispatch modifiers travel with their slots.
+func synthDefKeywordSig(ctor string, base *Signature, genChain bool) Signature {
+	offset := 2
+	args := []*Type{TAtom, TAtom}
+	quote := map[int]bool{0: true, 1: true}
+	patterns := map[int]Value{1: NewAtom(ctor)}
+	noEval := map[int]bool{}
+	if genChain {
+		offset = 4
+		args = []*Type{TAtom, TAtom, TList, TAtom}
+		quote[3] = true
+		patterns = map[int]Value{1: NewAtom("gen"), 3: NewAtom(ctor)}
+		noEval[2] = true // gen's params list is code, not data
+	}
+	args = append(args, base.Args...)
+	// No base per-position QuoteArgs/Patterns to mirror: base sigs with
+	// STRUCTURAL slots are excluded up front (hasStructuralSlots), and
+	// no blessed constructor carries value patterns. If one ever does,
+	// its Patterns must shift by offset here like the flag maps below.
+	if genChain {
+		// DEFER every tail operand's evaluation: a schema map/list may
+		// reference the gen placeholders, which are only bound once the
+		// form handler has run gen (defFormVia re-applies the tail's
+		// own evaluation policy afterwards).
+		for p := range base.Args {
+			noEval[p+offset] = true
+		}
+	}
+	for p, on := range base.NoEvalArgs {
+		if on {
+			noEval[p+offset] = true
+		}
+	}
+	sig := Signature{
+		Args:       args,
+		QuoteArgs:  quote,
+		Patterns:   patterns,
+		Impl:       Go(defFormVia(base, offset, genChain), RunInCheck()),
+		Returns:    []*Type{},
+		BarrierPos: -1,
+	}
+	if len(noEval) > 0 {
+		sig.NoEvalArgs = noEval
+	}
+	sig.NoEvalMapArgs = shiftPosFlags(base.NoEvalMapArgs, offset)
+	if genChain {
+		// Deferral covers map operands too (NoEvalArgs does not gate
+		// map auto-evaluation; NoEvalMapArgs does).
+		if sig.NoEvalMapArgs == nil {
+			sig.NoEvalMapArgs = make(map[int]bool, len(base.Args))
+		}
+		for p := range base.Args {
+			sig.NoEvalMapArgs[p+offset] = true
+		}
+	}
+	sig.RawParens = shiftPosFlags(base.RawParens, offset)
+	sig.FormArgs = shiftPosFlags(base.FormArgs, offset)
+	sig.TypeArgs = shiftPosFlags(base.TypeArgs, offset)
+	return sig
+}
+
+// hasStructuralSlots reports whether a signature captures any position
+// structurally — /q word capture, raw paren, macro form, or type-
+// literal slot. Such signatures are excluded from the def keyword
+// mirror (see registerDefKeywordForms).
+func hasStructuralSlots(sig *Signature) bool {
+	if len(sig.QuoteArgs) > 0 || len(sig.RawParens) > 0 ||
+		len(sig.FormArgs) > 0 || len(sig.TypeArgs) > 0 {
+		return true
+	}
+	return false
+}
+
+// shiftPosFlags returns src's per-position flags shifted by `by`
+// positions (nil/empty in → nil out).
+func shiftPosFlags(src map[int]bool, by int) map[int]bool {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[int]bool, len(src))
+	for p, on := range src {
+		dst[p+by] = on
+	}
+	return dst
+}
+
+// registerDefKeywordForms synthesizes def's keyword overloads from the
+// blessed constructors' live signature tables. Called at the end of
+// Register, after every constructor slice has registered.
+func registerDefKeywordForms(r *Registry) {
+	synth := func(ctor string, genChain bool) {
+		fnDef := r.Lookup(ctor)
+		if fnDef == nil {
+			return
+		}
+		for i := range fnDef.Signatures {
+			base := fnDef.Signatures[i]
+			if base.Fallback {
+				continue
+			}
+			// A base sig carrying STRUCTURAL capture slots (/q, raw
+			// paren, form, type-literal) cannot be mirrored: the
+			// capture gate (capturesForwardToken) is per-word across
+			// ALL of def's signatures, so an unpatterned structural
+			// slot at a shifted tail position would capture ANY word
+			// there for EVERY def statement — disabling the function-
+			// word barrier two-plus positions out (`def x (…)
+			// macroexpand (…)` must keep macroexpand as a barrier).
+			// Among the blessed constructors this only excludes
+			// quote's word-capture sig; `def a quote foo` spells as
+			// `def a foo/q`.
+			if hasStructuralSlots(&base) {
+				continue
+			}
+			r.Register("def", synthDefKeywordSig(ctor, &base, genChain))
+		}
+	}
+	for _, ctor := range defKeywordConstructors {
+		synth(ctor, false)
+	}
+	for _, tail := range defGenChainTails {
+		synth(tail, true)
+	}
 }
 
 func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

@@ -100,17 +100,52 @@ Three kernel seams make keyword slots sound (all in this change):
    def binds g. A signature whose keyword slot cannot match the token
    at its position is pruned before any group evaluation.
 
-### Known strict-mode fallout of the ruling (accepted, migration due)
+### Constructor keyword forms (DONE) — strict-mode fallout is now zero
 
-Bare-word def bodies OTHER than `fn` now strand under the strict rule:
-`refine` 485, `class` 463, `word` 311, `gen` 261 (including the
-`def Name<T>` parser sugar, which desugars to `def Name gen [params]`
-— eng/go/parser/parse.go:448), `Module.word` 82, `enum` 42, `make`
-40, `surface` 41, `fnsig` 28, `quote` 24, plus open-ended shapes
-(`def x add 1 2`). Each closed-set constructor can get its own
-keyword overload (`gen` needs the 5-slot chain
-`[name/q gen/q List fn/q List]`); open-ended shapes parenthesize.
-Default (gate off) behaviour is unchanged for all of these.
+Every closed-set constructor now has a synthesized def keyword
+overload, so all the `def name <ctor> …` idioms are structural
+dispatch and survive the strict rule. The forms are mirrored
+MECHANICALLY from each constructor's own live signature table
+(`registerDefKeywordForms`, `native_definition.go`), so a constructor
+that grows an overload propagates to def automatically:
+
+- **Plain forms** — `fn`, `fnsig`, `refine`, `class`, `surface`,
+  `enum`, `quote`, `word`: `[name/q ctor/q …ctor-args]`.
+- **Gen chains** — `gen [params] <tail> …` for tails `fn`, `class`,
+  `refine`, `fnsig`: `[name/q gen/q params:List tail/q …tail-args]`.
+  The `def Name<T>` angle sugar desugars to exactly this token shape
+  (`parser/parse.go`). The chain handler runs `gen` first, then
+  re-applies the tail's own evaluation policy to its operands (a
+  schema field like `{v:T}` or `(Self of [T])` references the gen
+  placeholders, so its evaluation is DEFERRED until the placeholders
+  are bound — `defFormVia`).
+
+The result: **`TestSpecProd` under `AQL_STRICT_BARRIER=1` passes
+with zero failures** — the entire spec corpus is strict-clean.
+
+Two constructors are deliberately NOT mirrored:
+
+- **`make`** — the one INSTANCE constructor (per-call fresh identity,
+  `OpMakeMap` recorder events). Routing it through the composite form
+  hides the inner dispatch from the bytecode recorder and loses the
+  operand provenance compiled programs depend on. `def p make P {…}`
+  keeps the wait-through path (it is a value bind, not a strict-rule
+  hazard — `make`'s result is a value, and the following statement is
+  a separate dispatch). A keyword form needs recorder plumbing first.
+- **`quote`'s word-capture sig** — its `[Atom/q]` overload is itself
+  a structural (/q) slot, and `hasStructuralSlots` excludes such base
+  sigs from the mirror (a shifted unpatterned /q slot would capture
+  any word two-plus positions out for every def statement, disabling
+  the function-word barrier there — the `macroexpand (twice 5)` after
+  a `def` regression). `def a quote foo` spells as `def a foo/q`;
+  `def xs quote [1 2 3]` (the list sig) mirrors fine.
+
+The keyword slots rest on the three kernel seams from the previous
+change (patternsOk keyword match, capturesForwardToken, keyword
+viability pruning) plus one new invocation seam: `eng.DispatchSig`
+runs a captured constructor's own signature over the operands after
+the keyword, so the constructor's handler stays the single
+implementation.
 
 Known gap: dot-access dispatch (`Rand.int …`) routes around `stepWord`,
 so module-export words are not strict-checked by the prototype.
@@ -157,15 +192,18 @@ Against:
 
 ## If adopted
 
-1. ~~def story~~ Done: the keyword-slot `[name/q fn/q sigs]` overload
-   (see the ruling above). Open follow-ups: keyword overloads for the
-   other closed-set constructors (`gen` — 5-slot chain — `refine`,
-   `class`, `word`, `enum`, `make`, `surface`, `fnsig`, `quote`);
-   surface keyword slots in `aql describe def` (help.SigInfo carries
-   no per-slot markers today); the AQL-authored surface — ParseFnParams
-   already carries value patterns and `FnParam.Quote`, so `fn/q` as a
-   bare patterned param in a sig literal is the natural spelling.
+1. ~~def story~~ ~~keyword overloads for the other closed-set
+   constructors~~ Both DONE (see the ruling and the constructor-forms
+   section above). Strict-mode spec fallout is zero. Remaining
+   follow-ups: a `make` keyword form (needs recorder plumbing so the
+   instance dispatch stays visible to the compiler); surface keyword
+   slots in `aql describe def` (help.SigInfo carries no per-slot
+   markers today); the AQL-authored surface — ParseFnParams already
+   carries value patterns and `FnParam.Quote`, so `fn/q` as a bare
+   patterned param in a sig literal is the natural spelling.
 2. Extend the check to the dot-access dispatch path.
+3. Flip the default (or keep the env gate for a migration window) —
+   the corpus is now strict-clean, so this is the remaining decision.
 3. Update the 18 spec rows (parenthesise) and pin the new errors as
    negative rows; update forward-barrier.tsv §6's "keeps waiting" rows.
 4. Checker mirror + compile-pipeline parity (CompileCheck).
