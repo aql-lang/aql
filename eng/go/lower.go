@@ -147,7 +147,10 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // nothing here — its value flows by provenance exactly as before.
 func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	d := ev.dyn
-	if lw.es == nil || lw.es.dynScopeNames == nil || !lw.es.dynScopeNames[d.name] {
+	if lw.es == nil || (!lw.es.dynEnv && (lw.es.dynScopeNames == nil || !lw.es.dynScopeNames[d.name])) {
+		// DynEnv mode (a dynamic code body compiled — tryRecordDynBody)
+		// widens to EVERY def: the body's runtime sub-run may read any name,
+		// so all bindings must be registry-visible, as under the interpreter.
 		return ""
 	}
 	src := d.src
@@ -1047,7 +1050,9 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
 		// program-residual-only value the dead-drop must not touch.
 		if ev.kind == evBranch {
-			if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 {
+			// DynEnv: no def is dead — a dynamic code body may read any binding
+			// at run time, so its OpBindDynScope twin needs the value live.
+			if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
 				if dead == nil {
 					dead = map[int]bool{}
 				}
@@ -1064,7 +1069,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			// merge (both arms net <=1) so the store seats exactly one value — a
 			// multi-value / variadic merge is refused at the store hook (sound fallback).
 			if branchSingleValue(ev.br) && es.eventInfo[ev.seq].valueDef &&
-				(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq])) {
+				(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
 				if promoted == nil {
 					promoted = map[int]int{}
 				}
@@ -1139,6 +1144,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// above guards — so the store never diverges. Gated on valueDef, keeping
 		// anonymous single-use harness feeds on the Stage-3 stack layout.
 		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 ||
+			(es.dynEnv && es.eventInfo[ev.seq].valueDef) ||
 			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
 			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
 			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef))
@@ -1152,7 +1158,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// use (refs>=1) harness/accumulation case the comment guards against, where the
 		// residual ref count can miss a dynamic read. The call's side effects run; only
 		// its ignored return is dropped.
-		deadValueDef := es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0
+		deadValueDef := es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv
 		switch {
 		case isUser && !promoteUser && !deadValueDef:
 			// leave the user-call result on the simulated stack (Stage-3 layout)

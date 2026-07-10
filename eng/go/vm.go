@@ -77,6 +77,9 @@ type vmFrame struct {
 	locals         []Value
 	loopBase       int
 	stackBase      int
+	// argsBase is the r.Args depth at call entry (DynEnv programs only —
+	// the frame pushed its args list; RET / flow unwind truncate back).
+	argsBase int
 	// dynBase is the vc.dynBinds depth at call entry: RET truncates the
 	// registry's dynamic-scope bindings back to it (the interpreter's
 	// def-cleanup discipline for the frame's OpBindDynScope installs).
@@ -105,6 +108,11 @@ type vmContext struct {
 	ceiling   int
 	stepLimit int
 	steps     int
+	// argsFloor is the r.Args depth when the run entered (DynEnv programs
+	// only): the tail-call frame swap at activation root truncates to it,
+	// and runVMEntry's exit restore truncates to it on EVERY path (error
+	// unwind included), so a failed run never leaks args entries.
+	argsFloor int
 	// dynBinds is the live dynamic-scope binding trail (OpBindDynScope),
 	// shared across re-entrant closure runs (they nest strictly): frames
 	// record their entry depth (vmFrame.dynBase), RET truncates back, and
@@ -304,7 +312,14 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 				fmt.Sprintf("internal bytecode VM error: %v", rec), "", src, "")
 		}
 	}()
-	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit}
+	vc := &vmContext{p: p, r: r, ceiling: vmStackCeiling(r), stepLimit: stepLimit, argsFloor: r.Args.Depth()}
+	if p != nil && p.DynEnv {
+		// DynEnv exit restore: the args bracket pushes per CALL_USER frame and
+		// RET/flow truncate back, but an ERROR unwind returns straight out of
+		// vc.run — rebalance to the entry depth on every path so a failed run
+		// never leaks args entries (the dynBinds discipline, applied to args).
+		defer r.Args.Truncate(vc.argsFloor)
+	}
 	// Install the body-closure invoker so a higher-order word's handler runs
 	// its body through the VM (InvokeBody → r.Invoker → invokeClosure). The
 	// shared registry means the island sub-engine inherits it too, so the
@@ -382,6 +397,41 @@ func (vc *vmContext) invokeClosureOn(reg *Registry, body Value, inputs []Value) 
 		}
 	}
 	return vc.run(cl.Unit, locals, nil)
+}
+
+// pushFrameArgs is the DynEnv args bracket's frame-entry half: push the
+// callee's real args (locals[0:nArgs], sig order) as the frame's args list —
+// the interpreter's per-call push, so a dynamic code body's runtime sub-run
+// reads `args` identically. No-op outside DynEnv programs.
+func (vc *vmContext) pushFrameArgs(nl []Value, nArgs int) {
+	if vc.p == nil || !vc.p.DynEnv {
+		return
+	}
+	_ = vc.r.Args.Push(NewList(append([]Value(nil), nl[:nArgs]...)))
+}
+
+// swapTailArgs is the bracket's TAIL-call form: the frame is replaced, so the
+// top args entry swaps for the new callee's, keeping the bracket depth stable.
+func (vc *vmContext) swapTailArgs(frames []vmFrame, nl []Value, nArgs int) {
+	if vc.p == nil || !vc.p.DynEnv {
+		return
+	}
+	if len(frames) > 0 {
+		vc.r.Args.Truncate(frames[len(frames)-1].argsBase + 1)
+		_, _ = vc.r.Args.Pop()
+	} else {
+		vc.r.Args.Truncate(vc.argsFloor)
+	}
+	_ = vc.r.Args.Push(NewList(append([]Value(nil), nl[:nArgs]...)))
+}
+
+// retFrameArgs is the bracket's frame-exit half: truncate to the popped
+// frame's entry depth (RET and flow unwind both route here).
+func (vc *vmContext) retFrameArgs(f *vmFrame) {
+	if vc.p == nil || !vc.p.DynEnv {
+		return
+	}
+	vc.r.Args.Truncate(f.argsBase)
 }
 
 // callPoly dispatches a native word by matching the kernel's own
@@ -1424,8 +1474,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if err := checkParamContract(r, fn, nl); err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
-			frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds)})
+			frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds), argsBase: r.Args.Depth()})
 			vc.frameDepth++ // balanced by the matching RET, like OpCallUser
+			vc.pushFrameArgs(nl, fn.NArgs)
 			locals = nl
 			enterUnit(unit)
 			pc = -1
@@ -1449,8 +1500,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				return nil, stampAt(err, curDebug, pc, r)
 			}
 			if in.Op == OpCallUser {
-				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds)})
+				frames = append(frames, vmFrame{retUnit: curUnit, retPC: pc + 1, locals: locals, loopBase: len(loops), stackBase: len(stack), dynBase: len(vc.dynBinds), argsBase: r.Args.Depth()})
 				vc.frameDepth++ // balanced by the matching RET below
+				vc.pushFrameArgs(nl, fn.NArgs)
 			} else {
 				// Tail call: REPLACE the frame — the language's
 				// tail-call guarantee in compiled form. The caller's
@@ -1468,6 +1520,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 					loopBase = frames[len(frames)-1].loopBase
 				}
 				loops = loops[:loopBase]
+				vc.swapTailArgs(frames, nl, fn.NArgs)
 			}
 			locals = nl
 			enterUnit(int(in.Arg))
@@ -1548,6 +1601,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			frames = frames[:len(frames)-1]
 			vc.frameDepth-- // matches the OpCallUser increment
 			vc.unwindDynBinds(f.dynBase)
+			vc.retFrameArgs(&f)
 			loops = loops[:f.loopBase]
 			locals = f.locals
 			enterUnit(f.retUnit)
@@ -1644,6 +1698,7 @@ func (vc *vmContext) flowSignal(op Opcode, frames []vmFrame, loops []vmLoop, loc
 		// tail when a break/continue escapes it; without this a dead
 		// frame's OpBindDynScope install would stay readable in Defs.
 		vc.unwindDynBinds(f.dynBase)
+		vc.retFrameArgs(&f)
 	}
 	stack = stack[:lp.iterBase]
 	if op == OpFlowBreak {

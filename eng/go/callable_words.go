@@ -43,7 +43,11 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	// closure is left count-agnostic rather than count-refused (which would
 	// island).
 	declared := []*Type{TAny}
-	if bodyOut == 0 || emptyBodyOK {
+	if bodyOut == 0 || bodyOut == BodyOutResidual || emptyBodyOK {
+		// A side-effect body (0), a whole-residual body (do — the handler
+		// returns everything the body nets, so the count is per-body), and an
+		// EmptyBodyErrors body are all count-AGNOSTIC: declared nil skips the
+		// closure count refusal and the unit RETs its actual residual.
 		declared = nil
 	}
 	if paramNames == nil {
@@ -60,6 +64,10 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	es.fnRecs[unit].inShape = shape
 	es.fnRecs[unit].closure = true
 	es.fnRecs[unit].takesTop = takesTop
+	// The two stored-ref compile paths use these eng-internal synthetic
+	// names; their rebind safety is the per-ref poisoning, so the frozen-
+	// read discipline skips them (see fnUnitRec.storedRefUnit).
+	es.fnRecs[unit].storedRefUnit = word == "storedfn" || word == "spawnbody"
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
 		return unit, es.active()
@@ -68,6 +76,17 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	// body re-runs under the armed unit and records.
 	delete(r.Check.FnSummaries, key)
 	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared)
+	if len(bodyToks) == 0 && len(stk) == 0 {
+		// An EMPTY body's residual is its pushed inputs, verbatim: the runtime
+		// InvokeBody pushes the per-call inputs and runs no tokens, so the frame
+		// nets exactly them — `error []` leaves the caught error (pass-through),
+		// `each []` leaves the element (identity map). AnalyseFnBody early-
+		// returns nil for an empty body, which compiled a RET-nothing unit that
+		// DIVERGED from the interpreter (each_error "body produced no result"
+		// against the interpreter's identity map). Reconstruct the residual so
+		// the unit resolves each input to its param slot (PUSH_LOCAL i … RET).
+		stk = append(stk, inputs...)
+	}
 	finish(stk)
 	return unit, es.Compilable
 }
@@ -176,8 +195,12 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// internals); the inactive recorder falls to the !active() decline.
 	es, _ := r.Check.Recorder().(*EmitState)
 	// 0 or 1 outputs (a side-effect case body nets 0; a map/transform body nets
-	// 1) — RecordClosureCall lowers both; a multi-output word is beyond this path.
-	if !es.active() || len(outs) > 1 || spec.BodyPos >= len(args) {
+	// 1) — RecordClosureCall lowers both. A whole-residual word (BodyOutResidual:
+	// `do` returns the body's ENTIRE residual) admits any statically-exact count:
+	// the closure compiles count-agnostic, the VM's frameless RET returns the full
+	// residual, and the dispatch seats all N results. Other multi-output words
+	// stay beyond this path.
+	if !es.active() || (len(outs) > 1 && spec.BodyOut != BodyOutResidual) || spec.BodyPos >= len(args) {
 		return false
 	}
 	body := args[spec.BodyPos]
@@ -440,29 +463,48 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// (which re-hits the same closure and fails its own residual). The REAL
 	// compile below resolves the recursion naturally (the enclosing unit's key is
 	// already in the real state).
-	r.Check.Emit = real.forkForProbe()
-	_, probeOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
+	// A strip-input word compiles count-agnostic (the runtime nets one value
+	// from either admitted shape — stripResidualShapeOK screens the rest).
+	countAgnostic := spec.EmptyBodyErrors || spec.StripsUnconsumedInput
+	probe := real.forkForProbe()
+	r.Check.Emit = probe
+	probeUnit, probeOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	for _, ex := range extras {
 		if !probeOk {
 			break
 		}
-		_, exOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		_, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
 		probeOk = probeOk && exOk
 	}
 	r.Check.Emit = real
 	if !probeOk {
 		return false
 	}
+	// Whole-residual multi-out exactness (BodyOutResidual, N > 1): the dispatch
+	// seats exactly len(outs) results, so the compiled unit's residual count
+	// must be statically EXACT and equal — a variadic merge, a dynamic-apply
+	// tail, or any count mismatch declines to the refusal path. 0/1-out bodies
+	// keep today's shapes untouched (a diverging body's single Error out, a
+	// dynTrail apply netting one value).
+	if spec.BodyOut == BodyOutResidual && len(outs) > 1 && !closureResidualExact(probe, probeUnit, len(outs)) {
+		return false
+	}
+	// Strip-input shape screen (`error`): admit only the two residual shapes
+	// the runtime nets ONE value from — everything else declines to the
+	// refusal path, exactly as before.
+	if spec.StripsUnconsumedInput && !stripResidualShapeOK(probe, probeUnit) {
+		return false
+	}
 
 	// REAL: compile the body into the program (deterministic success after a
 	// clean probe), then record the dispatch with the body as a closure.
-	unit, realOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
+	unit, realOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, bodyToks, inputs, paramNames, captures, shape, pos)
 	if !realOk || unit < 0 {
 		return false
 	}
 	var extraOps map[int]emitOperand
 	for _, ex := range extras {
-		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, spec.EmptyBodyErrors, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
+		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
 		if !exOk || exUnit < 0 {
 			return false
 		}
@@ -472,6 +514,51 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 		extraOps[ex.slot] = emitOperand{kind: opClosure, closureUnit: exUnit, closureCaps: ex.ops}
 	}
 	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, extraOps, outs, pos)
+}
+
+// closureResidualExact reports whether a probe-compiled closure unit's residual
+// is statically EXACT with exactly want outputs: no variadic merge (`if c []
+// [a b]`), no dynamic-apply tail (dynTrailArity), no dyn-frame window
+// (dynFrameW), and want resolved residual operands. A whole-residual dispatch
+// (`do`, BodyOutResidual) seats want results at the call site, so a unit whose
+// runtime count could differ from the check run's must decline to the refusal
+// path rather than mis-seat the simulated stack.
+func closureResidualExact(es *EmitState, unit, want int) bool {
+	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
+		return false
+	}
+	rec := es.fnRecs[unit]
+	return !rec.variadic && rec.dynTrailArity == 0 && rec.dynFrameW == 0 && len(rec.outOps) == want
+}
+
+// stripResidualShapeOK reports whether a strip-input word's probe-compiled
+// closure unit leaves one of the two residual shapes its handler nets ONE
+// runtime value from: a single-value residual (the body consumed or replaced
+// the input — including the empty `error []` body, whose residual is the
+// input itself), or a 2-value residual whose BOTTOM is the unconsumed input
+// (param local 0) that the handler's identity probe strips (errorHandler's
+// stack-neutrality rule). A diverging body never RETs (the re-raise
+// propagates out of InvokeBody in both engines) and is exempt. Anything else
+// — variadic, dynamic-apply tails, deeper residuals — declines.
+func stripResidualShapeOK(es *EmitState, unit int) bool {
+	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
+		return false
+	}
+	rec := es.fnRecs[unit]
+	if rec.frag != nil && fragDiverges(rec.frag) {
+		return true
+	}
+	if rec.variadic || rec.dynTrailArity > 0 || rec.dynFrameW > 0 {
+		return false
+	}
+	switch len(rec.outOps) {
+	case 1:
+		return true
+	case 2:
+		op := rec.outOps[0]
+		return op.kind == opLocal && op.idx == 0
+	}
+	return false
 }
 
 // lambdaCallbackInputs returns the representative input carriers a higher-order

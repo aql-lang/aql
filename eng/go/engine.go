@@ -2195,6 +2195,13 @@ func (e *Engine) stepWord(val Value) error {
 			// evaluated top.ID unconditionally on the run-mode hot path.
 			if e.registry.Check.IsActive() {
 				e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
+				// Freeze discipline: a CONCRETE module-scope binding read inside
+				// an open fn/closure unit bakes into the unit across calls, where
+				// the interpreter re-resolves the name per call — a later module
+				// rebind would diverge. Note it so NotifyNameRebound refuses.
+				if IsConcrete(top) && ModuleScopeBinding(e.registry, w.Name) {
+					e.registry.Check.Recorder().NoteFrozenRead(w.Name)
+				}
 			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated

@@ -209,11 +209,39 @@ func TestCodeEffectCompileDiscipline(t *testing.T) {
 	// Non-foldable carrier bodies: the compile pass REFUSES (prog nil,
 	// named reason) and the program still runs correctly on the
 	// interpreter fallback.
-	refusals := []struct {
+	// The dyn-body backstop (CompileDynBody, the always-compile goal) now
+	// COMPILES a computed body whose operand types strictly as a List: the
+	// CALL_NATIVE's runtime sub-run over the concrete tokens IS the
+	// interpreter's own execution under the DynEnv environment mirror.
+	compiles := []struct {
 		src  string
 		want string
 	}{
 		{`def ops [quote [2 mul 3]] do (reverse (ops get 0))`, "[6]"},
+	}
+	for _, cc := range compiles {
+		d, err := New()
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		prog, reason, _, cerr := d.CompileCheck(cc.src)
+		if cerr != nil || prog == nil {
+			t.Errorf("%q: the dyn-body backstop must compile a typed computed body; reason=%q err=%v", cc.src, reason, cerr)
+			continue
+		}
+		e, _ := New()
+		got, compiled, rerr := e.RunCompiled(cc.src)
+		if !compiled || rerr != nil || fmt.Sprint(got) != cc.want {
+			t.Errorf("%q: want %s compiled; got %v compiled=%v err=%v", cc.src, cc.want, got, compiled, rerr)
+		}
+	}
+	// A GRADUAL-Any collection operand stays refused: do's List and Map sigs
+	// are genuinely ambiguous over it (the Map handler is a different
+	// semantics), so no static commit is sound — interpreter fallback parity.
+	refusals := []struct {
+		src  string
+		want string
+	}{
 		{`def i 0 def ops [quote [1 add 2]] do (ops get (i add 0))`, "[3]"},
 	}
 	for _, rc := range refusals {

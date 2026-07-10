@@ -459,6 +459,19 @@ const (
 	// The flag scopes the "0 results ⇒ diverges" inference to these words: a
 	// genuinely void word (print/set, declared 0-result) is unaffected.
 	CompileValueDiverges
+	// CompileDynBody marks a body-running word (`do`) whose dispatch may lower
+	// to a plain CALL_NATIVE even when the closure path declines — a COMPUTED
+	// (carrier) body, or a concrete body carrying context-dependent words
+	// (args) — because the handler's runtime execution (InvokeBody →
+	// RunResolved, or a JIT-compiled unit) IS the interpreter's own semantics
+	// PROVIDED the name environment matches. Recording such a site therefore
+	// arms the program's DynEnv mode: every def and every named unit param
+	// emits an OpBindDynScope twin (registry-visible, frame-unwound) and the
+	// VM brackets each CALL_USER frame with an args-stack push, so the body's
+	// sub-run resolves names and `args` exactly as it does under the
+	// interpreter. The result is marked variadic (the runtime count is the
+	// body's own), so only variadic-absorbing positions consume it.
+	CompileDynBody
 	// CompileStoresBody marks a word that STORES a NoEvalArgs CODE-BODY list to run
 	// LATER on its own registry — `spawn`'s process body. Like CompileStoresFn but
 	// for a code list rather than a fn value: the recorder compiles the body's
@@ -484,13 +497,25 @@ func (e CompileEffect) Has(f CompileEffect) bool { return e&f != 0 }
 // (often module) word names that own these words. A word declares one on its
 // NativeFunc; RegisterNativeFunc copies the pointer onto every signature. nil
 // on a Signature means the word is not closure-eligible.
+// BodyOutResidual is CallableSpec.BodyOut's whole-residual sentinel: the
+// driving handler returns the body's entire residual stack (do), so the
+// body nets an arbitrary, per-body-exact count rather than a declared 0/1.
+// Out-of-domain per the no-zero-value-overload rule — 0 remains the valid
+// explicit "side-effect body" count.
+const BodyOutResidual = -1
+
 type CallableSpec struct {
 	// BodyPos is the body operand's sig position (the code list / lambda).
 	BodyPos int
 	// BodyOut is how many values the body nets per invocation: 1 for a
-	// map/transform body (each / fold / do), 0 for a SIDE-EFFECT body (a test
+	// map/transform body (each / fold), 0 for a SIDE-EFFECT body (a test
 	// case whose assertions raise on failure and otherwise leave nothing). It
-	// sets the compiled unit's declared return count.
+	// sets the compiled unit's declared return count. BodyOutResidual (the
+	// out-of-domain sentinel; 0 stays the valid explicit side-effect count)
+	// marks a whole-residual word (`do`): the driving handler returns the
+	// body's ENTIRE residual, so the closure compiles count-AGNOSTIC and the
+	// dispatch seats however many results the check run reported — the VM's
+	// frameless RET already returns the full residual stack.
 	BodyOut int
 	// EmptyBodyErrors marks a word whose driving HANDLER itself raises a
 	// runtime error when an invocation's body nets 0 values — each / fold /
@@ -538,6 +563,17 @@ type CallableSpec struct {
 	// body never reaches this — it matches only the single TFunction overload, so
 	// the ≥2-reachable ambiguity gate never fires for it.
 	CrossCollectionTokenShape bool
+	// StripsUnconsumedInput marks a word whose driving handler STRIPS its
+	// pushed per-invocation input from the residual BOTTOM when the body
+	// leaves it unconsumed — `error [handler]`: the caught Error is pushed
+	// so the handler can bind it, and a handler that ignores it nets
+	// [error, result]; the handler's identity probe strips the bottom so
+	// the branch leaves exactly the result. The closure path then admits
+	// two body shapes (both netting ONE runtime value): a 1-value residual,
+	// and a 2-value residual whose bottom IS the input (param local 0).
+	// The closure compiles count-agnostic (declared nil) and
+	// stripResidualShapeOK screens everything else back to the refusal.
+	StripsUnconsumedInput bool
 	// LambdaSharesTokenShape marks a word that presents a LAMBDA callback the
 	// SAME per-invocation inputs as a token-quotation body — Inputs(args) is the
 	// single callback convention (walk's `{key value path parent depth}` payload
