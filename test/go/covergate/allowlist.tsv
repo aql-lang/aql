@@ -28,7 +28,7 @@ github.com/aql-lang/aql/eng/go/core_make.go:372.17,374.4	shared-assertion / gate
 github.com/aql-lang/aql/eng/go/core_make.go:398.29,400.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/core_make.go:912.17,914.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/core_make.go:918.17,920.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
-github.com/aql-lang/aql/eng/go/core_type.go:493.17,498.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
+github.com/aql-lang/aql/eng/go/core_type.go:498.17,503.4	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/define_type.go:35.14,40.3	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/depscalar.go:294.16,296.3	shared-assertion / gate-guaranteed kernel guard (§kernel)
 github.com/aql-lang/aql/eng/go/depscalar.go:492.16,494.3	shared-assertion / gate-guaranteed kernel guard (§kernel)

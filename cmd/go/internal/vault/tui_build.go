@@ -478,6 +478,7 @@ func (m *rootModel) secretDetailBody(alias string, shown bool, value string, cmd
 		}
 		b.WriteString(detailRow("expires", exp))
 		b.WriteString(detailRow("source", dash(a.Source)))
+		b.WriteString(detailRow("ip-allow", dashJoin(a.IPWhitelist)))
 	}
 	b.WriteByte('\n')
 	indent := strings.Repeat(" ", detailValueCol)

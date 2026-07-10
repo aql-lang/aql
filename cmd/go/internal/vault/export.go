@@ -50,11 +50,12 @@ type exportBundle struct {
 
 // exportAlias is one secret plus the metadata worth carrying with it.
 type exportAlias struct {
-	Name      string `json:"name"`
-	Provider  string `json:"provider,omitempty"`
-	Namespace string `json:"namespace,omitempty"`
-	Source    string `json:"source,omitempty"`
-	Value     string `json:"value"`
+	Name        string   `json:"name"`
+	Provider    string   `json:"provider,omitempty"`
+	Namespace   string   `json:"namespace,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	IPWhitelist []string `json:"ip_whitelist,omitempty"`
+	Value       string   `json:"value"`
 }
 
 // isExportBundle reports whether data is an encrypted export bundle, by
@@ -131,7 +132,8 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 			return 1
 		}
 		bundle.Aliases = append(bundle.Aliases, exportAlias{
-			Name: a.Name, Provider: a.Provider, Namespace: a.Namespace, Source: a.Source, Value: v,
+			Name: a.Name, Provider: a.Provider, Namespace: a.Namespace, Source: a.Source,
+			IPWhitelist: a.IPWhitelist, Value: v,
 		})
 	}
 
@@ -304,7 +306,10 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		remap, remapNS = true, namespaceOverride
 	}
 
-	type imp struct{ name, provider, metaNS string }
+	type imp struct {
+		name, provider, metaNS string
+		ipwl                   []string
+	}
 	var done []imp
 	imported, skipped := 0, 0
 	for _, a := range bundle.Aliases {
@@ -340,7 +345,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		if ns == "" && !remap {
 			metaNS = a.Namespace
 		}
-		done = append(done, imp{name: name, provider: a.Provider, metaNS: metaNS})
+		done = append(done, imp{name: name, provider: a.Provider, metaNS: metaNS, ipwl: a.IPWhitelist})
 		_ = appendAudit(homeDir, AuditEvent{
 			Action: "vault.import", Alias: name, Provider: a.Provider,
 			Outcome: "ok", Reason: "source=bundle",
@@ -350,7 +355,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 	}
 	if err := mutateStore(homeDir, func(s *Store) error {
 		for _, d := range done {
-			s.UpsertAlias(Alias{Name: d.name, Provider: d.provider, Namespace: d.metaNS, Source: "import:bundle"})
+			s.UpsertAlias(Alias{Name: d.name, Provider: d.provider, Namespace: d.metaNS, Source: "import:bundle", IPWhitelist: d.ipwl})
 		}
 		return nil
 	}); err != nil {

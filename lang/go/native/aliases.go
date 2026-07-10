@@ -170,6 +170,15 @@ var (
 	TMicron         = eng.TMicron
 	TEmailon        = eng.TEmailon
 	TUrlon          = eng.TUrlon
+	TIpon           = eng.TIpon
+	THoston         = eng.THoston
+	TSemveron       = eng.TSemveron
+	TCidron         = eng.TCidron
+	TMacon          = eng.TMacon
+	TColoron        = eng.TColoron
+	TMimon          = eng.TMimon
+	TQion           = eng.TQion
+	TPhonon         = eng.TPhonon
 	TRecord         = eng.TRecord
 	TResource       = eng.TResource
 	TResourceEntity = eng.TResourceEntity
@@ -389,6 +398,7 @@ var (
 	MintTestType              = eng.MintTestType
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
+	BeginIDMintScope          = eng.BeginIDMintScope
 	IDPrefixForType           = eng.IDPrefixForType
 	CanonicalType             = eng.CanonicalType
 	ResetModuleExportGrowth   = eng.ResetModuleExportGrowth

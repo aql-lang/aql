@@ -58,8 +58,28 @@ type Engine struct {
 	// atomically before control returns, so a single engine-owned buffer is
 	// reentrancy-safe.
 	loopTokens []Value
-	source     string // original source text for error reporting
-	isTop      bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
+	// peScratch is the reusable span buffer for expandParenExprScratch:
+	// a ParenExpr expands to `( items… )` immediately before a
+	// Tape.Splice (which copies the tokens in), so the buffer is free the
+	// moment the splice returns — same lifetime argument as loopTokens.
+	// The runPooledSub expansion sites keep the allocating variant (a
+	// sub-engine run intervenes there).
+	peScratch []Value
+	// resolvedScratch / excludeScratch are reusable buffers for
+	// effectiveResolved's two per-dispatch allocations — the resolved-stack
+	// snapshot and the forward-exclusion set — which forward-collecting
+	// dispatch pays on every hot-loop step (design/INTERPRETER-SPEED-PLAN.10.md
+	// #3). effectiveResolved runs a single backward tape scan with NO nested
+	// dispatch, and its returned slice is consumed only by matchSignature —
+	// which merely READS it by index and never retains it — before any
+	// further dispatch runs. So one engine-owned buffer per engine is
+	// aliasing- and reentrancy-safe by the same argument as rrValues /
+	// loopTokens above. Both are reset at the top of effectiveResolved;
+	// excludeScratch is never returned (fully consumed inside the scan).
+	resolvedScratch []Value
+	excludeScratch  map[int]bool
+	source          string // original source text for error reporting
+	isTop           bool   // true for engines created via NewTop; an unhandled FlowCtrl at end-of-Run is an error here, propagates upward otherwise
 	// elemEvalRecordable marks a SUB-engine spawned by autoEvalList/autoEvalMap
 	// to evaluate CONTAINER ELEMENTS of a recordable container eval (top-level or
 	// consumed): a map/list literal ELEMENT inside it is residual-evaluated
@@ -572,8 +592,13 @@ func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
 // `fn`/`afn` value carries its construction site for downstream errors). Only
 // zero-Pos entries are touched, so values that already carry a position — a
 // stored fn passed through, a literal — are left alone.
-func stampResultPos(vals []Value, pos SrcPos) {
-	if pos.Row == 0 {
+//
+// pos arrives as the CALL-SITE TOKEN's own *SrcPos and is shared onto the
+// stamped values rather than re-escaped per dispatch (positions are minted
+// once at parse and never mutated — the documented sharing rule on
+// Value.pos). A nil pos means the token carries no position: nothing to stamp.
+func stampResultPos(vals []Value, pos *SrcPos) {
+	if pos == nil || pos.Row == 0 {
 		return
 	}
 	for i := range vals {
@@ -583,11 +608,11 @@ func stampResultPos(vals []Value, pos SrcPos) {
 		switch {
 		case IsReturnCheck(vals[i]):
 			if rc, err := AsReturnCheck(vals[i]); err == nil && rc.Pos.Row == 0 {
-				rc.Pos = pos
+				rc.Pos = *pos
 				vals[i] = NewReturnCheck(rc)
 			}
 		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
-			vals[i].pos = &pos
+			vals[i].pos = pos
 		}
 	}
 }
@@ -976,7 +1001,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				}
 			} else {
 				items, _ := AsParenExpr(val)
-				e.tape.Splice(e.pointer, 1, expandParenExpr(items)...)
+				e.tape.Splice(e.pointer, 1, e.expandParenExprScratch(items)...)
 			}
 
 		case IsReach(val):
@@ -1548,7 +1573,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				continue
 			}
 			peItems, _ := AsParenExpr(tok)
-			e.tape.Splice(scanIdx, 1, expandParenExpr(peItems)...)
+			e.tape.Splice(scanIdx, 1, e.expandParenExprScratch(peItems)...)
 			continue
 		}
 
@@ -2142,13 +2167,20 @@ func (e *Engine) stepWord(val Value) error {
 			// the OpenParen barrier hides the pending forward, so the
 			// re-stepped word takes the standalone splice-fire path — no
 			// recursion (and recordUse fires on that inner step).
-			if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
-				if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
-					if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
-						pe := NewParenExpr([]Value{val})
-						pe.pos = val.pos
-						e.tape.Set(e.pointer, pe)
-						return e.stepLiteral()
+			// IsSplice gates the AsSplice destructure: bindings are almost
+			// never splices, and AsSplice's failure path builds a discarded
+			// fmt.Errorf — an allocation on EVERY def-value substitution
+			// without the guard (the same guard the collection-side twin at
+			// the stepLiteral splice check already carries).
+			if IsSplice(top) {
+				if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
+					if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
+						if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
+							pe := NewParenExpr([]Value{val})
+							pe.pos = val.pos
+							e.tape.Set(e.pointer, pe)
+							return e.stepLiteral()
+						}
 					}
 				}
 			}
@@ -2158,14 +2190,18 @@ func (e *Engine) stepWord(val Value) error {
 			// Remember which NAME produced this value (compile passes): if the
 			// value later has no compiled home in a fn unit, the read was a
 			// dynamic-scope reference and lowers to a runtime name lookup
-			// (resolveOperand's dynScopeRescue).
-			e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
-			// Freeze discipline: a CONCRETE module-scope binding read inside
-			// an open fn/closure unit bakes into the unit across calls, where
-			// the interpreter re-resolves the name per call — a later module
-			// rebind would diverge. Note it so NotifyNameRebound refuses.
-			if IsConcrete(top) && ModuleScopeBinding(e.registry, w.Name) {
-				e.registry.Check.Recorder().NoteFrozenRead(w.Name)
+			// (resolveOperand's dynScopeRescue). Gated on an active check —
+			// NoteDefRead is a no-op outside a pass, but the bare call still
+			// evaluated top.ID unconditionally on the run-mode hot path.
+			if e.registry.Check.IsActive() {
+				e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
+				// Freeze discipline: a CONCRETE module-scope binding read inside
+				// an open fn/closure unit bakes into the unit across calls, where
+				// the interpreter re-resolves the name per call — a later module
+				// rebind would diverge. Note it so NotifyNameRebound refuses.
+				if IsConcrete(top) && ModuleScopeBinding(e.registry, w.Name) {
+					e.registry.Check.Recorder().NoteFrozenRead(w.Name)
+				}
 			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
 			// maps — `def xs [1,2,3]` makes `xs` the list value, evaluated
@@ -2948,7 +2984,8 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// return-type error (named-fn body or anonymous fn value) points at the
 	// call/construction rather than the last textual occurrence of the name.
 	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		stampResultPos(results, e.tape.At(e.pointer).Pos())
+		cur := e.tape.At(e.pointer)
+		stampResultPos(results, cur.pos)
 	}
 
 	// Full frame replacement: the callee's frame (the handler result,
@@ -3104,7 +3141,16 @@ func (e *Engine) rearrangeForForward(stackArgs, forwardArgs int) {
 // resolvedIndicesBefore returns the indices of the last n resolved values
 // before the current pointer, stopping at open-paren barriers.
 func (e *Engine) resolvedIndicesBefore(n int) []int {
-	var indices []int
+	return e.resolvedIndicesBeforeInto(nil, n)
+}
+
+// resolvedIndicesBeforeInto is resolvedIndicesBefore appending into a
+// caller-supplied buffer (matchSignature's per-invocation int buffer —
+// its cap must be ≥ n to stay allocation-free; a nil buf allocates as
+// before). The buffer collects at most n indices, so a cap-n tail
+// region never reallocates.
+func (e *Engine) resolvedIndicesBeforeInto(buf []int, n int) []int {
+	indices := buf
 	for i := e.pointer - 1; i >= 0 && len(indices) < n; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			break
@@ -3249,7 +3295,7 @@ func (e *Engine) stepLiteral() error {
 	// nested-paren case).
 	if IsParenExpr(e.tape.At(valIdx)) && !e.tape.At(valIdx).Quoted && !e.pendingForwardWantsRawParen() {
 		items, _ := AsParenExpr(e.tape.At(valIdx))
-		e.tape.Splice(valIdx, 1, expandParenExpr(items)...)
+		e.tape.Splice(valIdx, 1, e.expandParenExprScratch(items)...)
 		return nil
 	}
 	// A Reach reaching stepLiteral (nested in a collapsing span, or a
@@ -3379,8 +3425,10 @@ func (e *Engine) stepLiteral() error {
 	fwd.CollectedArgs++
 	fwd.FuncIndex = funcIdx
 
-	e.traceNote = fmt.Sprintf("collect %s %d/%d",
-		fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("collect %s %d/%d",
+			fwd.FuncName, fwd.CollectedArgs, fwd.ExpectedArgs)
+	}
 
 	if fwd.CollectedArgs >= fwd.ExpectedArgs {
 		// All forward args collected. Remove forward, force stack, retry.
@@ -3749,6 +3797,19 @@ func expandParenExpr(items []Value) []Value {
 	span = append(span, NewOpenParen())
 	span = append(span, items...)
 	span = append(span, NewCloseParen())
+	return span
+}
+
+// expandParenExprScratch is expandParenExpr into the engine's reusable
+// span buffer, for the call sites that Splice the span into the tape
+// immediately (the splice copies the tokens, freeing the buffer). Not
+// for spans handed to a sub-engine run — those use the allocating
+// variant above.
+func (e *Engine) expandParenExprScratch(items []Value) []Value {
+	span := append(e.peScratch[:0], NewOpenParen())
+	span = append(span, items...)
+	span = append(span, NewCloseParen())
+	e.peScratch = span
 	return span
 }
 
@@ -4467,7 +4528,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			// `Math.sqrt` otherwise shows only the `get` expansion, never the
 			// function it resolves to. Gated on a module origin so ordinary
 			// user-fn and bare-word traces are unaffected.
-			if fnDef.Module != "" {
+			if fnDef.Module != "" && e.trace != nil {
 				e.traceNote = "call " + fnDef.Name
 			}
 			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
@@ -5165,9 +5226,11 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// AppendFrameTail now, so the two splice paths cannot diverge.)
 	defSnapshot := e.registry.Defs.Snapshot()
 
-	body := make([]Value, len(sig.body()))
-	copy(body, sig.body())
-	tokens = append(tokens, body...)
+	// Append the sig's body tokens directly: append COPIES them into
+	// tokens' backing array, and sig.body() (the shared AQLImpl.Body) is
+	// never mutated here, so the previous intermediate make+copy was a
+	// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
+	tokens = append(tokens, sig.body()...)
 
 	tokens = AppendFrameTail(tokens, FrameTailSpec{
 		Registry:     e.registry,
@@ -5473,7 +5536,9 @@ func (e *Engine) stepMark(val Value) {
 		e.marks = make(map[string]bool)
 	}
 	e.marks[info.ID] = true
-	e.traceNote = "mark " + info.ID
+	if e.trace != nil {
+		e.traceNote = "mark " + info.ID
+	}
 	e.pointer++
 }
 
@@ -5506,7 +5571,9 @@ func (e *Engine) stepMove(val Value) error {
 		// signalling loop completion). Remove this orphaned move quietly.
 		delete(e.marks, info.To)
 		e.tape.Remove(e.pointer)
-		e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		if e.trace != nil {
+			e.traceNote = fmt.Sprintf("move orphan %s", info.To)
+		}
 		return nil
 	}
 
@@ -5531,7 +5598,9 @@ func (e *Engine) stepMove(val Value) error {
 	copy(body, markInfo.Body)
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, body...)
 
-	e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("move→mark %s", info.To)
+	}
 
 	// Set pointer to where the mark was (now the start of the replayed body).
 	e.pointer = markIdx
@@ -5587,7 +5656,9 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 
 		// Set pointer to the new mark so stepMark processes it.
 		e.pointer = markIdx
-		e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		if e.trace != nil {
+			e.traceNote = fmt.Sprintf("for next %s i=%d", id, cont.Current)
+		}
 		return nil
 	}
 
@@ -5596,7 +5667,9 @@ func (e *Engine) stepMoveCont(markIdx, moveIdx int, info MoveInfo) error {
 	delete(e.marks, info.To)
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, cont.Results...)
 	e.pointer = markIdx
-	e.traceNote = "for done"
+	if e.trace != nil {
+		e.traceNote = "for done"
+	}
 	return nil
 }
 
@@ -5635,7 +5708,9 @@ func (e *Engine) stepMoveIf(markIdx, moveIdx int, info MoveInfo) error {
 	// Splice chosen branch (or nothing) in place of mark+condition+move.
 	e.tape.Splice(markIdx, moveIdx-markIdx+1, branch...)
 	e.pointer = markIdx
-	e.traceNote = fmt.Sprintf("if %v", cond)
+	if e.trace != nil {
+		e.traceNote = fmt.Sprintf("if %v", cond)
+	}
 	return nil
 }
 
@@ -6137,10 +6212,12 @@ func (e *Engine) findCloseParenAfter(openIdx int) int {
 // forward's context and should not be consumed by inner stack matching.
 func (e *Engine) effectiveResolved() []Value {
 	start := 0
-	// Lazily allocated: most dispatches have no active Forward in the
-	// window, so the common case pays no map allocation (nil-map reads
-	// below return false). design/INTERPRETER-SPEED-PLAN.10.md #3.
-	var excludeIndices map[int]bool
+	// Reused exclusion set, cleared each call (see resolvedScratch/
+	// excludeScratch on Engine). Most dispatches have no active Forward in
+	// the window, so hasExclude stays false and the set is never touched.
+	// design/INTERPRETER-SPEED-PLAN.10.md #3.
+	excludeIndices := e.excludeScratch
+	hasExclude := false
 	for i := e.pointer - 1; i >= 0; i-- {
 		if IsOpenParen(e.tape.At(i)) {
 			start = i + 1
@@ -6150,7 +6227,11 @@ func (e *Engine) effectiveResolved() []Value {
 			fwd, _ := AsForward(e.tape.At(i))
 			if excludeIndices == nil {
 				excludeIndices = make(map[int]bool)
+				e.excludeScratch = excludeIndices
+			} else if !hasExclude {
+				clear(excludeIndices)
 			}
+			hasExclude = true
 			// Exclude the function word itself.
 			excludeIndices[fwd.FuncIndex] = true
 			// Exclude collected forward args (positioned before function word).
@@ -6169,14 +6250,19 @@ func (e *Engine) effectiveResolved() []Value {
 			}
 		}
 	}
-	var resolved []Value
+	// Reused result buffer: after the first few dispatches it has grown to
+	// the window size and append never reallocates. Its sole consumer,
+	// matchSignature, reads it and returns before any further dispatch, so
+	// reuse is aliasing-safe (see the field comment).
+	resolved := e.resolvedScratch[:0]
 	for i := start; i < e.pointer; i++ {
 		v := e.tape.At(i)
-		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || excludeIndices[i] {
+		if IsForward(v) || IsOpenParen(v) || IsMark(v) || IsMove(v) || (hasExclude && excludeIndices[i]) {
 			continue
 		}
 		resolved = append(resolved, v)
 	}
+	e.resolvedScratch = resolved
 	return resolved
 }
 
@@ -6467,10 +6553,6 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		}
 	}
 
-	// Build a map from resolved values to their absolute stack indices.
-	// This lets us record exact positions for stack-matched args.
-	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
-
 	// Track the best non-preferred match so that if no preferred sig
 	// matches, we can fall back to it without a second pass.
 	type matchResult struct {
@@ -6479,6 +6561,30 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 		specAt    int
 	}
 	var bestDeferred *matchResult
+
+	// ONE int buffer per matchSignature INVOCATION backs both the
+	// per-candidate positions (first maxSigArgs cells, re-sliced and
+	// re-zeroed per candidate — the previous per-candidate make was ~17%
+	// of all interpreter allocations) and the resolved-index map (tail
+	// cells). Per-invocation (NOT engine-level) is load-bearing: a
+	// predicate-typed param runs AQL during sigTypeMatches (RunPredicate),
+	// so matchSignature can nest — each nested call owns its own buffer.
+	// A success return hands the positions slice to the caller (ownership
+	// transfers; this call never touches the buffer again and the
+	// resolvedIdx region is dead after return); bestDeferred keeps its
+	// explicit copy since later candidates overwrite the buffer.
+	maxSigArgs := 0
+	for si := range fn.Signatures {
+		if n := fn.Signatures[si].TotalArgs(); n > maxSigArgs {
+			maxSigArgs = n
+		}
+	}
+	intBuf := make([]int, maxSigArgs, maxSigArgs+len(resolved))
+	posBuf := intBuf[:maxSigArgs]
+
+	// Absolute stack indices of the resolved values — the positions of
+	// stack-matched args. Filled into the tail region of intBuf.
+	resolvedIdx := e.resolvedIndicesBeforeInto(intBuf[maxSigArgs:maxSigArgs], len(resolved))
 
 	// ── 0.1: one outer loop over sorted signatures ───────────────
 	for si := range fn.Signatures {
@@ -6514,7 +6620,10 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 		// ── Step 1: forward matching ─────────────────────────────
 
-		positions := make([]int, nArgs)
+		positions := posBuf[:nArgs]
+		for i := range positions {
+			positions[i] = 0
+		}
 		fwd := 0     // number of params matched by forward tokens
 		specAt := -1 // first slot filled by a dispatching word, -1 = none
 

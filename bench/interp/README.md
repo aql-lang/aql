@@ -49,8 +49,20 @@ After the six-cause fix series (`design/INTERPRETER-SPEED-PLAN.10.md`):
 | loopsum  | ~2,430 ms |  93 ms | 21 ms | 66 ms | 36 ms |
 | nestloop | ~2,160 ms |  86 ms | 18 ms | 65 ms | 37 ms |
 
-The interpreter is now ~1.5–2.4× faster; the interp↔compiled gap dropped
-from ~28–50× to ~16–36× (roughly halved on recursion). Root-cause
-analysis, results, and per-fix notes:
-`design/INTERPRETER-SPEED-INVESTIGATION.10.md` and
-`design/INTERPRETER-SPEED-PLAN.10.md`.
+After the second-pass series (`design/INTERPRETER-PYTHON-PARITY.10.md` —
+frame-skeleton memoization, mode-gated ID elision, scratch/buffer reuse,
+trace-gating completion, Equal fast path):
+
+| workload | aql-interp | aql-compiled | python | ruby | node |
+|---|---:|---:|---:|---:|---:|
+| fib      | ~5,080 ms | 232 ms | 22 ms | 79 ms | 46 ms |
+| loopsum  | ~1,510 ms |  65 ms | 23 ms | 77 ms | 44 ms |
+| nestloop | ~1,310 ms |  59 ms | 21 ms | 78 ms | 42 ms |
+
+Cumulative: the interpreter is ~4.3× faster than the original baseline on
+recursion and ~2.5× on loops; the interp↔compiled execution gap is
+~14–23× on most shapes, and allocations per op are down 50–75 % from the
+second-pass start. The compiled VM also gained (~15–20 %) from the
+ID-elision and type-equality work. Analysis, per-fix notes, and the
+closing assessment of what remains (and why the VM is the performance
+story): `design/INTERPRETER-PYTHON-PARITY.10.md`.

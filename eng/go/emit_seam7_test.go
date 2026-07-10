@@ -259,6 +259,10 @@ func TestComputedArmCondOKDirect(t *testing.T) {
 }
 
 func TestStripZeroOutPhantomsKeepsNonPhantom(t *testing.T) {
+	// Mint inside a pass so the values carry the compile identities the
+	// producedBy bookkeeping keys on (runtime mints elide IDs).
+	c := &CheckState{}
+	defer c.Begin()()
 	es := NewEmitState()
 	phantom := NewInteger(1)
 	kept := NewInteger(2)

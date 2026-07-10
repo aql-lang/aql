@@ -413,7 +413,16 @@ Any
 │   ├── Micron                       -- structured scalars: content-equal, immutable
 │   │   ├── Pathon                   -- filesystem-style path (was `Path`)
 │   │   ├── Emailon                  -- email address
-│   │   └── Urlon                    -- absolute URL
+│   │   ├── Urlon                    -- absolute URL
+│   │   ├── Ipon                     -- IPv4 / IPv6 address (net.ParseIP)
+│   │   ├── Hoston                   -- host:port authority (optional port)
+│   │   ├── Semveron                 -- SemVer 2.0.0 version (ordered by precedence)
+│   │   ├── Cidron                   -- CIDR block (net/netip, ordered numerically)
+│   │   ├── Macon                    -- IEEE 802 MAC-48 / EUI-64 address
+│   │   ├── Coloron                  -- sRGB colour + alpha (ordered by channels)
+│   │   ├── Mimon                    -- MIME / media type (type/subtype; params)
+│   │   ├── Qion                     -- money: exact Decimal + ISO 4217 code
+│   │   └── Phonon                   -- E.164 telephone number
 │   └── Time
 │       ├── Date, DateTime, Instant
 │       └── (aql:time-util owns TimeOfDay, Duration
@@ -605,13 +614,22 @@ sort [Integer 0 5 -3]         # returns [Integer -3 0 5]
 identity rules of a scalar — equality by content (two values with the
 same fields *are* equal), immutability, a place in the total order —
 that are nevertheless object-like, exposing named read-only properties
-through `.` / `get`. Three leaves are built in:
+through `.` / `get`. Five leaves are built in:
 
 | Type | Construct from | Properties (derived in bold) |
 |---|---|---|
 | `Pathon` | a `String` (`'a/b'`) or a `List` of segments | `parts`, `abs` |
 | `Emailon` | a plain `user@host` string, or a `{user host}` map | `user`, `host`, **`address`** |
 | `Urlon` | an absolute-URL string, or a `{scheme host port? path? query? fragment?}` map | `scheme`, `host`, `port`, `path`, `query`, `fragment`, **`href`** |
+| `Ipon` | an IPv4/IPv6 address string (`net.ParseIP`-validated), or an `{addr}` map | `addr` (canonical), `version` (`4`/`6`) |
+| `Hoston` | a `host:port` string (optional port; IPv6 bracketed `[::1]:80`), or a `{host port?}` map | `host`, `port` (optional), **`authority`** |
+| `Semveron` | a SemVer 2.0.0 string (`'1.2.3-rc.1+b.5'`, no leading `v`), or a `{major minor patch prerelease? build?}` map (prerelease/build as a String or a `List` of identifiers) | `major`, `minor`, `patch`, `prerelease` (opt), `build` (opt), **`prereleaseParts`**, **`buildParts`**, **`release`**, **`stable`**, **`version`** |
+| `Cidron` | a CIDR string (`'10.0.0.0/8'`, `'2001:db8::/32'`; host bits masked away), or an `{addr prefix version?}` map | `cidr`, `addr`, `prefix`, `version` (`4`/`6`), **`hostbits`**, **`count`** |
+| `Macon` | a MAC-48/EUI-64 string in any IEEE form (colon/hyphen/Cisco-dot/bare-hex), or an `{addr}` map | `addr` (canonical lowercase colon), **`bits`**, **`eui64`**, **`oui`**, **`multicast`**, **`local`**, **`broadcast`** |
+| `Coloron` | a `#hex` (`#rgb`/`#rgba`/`#rrggbb`/`#rrggbbaa`) or `rgb()`/`rgba()` string, or an `{r g b a?}` map | `r`, `g`, `b`, `a` (0..255), **`hex`**, **`opaque`**, **`alpha`** (0..1 Float), **`css`** |
+| `Mimon` | a media-type string (`'text/html; charset=utf-8'`), or a `{type subtype params?}` map | `type`, `subtype`, `params` (opt Map), **`essence`**, **`mime`**, **`suffix`** (opt), **`facet`** (opt) |
+| `Qion` | a `'CODE AMOUNT'` string (`'USD 12.50'`; ISO 4217 code, exact decimal at the currency's minor-unit scale), or a `{code amount}` map | `code`, `amount` (Decimal), `minor`, **`units`** (opt), **`negative`**, **`display`** |
+| `Phonon` | an E.164 string (`'+14155552671'`; presentation separators stripped), or a `{cc subscriber}` map | `digits`, **`e164`**, **`length`** |
 
 (`Pathon` is the former `Scalar/Path`, moved into the family under its
 new name — the bare `Path` name no longer resolves; change `make Path`
@@ -677,11 +695,18 @@ are not Microns.
 def Bad refine Micron {x:String}         # returns error: micron_name
 ```
 
-**Ordering.** Same-kind Microns order by content (`Pathon` keeps its
-historical segment order; other kinds order by canonical render), and
-newtype-vs-base pairs compare across the nominal tag. Different Micron
-kinds are `cmp`-incomparable — use `tcmp` for the cross-kind total
-order (`Micron` < `Pathon` < `Emailon` < `Urlon` < user kinds).
+**Ordering.** Same-kind Microns order by content. Most kinds order by
+canonical render, but four carry a custom numeric order where lexical
+render would be wrong: `Pathon` keeps its historical segment order;
+`Semveron` by SemVer 2.0.0 precedence (`1.9.0 < 1.10.0`, `1.0.0-rc.1 <
+1.0.0`); `Cidron` by family then network address then prefix (`10.0.0.0/8
+< 10.0.0.0/16`, all v4 before v6); `Coloron` by the `(r,g,b,a)` channel
+tuple; `Qion` by currency code then exact decimal magnitude (`USD 9.00 <
+USD 100.00`). Newtype-vs-base pairs compare across the nominal tag.
+Different Micron kinds are `cmp`-incomparable — use `tcmp` for the
+cross-kind total order (`Micron` < `Pathon` < `Emailon` < `Urlon` <
+`Ipon` < `Hoston` < `Semveron` < `Cidron` < `Macon` < `Coloron` <
+`Mimon` < `Qion` < `Phonon` < user kinds).
 
 ```
 (make Emailon 'a@b.co') cmp (make Emailon 'b@b.co')   # returns -1

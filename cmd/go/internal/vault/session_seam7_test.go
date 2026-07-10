@@ -63,6 +63,10 @@ func TestS7_AuthenticateWithAutoNonFileBackend(t *testing.T) {
 	stubDir := t.TempDir()
 	stubBin(t, stubDir, "secret-tool", "exit 0\n")
 	prependPath(t, stubDir)
+	// autoBackend's precedence is GOOS-specific; force the Linux dispatch so
+	// the stubbed secret-tool is detected (a real macOS host's `security`
+	// keychain would otherwise win and resolve to keychain instead).
+	p7swapGoos(t, "linux")
 	home := testHome(t)
 	// Backend "" → BackendAuto → autoBackend() = secret-service (stub);
 	// resolved != file → a keychain admin session with no passphrase.

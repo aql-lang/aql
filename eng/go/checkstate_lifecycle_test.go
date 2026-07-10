@@ -138,7 +138,7 @@ func populateNonZero(v reflect.Value) {
 			}
 			m.SetMapIndex(k, reflect.New(f.Type().Elem()).Elem())
 			f.Set(m)
-		case reflect.Ptr:
+		case reflect.Pointer:
 			f.Set(reflect.New(f.Type().Elem()))
 		case reflect.Struct:
 			populateNonZero(f)
@@ -162,7 +162,7 @@ func mutateContainers(v reflect.Value) {
 			switch k.Kind() {
 			case reflect.String:
 				k.SetString("k2")
-			case reflect.Ptr:
+			case reflect.Pointer:
 				// Pointer-keyed maps (CtxShapes): a fresh non-nil pointer is
 				// a distinguishable second key.
 				k.Set(reflect.New(f.Type().Key().Elem()))

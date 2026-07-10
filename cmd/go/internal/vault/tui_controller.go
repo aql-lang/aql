@@ -160,21 +160,22 @@ func (c *tuiController) needsPassphrase() (bool, error) {
 	return vaultNeedsPassphrase(s), nil
 }
 
-// authenticate validates pass by opening (and immediately closing) a
-// session, then remembers it for subsequent operations.
+// authenticate verifies pass actually opens the active vault, then caches
+// it for subsequent operations. Verification is load-bearing: the TUI holds
+// one passphrase for the whole session and never re-prompts once authed, so
+// accepting a mistyped one here would wedge every later operation (and run a
+// mutation like rename under the wrong key). verifyPassphrase checks an
+// envelope vault against a keyslot AND a legacy file backend by decrypting
+// its keyring — closing the gap where the file backend used to accept any
+// passphrase and defer the failure to the first value read.
 func (c *tuiController) authenticate(pass string) error {
 	s, err := requireStore(c.homeDir)
 	if err != nil {
 		return err
 	}
-	sess, err := authenticateWith(s, c.homeDir, pass)
-	if err != nil {
+	if err := verifyPassphrase(s, c.homeDir, pass); err != nil {
 		return err
 	}
-	// For an envelope vault openSession has already verified the passphrase
-	// against a slot. A legacy file backend defers validation to the first
-	// value read, matching the CLI.
-	sess.Close()
 	c.pass = pass
 	c.authed = true
 	return nil

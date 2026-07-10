@@ -231,6 +231,54 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 	// the fn baseline still pushes/pops (a nil entry) and the DefCleanup
 	// marker still rides the tape (carrying SkipCleanup).
 	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(r, s.body())
+	// For a leaf body (!needsFrameState) the ENTIRE token expansion is
+	// constant per signature except the unnamed-arg cells: frame open,
+	// body, and the cleanup tail (nil-snapshot DefCleanup, __pa, undef
+	// pairs, zero-Pos ReturnCheck) never vary between calls. Build that
+	// skeleton ONCE here and per call only copy it with the arg values
+	// patched in — the old per-call rebuild minted ~7 ID-stamped tokens
+	// per frame (design/INTERPRETER-SPEED-PLAN.10.md #5). The per-call
+	// COPY is mandatory: execMatch's stampResultPos mutates the returned
+	// slice (ReturnCheck Pos, fn-value pos), and ForkConcurrent engines
+	// share this handler. Nothing keys on the shared tokens' Value.IDs —
+	// the tail probe and unwindFrameTail match structurally.
+	var (
+		skeleton   []Value
+		unnamedIdx []int // param positions whose args splice into the frame head
+		emptyArgs  Value
+		refsArgs   bool
+	)
+	if !needsFrameState {
+		for i, p := range s.Params {
+			if p.Name == "" {
+				unnamedIdx = append(unnamedIdx, i)
+			}
+		}
+		u := len(unnamedIdx)
+		if u > 0 {
+			skeleton = append(skeleton, NewFrameOpenSpan(meta, u))
+		} else {
+			skeleton = append(skeleton, NewFrameOpen(meta))
+		}
+		skeleton = append(skeleton, make([]Value, u)...) // arg placeholder cells
+		skeleton = append(skeleton, s.body()...)
+		skeleton = AppendFrameTail(skeleton, FrameTailSpec{
+			Registry:     r,
+			SkipCleanup:  true,
+			Names:        fnInstallNames(s, fnDefCopy.Captured),
+			Returns:      s.Returns,
+			UnnamedCount: u,
+			FuncName:     name,
+		})
+		skeleton = append(skeleton, NewCloseParen())
+		// When the body provably never reads `args` (sound under the
+		// !needsFrameState gate — see bodyReferencesArgs), push a shared
+		// empty list per call instead of copying the args into a fresh
+		// one; __pa only needs an entry to pop, and nothing else reads
+		// the list contents.
+		refsArgs = bodyReferencesArgs(r, s.body())
+		emptyArgs = NewList(nil)
+	}
 	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
 		// Reached from a FOREIGN registry (callReg != the install registry r) — a
 		// module fn dispatched through the unified execMatch path from an outer
@@ -256,6 +304,42 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			}
 			return target.CallAQL(&s, args, fnDefCopy.Captured)
 		}
+		// Leaf fast path: per-call work is registry installs plus ONE
+		// slice copy of the memoized skeleton with the arg cells patched
+		// (see the construction-time comment above).
+		if !needsFrameState {
+			r.PushFnBaseline(nil)
+			argsList := emptyArgs
+			if refsArgs {
+				argsCopy := make([]Value, len(args))
+				copy(argsCopy, args)
+				argsList = NewList(argsCopy)
+			}
+			if err := r.Args.Push(argsList); err != nil {
+				r.PopFnBaseline()
+				return nil, err
+			}
+			for _, cb := range fnDefCopy.Captured {
+				InstallFrameBinding(r, cb.Name, cb.Value)
+			}
+			for i, p := range s.Params {
+				if p.Name != "" {
+					arg := args[i]
+					// Quote list params so they're treated as data values
+					// when referenced in the body, not expanded as code bodies.
+					if arg.Parent.Equal(TList) && !arg.Quoted {
+						arg.Quoted = true
+					}
+					InstallFrameBinding(r, p.Name, arg)
+				}
+			}
+			out := make([]Value, len(skeleton))
+			copy(out, skeleton)
+			for k, i := range unnamedIdx {
+				out[1+k] = args[i]
+			}
+			return out, nil
+		}
 		var result []Value
 		var names []string
 		// Wrap the entire expansion (unnamed args + body + undef
@@ -274,16 +358,9 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// names installed AFTER this snapshot (this call's
 		// captures + named params + body-local defs) are
 		// capturable; names already present at module/global
-		// scope are dynamic.
-		// Skip the (O(all names)) snapshot for a body that constructs no
-		// inner fn — the baseline is read only by inner-fn capture
-		// detection. Still push a (nil) entry so __pa's paired pop stays
-		// balanced.
-		if needsFrameState {
-			r.PushFnBaseline(r.Defs.Snapshot())
-		} else {
-			r.PushFnBaseline(nil)
-		}
+		// scope are dynamic. (Only needsFrameState bodies reach
+		// here — the leaf fast path above pushes a nil baseline.)
+		r.PushFnBaseline(r.Defs.Snapshot())
 
 		// Push args list onto the args stack for access via the
 		// "args" word (args.0, args.1, etc.). Paired with __pa
@@ -330,13 +407,8 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		}
 		// Snapshot DefStacks lengths after installing named params
 		// so we can clean up any defs created during body execution
-		// (fixes def leakage from fn bodies — DX-REPORT Issue 2). Skipped
-		// (nil) when the body installs no body-local defs; the DefCleanup
-		// marker then rides with SkipCleanup and allocates no map.
-		var defSnapshot map[string]int
-		if needsFrameState {
-			defSnapshot = r.Defs.Snapshot()
-		}
+		// (fixes def leakage from fn bodies — DX-REPORT Issue 2).
+		defSnapshot := r.Defs.Snapshot()
 
 		// Generic fn: install the inferred type-parameter bindings for
 		// the body (`of [T]`, `make (Box of [T])`). AFTER the snapshot,
@@ -347,9 +419,11 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
 		}
 
-		body := make([]Value, len(s.body()))
-		copy(body, s.body())
-		result = append(result, body...)
+		// Append the body tokens directly: append COPIES them into result's
+		// backing array and s.body() (the shared AQLImpl.Body) is never
+		// mutated here, so the previous intermediate make+copy was a
+		// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
+		result = append(result, s.body()...)
 		// The canonical cleanup tail: DefCleanup (undoes body-local
 		// defs), __pa (pops Args + FnBaseline), the undef pairs for
 		// captures+params, and the ReturnCheck when returns are
@@ -357,7 +431,6 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		result = AppendFrameTail(result, FrameTailSpec{
 			Registry:     r,
 			Snapshot:     defSnapshot,
-			SkipCleanup:  !needsFrameState,
 			Names:        names,
 			Returns:      s.Returns,
 			UnnamedCount: unnamedCount,

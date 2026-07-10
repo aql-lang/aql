@@ -431,6 +431,178 @@ func TestMakeUrlon(t *testing.T) {
 	}
 }
 
+func TestMakeIpon(t *testing.T) {
+	out, err := makeIpon(NewString("203.0.113.7"))
+	if err != nil {
+		t.Fatalf("makeIpon: %v", err)
+	}
+	v := out[0]
+	if !v.Parent.Equal(TIpon) {
+		t.Fatalf("ipon = %v", v)
+	}
+	if got := v.String(); got != "203.0.113.7" {
+		t.Errorf("render = %q", got)
+	}
+	fields, _ := AsMicronFields(v)
+	if a := micronFieldString(fields, "addr"); a != "203.0.113.7" {
+		t.Errorf("addr = %q", a)
+	}
+
+	// IPv6 canonicalizes (lowercase, zero-compressed).
+	out, err = makeIpon(NewString("2001:0DB8::1"))
+	if err != nil {
+		t.Fatalf("ipv6 ipon: %v", err)
+	}
+	if got := out[0].String(); got != "2001:db8::1" {
+		t.Errorf("ipv6 render = %q", got)
+	}
+
+	// Map form re-validates through the string path.
+	out, err = makeIpon(mapOf("addr", NewString("10.0.0.1")))
+	if err != nil {
+		t.Fatalf("map ipon: %v", err)
+	}
+	if got := out[0].String(); got != "10.0.0.1" {
+		t.Errorf("map render = %q", got)
+	}
+
+	// Negative space.
+	if _, err := makeIpon(NewString("not-an-ip")); err == nil {
+		t.Error("bad address accepted")
+	}
+	if _, err := makeIpon(NewString("10.0.0")); err == nil {
+		t.Error("short IPv4 accepted")
+	}
+	if _, err := makeIpon(mapOf("addr", NewString("1.2.3.4"), "extra", NewString("x"))); err == nil {
+		t.Error("unknown field accepted")
+	}
+	if _, err := makeIpon(mapOf("addr", NewInteger(1))); err == nil {
+		t.Error("non-string addr accepted")
+	}
+	if _, err := makeIpon(mapOf()); err == nil {
+		t.Error("empty map (missing addr) accepted")
+	}
+	if _, err := makeIpon(NewBoolean(true)); err == nil {
+		t.Error("boolean source accepted")
+	}
+}
+
+func TestMakeHoston(t *testing.T) {
+	mkVal := func(s string) Value {
+		out, err := makeHoston(NewString(s))
+		if err != nil {
+			t.Fatalf("makeHoston(%q): %v", s, err)
+		}
+		return out[0]
+	}
+	host := func(v Value) string { h, _ := MicronProperty(v, "host"); s, _ := AsString(h); return s }
+	port := func(v Value) (int64, bool) {
+		p, ok := MicronProperty(v, "port")
+		if !ok {
+			return 0, false
+		}
+		n, _ := AsInteger(p)
+		return n, true
+	}
+
+	// host:port, host-only, IPv4:port.
+	v := mkVal("example.com:8080")
+	if host(v) != "example.com" || v.String() != "example.com:8080" {
+		t.Errorf("host:port = %+v (%q)", v, v.String())
+	}
+	if n, ok := port(v); !ok || n != 8080 {
+		t.Errorf("port = %d %v", n, ok)
+	}
+	if v = mkVal("example.com"); v.String() != "example.com" {
+		t.Errorf("host-only render = %q", v.String())
+	}
+	if _, ok := port(v); ok {
+		t.Error("host-only carries a port")
+	}
+	if host(mkVal("127.0.0.1:80")) != "127.0.0.1" {
+		t.Error("ipv4 host wrong")
+	}
+	// IPv6: bracketed (with/without port), and bare (multi-colon, no port).
+	if v = mkVal("[::1]:8080"); host(v) != "::1" || v.String() != "[::1]:8080" {
+		t.Errorf("bracketed ipv6 = %q", v.String())
+	}
+	if v = mkVal("[2001:db8::1]"); host(v) != "2001:db8::1" || v.String() != "2001:db8::1" {
+		t.Errorf("bracketed no-port = %q", v.String())
+	}
+	if v = mkVal("2001:db8::1"); host(v) != "2001:db8::1" {
+		t.Errorf("bare ipv6 host = %q", host(v))
+	}
+	if _, ok := port(mkVal("2001:db8::1")); ok {
+		t.Error("bare ipv6 carries a port")
+	}
+
+	// Map form: host+port, host-only, IPv6 re-brackets.
+	mval := func(m Value) (Value, error) {
+		out, err := makeHoston(m)
+		if err != nil {
+			return Value{}, err
+		}
+		return out[0], nil
+	}
+	if got, _ := mval(mapOf("host", NewString("a.com"), "port", NewInteger(443))); got.String() != "a.com:443" {
+		t.Errorf("map host+port = %q", got.String())
+	}
+	if got, _ := mval(mapOf("host", NewString("a.com"))); got.String() != "a.com" {
+		t.Errorf("map host-only = %q", got.String())
+	}
+	if got, _ := mval(mapOf("host", NewString("::1"), "port", NewInteger(22))); got.String() != "[::1]:22" {
+		t.Errorf("map ipv6 re-bracket = %q", got.String())
+	}
+	// Derived authority property.
+	a, _ := MicronProperty(mkVal("a.com:8080"), "authority")
+	if s, _ := AsString(a); s != "a.com:8080" {
+		t.Errorf("authority = %q", s)
+	}
+
+	// Negative space — string forms. A host is not a URL, so authority
+	// delimiters (/ ? #) are rejected rather than swallowed into the host.
+	for _, bad := range []string{
+		"", "   ", "a b:80", ":80", "host:99999", "host:-1", "host:notaport",
+		"[::1", "[not-an-ip]:80", "[::1]x", "[::1]:99999", "1:2:3",
+		"example.com/path", "example.com/path:443", "a?b", "a#b",
+	} {
+		if _, err := makeHoston(NewString(bad)); err == nil {
+			t.Errorf("bad authority %q accepted", bad)
+		}
+	}
+	// Negative space — map + source.
+	if _, err := mval(mapOf("port", NewInteger(80))); err == nil {
+		t.Error("missing host accepted")
+	}
+	// The host field is a host, not an authority: a "host:port" string there
+	// is rejected (not silently split into the optional port), as are URL
+	// delimiters and an out-of-range explicit port.
+	if _, err := mval(mapOf("host", NewString("a.com:80"))); err == nil {
+		t.Error("host field with a :port accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a.com/p"))); err == nil {
+		t.Error("host field with a / accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a.com"), "port", NewInteger(99999))); err == nil {
+		t.Error("out-of-range map port accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a"), "extra", NewString("y"))); err == nil {
+		t.Error("unknown field accepted")
+	}
+	if _, err := mval(mapOf("host", NewInteger(1))); err == nil {
+		t.Error("non-string host accepted")
+	}
+	if _, err := mval(mapOf("host", NewString("a"), "port", NewString("80"))); err == nil {
+		t.Error("non-integer port accepted")
+	}
+	if _, err := makeHoston(NewInteger(42)); err == nil {
+		t.Error("integer source accepted")
+	}
+	if _, err := makeHoston(Value{Parent: TMap, Data: ListPayload{}}); err == nil {
+		t.Error("unreadable map payload accepted")
+	}
+}
+
 func TestMicronTypePredicates(t *testing.T) {
 	if _, err := AsMicronType(NewInteger(1)); err == nil {
 		t.Error("AsMicronType accepted an integer")
@@ -568,6 +740,14 @@ func TestMicronInstantiateKinds(t *testing.T) {
 	if err != nil || !IsPathon(out[0]) {
 		t.Errorf("Pathon make = %v (%v)", out, err)
 	}
+	out, err = micronInstantiate(NewTypeLiteral(TIpon), NewString("203.0.113.7"), r)
+	if err != nil || !out[0].Parent.Equal(TIpon) {
+		t.Errorf("Ipon make = %v (%v)", out, err)
+	}
+	out, err = micronInstantiate(NewTypeLiteral(THoston), NewString("example.com:8080"), r)
+	if err != nil || !out[0].Parent.Equal(THoston) {
+		t.Errorf("Hoston make = %v (%v)", out, err)
+	}
 	// A newtype of a builtin leaf constructs the base then retags.
 	newt := r.Types.MintType("W4bMailon", TEmailon)
 	out, err = micronInstantiate(NewTypeLiteral(newt), NewString("c@d.io"), r)
@@ -576,6 +756,24 @@ func TestMicronInstantiateKinds(t *testing.T) {
 	}
 	if !out[0].Parent.Equal(newt) {
 		t.Errorf("newtype instance parent = %v, want W4bMailon", out[0].Parent)
+	}
+	// A newtype of Ipon likewise constructs the base then retags.
+	newIp := r.Types.MintType("W4bIpon", TIpon)
+	out, err = micronInstantiate(NewTypeLiteral(newIp), NewString("203.0.113.7"), r)
+	if err != nil {
+		t.Fatalf("ipon newtype make: %v", err)
+	}
+	if !out[0].Parent.Equal(newIp) {
+		t.Errorf("ipon newtype instance parent = %v, want W4bIpon", out[0].Parent)
+	}
+	// A newtype of Hoston likewise constructs the base then retags.
+	newH := r.Types.MintType("W4bHoston", THoston)
+	out, err = micronInstantiate(NewTypeLiteral(newH), NewString("example.com:8080"), r)
+	if err != nil {
+		t.Fatalf("hoston newtype make: %v", err)
+	}
+	if !out[0].Parent.Equal(newH) {
+		t.Errorf("hoston newtype instance parent = %v, want W4bHoston", out[0].Parent)
 	}
 	// A kind with no schema anywhere on its chain errors.
 	bare := r.Types.MintType("W4bBareon", TMicron)

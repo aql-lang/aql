@@ -21,6 +21,12 @@ func TestRunWalkError(t *testing.T) {
 	if err := os.Remove(gone); err != nil {
 		t.Skipf("cannot remove cwd on this platform: %v", err)
 	}
+	// Some platforms (notably macOS) keep resolving a removed working
+	// directory, so the walk succeeds and the error arm is unreachable. Skip
+	// rather than fail spuriously where that is the case.
+	if _, err := os.Getwd(); err == nil {
+		t.Skip("this platform still resolves a removed working directory; the walk-error arm is unreachable here")
+	}
 	var stdout, stderr bytes.Buffer
 	if code := Run(nil, &stdout, &stderr); code != 1 {
 		t.Fatalf("exit = %d, want 1", code)

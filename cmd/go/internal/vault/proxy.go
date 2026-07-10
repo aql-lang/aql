@@ -218,6 +218,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log(started, r, alias, http.StatusNotFound, "no-alias")
 		return
 	}
+	// Per-alias source-IP allowlist: a key tagged with --ip-whitelist may
+	// only be used from a listed client IP/CIDR. Checked here at the
+	// broker (the host-side `vault get`/`exec` paths never see a client
+	// IP); matters once the proxy is bound off-loopback.
+	if len(aliasMeta.IPWhitelist) > 0 && !ipAllowed(clientIP(r.RemoteAddr), aliasMeta.IPWhitelist) {
+		writeDenied(w, http.StatusForbidden, "client IP not in the alias ip-whitelist")
+		p.log(started, r, alias, http.StatusForbidden, "ip-denied")
+		return
+	}
 	provider := LookupProvider(aliasMeta.Provider)
 	if provider.BaseURL == "" {
 		writeDenied(w, http.StatusBadRequest,
