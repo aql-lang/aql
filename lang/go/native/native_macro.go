@@ -365,8 +365,8 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
 				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
-				args[0].Pos)
-			macroDegradedAdvisory(r, "mini", "the aql:minilang import is outside the checked fragment", args[0].Pos)
+				args[0].Pos())
+			macroDegradedAdvisory(r, "mini", "the aql:minilang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
@@ -602,7 +602,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// below): the runtime resolves the kind, so the compiled program must
 			// NOT raise parse_unknown_lang. The check-mode hook that records the
 			// deferral is aql:parse's parse-register ReturnsFn.
-			macroDegradedAdvisory(r, "parse", "the "+kind+" grammar is built at run time (Parse.register)", args[0].Pos)
+			macroDegradedAdvisory(r, "parse", "the "+kind+" grammar is built at run time (Parse.register)", args[0].Pos())
 			// COMPILE pass (Phase 6 M3): record the runtime deferred dispatch —
 			// a CALL_NATIVE of parselang-deferred-dispatch — so the parse
 			// result has provenance and the program compiles. At run time the
@@ -628,8 +628,8 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
 				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
-				args[0].Pos)
-			macroDegradedAdvisory(r, "parse", "the aql:parselang import is outside the checked fragment", args[0].Pos)
+				args[0].Pos())
+			macroDegradedAdvisory(r, "parse", "the aql:parselang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("parse_unknown_lang",
@@ -761,7 +761,7 @@ func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
 	}
 	outs := []Value{NewDynamicCarrier(TAny)}
 	rec.RecordCall("parselang-deferred-dispatch", sig,
-		[]Value{args[0], source, opts}, outs, args[0].Pos, true, false)
+		[]Value{args[0], source, opts}, outs, args[0].Pos(), true, false)
 	return outs[0], true
 }
 
@@ -815,7 +815,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
 				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
-				args[0].Pos)
+				args[0].Pos())
 			return []Value{NewDynamicCarrier(TString)}, nil
 		}
 		return nil, r.AqlErrorHint("emit_unknown_lang",

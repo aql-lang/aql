@@ -272,7 +272,7 @@ func reifyReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos)
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "reify", args[1].Pos())
 		}
 	}
 	if IsDisjunct(target) {
@@ -314,7 +314,7 @@ func parseTextReturns(args []Value, r *Registry) []Value {
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
-			eng.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos)
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "parse", args[0].Pos())
 		}
 		return dyn
 	}

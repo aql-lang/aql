@@ -72,7 +72,7 @@ func compareValuesClassified(a, b Value) (n int, viaFamily bool, err error) {
 	}
 	sameType := aType.Equal(bType)
 	for t := lowestCommonAncestor(aType, bType); t != nil; t = t.Parent {
-		cmp, ok := t.Behavior.(Comparer)
+		cmp, ok := t.Behavior().(Comparer)
 		if !ok {
 			continue
 		}
@@ -139,7 +139,7 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 					// Routed through the unique-diagnostic helper for the
 					// caught-body gate: inside `do [...]` the runtime error
 					// is trapped, so the static mirror stays silent there.
-					CheckAddUniqueDiagnostic(r, "incomparable", ae.Detail, "", args[0].Pos)
+					CheckAddUniqueDiagnostic(r, "incomparable", ae.Detail, "", args[0].Pos())
 				}
 			}
 		}
@@ -306,14 +306,14 @@ func scalarFamilyEqual(a, b Value) (equal, handled bool) {
 // so those never reach here.
 func scalarSemanticEqual(a, b Value) (equal, handled bool) {
 	if a.Parent == b.Parent && a.Parent != nil && a.Parent.ConformsTo(TScalar) &&
-		a.Parent.Behavior != nil && a.Parent.Behavior != DefaultBehavior {
-		return a.Parent.Behavior.Equal(a, b), true
+		a.Parent.Behavior() != nil && a.Parent.Behavior() != DefaultBehavior {
+		return a.Parent.Behavior().Equal(a, b), true
 	}
 	if a.Parent != b.Parent {
 		if lca := lowestCommonAncestor(a.Parent, b.Parent); lca != nil &&
 			!lca.Equal(TScalar) && lca.ConformsTo(TScalar) &&
 			(lca.Equal(a.Parent) || lca.Equal(b.Parent)) {
-			if cmp, ok := lca.Behavior.(Comparer); ok {
+			if cmp, ok := lca.Behavior().(Comparer); ok {
 				if res, e := cmp.Compare(a, b); e == nil {
 					return res == 0, true
 				}

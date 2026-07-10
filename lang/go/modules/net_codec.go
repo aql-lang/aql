@@ -93,7 +93,9 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 	if sig == nil {
 		return native.Value{}, fmt.Errorf("codec function does not accept %d argument(s)", len(args))
 	}
-	res, err := r.CallAQL(sig, args, fnInfo.Captured)
+	// InvokeCallback runs a compiled codec body on the VM (nested in the live run,
+	// or fresh on an idle connection fork) and falls back to CallAQL otherwise.
+	res, err := eng.InvokeCallback(r, sig, args, fnInfo.Captured)
 	if err != nil {
 		return native.Value{}, err
 	}

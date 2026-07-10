@@ -40,7 +40,7 @@ func TestMicronMergedGrammarDispatch(t *testing.T) {
 			continue
 		}
 		if !v.Parent.Equal(c.kind) {
-			t.Errorf("MicronFromString(%q) = %s, want %s", c.src, v.Parent.Name, c.kind.Name)
+			t.Errorf("MicronFromString(%q) = %s, want %s", c.src, v.Parent.Name(), c.kind.Name())
 		}
 	}
 }
@@ -132,7 +132,7 @@ func TestMicronMergeCommutative(t *testing.T) {
 			}
 			v, ok := node.(Value)
 			if !ok || !v.Parent.Equal(kind) {
-				t.Errorf("merged parse %q → %v, want %s", src, node, kind.Name)
+				t.Errorf("merged parse %q → %v, want %s", src, node, kind.Name())
 			}
 		}
 	}
@@ -217,7 +217,7 @@ func TestMicronGrammarWithExtras(t *testing.T) {
 		}
 		v, ok := node.(Value)
 		if !ok || !v.Parent.Equal(kind) {
-			t.Errorf("parse %q → %v, want %s", src, node, kind.Name)
+			t.Errorf("parse %q → %v, want %s", src, node, kind.Name())
 		}
 	}
 

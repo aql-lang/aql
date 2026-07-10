@@ -419,7 +419,7 @@ func formatTypeSchema(name string, v Value) string {
 			inherited = "  (inherited)"
 		}
 		if IsConcrete(c) {
-			fmt.Fprintf(&b, "  %-*s : %s = %s  (default)%s\n", w, k, c.Parent.Name, c.String(), inherited)
+			fmt.Fprintf(&b, "  %-*s : %s = %s  (default)%s\n", w, k, c.Parent.Name(), c.String(), inherited)
 		} else {
 			fmt.Fprintf(&b, "  %-*s : %s  (required)%s\n", w, k, c.String(), inherited)
 		}

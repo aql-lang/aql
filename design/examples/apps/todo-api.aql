@@ -38,11 +38,11 @@ def todo-serve fn [[opts:Map] [Any] [
     if (req has "body-json") [
       def body req.body-json
       def id (convert String state.next)
-      state set next (add 1 state.next)
+      (state set next (add 1 state.next)) drop
       def text body.text
       def todo {id: id text: text done: false}
       def todos state.todos
-      todos set (id) todo
+      (todos set (id) todo) drop
       {status: 201 body: todo}
     ] [
       {status: 400 body: {error: "missing json body"}}
@@ -69,7 +69,7 @@ def todo-serve fn [[opts:Map] [Any] [
       def new-text (if (body has "text") [ body.text ] [ t.text ])
       def new-done (if (body has "done") [ body.done ] [ t.done ])
       def t2 {id: id text: new-text done: new-done}
-      todos set (id) t2
+      (todos set (id) t2) drop
       t2
     ]
   ]) api
@@ -77,7 +77,7 @@ def todo-serve fn [[opts:Map] [Any] [
   add {method:"DELETE" path:"/todos/:id"} ([req:Map state:Any] => [
     def todos state.todos
     def id req.params.id
-    todos set (id) None
+    (todos set (id) None) drop
     {status: 204 body: ""}
   ]) api
 
@@ -87,7 +87,7 @@ def todo-serve fn [[opts:Map] [Any] [
 
   # Ambient middleware: count every request into the service.
   wrap ([req:Map state:Any prior:Any] => [
-    state set hits (add 1 state.hits)
+    (state set hits (add 1 state.hits)) drop
     prior req
   ]) api
 

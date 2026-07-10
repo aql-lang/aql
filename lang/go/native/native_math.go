@@ -125,7 +125,7 @@ func returnsIntArithChecked(op string, faultFn func(a, b int64) error) ReturnsFu
 					if errors.As(err, &ae) {
 						code, detail = ae.Code, ae.Detail
 					}
-					eng.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos)
+					eng.CheckAddUniqueDiagnostic(r, code, detail, op, args[0].Pos())
 				}
 			}
 		}

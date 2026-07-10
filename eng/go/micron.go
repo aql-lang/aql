@@ -299,12 +299,12 @@ func init() {
 	// Package vars (the T* nodes) initialise before init() runs, so
 	// the pointers are live — same pattern as the scalar Comparer
 	// installs in compare_scalar_behaviors.go.
-	TMicron.Behavior = micronBehavior{kind: TMicron}
-	TPathon.Behavior = micronBehavior{kind: TPathon}
-	TEmailon.Behavior = micronBehavior{kind: TEmailon}
-	TUrlon.Behavior = micronBehavior{kind: TUrlon}
-	TIpon.Behavior = micronBehavior{kind: TIpon}
-	THoston.Behavior = micronBehavior{kind: THoston}
+	TMicron.ensureTMeta().Behavior = micronBehavior{kind: TMicron}
+	TPathon.ensureTMeta().Behavior = micronBehavior{kind: TPathon}
+	TEmailon.ensureTMeta().Behavior = micronBehavior{kind: TEmailon}
+	TUrlon.ensureTMeta().Behavior = micronBehavior{kind: TUrlon}
+	TIpon.ensureTMeta().Behavior = micronBehavior{kind: TIpon}
+	THoston.ensureTMeta().Behavior = micronBehavior{kind: THoston}
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -352,7 +352,7 @@ func MicronProperty(v Value, key string) (Value, bool) {
 // builtin leaves and the root.
 func MicronSchemaFor(t *Type) (*OrderedMap, bool) {
 	for ; t != nil && t.ConformsTo(TMicron); t = t.Parent {
-		if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
+		if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 			return mb.info.Fields, true
 		}
 	}
@@ -898,9 +898,9 @@ func micronAccepts(v Value) bool {
 // of any Micron kind rides the ordinary refine-prefab path instead.
 func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 	if !(IsBareTypeNode(base) && base.Equal(TMicron)) {
-		name := base.Parent.Name
+		name := base.Parent.Name()
 		if IsBareTypeNode(base) {
-			name = base.Name
+			name = base.Name()
 		} else if info, err := AsMicronType(base); err == nil && info.Name != "" {
 			name = info.Name
 		}
@@ -967,7 +967,7 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		case t.Equal(THoston):
 			out, err = makeHoston(data)
 		default:
-			if mb, ok := t.Behavior.(micronBehavior); ok && mb.info != nil {
+			if mb, ok := t.Behavior().(micronBehavior); ok && mb.info != nil {
 				out, err = makeMicronUser(*mb.info, data, r)
 			} else {
 				continue
@@ -979,5 +979,5 @@ func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
 		return []Value{ReparentValue(out[0], kind)}, nil
 	}
 	return nil, &AqlError{Code: "type_error",
-		Detail: "make: " + kind.Name + " has no field schema — define one with refine Micron {fields}"}
+		Detail: "make: " + kind.Name() + " has no field schema — define one with refine Micron {fields}"}
 }

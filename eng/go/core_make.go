@@ -447,7 +447,7 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 			return val, nil
 		}
 		return Value{}, fmt.Errorf("expected %s (the default's type), got %s (%s)",
-			constraint.Parent.Name, val.Parent.Name, val.String())
+			constraint.Parent.Name(), val.Parent.Name(), val.String())
 	}
 
 	// Class-typed field ({i:Inner}) — nominal check: the value must be
@@ -458,7 +458,7 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 			return val, nil
 		}
 		return Value{}, fmt.Errorf("expected a %s instance, got %s (%s)",
-			info.Name, val.Parent.Name, val.String())
+			info.Name, val.Parent.Name(), val.String())
 	}
 
 	// Type constraint — bare node, predicate type, disjunction.
@@ -466,7 +466,7 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 	unified, uerr := UnifyExplainR(constraint, val, r)
 	if uerr != nil {
 		return Value{}, fmt.Errorf("expected %s, got %s (%s): %s",
-			constraint.String(), val.Parent.Name, val.String(), uerr.Error())
+			constraint.String(), val.Parent.Name(), val.String(), uerr.Error())
 	}
 	return unified, nil
 }

@@ -152,6 +152,6 @@ func (mapFormatBehavior) Format(v Value) string {
 }
 
 func init() {
-	TList.Behavior = listFormatBehavior{}
-	TMap.Behavior = mapFormatBehavior{}
+	TList.ensureTMeta().Behavior = listFormatBehavior{}
+	TMap.ensureTMeta().Behavior = mapFormatBehavior{}
 }

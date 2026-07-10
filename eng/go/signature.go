@@ -375,7 +375,7 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 		// Bare None has Parent=TNone; treat it as not-a-type for type
 		// args. Lattice roots have Parent=nil but are still valid type
 		// literals — &v is the lattice node either way.
-		if v.Parent != nil && v.Parent.Equal(TNone) && v.Name == "" {
+		if v.Parent != nil && v.Parent.Equal(TNone) && v.Name() == "" {
 			return false
 		}
 		return (&v).ConformsTo(t)

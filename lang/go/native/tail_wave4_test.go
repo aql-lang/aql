@@ -381,7 +381,7 @@ func TestW4SizeAndCloneReturns(t *testing.T) {
 
 func TestW4StreamKindMint(t *testing.T) {
 	sk := NewStreamKind()
-	if sk == nil || sk.Name != "StreamKind" {
+	if sk == nil || sk.Name() != "StreamKind" {
 		t.Fatalf("NewStreamKind = %v", sk)
 	}
 	if !NewAtom("stdout").Is(sk) || !NewAtom("stdin").Is(sk) || !NewAtom("stderr").Is(sk) {

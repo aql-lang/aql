@@ -143,15 +143,15 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	// installed — adding a new capability (canon on top of compare)
 	// must preserve previously installed slots.
 	var ub *userBehavior
-	if existing, ok := target.Behavior.(*userBehavior); ok {
+	if existing, ok := target.Behavior().(*userBehavior); ok {
 		ub = existing
 	} else {
 		ub = &userBehavior{
-			prev:     target.Behavior,
+			prev:     target.Behavior(),
 			registry: r,
 			typeName: target.Leaf(),
 		}
-		target.Behavior = ub
+		target.SetBehavior(ub)
 	}
 	be.install(ub, body)
 	// Capture the target *Type for capabilities that need to validate

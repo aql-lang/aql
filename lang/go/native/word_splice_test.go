@@ -76,6 +76,21 @@ func TestWordSplice(t *testing.T) {
 	}
 }
 
+// TestWordSpliceMacroFnCapture pins that a `word`-macro whose expansion
+// constructs an inner fn, used inside an outer fn body, still captures the
+// outer fn's param. The macro hides the inner `fn` behind a bare word, so the
+// frame-state analysis must resolve the splice to keep the enclosing-fn
+// baseline (regression guard for the interpreter frame-state optimization).
+func TestWordSpliceMacroFnCapture(t *testing.T) {
+	src := `def mk word [fn [[x:Integer] [Integer] [x add y]]]
+def outer fn [[y:Integer] [Function] [mk]]
+def f (outer 100)
+f 5`
+	if got := runSplice(t, src); got != "105" {
+		t.Errorf("macro-fn capture = %q, want 105", got)
+	}
+}
+
 func TestWordSpliceErrors(t *testing.T) {
 	// A spliced bare word that can't run against the stack still errors —
 	// the splice is unevaluated but the resulting tokens are real code.

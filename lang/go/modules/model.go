@@ -350,12 +350,16 @@ func parseStep(s string) model.Step {
 }
 
 // makeAction wraps an AQL Function as a model.Action. The callback hands the
-// unified model (as an AQL Map) to the function via CallAQL on h.actionReg —
-// the foreground registry for Model.run, an isolated fork for Model.start — and
-// reads its result: a Boolean is the OK flag; a Map supplies {ok, reload};
-// anything else (including no result) is treated as OK. A CallAQL error is
-// stashed on the handle (the model.Action signature has no error return) and
-// surfaces in the build result.
+// unified model (as an AQL Map) to the function via eng.InvokeCallback on
+// h.actionReg — the foreground registry for Model.run, an isolated fork for
+// Model.start — and reads its result: a Boolean is the OK flag; a Map supplies
+// {ok, reload}; anything else (including no result) is treated as OK. An error
+// is stashed on the handle (the model.Action signature has no error return) and
+// surfaces in the build result. InvokeCallback is the uniform seam: the action
+// runs on the VM once its sig carries a compiled unit, else falls back to the
+// interpreter (CallAQL) — a no-op today because the model builder word does not
+// stamp its action fns (CompileStoresFn), exactly as RunPredicate routes now and
+// benefits when predicate stamping lands.
 func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
 	var caps []native.CapturedBinding
 	if fd, ok := fnVal.Data.(native.FnDefInfo); ok {
@@ -373,7 +377,7 @@ func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.Actio
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: no matching signature (declare one param for the model Map)"))
 				return model.ActionResult{OK: false}
 			}
-			res, err := h.actionReg.CallAQL(sig, []native.Value{modelVal}, caps)
+			res, err := eng.InvokeCallback(h.actionReg, sig, []native.Value{modelVal}, caps)
 			if err != nil {
 				h.actErrs = append(h.actErrs, fmt.Errorf("action: %w", err))
 				return model.ActionResult{OK: false}

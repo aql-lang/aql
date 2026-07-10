@@ -35,7 +35,7 @@ func NodifyValue(v Value) (Value, error) {
 		return v, nil
 	}
 	for t := v.Parent; t != nil; t = t.Parent {
-		n, ok := t.Behavior.(Nodifier)
+		n, ok := t.Behavior().(Nodifier)
 		if !ok {
 			continue
 		}

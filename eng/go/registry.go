@@ -173,6 +173,18 @@ type Registry struct {
 	// scope; forks inherit the field and pass THEMSELVES.
 	Invoker func(reg *Registry, body Value, inputs []Value) ([]Value, error)
 
+	// nestedRunner runs a compiled fn UNIT nested within the currently-active
+	// VM run on this registry — the live-run twin of RunUnit (which starts a
+	// FRESH run and so cannot be used mid-run, where vmRunning is already 1). It
+	// is installed alongside Invoker for the duration of a RunProgram and lets a
+	// stamped callback invoked synchronously during the run (a service handler)
+	// execute on the VM instead of falling to CallAQL. Returns handled=false when
+	// the ref belongs to a different program than the running one (a defensive,
+	// normally-unreachable case), so InvokeCallback falls back to the interpreter.
+	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
+	// idle, so InvokeCallback takes the RunUnit path there, not this one).
+	nestedRunner func(ref *CompiledFnRef, args []Value) (result []Value, handled bool, err error)
+
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the
 	// shared Invoker (and the run mutates other shared scopes — Contexts, Defs,
@@ -238,6 +250,27 @@ type Registry struct {
 	// per-execution state, reset by ForkConcurrent so forks never share
 	// the parent's engines (a pooled engine pins its creating registry).
 	enginePool []*Engine
+
+	// dispatchCache memoizes Lookup's aggregated dispatch table per name.
+	// aggregateDispatch rebuilds a fresh []Signature + *FnDefInfo on every
+	// word dispatch even in a hot loop where the name's bindings never
+	// change (~14% of interpreter allocations — see
+	// design/INTERPRETER-SPEED-PLAN.10.md #2). Each entry records the
+	// DefTable generation (Defs.Gen(name)) the aggregate was built at; the
+	// cache hits while that generation is unchanged and misses (rebuilds)
+	// the moment any binding for the name changes. Per-execution state,
+	// like enginePool: reset by ForkConcurrent so a fork never serves the
+	// parent's aggregates against its own cloned DefTable.
+	dispatchCache map[string]dispatchCacheEntry
+}
+
+// dispatchCacheEntry is one memoized Lookup result plus the DefTable
+// generation it is valid for. fn may be nil (name resolves to no
+// FnDefInfo) — caching the negative avoids re-walking the stack for a
+// value-only name on every dispatch.
+type dispatchCacheEntry struct {
+	gen int64
+	fn  *FnDefInfo
 }
 
 // Engine-pool bounds. An engine whose tape grew past pooledTapeMaxEntries
@@ -277,6 +310,17 @@ func (r *Registry) putSubEngine(e *Engine) {
 		return
 	}
 	e.elemEvalRecordable = false
+	// Release any Values still held in the forward-collection scratch
+	// buffers before the engine idles in the pool. rearrangeForForward
+	// leaves the last call's collected args (which can be large list/map
+	// payloads) in rrValues/rrReordered; without clearing, a pooled engine
+	// would pin that transient data for the pool's lifetime, and a later
+	// shorter call would leave stale tail entries pinned. Zero every slot up
+	// to capacity but keep the backing arrays so the buffers stay reusable.
+	clear(e.rrValues[:cap(e.rrValues)])
+	e.rrValues = e.rrValues[:0]
+	clear(e.rrReordered[:cap(e.rrReordered)])
+	e.rrReordered = e.rrReordered[:0]
 	r.enginePool = append(r.enginePool, e)
 }
 
@@ -351,6 +395,16 @@ func (r *Registry) CurrentStack() ([]Value, bool) {
 // a concurrent misuse — not the compiled run's own islands.
 func (r *Registry) interpRunActive() bool {
 	return r != nil && atomic.LoadInt32(&r.interpRunDepth) > 0
+}
+
+// canHostVM reports whether r can start a FRESH compiled run right now: no
+// compiled run and no interpreter run is already in flight on it. A per-
+// connection / per-process fork (ForkConcurrent) is idle, so a callback fires a
+// VM run cleanly; the main registry mid-run is busy, so InvokeCallback routes
+// the callback to the interpreter (CallAQL) instead — never racing the shared
+// invoker/scopes a live run owns.
+func (r *Registry) canHostVM() bool {
+	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
@@ -1114,6 +1168,37 @@ func calcMaxForwardArgs(sigs []Signature) int {
 // recorded by the engine.stepWord paths (simple-value substitution
 // and the post-Lookup dispatch path).
 func (r *Registry) Lookup(name string) *FnDefInfo {
+	// The dispatchCache serves ONLY the interpreter's runtime-execution
+	// path (Check inactive). Check and compile passes deliberately get a
+	// fresh aggregate every call: their carrier-disjointness /
+	// unmatched-dispatch refusal proofs (carrier.go) and the emitter
+	// (callable_words.go, emit.go) compare a matched `*Signature` against
+	// `&Lookup(word).Signatures[i]` by POINTER identity — a contract that
+	// assumes each Lookup yields its own aggregate. A stable cached
+	// aggregate would make those identity tests hold across calls where
+	// they must not, flipping a refusal into a (wrong) compile. Runtime
+	// dispatch does no such identity test, so caching there is sound and
+	// is where the hot-loop win lives.
+	if r.Check.IsActive() {
+		return r.lookupUncached(name)
+	}
+	gen := r.Defs.Gen(name)
+	if e, ok := r.dispatchCache[name]; ok && e.gen == gen {
+		return e.fn
+	}
+	fn := r.lookupUncached(name)
+	if r.dispatchCache == nil {
+		r.dispatchCache = make(map[string]dispatchCacheEntry)
+	}
+	r.dispatchCache[name] = dispatchCacheEntry{gen: gen, fn: fn}
+	return fn
+}
+
+// lookupUncached aggregates the dispatch table for name from its binding
+// stack, with no memoization. Lookup wraps it with the generation-keyed
+// dispatchCache; call this directly only when a fresh (uncached) aggregate
+// is required.
+func (r *Registry) lookupUncached(name string) *FnDefInfo {
 	stack := r.Defs.Stack(name)
 	// Collect every FnDefInfo binding for the name, newest-first. Each
 	// entry holds only its OWN overloads; the dispatch table is the union
@@ -1848,7 +1933,11 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	saved := snapshotPredicateState(r)
 	defer restorePredicateState(r, saved)
 
-	result, err := r.CallAQL(predSig, []Value{candidate}, fnDef.Captured)
+	// InvokeCallback runs the predicate body on the VM when it compiled to a unit
+	// (nested in a live run, or fresh on an idle registry) and falls back to
+	// CallAQL — the interpreter — otherwise. The predicate sandbox (above) wraps
+	// either engine identically.
+	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
 	if err != nil {
 		return Value{}, false, err
 	}

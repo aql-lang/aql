@@ -17,7 +17,7 @@ func w8ParamLit(r *Registry) Value  { return NewTypeLiteral(w8ParamNode(r)) }
 func TestW8GenParamUnifierMatchConforms(t *testing.T) {
 	r := w8reg(t)
 	node := w8ParamNode(r)
-	g, ok := node.Behavior.(*genParamUnifier)
+	g, ok := node.Behavior().(*genParamUnifier)
 	if !ok {
 		t.Fatal("minted placeholder must carry a genParamUnifier")
 	}
@@ -31,7 +31,7 @@ func TestW8GenParamUnifierMatchConforms(t *testing.T) {
 func TestW8GenParamUnifierFormat(t *testing.T) {
 	r := w8reg(t)
 	node := w8ParamNode(r)
-	g := node.Behavior.(*genParamUnifier)
+	g := node.Behavior().(*genParamUnifier)
 	// A bare literal renders as the parameter name.
 	if s := g.Format(NewTypeLiteral(node)); s != "T" {
 		t.Fatalf("bare placeholder literal should render as \"T\", got %q", s)

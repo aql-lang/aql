@@ -221,6 +221,64 @@ func UninstallDef(r *Registry, name string) {
 // paren (the same pointer the compile boundary stores in
 // Signature.FnFrame — see eng/go/fn_frame.go).
 func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, meta *FnFrameMeta) Handler {
+	// Computed ONCE at construction: does this body install any body-local
+	// def or construct an inner fn? A generic fn always does (it installs
+	// inferred type-param bindings per call). When false — the common
+	// leaf-fn / recursion case (fib, a tail-accumulator) — every call skips
+	// BOTH per-call DefTable.Snapshot maps (each O(all bound names)) and the
+	// def-cleanup name scan, the dominant term behind the ~340 allocs/frame
+	// (design/INTERPRETER-SPEED-PLAN.10.md #5). Stack balance is preserved:
+	// the fn baseline still pushes/pops (a nil entry) and the DefCleanup
+	// marker still rides the tape (carrying SkipCleanup).
+	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(r, s.body())
+	// For a leaf body (!needsFrameState) the ENTIRE token expansion is
+	// constant per signature except the unnamed-arg cells: frame open,
+	// body, and the cleanup tail (nil-snapshot DefCleanup, __pa, undef
+	// pairs, zero-Pos ReturnCheck) never vary between calls. Build that
+	// skeleton ONCE here and per call only copy it with the arg values
+	// patched in — the old per-call rebuild minted ~7 ID-stamped tokens
+	// per frame (design/INTERPRETER-SPEED-PLAN.10.md #5). The per-call
+	// COPY is mandatory: execMatch's stampResultPos mutates the returned
+	// slice (ReturnCheck Pos, fn-value pos), and ForkConcurrent engines
+	// share this handler. Nothing keys on the shared tokens' Value.IDs —
+	// the tail probe and unwindFrameTail match structurally.
+	var (
+		skeleton   []Value
+		unnamedIdx []int // param positions whose args splice into the frame head
+		emptyArgs  Value
+		refsArgs   bool
+	)
+	if !needsFrameState {
+		for i, p := range s.Params {
+			if p.Name == "" {
+				unnamedIdx = append(unnamedIdx, i)
+			}
+		}
+		u := len(unnamedIdx)
+		if u > 0 {
+			skeleton = append(skeleton, NewFrameOpenSpan(meta, u))
+		} else {
+			skeleton = append(skeleton, NewFrameOpen(meta))
+		}
+		skeleton = append(skeleton, make([]Value, u)...) // arg placeholder cells
+		skeleton = append(skeleton, s.body()...)
+		skeleton = AppendFrameTail(skeleton, FrameTailSpec{
+			Registry:     r,
+			SkipCleanup:  true,
+			Names:        fnInstallNames(s, fnDefCopy.Captured),
+			Returns:      s.Returns,
+			UnnamedCount: u,
+			FuncName:     name,
+		})
+		skeleton = append(skeleton, NewCloseParen())
+		// When the body provably never reads `args` (sound under the
+		// !needsFrameState gate — see bodyReferencesArgs), push a shared
+		// empty list per call instead of copying the args into a fresh
+		// one; __pa only needs an entry to pop, and nothing else reads
+		// the list contents.
+		refsArgs = bodyReferencesArgs(r, s.body())
+		emptyArgs = NewList(nil)
+	}
 	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
 		// Reached from a FOREIGN registry (callReg != the install registry r) — a
 		// module fn dispatched through the unified execMatch path from an outer
@@ -246,6 +304,42 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			}
 			return target.CallAQL(&s, args, fnDefCopy.Captured)
 		}
+		// Leaf fast path: per-call work is registry installs plus ONE
+		// slice copy of the memoized skeleton with the arg cells patched
+		// (see the construction-time comment above).
+		if !needsFrameState {
+			r.PushFnBaseline(nil)
+			argsList := emptyArgs
+			if refsArgs {
+				argsCopy := make([]Value, len(args))
+				copy(argsCopy, args)
+				argsList = NewList(argsCopy)
+			}
+			if err := r.Args.Push(argsList); err != nil {
+				r.PopFnBaseline()
+				return nil, err
+			}
+			for _, cb := range fnDefCopy.Captured {
+				InstallFrameBinding(r, cb.Name, cb.Value)
+			}
+			for i, p := range s.Params {
+				if p.Name != "" {
+					arg := args[i]
+					// Quote list params so they're treated as data values
+					// when referenced in the body, not expanded as code bodies.
+					if arg.Parent.Equal(TList) && !arg.Quoted {
+						arg.Quoted = true
+					}
+					InstallFrameBinding(r, p.Name, arg)
+				}
+			}
+			out := make([]Value, len(skeleton))
+			copy(out, skeleton)
+			for k, i := range unnamedIdx {
+				out[1+k] = args[i]
+			}
+			return out, nil
+		}
 		var result []Value
 		var names []string
 		// Wrap the entire expansion (unnamed args + body + undef
@@ -264,7 +358,8 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// names installed AFTER this snapshot (this call's
 		// captures + named params + body-local defs) are
 		// capturable; names already present at module/global
-		// scope are dynamic.
+		// scope are dynamic. (Only needsFrameState bodies reach
+		// here — the leaf fast path above pushes a nil baseline.)
 		r.PushFnBaseline(r.Defs.Snapshot())
 
 		// Push args list onto the args stack for access via the
@@ -324,9 +419,11 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			InstallGenCallBindings(r, fnDefCopy.Gen, s.Params, args)
 		}
 
-		body := make([]Value, len(s.body()))
-		copy(body, s.body())
-		result = append(result, body...)
+		// Append the body tokens directly: append COPIES them into result's
+		// backing array and s.body() (the shared AQLImpl.Body) is never
+		// mutated here, so the previous intermediate make+copy was a
+		// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
+		result = append(result, s.body()...)
 		// The canonical cleanup tail: DefCleanup (undoes body-local
 		// defs), __pa (pops Args + FnBaseline), the undef pairs for
 		// captures+params, and the ReturnCheck when returns are
@@ -683,8 +780,8 @@ func bodySpanEnd(body []Value) SrcPos {
 	var walk func(vs []Value)
 	walk = func(vs []Value) {
 		for _, v := range vs {
-			if posBefore(end.Row, end.Col, v.Pos) {
-				end = v.Pos
+			if posBefore(end.Row, end.Col, v.Pos()) {
+				end = v.Pos()
 			}
 			if IsParenExpr(v) {
 				if toks, err := AsParenExpr(v); err == nil {
@@ -781,7 +878,7 @@ func membershipBeyondNominal(t *Type) bool {
 	if t == nil {
 		return false
 	}
-	switch t.Behavior.(type) {
+	switch t.Behavior().(type) {
 	case *disjunctUnifier, *negationUnifier, *predicateUnifier, memberBehavior, *depScalarUnifier:
 		return true
 	}
@@ -1028,7 +1125,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// unknown position. Empty body falls back to a zero pos.
 			var fnPos SrcPos
 			if len(bodyCopy) > 0 {
-				fnPos = bodyCopy[0].Pos
+				fnPos = bodyCopy[0].Pos()
 			}
 			fnUnit, finishFn, okFn = es.StartFnCompile(key, nameCopy, r, genArgs, declaredReturns, paramNames, capturesCopy, genSpec != nil, fnPos)
 			if !okFn {
@@ -1071,7 +1168,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		if genSpec == nil {
 			var retPos SrcPos
 			if len(bodyCopy) > 0 {
-				retPos = bodyCopy[0].Pos
+				retPos = bodyCopy[0].Pos()
 			}
 			unnamedCount := 0
 			for _, p := range sigParams {
@@ -1194,7 +1291,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserCall(fnUnit, args, out, pos)
 			} else if polyPlan != nil {
@@ -1205,7 +1302,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// whichever arm the VM selects.
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, out, pos)
 			}
@@ -1223,7 +1320,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			if fnUnit >= 0 {
 				pos := SrcPos{}
 				if len(args) > 0 {
-					pos = args[0].Pos
+					pos = args[0].Pos()
 				}
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
@@ -1236,7 +1333,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		if fnUnit >= 0 {
 			pos := SrcPos{}
 			if len(args) > 0 {
-				pos = args[0].Pos
+				pos = args[0].Pos()
 			}
 			es.RecordUserCall(fnUnit, args, stk, pos)
 		}

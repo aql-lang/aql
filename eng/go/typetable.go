@@ -81,10 +81,10 @@ func (t *Type) Path() string {
 	if t == nil {
 		return ""
 	}
-	if t.Parent == nil || t.Parent.FixedID == anyFixedID {
-		return t.Name
+	if t.Parent == nil || t.Parent.FixedID() == anyFixedID {
+		return t.Name()
 	}
-	return t.Parent.Path() + "/" + t.Name
+	return t.Parent.Path() + "/" + t.Name()
 }
 
 // Root returns the top of the ancestry chain.
@@ -108,8 +108,8 @@ func (t *Type) IsAncestor(ancestor *Type) bool {
 	// exactly the builtins labelled at table construction, whose ancestry
 	// is fixed. Minted / external / ad-hoc types (In == 0) fall through to
 	// the structural walk, which stays the single source of truth.
-	if t.In > 0 && ancestor.In > 0 {
-		return ancestor.In <= t.In && t.In <= ancestor.Out
+	if t.In() > 0 && ancestor.In() > 0 {
+		return ancestor.In() <= t.In() && t.In() <= ancestor.Out()
 	}
 	for x := t; x != nil; x = x.Parent {
 		if x.Equal(ancestor) {
@@ -128,8 +128,8 @@ func depthOf(parent *Type) int {
 	if parent == nil {
 		return 1
 	}
-	if parent.Depth > 0 {
-		return parent.Depth + 1
+	if parent.Depth() > 0 {
+		return parent.Depth() + 1
 	}
 	return typeDepth(parent) + 1
 }
@@ -157,13 +157,13 @@ func (tt *TypeTable) labelIntervals() {
 	var visit func(t *Type)
 	visit = func(t *Type) {
 		counter++
-		t.In = counter
+		t.ensureTMeta().In = counter
 		kids := children[t.ID]
 		sort.Slice(kids, func(i, j int) bool { return kids[i].ID < kids[j].ID })
 		for _, c := range kids {
 			visit(c)
 		}
-		t.Out = counter
+		t.ensureTMeta().Out = counter
 	}
 	for _, r := range roots {
 		visit(r)
@@ -290,7 +290,7 @@ func (tt *TypeTable) mintID(parent *Type) string {
 	n := tt.seq.Add(1)
 	prefix := "T_"
 	if parent != nil {
-		switch parent.Root().Name {
+		switch parent.Root().Name() {
 		case "Scalar":
 			prefix = "S_"
 		case "Node":
@@ -345,11 +345,9 @@ func (tt *TypeTable) AdoptSeqFrom(src *TypeTable) {
 // before exposing it, or use MintTypeWithBehavior.
 func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
-		Name:     name,
-		Parent:   parent,
-		Depth:    depthOf(parent),
-		Origin:   OriginUserDef,
-		Behavior: DefaultBehavior,
+		Parent: parent,
+		tmeta:  &typeMeta{Name: name, Depth: depthOf(parent), Behavior: DefaultBehavior},
+		Origin: OriginUserDef,
 	}
 	// User and external types share a single Rank band per kernel
 	// branch — they sit one band above the kernel positional ranks
@@ -359,7 +357,7 @@ func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	// depth → lex name. See externalBandFor for the per-branch
 	// constants.
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	def.ID = tt.mintID(parent)
 	tt.byID[def.ID] = def
@@ -383,7 +381,7 @@ func (tt *TypeTable) MintRefinePrefab(parent *Type) *Type {
 // lattice node is user-minted with no Name — the unique shape
 // `MintRefinePrefab` produces.
 func IsRefinePrefab(v Value) bool {
-	return IsBareTypeNode(v) && v.Origin == OriginUserDef && v.Name == ""
+	return IsBareTypeNode(v) && v.Origin == OriginUserDef && v.Name() == ""
 }
 
 // externalBandFor returns the Rank band for user/external types
@@ -401,10 +399,10 @@ func externalBandFor(parent *Type) int {
 	// degenerate root). Any itself has FixedID=anyFixedID; stop one
 	// step below.
 	branch := parent
-	for branch.Parent != nil && branch.Parent.FixedID != anyFixedID {
+	for branch.Parent != nil && branch.Parent.FixedID() != anyFixedID {
 		branch = branch.Parent
 	}
-	switch branch.Name {
+	switch branch.Name() {
 	case "Scalar":
 		return 21_000_000_000
 	case "Node":
@@ -416,7 +414,7 @@ func externalBandFor(parent *Type) int {
 	case "Type":
 		return 61_000_000_000
 	}
-	return parent.Rank
+	return parent.Rank()
 }
 
 // RegisterExternalBuiltin installs a non-kernel-declared "builtin-
@@ -499,36 +497,33 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	}
 
 	def := &Type{
-		ID:       id,
-		Name:     parts[len(parts)-1],
-		Parent:   parent,
-		Depth:    depthOf(parent),
-		FixedID:  fixedID,
-		Origin:   OriginBuiltin,
-		Behavior: behavior,
+		ID:     id,
+		Parent: parent,
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: fixedID, Behavior: behavior},
+		Origin: OriginBuiltin,
 	}
 	// External builtins share the user-/external-type band for
 	// their branch (one increment above the kernel positional band)
 	// so they sort after every kernel builtin in the same branch
 	// and tiebreak among themselves by depth then name.
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	tt.byID[id] = def
 	tt.bypath[path] = def
 	if parent == nil {
 		tt.rootSet[path] = true
 	}
-	tt.byName[def.Name] = def
+	tt.byName[def.Name()] = def
 	for _, p := range parts {
 		tt.parts[p] = true
 	}
-	if existing, dup := tt.leafIndex[def.Name]; dup {
+	if existing, dup := tt.leafIndex[def.Name()]; dup {
 		if existing != "" {
-			tt.leafIndex[def.Name] = ""
+			tt.leafIndex[def.Name()] = ""
 		}
 	} else {
-		tt.leafIndex[def.Name] = path
+		tt.leafIndex[def.Name()] = path
 	}
 	// Refresh the parser's bare-name lookup snapshot so the newly-
 	// registered type is resolvable by source-text references like
@@ -547,7 +542,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 func (tt *TypeTable) MintTypeWithBehavior(name string, parent *Type, behavior TypeBehavior) *Type {
 	def := tt.MintType(name, parent)
 	if behavior != nil {
-		def.Behavior = behavior
+		def.ensureTMeta().Behavior = behavior
 	}
 	return def
 }
@@ -845,7 +840,7 @@ func newBuiltinTypeTable() *TypeTable {
 	// acceptance to the literals and bodies `is Type` already admits).
 	// Installed on the canonical node here so every lookup sees it.
 	if t := tt.bypath["Type"]; t != nil {
-		t.Behavior = typeMembershipBehavior{}
+		t.ensureTMeta().Behavior = typeMembershipBehavior{}
 	}
 	return tt
 }
@@ -875,14 +870,10 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 	}
 	def := &Type{
 		ID:         id,
-		Name:       parts[len(parts)-1],
 		Parent:     parent,
-		Depth:      depthOf(parent),
-		FixedID:    d.FixedID,
-		Rank:       d.Rank,
+		tmeta:      &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank, Behavior: DefaultBehavior},
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
-		Behavior:   DefaultBehavior,
 	}
 	tt.byID[id] = def
 	tt.bypath[d.Path] = def
@@ -890,18 +881,18 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 		tt.rootSet[d.Path] = true
 	}
 	if !d.IsInternal {
-		tt.byName[def.Name] = def
+		tt.byName[def.Name()] = def
 	}
 	for _, p := range parts {
 		tt.parts[p] = true
 	}
-	if existing, dup := tt.leafIndex[def.Name]; dup {
+	if existing, dup := tt.leafIndex[def.Name()]; dup {
 		// Ambiguous leaf name — mark with "" so ExpandShortName won't expand.
 		if existing != "" {
-			tt.leafIndex[def.Name] = ""
+			tt.leafIndex[def.Name()] = ""
 		}
 	} else {
-		tt.leafIndex[def.Name] = d.Path
+		tt.leafIndex[def.Name()] = d.Path
 	}
 	if d.Alias != "" {
 		tt.leafIndex[d.Alias] = d.Path
@@ -992,7 +983,7 @@ func MintTestType(path string) *Type {
 	prefix := "T_"
 	if parent != nil {
 		if root := parent.Root(); root != nil {
-			switch root.Name {
+			switch root.Name() {
 			case "Scalar":
 				prefix = "S_"
 			case "Node":
@@ -1003,14 +994,13 @@ func MintTestType(path string) *Type {
 		}
 	}
 	def := &Type{
-		ID:       fmt.Sprintf("%st%011x", prefix, testTypeSeq),
-		Name:     parts[len(parts)-1],
-		Parent:   parent,
-		Origin:   OriginUserDef,
-		Behavior: DefaultBehavior,
+		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Behavior: DefaultBehavior},
+		Parent: parent,
+		Origin: OriginUserDef,
 	}
 	if parent != nil {
-		def.Rank = externalBandFor(parent)
+		def.ensureTMeta().Rank = externalBandFor(parent)
 	}
 	testTypePool[path] = def
 	return def
@@ -1040,7 +1030,7 @@ func mustBuiltinType(path string) *Type {
 		// The recorded error is surfaced at NewRegistry, which returns it
 		// before the registry is ever used, so the placeholder is never
 		// actually dispatched against.
-		return &Type{Name: path, Origin: OriginBuiltin}
+		return &Type{tmeta: &typeMeta{Name: path}, Origin: OriginBuiltin}
 	}
 	return def
 }

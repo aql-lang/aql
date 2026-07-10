@@ -294,7 +294,7 @@ func renderDepScalar(v Value) string {
 	if err != nil {
 		return ""
 	}
-	return formatDepScalar(v.Parent.Name, info)
+	return formatDepScalar(v.Parent.Name(), info)
 }
 
 // tightenSameSide combines two same-side bounds (both lower, or both

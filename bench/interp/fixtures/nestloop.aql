@@ -1,0 +1,3 @@
+def total 0
+for 300 [for 300 [def total (total add 1)]]
+print total

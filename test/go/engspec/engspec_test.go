@@ -1166,7 +1166,7 @@ func buildTypeInspection(name string, tv eng.Value) eng.Value {
 	case tv.IsDepScalar():
 		result.Set("kind", eng.NewAtom("dependent_scalar"))
 		info, _ := tv.AsDepScalar()
-		result.Set("leaf", eng.NewString(tv.Parent.Name))
+		result.Set("leaf", eng.NewString(tv.Parent.Name()))
 		if info.Lo != nil {
 			lo := eng.NewOrderedMap()
 			lo.Set("kind", eng.NewString(eng.BoundToKind(info.Lo, true).String()))
