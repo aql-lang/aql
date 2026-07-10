@@ -73,6 +73,20 @@ func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registr
 		if isForward && !IsConcrete(pattern) {
 			continue
 		}
+		// A negation pattern takes the direct unifyNegation path —
+		// skipping Unify's ResolveWordsDeep prepass, which deep-resolves
+		// (and rebuilds) every list operand per call and dominated
+		// fn-construction dispatch: each spec-list `fn [[…]]` call tests
+		// the triple sig's tnot-List pattern here and at plan time. A
+		// negation-of-type verdict depends only on the operand's
+		// top-level shape, never on nested word resolution, so the
+		// direct path is verdict-identical.
+		if ni, err := AsNegation(pattern); err == nil {
+			if _, uerr := unifyNegation(ni, val); uerr != nil {
+				return false
+			}
+			continue
+		}
 		if _, uOk := Unify(val, pattern); !uOk {
 			return false
 		}
@@ -108,6 +122,12 @@ func forwardPatternRejects(sig *Signature, pos int, val Value) bool {
 	}
 	if !IsConcrete(pattern) {
 		return false // type-literal / non-concrete pattern: not forward-enforced
+	}
+	// Direct unifyNegation path for negation patterns — see the twin
+	// fast path in patternsOk: skips ResolveWordsDeep, verdict-identical.
+	if ni, err := AsNegation(pattern); err == nil {
+		_, uerr := unifyNegation(ni, val)
+		return uerr != nil
 	}
 	_, uOk := Unify(val, pattern)
 	return !uOk
