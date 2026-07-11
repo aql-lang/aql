@@ -1,5 +1,70 @@
 # NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
 
+> **ADDENDUM 4 (2026-07-11 — s3-serve is closed; only the fork remains).**
+> `s3-serve`'s "finalize left the unit unstamped" was a **dynEnv
+> plan/lowering drift**: `tryRecordDynBody` arms the program-wide
+> DYNAMIC-ENVIRONMENT mode *mid-pass* (here at s3-conn's
+> `do […] error […]`, reached through the serve-raw handler closure),
+> but the store's append-handler unit had already FINISHED — its
+> `planValueDefLocals` ran with `dynEnv=false`, so the computed
+> `def old (if …)` source was never promoted to a frame local. Finalize
+> then lowered the unit under the WIDENED mode (every def emits its
+> OpBindDynScope twin) and refused "dynamic-scope def `old` of
+> unpromoted computed value", killing the whole detached stamp. Only
+> `s3-serve` hit it because only its body contains BOTH the store
+> construction (the handler unit) and, later, the dyn-body dispatch.
+>
+> Fix: the probe-then-real sites (`tryReturnedClosure`,
+> `compileStoredFnUnit`, `compileStoredBody`, `recordClosureDispatch`)
+> now carry the probe's TERMINAL `dynEnv` back into the real pass before
+> it starts — the probe ran the body end-to-end, so it knows the pass's
+> end-state mode; pre-arming makes every unit plan under the mode it
+> will lower under. The probes also inherit the caller's `dynEnv`
+> (same-modality principle, as with `storedGradualDepth`). Pinned both
+> ways in `lang/go/test/stamp_dynenv_drift_test.go` (stamp + runtime
+> accumulation parity); validated to fail pre-fix with exactly the
+> s3-serve refusal. Note: the whole-PROGRAM compile pass (no probe) can
+> still drift the same way — there the refusal is a sound interpreter
+> fallback of the top-level program, not a lost stamp; a future
+> pre-pass could close it. mini-s3 now stamps **21 units**; the ONLY
+> remaining refusals are the two `s3-handle-*` units on the addendum-2
+> interpreter residual-timing fork (blocked upstream).
+>
+> **ADDENDUM 3 (2026-07-11 — the filter wall is closed; 20/22).** The
+> bucket-list handler's "function-valued operand at filter (Stage 3)"
+> was NOT a missing closure feature — it was two compile-pass defects
+> stacked under the lambda-body probe:
+>
+> 1. **Probe/real modality drift.** Three probe constructors —
+>    `forkForProbe` (recordClosureDispatch), `tryReturnedClosure`, and
+>    `compileStoredBody` — built their throwaway EmitState WITHOUT
+>    inheriting `storedGradualDepth`, so inside a detached stamp the
+>    inner lambda's body probed STRICT while the real compile would
+>    have run gradual ("probe and real must compile under the SAME
+>    modality" — the rule compileStoredFnUnit's probe already followed).
+>    All three now inherit it.
+> 2. **Un-stepped type-name words in poly windows.** The lambda body's
+>    `convert Bytes kk` over the callback entry's dynamic `.value`
+>    cannot commit statically, and the recovery's claimed window still
+>    held the RAW `Bytes` name token (never stepped to its literal), so
+>    RecordPolyCall's operand resolution failed and the dispatch refused
+>    "unmatched dispatch recovered at convert". RecordPolyCall now
+>    resolves a plain type-name word via stepWord's own
+>    typeNames/ResolveTypePath cascade to the canonical literal
+>    (OpPushType by ID), giving callPoly's re-match exactly the operands
+>    the interpreter's dispatch sees.
+>
+> With both landed, every anonymous service handler in mini-s3 stamps —
+> the capturing-filter list handler included (pinned end-to-end in
+> `lang/go/test/stamp_filterlambda_test.go`). Remaining: the two
+> `s3-handle-*` units (the addendum-2 residual-timing fork, unchanged)
+> and `s3-serve`'s consequence-level "finalize left the unit unstamped"
+> (undiagnosed; next up). A residual imprecision worth a note: a
+> synthetic sibling shape whose folded placeholder coerces the chain to
+> `slice 0 N ""` (an overload-less concrete window) still refuses at the
+> definite-mismatch fall-through — narrower than the mini-s3 shape and
+> not exercised by it.
+>
 > **ADDENDUM 2 (2026-07-11 — mini-s3 walls, 2 closed / 2 mapped).** Two of
 > mini-s3's walls are CLOSED as compiler extensions, taking its stamp state
 > from 9/22 units to **18/22** (measured with `-compile-report` over the

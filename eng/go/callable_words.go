@@ -498,6 +498,13 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	if !probeOk {
 		return false
 	}
+	// Probe-terminal environment mode → real pass (see tryReturnedClosure):
+	// a dyn-body dispatch inside the closure body armed the probe's dynEnv;
+	// the real compile must run widened from the start so units it finishes
+	// before that dispatch plan their dyn-bind promotions.
+	if probe.dynEnv {
+		real.dynEnv = true
+	}
 	// Whole-residual multi-out exactness (BodyOutResidual, N > 1): the dispatch
 	// seats exactly len(outs) results, so the compiled unit's residual count
 	// must be statically EXACT and equal — a variadic merge, a dynamic-apply

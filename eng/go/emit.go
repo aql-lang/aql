@@ -874,6 +874,12 @@ func (es *EmitState) forkForProbe() *EmitState {
 	copy(p.units, es.units)
 	p.openUnitRecs = make([]int, len(es.openUnitRecs))
 	copy(p.openUnitRecs, es.openUnitRecs)
+	// The probe inherits the gradual-nesting mode: probe and real must
+	// compile under the SAME modality or the probe's verdict is about a
+	// different unit (see compileStoredFnUnit / tryReturnedClosure). Same
+	// for the environment mode (dynEnv).
+	p.storedGradualDepth = es.storedGradualDepth
+	p.dynEnv = es.dynEnv
 	return p
 }
 
@@ -1514,6 +1520,15 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	// that refuses leaves THIS program untouched and the value stays unresolved.
 	probe := NewEmitState()
 	probe.reg = r
+	// The probe inherits the gradual-nesting mode (a detached stamp arms it on
+	// the real state): probe and real must compile under the SAME modality or
+	// the probe's verdict is about a different unit — without this, an inner
+	// lambda inside a stored service handler (mini-s3's bucket-list filter,
+	// whose body runs `convert … e.value` over an Any param) probed STRICT,
+	// refused "unmatched dispatch recovered", and surfaced as the misleading
+	// "function-valued operand at filter (Stage 3)".
+	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
@@ -1521,6 +1536,19 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
+	}
+	// The probe ran the body END TO END, so it knows the pass's terminal
+	// environment mode: a dyn-body dispatch (tryRecordDynBody) anywhere
+	// inside armed probe.dynEnv. Arm the REAL state NOW — before the real
+	// compile — so every unit it finishes plans under the widened mode.
+	// DynEnv arming mid-pass otherwise drifts plan against lowering: a unit
+	// finished BEFORE the arming plans without dyn-bind source promotion,
+	// then Finalize lowers it widened and refuses "dynamic-scope def of
+	// unpromoted computed value" (mini-s3's s3-serve — the store's append
+	// handler finishes before the serve-raw closure reaches s3-conn's
+	// `do … error …`).
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
 	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
@@ -1558,6 +1586,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	// on the real state) — probe and real must compile under the SAME
 	// modality or the probe's verdict is about a different unit.
 	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
@@ -1566,6 +1595,13 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		// (stamp_report.go); the compile-time bake ignores the field.
 		es.storedFnProbeReason = probe.Reason
 		return 0, false
+	}
+	// Carry the probe's TERMINAL environment mode into the real pass (see
+	// tryReturnedClosure): a dyn-body dispatch inside the body arms dynEnv,
+	// and units the real pass finishes before reaching that dispatch must
+	// plan under the widened mode or Finalize refuses their dyn-binds.
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -1618,11 +1654,18 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	r := es.reg
 	probe := NewEmitState()
 	probe.reg = r
+	// Same-modality probe (see tryReturnedClosure / compileStoredFnUnit).
+	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
 	if !probeOK {
 		return Value{}, false
+	}
+	// Probe-terminal environment mode → real pass (see tryReturnedClosure).
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -3899,7 +3942,31 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	}
 	ops := make([]emitOperand, len(args))
 	for i := range args {
-		op, ok := es.resolveOperand(args[i])
+		a := args[i]
+		// A TYPE-NAME word in the claimed window — the un-stepped `Bytes` in
+		// `convert Bytes <dynamic>`: the dispatch could not commit statically
+		// (the data operand's type is unknown), so the plan's claimed args
+		// still hold the RAW name token. At runtime the interpreter steps the
+		// name to its canonical type literal before the word dispatches; give
+		// the poly window the same value — the canonical literal lowers via
+		// resolveOperand's type-operand path (OpPushType by ID), so callPoly's
+		// re-match sees exactly the operand the interpreter's dispatch does.
+		// Only a PLAIN word naming a live type qualifies; anything else keeps
+		// the unresolvable-operand decline below.
+		if IsWord(a) && es.reg != nil {
+			if w, wErr := AsWord(a); wErr == nil &&
+				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceRef && !w.ForceUsurp {
+				// Mirror stepWord's type-name cascade exactly: the kernel
+				// name table, then the external-builtin path resolver, then
+				// the registry's dynamic type bindings.
+				if t, tOK := typeNames[w.Name]; tOK {
+					a = NewTypeLiteral(t)
+				} else if t, tOK := ResolveTypePath(w.Name); tOK {
+					a = NewTypeLiteral(t)
+				}
+			}
+		}
+		op, ok := es.resolveOperand(a)
 		if !ok {
 			return false
 		}

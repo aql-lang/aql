@@ -45,16 +45,11 @@ var knownRefusals = map[string]string{
 
 	// open-words — a locally/module-redefined `add` overload anchored to a user
 	// type: an operand outside the overload stays a no-match (negative rows).
-	`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`:                                                                                                         "unmatched dispatch recovered at add (local add overload)",
-	`import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  add p0 1`: "unmatched dispatch recovered at add (Point add, a Point plus a number)",
+	`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`: "unmatched dispatch recovered at add (local add overload)",
 
 	// word-splice — `word` is a live-stack splice, not a spread; `f p` is a
 	// no-match the interpreter raises (code splice is NOT spread).
 	`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`: "unmatched dispatch recovered at f (code splice is not spread)",
-
-	// module-repl — the served-handler teardown passes a Function value to `drop`;
-	// a fn-as-data reaching a consuming word with no CompileStoresFn cannot bake.
-	`import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) Repl.eval e "def x 21" drop def r (Repl.eval e "x mul 2") Repl.close e; Repl.close l; r`: "function value reaches drop (Stage 3)",
 }
 
 // TestRefusalsAreFailures fails on any spec-row compilation refusal that is not
