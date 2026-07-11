@@ -1,5 +1,34 @@
 # NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
 
+> **ADDENDUM 6 (2026-07-11 — mini-s3 is FULLY STAMPED: 23/23, zero
+> refusals).** The last wall ("for: body nets multiple values per
+> iteration" on s3-handle-get/one) was a DISJUNCT-carrier modeling gap,
+> not a loop feature: the recovered `slice` over the dynamic service
+> read synthesises a Bytes|List|String disjunct (`part`), and the
+> armed-compile arg generalisation's default arm bound s3-send-resp's
+> `body:Bytes` param to a PAYLOAD-STRIPPED Disjunct carrier
+> (`NewCarrier(a.Parent)` — alternatives and the dynamic flag lost),
+> which matches NO overload; the chunk loop's `slice i hi body` then
+> cascaded no_signature contagion into the multi-value refusal.
+> s3-send-resp's OWN stamp never saw it (its params generalise gradual
+> via fnValueInputs). Fix: a disjunct-carrier arg flowing into a
+> concretely-typed param narrows to the declared type — the same
+> entry-guard contract as the recovered-Any narrowing arm directly
+> above it (the CALL_USER guard raises exactly where the interpreter's
+> dispatch would), preserving the dynamic flag; the
+> narrowArgsToParams twin gets the strict-disjunct arm (its dynamic
+> case was already covered by the bound-mismatch arm). Pinned in
+> lang/go/test/stamp_disjunct_narrow_test.go (fails pre-fix with
+> exactly the mini-s3 refusal). `-compile-report` over the full
+> PUT/HEAD/resume/range/list/delete flow: **23/23 stamped units, byte-
+> correct output** — every named fn and every anonymous handler in
+> mini-s3 and mini-s3-client executes on the VM. Remaining artifact
+> (non-app): a top-level DRIVER program refuses whole-program compile
+> with the for-multi reason — the top-level pass runs without the
+> detached stamp's gradual modality, so the same chain models
+> differently there; the driver runs interpreted and calls the stamped
+> units, so nothing app-level is lost.
+>
 > **ADDENDUM 5 (2026-07-11 — the residual-timing fork is UNIFIED; the
 > parse-range wall is closed).** The addendum-2 fork is resolved by an
 > interpreter decision, shape-based:
