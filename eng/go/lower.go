@@ -1440,11 +1440,17 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 // each value from a frame slot for its OpBindDynScope install.
 func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
 	dynBindSrc := map[int]bool{}
-	if !es.dynEnv {
-		return dynBindSrc
-	}
 	for i := range events {
-		if events[i].kind == evDynBind && events[i].dyn != nil && events[i].dyn.srcSeq >= 0 {
+		if events[i].kind != evDynBind || events[i].dyn == nil || events[i].dyn.srcSeq < 0 {
+			continue
+		}
+		// A def's computed source is promoted for its OpBindDynScope install
+		// when the bind actually LOWERS: under dynEnv (every def is registry-
+		// visible) OR when this specific name is dynamically read
+		// (dynScopeNames — e.g. a module-scope `flex` read from a fn body). The
+		// gate mirrors lowerDynBind's, so a source is promoted exactly when the
+		// bind re-pushes it.
+		if es.dynEnv || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) {
 			dynBindSrc[events[i].dyn.srcSeq] = true
 		}
 	}

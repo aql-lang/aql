@@ -1,5 +1,19 @@
 # voxgig `Template` library — bytecode-compile frontier
 
+> **RESOLVED (2026-07).** The module-scope-binding-read blocker documented
+> below is fixed. An enclosing-scope binding read (the module-scope
+> `mustache-acc` flex accumulator; any computed module `def`) inside a
+> fn/closure unit now routes to a dynamic-scope lookup (`OpLookupDynScope`)
+> instead of an unreachable in-frame event operand — see
+> `aql-bytecode-next-stages.0.md` §"Stage C — Update (2026-07)". The Template
+> library `template.aql` and 5 of 6 test files now `-force-compile` clean and
+> stay byte-identical `compile == interpret` across all four engines
+> (mustache/handlebars/liquid/jinja), including the mutating lexers. The lone
+> remaining refusal — `test/template_prop_test.aql`: "code-body word `each`
+> (Stage 2)" — is a SEPARATE frontier (a higher-order `each` in code-body
+> position in the property-test harness), unrelated to the module-scope read,
+> and falls back to the interpreter cleanly.
+
 Diagnosis of every bytecode-compilation refusal the **voxgig `Template`**
 library (`voxgig-aql/template`) and its test suites trigger against `aql`
 `main` (`203ea2f`), and the one fix landed here. Method: build `aql`, run each

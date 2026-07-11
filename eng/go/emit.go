@@ -675,6 +675,19 @@ type emitUnit struct {
 	// IDs only DURING body analysis, after this snapshot — so they correctly
 	// classify as body-fresh.
 	enclosingIDs map[string]bool
+	// enclosingBindIDs snapshots, at unit open, the value IDs of EVERY def
+	// binding visible in the DefTable — the superset of enclosingIDs (which
+	// filters to freshenable compounds). A value whose producing event is
+	// recorded but whose ID appears here was read from an ENCLOSING-scope
+	// binding (a module-scope `flex`, a computed module `def`), NOT produced
+	// inside this fn body: the producer event lives in the parent/module
+	// frame and is unreachable from this unit's sim stack. resolveOperand
+	// routes such a read to a dynamic-scope lookup (OpLookupDynScope) so the
+	// VM re-resolves the LIVE binding per call — the same cell the interpreter
+	// reads, by-reference for a mutable flex. (Immutable list/scalar literals
+	// have no producing event, so they still const-fold; only computed /
+	// mutable enclosing bindings take this path.)
+	enclosingBindIDs map[string]bool
 	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
 	// unit's body dispatched through the `apply` word (a param/captured
 	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
@@ -1260,6 +1273,21 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 		// its ID-matched event genuinely produced it (the identity-
 		// preserving rebind in narrowDynamicUses).
 		if !IsTypeBody(v) || v.Dynamic || es.eventInfo[pr.seq].typeOut {
+			// An ENCLOSING-scope binding read (a module-scope `flex`, a computed
+			// module `def`) carries a producedBy event from the PARENT/module
+			// frame — unreachable from this fn unit's sim stack. Route it to a
+			// dynamic-scope lookup (OpLookupDynScope) so the VM re-resolves the
+			// live binding per call, exactly as the interpreter reads the name
+			// against the live def stack (by-reference for a mutable flex). The
+			// signal is precise: only a value with BOTH a producing event AND a
+			// def-binding ID snapshotted at unit open takes this path, so a
+			// body-local producer (its ID absent from enclosingBindIDs) and an
+			// immutable const literal (no producing event) are untouched.
+			if cur := es.units[len(es.units)-1]; cur != nil && len(es.units) > 1 && cur.enclosingBindIDs[v.ID] {
+				if op, ok := es.dynScopeRescue(v); ok {
+					return op, true
+				}
+			}
 			return eventOperand(pr.seq, pr.idx), true
 		}
 	}
@@ -1440,6 +1468,26 @@ func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
 	for _, name := range es.reg.Defs.Names() {
 		for _, bv := range es.reg.Defs.Stack(name) {
 			if freshenableConst(bv) && bv.ID != "" {
+				ids[bv.ID] = true
+			}
+		}
+	}
+	return ids
+}
+
+// snapshotAllBindingIDs snapshots the value IDs of EVERY def binding visible
+// in the DefTable at unit open (the superset of snapshotCompoundBindingIDs).
+// Used to recognise an enclosing-scope binding read whose producing event
+// lives in the parent/module frame — resolveOperand routes it to a dynamic-
+// scope lookup rather than an unreachable in-frame event operand.
+func (es *EmitState) snapshotAllBindingIDs() map[string]bool {
+	ids := map[string]bool{}
+	if es.reg == nil || es.reg.Defs == nil {
+		return ids
+	}
+	for _, name := range es.reg.Defs.Names() {
+		for _, bv := range es.reg.Defs.Stack(name) {
+			if bv.ID != "" {
 				ids[bv.ID] = true
 			}
 		}
@@ -2683,7 +2731,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos, reg: fnReg}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), reg: fnReg}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), enclosingBindIDs: es.snapshotAllBindingIDs(), reg: fnReg}
 	es.units = append(es.units, u)
 	es.unitNames = append(es.unitNames, name)
 	es.openUnitRecs = append(es.openUnitRecs, unit)
@@ -4242,7 +4290,21 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 			reader = c.FnNameStack[n-1]
 		}
 	}
-	if !c.dynamicScopeReachable(name, reader) {
+	// An ENCLOSING-scope binding (a value snapshotted in the reading unit's
+	// DefTable at open — a module-scope `flex`, a computed module `def`) is
+	// unconditionally in dynamic scope for this fn: the interpreter resolves
+	// the name against the live def stack and the VM's OpLookupDynScope does
+	// the same against the module registry. It need not satisfy the fn-binder
+	// reachability model (dynamicScopeReachable), which only covers names bound
+	// INSIDE a fn frame; a plain typo is still refused because it is absent from
+	// the snapshot AND has no fn binder.
+	enclosing := false
+	if len(es.units) > 1 {
+		if cur := es.units[len(es.units)-1]; cur != nil {
+			enclosing = cur.enclosingBindIDs[v.ID]
+		}
+	}
+	if !enclosing && !c.dynamicScopeReachable(name, reader) {
 		return emitOperand{}, false
 	}
 	if es.dynScopeNames == nil {

@@ -3250,14 +3250,22 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 	}
 
 	// NEGATIVE: a RECEIVER-bound body (`r.int`) is seed-specific. It must NOT be
-	// baked as a closure-word const-frozen draw; it stays on the dynamic path and
-	// remains byte-identical to the interpreter at every seed.
+	// baked as a closure-word const-FROZEN draw (the receiver `r` baked as a
+	// snapshot const, so every draw repeats). It MAY compile to a closure whose
+	// body reads the receiver via LOOKUP_DYN_SCOPE — the enclosing module-scope
+	// `def r` binding routes through the dynamic-scope path (a computed enclosing
+	// binding read inside a fn/closure unit), so the VM re-resolves the LIVE
+	// by-reference carrier per draw exactly as the interpreter does. The frozen-
+	// bake shape is PUSH_CLOSURE with the receiver as a const and NO dynamic
+	// resolution (neither CALL_DYNAMIC nor LOOKUP_DYN_SCOPE); the parity loop
+	// below is the real correctness contract (byte-identical at every seed).
 	for _, seed := range []int{2, 5, 42} {
 		src := fmt.Sprintf(
 			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [r.int 0 10] 3`, seed)
 		prog, _, _, _ := newClocked().CompileCheck(src)
 		if prog != nil && strings.Contains(prog.Disassemble(), "PUSH_CLOSURE") &&
-			!strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") {
+			!strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") &&
+			!strings.Contains(prog.Disassemble(), "LOOKUP_DYN_SCOPE") {
 			t.Errorf("seed %d: r.int body wrongly baked as a frozen closure draw:\n%s",
 				seed, prog.Disassemble())
 		}
