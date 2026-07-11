@@ -68,6 +68,13 @@ type frameTailScan struct {
 	// frame's shell in place; a full frame replacement must nest
 	// instead (the values would be dropped).
 	ValuesBelow bool
+	// PendingEvalBelow is true when one of those values is a pending
+	// (unevaluated) plain list/map — the shape an EvalResidual frame's
+	// eager teardown would evaluate BEFORE the callee runs, where the
+	// parked marker evaluates it after the callee returns. Such a
+	// frame must nest (tcoEligible declines) so elision cannot reorder
+	// the residual's side effects around the tail callee.
+	PendingEvalBelow bool
 }
 
 // probeTailCall scans around the dispatch at e.pointer (an fn-body
@@ -166,6 +173,9 @@ func (e *Engine) probeTailCall(sortedIndices []int, n int) (frameTailScan, bool)
 			return scan, false
 		case IsConcrete(v):
 			scan.ValuesBelow = true
+			if isPendingResidualContainer(v) {
+				scan.PendingEvalBelow = true
+			}
 		default:
 			// Type literals, carriers, and anything not positively
 			// classified: decline.

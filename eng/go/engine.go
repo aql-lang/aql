@@ -1151,7 +1151,9 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.pointer++
 
 		case IsDefCleanup(val):
-			e.stepDefCleanup(val)
+			if err := e.stepDefCleanup(val, e.pointer); err != nil {
+				return nil, err
+			}
 			e.pointer++
 
 		default:
@@ -2068,7 +2070,10 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 		case IsReturnCheck(v):
 			e.pointer++
 		case IsDefCleanup(v):
-			e.stepDefCleanup(v)
+			if err := e.stepDefCleanup(v, e.pointer); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
 			e.pointer++
 		case IsInterpString(v):
 			// Mirror the main loop: evaluate the template in place and
@@ -5583,6 +5588,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
+		EvalResidual: BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 
@@ -5895,22 +5901,136 @@ func (e *Engine) stepEnd() error {
 }
 
 // stepMark records the mark's ID in the marks hash table and advances.
+
+// isPendingResidualContainer reports whether v is a pending
+// (unevaluated) plain list/map — exactly the shape stepDefCleanup's
+// EvalResidual scan evaluates in-frame. Shared with probeTailCall so
+// the TCO gate and the marker can never disagree about what the
+// eager teardown would evaluate.
+func isPendingResidualContainer(v Value) bool {
+	if !v.Eval || v.Quoted || v.Parent == nil {
+		return false
+	}
+	if v.Parent.Equal(TMap) {
+		return v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v)
+	}
+	if v.Parent.Equal(TList) {
+		return v.Data != nil && !IsTypedList(v) && !IsTableType(v)
+	}
+	return false
+}
+
 // stepDefCleanup removes defs that were created during fn body execution.
 // The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
 // the body ran. Any defs added since are popped via UninstallDef.
-func (e *Engine) stepDefCleanup(val Value) {
+func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 	info, _ := AsDefCleanup(val)
+	if info.EvalResidual {
+		// A COMPUTING body's residual pending containers evaluate
+		// IN-frame — before the body-local defs pop — so the spliced
+		// dispatch path agrees with the CallAQL sub-run drain (mini-s3's
+		// s3-parse-range trailing `{from: from upto: upto}`; previously
+		// the spliced path deferred the container to the CONSUMER scope,
+		// where the body-locals are gone — the residual-timing fork,
+		// design/NET-COMPILE-FRONTIER.0.md addendum 2). The frame is a
+		// paren group and every nested group below has already collapsed,
+		// so the first OpenParen below the marker is the frame's own open:
+		// the scan touches exactly the frame's residual, never a caller
+		// value. Single-literal bodies leave EvalResidual false and keep
+		// the no-closures transparency (def-node-binding.tsv §3).
+		//
+		// Multiple residuals evaluate BOTTOM-UP (frame order = source
+		// order), matching the end-of-run sweep's stack order — walking
+		// down from the marker would run their side effects in reverse.
+		lo := 0
+		for i := markerIdx - 1; i >= 0; i-- {
+			if IsOpenParen(e.tape.At(i)) {
+				lo = i + 1
+				break
+			}
+		}
+		for i := lo; i < markerIdx; i++ {
+			v := e.tape.At(i)
+			if !isPendingResidualContainer(v) {
+				continue
+			}
+			var ev Value
+			var err error
+			if v.Parent.Equal(TMap) {
+				ev, err = e.autoEvalMap(v, false, true)
+			} else {
+				ev, err = e.autoEvalList(v, true)
+			}
+			if err != nil {
+				// The error unwinds the run, so the frame's remaining
+				// parked tail (__pa, the undef pairs) never steps —
+				// replay its registry effects before propagating,
+				// exactly as CallAQL's inline cleanup runs on a body
+				// error. Otherwise a do-error trap upstream would
+				// resume with the callee's params/args/locals still
+				// bound in the caller's scope.
+				e.unwindFrameTailOnError(info, markerIdx)
+				return err
+			}
+			ev.Eval = false
+			e.tape.Set(i, ev)
+		}
+	}
 	if info.SkipCleanup {
 		// The frame installs no body-local defs — nothing to truncate,
 		// and no Names() scan to pay (design/INTERPRETER-SPEED-PLAN.10.md #5).
-		return
+		return nil
 	}
+	truncateFrameDefs(info)
+	return nil
+}
+
+// truncateFrameDefs pops every def binding installed since the frame's
+// entry snapshot — the DefCleanup marker's truncation duty.
+func truncateFrameDefs(info DefCleanupInfo) {
 	reg := info.Registry
 	for _, name := range reg.Defs.Names() {
 		prevLen := info.Snapshot[name] // 0 for names not in snapshot
 		for reg.Defs.Depth(name) > prevLen {
 			UninstallDef(reg, name)
 		}
+	}
+}
+
+// unwindFrameTailOnError replays the frame tail's registry effects when
+// the in-frame residual evaluation raises: the truncation this marker
+// owns, then — best-effort, only when the canonical parked tail is
+// actually next on the tape — the __pa Args/baseline pop and the undef
+// pairs, exactly the operations the parked tokens would have performed
+// had the error not discarded them. Mirrors probeTailCall's forward walk.
+func (e *Engine) unwindFrameTailOnError(info DefCleanupInfo, markerIdx int) {
+	if !info.SkipCleanup {
+		truncateFrameDefs(info)
+	}
+	i := markerIdx + 1
+	if i >= e.tape.Len() {
+		return
+	}
+	if w, err := AsWord(e.tape.At(i)); err != nil || w.Name != "__pa" {
+		// A bare marker outside a canonical frame tail (a sweep re-run,
+		// a synthetic tape) — nothing further to replay.
+		return
+	}
+	if err := PopFrameArgs(e.registry); err != nil {
+		return
+	}
+	i++
+	for i+1 < e.tape.Len() {
+		u, err := AsWord(e.tape.At(i))
+		if err != nil || u.Name != "undef" || !u.ForceForward {
+			break
+		}
+		nm, err := AsWord(e.tape.At(i + 1))
+		if err != nil {
+			break
+		}
+		UninstallDef(e.registry, nm.Name)
+		i += 2
 	}
 }
 
@@ -6353,7 +6473,9 @@ func (e *Engine) stepCloseParen() error {
 					case IsReturnCheck(val):
 						e.pointer++
 					case IsDefCleanup(val):
-						e.stepDefCleanup(val)
+						if err := e.stepDefCleanup(val, e.pointer); err != nil { //covergate:allow interpreter step/dispatch defensive error arm: a marker reaching the implicit-end re-run was already stepped by the main loop (its residual containers are no longer pending, so the EvalResidual scan no-ops); a first-time step here needs a frame spliced DURING forward resolution carrying a pending failing residual — a pathological shape the census does not produce (§engine)
+							return err
+						}
 						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -6419,7 +6541,9 @@ func (e *Engine) stepCloseParen() error {
 	// Remove any surviving def-cleanup markers.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if IsDefCleanup(e.tape.At(i)) {
-			e.stepDefCleanup(e.tape.At(i))
+			if err := e.stepDefCleanup(e.tape.At(i), i); err != nil {
+				return err
+			}
 			e.tape.Remove(i)
 			closeIdx--
 			i--

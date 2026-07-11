@@ -280,12 +280,86 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			pat := elem
 			params = append(params, FnParam{Type: TString, Pattern: &pat})
 
+		case IsReach(elem):
+			// Dotted TYPE annotation: `mat:MatrixUtil.Matrix` (the implicit
+			// pair folds into the Reach's receiver) or a bare unnamed
+			// `MatrixUtil.Matrix`. Resolved at fn-construction time against
+			// the live registry — the module export must already be bound.
+			if p, ok := dottedParamType(r, elem); ok {
+				params = append(params, p)
+				continue
+			}
+			return nil, 0, fmt.Errorf("function spec: invalid parameter: %s (a dotted annotation must reach a type literal through bound module exports)", elem.String())
+
 		default:
 			return nil, 0, fmt.Errorf("function spec: invalid parameter: %s", elem.String())
 		}
 	}
 
 	return params, barrierPos, nil
+}
+
+// dottedParamType resolves a Reach-shaped param spec — `mat:Pkg.Type` /
+// `Pkg.Type` — to its FnParam. The receiver is either a WORD (unnamed
+// positional param) or the implicit single-pair map `{name: word(Pkg)}`
+// (named param); the literal dot segments then walk from the word's
+// binding via ApplyReach (the same Stage-1 lowering a bare `Pkg.Type`
+// expression uses, so ModuleExport transparency and getr strictness are
+// identical). The reached value must be a bare type literal.
+func dottedParamType(r *Registry, elem Value) (FnParam, bool) {
+	if r == nil {
+		return FnParam{}, false
+	}
+	info, err := AsReach(elem)
+	if err != nil || len(info.Receiver) != 1 || len(info.Segments) == 0 {
+		return FnParam{}, false
+	}
+	for _, seg := range info.Segments {
+		if seg.Computed {
+			return FnParam{}, false
+		}
+	}
+	paramName := ""
+	baseWord := ""
+	recv := info.Receiver[0]
+	switch {
+	case IsWord(recv):
+		w, wErr := AsWord(recv)
+		if wErr != nil {
+			return FnParam{}, false
+		}
+		baseWord = w.Name
+	case recv.Parent != nil && recv.Parent.Equal(TMap) && IsConcrete(recv):
+		m, mErr := AsMap(recv)
+		if mErr != nil || m.Len() != 1 {
+			return FnParam{}, false
+		}
+		key := m.Keys()[0]
+		val, _ := m.Get(key)
+		if !IsWord(val) {
+			return FnParam{}, false
+		}
+		w, wErr := AsWord(val)
+		if wErr != nil {
+			return FnParam{}, false
+		}
+		paramName, baseWord = key, w.Name
+		if err := ValidateWordName(paramName); err != nil {
+			return FnParam{}, false
+		}
+	default:
+		return FnParam{}, false
+	}
+	base, ok := r.Defs.Top(baseWord)
+	if !ok {
+		return FnParam{}, false
+	}
+	reached, rErr := ApplyReach(r, ReachInfo{Segments: info.Segments}, base)
+	if rErr != nil || !IsTypeLiteral(reached) {
+		return FnParam{}, false
+	}
+	t := CanonicalType(r, &reached)
+	return FnParam{Name: paramName, Type: t}, true
 }
 
 // QuoteArgsFromParams derives the Signature.QuoteArgs map from /q-marked

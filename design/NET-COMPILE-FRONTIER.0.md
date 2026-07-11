@@ -1,5 +1,73 @@
 # NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
 
+> **ADDENDUM 6 (2026-07-11 — mini-s3 is FULLY STAMPED: 23/23, zero
+> refusals).** The last wall ("for: body nets multiple values per
+> iteration" on s3-handle-get/one) was a DISJUNCT-carrier modeling gap,
+> not a loop feature: the recovered `slice` over the dynamic service
+> read synthesises a Bytes|List|String disjunct (`part`), and the
+> armed-compile arg generalisation's default arm bound s3-send-resp's
+> `body:Bytes` param to a PAYLOAD-STRIPPED Disjunct carrier
+> (`NewCarrier(a.Parent)` — alternatives and the dynamic flag lost),
+> which matches NO overload; the chunk loop's `slice i hi body` then
+> cascaded no_signature contagion into the multi-value refusal.
+> s3-send-resp's OWN stamp never saw it (its params generalise gradual
+> via fnValueInputs). Fix: a disjunct-carrier arg flowing into a
+> concretely-typed param narrows to the declared type — the same
+> entry-guard contract as the recovered-Any narrowing arm directly
+> above it (the CALL_USER guard raises exactly where the interpreter's
+> dispatch would), preserving the dynamic flag; the
+> narrowArgsToParams twin gets the strict-disjunct arm (its dynamic
+> case was already covered by the bound-mismatch arm). Pinned in
+> lang/go/test/stamp_disjunct_narrow_test.go (fails pre-fix with
+> exactly the mini-s3 refusal). `-compile-report` over the full
+> PUT/HEAD/resume/range/list/delete flow: **23/23 stamped units, byte-
+> correct output** — every named fn and every anonymous handler in
+> mini-s3 and mini-s3-client executes on the VM. Remaining artifact
+> (non-app): a top-level DRIVER program refuses whole-program compile
+> with the for-multi reason — the top-level pass runs without the
+> detached stamp's gradual modality, so the same chain models
+> differently there; the driver runs interpreted and calls the stamped
+> units, so nothing app-level is lost.
+>
+> **ADDENDUM 5 (2026-07-11 — the residual-timing fork is UNIFIED; the
+> parse-range wall is closed).** The addendum-2 fork is resolved by an
+> interpreter decision, shape-based:
+>
+> - **Multi-token fn body**: a trailing pending container evaluates
+>   IN-frame — before the body-local defs pop — on EVERY dispatch path.
+>   The CallAQL path always did this (the sub-run's end-of-run drain);
+>   the same-registry SPLICED path deferred it to the consumer's scope
+>   (where the body-locals are gone → `undefined_word: from`), because a
+>   spliced frame has no sub-run and the eager top-engine drain does not
+>   apply inside a sub-engine. The frame's DefCleanup marker now carries
+>   `EvalResidual` (set when the body has more than one token) and
+>   evaluates the frame's residual pending containers before the def
+>   truncation — the frame is a paren group whose nested groups have
+>   already collapsed, so the scan down to the frame's own OpenParen
+>   touches exactly the frame's residual. All three tail-builders
+>   (buildFnBodyHandler's skeleton + slow path, execFnDefSig) set the
+>   flag; the TCO eager teardown runs the same eval; the break/continue
+>   unwind skips it (the region's values are discarded).
+> - **Single-literal container body**: UNTOUCHED — the pinned
+>   no-closures transparency (def-node-binding.tsv §3): top-level
+>   spliced resolves the MODULE binding; the CallAQL module path keeps
+>   its in-frame answer (pre-existing split, now documented and pinned in
+>   lang/go/test/stamp_residual_map_test.go). The whole-program compiler
+>   keeps refusing the shape ("body result of unknown provenance").
+>
+> With the runtime unified, the recording admission widened soundly:
+> `runFnBodyOnce` marks the body sub-engine elemEvalRecordable for
+> callback bodies AND multi-token bodies, so s3-parse-range's trailing
+> `{from: from upto: upto}` records its OpMakeMap assembly and the
+> "fn s3-parse-range: body result of unknown provenance" refusal class
+> is GONE. New spec rows pin the multi-token twins (def-node-binding.tsv
+> §3); full estates green. mini-s3 stays 21 stamped with byte-correct
+> output — the two `s3-handle-*` units now refuse one wall further in:
+> "for: body nets multiple values per iteration" (s3-send-resp's chunked
+> send loop, compiled NESTED under the handlers, models a leftover
+> `[__FN, List, dynamic-Any]` in the loop body — send-resp's own stamp
+> compiles the same loop clean; undiagnosed, next up).
+>
 > **ADDENDUM 4 (2026-07-11 — s3-serve is closed; only the fork remains).**
 > `s3-serve`'s "finalize left the unit unstamped" was a **dynEnv
 > plan/lowering drift**: `tryRecordDynBody` arms the program-wide

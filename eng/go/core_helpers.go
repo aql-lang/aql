@@ -270,6 +270,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:         s.Decl,
 			UnnamedCount: u,
 			FuncName:     name,
+			EvalResidual: BodyEvalsResidual(s.body()),
 		})
 		skeleton = append(skeleton, NewCloseParen())
 		// When the body provably never reads `args` (sound under the
@@ -437,6 +438,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:         s.Decl,
 			UnnamedCount: unnamedCount,
 			FuncName:     name,
+			EvalResidual: BodyEvalsResidual(s.body()),
 		})
 		result = append(result, NewCloseParen())
 		return result, nil
@@ -538,6 +540,19 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 			nc := NewCarrier(pt)
 			nc.Dynamic = true
 			out[i] = nc
+		case !a.Dynamic && a.Carrier && IsDisjunct(a) && pt != nil && !pt.Equal(TAny):
+			// A strict DISJUNCT carrier — the checker's ∀-abstraction of an
+			// unresolved overload's returns — narrows to the declared param
+			// type by the same contract as the armed-compile genArgs twin:
+			// the entry guard / interpreter dispatch raises when the runtime
+			// value misses pt, so assuming pt can only narrow (mini-s3's
+			// `part` (a recovered slice's Bytes|List|String) into
+			// s3-send-resp's body:Bytes — the chunk loop's `slice` then
+			// matches mono instead of cascading no_signature).
+			if out == nil {
+				out = append([]Value(nil), args...)
+			}
+			out[i] = NewCarrier(pt)
 		case !a.Dynamic && pt != nil && pt.Equal(TAny) && a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a):
 			// A STRICT Any arg bound to a declared-`Any` param. The param is
 			// gradual by declaration (ParamInputCarrier gives dynamic Any), so a
@@ -1089,6 +1104,24 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
 						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
 						genArgs[i] = NewCarrier(pt)
+						continue
+					}
+					// A DISJUNCT carrier — the checker's abstraction of an
+					// unresolved overload's returns (a recovered `slice` over a
+					// dynamic input yields Bytes|List|String) — narrows to a typed
+					// param by the same contract: the entry guard raises exactly
+					// where the interpreter's dispatch would, so the body compiles
+					// against the declared type instead of a payload-stripped
+					// Disjunct carrier no sig accepts (mini-s3: s3-handle-get's
+					// `part` into s3-send-resp's `body:Bytes`, whose chunk loop
+					// then dispatched `slice` over a Disjunct and refused
+					// "for: body nets multiple values"). The dynamic flag is
+					// preserved: a gradual disjunct keeps matching optimistically.
+					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
+						a.Carrier && IsDisjunct(a) {
+						nc := NewCarrier(pt)
+						nc.Dynamic = a.Dynamic
+						genArgs[i] = nc
 						continue
 					}
 					// The complementary case, INSIDE a stored-handler / spawn-

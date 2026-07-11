@@ -112,6 +112,15 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	if dcInfo.Registry != e.registry {
 		return false
 	}
+	// An EvalResidual frame with a pending Eval container parked below
+	// the call would have that residual EVALUATED by the eager teardown
+	// — before the callee runs — where the parked marker evaluates it
+	// after the callee returns. A side-effectful residual would observe
+	// the reorder, so the frame nests: the parked __DC then sequences
+	// the residual exactly as under nesting.
+	if dcInfo.EvalResidual && scan.PendingEvalBelow {
+		return false
+	}
 	// A SkipCleanup frame installs no body-local defs, so its (nil) Snapshot
 	// truncation removes nothing — trivially covered, no need to walk the
 	// def table. Without this shortcut the nil Snapshot would read every
@@ -161,8 +170,13 @@ func (e *Engine) returnsConform(scan frameTailScan, sig *Signature) bool {
 // replacement deletes the whole frame after the callee's tokens are
 // in hand.
 func (e *Engine) teardownFrameState(scan frameTailScan) error {
-	// __DC: truncate body-local defs to the frame's entry snapshot.
-	e.stepDefCleanup(e.tape.At(scan.TailStart))
+	// __DC: truncate body-local defs to the frame's entry snapshot
+	// (running the multi-token in-frame residual eval first, exactly as
+	// the parked marker would — the eager teardown must not change WHERE
+	// a residual container's names resolve).
+	if err := e.stepDefCleanup(e.tape.At(scan.TailStart), scan.TailStart); err != nil {
+		return err
+	}
 	// __pa: pop the per-call Args list and FnBaseline, paired.
 	if err := PopFrameArgs(e.registry); err != nil {
 		return err

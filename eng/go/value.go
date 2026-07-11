@@ -2146,6 +2146,15 @@ type DefCleanupInfo struct {
 	// defs the truncation would remove nothing, so TCO treats the frame as
 	// eagerly-teardown-eligible without consulting the (nil) Snapshot.
 	SkipCleanup bool
+	// EvalResidual marks a MULTI-TOKEN fn body: the frame's residual
+	// pending containers evaluate IN-frame at this marker — before the
+	// body-local defs pop — so the spliced dispatch path agrees with the
+	// CallAQL sub-run drain (which evaluates the residual at sub-run end,
+	// while the frame is live). A SINGLE-LITERAL container body leaves
+	// this false and keeps the no-closures transparency: the returned
+	// container resolves names in the CONSUMER's scope
+	// (lang/spec/def-node-binding.tsv §3).
+	EvalResidual bool
 }
 
 // NewDefCleanup creates a def-cleanup marker for fn body local def cleanup.
