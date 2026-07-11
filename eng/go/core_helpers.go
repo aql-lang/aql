@@ -655,13 +655,19 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unna
 	// The count mirror flags only an exactly-known count: a DYNAMIC value
 	// in the residual marks a modelling seam (a mid-body `apply`, a
 	// gradual branch join) where the static count can diverge from the
-	// runtime one — skip, like the variadic/fn-value shapes. It is a
+	// runtime one — skip, like the variadic/fn-value shapes. A bare strict
+	// Any carrier is the same kind of seam: it is the lenient approximation
+	// left for a 0-net / undeclared call whose body unit declined (a
+	// cross-module fn calling a private 0-return helper before its own
+	// return — sort.aql's counting-sort → ensure-ints), a phantom that
+	// inflates the residual by an unknown count, so skip it too. It is a
 	// RuntimeMirror: the compile pass deliberately COMPILES the
 	// count-mismatched body and lets the VM RET raise the byte-identical
 	// error (emit.go — TestEmitP5MultiResult pins it), so the refusal
 	// loop skips mirror diagnostics.
 	if extra > unnamedCount &&
-		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) {
+		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) &&
+		!stackHasApproxAny(stk) {
 		detail := returnCountErrorText(name, len(declared), len(stk)-unnamedCount)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			r.Check.AddDiagnostic(CheckDiagnostic{
@@ -774,6 +780,24 @@ func stackHasFnValue(stk []Value) bool {
 func stackHasDynamic(stk []Value) bool {
 	for _, v := range stk {
 		if v.Dynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// stackHasApproxAny reports whether any residual value is a bare STRICT Any
+// carrier — the lenient approximation buildFnBodyReturnsFn leaves for a
+// 0-net / undeclared call whose body unit declined (and the in-flight
+// recursion bail). Such a value is a PHANTOM: the call nets zero (or an
+// unknown count) at runtime, so a residual carrying one has a count the
+// analysis does not know exactly — the same "inexact, skip the mirror"
+// situation as a variadic / fn-value / dynamic residual. A declared `[Any]`
+// return and the unbound-param degrade are marked Dynamic (caught by
+// stackHasDynamic), so only the approximation phantom lands here.
+func stackHasApproxAny(stk []Value) bool {
+	for _, v := range stk {
+		if v.Carrier && !v.Dynamic && v.Parent != nil && v.Parent.Equal(TAny) {
 			return true
 		}
 	}
@@ -1388,6 +1412,18 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
 			}
+			// The 0-net / undeclared call whose body unit declined leaves a
+			// lenient STRICT Any approximation so a downstream consumer that reads
+			// the value refuses on unknown provenance and the program falls back.
+			// It is kept strict (not dynamic): a dynamic Any would match a
+			// concrete consumer's slot optimistically and hide a real error —
+			// `3 add (f 1)` where f returns nothing must still flag. But it is a
+			// PHANTOM from the analysis's point of view (the call nets zero at
+			// runtime), so checkBodyReturnConformance's count mirror excludes a
+			// bare strict-Any carrier from the residual count (stackHasApproxAny),
+			// which cleared the false "expected N return value(s), got N+1" on a
+			// fn calling a private 0-return helper before its own return
+			// (sort.aql's counting-sort → ensure-ints, reached cross-module).
 			return []Value{NewCarrier(TAny)}
 		}
 		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
