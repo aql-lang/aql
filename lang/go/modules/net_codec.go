@@ -125,14 +125,25 @@ func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, 
 		return codecFuncs{}, r.AqlErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
 			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
 	}
+	// Detached-stamp each custom AQL codec fn so the per-request invokeFn →
+	// InvokeCallback dispatch runs it on the VM instead of CallAQL. The codec
+	// fns live INSIDE this map, where the compile-time store-fn bake never
+	// reaches (recordCallOperands stamps only direct fn operands), so the
+	// resolve site is their stamping seam. StampFnValue declines silently —
+	// Go-backed built-ins, policy off (-no-compile), capturing or refusing
+	// bodies — returning the value unchanged, so behaviour is byte-identical
+	// on every decline. Stamp BEFORE the client-side defaulting below so a
+	// symmetric codec's aliases share one stamped clone (one compile, not two).
+	dec, _ = eng.StampFnValue(r, dec)
+	enc, _ = eng.StampFnValue(r, enc)
 	cf.decode, cf.encode = dec, enc
 	if v, ok := get("encode-req"); ok {
-		cf.encodeReq = v
+		cf.encodeReq, _ = eng.StampFnValue(r, v)
 	} else {
 		cf.encodeReq = enc
 	}
 	if v, ok := get("decode-resp"); ok {
-		cf.decodeResp = v
+		cf.decodeResp, _ = eng.StampFnValue(r, v)
 	} else {
 		cf.decodeResp = dec
 	}

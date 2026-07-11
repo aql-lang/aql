@@ -297,14 +297,20 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 // bound to the lambda's NAMED params, so a body that destructures the entry
 // (`p.value`, `kv.v`, `acc`+`kv.v`) typechecks. Returns false — leaving the
 // refusal to stand — for a shape the word has no lambda convention for, an
-// arity mismatch, a capturing lambda (deferred), or a body that does not
-// compile.
+// arity mismatch, or a body that does not compile.
 func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, extraLamSlots []int, outs []Value, pos SrcPos) bool {
 	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
 	if !ok {
 		return false
 	}
-	lam, ok := lambdaHookCompatible(fd, inputs, shape)
+	// The BODY lambda admits LEXICAL captures (allowCaptures): the mini-redis
+	// KEYS shape — `def kv state.kv  filter ([e:Any] => [… kv …]) (keys kv)` —
+	// captures an enclosing-fn local. Each capture resolves to a compiled home
+	// via resolveOperand in recordClosureDispatch (an unresolvable one declines
+	// cleanly), rides the stack at OpPushClosure, and binds a trailing unit
+	// slot in invokeClosureOn — value-identical to the interpreter's
+	// construction-time snapshot, taken at the same program point per dispatch.
+	lam, ok := lambdaHookCompatible(fd, inputs, shape, true)
 	if !ok {
 		return false
 	}
@@ -319,8 +325,11 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	// rebind a module-scope name), so the value threaded at OpPushClosure
 	// equals every per-run lookup the interpreter's CallAQL makes, and the
 	// pointer-backed instance shares mutations across the boundary. See
-	// moduleScopeMutableCaptures.
-	captures := moduleScopeMutableCaptures(r, lam.body(), nil)
+	// moduleScopeMutableCaptures. The lambda's LEXICAL captures come first
+	// (already name-sorted per the CapturedBinding contract); the module-scope
+	// additions append after, and the unit binds trailing slots in this same
+	// merged order.
+	captures := moduleScopeMutableCaptures(r, lam.body(), fd.Captured)
 	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
 }
 
@@ -332,10 +341,13 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 //   - exactly ONE own signature: an OVERLOADED fn value is dispatched by
 //     MatchFnSig at runtime — FirstOwnSig is not necessarily the matched
 //     overload, so compiling its body could run the wrong one;
-//   - no LEXICAL captures (they would need resolving in this scope and
-//     threading onto the closure; MODULE-SCOPE mutable-instance reads are not
-//     lexical captures — the callers admit those via
-//     moduleScopeMutableCaptures);
+//   - LEXICAL captures only where the caller allows them (allowCaptures):
+//     the BODY lambda threads them onto the closure (resolved to compiled
+//     homes in the enclosing scope, bound to trailing unit slots); the
+//     extras/hook path keeps refusing them — its shared-token-shape hooks
+//     have no per-hook capture layout. MODULE-SCOPE mutable-instance reads
+//     are not lexical captures — the callers admit those via
+//     moduleScopeMutableCaptures;
 //   - no flow-control sentinel in the body;
 //   - param count matches the callback inputs, and every declared param TYPE
 //     accepts its input — the same membership the runtime MatchFnSig checks
@@ -346,7 +358,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 //     a KeyVal (a Map subtype) the carrier conservatively under-types as a
 //     plain Map, so any Map-family param is accepted there and only a
 //     provably-incompatible param (a scalar, a sibling container) refuses.
-func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape) (*Signature, bool) {
+func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, allowCaptures bool) (*Signature, bool) {
 	lam, ok := fd.FirstOwnSig()
 	if !ok || len(lam.body()) == 0 {
 		return nil, false
@@ -360,7 +372,7 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape) (
 	if own > 1 {
 		return nil, false
 	}
-	if len(fd.Captured) > 0 {
+	if !allowCaptures && len(fd.Captured) > 0 {
 		return nil, false
 	}
 	if bodyToksHaveSentinel(lam.body()) {
@@ -436,7 +448,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 		if !insOK {
 			return false
 		}
-		lam, lamOK := lambdaHookCompatible(&fd, hookIns, hookShape)
+		lam, lamOK := lambdaHookCompatible(&fd, hookIns, hookShape, false)
 		if !lamOK {
 			return false
 		}
@@ -600,7 +612,18 @@ func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Va
 	}
 	data := args[spec.BodyPos+1] // the data operand follows the body operand
 	if !IsConcrete(data) {
-		return nil, ClosureInValue, false
+		// A COMPUTED collection (`filter (…lambda) (keys kv)`) arrives as a
+		// typed CARRIER. A typed, NON-dynamic List/Map carrier is admitted:
+		// its element type reads off the carrier exactly as off a concrete
+		// value (DataListElemTypeFromValue), and the closure compiles once
+		// against it. A Dynamic (gradual) carrier still refuses — the
+		// collection's family is unknown, so the InShape (pair vs KeyVal),
+		// and with it the runtime callback convention, is ambiguous. Bare
+		// type literals and non-container carriers refuse as before.
+		if data.Dynamic || !data.Carrier || data.Parent == nil ||
+			!(data.Parent.ConformsTo(TList) || data.Parent.ConformsTo(TMap)) {
+			return nil, ClosureInValue, false
+		}
 	}
 	elem := DataListElemTypeFromValue(data)
 	isMap := data.Parent.ConformsTo(TMap)

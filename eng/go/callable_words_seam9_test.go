@@ -38,11 +38,11 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 	body := AQL([]Value{NewWord("x")})
 
 	// No own sig (empty) → decline.
-	if _, ok := lambdaHookCompatible(&FnDefInfo{}, nil, ClosureInValue); ok {
+	if _, ok := lambdaHookCompatible(&FnDefInfo{}, nil, ClosureInValue, false); ok {
 		t.Error("a sig-less fn should decline")
 	}
 	// An own sig with an empty body → decline.
-	if _, ok := lambdaHookCompatible(&FnDefInfo{Signatures: []Signature{{}}}, nil, ClosureInValue); ok {
+	if _, ok := lambdaHookCompatible(&FnDefInfo{Signatures: []Signature{{}}}, nil, ClosureInValue, false); ok {
 		t.Error("an empty-body sig should decline")
 	}
 	// More than one own sig → decline.
@@ -50,29 +50,41 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 		{Params: []FnParam{{Name: "a"}}, Impl: body},
 		{Params: []FnParam{{Name: "b"}}, Impl: body},
 	}}
-	if _, ok := lambdaHookCompatible(two, []Value{NewInteger(1)}, ClosureInValue); ok {
+	if _, ok := lambdaHookCompatible(two, []Value{NewInteger(1)}, ClosureInValue, false); ok {
 		t.Error("a multi-overload fn should decline")
 	}
 	// A body carrying a flow-control sentinel → decline.
 	sentinel := &FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "a"}}, Impl: AQL([]Value{NewWord("break")}),
 	}}}
-	if _, ok := lambdaHookCompatible(sentinel, []Value{NewInteger(1)}, ClosureInValue); ok {
+	if _, ok := lambdaHookCompatible(sentinel, []Value{NewInteger(1)}, ClosureInValue, false); ok {
 		t.Error("a sentinel body should decline")
 	}
 	// Param / input arity mismatch → decline.
 	arity := &FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "a"}, {Name: "b"}}, Impl: body,
 	}}}
-	if _, ok := lambdaHookCompatible(arity, []Value{NewInteger(1)}, ClosureInValue); ok {
+	if _, ok := lambdaHookCompatible(arity, []Value{NewInteger(1)}, ClosureInValue, false); ok {
 		t.Error("an arity mismatch should decline")
 	}
 	// A nil-typed param is skipped; the compatible lambda is returned.
 	okFd := &FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "a"}}, Impl: body, // Type nil
 	}}}
-	if _, ok := lambdaHookCompatible(okFd, []Value{NewInteger(1)}, ClosureInValue); !ok {
+	if _, ok := lambdaHookCompatible(okFd, []Value{NewInteger(1)}, ClosureInValue, false); !ok {
 		t.Error("a nil-typed param should be skipped and the lambda accepted")
+	}
+	// The capture gate is caller-selected: the extras/hook path (false)
+	// refuses a capturing lambda; the body-lambda path (true) admits it.
+	capFd := &FnDefInfo{
+		Signatures: []Signature{{Params: []FnParam{{Name: "a"}}, Impl: body}},
+		Captured:   []CapturedBinding{{Name: "kv", Value: NewInteger(9)}},
+	}
+	if _, ok := lambdaHookCompatible(capFd, []Value{NewInteger(1)}, ClosureInValue, false); ok {
+		t.Error("the hook path must refuse a capturing lambda")
+	}
+	if _, ok := lambdaHookCompatible(capFd, []Value{NewInteger(1)}, ClosureInValue, true); !ok {
+		t.Error("the body path must admit a capturing lambda")
 	}
 }
 

@@ -3672,6 +3672,30 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	defer func() { r.Check.ArgsFrameUnnamed = prevUnnamed }()
 
 	sub := New(r)
+	// When this body is being RECORDED into a compiled CALLBACK unit (a
+	// stored-fn / spawn body — see compileStoredFnUnit / compileStoredBody,
+	// name "storedfn$body" / "spawnbody$body"), mark the body sub-engine
+	// element-eval-recordable so a residual COMPUTED container it returns
+	// (`{message: (join …)}` / `[a b]`, a bare map/list result) records its
+	// OpMakeMap / OpMakeList assembly instead of leaving an unresolvable
+	// residual that refuses "body result of unknown provenance" (the
+	// mini-redis catch-all shape). Mirrors the branch arm's treatment
+	// (RunCarrierBodyWithDefs, peekCaptureArm).
+	//
+	// SCOPED TO CALLBACK BODIES on purpose. A callback is only ever invoked
+	// via InvokeCallback / CallAQL, which evaluate the body residual IN the
+	// live frame on BOTH engines — so the recorded OpMakeMap (which
+	// re-assembles per run) matches the interpreter exactly. A NORMAL
+	// user-fn body must NOT enable this: a directly-applied `f x` at top
+	// level leaves its result as a DEFERRED autoEvalStack residual, which the
+	// interpreter evaluates AFTER the frame pops (frame-locals gone) while a
+	// compiled CALL_USER would assemble it in-frame — recording here would
+	// diverge (the deferred-residual hazard the `consumed` gate guards, see
+	// engine.go's autoEvalMap). Such a body keeps refusing and falls back,
+	// byte-identically.
+	if r.Check.Recorder().active() && isCallbackBodyName(name) {
+		sub.elemEvalRecordable = true
+	}
 	result, err := sub.Run(input)
 	if err != nil {
 		r.Check.AddDiagnostic(CheckDiagnostic{
@@ -3696,6 +3720,20 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	}
 	r.Defs.Restore(snapshot)
 	return result
+}
+
+// isCallbackBodyName reports whether name is a stored-fn / spawn callback
+// body — compileClosureBody builds "storedfn$body" / "spawnbody$body" for the
+// words "storedfn" / "spawnbody" (callable_words.go). Such a body is invoked
+// only via InvokeCallback / CallAQL, which evaluate a residual COMPUTED
+// container (`{message: (join …)}` / `[a b]`) IN the live frame on both
+// engines, so recording its OpMakeMap / OpMakeList assembly is safe (it
+// re-assembles per run, matching the interpreter). A normal user fn applied
+// directly at top level leaves a DEFERRED residual the interpreter evaluates
+// after the frame pops — recording there would diverge, so runFnBodyOnce gates
+// elemEvalRecordable on this predicate.
+func isCallbackBodyName(name string) bool {
+	return name == "storedfn$body" || name == "spawnbody$body"
 }
 
 // AnalyseFnBody runs a user-defined fn body through a sub-engine in
