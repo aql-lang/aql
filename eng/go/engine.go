@@ -7,18 +7,22 @@ import (
 	"strings"
 )
 
-// strictForwardBarrier gates the PROTOTYPE strict-barrier rule
-// (AQL_STRICT_BARRIER=1): a function word beginning its own dispatch is
-// ALWAYS a forward-collection barrier. Today, when the nearest parked
-// forward cannot commit with the args it already holds
-// (commitBarrierForward's exact-arity probe fails), the parked word
-// keeps WAITING and the fn word's result arrives into the open slot —
-// this is what makes `print add 1 2` work while `get`'s typed slots
-// error. Under the strict rule the stranded word raises the same
-// signature error the plan-time walk gives typed natives, so typed and
-// Any slots behave identically: a function word never feeds forward
-// collection; group the call in parens.
-var strictForwardBarrier = os.Getenv("AQL_STRICT_BARRIER") != ""
+// strictForwardBarrier is the forward-collection rule and the language
+// DEFAULT: every bare function word beginning its own dispatch is a
+// forward-collection barrier — uniformly, regardless of arity. It is a
+// fundamental design property, not a mode. When the nearest parked forward
+// cannot commit with the args it already holds (commitBarrierForward's
+// exact-arity probe fails), the stranded word raises a signature error
+// rather than letting the fn word's result arrive into the open slot — so
+// `print add 1 2` is an error and `print (add 1 2)` is the spelling.
+// `context eq context` strands the same way (a nullary is still a function
+// dispatch): group it as `(context) eq (context)`. The SOLE exemption is
+// structural, not arity-based: a dot-access chain (`m.a`, `MathUtil.now`)
+// is implicitly-parenthesized navigation, so its `dot` dispatch is grouped
+// and the outer word sees one value. AQL_NO_STRICT_BARRIER=1 restores the
+// legacy wait-through behaviour (transitional; slated for removal). See
+// design/STRICT-FORWARD-BARRIER.0.md.
+var strictForwardBarrier = os.Getenv("AQL_NO_STRICT_BARRIER") == ""
 
 // stackHeadroom is the extra capacity allocated beyond current need,
 // so that most insert/splice operations avoid heap allocation.
@@ -1025,23 +1029,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// or a codequote'd one (Quoted) is data — left via stepLiteral.
 			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
 				info, _ := AsReach(val)
-				// Strict barrier (AQL_STRICT_BARRIER): a dot-access chain
-				// beginning its own dispatch is a forward-collection
-				// barrier, like a plain function word — but it lowers to a
-				// paren-wrapped `( recv dot key )` span, so the per-word
-				// check in stepWord runs INSIDE that paren and can't see
-				// the outer parked forward. Check HERE, before the wrap,
-				// where the parked forward is still in scope (mirrors the
-				// stepWord hook): commit a committable guard first,
-				// otherwise strand. design/STRICT-FORWARD-BARRIER.0.md.
-				if strictForwardBarrier {
-					if e.commitBarrierForward() {
-						break // pointer moved to the committed word; loop re-steps it
-					}
-					if serr := e.strandedForwardError(reachBoundaryLabel(info)); serr != nil {
-						return nil, serr
-					}
-				}
+				// A dot-access chain (`m.a`, `MathUtil.now`) is a self-
+				// delimiting navigation that produces exactly ONE value — it
+				// reads as an implicit `(m.a)` group and feeds forward
+				// collection like any other value, so it is NOT a barrier
+				// under the strict rule. (The barrier exists for a function
+				// word that forward-collects its OWN args — `print add 1 2`;
+				// a Reach collects nothing further, its key is bound in the
+				// chain.) Lower to its get-chain marker span in place.
+				// design/STRICT-FORWARD-BARRIER.0.md.
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil {
@@ -1705,17 +1701,12 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				scanIdx++
 				continue
 			}
-			// Strict barrier (AQL_STRICT_BARRIER): a dot-access chain is a
-			// forward-collection barrier like a function word — do NOT
-			// pre-evaluate it into the collecting word's slot. Stop the
-			// scan; the collecting word parks, the Reach dispatches on its
-			// own, and the statement-level Reach hook (main loop) strands
-			// the parked word. Without this the paren-wrapped chain would
-			// be evaluated here and its result fed as a forward arg,
-			// silently bypassing the rule. design/STRICT-FORWARD-BARRIER.0.md.
-			if strictForwardBarrier {
-				break
-			}
+			// A dot-access chain is a single-value navigation, not a
+			// forward-collection barrier (see the statement-branch Reach
+			// hook): pre-evaluate it into the collecting word's slot exactly
+			// like a paren group — uniformly, strict or not. Only a bare
+			// function word that collects its own args stops the scan
+			// (below). design/STRICT-FORWARD-BARRIER.0.md.
 			info, _ := AsReach(tok)
 			e.tape.Splice(scanIdx, 1, expandReach(info)...)
 			continue
@@ -2372,6 +2363,15 @@ func (e *Engine) stepWord(val Value) error {
 		if e.commitBarrierForward() {
 			return nil
 		}
+		// Every bare function word beginning its own dispatch is a barrier —
+		// uniformly, regardless of arity. The strict rule does not ask "how
+		// many args does this word collect"; a nullary `context` and a
+		// binary `add` are both function dispatches, so both strand a parked
+		// forward that cannot commit (`(context) eq (context)`, `print (add
+		// 1 2)`). The ONLY exemption is structural, not arity-based: a
+		// dot-access chain is implicitly parenthesized navigation, so its
+		// `dot` dispatch is grouped and the outer word sees one value (the
+		// Reach hook above never strands). design/STRICT-FORWARD-BARRIER.0.md.
 		if strictForwardBarrier {
 			if serr := e.strandedForwardError(w.Name); serr != nil {
 				return serr
@@ -3999,28 +3999,6 @@ func (e *Engine) expandParenExprScratch(items []Value) []Value {
 // evaluator (design/REACH.10.md §4): the chain is identical to the former
 // dot-access ParenExpr, so wrapping it with expandParenExpr and running it
 // in place reproduces exact get/getr semantics.
-// reachBoundaryLabel renders a readable dot-access label for the
-// strict-barrier stranded-forward error — e.g. `Rand.int` for the reach
-// `Rand.int 0 10`. Best-effort: a single-word receiver plus the first
-// literal segment key; falls back to "<dot-access>" for computed or
-// multi-token receivers.
-func reachBoundaryLabel(info ReachInfo) string {
-	recv := "<dot-access>"
-	if len(info.Receiver) == 1 {
-		if w, err := AsWord(info.Receiver[0]); err == nil {
-			recv = w.Name
-		} else if a, err := AsAtom(info.Receiver[0]); err == nil {
-			recv = a
-		}
-	}
-	if len(info.Segments) > 0 && !info.Segments[0].Computed {
-		if a, err := AsAtom(info.Segments[0].KeyLit); err == nil {
-			return recv + "." + a
-		}
-	}
-	return recv
-}
-
 func lowerReach(info ReachInfo) []Value {
 	out := make([]Value, 0, len(info.Receiver)+len(info.Segments)*2)
 	out = append(out, info.Receiver...)

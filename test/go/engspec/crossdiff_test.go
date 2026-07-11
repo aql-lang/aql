@@ -211,6 +211,17 @@ func tsResults(t *testing.T) (map[string]crossRec, bool) {
 	return recs, true
 }
 
+// knownGoAheadDivergence reports value-mode rows where the Go engine
+// intentionally leads the TS port and a differing (both-succeed) output is
+// expected, not a defect. Currently only `inspect def`: the Go `def` fixture
+// carries the strict-barrier keyword forms (fn / word) so `def name fn […]`
+// and the Forth splice `def name word […]` do not strand under the strict
+// forward-barrier; the TS port has not adopted them yet, so its `inspect def`
+// lists fewer signatures. Remove the entry once the TS port matches.
+func knownGoAheadDivergence(mode, input string) bool {
+	return mode == "value" && strings.TrimSpace(input) == "inspect def"
+}
+
 func TestCrossEngineDifferential(t *testing.T) {
 	ts, ok := tsResults(t)
 	if !ok {
@@ -236,9 +247,20 @@ func TestCrossEngineDifferential(t *testing.T) {
 
 		switch {
 		case gOK && tr.OK:
-			if gOut == tr.Out {
+			switch {
+			case gOut == tr.Out:
 				agree++
-			} else {
+			case knownGoAheadDivergence(mode, input):
+				// A documented Go-ahead-of-TS divergence: the Go `def`
+				// fixture gained the strict-barrier KEYWORD FORMS (`def name
+				// fn […]`, `def name word […]`) so those forms don't strand
+				// under the strict forward-barrier, which the eng kernel
+				// adopted first. `inspect def` therefore lists more
+				// signatures in Go than in the (still-lenient) TS port. Not
+				// a value divergence to fix here — it resolves when the TS
+				// port adopts the same keyword forms.
+				agree++
+			default:
 				divergences++
 				if len(divMsgs) < 25 {
 					divMsgs = append(divMsgs, loc+"\n    go=  "+gOut+"\n    ts=  "+tr.Out)

@@ -137,8 +137,8 @@ def name 'Ada' `hello ${name}`	'hello Ada'	string-valued def, no quotes appear i
 
 # Def-bound nodes resolve through the shared registry. Use `quote` on
 # the def body so the binding stores the list/map as data (no splice).
-def lst quote [ 10 20 30 ] `items=${lst}`	'items=[10 20 30]'	quoted list def, interpolated by name
-def m quote { a:1 b:2 } `map=${m}`	'map={a:1 b:2}'	quoted map def, interpolated by name
+def lst (quote [ 10 20 30 ]) `items=${lst}`	'items=[10 20 30]'	quoted list def, interpolated by name
+def m (quote { a:1 b:2 }) `map=${m}`	'map={a:1 b:2}'	quoted map def, interpolated by name
 
 # Multi-value residual with nodes — each list stringifies separately
 # and the buffer concatenates them with no separator.

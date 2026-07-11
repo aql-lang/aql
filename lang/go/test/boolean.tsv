@@ -883,12 +883,12 @@ make Options {x:([Integer None] tany)}	options{x:None tor Integer}
 # =====================================================================
 
 # Define a named disjunct via tany.
-def Maybe tany [String None] Maybe	None tor String
-def ScalarOrList tany [Scalar List] ScalarOrList	Scalar tor List
+def Maybe (tany [String None]) Maybe	None tor String
+def ScalarOrList (tany [Scalar List]) ScalarOrList	Scalar tor List
 
 # Use the named disjunct as a record field constraint.
-def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice' nick:None}
-def Maybe tany [String None] def Person refine Record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob' nick:'Bobby'}
+def Maybe (tany [String None]) def Person refine Record [name:String nick:Maybe] make Person {name:"Alice" nick:None}	{name:'Alice' nick:None}
+def Maybe (tany [String None]) def Person refine Record [name:String nick:Maybe] make Person {name:"Bob" nick:"Bobby"}	{name:'Bob' nick:'Bobby'}
 
 # =====================================================================
 # 42. all-quantifier / type-quantifier crosswise interactions

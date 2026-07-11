@@ -72,14 +72,15 @@ func TestRegisterDefKeywordFormsGuards(t *testing.T) {
 			t.Fatal("a Fallback base sig must not be mirrored")
 		}
 	}
-	// Exactly the real fn sig mirrors: the plain form (3 slots) and
-	// the gen chain (5 slots).
-	var arities []int
+	// Exactly the real fn sig mirrors, each in an Atom-name and a
+	// String-name variant (def accepts a word OR a string as the name):
+	// the plain form (3 slots) and the gen chain (5 slots), ×2 = 4 sigs.
+	counts := map[int]int{}
 	for i := range def.Signatures {
-		arities = append(arities, def.Signatures[i].TotalArgs())
+		counts[def.Signatures[i].TotalArgs()]++
 	}
-	if len(arities) != 2 {
-		t.Fatalf("want 2 mirrored sigs (plain + gen chain), got %v", arities)
+	if len(def.Signatures) != 4 || counts[3] != 2 || counts[5] != 2 {
+		t.Fatalf("want 4 mirrored sigs (plain + gen chain, Atom + String name), got %v", counts)
 	}
 }
 

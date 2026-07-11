@@ -21,7 +21,7 @@ import (
 // the exports that carry all of it to the importer.
 const flagExtModule = `def Flag (refine Boolean)
 def flip fn [[b:Boolean] [Boolean] [b not]]
-def add fn [[a:Flag b:Flag] [Boolean] [flip (flip a and flip b)]]
+def add fn [[a:Flag b:Flag] [Boolean] [flip ((flip a) and (flip b))]]
 def mk fn [[b:Boolean] [Flag] [def v:Flag b v]]
 export "FlagExt" {add: add/r mk: mk/r Flag: Flag}`
 
@@ -206,8 +206,8 @@ export "Pointer" {Point: Point add: add/r}`,
 	}
 	steps := []string{
 		`import "./pointer.aql"`,
-		`def p0 make Pointer.Point {x:1 y:2}`,
-		`def p1 make Pointer.Point {x:4 y:6}`,
+		`def p0 (make Pointer.Point {x:1 y:2})`,
+		`def p1 (make Pointer.Point {x:4 y:6})`,
 		`def p2 (p0 add p1)`,
 	}
 

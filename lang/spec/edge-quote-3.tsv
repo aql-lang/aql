@@ -66,7 +66,7 @@ macro [[x y]]	ERROR:macro_error	the definer needs [[params] [body]]
 macro []	ERROR:macro_error	…and an empty spec list is no better
 macro [[] [quote [1]]]	ERROR:macro_error	a macro needs at least one parameter — 0-operand macros are rejected
 def m (macro [[a b] [quote [unquote a]]]) m 1	ERROR:macro_error	too few operands at expansion
-def tw2 (macro [[e] [quote [unquote e add unquote e]]]) typeof tw2	ERROR:macro_error	a macro name is claimed at expansion — 0 operands is an arity error
+def tw2 (macro [[e] [quote [unquote e add unquote e]]]) typeof (tw2)	ERROR:macro_error	a macro name is claimed at expansion — 0 operands is an arity error
 def m (macro [[a] [quote [splice a]]]) m 7	ERROR:macro_error	splice of a non-list operand
 def spr (macro [[xs] [quote [splice xs]]]) spr ([4 5])	ERROR:macro_error	a paren operand is a paren FORM — splice needs a list value
 def m (macro [[a] [quote [splice nosuch]]]) m 7	ERROR:undefined_word	splice of an unbound name inside the template

@@ -332,7 +332,7 @@ func TestDeclaredUnionParamPartialDispatchError(t *testing.T) {
 	}
 	clean := []string{
 		// branch-join disjunct: same partial shape, stays a warning.
-		`def y if (1 gt 0) [1] ["s"] mod y 2`,
+		`def y (if (1 gt 0) [1] ["s"]) mod y 2`,
 		// a guard discharges the failing alternative — no partial at all.
 		`def T (Integer tor Boolean) def g fn [[x:T] [Any] [if (x is Integer) [x add 1] [0]]] g 2`,
 		// every alternative dispatches — no partial.

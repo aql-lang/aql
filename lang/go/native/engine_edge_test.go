@@ -3349,7 +3349,7 @@ func TestModuleDefSubject(t *testing.T) {
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
 	runAQL(t, r, []Value{
-		NewWord("def"), NewWord("my-mod"), NewWord("module"), body,
+		NewWord("def"), NewWord("my-mod"), NewOpenParen(), NewWord("module"), body, NewCloseParen(),
 	})
 
 	// my-mod should resolve to a module descriptor.

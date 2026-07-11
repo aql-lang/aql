@@ -117,7 +117,7 @@ not 0	true	not applies the same coercion
 not nan	false	…including NaN-is-truthy
 not ''	true	empty string
 not none	true	none
-not not 5	true	double negation normalises any value to a Boolean
+not (not 5)	true	double negation normalises any value to a Boolean
 #
 # §9  connectives — value semantics, strict operands, coercing xor
 0 and (20 div 0)	ERROR:division by zero	a paren operand evaluates BEFORE and sees it: no short-circuit rescue

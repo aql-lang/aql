@@ -500,7 +500,7 @@ def myval 42 myval	42
 def greeting "hello" greeting	'hello'
 
 # def with string name (quoted)
-def "inc" word [1 add] 10 inc	11
+def "inc" (word [1 add] 10) inc	11
 
 # def with prefix body — semicolon separates def from call.
 # A prefix list body binds the list VALUE; splicing needs the forward

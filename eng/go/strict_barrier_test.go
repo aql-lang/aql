@@ -121,47 +121,10 @@ func TestStrictBarrierStepWordUsurpOn(t *testing.T) {
 	}
 }
 
-// --- GAP A: dot-access chains are strict-barrier'd ---------------------------
+// --- dot-access navigation is EXEMPT (structural, not a barrier) -------------
 
-func TestReachBoundaryLabel(t *testing.T) {
-	// receiver word + first literal segment → "Rand.int"
-	info := ReachInfo{
-		Receiver: []Value{NewWord("Rand")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("int")}},
-	}
-	if got := reachBoundaryLabel(info); got != "Rand.int" {
-		t.Errorf("label = %q, want Rand.int", got)
-	}
-	// receiver-only fallback (computed first segment)
-	comp := ReachInfo{
-		Receiver: []Value{NewWord("m")},
-		Segments: []ReachSeg{{Computed: true, KeyExpr: []Value{NewWord("k")}}},
-	}
-	if got := reachBoundaryLabel(comp); got != "m" {
-		t.Errorf("computed-segment label = %q, want m", got)
-	}
-	// multi-token receiver → generic
-	multi := ReachInfo{Receiver: []Value{NewWord("a"), NewWord("b")}}
-	if got := reachBoundaryLabel(multi); got != "<dot-access>" {
-		t.Errorf("multi-receiver label = %q, want <dot-access>", got)
-	}
-	// atom receiver (foo/q.bar) resolves via AsAtom
-	atomRecv := ReachInfo{
-		Receiver: []Value{NewAtom("foo")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("bar")}},
-	}
-	if got := reachBoundaryLabel(atomRecv); got != "foo.bar" {
-		t.Errorf("atom-receiver label = %q, want foo.bar", got)
-	}
-	// non-word non-atom receiver → generic fallback
-	odd := ReachInfo{Receiver: []Value{NewInteger(1)}}
-	if got := reachBoundaryLabel(odd); got != "<dot-access>" {
-		t.Errorf("non-word receiver label = %q, want <dot-access>", got)
-	}
-}
-
-// registerCollector adds a 1-arg forward-collecting native for the
-// dot-access barrier tests (covRegistry extra hook).
+// registerCollector adds a 1-arg forward-collecting native and a trivial
+// `dot` so a Reach can evaluate.
 func registerCollector(r *Registry) {
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "collector",
@@ -170,83 +133,6 @@ func registerCollector(r *Registry) {
 			Impl:    Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return a, nil }),
 			Returns: []*Type{TAny}, BarrierPos: -1,
 		}},
-	})
-}
-
-func TestStrictForwardScanReachBarrier(t *testing.T) {
-	setStrict(t, true)
-	r := covRegistry(t, registerCollector)
-	e := NewTop(r)
-	reach := NewReach(ReachInfo{
-		Receiver: []Value{NewWord("x")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
-		Eval:     true,
-	})
-	e.tape = NewTape([]Value{NewWord("collector"), reach}, stackHeadroom)
-	e.pointer = 0
-	fn := r.Lookup("collector")
-	if err := e.resolveForwardArgs(fn, WordInfo{Name: "collector", ArgCount: -1}); err != nil {
-		t.Fatalf("resolveForwardArgs: %v", err)
-	}
-	// Under strict, the scan must STOP at the Reach — it stays a Reach on
-	// the tape (not expanded to a dot chain).
-	if !IsReach(e.tape.At(1)) {
-		t.Errorf("strict forward scan must leave the Reach un-expanded, got %v", e.tape.At(1))
-	}
-}
-
-func TestStrictForwardScanReachBarrierOffExpands(t *testing.T) {
-	setStrict(t, false)
-	r := covRegistry(t, registerCollector)
-	e := NewTop(r)
-	reach := NewReach(ReachInfo{
-		Receiver: []Value{NewWord("x")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
-		Eval:     true,
-	})
-	e.tape = NewTape([]Value{NewWord("collector"), reach}, stackHeadroom)
-	e.pointer = 0
-	fn := r.Lookup("collector")
-	_ = e.resolveForwardArgs(fn, WordInfo{Name: "collector", ArgCount: -1})
-	// Gate off: the Reach is expanded to its dot chain (no longer a Reach).
-	if IsReach(e.tape.At(1)) {
-		t.Error("gate off: the Reach must expand during forward collection")
-	}
-}
-
-func TestStrictDotAccessStrandsEndToEnd(t *testing.T) {
-	setStrict(t, true)
-	r := covRegistry(t, registerCollector)
-	e := NewTop(r)
-	reach := NewReach(ReachInfo{
-		Receiver: []Value{NewWord("x")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
-		Eval:     true,
-	})
-	// `collector x.k` — collector parks (forward scan breaks at the reach),
-	// then the reach dispatches at statement position and strands collector.
-	_, err := e.Run([]Value{NewWord("collector"), reach})
-	if err == nil {
-		t.Fatal("a dot-access feeding a parked forward must strand under strict")
-	}
-	if !strings.Contains(err.Error(), "still waiting") || !strings.Contains(err.Error(), "x.k") {
-		t.Errorf("strand error = %q, want collector waiting on the x.k barrier", err.Error())
-	}
-}
-
-// registerGAndDot adds a 1-and-2-arg `gg` (the smaller overload commits
-// at a boundary) and a trivial `dot` so a Reach can evaluate.
-func registerGAndDot(r *Registry) {
-	r.RegisterNativeFunc(NativeFunc{
-		Name: "gg",
-		Signatures: []Signature{
-			{Args: []*Type{TAny}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewInteger(777)}, nil
-			}), Returns: []*Type{TAny}, BarrierPos: -1},
-			{Args: []*Type{TAny, TAny}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return []Value{NewInteger(999)}, nil
-			}), Returns: []*Type{TAny}, BarrierPos: -1},
-		},
 	})
 	r.RegisterNativeFunc(NativeFunc{
 		Name: "dot",
@@ -261,23 +147,65 @@ func registerGAndDot(r *Registry) {
 	})
 }
 
-func TestStrictDotAccessCommitsGuardFirst(t *testing.T) {
-	setStrict(t, true)
-	r := covRegistry(t, registerGAndDot)
-	r.Defs.Push("xmap", NewInteger(0)) // receiver binding (dot ignores it)
-	e := NewTop(r)
-	reach := NewReach(ReachInfo{
-		Receiver: []Value{NewWord("xmap")},
-		Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
-		Eval:     true,
+func TestStrictForwardScanReachExpands(t *testing.T) {
+	// A dot-access chain is implicitly-parenthesized navigation, NOT a
+	// barrier: under strict the forward scan expands it into the collecting
+	// word's slot exactly like a paren group (identical to gate-off).
+	for _, on := range []bool{true, false} {
+		setStrict(t, on)
+		r := covRegistry(t, registerCollector)
+		r.Defs.Push("x", NewInteger(0)) // receiver binding (dot ignores it)
+		e := NewTop(r)
+		reach := NewReach(ReachInfo{
+			Receiver: []Value{NewWord("x")},
+			Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
+			Eval:     true,
+		})
+		e.tape = NewTape([]Value{NewWord("collector"), reach}, stackHeadroom)
+		e.pointer = 0
+		fn := r.Lookup("collector")
+		if err := e.resolveForwardArgs(fn, WordInfo{Name: "collector", ArgCount: -1}); err != nil {
+			t.Fatalf("strict=%v resolveForwardArgs: %v", on, err)
+		}
+		if IsReach(e.tape.At(1)) {
+			t.Errorf("strict=%v: the Reach must expand during forward collection (dot-access is exempt)", on)
+		}
+	}
+}
+
+// registerGgBnd adds a 1-and-2-arg `gg` (the 1-arg overload commits at a
+// boundary) and a nullary boundary word `bnd`.
+func registerGgBnd(r *Registry) {
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "gg",
+		Signatures: []Signature{
+			{Args: []*Type{TAny}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewInteger(777)}, nil
+			}), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewInteger(999)}, nil
+			}), Returns: []*Type{TAny}, BarrierPos: -1},
+		},
 	})
-	// `gg 1 xmap.k` — gg collects 1, the Reach is a barrier so gg parks
-	// with its 1-arg overload committable; at the Reach the commit fires
-	// FIRST (gg → 777), then the dot-access evaluates (→ 42). The commit
-	// path is what this exercises.
-	out, err := e.Run([]Value{NewWord("gg"), NewInteger(1), reach})
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "bnd",
+		Signatures: []Signature{{
+			Args: []*Type{}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return []Value{NewInteger(42)}, nil
+			}), Returns: []*Type{TInteger}, BarrierPos: -1,
+		}},
+	})
+}
+
+func TestStrictCommitAtFunctionWordBoundary(t *testing.T) {
+	setStrict(t, true)
+	r := covRegistry(t, registerGgBnd)
+	e := NewTop(r)
+	// `gg 1 bnd` — gg collects 1, then the function word bnd is a barrier;
+	// gg's 1-arg overload commits FIRST (→ 777), then bnd fires (→ 42).
+	out, err := e.Run([]Value{NewWord("gg"), NewInteger(1), NewWord("bnd")})
 	if err != nil {
-		t.Fatalf("commit-at-reach then dot-access must succeed, got %v", err)
+		t.Fatalf("commit at the function-word boundary must succeed, got %v", err)
 	}
 	var saw777 bool
 	for _, v := range out {
@@ -286,6 +214,49 @@ func TestStrictDotAccessCommitsGuardFirst(t *testing.T) {
 		}
 	}
 	if !saw777 {
-		t.Errorf("gg's 1-arg overload must commit at the reach barrier (777), got %v", out)
+		t.Errorf("gg's 1-arg overload must commit at the bnd barrier (777), got %v", out)
+	}
+}
+
+func TestStrictStrandAtFunctionWordBoundary(t *testing.T) {
+	setStrict(t, true)
+	r := covRegistry(t, func(r *Registry) { registerGgBnd(r); registerCollector(r) })
+	e := NewTop(r)
+	// `collector bnd` — collector parks with 0 args, the function word bnd is
+	// a barrier and collector cannot commit, so it strands.
+	_, err := e.Run([]Value{NewWord("collector"), NewWord("bnd")})
+	if err == nil {
+		t.Fatal("a parked forward that cannot commit at a function-word barrier must strand")
+	}
+	if !strings.Contains(err.Error(), "still waiting") {
+		t.Errorf("expected a strand error, got %v", err)
+	}
+}
+
+func TestStrictDotAccessDoesNotStrand(t *testing.T) {
+	// `collector x.k` — the dot-access is navigation, not a barrier, so its
+	// value feeds the parked collector and the statement succeeds even under
+	// strict (mirrors `size m.a`).
+	setStrict(t, true)
+	r := covRegistry(t, registerCollector)
+	r.Defs.Push("x", NewInteger(0)) // receiver binding (dot ignores it)
+	e := NewTop(r)
+	reach := NewReach(ReachInfo{
+		Receiver: []Value{NewWord("x")},
+		Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
+		Eval:     true,
+	})
+	out, err := e.Run([]Value{NewWord("collector"), reach})
+	if err != nil {
+		t.Fatalf("a dot-access feeding a parked forward must NOT strand under strict, got %v", err)
+	}
+	var saw42 bool
+	for _, v := range out {
+		if n, _ := AsInteger(v); n == 42 {
+			saw42 = true
+		}
+	}
+	if !saw42 {
+		t.Errorf("collector must receive the dot-access value (42), got %v", out)
 	}
 }

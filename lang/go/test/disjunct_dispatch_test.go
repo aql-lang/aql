@@ -27,7 +27,7 @@ func TestCheckDisjunctDispatchJoinsAlternatives(t *testing.T) {
 	// arm (else-less-if soundness fix), which would collapse the disjunct we
 	// need here. The list-form `[1 gt 0]` is a deferred code body that stays a
 	// branch join.
-	res, err := a.Check(`def y if [1 gt 0] [1] ['s'] y add 1`)
+	res, err := a.Check(`def y (if [1 gt 0] [1] ['s']) y add 1`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestCheckDisjunctDispatchPartialWarning(t *testing.T) {
 	// mod: [Number Number] only — no catch-all. Integer|String
 	// straddles it: the String alternative has no overload.
 	// List-form condition — see TestCheckDisjunctDispatchJoinsAlternatives.
-	res, err := a.Check(`def y if [1 gt 0] [1] ['s'] mod y 2`)
+	res, err := a.Check(`def y (if [1 gt 0] [1] ['s']) mod y 2`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}

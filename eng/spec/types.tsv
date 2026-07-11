@@ -115,7 +115,7 @@ def t List t	List
 # To get the Atom version of a type-name word, quote it.		
 quote Integer	Integer	type-name words parse as type literals before quote sees them; quote of a type literal returns it unchanged
 quote String	String	
-def t quote Integer t	Integer	
+def t (quote Integer) t	Integer	
 		
 # =====================================================================		
 # 2. None and null		
@@ -198,9 +198,9 @@ def n 5 typeof n	Integer
 def s 'hi' typeof s	ProperString
 
 # typeof's result IS a Type — round-trips:
-typeof typeof 5	Number	typeof 5 = Integer; typeof Integer = Number
-typeof typeof 'x'	String
-typeof typeof none	None	typeof none = None; typeof None = None (None is a degenerate root)
+typeof (typeof 5)	Number	typeof 5 = Integer; typeof Integer = Number
+typeof (typeof 'x')	String
+typeof (typeof none)	None	typeof none = None; typeof None = None (None is a degenerate root)
 		
 # =====================================================================		
 # 4. def — install a type binding		
@@ -517,8 +517,8 @@ Type is Type	true	`Type` is itself a type
 # --- user-defined type bindings are types ---		
 def IdType Integer IdType is Type	true	a type-namedalias of a builtin
 def Vec { x:Integer y:Integer } Vec is Type	true	a type-namedrecord shape
-def Color enum [ red green blue ] Color is Type	true	a type-namedenum
-def Mapper fnsig [ [ Integer ] [ Integer ] ] Mapper is Type	true	a type-namedfunction-shape
+def Color (enum [ red green blue ]) Color is Type	true	a type-namedenum
+def Mapper (fnsig [ [ Integer ] [ Integer ] ]) Mapper is Type	true	a type-namedfunction-shape
 def Ints [ :Integer ] Ints is Type	true	a type-namedtyped list
 def N 5 N is Type	false	but a SINGLETON type from a scalar literal resolves to the scalar value `5` — and `5` is not a type
 		
@@ -791,7 +791,7 @@ def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 # function.tsv §2). `quote` would store as data instead.		
 def xs:[ :Integer ] [ 1 2 3 ] xs	[1 2 3]	typed-name list binds the list value (matches [:Integer]); use `word` to splice
 def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
-def xs:[ :Integer ] quote [ 1 2 3 ] xs	(quote [1 2 3])	quote stores the list as data; xs resolves to the quoted list (canonical render preserves the (quote ...) wrapper — /q is for atoms only)
+def xs:[ :Integer ] (quote [ 1 2 3 ]) xs	(quote [1 2 3])	quote stores the list as data; xs resolves to the quoted list (canonical render preserves the (quote ...) wrapper — /q is for atoms only)
 		
 # =====================================================================		
 # 11k. enum — fixed enumeration of values		
@@ -806,29 +806,29 @@ def xs:[ :Integer ] quote [ 1 2 3 ] xs	(quote [1 2 3])	quote stores the list as 
 # error before the disjunct is built.		
 		
 # Atom-valued enum.		
-def Color enum [ red green blue ] quote red is Color	true	
-def Color enum [ red green blue ] quote green is Color	true	
-def Color enum [ red green blue ] quote pink is Color	false	
+def Color (enum [ red green blue ]) quote red is Color	true	
+def Color (enum [ red green blue ]) quote green is Color	true	
+def Color (enum [ red green blue ]) quote pink is Color	false	
 		
 # Integer-valued enum with child-type validation.		
-def Codes enum [ :Integer 200 404 500 ] 200 is Codes	true	
-def Codes enum [ :Integer 200 404 500 ] 500 is Codes	true	
-def Codes enum [ :Integer 200 404 500 ] 201 is Codes	false	
+def Codes (enum [ :Integer 200 404 500 ]) 200 is Codes	true	
+def Codes (enum [ :Integer 200 404 500 ]) 500 is Codes	true	
+def Codes (enum [ :Integer 200 404 500 ]) 201 is Codes	false	
 		
 # Child-type rejects mismatched literals at enum-construction time.		
-def Codes enum [ :Integer 200 'bad' 500 ]	ERROR:type_error	'bad' is not an Integer
-def Codes enum [ :String 'ok' 1 ]	ERROR:type_error	1 is not a String
+def Codes (enum [ :Integer 200 'bad' 500 ])	ERROR:type_error	'bad' is not an Integer
+def Codes (enum [ :String 'ok' 1 ])	ERROR:type_error	1 is not a String
 		
 # String-valued enum.		
-def Mode enum [ :String 'off' 'on' 'auto' ] 'on' is Mode	true	
-def Mode enum [ :String 'off' 'on' 'auto' ] 'ok' is Mode	false	
+def Mode (enum [ :String 'off' 'on' 'auto' ]) 'on' is Mode	true	
+def Mode (enum [ :String 'off' 'on' 'auto' ]) 'ok' is Mode	false	
 		
 # A bare enum (no `def`) returns a disjunct value usable directly.		
-quote red is enum [ red green blue ]	true	the enum value behaves as a type at the right of `is`
-quote pink is enum [ red green blue ]	false	
+quote red is (enum [ red green blue ])	true	the enum value behaves as a type at the right of `is`
+quote pink is (enum [ red green blue ])	false	
 		
 # Empty enum — uninhabited.		
-quote red is enum [ ]	false	no alternatives means nothing satisfies
+quote red is (enum [ ])	false	no alternatives means nothing satisfies
 		
 # =====================================================================		
 # 11l. fnsig — body-less function-shape type		
@@ -847,13 +847,13 @@ quote red is enum [ ]	false	no alternatives means nothing satisfies
 # core words alone can demonstrate.)		
 		
 # Bare fnsig produces an FunctionSignature type literal.		
-typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	body-less form yields an FunctionSignature type literal
+typeof (fnsig [ [ Integer ] [ Integer ] ])	FunctionSignature	body-less form yields an FunctionSignature type literal
 fnsig [ [ Integer ] [ Integer ] ] is FunctionSignature	true	is-test confirms the type
-typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	multi-pair fnsig is still FunctionSignature
+typeof (fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ])	FunctionSignature	multi-pair fnsig is still FunctionSignature
 		
 # `def NAME fnsig […]` installs the shape under NAME; the named type		
 # is itself an FunctionSignature.		
-def Mapper fnsig [ [ Integer ] [ Integer ] ] typeof Mapper	FunctionSignature	named fnsig type round-trips through typeof
+def Mapper (fnsig [ [ Integer ] [ Integer ] ]) typeof Mapper	FunctionSignature	named fnsig type round-trips through typeof
 		
 # `fnsig` is strict about its outer-list grammar: each pair MUST be		
 # `[in] [out]` (length is non-zero multiple of 2). Adding a body		
@@ -862,7 +862,7 @@ fnsig [ ]	ERROR:multiple of 2	empty list is rejected
 fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with body) is rejected; use fn for that
 		
 # =====================================================================		
-# 11m. Instantiated enum — `def x:Color quote red`		
+# 11m. Instantiated enum — `def x:Color (quote red)`		
 # =====================================================================		
 # Once an enum is registered as a type via `type Color enum […]`,		
 # Color is an FunctionSignature-style disjunct constraint. The typed-def form		
@@ -878,7 +878,7 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 #   Python        Color.RED           Enum subclass attribute		
 #   TypeScript    Color.Red           value of an enum type		
 #   Haskell       Red                 data constructor of the sum type		
-#   AQL           def x:Color quote red		
+#   AQL           def x:Color (quote red)		
 #                                     typed-def asserts `red ∈ Color` at		
 #                                     bind time; x then resolves to		
 #                                     Atom(red) and `x is Color` is true		
@@ -889,24 +889,24 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 # bound, x is an Atom that *happens* to satisfy Color.		
 		
 # Atom-valued enum — typed binding admits members.
-def Color enum [ red green blue ] def x:Color quote red x	red/q	red is a Color member; bind succeeds
-def Color enum [ red green blue ] def x:Color quote green x	green/q
-def Color enum [ red green blue ] def x:Color quote blue x	blue/q
+def Color (enum [ red green blue ]) def x:Color (quote red) x	red/q	red is a Color member; bind succeeds
+def Color (enum [ red green blue ]) def x:Color (quote green) x	green/q
+def Color (enum [ red green blue ]) def x:Color (quote blue) x	blue/q
 		
 # Non-member rejected.		
-def Color enum [ red green blue ] def x:Color quote pink	ERROR:type_error	pink is not in Color's alternatives
+def Color (enum [ red green blue ]) def x:Color (quote pink)	ERROR:type_error	pink is not in Color's alternatives
 		
 # Membership round-trip via `is`.		
-def Color enum [ red green blue ] def x:Color quote red x is Color	true	the bound value still satisfies Color
+def Color (enum [ red green blue ]) def x:Color (quote red) x is Color	true	the bound value still satisfies Color
 		
 # Integer-valued enum — typed binding accepts matching literals.		
-def Codes enum [ :Integer 200 404 500 ] def s:Codes 200 s	200	200 is a Codes member
-def Codes enum [ :Integer 200 404 500 ] def s:Codes 404 s	404	
-def Codes enum [ :Integer 200 404 500 ] def s:Codes 201	ERROR:type_error	201 is not in Codes
+def Codes (enum [ :Integer 200 404 500 ]) def s:Codes 200 s	200	200 is a Codes member
+def Codes (enum [ :Integer 200 404 500 ]) def s:Codes 404 s	404	
+def Codes (enum [ :Integer 200 404 500 ]) def s:Codes 201	ERROR:type_error	201 is not in Codes
 		
 # String-valued enum — same pattern, String members.		
-def Mode enum [ :String 'off' 'on' 'auto' ] def m:Mode 'on' m	'on'	'on' is a Mode member
-def Mode enum [ :String 'off' 'on' 'auto' ] def m:Mode 'fast'	ERROR:type_error	'fast' is not in Mode
+def Mode (enum [ :String 'off' 'on' 'auto' ]) def m:Mode 'on' m	'on'	'on' is a Mode member
+def Mode (enum [ :String 'off' 'on' 'auto' ]) def m:Mode 'fast'	ERROR:type_error	'fast' is not in Mode
 		
 # =====================================================================		
 # 12. Dispatch — type literals are rejected at concrete-payload sigs		

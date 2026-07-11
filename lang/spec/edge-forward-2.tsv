@@ -60,22 +60,22 @@ sub/u 10 3	7	/u sub: sub 3 10
 #     IS speculation working (design/FORWARD-COLLECTION-PHASES.10.md):
 #     a word planned into an Any slot, the barrier probe, and the
 #     arrival that completes the parked word.
-def x add 1 2 x	3	def's value slot plans `add` speculatively; add's result arrives and completes def
-def x iota 3 size x	3	the generator idiom: iota's list arrives as x's value
-def x size [1 2] x	2	a measuring word as the speculative filler
+def x (add 1 2) x	3	def's value slot plans `add` speculatively; add's result arrives and completes def
+def x (iota 3) size x	3	the generator idiom: iota's list arrives as x's value
+def x (size [1 2]) x	2	a measuring word as the speculative filler
 def x (add 1 2) x mul 2	6	a paren value needs no speculation: def completes in phase 1
-def x add 1 2 def y add x 1 y	4	chained speculative defs commit statement by statement
-def s iota 3 s	[0 1 2]	the bound value is the arrival itself
-def s range 2 5 s	[2 3 4]	range's optional slot stops at the UNBOUND word s: 2-arg completes, then binds
+def x (add 1 2) def y (add x 1) y	4	chained defs: each call is grouped, then bound
+def s (iota 3) s	[0 1 2]	the bound value is the arrival itself
+def s (range 2 5) s	[2 3 4]	range's optional slot stops at the UNBOUND word s: 2-arg completes, then binds
 def a 1 def b 2 add a b	3	plain multi-statement flow — each def commits before the next statement
 def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 2 def x 5 x	3 5	TYPED overloads: the def word prunes the 3-arg form in phase 1 — the 2-arg call completes before parking
 def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 2 3	123	…with a third value present the 3-arg form wins
 def g2 fn [[a:Integer b:Integer][Integer][a add b] [a:Integer b:Integer c:Integer][Integer][((a mul 100) add (b mul 10)) add c]] g2 1 def x 5 x	ERROR:signature	one arg and a word: no 1-arg overload exists, so the typed plan fails loudly
 def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 2 def x 5 x	3 5	ANY overloads park speculatively instead — the barrier probe commits the exact 2-arg form
 def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 2 3 def x 5 x	123 5	…three claimed args commit the 3-arg form
-def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 def x 5 x	6	one claimed arg fails the probe: ga keeps waiting and def's x feeds its second slot
+def ga fn [[a:Any b:Any][Any][add a b] [a:Any b:Any c:Any][Any][((a mul 100) add (b mul 10)) add c]] ga 1 def x 5 x	ERROR:signature	one claimed arg fails the probe: ga cannot commit and `def` is a barrier — the parked ga strands (no wait-through)
 mul 2 def x 5 x	ERROR:signature	a typed native with no smaller overload fails at plan time (mul sibling of the pinned add row)
-not def x 5 x	false	an Any-slot native waits through the boundary: x's 5 arrives, truthy → false
+not (def x 5) x	false	an Any-slot native waits through the boundary: x's 5 arrives, truthy → false
 5 if (1 eq 1) [99] def x 1 x	99 1	a stack value claimed as the else is consumed; the next statement then runs intact
 (if (1 eq 1) [9] def x 1 x)	9 1	the commit scan works inside a paren scope too
 def f fn [[n:Integer][List][if (n eq 0) [raise "z"] range 0 n]] f 2	[0 1]	guard inside a fn body committed by a range statement

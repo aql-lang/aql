@@ -97,13 +97,15 @@ func TestFnReturnCountDivergenceParity(t *testing.T) {
 // --- forward-collection arrival loop ---------------------------------------------------
 
 func TestSpeculativeWordArrivalCompletes(t *testing.T) {
-	// `cpairany cbool 5` — the Any slot accepts the WORD cbool as a
-	// speculative forward operand; at run time cbool dispatches first
-	// and its Boolean ARRIVES at the parked forward.
+	// `cpairany (cbool) 5` — a grouped call's RESULT arrives at the parked
+	// forward. (Under the strict forward-barrier a bare `cbool` word would
+	// be a barrier and strand; the paren makes its Boolean the operand.)
 	r := covRegistry(t, registerContractWords)
-	out, err := NewTop(r).Run([]Value{NewWord("cpairany"), NewWord("cbool"), NewInteger(5)})
+	out, err := NewTop(r).Run([]Value{
+		NewWord("cpairany"), NewOpenParen(), NewWord("cbool"), NewCloseParen(), NewInteger(5),
+	})
 	if err != nil {
-		t.Fatalf("speculative arrival: %v", err)
+		t.Fatalf("grouped arrival: %v", err)
 	}
 	if got := renderAll(out); got != "5" {
 		t.Errorf("got %q, want 5", got)
@@ -111,11 +113,13 @@ func TestSpeculativeWordArrivalCompletes(t *testing.T) {
 }
 
 func TestMultiValueArrivalFillsForward(t *testing.T) {
-	// `9 cpairany cbools2` — the parked forward expects ONE arrival; the
-	// word produces two values, the first completes the dispatch and the
-	// second stays on the stack.
+	// `9 cpairany (cbools2)` — the parked forward expects ONE arrival; the
+	// grouped call produces two values, the first completes the dispatch and
+	// the second stays on the stack.
 	r := covRegistry(t, registerContractWords)
-	out, err := NewTop(r).Run([]Value{NewInteger(9), NewWord("cpairany"), NewWord("cbools2")})
+	out, err := NewTop(r).Run([]Value{
+		NewInteger(9), NewWord("cpairany"), NewOpenParen(), NewWord("cbools2"), NewCloseParen(),
+	})
 	if err != nil {
 		t.Fatalf("multi-value arrival: %v", err)
 	}

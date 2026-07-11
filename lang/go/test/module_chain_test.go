@@ -730,7 +730,7 @@ func TestInlineModuleImportAll(t *testing.T) {
 
 func TestInlineModuleDefSubjectThenImport(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`def my-mod module [export "M" {v:88}]`,
+		`def my-mod (module [export "M" {v:88}])`,
 		`import my-mod`,
 		`M.v`,
 	})
@@ -742,7 +742,7 @@ func TestInlineModuleDefSubjectThenImport(t *testing.T) {
 
 func TestInlineModuleDefSubjectRenameImport(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`def my-mod module [export "M" {v:88}]`,
+		`def my-mod (module [export "M" {v:88}])`,
 		`import [M R] my-mod`,
 		`R.v`,
 	})
@@ -754,7 +754,7 @@ func TestInlineModuleDefSubjectRenameImport(t *testing.T) {
 
 func TestInlineModuleDefSubjectMultiRenameImport(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`def my-mod module [export "A" {x:1} export "B" {y:2}]`,
+		`def my-mod (module [export "A" {x:1} export "B" {y:2}])`,
 		`import [[A AA] [B BB]] my-mod`,
 		`BB.y`,
 	})
@@ -801,7 +801,7 @@ func TestModuleValueType(t *testing.T) {
 
 func TestRenameWithStringNames(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`def my-mod module [export "Orig" {x:1}]`,
+		`def my-mod (module [export "Orig" {x:1}])`,
 		`import ["Orig" "Renamed"] my-mod`,
 		`Renamed.x`,
 	})
@@ -813,7 +813,7 @@ func TestRenameWithStringNames(t *testing.T) {
 
 func TestMultiRenameWithStringNames(t *testing.T) {
 	result, err := runModuleSteps(t, nil, []string{
-		`def my-mod module [export "A" {x:1} export "B" {y:2}]`,
+		`def my-mod (module [export "A" {x:1} export "B" {y:2}])`,
 		`import [["A" "AA"] ["B" "BB"]] my-mod`,
 		`AA.x`,
 	})

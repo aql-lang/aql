@@ -1,9 +1,54 @@
-# Strict Forward Barrier (prototype)
+# Strict Forward Barrier
 
-Status: **experiment** — prototype gated behind `AQL_STRICT_BARRIER=1`,
-default off (zero behaviour change when unset). This note records the
-motivation, the measured fallout, and the open design questions. It is
-NOT shipped semantics.
+Status: **shipped as the default.** A bare function word beginning its own
+dispatch is a forward-collection barrier, uniformly, regardless of arity.
+`AQL_NO_STRICT_BARRIER=1` restores the legacy wait-through behaviour as a
+transitional escape hatch (slated for removal). This note records the
+motivation, the final rule, and the migration.
+
+## The shipped rule (uniform)
+
+> **Every bare function word that begins its own dispatch is a barrier.**
+> A parked forward that cannot commit with the args it already holds is
+> STRANDED — a `signature_error`, not a wait-through. The rule does not ask
+> "how many args does the word collect": a nullary `context`/`gensym` and a
+> binary `add` are both function dispatches, so both strand a waiting
+> forward. Group the call in parens so its RESULT becomes the argument:
+> `print (add 1 2)`, `(context) eq (context)`, `not (not 5)`.
+
+The **sole exemption is structural, not arity-based**: a dot-access chain
+(`m.a`, `MathUtil.now`) is implicitly-parenthesized navigation — it produces
+exactly one value and collects nothing further, so it feeds forward
+collection like any other value and is never a barrier (`size m.a` works).
+A dot-access that resolves to a FUNCTION is still a function: given trailing
+args it dispatches (`L.f x` collects `x`), so parenthesize `(L.f)` when you
+want the value, not the call. (An earlier revision tried an arity-based
+exemption — "a word that collects 0 forward tokens is transparent" — and it
+was rejected as fragile special-casing: functions are treated uniformly, only
+the navigation *syntax* is grouped.)
+
+### Two sharp edges the migration surfaced
+
+- **`(fn […])` auto-invokes a 0-arg overload.** A Function value with a
+  nullary overload, reaching the pointer with no args, fires the 0-arg sig
+  (the "value vs call" edge, lang/go/CLAUDE.md). So `def h (fn […])` where the
+  fn has a `[]` overload binds `h` to the 0-arg *result*, not the FnDef —
+  wrapping is WRONG there. Bind it with the keyword form `def h fn […]`
+  instead (the keyword slot captures `fn` and installs the FnDef directly).
+- **The `word` splice is forward-form only.** `(word [body])` fires the
+  `__SP` inside the paren, so splice-def must use the keyword form
+  `def name word [body]`, never a paren.
+
+Both are why `def`'s keyword forms (below) are load-bearing under the strict
+rule, and why the eng-kernel spec fixture grew the same `fn`/`word` keyword
+forms the lang layer synthesizes.
+
+## History: the opt-in prototype
+
+The rule first shipped behind `AQL_STRICT_BARRIER=1` (default off). The
+sections below record that prototype's motivation and fallout measurement;
+the rule is now the default and the gate variable inverted
+(`AQL_NO_STRICT_BARRIER`).
 
 ## The question
 

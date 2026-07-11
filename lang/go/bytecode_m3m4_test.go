@@ -219,7 +219,7 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		// overload has one Point-compatible candidate for two Point slots,
 		// so the Integer must occupy one of them (assignment infeasibility).
 		{"one Point candidate for two Point slots",
-			`import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  add p0 1`},
+			`import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 (make Pointer.Point {x:1 y:2})  add p0 1`},
 		// generics-sugar.tsv:37 — the design's named example: a Box<String>
 		// instance is statically Never against a Box<Integer> param.
 		{"Box<String> vs Box<Integer> param",

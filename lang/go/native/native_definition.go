@@ -355,18 +355,31 @@ func defFormVia(base *Signature, offset int, genChain bool) func([]Value, map[st
 // keyword overload: [name/q ctor/q …ctor-args], or the gen chain
 // [name/q gen/q params:List tail/q …tail-args]. The constructor's
 // per-position dispatch modifiers travel with their slots.
-func synthDefKeywordSig(ctor string, base *Signature, genChain bool) Signature {
+// synthDefKeywordSigNamed synthesizes one def keyword overload, parameterised
+// by the NAME
+// slot's type. def accepts a word OR a string as the name everywhere else
+// (`def "x" 5` binds the same as `def x 5`), so the keyword forms mirror
+// both: nameType=TAtom captures a bare-word name via /q, nameType=TString
+// takes a string-literal name as a plain value (no quote). Without the
+// String variant, `def "double" word […]` (a string-named splice/fn form,
+// as host code builds it) fell through to the general value sig and — under
+// the strict forward-barrier — stranded on the constructor word.
+func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameType *Type) Signature {
+	nameQuote := nameType == TAtom
 	offset := 2
-	args := []*Type{TAtom, TAtom}
-	quote := map[int]bool{0: true, 1: true}
+	args := []*Type{nameType, TAtom}
+	quote := map[int]bool{0: nameQuote, 1: true}
 	patterns := map[int]Value{1: NewAtom(ctor)}
 	noEval := map[int]bool{}
 	if genChain {
 		offset = 4
-		args = []*Type{TAtom, TAtom, TList, TAtom}
+		args = []*Type{nameType, TAtom, TList, TAtom}
 		quote[3] = true
 		patterns = map[int]Value{1: NewAtom("gen"), 3: NewAtom(ctor)}
 		noEval[2] = true // gen's params list is code, not data
+	}
+	if !nameQuote {
+		delete(quote, 0)
 	}
 	args = append(args, base.Args...)
 	// No base per-position QuoteArgs/Patterns to mirror: base sigs with
@@ -468,7 +481,8 @@ func registerDefKeywordForms(r *Registry) {
 			if hasStructuralSlots(&base) {
 				continue
 			}
-			r.Register("def", synthDefKeywordSig(ctor, &base, genChain))
+			r.Register("def", synthDefKeywordSigNamed(ctor, &base, genChain, TAtom))
+			r.Register("def", synthDefKeywordSigNamed(ctor, &base, genChain, TString))
 		}
 	}
 	for _, ctor := range defKeywordConstructors {

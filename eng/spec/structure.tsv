@@ -86,10 +86,10 @@ def t Integer { rows:[ { id:t } { id:t } ] }	{rows:[{id:Integer} {id:Integer}]}
 firstq [ ( enum [ a b ] ) ( enum [ c d ] ) ]	a tor b	
 		
 # type-named enum referenced at depth.		
-def Color enum [ red green blue ] { c:Color }	{c:(red tor green tor blue)}	
-def Color enum [ red green blue ] { palette:[ Color Color ] }	{palette:[(red tor green tor blue) (red tor green tor blue)]}	
-def Color enum [ red green blue ] { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:(red tor green tor blue)}}}	
-def Color enum [ red green blue ] firstq [ Color ]	red tor green tor blue
+def Color (enum [ red green blue ]) { c:Color }	{c:(red tor green tor blue)}	
+def Color (enum [ red green blue ]) { palette:[ Color Color ] }	{palette:[(red tor green tor blue) (red tor green tor blue)]}	
+def Color (enum [ red green blue ]) { deep:{ inner:{ kind:Color } } }	{deep:{inner:{kind:(red tor green tor blue)}}}	
+def Color (enum [ red green blue ]) firstq [ Color ]	red tor green tor blue
 
 # `tor` orders its alternatives by the value (tcmp) order, not lattice rank
 # alone: concrete numbers by magnitude across Integer/Float, and within a
@@ -124,7 +124,7 @@ def double fn [ [ a:Integer ] [ Integer ] [ a addq a ] ] { fn:double }	ERROR:sig
 		
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } typeof	Map	
 { s:( fnsig [ [ Integer ] [ Integer ] ] ) } is Map	true	
-def Mapper fnsig [ [ Integer ] [ Integer ] ] { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
+def Mapper (fnsig [ [ Integer ] [ Integer ] ]) { schema:{ sig:Mapper } } typeof	Map	an FunctionSignature nested two levels deep; the outer value is still a Map
 		
 # ====================================================================		
 # 6. Atoms (quoted words) as structure values		
@@ -152,13 +152,13 @@ def t Integer { a:{ b:{ c:t } } }	{a:{b:{c:Integer}}}	three maps deep
 def t Integer { a:[ { b:[ { c:t } ] } ] }	{a:[{b:[{c:Integer}]}]}	map → list → map → list → map
 def t Integer [ [ [ t ] ] ]	[[[Integer]]]	three lists deep
 def t Integer { rows:[ { cols:[ t t ] } { cols:[ t ] } ] }	{rows:[{cols:[Integer Integer]} {cols:[Integer]}]}	
-def Color enum [ a b c ] { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:(a tor b tor c) base:(a tor b tor c)}}}	type-named disjunct, three deep, twice
+def Color (enum [ a b c ]) { ui:{ theme:{ accent:Color base:Color } } }	{ui:{theme:{accent:(a tor b tor c) base:(a tor b tor c)}}}	type-named disjunct, three deep, twice
 def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, four deep
 		
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 def Color enum [ red green blue ] { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:(red tor green tor blue)}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color (enum [ red green blue ]) { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:(red tor green tor blue)}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		

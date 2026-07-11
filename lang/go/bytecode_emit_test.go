@@ -86,7 +86,7 @@ func TestEmitGoldens(t *testing.T) {
 		// The branch result feeds the downstream mul; a stripped
 		// Boolean literal condition compiles as PUSH_CONST + jump
 		// (CoerceBoolean truthiness at run time).
-		{`def y if (2 gt 1) [1 add 2] [9] y mul 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
+		{`def y (if (2 gt 1) [1 add 2] [9]) y mul 2`, `0000 PUSH_CONST  k1   ; 2 (Integer)
 0001 PUSH_CONST  k0   ; 1 (Integer)
 0002 CALL_NATIVE s0   ; gt (Any, Any)
 0003 JMP_IF_FALSE -> 0008
@@ -881,7 +881,7 @@ func TestEmitRefusals(t *testing.T) {
 // `Integer|String add 1` no longer has a single whole-disjunct seed overload,
 // so the straddle moved to `is`, which keeps the same shape.)
 func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
-	const src = `def y if (1 gt 0) [1] ['s'] y is Integer`
+	const src = `def y (if (1 gt 0) [1] ['s']) y is Integer`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)

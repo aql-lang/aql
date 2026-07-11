@@ -435,8 +435,12 @@ func TestClassifyFrontierKnownInputs(t *testing.T) {
 		// An error-severity diagnostic → check stage, with the stable
 		// diagnostic code as the detail; never emitted as a Program.
 		{"frobnicate", classCheck, "undefined_word", false},
-		// Checks clean but Stage-1 will not lower it.
-		{"0 not dup", classCompile, "dup", false},
+		// A function word that strands a parked forward under the strict
+		// forward barrier → check stage (`not` cannot feed off `dup`).
+		{"0 not dup", classCheck, "check", false},
+		// Checks clean but Stage-1 will not lower it (an unmatched dispatch
+		// the checker recovers but the compiler refuses).
+		{"def n 0 if (n eq 0) [99] [1 2] each [dup mul]", classCompile, "unmatched dispatch", false},
 		// Checks clean AND compiles, yet errors at run.
 		{"0 true not lt", classRuntime, "incomparable", true},
 		// A genuinely passing program reaches the runtime stage and is
@@ -833,7 +837,7 @@ func TestExtractPassingSkipsNonQualifyingRows(t *testing.T) {
 		"dup\tERROR:signature_error\t1-elem rejected", // error row: never passing
 		"0 true not lt\tbogus\t4-elem → 1 value(s)",   // errors at run (incomparable)
 		"[None] get 0\t[None]\t3-elem → 1 value(s)",   // runs clean, but the checker errors
-		"0 not dup\ttrue true\t3-elem → 1 value(s)",   // checks clean, but the compiler refuses
+		"def One (typeof (const 1)) end 1 is One\ttrue\tchecks & runs clean, but the compiler refuses (whole-program fallback)", // checks clean, but the compiler refuses
 	}, "\n")+"\n")
 	out := filepath.Join(t.TempDir(), "mini-passing.tsv")
 

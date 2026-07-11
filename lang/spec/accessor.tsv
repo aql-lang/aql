@@ -68,7 +68,7 @@ do [raise bad_input 'boom'] error [get 'message']	'boom'	get reads the message b
 
 # ---- None: forgiving access propagates None ----
 None get 'a'	None	get over None short-circuits to None
-None dot quote x	None	dot over None with a materialised atom key → None
+None dot (quote x)	None	dot over None with a materialised atom key → None
 
 # ---- Chained access composes left to right ----
 {a:{b:7}} dot a dot b	7	dot chains: a then b

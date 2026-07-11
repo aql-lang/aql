@@ -276,12 +276,12 @@ func TestW3ListOps(t *testing.T) {
 func TestW3ListOpsFlex(t *testing.T) {
 	// push/unshift return the mutated flex value; `node f` then renders
 	// the frozen copy — both stay on the stack.
-	w3MiscWant(t, `def f flex [1 2]  push 3 f  end  node f`, `(flex [1 2 3]) [1 2 3]`)
-	w3MiscWant(t, `def f flex [1 2]  unshift 0 f  end  node f`, `(flex [0 1 2]) [0 1 2]`)
-	w3MiscWant(t, `def f flex [1 2]  pop f  end`, `(flex [1]) 2`)
-	w3MiscWant(t, `def f flex [1 2]  shift f  end`, `(flex [2]) 1`)
-	w3MiscErr(t, `def f flex []  pop f`, "empty list")
-	w3MiscErr(t, `def f flex []  shift f`, "empty list")
+	w3MiscWant(t, `def f (flex [1 2])  push 3 f  end  node f`, `(flex [1 2 3]) [1 2 3]`)
+	w3MiscWant(t, `def f (flex [1 2])  unshift 0 f  end  node f`, `(flex [0 1 2]) [0 1 2]`)
+	w3MiscWant(t, `def f (flex [1 2])  pop f  end`, `(flex [1]) 2`)
+	w3MiscWant(t, `def f (flex [1 2])  shift f  end`, `(flex [2]) 1`)
+	w3MiscErr(t, `def f (flex [])  pop f`, "empty list")
+	w3MiscErr(t, `def f (flex [])  shift f`, "empty list")
 }
 
 // ---- has / getr / dotr ----

@@ -645,7 +645,7 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("cmod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 	runAQL(t, r, []Value{NewWord("import"), NewWord("cmod")})
@@ -671,7 +671,7 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("rmod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 	renameList := NewList([]Value{NewAtom("origName"), NewAtom("newName")})
@@ -696,7 +696,7 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mmod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -722,7 +722,7 @@ func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("emod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -745,7 +745,7 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("memod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 

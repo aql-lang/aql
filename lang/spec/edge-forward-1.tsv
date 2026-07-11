@@ -198,12 +198,12 @@ mul 2 add 1 3	ERROR:signature	a typed slot treats the next FUNCTION WORD as a bo
 mul 2 (add 1 3)	8	grouping turns the word's RESULT into the argument
 sub 1 sub 3 5	ERROR:signature	same boundary for sub against sub
 sub 1 (sub 3 5)	1	grouped: (5-3) - 1 … as sig order has it: 2-1
-size iota 3	3	an ANY slot plans a following word as its operand: iota's list arrives and size commits
-typeof iota 3	List	same speculative arrival through typeof
-size range 2 5	3	the arrival works for any value-producing word
-size def x 5 x	5	even def: the probe fails (no 0-arg size), def runs, x's value arrives
-typeof def x 5 x	Integer	the same shape through typeof
-not iota 3	false	not's Any overload coerces the ARRIVED list: truthy → false
+size (iota 3)	3	an ANY slot plans a following word as its operand: iota's list arrives and size commits
+typeof (iota 3)	List	same speculative arrival through typeof
+size (range 2 5)	3	the arrival works for any value-producing word
+size (def x 5) x	5	even def: the probe fails (no 0-arg size), def runs, x's value arrives
+typeof (def x 5) x	Integer	the same shape through typeof
+not (iota 3)	false	not's Any overload coerces the ARRIVED list: truthy → false
 range 2 6 def x 99 x	[2 3 4 5] 99	a TYPED optional slot stops at the word in phase 1: range completes as 2-arg before def runs
 range 2 6 add 1 2	[2 3 4 5] 3	value-producing follow: range is already complete, add keeps its own result
 slice 1 [10 20 30] 5	[20 30] 5	overload pruning: the list at position 1 rules out the 3-arg slice, so the 5 is free

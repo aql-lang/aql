@@ -162,8 +162,8 @@ make Urlon 'https://x.com/a?q=1' typeof	Urlon
 # A `make`-produced value can be captured by `def` and reused —		
 # typeof and round-trip behaviour survive the def-stack.		
 		
-def n make Integer '42' n	42	def captures the parsed Integer
-def n make Integer '42' n typeof	Integer	type round-trips through the def stack
-def p make Pathon 'a/b/c' p	a/b/c	
-def p make Pathon 'a/b/c' p typeof	Pathon	
-def opt make Options { x:1 } opt	options{x:1}	
+def n (make Integer '42') n	42	def captures the parsed Integer
+def n (make Integer '42') n typeof	Integer	type round-trips through the def stack
+def p (make Pathon 'a/b/c') p	a/b/c	
+def p (make Pathon 'a/b/c') p typeof	Pathon	
+def opt (make Options { x:1 }) opt	options{x:1}	

@@ -14,7 +14,7 @@ import "aql:repl" def l (Repl.serve {port: 0}) Repl.close l; "stopped"	'stopped'
 # §2  connect / eval — a full client round-trip (evaluate, then reuse a
 #     definition from the session history; errors come back as text)
 import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "1 add 2") Repl.close e; Repl.close l; r	'3'	Repl.connect dials; Repl.eval evaluates one line remotely
-import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) Repl.eval e "def x 21" drop def r (Repl.eval e "x mul 2") Repl.close e; Repl.close l; r	'42'	definitions persist across lines (session history replay)
+import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) (Repl.eval e "def x 21") drop def r (Repl.eval e "x mul 2") Repl.close e; Repl.close l; r	'42'	definitions persist across lines (session history replay)
 import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "no-such-thing") Repl.close e; Repl.close l; def rb (convert Bytes r) def r6 (slice 0 6 rb) def out (convert String r6) out eq "error:"	true	a bad line replies with an error line instead of killing the connection
 #
 # §3  negative — the namespace needs the import

@@ -71,7 +71,7 @@ inspect tand	{name:'tand' kind:native signatures:[{args:['Any' 'Any']}]}
 # --- binding / quotation ---		
 inspect quote	{name:'quote' kind:native signatures:[{args:['Atom']} {args:['Any']}]}	name slot is Atom/q — captures upcoming Word as Atom
 inspect args	{name:'args' kind:native signatures:[{args:[]}]}
-inspect def	{name:'def' kind:native signatures:[{args:['Map' 'Any']} {args:['Atom' 'Any']}]}	name slot is Atom/q
+inspect def	{name:'def' kind:native signatures:[{args:['Atom' 'Atom' 'Any']} {args:['Atom' 'Atom' 'List']} {args:['Map' 'Any']} {args:['Atom' 'Any']}]}	name slot is Atom/q; word-keyword form first
 inspect fn	{name:'fn' kind:native signatures:[{args:['List']}]}
 inspect fnsig	{name:'fnsig' kind:native signatures:[{args:['List']}]}
 
@@ -176,12 +176,12 @@ def Pt (refine Record [ { x:Integer } { y:Integer } ]) inspect Pt	{name:'Pt' typ
 inspect ( Integer tor Boolean )	{type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Boolean' 'Scalar/Number/Integer']}	
 inspect ( enum [ red green blue ] )	{type:'Type' struct:'Enum' kind:disjunct alternatives:['Scalar/Atom' 'Scalar/Atom' 'Scalar/Atom']}	enum members are atoms
 def D ( Integer tor Boolean ) inspect D	{name:'D' type:'Type' struct:'Disjunct' kind:disjunct alternatives:['Scalar/Boolean' 'Scalar/Number/Integer']}	
-def Color enum [ red green blue ] inspect Color	{name:'Color' type:'Type' struct:'Enum' kind:disjunct alternatives:['Scalar/Atom' 'Scalar/Atom' 'Scalar/Atom']}	
+def Color (enum [ red green blue ]) inspect Color	{name:'Color' type:'Type' struct:'Enum' kind:disjunct alternatives:['Scalar/Atom' 'Scalar/Atom' 'Scalar/Atom']}	
 		
 # --- function-shape (fnsig) ---		
 inspect ( fnsig [ [ Integer ] [ Integer ] ] )	{type:'Type' struct:'FunctionSignature' kind:function_shape signatures:[{params:['Integer'] returns:['Integer']}]}	
 inspect ( fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ] )	{type:'Type' struct:'FunctionSignature' kind:function_shape signatures:[{params:['Integer'] returns:['Integer']} {params:['String'] returns:['String']}]}	two pairs → two sigs
-def Sig fnsig [ [ Integer ] [ Integer ] ] inspect Sig	{name:'Sig' type:'Type' struct:'FunctionSignature' kind:function_shape signatures:[{params:['Integer'] returns:['Integer']}]}	
+def Sig (fnsig [ [ Integer ] [ Integer ] ]) inspect Sig	{name:'Sig' type:'Type' struct:'FunctionSignature' kind:function_shape signatures:[{params:['Integer'] returns:['Integer']}]}	
 		
 # --- a function VALUE / typed-list / typed-map / alias named type ---		
 inspect ( fn [ [ a:Integer ] [ Integer ] [ a ] ] )	{type:'Type' struct:'Function' kind:literal}	a function value is a (predicate) type — type:'Type', struct:'Function'
@@ -202,7 +202,7 @@ def n -7 inspect n	{name:'n' kind:defined value:-7 signatures:[]}
 def s 'hi' inspect s	{name:'s' kind:defined value:'hi' signatures:[]}	
 def lst [ 1 2 3 ] inspect lst	{name:'lst' kind:defined value:[1 2 3] signatures:[]}	a list value — note the comma-separated render
 def m { a:1 b:2 } inspect m	{name:'m' kind:defined value:{a:1 b:2} signatures:[]}	
-def g fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ] inspect g	{name:'g' kind:defined signatures:[{args:['Integer']} {args:[]}]}	an fn-defined word — no `value`; the unified signature carries the AQL body so kind:defined, and the dispatch aggregate appends the synthetic 0-arg fallback ({args:[]})
+def g (fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]) inspect g	{name:'g' kind:defined signatures:[{args:['Integer']} {args:[]}]}	an fn-defined word — no `value`; the unified signature carries the AQL body so kind:defined, and the dispatch aggregate appends the synthetic 0-arg fallback ({args:[]})
 inspect nonexistentword	{name:'nonexistentword' kind:unknown signatures:[]}	not a type, def, or word — no `value`
 		
 typeof ( inspect dup )	Inspect	an inspect result is an `Inspect` value
