@@ -36,4 +36,16 @@ func TestUncompilableShapesNowCompile(t *testing.T) {
 			` iota 3 each [ var [[i] cells set (convert String i) (i mul 10) drop 0 ] ]`+
 			` drop (cells get "2")`,
 		"[20]")
+
+	// C'. The verbatim 407feda spelling of C (Array→List): the each body
+	// `var`-binds the element and `set`s a captured LIST by integer index.
+	// List set is copy-on-write, so the fresh list is discarded and the
+	// binding stays [1 2 3] — the pin asserts BOTH engines agree on that
+	// AND on the per-iteration body results, through the list-set path
+	// the store-based C above never touches.
+	mustCompileWithParity(t,
+		`def cells (make List [1 2 3])`+
+			` def _fill (iota 3 each [ var [[i] cells 0 i set end 0 ] ])`+
+			` [_fill cells]`,
+		"[[[0 0 0] [1 2 3]]]")
 }
