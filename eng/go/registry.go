@@ -197,6 +197,15 @@ type Registry struct {
 	// stays copyable for ForkConcurrent's shallow clone.
 	vmRunning int32
 
+	// runtimeStamping arms detached fn-unit compilation (StampDetachedFn):
+	// see EnableRuntimeStamping. Set only by the compiled execution entry
+	// points; default false keeps plain interpreter runs stamp-free.
+	runtimeStamping bool
+	// stampLog collects stamp attempts for the -compile-report surface
+	// (stamp_report.go). Created at arming; SHARED (pointer) with forks and
+	// module sub-registries so one report covers the whole execution.
+	stampLog *stampLog
+
 	// interpRunDepth counts live interpreter Engine.Run activations on this
 	// registry — the top-level run AND every re-entrant sub-engine run (module
 	// loads, islands, higher-order bodies). It exists so a compiled RunProgram
@@ -405,6 +414,53 @@ func (r *Registry) interpRunActive() bool {
 // invoker/scopes a live run owns.
 func (r *Registry) canHostVM() bool {
 	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
+}
+
+// EnableRuntimeStamping arms detached fn-unit compilation (StampDetachedFn /
+// StampFnValue): store words and codec resolution may then compile a
+// runtime-constructed, capture-free fn body to a standalone unit so
+// InvokeCallback runs it on the VM. Armed only by the COMPILED execution
+// entry points (RunCompiled / RunCompiledStrict and the CLI's default mode)
+// and inherited by module sub-registries — a plain interpreter run
+// (`-no-compile`, `Run`) never stamps, keeping the mode contract exact.
+// ForkConcurrent's shallow copy carries the flag to per-connection forks.
+func (r *Registry) EnableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = true
+		if r.stampLog == nil {
+			r.stampLog = &stampLog{}
+		}
+	}
+}
+
+// InheritRuntimeStamping arms r exactly like parent — including SHARING the
+// parent's stamp-attribution log, so a module sub-registry's stamps land in
+// the one report. A no-op when the parent is unarmed.
+func (r *Registry) InheritRuntimeStamping(parent *Registry) {
+	if r == nil || parent == nil || !parent.runtimeStamping {
+		return
+	}
+	r.runtimeStamping = true
+	r.stampLog = parent.stampLog
+}
+
+// RuntimeStampingEnabled reports whether detached fn-unit compilation is
+// armed on this registry (see EnableRuntimeStamping).
+func (r *Registry) RuntimeStampingEnabled() bool {
+	return r != nil && r.runtimeStamping
+}
+
+// DisableRuntimeStamping disarms detached fn-unit compilation — the inverse of
+// EnableRuntimeStamping. It stops only NEW stamps: a callback already stamped
+// keeps its VM path (InvokeCallback gates on the stored CompiledRef, not this
+// flag), and the stamp-attribution log is left intact so StampReport still
+// reads after the run. RunCompiled / RunCompiledStrict use it to restore the
+// prior interpreter contract on return, so a compiled-mode request never leaks
+// the armed flag into a later plain Run (`-no-compile`) on a reused instance.
+func (r *Registry) DisableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = false
+	}
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).

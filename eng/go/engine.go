@@ -5245,7 +5245,24 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			}
 		}
 		restoreCheck := e.shareCheckState(capturedReg)
-		result, err := capturedReg.CallAQL(sig, args, captures)
+		var result []Value
+		var err error
+		if e.registry.Check.Mode {
+			// Check mode ANALYSES the body — always the interpreter path
+			// (running a stamped unit here would execute real side effects
+			// during static analysis).
+			result, err = capturedReg.CallAQL(sig, args, captures)
+		} else {
+			// Runtime: a module fn stamped at load (StampFnValueInPlace,
+			// RunModuleBody) runs its unit on the VM — the module
+			// sub-registry is idle from the caller's perspective, so
+			// InvokeCallback starts a fresh RunUnit there; an unstamped or
+			// stale-dep sig falls to CallAQL inside the seam, byte-identical
+			// to the old direct call. This retires the per-call interpreter
+			// hop for module-export application (the mini-redis client loop:
+			// `MiniRedis.cmd` per iteration).
+			result, err = InvokeCallback(capturedReg, sig, args, captures)
+		}
 		restoreCheck()
 		if err != nil {
 			return err

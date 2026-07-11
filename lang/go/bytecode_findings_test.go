@@ -4021,3 +4021,97 @@ func TestPR225P1Refusals(t *testing.T) {
 		t.Errorf("non-fn field read: compiled=%v err=%v got=%v (want compiled [5])", compiled3, errC3, gotC3)
 	}
 }
+
+// Filter-lambda closures with LEXICAL captures + computed collections
+// (design/RUNTIME-STAMPING.0.md Phase 3): the BODY lambda admits captures —
+// resolved to compiled homes, threaded at OpPushClosure, bound to trailing
+// unit slots — and a typed non-dynamic carrier data operand. Positives
+// compile natively (no island) with compiled == interpreted parity; the
+// negative twins pin what must KEEP refusing.
+func TestFilterLambdaCaptureCompiles(t *testing.T) {
+	parity := []struct{ name, src, want string }{
+		{"enclosing-fn param capture (list pair shape)",
+			`def f (fn [[y:Integer] [List] [ filter ([e:Any] => [ e.value gte y ]) [3 7 9] ]]) f 5`,
+			"[[7 9]]"},
+		{"computed collection (keys result carrier)",
+			`def f (fn [[m:Map] [List] [ filter ([e:Any] => [ (e.value eq "b") not ]) (keys m) ]]) f {a:1 b:2}`,
+			"[[a]]"},
+		{"body-local capture over a computed collection (the mini-redis KEYS shape)",
+			`def g (fn [[m:Map] [List] [ def kv m  filter ([e:Any] => [ ((kv get e.value) eq None) not ]) (keys kv) ]]) g {x:1}`,
+			"[[x]]"},
+		{"map KeyVal shape with a param capture",
+			`def f (fn [[y:Integer] [Map] [ filter ([kv:Any] => [ kv.v gte y ]) {a:3 b:7} ]]) f 5`,
+			"[map[b:7]]"},
+	}
+	for _, c := range parity {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if cerr != nil {
+			t.Fatalf("%s: check error %v", c.name, cerr)
+		}
+		if prog == nil {
+			t.Fatalf("%s: refused: %s", c.name, reason)
+		}
+		if strings.Contains(prog.Disassemble(), "FALLBACK") {
+			t.Errorf("%s: expected no island:\n%s", c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: did not run compiled", c.name)
+		}
+		if errC != nil || errI != nil {
+			t.Fatalf("%s: run errs compiled=%v interp=%v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: compiled=%v interp=%v (must agree)", c.name, gotC, gotI)
+		}
+	}
+
+	// NEGATIVES — each keeps its refusal, and the interpreter fallback keeps
+	// the value contract (RunCompiled degrades, never diverges).
+
+	// A MULTI-overload lambda still refuses (MatchFnSig picks at runtime;
+	// compiling one overload could run the wrong body).
+	{
+		src := `def two (fn [[x:Integer] [Integer] [x add 1] [x:String] [String] [x]])
+def f (fn [[] [List] [ filter two [1 2 3] ]]) f`
+		prog, _, _, cerr := mustNew(t).CompileCheck(src)
+		if cerr == nil && prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
+			// The multi-overload operand must not compile to a single closure
+			// unit; islanding or refusal are both sound.
+			gotC, _, errC := mustNew(t).RunCompiled(src)
+			gotI, errI := mustNew(t).Run(src)
+			if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+				t.Errorf("multi-overload operand diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
+			}
+		}
+	}
+
+	// A DYNAMIC (gradual) collection still refuses the lambda path — the
+	// callback convention (pair vs KeyVal) is ambiguous. The program falls
+	// back and values agree.
+	{
+		src := `def f (fn [[x:Any] [Any] [ filter ([e:Any] => [ e.value ]) x.items ]]) f {items: [1 2]}`
+		gotC, _, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).Run(src)
+		if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("dynamic-collection lambda diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
+		}
+	}
+
+	// A capturing HOOK lambda (walk's ascend slot — the extras path) keeps
+	// refusing the closure compile: allowCaptures is body-lambda-only. The
+	// program islands or refuses; values agree either way.
+	{
+		src := `def f (fn [[tag:String] [Any] [
+  def acc (flex [])
+  walk {mode: "depth"} {a:1} (m:Any => [acc (m.path) append]) (m:Any => [acc (tag) append])
+  acc
+]]) f "z"`
+		gotC, _, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).Run(src)
+		if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("capturing hook lambda diverged: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
+		}
+	}
+}

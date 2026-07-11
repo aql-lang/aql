@@ -61,6 +61,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
+	compileReport := fs.Bool("compile-report", false, "after the run, print each runtime-constructed callback's stamp outcome (compiled to the VM, or the refusal reason) to stderr; requires a compiled mode")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 
@@ -132,7 +133,11 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 1
 			}
 		}
-		if err := EvalOptionsModeColor(stdout, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
+		var report io.Writer
+		if *compileReport {
+			report = stderr
+		}
+		if err := buildrt.EvalReport(stdout, report, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}

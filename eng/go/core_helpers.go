@@ -1091,6 +1091,29 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						genArgs[i] = NewCarrier(pt)
 						continue
 					}
+					// The complementary case, INSIDE a stored-handler / spawn-
+					// body unit compile only (es.storedGradualDepth): an Any arg
+					// flowing into an Any (or untyped) param generalises GRADUAL
+					// (ParamInputCarrier), not strict — the callee body's
+					// dispatch over the param keeps poly-matching optimistically,
+					// exactly as the unit's own params do via fnValueInputs; a
+					// strict Any refuses "unmatched dispatch recovered" on the
+					// first field access (a stored service handler calling an
+					// `st:Any` helper that reads `st.kv`). Sound by the same
+					// contract as the narrowing above: the VM's per-word poly
+					// re-match raises exactly where the interpreter does. Scoped
+					// to the stored context because there the probe-then-real
+					// discipline makes a gradual-caused refusal per-body (one
+					// unstamped handler); applied globally it flipped whole-
+					// program main-pass rows (module-repl). Args with CONCRETE
+					// parents keep the precise strict generalisation below.
+					realES, inStored := es.(*EmitState)
+					if pt := sigParams[i].Type; inStored && realES.storedGradualDepth > 0 &&
+						(pt == nil || pt.Equal(TAny)) &&
+						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
+						genArgs[i] = ParamInputCarrier(TAny)
+						continue
+					}
 				}
 				if a.Parent == nil {
 					// A root-node carrier (None / Any / Never) has a nil Parent

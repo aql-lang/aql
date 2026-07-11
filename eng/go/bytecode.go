@@ -554,6 +554,52 @@ type CompiledFnRef struct {
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
 	poisoned bool
+	// depSnap is the RUNTIME-stamped twin of the compile-time poisoning above
+	// (StampDetachedFn): a ref created OUTSIDE a whole-program pass has no
+	// recording EmitState alive to observe later rebinds, so freshness moves
+	// to invoke time. Each dep name maps to the binding state captured when
+	// the ref was stamped — the DefTable shadow depth plus the name's
+	// mutation generation (DefTable.Gen, bumped by every push / pop /
+	// replace / truncate / delete / set of that name, and carried across
+	// ForkConcurrent clones). A generation mismatch catches every rebind
+	// path — including an undef+redef that lands back at the same depth
+	// with an ID-less runtime value, which a depth+ID probe would miss —
+	// PLUS live shadowing (a body-local def of the same name active at
+	// invoke time) that compile-time poisoning structurally cannot see.
+	// InvokeCallback checks depsFresh before the VM path; any mismatch
+	// falls to CallAQL, which resolves the live binding exactly as the
+	// interpreter. nil = compile-time ref, no validation (nil is the
+	// unambiguous unset for a map).
+	depSnap map[string]depSnapEntry
+}
+
+// depSnapEntry is one dep's binding state at stamp time (see depSnap).
+type depSnapEntry struct {
+	Depth int
+	Gen   int64
+}
+
+// depsFresh reports whether every module-level dep a runtime-stamped unit's
+// body reads still resolves to the binding captured at stamp time on r's def
+// table. A compile-time ref (nil depSnap) is vacuously fresh — its staleness
+// is handled by NotifyNameRebound poisoning before Finalize. Any mismatch —
+// a changed generation (rebind, undef, in-place replace) or a changed depth
+// (live shadow) — reports false and the caller falls back to the
+// interpreter, so validation only ever degrades toward CallAQL, never away
+// from it.
+func (ref *CompiledFnRef) depsFresh(r *Registry) bool {
+	if ref == nil || ref.depSnap == nil {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	for name, snap := range ref.depSnap {
+		if r.Defs.Gen(name) != snap.Gen || r.Defs.Depth(name) != snap.Depth {
+			return false
+		}
+	}
+	return true
 }
 
 // Instr is one fixed-width instruction.

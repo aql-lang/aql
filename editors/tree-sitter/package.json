@@ -1,0 +1,70 @@
+{
+  "name": "tree-sitter-aql",
+  "version": "0.1.0",
+  "description": "AQL grammar for tree-sitter (a concatenative, strongly-typed query language)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aql-lang/aql.git",
+    "directory": "editors/tree-sitter"
+  },
+  "author": "AQL contributors",
+  "license": "MIT",
+  "main": "bindings/node",
+  "types": "bindings/node",
+  "keywords": [
+    "incremental",
+    "parsing",
+    "tree-sitter",
+    "aql"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**",
+    "tree-sitter.json",
+    "*.wasm"
+  ],
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "prebuildify": "^6.0.0",
+    "tree-sitter-cli": "^0.22.6"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip",
+    "generate": "tree-sitter generate",
+    "build": "tree-sitter generate --no-bindings",
+    "build-wasm": "tree-sitter build --wasm",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.aql",
+      "file-types": [
+        "aql"
+      ],
+      "injection-regex": "^aql$",
+      "highlights": [
+        "queries/highlights.scm"
+      ],
+      "injections": [
+        "queries/injections.scm"
+      ]
+    }
+  ]
+}

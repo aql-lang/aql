@@ -450,6 +450,20 @@ type EmitState struct {
 	Compilable bool
 	Reason     string
 
+	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
+	// sets it on the fork's private EmitState). While non-zero,
+	// buildFnBodyReturnsFn generalises an Any arg into an Any param as a
+	// GRADUAL carrier (ParamInputCarrier) so a nested callee's body keeps
+	// poly-matching optimistically — the same modality the unit's own
+	// params get from fnValueInputs. Detached-only by design: the fork
+	// owns its program AND its Finalize, so a gradual-caused failure at
+	// ANY stage (analysis, unit compile, lowering) is contained to one
+	// declined stamp. Applied to the in-program stored-handler path the
+	// same generalisation leaked whole-program refusals at Finalize (a
+	// gradual nested unit recorded into the main program whose Stage-2
+	// lowering later refused — the module-repl corpus rows).
+	storedGradualDepth int
+
 	// reg is the registry the check pass runs against — set once at the top of
 	// Engine.Run while emit is active. It lets recorder-internal helpers reuse
 	// the lang-layer closure compiler (compileClosureBody) for a fn VALUE a body
@@ -484,7 +498,12 @@ type EmitState struct {
 	// Prog once the *Program exists and copies the slice onto Program. Nil
 	// until the first store-fn handler is compiled.
 	storedFnRefs []*CompiledFnRef
-	producedBy   map[string]producer // value ID → producing (event seq, result idx)
+	// storedFnProbeReason holds the LAST stored-fn probe's refusal reason
+	// (compileStoredFnUnit), for the -compile-report attribution
+	// (stamp_report.go). Set only on a probe failure; the compile-time
+	// bake ignores it.
+	storedFnProbeReason string
+	producedBy          map[string]producer // value ID → producing (event seq, result idx)
 	// trailingApplies maps a Function VALUE's ID → the arg count of a paren-bounded
 	// TRAILING fn-value apply (`(prev key comp)`), registered at the paren-collapse
 	// boundary (registerTrailingApply) where the paren-group size is known. The body
@@ -1525,14 +1544,8 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	if es == nil || es.reg == nil {
 		return 0, false
 	}
-	own := 0
-	for i := range fd.Signatures {
-		if !fd.Signatures[i].Fallback {
-			own++
-		}
-	}
-	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+	lam, ok := storedFnUnitEligible(fd)
+	if !ok {
 		return 0, false
 	}
 	inputs, paramNames := fnValueInputs(lam.Params)
@@ -1541,10 +1554,17 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	// untouched (mirrors tryReturnedClosure / recordClosureDispatch).
 	probe := NewEmitState()
 	probe.reg = r
+	// The probe inherits the gradual-nesting mode (a detached stamp arms it
+	// on the real state) — probe and real must compile under the SAME
+	// modality or the probe's verdict is about a different unit.
+	probe.storedGradualDepth = es.storedGradualDepth
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
+		// Surface the probe's refusal for the -compile-report attribution
+		// (stamp_report.go); the compile-time bake ignores the field.
+		es.storedFnProbeReason = probe.Reason
 		return 0, false
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
@@ -1552,6 +1572,27 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		return 0, false
 	}
 	return unit, true
+}
+
+// storedFnUnitEligible reports whether fd is the SHAPE a stored-fn unit
+// compile accepts — exactly one own (non-fallback) signature carrying a
+// non-empty body with no flow-control sentinel — returning that signature.
+// Shared by the compile-time store-fn bake (compileStoredFnUnit) and the
+// runtime detached stamp (StampDetachedFn) so the two gates cannot drift.
+// Capture-freedom is the CALLER's gate (recordCallOperands / StampFnValue):
+// it is a property of the storing context, not of the unit shape.
+func storedFnUnitEligible(fd FnDefInfo) (*Signature, bool) {
+	own := 0
+	for i := range fd.Signatures {
+		if !fd.Signatures[i].Fallback {
+			own++
+		}
+	}
+	lam, hasOwn := fd.FirstOwnSig()
+	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+		return nil, false
+	}
+	return lam, true
 }
 
 // compileStoredBody compiles a NoEvalArgs CODE-BODY list (spawn's process body) to

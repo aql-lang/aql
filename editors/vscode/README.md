@@ -6,7 +6,7 @@ Minimal Language Server client that runs `aql lsp` on stdio for any
 ## Install (local development)
 
 ```sh
-cd cmd/go/internal/lsp/editors/vscode
+cd editors/vscode
 npm install
 npx --yes @vscode/vsce package          # writes aql-0.1.0.vsix
 code --install-extension aql-0.1.0.vsix
