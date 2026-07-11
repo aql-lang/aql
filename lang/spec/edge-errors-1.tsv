@@ -87,8 +87,8 @@ aa/q gte "a"	ERROR:incomparable	atoms do not order against strings
 true lt 1	ERROR:incomparable	booleans do not order against numbers
 #
 # §3d  signature / undefined-word
-def f fn [[x:Integer] [Integer] [x]] f true	ERROR:no matching signature	no overload of a typed fn covers a Boolean argument
-def f fn [[x:Integer] [Integer] [x]] f "s"	ERROR:no matching signature	…nor a String one — dispatch failures are loud
+def f fn [[x:Integer] [Integer] [x]] f true	ERROR:no signature matches	no overload of a typed fn covers a Boolean argument
+def f fn [[x:Integer] [Integer] [x]] f "s"	ERROR:no signature matches	…nor a String one — dispatch failures are loud
 nosuchword 1 2	ERROR:undefined_word	a bare unknown word is undefined
 nope.word 1	ERROR:undefined_word	a dotted chain on an unbound lowercase name blames the root
 #

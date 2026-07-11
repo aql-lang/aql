@@ -554,6 +554,52 @@ type CompiledFnRef struct {
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
 	poisoned bool
+	// depSnap is the RUNTIME-stamped twin of the compile-time poisoning above
+	// (StampDetachedFn): a ref created OUTSIDE a whole-program pass has no
+	// recording EmitState alive to observe later rebinds, so freshness moves
+	// to invoke time. Each dep name maps to the binding state captured when
+	// the ref was stamped — the DefTable shadow depth plus the name's
+	// mutation generation (DefTable.Gen, bumped by every push / pop /
+	// replace / truncate / delete / set of that name, and carried across
+	// ForkConcurrent clones). A generation mismatch catches every rebind
+	// path — including an undef+redef that lands back at the same depth
+	// with an ID-less runtime value, which a depth+ID probe would miss —
+	// PLUS live shadowing (a body-local def of the same name active at
+	// invoke time) that compile-time poisoning structurally cannot see.
+	// InvokeCallback checks depsFresh before the VM path; any mismatch
+	// falls to CallAQL, which resolves the live binding exactly as the
+	// interpreter. nil = compile-time ref, no validation (nil is the
+	// unambiguous unset for a map).
+	depSnap map[string]depSnapEntry
+}
+
+// depSnapEntry is one dep's binding state at stamp time (see depSnap).
+type depSnapEntry struct {
+	Depth int
+	Gen   int64
+}
+
+// depsFresh reports whether every module-level dep a runtime-stamped unit's
+// body reads still resolves to the binding captured at stamp time on r's def
+// table. A compile-time ref (nil depSnap) is vacuously fresh — its staleness
+// is handled by NotifyNameRebound poisoning before Finalize. Any mismatch —
+// a changed generation (rebind, undef, in-place replace) or a changed depth
+// (live shadow) — reports false and the caller falls back to the
+// interpreter, so validation only ever degrades toward CallAQL, never away
+// from it.
+func (ref *CompiledFnRef) depsFresh(r *Registry) bool {
+	if ref == nil || ref.depSnap == nil {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	for name, snap := range ref.depSnap {
+		if r.Defs.Gen(name) != snap.Gen || r.Defs.Depth(name) != snap.Depth {
+			return false
+		}
+	}
+	return true
 }
 
 // Instr is one fixed-width instruction.
@@ -673,16 +719,24 @@ type TypedBindSpec struct {
 }
 
 // TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
-// detail message, the word it is attributed to, and an optional hint — built
-// from the SAME strings the interpreter raises for the matching runtime error,
-// so error-scraping tooling can never tell which engine ran. It lowers a
+// detail message, the word it is attributed to, an optional hint, and the full
+// structured diagnostic payload (secondary spans, notes, suggestions) — built
+// from the SAME AqlError the interpreter raises for the matching runtime error,
+// so the compiled and interpreted diagnostics are byte-identical and
+// error-scraping tooling can never tell which engine ran. It lowers a
 // check-mode-suppressed runtime error (an orphan gen, an unpack of a missing
-// key) into the compiled stream rather than refusing the whole program.
+// key, a statically-definite unmatched dispatch) into the compiled stream
+// rather than refusing the whole program. The rich fields are populated by
+// RecordTrapErr (serialising a built AqlError); the plain string RecordTrap
+// leaves them nil for the simpler callers.
 type TrapSpec struct {
-	Code   string
-	Detail string
-	Word   string
-	Hint   string
+	Code        string
+	Detail      string
+	Word        string
+	Hint        string
+	Spans       []DiagSpan
+	Notes       []string
+	Suggestions []DiagSuggestion
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
@@ -804,6 +858,13 @@ type CompiledFn struct {
 	// param raises the same signature_error rather than running the body. Nil
 	// where the param has no pattern.
 	ParamPatterns []*Value
+	// Decl is the return-contract declaration site (FnSig.Decl): the
+	// output-signature token's position plus the declaring program's
+	// source/file. A compiled RET return error labels it as a secondary
+	// span exactly as the interpreter's ReturnCheck does — so the two
+	// engines' return diagnostics carry the same declaration span. Zero
+	// for anonymous closures (no meaningful declaration site).
+	Decl DeclSite
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely

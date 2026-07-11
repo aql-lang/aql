@@ -1,0 +1,231 @@
+================================================================================
+Comments — line (# and //) and block (/* */)
+================================================================================
+
+# line hash
+// line slash
+/* block
+   comment */ add
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line_comment)
+  (line_comment)
+  (block_comment)
+  (word))
+
+================================================================================
+Strings — single, double and backtick template, with escapes
+================================================================================
+
+'single \n' "double \t" `plain`
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (string
+    (escape_sequence))
+  (string
+    (escape_sequence))
+  (template_string))
+
+================================================================================
+Template string with interpolation
+================================================================================
+
+`hi ${name add 1} end`
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (template_string
+    (interpolation
+      (interpolation_start)
+      (word)
+      (word)
+      (number
+        (integer))
+      (interpolation_end))))
+
+================================================================================
+Nested interpolation — a template string inside ${ … }
+================================================================================
+
+`a ${ `b ${c} d` } e`
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (template_string
+    (interpolation
+      (interpolation_start)
+      (template_string
+        (interpolation
+          (interpolation_start)
+          (word)
+          (interpolation_end)))
+      (interpolation_end))))
+
+================================================================================
+Numbers — every form (int, underscores, float, exp, hex, binary, big, consts)
+================================================================================
+
+42 1_000 -3.14 6.02e23 0xFF 0b1010 0d999 inf nan
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (number
+    (integer))
+  (number
+    (integer))
+  (number
+    (float))
+  (number
+    (float))
+  (number
+    (hex))
+  (number
+    (binary))
+  (number
+    (big_number))
+  (float_const)
+  (float_const))
+
+================================================================================
+Keywords and the true constant
+================================================================================
+
+def x if true from where
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (word)
+  (word)
+  (word)
+  (boolean)
+  (word)
+  (word))
+
+================================================================================
+A def with a fn signature and body
+================================================================================
+
+def add5 fn [[n:Integer] [Integer] [n add 5]]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (word)
+  (word)
+  (word)
+  (list
+    (list
+      (word)
+      (operator)
+      (type_identifier))
+    (list
+      (type_identifier))
+    (list
+      (word)
+      (word)
+      (number
+        (integer)))))
+
+================================================================================
+A lambda with the => arrow
+================================================================================
+
+def double (x:Integer => [x mul 2])
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (word)
+  (word)
+  (group
+    (word)
+    (operator)
+    (type_identifier)
+    (operator)
+    (list
+      (word)
+      (word)
+      (number
+        (integer)))))
+
+================================================================================
+A concatenative pipeline
+================================================================================
+
+1 add 2 mul 3
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (number
+    (integer))
+  (word)
+  (number
+    (integer))
+  (word)
+  (number
+    (integer)))
+
+================================================================================
+Module dot-access (Pkg.word)
+================================================================================
+
+MathUtil.sqrt 16.0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_identifier)
+  (operator)
+  (word)
+  (number
+    (float)))
+
+================================================================================
+The /modifier dispatch suffixes (/r /q /s and force-arity digit)
+================================================================================
+
+New/r foo/q add/s x/2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_identifier)
+  (modifier)
+  (word)
+  (modifier)
+  (word)
+  (modifier)
+  (word)
+  (modifier))
+
+================================================================================
+Maps, dotted access, and typed keys
+================================================================================
+
+def p make Entity { kind: "api" entity: planet.name }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (word)
+  (word)
+  (word)
+  (type_identifier)
+  (map
+    (word)
+    (operator)
+    (string)
+    (word)
+    (operator)
+    (word)
+    (operator)
+    (word)))

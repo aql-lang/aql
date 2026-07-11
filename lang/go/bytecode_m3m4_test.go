@@ -12,16 +12,19 @@ package lang
 // (module-minilang:320) while every key a register call may install keeps the
 // blanket fold decline.
 //
-// M4 — the carrier-disjointness extension to the definite-unmatched-dispatch
-// trap: a dispatch-recovery ERROR row whose carrier operands are provably
-// disjoint from every overload's slots compiles to a terminal OpTrap with the
-// interpreter's byte-identical taxonomy. The negatives live in
-// TestUnmatchedDispatchTrapNegatives (refinement escape, predicate params,
-// matching disjunct alternative, splice).
+// M4 (superseded by phase 7) — a dispatch-recovery ERROR row whose carrier
+// operands are non-concrete at compile time can no longer be baked into a
+// terminal OpTrap (the baked diagnostic could not match the interpreter's
+// runtime, concrete-value one — design/DIAGNOSTICS.0.md). Such a row now
+// EITHER compiles to a runtime-re-matching poly call or falls back to the
+// interpreter; either way the raised signature_error is byte-identical across
+// engines. TestUnmatchedDispatchTrapCarrierDisjoint pins that parity; the
+// former carrier-disjointness trap machinery is removed.
 
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -229,20 +232,15 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 			`def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [String]) {value:'s'})`},
 	}
 	for _, c := range cases {
-		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
-		if cerr != nil {
-			t.Fatalf("%s: check error %v", c.name, cerr)
-		}
-		if prog == nil {
-			t.Fatalf("%s: expected a trap program, refused: %s", c.name, reason)
-		}
-		if dis := prog.Disassemble(); !strings.Contains(dis, "TRAP") || strings.Contains(dis, "FALLBACK") {
-			t.Errorf("%s: expected a terminal TRAP, no island:\n%s", c.name, dis)
-		}
-		_, compiled, errC := mustNew(t).RunCompiled(c.src)
-		if !compiled {
-			t.Errorf("%s: trap program did not run compiled (fell back)", c.name)
-		}
+		// A carrier no-match reaches the compiled path in one of two ways:
+		// a runtime-re-matching poly call (tryRecordPoly), or — where that
+		// declines — a whole-program fallback (the no-match trap DECLINES a
+		// carrier window, since a carrier is not concrete at compile time so
+		// a baked diagnostic could not match the interpreter's runtime one;
+		// this supersedes the former M4 carrier-disjointness trap). EITHER
+		// way the raised error must be byte-identical to the interpreter's
+		// (phase 7): same code, Detail, notes, and suggestions.
+		_, _, errC := mustNew(t).RunCompiled(c.src)
 		_, errI := mustNew(t).Run(c.src)
 		if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
 			t.Fatalf("%s: compiled=[%s] interp=[%s], want both signature_error", c.name, codeOf(errC), codeOf(errI))
@@ -254,30 +252,49 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		if aeC.Detail != aeI.Detail {
 			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)
 		}
-		if aeI.Row > 0 && (aeC.Row != aeI.Row || aeC.Col != aeI.Col) {
-			t.Errorf("%s: position divergence: compiled %d:%d interp %d:%d",
-				c.name, aeC.Row, aeC.Col, aeI.Row, aeI.Col)
+		if !diagNotesEqual(aeC, aeI) {
+			t.Errorf("%s: note divergence:\n  compiled=%v\n  interp=%v", c.name, aeC.Notes, aeI.Notes)
 		}
 	}
 }
 
-// TestTrapKeepsPriorCallEffects pins the seatResults relaxation that the M4
-// carrier traps needed: a trap-truncated program whose kept event prefix
-// leaves an UNCONSUMED call result (inc's return is live when apply raises)
-// still compiles, runs its prior effects in order, and raises the trap —
-// exactly the interpreter's abort point.
+// diagNotesEqual reports whether two errors carry the same notes,
+// normalising the incidental value-rendering non-determinism the two
+// engines legitimately have (counter-based IDs) — the diagnostic
+// STRUCTURE is what parity requires.
+func diagNotesEqual(a, b *eng.AqlError) bool {
+	if len(a.Notes) != len(b.Notes) {
+		return false
+	}
+	norm := func(s string) string { return regexp.MustCompile(`#\d+`).ReplaceAllString(s, "#N") }
+	for i := range a.Notes {
+		if norm(a.Notes[i]) != norm(b.Notes[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// TestTrapKeepsPriorCallEffects pins that a carrier no-match with prior
+// effects (inc's body prints before apply raises) falls back cleanly: the
+// program refuses to compile, runs interpreted, and its prior effects
+// still run in order before the identical signature_error — the same abort
+// point either way (phase 7 fallback; formerly an M4 carrier trap).
 func TestTrapKeepsPriorCallEffects(t *testing.T) {
 	const src = `def inc fn [[n:Integer][Integer][print 'a' n add 1]]  5 inc apply`
-	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
-	if cerr != nil || prog == nil {
-		t.Fatalf("expected a trap program: reason=%q err=%v", reason, cerr)
+	prog, _, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil {
+		t.Fatalf("check error: %v", cerr)
+	}
+	if prog != nil {
+		t.Errorf("a carrier no-match must refuse (fall back), got a compiled program")
 	}
 	var outC, outI strings.Builder
 	ac := mustNew(t)
 	ac.SetOutput(&outC)
 	_, compiled, errC := ac.RunCompiled(src)
-	if !compiled {
-		t.Fatalf("trap program did not run compiled")
+	if compiled {
+		t.Fatalf("a carrier no-match must fall back, but ran compiled")
 	}
 	ai := mustNew(t)
 	ai.SetOutput(&outI)
@@ -286,6 +303,6 @@ func TestTrapKeepsPriorCallEffects(t *testing.T) {
 		t.Fatalf("compiled=[%s] interp=[%s], want both signature_error", codeOf(errC), codeOf(errI))
 	}
 	if outC.String() != outI.String() || !strings.Contains(outC.String(), "a") {
-		t.Errorf("effect ordering: compiled output %q, interp output %q (the fn body's print must run before the trap)", outC.String(), outI.String())
+		t.Errorf("effect ordering: compiled output %q, interp output %q (the fn body's print must run before the error)", outC.String(), outI.String())
 	}
 }

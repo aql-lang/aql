@@ -153,7 +153,7 @@ func CanonValue(v Value) string {
 		return "(flex [" + strings.Join(parts, " ") + "])"
 	case IsFlexMap(v):
 		m, err := AsMap(v)
-		if err != nil || m == nil {
+		if err != nil || m == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return v.String()
 		}
 		return "(flex {" + joinEntries(m, canonChild) + "})"

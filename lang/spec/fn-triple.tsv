@@ -1,0 +1,66 @@
+# AQL Language Specification: fn 3-arg single-triple form — `fn input output body`
+# Format: input<TAB>expected<TAB>description
+#
+# The `fn` word has two signatures (in match order):
+#   [(tnot List) Any List]  Function   — the 3-arg single-triple form
+#   [List]                  Function   — the spec-list form
+#
+# The triple form takes one [input output body] triple WITHOUT the
+# wrapping list: `fn x:Integer [Integer] [x mul 2]`. Its input slot is
+# constrained to `tnot List`: a list input ALWAYS selects the spec-list
+# form (the two forms stay disjoint), so multi-param triples and
+# multi-overload fns need the list form. The BODY slot is List-typed —
+# a triple-form body is always a `[…]` code list, which keeps the
+# greedy 3-slot window from claiming a non-list value as a body in
+# mixed/stack arrangements and makes a truncated `fn input output`
+# fail loudly. Non-list input/output follow ParseFnDef's abbreviation
+# rule (auto-wrap into a one-element list), mirroring afn.
+#
+# COMPUTED operands (`fn (2 add 3) [String] ['five']`) are deliberately
+# interpreter-only (the compiled unit would bake the check-time carrier
+# where the live value belongs); those cases are pinned in
+# lang/go/test/fn_triple_compiled_test.go rather than here so the spec
+# corpus's compiled-coverage refusal ratchet (compiled_coverage_test.go,
+# ground to its refusalCeiling=0 floor) stays untouched.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  basics — named / unnamed params, output abbreviation
+def double fn x:Integer [Integer] [x mul 2]  double 5	10	named single param
+def add10 fn Integer [Integer] [10 add]  add10 5	15	unnamed bare-type param (body reads the stack)
+def neg fn x:Integer Integer [x mul -1]  neg 5	-5	bare-type output abbreviation (Integer ≡ [Integer])
+def shout fn s:String [String] [s]  shout 'hi'	'hi'	string param round-trip
+def a fn x:Integer [Integer] [x mul 2]  def b fn [[x:Integer] [Integer] [x mul 3]]  a (b 2)	12	triple-form and spec-list fns coexist
+def b quote [x mul 2]  def f fn x:Integer [Integer] b  f 5	10	a def-bound list fills the List-typed body slot
+def f fn x:(Integer tor String) [String] [`v${x}`]  f 5	'v5'	disjunct annotation on the single param
+def f fn x?:Integer [Any] [x]  f 3	3	optional-suffix param (x?:T) works in the triple form
+def f fn x:Atom/q [Atom] [x]  f hello	hello/q	quoted-atom (/q) param captures the bare word
+#
+# §2  form equivalence — triple ≡ wrapped spec list; mirror forms
+def w fn [[x:Integer] [Integer] [x mul 2]]  def t fn x:Integer [Integer] [x mul 2]  (w 3) add (t 3)	12	fn x:T [O] [b] ≡ fn [[x:T] [O] [b]]
+def t ([x mul 2] [Integer] x:Integer fn)  t 8	16	full mirror (stack) form: body output input fn
+(fn Integer [Integer] [10 add]) 7	17	direct paren construction + forward invocation
+#
+# §3  literal value patterns as the input
+def z fn 0 [String] ['zero']  z 0	'zero'	literal value pattern admits the matching value
+def z fn 0 [String] ['zero']  z 1	ERROR:signature_error	literal value pattern rejects other values
+#
+# §4  negatives — the (tnot List) input rule, the List body rule, type enforcement
+def f fn [x:Integer] [Integer] [x mul 2]  f 5	ERROR:fn_error	a LIST input selects the spec-list form, which requires triples
+def f fn List [Integer] [size]	ERROR:signature_error	a bare List type literal input is rejected by (tnot List) — a single List-typed param needs the spec-list form
+def z fn 0 [Integer] 1  z 0	ERROR:signature_error	a non-list body does not fill the List-typed body slot
+def f fn x:Integer [Integer]  def g 5  g	ERROR:signature_error	a truncated triple fails loudly — the List body slot refuses the following statement's values
+def bad fn x:Integer [String] [x]  bad 5	ERROR:type_error	declared output type is enforced on return
+def dbl fn x:Integer [Integer] [x mul 2]  dbl 'a'	ERROR:signature_error	declared input type is enforced at the call
+#
+# §5  the spec-list form is undisturbed (regression pins)
+1 2 3 (fn [[x:Integer][Integer][x mul 2]]) 4	1 2 3 8	a spec list following fn keeps the 1-arg form even with stack values present
+10 20 def f fn [[x:Integer][Integer][x]]  f 30	10 20 30	stack values before `def … fn [list]` are not stolen by the triple sig
+def f fn [[x:Integer] [Integer] [x mul 3]]  f 5	15	plain spec-list form still dispatches
+def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/r) 10 3	7	a paren group after the spec list is NOT pre-evaluated early (the triple sig's window closes on the list)
+def s quote [[x:Integer][Integer][x mul 2]]  99 s fn 7	99 14	mixed form: a stack spec list is NOT claimed as a triple body (99 fails the List body slot); the list form fires with 7 forward
+def sw quote [[x:Integer][Integer][x mul 2]]  def f fn sw  (f/r) 4	8	a word-spelled spec list closes the triple window too (pattern prune resolves the binding)
+def f fn (quote [[x:Integer][Integer][x mul 2]])  (f/r) 4	8	a paren-spelled spec list closes the triple window (pattern prune tests the collapsed result)
+#
+# §6  composition — closures, generics, higher-order use
+def make-adder fn x:Integer [Function] [fn y:Integer [Integer] [x add y]]  def add5 (make-adder 5)  add5 3	8	nested triple-form fns capture lexically
+def identity gen [T] fn x:T [T] [x]  identity 42	42	generic fn via the triple form

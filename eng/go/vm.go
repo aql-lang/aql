@@ -352,7 +352,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 // different program than the one running — a stamped fn baked by the running
 // program always matches, so this is a defensive guard, not a normal path.
 func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, bool, error) {
-	if ref.Prog != vc.p {
+	if ref.Prog != vc.p { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, false, nil
 	}
 	res, err := vc.run(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures), nil)
@@ -570,7 +570,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 			return units[j], mr.Args, nil
 		}
 	}
-	return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY matched signature outside the recorded arm set at "+pr.Word)
+	return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY matched signature outside the recorded arm set at "+pr.Word) //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 }
 
 // callDynamic applies a runtime fn VALUE (sitting below n trailing args) to
@@ -648,7 +648,7 @@ func (vc *vmContext) callDynamic(reg *Registry, n int, trailing bool, stack []Va
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -736,7 +736,7 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -791,7 +791,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -889,7 +889,7 @@ func (vc *vmContext) callDynamicMixed(reg *Registry, w int, stack []Value, curDe
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
-	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -919,7 +919,7 @@ func (vc *vmContext) callDynFrame(reg *Registry, w, frameBase int, stack []Value
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
-	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (the replay island's results are interpreter residuals, tape-coupled only on a compiler bug) (§compiler)
 		return nil, err
 	}
 	return append(stack[:frameBase], results...), nil
@@ -1058,7 +1058,7 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack, results...), nil
@@ -1248,15 +1248,19 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 		case OpTrap:
 			// A check-mode-suppressed runtime error compiled in place: raise the
-			// byte-identical AQL error (the interpreter errors at this same point).
+			// byte-identical AQL error (the interpreter errors at this same point),
+			// including its full structured diagnostic payload (spans, notes,
+			// suggestions) so the compiled report equals the interpreted one.
 			tr := &p.Traps[in.Arg]
-			var err error
-			if tr.Hint != "" {
-				err = r.AqlErrorHint(tr.Code, tr.Detail, tr.Word, tr.Hint)
-			} else {
-				err = r.AqlError(tr.Code, tr.Detail, tr.Word)
+			src := ""
+			if r != nil {
+				src = r.Source
 			}
-			return nil, stampAt(err, curDebug, pc, r)
+			ae := makeAqlError(tr.Code, tr.Detail, tr.Word, src, tr.Hint)
+			ae.Spans = tr.Spans
+			ae.Notes = tr.Notes
+			ae.Suggestions = tr.Suggestions
+			return nil, stampAt(ae, curDebug, pc, r)
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -1344,7 +1348,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// -tags aqldebug build (vmFreshArgsPerCall) allocates fresh per
 			// call to localize a violator directly. See vm_args_release.go.
 			var args []Value
-			if vmFreshArgsPerCall {
+			if vmFreshArgsPerCall { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				args = make([]Value, n)
 			} else {
 				if cap(argScratch) < n {
@@ -1530,11 +1534,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// (OpLookupDynScope), through the same installer the interpreter's
 			// `def` runs; record the prior depth so the frame's RET (or the
 			// error unwind) truncates the binding stack back.
-			if len(stack) == 0 {
+			if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
 			}
 			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil {
+			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
 			}
 			v := stack[len(stack)-1]
@@ -1547,7 +1551,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// substitution would DISPATCH instead of push (an FnDef / class /
 			// splice / reach), defers to the interpreter (slow, not wrong).
 			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil {
+			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "LOOKUP_DYN_SCOPE bad name const")
 			}
 			v, ok := curReg.Defs.Top(name)
@@ -1657,7 +1661,7 @@ func (vc *vmContext) opForSetup(stack []Value, loops []vmLoop, slot int, curCode
 	for next < len(curCode) && curCode[next].Op != OpForNext {
 		next++
 	}
-	if next >= len(curCode) {
+	if next >= len(curCode) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (lowerLoop always pairs FOR_SETUP with a FOR_NEXT) (§compiler)
 		return nil, nil, vmErrAt(debug, pc, "FOR_SETUP without a FOR_NEXT")
 	}
 	loops = append(loops, vmLoop{
@@ -1728,17 +1732,28 @@ func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
 }
 
 // vmReturnTypeErr / vmReturnCountErr raise the interpreter's
-// returnTypeError / returnCountError text — same detail/hint, same type_error
-// taxonomy — so error-scraping tooling never learns which engine ran. The
-// strings come from the shared returnTypeErrorText / returnCountErrorText
-// (return_check_msg.go); only the error-construction plumbing differs.
-func vmReturnTypeErr(r *Registry, funcName string, index int, expected *Type, got Value) error {
-	detail, hint := returnTypeErrorText(funcName, index, expected, got)
-	return r.AqlErrorHint("type_error", detail, funcName, hint)
+// returnTypeError / returnCountError — same detail/hint, same type_error
+// taxonomy, and the SAME two secondary spans (the produced value, and the
+// return-contract declaration fn.Decl) — via the shared builders in
+// return_check_msg.go. So the compiled and interpreted return diagnostics are
+// byte-identical bar the primary caret position (the VM points inside the
+// shared fn unit, the interpreter at the call site — the documented, gated
+// difference). The primary position is left unset here and stamped by stampAt
+// on the RET.
+func vmReturnTypeErr(r *Registry, fn *CompiledFn, index int, expected *Type, got Value) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return buildReturnTypeError(src, fn.Name, index, expected, got, SrcPos{}, fn.Decl)
 }
 
-func vmReturnCountErr(r *Registry, funcName string, expected, got int) error {
-	return r.AqlError("type_error", returnCountErrorText(funcName, expected, got), funcName)
+func vmReturnCountErr(r *Registry, fn *CompiledFn, expected, got int) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return buildReturnCountError(src, fn.Name, expected, got, SrcPos{}, fn.Decl)
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
@@ -1827,7 +1842,7 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		// here — see design/PARAM-GUARD-SKIP-MISCOMPILE.0.md; this guard catches the
 		// plain-type laundering (the reported bug) without over-raising.
 		if !sigTypeMatches(locals[i], pt) {
-			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
 	}
 	// An inline disjunct / predicate / bounded / structural param carries its
@@ -1847,10 +1862,24 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 			_, ok = Unify(v, pat)
 		}
 		if !ok {
-			return r.AqlError("signature_error", "no matching signature for "+fn.Name, fn.Name)
+			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
 	}
 	return nil
+}
+
+// guardArgs returns the leading n locals — the real dispatch arguments,
+// sig order, excluding a closure's trailing capture slots — as the
+// failing tuple a runtime param-contract guard rebuilds its rich
+// no-signature diagnostic from. Clamped to the available locals.
+func guardArgs(locals []Value, n int) []Value {
+	if n > len(locals) {
+		n = len(locals)
+	}
+	if n < 0 {
+		n = 0
+	}
+	return locals[:n]
 }
 
 // checkNativeParamContract enforces a GUARDED CALL_NATIVE's committed sig at run
@@ -1876,7 +1905,7 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 			continue
 		}
 		if !sigTypeMatches(args[i], at) {
-			return r.AqlError("signature_error", "no matching signature for "+s.Word, s.Word)
+			return runtimeNoMatch(r, s.Word, args)
 		}
 	}
 	return nil
@@ -1928,17 +1957,17 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 	if hasFrame {
 		produced := len(stack) - stackBase
 		if produced < len(rets) {
-			return stack, vmReturnCountErr(r, fn.Name, len(rets), produced)
+			return stack, vmReturnCountErr(r, fn, len(rets), produced)
 		}
 		if extra := produced - len(rets); extra > 0 {
 			if extra > fn.NUnnamed {
-				return stack, vmReturnCountErr(r, fn.Name, len(rets), produced-fn.NUnnamed)
+				return stack, vmReturnCountErr(r, fn, len(rets), produced-fn.NUnnamed)
 			}
 			stack = append(stack[:stackBase], stack[stackBase+extra:]...)
 		}
 	} else {
 		if len(stack) < len(rets) {
-			return stack, vmReturnCountErr(r, fn.Name, len(rets), len(stack))
+			return stack, vmReturnCountErr(r, fn, len(rets), len(stack))
 		}
 		// Frameless (re-entrant closure / fn-root run): same trim over the
 		// whole residual — a closure unit has NUnnamed 0, so this is a
@@ -1954,7 +1983,7 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 	base := len(stack) - len(rets)
 	for k, exp := range rets {
 		if !stack[base+k].Is(CanonicalType(r, exp)) {
-			return stack, vmReturnTypeErr(r, fn.Name, k+1, exp, stack[base+k])
+			return stack, vmReturnTypeErr(r, fn, k+1, exp, stack[base+k])
 		}
 	}
 	return stack, nil

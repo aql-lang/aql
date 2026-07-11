@@ -122,7 +122,7 @@ func (s *server) handleInitialize(msg *rawMessage) {
 		Capabilities: ServerCapabilities{
 			TextDocumentSync:           syncFull,
 			HoverProvider:              true,
-			CompletionProvider:         &CompletionOptions{},
+			CompletionProvider:         &CompletionOptions{TriggerCharacters: []string{"."}},
 			DocumentFormattingProvider: true,
 		},
 		ServerInfo: &ServerInfo{
@@ -206,13 +206,20 @@ func (s *server) handleHover(msg *rawMessage) {
 	_ = s.conn.respond(msg.ID, hover)
 }
 
-// handleCompletion responds with the static list of known words.
+// handleCompletion responds with member completions when the cursor sits
+// after a `RECV.` (a Micron property, a class/record/module member, or a
+// recovered map key), and the full list of known words otherwise.
 func (s *server) handleCompletion(msg *rawMessage) {
 	if !msg.hasID() {
 		return
 	}
-	items := s.buildCompletionItems()
-	_ = s.conn.respond(msg.ID, items)
+	var p CompletionParams
+	if err := json.Unmarshal(msg.Params, &p); err != nil {
+		_ = s.conn.respond(msg.ID, s.buildCompletionItems())
+		return
+	}
+	src := s.buffers[p.TextDocument.URI]
+	_ = s.conn.respond(msg.ID, s.completionItemsAt(src, p.Position))
 }
 
 // handleFormatting reformats the buffer and returns a single

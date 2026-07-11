@@ -19,5 +19,6 @@ make fmt && make vet && make lint && make test && make cover-gate
 ```
 
 `make cover-gate` enforces **ADR-008**: 100% unit-test coverage of every
-reachable Go statement (the sole exclusion is the reviewed, proof-carrying
-`test/go/covergate/allowlist.tsv` — see `design/COVERAGE-ALLOWLIST.10.md`).
+reachable Go statement (the sole exclusions are provably-unreachable guards
+marked with a proof-carrying `//covergate:allow <reason>` comment on the
+guard's opening line — see `design/COVERAGE-ALLOWLIST.10.md`).

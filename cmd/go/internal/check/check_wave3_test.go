@@ -302,9 +302,10 @@ func TestRunStrictDirect(t *testing.T) {
 func TestPrintDiagnostics(t *testing.T) {
 	var buf bytes.Buffer
 	printDiagnostics(&buf, []lang.CheckDiagnostic{
-		{Row: 2, Col: 5, Severity: lang.SeverityError, Code: "boom", Detail: "bad thing"},
+		{Row: 2, Col: 5, Severity: lang.SeverityError, Code: "boom", Detail: "bad thing", Word: "add",
+			Suggestions: []lang.DiagSuggestion{{Message: "try harder"}}},
 		{Code: "note", Detail: "no position, no severity"},
-	})
+	}, "1 2 3\n1 add 2 x", false)
 	out := buf.String()
 	if !strings.Contains(out, "check: 2:5: [error] boom: bad thing") {
 		t.Errorf("output = %q, want positioned error line", out)
@@ -312,11 +313,22 @@ func TestPrintDiagnostics(t *testing.T) {
 	if !strings.Contains(out, "check: [info] note: no position, no severity") {
 		t.Errorf("output = %q, want positionless info line", out)
 	}
+	// The rich block renders under the stable one-liner: the source
+	// excerpt with a caret at the word, and the suggestion.
+	if !strings.Contains(out, "1 add 2 x") || !strings.Contains(out, "^^^") {
+		t.Errorf("output = %q, want the source excerpt block", out)
+	}
+	if !strings.Contains(out, "= help: try harder") {
+		t.Errorf("output = %q, want the suggestion line", out)
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("plain rendering must be ANSI-free: %q", out)
+	}
 }
 
 func TestPrintDiagnosticsEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	printDiagnostics(&buf, nil)
+	printDiagnostics(&buf, nil, "", false)
 	if buf.Len() != 0 {
 		t.Errorf("output = %q, want empty", buf.String())
 	}
@@ -398,5 +410,34 @@ func TestPreflightCheckError(t *testing.T) {
 	err := Preflight(&stderr, "gen [1]", "", 0, false)
 	if err == nil || !strings.Contains(err.Error(), "check error") {
 		t.Fatalf("err = %v, want check error", err)
+	}
+}
+
+// --- --color flag parsing ---------------------------------------------------
+
+func TestRunCLIColorFlag(t *testing.T) {
+	// With a value: consumed together with its mode argument.
+	var stdout, stderr bytes.Buffer
+	if code := RunCLI([]string{"--color", "never", "-e", "1 add 2"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("--color never: exit %d, stderr %s", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "\x1b[") {
+		t.Errorf("--color never must stay plain: %q", stderr.String())
+	}
+	// Bare --color as the LAST flag: consumed alone, the source arg
+	// still required (exercises the no-value arm).
+	stdout.Reset()
+	stderr.Reset()
+	if code := RunCLI([]string{"--color"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("bare --color with no source: exit %d, want 1", code)
+	}
+	// --color always paints the rich diagnostic block.
+	stdout.Reset()
+	stderr.Reset()
+	if code := RunCLI([]string{"--color", "always", "-e", "99 uppr"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("--color always on an erroring program: exit %d", code)
+	}
+	if !strings.Contains(stderr.String(), "\x1b[") {
+		t.Errorf("--color always must carry ANSI in the rich block: %q", stderr.String())
 	}
 }

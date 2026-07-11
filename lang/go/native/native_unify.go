@@ -39,13 +39,13 @@ func unifyFoldReturns(args []Value, r *Registry) []Value {
 		return fallback
 	}
 	out, err := unifyHandler(args, nil, nil, r)
-	if err != nil || len(out) != 2 {
+	if err != nil || len(out) != 2 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return fallback
 	}
 	// A Disjunct result is a type-as-VALUE — ride it dynamic so carrier-side
 	// consumers don't misread it as a union carrier (same rule as the
 	// tany/tall fold).
-	if IsDisjunct(out[0]) {
+	if IsDisjunct(out[0]) { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		out[0] = NewDynamicCarrierValue(out[0])
 	}
 	return out

@@ -168,7 +168,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         const fn = registry.lookup(pr.word)
         const mr = fn ? matchValues(fn, win) : null
         if (mr === null) {
-          throw new AqlError('signature_error', `no matching signature for ${pr.word}`, pr.word)
+          throw new AqlError('signature_error', `cannot call \`${pr.word}\` — no signature matches the arguments`, pr.word)
         }
         sp -= a
         const out = mr.sig.handler(mr.args, null, [], registry)

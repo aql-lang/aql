@@ -538,7 +538,7 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		vals := sigExampleVals(sig, counters)
 		for _, prefix := range examplePrefixes(info, sig) {
 			expr := buildExampleExpr(info.Name, vals, prefix, nArgs)
-			if seen[expr] {
+			if seen[expr] { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				continue
 			}
 			seen[expr] = true

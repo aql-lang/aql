@@ -211,6 +211,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 	// guard OpCallUser runs), so the runtime re-match's pick is double-checked
 	// against the arm's own contract.
 	es.SetUnitParamTypes(unit, pts, pats)
+	es.SetUnitDecl(unit, s.Decl)
 	if finishFn != nil {
 		// Drop any summary cached by a prior plain analysis so AnalyseFnBody
 		// re-runs and records the body into THIS unit (the same memo-key
@@ -219,10 +220,10 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared)
 		finishFn(stk)
 	}
-	if !es.active() {
+	if !es.active() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return -1, false
 	}
-	if es.unitVariadic(unit) {
+	if es.unitVariadic(unit) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return -1, false
 	}
 	return unit, true

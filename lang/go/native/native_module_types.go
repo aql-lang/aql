@@ -230,7 +230,11 @@ func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 	if val, ok := moduleExportGet(args[1], k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("not_found", fmt.Sprintf("getr: export %q not found in module", k), "getr")
+	var keys []string
+	if me, ok := asModuleExportInfo(args[1]); ok && me.Fields != nil {
+		keys = me.Fields.Keys()
+	}
+	return nil, notFoundKeyError(r, fmt.Sprintf("getr: export %q not found in module", k), k, args[0].Pos(), keys)
 }
 
 // moduleExportGetReturns is the check-mode counterpart for `get`/`getr`
@@ -283,9 +287,16 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 			eng.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos())
 		}
-		r.Check.Recorder().RecordTrap("not_found",
-			fmt.Sprintf("getr: export %q not found in module", k), "getr",
-			"", args[0].Pos())
+		// Record the SAME rich error the runtime handler raises (with the
+		// did-you-mean suggestion over the export keys) so the compiled trap
+		// is byte-identical to the interpreter's getrModuleExportHandler.
+		var keys []string
+		if me, ok := asModuleExportInfo(args[1]); ok && me.Fields != nil {
+			keys = me.Fields.Keys()
+		}
+		ferr := buildNotFoundKeyError(r,
+			fmt.Sprintf("getr: export %q not found in module", k), k, args[0].Pos(), keys)
+		r.Check.Recorder().RecordTrapErr(ferr, args[0].Pos())
 	}
 	return []Value{NewCarrier(TAny)}
 }

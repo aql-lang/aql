@@ -195,7 +195,44 @@ func TestMatchSignatureInsideForwardStackMismatch(t *testing.T) {
 	}
 }
 
-// The positive twin (canStack=true → fill the remaining slots from the
-// stack) is exercised by ordinary swap-form dispatch in the spec suite
-// (e.g. `5 sub 2 add 1`); it needs the real resolvedIdx tape mapping a
-// hand-built matchSignature call cannot supply.
+// TestMatchSignatureInsideForwardPatternReject drives the pattern GATE of
+// that same swap-form-inside-forward arm: the remaining stack operand
+// type-matches (canStack=true), so the split is filled — but the sig
+// carries a value Pattern that the forward-collected position VIOLATES,
+// so patternsOk rejects the selection exactly like the full-forward and
+// normal-stack returns. Under the shipped strict barrier the enclosing
+// pending forward strands before a bare word can dispatch into it, so
+// this gate is only reachable by a direct dispatch call; the white-box
+// call pins it. sig[0] carries a literal-0 Pattern; the forward token is
+// 3, which fails it while the Integer stack operand satisfies sig[1].
+func TestMatchSignatureInsideForwardPatternReject(t *testing.T) {
+	r := covRegistry(t, nil)
+	e := NewTop(r)
+	// tape[0] is a resolved stack Integer (fills sig[1] from the stack via
+	// resolvedIdx); tape[1] is the parked outer Forward so
+	// isInsidePendingForward() is true at pointer 2; tape[3] is the
+	// forward token that fills sig[0] and violates its literal-0 pattern.
+	e.tape = NewTape([]Value{
+		NewInteger(5),
+		fwdMarker("outer", 0, 1, 0),
+		NewWord("inner"),
+		NewInteger(3),
+	}, stackHeadroom)
+	e.pointer = 2
+	fn := mkFn(Signature{
+		Args:       []*Type{TInteger, TInteger},
+		Patterns:   map[int]Value{0: NewInteger(0)},
+		BarrierPos: 2,
+	})
+	// resolved carries one stack value of the RIGHT type for sig[1], so
+	// canStack holds and the split is filled — only the pattern rejects.
+	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(5)})
+	if sig != nil {
+		t.Errorf("a pattern-violating forward operand must reject the swap split, got %v", sig)
+	}
+}
+
+// The positive twin (canStack=true, pattern satisfied → fill the
+// remaining slots from the stack) is exercised by ordinary swap-form
+// dispatch in the spec suite (e.g. `5 sub 2 add 1`); it needs the real
+// resolvedIdx tape mapping a hand-built matchSignature call cannot supply.

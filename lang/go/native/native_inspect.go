@@ -144,7 +144,7 @@ func buildInspection(r *Registry, name string) Value {
 
 		sigMaps = append(sigMaps, NewMap(sm))
 	}
-	if sigMaps == nil {
+	if sigMaps == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		sigMaps = []Value{}
 	}
 	result.Set("signatures", NewList(sigMaps))

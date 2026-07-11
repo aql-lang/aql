@@ -117,60 +117,6 @@ func TestW8CurryOrStackCheckStartClamp(t *testing.T) {
 	}
 }
 
-// --- carrierSlotProvablyDisjoint (residual arms) --------------------------
-
-func TestW8CarrierSlotDisjointFnFamilyDecline(t *testing.T) {
-	// A Function-tagged carrier sits on the fn-value frontier → decline.
-	c := NewCarrier(TFunction)
-	if carrierSlotProvablyDisjoint(c, TInteger) {
-		t.Error("a Function-tagged carrier is never provably disjoint")
-	}
-}
-
-func TestW8CarrierSlotDisjointContainerStandin(t *testing.T) {
-	// A List-tagged carrier can stand for a spliced sequence → decline.
-	c := NewCarrier(TList)
-	if carrierSlotProvablyDisjoint(c, TInteger) {
-		t.Error("a List-tagged carrier is a possible splice stand-in → decline")
-	}
-}
-
-func TestW8CarrierSlotDisjointMembershipType(t *testing.T) {
-	// A member-type slot (membershipBeyondNominal) admits by value, not by
-	// tag — a nominally-disjoint carrier is not provably disjoint from it.
-	r := covRegistry(t, nil)
-	member, err := r.DefineMemberType("W8Even", TInteger, func(v Value) bool {
-		n, _ := AsInteger(v)
-		return n%2 == 0
-	})
-	if err != nil {
-		t.Fatalf("DefineMemberType: %v", err)
-	}
-	c := NewCarrier(TString)
-	if carrierSlotProvablyDisjoint(c, member) {
-		t.Error("a membership-by-value slot is never provably disjoint")
-	}
-}
-
-func TestW8CarrierSlotDisjointRecordTaggedVsMap(t *testing.T) {
-	// A Record-tagged carrier vs a Map slot: the structural carve accepts
-	// Record-tagged values at a Map-or-above slot → not disjoint.
-	c := NewCarrier(TRecord)
-	if carrierSlotProvablyDisjoint(c, TMap) {
-		t.Error("a Map slot accepts a Record-tagged value → not disjoint")
-	}
-}
-
-func TestW8CarrierSlotDisjointTrueDisjoint(t *testing.T) {
-	// A Boolean-tagged carrier vs an Integer slot: nominally disjoint, no
-	// membership, no structural carve → provably disjoint (the terminal
-	// isNeverShape arm returns true).
-	c := NewCarrier(TBoolean)
-	if !carrierSlotProvablyDisjoint(c, TInteger) {
-		t.Error("Boolean carrier vs Integer slot should be provably disjoint")
-	}
-}
-
 // --- matchSignature: forward-scan boundary and type-path arms -------------
 
 // mkFn wraps a single native-style Signature in an FnDefInfo.

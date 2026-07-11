@@ -304,7 +304,7 @@ func (p *Patrun) find(pat map[string]string, exact bool, collect bool) (*string,
 		}
 	} else {
 		// Root data catch-all
-		if data == nil && p.top.d != nil {
+		if data == nil && p.top.d != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			data = p.top.d
 		}
 	}

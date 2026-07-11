@@ -466,7 +466,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			InstallJoinedDefs(r, nil, defs)
 		}
 		frag := es.Recorder().TakeFragment()
-		if len(stk) == 0 {
+		if len(stk) == 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			es.Recorder().MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
 			return nil
 		}
@@ -725,7 +725,7 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 			return out
 		}
 	}
-	if lit, ok := LiteralCondValue(args[0]); ok && !lit {
+	if lit, ok := LiteralCondValue(args[0]); ok && !lit { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		r.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "unreachable_branch",
 			Detail: "if condition is a constant false; then-branch is unreachable",

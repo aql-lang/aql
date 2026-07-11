@@ -227,7 +227,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 	// native) with the outcome seam routed to RecordDynMethod.
 	r.Check.PendingMethodApply = &PendingMethodApply{Origin: v, Word: fnDef.Name}
 	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
-	if r.Check.PendingMethodApply != nil {
+	if r.Check.PendingMethodApply != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		// Not consumed — an unexpected short-circuit upstream of the outcome
 		// seam. Decline wholesale; the carrier keeps today's paths.
 		r.Check.PendingMethodApply = nil
@@ -300,7 +300,7 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	// the match the interpreter performs on the concrete member.
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
 	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
-	if sig == nil || sig.Fallback || len(positions) == 0 {
+	if sig == nil || sig.Fallback || len(positions) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
 	}
 	// Pure-forward, contiguous-prefix coverage: the matched positions must be
@@ -308,11 +308,11 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	// stack below the carrier (a trailing/mixed shape) or skips a slot is not
 	// the statement-window apply — those keep today's paths.
 	for i, p := range positions {
-		if p != valIdx+1+i {
+		if p != valIdx+1+i { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return nil, nil, false
 		}
 	}
-	if positions[len(positions)-1] > winEnd {
+	if positions[len(positions)-1] > winEnd { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
 	}
 	// Only a plain Go-handler native models: no code bodies, no quotation
@@ -320,7 +320,7 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	// the shaped-method class is exactly the delegation-wrapper methods.
 	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
 		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
-		sig.parkResult() {
+		sig.parkResult() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
 	}
 	return sig, positions, true

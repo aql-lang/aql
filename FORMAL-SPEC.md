@@ -463,13 +463,15 @@ A function signature is a pair of an input parameter list and an output type
 list, with a body for defined functions.
 
 ```ebnf
-FnDefSpec   ::= "fn" ListValue
-FnSigTriple ::= InputSig OutputSig Body
-InputSig    ::= "[" { Param | Barrier } "]"
-Param       ::= [ Name ":" ] TypeExpr [ "?" ]
-Barrier     ::= "|"
-OutputSig   ::= TypeExpr | "[" { TypeExpr } "]"
-Body        ::= ListValue | Expr
+FnDefSpec    ::= "fn" ListValue
+               | "fn" NonListInput OutputSig ListValue
+FnSigTriple  ::= InputSig OutputSig Body
+InputSig     ::= "[" { Param | Barrier } "]"
+NonListInput ::= Param                       (* not a ListValue *)
+Param        ::= [ Name ":" ] TypeExpr [ "?" ]
+Barrier      ::= "|"
+OutputSig    ::= TypeExpr | "[" { TypeExpr } "]"
+Body         ::= ListValue | Expr
 ```
 
 A function definition list contains one or more triples:
@@ -477,6 +479,24 @@ A function definition list contains one or more triples:
 ```text
 fn [[in1] [out1] [body1] [in2] [out2] [body2] ...]
 ```
+
+The second production is the 3-arg single-triple form: `fn input
+output body` builds a one-signature function from the triple directly.
+Its dispatch signature is `[(tnot List) Any List]` — the input must
+NOT be a list, so a list operand following `fn` (a literal, a
+def-bound word, or a paren group's result) always selects the list
+form, and the body MUST be a list (`[…]` code). Both constraints are
+normative: the input rule keeps the greedier 3-arg signature from
+re-interpreting a list-form call regardless of what else sits on the
+stack, and the List-typed body keeps the 3-slot window from claiming a
+non-list value as a body in mixed/stack arrangements — a truncated
+`fn input output` fails with a signature error rather than collecting
+past the triple. The non-list input is treated as a single-element
+input signature (the same abbreviation rule that already applies to a
+non-list `OutputSig`); barriers, bare positional `?` markers,
+multi-parameter inputs, and overloads are expressible only in the
+list form (the optional-parameter suffix, as in `x?:Integer`, works
+in both).
 
 A function-shape type contains pairs without bodies:
 

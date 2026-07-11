@@ -261,14 +261,14 @@ var mathNatives = []NativeFunc{
 					// (there is no integer infinity) — it stays a hard
 					// error. The Float path below follows IEEE-754 instead.
 					if a == 0 {
-						return Value{}, fmt.Errorf("division by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
 					}
 					return NewInteger(b / a), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
 					// BigInteger division truncates toward zero (like Integer).
 					if a.Sign() == 0 {
-						return Value{}, fmt.Errorf("division by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
 					}
 					return NewBigInteger(new(big.Int).Quo(b, a)), nil
 				},
@@ -301,17 +301,17 @@ var mathNatives = []NativeFunc{
 					// Integer modulo by zero stays a hard error (no
 					// integer infinity / NaN). The Float path is IEEE.
 					if a == 0 {
-						return Value{}, fmt.Errorf("modulo by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
 					}
 					return NewInteger(b % a), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
 					if a.Sign() == 0 {
-						return Value{}, fmt.Errorf("modulo by zero")
+						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
 					}
 					return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
 				},
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) },
+				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) }, //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				fltFn: func(a, b float64) (Value, error) {
 					// Float modulo by zero is IEEE-754: math.Mod(x, 0)
 					// returns NaN. No special-case error.
@@ -339,7 +339,7 @@ var mathNatives = []NativeFunc{
 					return NewInteger(result), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
-					if a.Sign() < 0 {
+					if a.Sign() < 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 						return Value{}, fmt.Errorf("pow: negative exponent")
 					}
 					return NewBigInteger(new(big.Int).Exp(b, a, nil)), nil

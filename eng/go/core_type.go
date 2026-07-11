@@ -495,7 +495,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// Same dispatch-vs-`is` asymmetry: install on `def`, not on
 		// `body`.
 		di, err := body.AsDepScalar()
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return &AqlError{
 				Code:   "type_error",
 				Detail: "type " + name + ": DepScalar body unreadable: " + err.Error(),

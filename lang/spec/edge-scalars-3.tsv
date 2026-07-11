@@ -80,10 +80,10 @@ import "aql:string-util"  StringUtil.replace 'z' 'y' 'abc' {scope: 'all'}	'abc'	
 '' add ''	''	concat of empties stays empty
 '' add '' typeof	EmptyString	…and stays on the EmptyString leaf
 'a' add '' typeof	ProperString	one proper operand makes the result proper
-def f fn [[s:ProperString] [String] [s]]  f ''	ERROR:no matching signature	a ProperString param REJECTS the empty string
+def f fn [[s:ProperString] [String] [s]]  f ''	ERROR:no signature matches	a ProperString param REJECTS the empty string
 def f fn [[s:ProperString] [String] [s]]  f 'x'	'x'	…and accepts any non-empty one
 def g fn [[s:EmptyString] [String] ['got empty']]  g ''	'got empty'	an EmptyString param accepts only ''
-def g fn [[s:EmptyString] [String] [s]]  g 'x'	ERROR:no matching signature	…and rejects everything else
+def g fn [[s:EmptyString] [String] [s]]  g 'x'	ERROR:no signature matches	…and rejects everything else
 def h fn [[s:String] [String] [s]]  h ''	''	a String param spans both leaves
 #
 # §7  atoms — quoted words are data, distinct from equal-looking strings

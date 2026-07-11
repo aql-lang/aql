@@ -135,13 +135,38 @@ var definitionNatives = []NativeFunc{
 	{
 		Name: "fn",
 
-		Signatures: []Signature{{
-			Args:       []*Type{TList},
-			NoEvalArgs: map[int]bool{0: true},
-			Impl:       Go(fnHandler, RunInCheck()),
-			Returns:    []*Type{TFunction},
-			BarrierPos: -1,
-		}},
+		// Two forms, matched longest-first: the 3-arg single-triple
+		// form `fn input output body`, then the 1-arg spec-list form
+		// `fn [[input] [output] [body] …]`. The triple form's input
+		// slot carries a `tnot List` Pattern: a list input ALWAYS
+		// means the spec-list form, so a list following `fn` fails the
+		// triple candidate at patternsOk and dispatch falls through to
+		// the 1-arg sig — existing spec-list calls keep their meaning
+		// even with extra values on the stack. The body slot is
+		// List-typed (not Any): a triple-form body is always a `[…]`
+		// code list, which keeps the greedy 3-slot window from
+		// claiming a non-list value as a body in mixed/stack
+		// arrangements and makes a truncated `fn input output` fail
+		// loudly instead of absorbing a following value. NoEvalArgs on
+		// all three slots (the input pair, the output types, and the
+		// body are spec/code, not data).
+		Signatures: []Signature{
+			{
+				Args:       []*Type{TAny, TAny, TList},
+				Patterns:   map[int]Value{0: NewNegation(NewTypeLiteral(TList))},
+				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+				Impl:       Go(fnTripleHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
+			},
+			{
+				Args:       []*Type{TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       Go(fnHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
+			},
+		},
 	},
 	{
 		// `afn` is the canonical anonymous-fn constructor. The parser
@@ -382,10 +407,22 @@ func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameTy
 		delete(quote, 0)
 	}
 	args = append(args, base.Args...)
-	// No base per-position QuoteArgs/Patterns to mirror: base sigs with
-	// STRUCTURAL slots are excluded up front (hasStructuralSlots), and
-	// no blessed constructor carries value patterns. If one ever does,
-	// its Patterns must shift by offset here like the flag maps below.
+	// Mirror the base's per-position VALUE patterns, shifted by offset.
+	// STRUCTURAL capture slots (/q, raw paren, form, type-literal) are
+	// excluded up front (hasStructuralSlots), but a value Pattern is a
+	// dispatch CONSTRAINT, not a capture — it must travel with its slot
+	// so the keyword form dispatches on the same predicate the bare
+	// constructor does. This is load-bearing for fn's two forms: the
+	// 3-arg `fn input output body` sig pins slot 0 with `(tnot List)`,
+	// so `def g fn [body]` (a List input) fails the 3-arg keyword form
+	// and falls through to the 1-list form (`fn [triples]`) instead of
+	// over-collecting the following `output`/`body` operands, while
+	// `def d fn (2 add 3) [String] ["five"]` (a non-list input) still
+	// selects the 3-arg form. QuoteArgs is never mirrored — a /q slot
+	// is structural and already gates the sig out above.
+	for p, pat := range base.Patterns {
+		patterns[p+offset] = pat
+	}
 	if genChain {
 		// DEFER every tail operand's evaluation: a schema map/list may
 		// reference the gen placeholders, which are only bound once the
@@ -730,7 +767,18 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {
-		return nil, fmt.Errorf("def %s: type annotation must be a type value, got %s", name, constraint.String())
+		err := r.AqlError("def_error",
+			fmt.Sprintf("def %s: type annotation must be a type value, got %s", name, constraint.String()), "def")
+		// An unresolved WORD annotation is almost always a misspelt type
+		// name — suggest the near-miss (diagnostics phase 4).
+		if ae, ok := err.(*eng.AqlError); ok && eng.IsWord(constraint) {
+			if w, werr := eng.AsWord(constraint); werr == nil {
+				if s := eng.DidYouMean(w.Name, r.SuggestionCandidates()); s != "" {
+					ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+				}
+			}
+		}
+		return nil, err
 	}
 	describeType := func() string {
 		if typeName != "" {
@@ -934,7 +982,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			for root != nil && root.Origin == eng.OriginUserDef {
 				root = root.Parent
 			}
-			if root == nil {
+			if root == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, fmt.Errorf("def %s: refine subtype %s has no builtin ancestor",
 					name, describeType())
 			}
@@ -1144,23 +1192,78 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// then pop; the spec rides FnDefInfo.Gen so each call installs
 	// the inferred body-scoped type bindings.
 	genSpec := r.TakePendingGen()
-	failGen := func(err error) ([]Value, error) {
-		if genSpec != nil {
-			PopGenBindings(r, genSpec)
-		}
-		return nil, err
-	}
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return failGen(r.AqlError("fn_error", "fn: argument must be a list", "fn"))
+		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: argument must be a list", "fn"))
 	}
 	if !IsConcrete(list) {
-		return failGen(r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
+		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
 	}
 	_lst, _ := AsList(list)
 	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
-		return failGen(r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form", "fn"))
+		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form, or the 3-arg form `fn input output body` for a single triple with a non-list input", "fn"))
+	}
+	return fnConstruct(r, elems, genSpec)
+}
+
+// fnTripleHandler — the 3-arg single-triple form `fn input output body`.
+// The three args are one signature triple without the wrapping list:
+// `fn x:Integer [Integer] [x mul 2]` ≡ `fn [[x:Integer] [Integer] [x mul 2]]`.
+// The input must NOT be a list (the sig's `tnot List` Pattern enforces
+// this at dispatch): a list input always selects the 1-arg spec-list
+// form, so the two forms stay disjoint. Non-list input/output/body
+// follow ParseFnDef's abbreviation rule (auto-wrap into a one-element
+// list), the same convention afn applies — so a bare type, an implicit
+// pair (x:Integer), an explicit map, or a literal pattern all work as
+// the single param. Multi-param triples need the spec-list form.
+func fnTripleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	genSpec := r.TakePendingGen()
+	// Defensive twin of the sig's `tnot List` Pattern: dispatch never
+	// routes a list input here, but check-mode fallbacks and direct
+	// handler calls can. A list input means the spec-list form.
+	if args[0].Parent.Equal(TList) {
+		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: the 3-arg triple form takes a non-list input; wrap the whole triple as a list instead: fn [[input] [output] [body]]", "fn"))
+	}
+	// Unlike the spec-list form — whose operands are always literals
+	// inside the NoEvalArgs list — a triple-form operand can be COMPUTED
+	// (`fn (2 add 3) [String] ['five']`). In check mode such an operand
+	// arrives as a carrier, so the Function constructed here carries the
+	// carrier where the runtime value belongs (an Integer carrier as the
+	// input pattern instead of 5); a compiled unit would intern that
+	// check-time Function as a constant and diverge from the interpreter,
+	// which re-constructs with the live value. Analysis proceeds with the
+	// carrier; the program itself is interpreter-only.
+	for i := range args[:3] {
+		if args[i].Carrier {
+			if es := r.Check.Recorder(); es.Active() {
+				es.MarkUncompilable("fn: triple-form construction over a computed (carrier) operand is interpreter-only — the compiled unit would bake the check-time placeholder")
+			}
+			break
+		}
+	}
+	return fnConstruct(r, args[:3], genSpec)
+}
+
+// failGenErr unwinds a pending gen spec's placeholder bindings before
+// surfacing err — the shared error tail of every fn-construction path
+// (`gen [T] fn …` must not leak T on failure).
+func failGenErr(r *Registry, genSpec *GenSpecInfo, err error) ([]Value, error) {
+	if genSpec != nil {
+		PopGenBindings(r, genSpec)
+	}
+	return nil, err
+}
+
+// fnConstruct is the shared construction core behind both fn forms:
+// elems is the flat triple stream ([input output body …]) already
+// validated to a non-zero multiple of 3. Parses the FnDefInfo, attaches
+// a pending gen spec, computes lexical captures, and runs the
+// check-mode analyses (declaration-time generic body check, dead
+// overload detection).
+func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, error) {
+	failGen := func(err error) ([]Value, error) {
+		return failGenErr(r, genSpec, err)
 	}
 	fnDef, err := parseFnDef(r, elems)
 	if err != nil {
@@ -1215,7 +1318,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			for j, p := range s.Params {
 				paramNames[j] = p.Name
 				t := p.Type
-				if t == nil {
+				if t == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					t = TAny
 				}
 				// A plain-Any param, or one typed by an unconstrained type
@@ -1290,6 +1393,19 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	// operand (body). Mirrors the AQL `args[1] op args[0]` convention.
 	inputSig := args[1]
 	body := args[0]
+
+	// Same rule as fnTripleHandler: a COMPUTED operand (a check-mode
+	// carrier — e.g. `(2 add 3) afn [body]`) makes the construction
+	// interpreter-only, or the compiled unit would intern the check-time
+	// Function with the carrier baked in where the live value belongs.
+	for i := range args[:2] {
+		if args[i].Carrier {
+			if es := r.Check.Recorder(); es.Active() {
+				es.MarkUncompilable("afn: construction over a computed (carrier) operand is interpreter-only — the compiled unit would bake the check-time placeholder")
+			}
+			break
+		}
+	}
 
 	if !inputSig.Parent.Equal(TList) {
 		inputSig = NewList([]Value{inputSig})

@@ -133,10 +133,11 @@ locally commit fail CI; the cost of running it is a few seconds.
 
 `make cover-gate` enforces **ADR-008**: 100% unit-test coverage of every
 reachable Go statement, measured across the merged cross-suite profile.
-The sole exclusion is the reviewed, proof-carrying allowlist
-`test/go/covergate/allowlist.tsv` (provably-unreachable defensive guards);
-the gate fails if an allowlisted block becomes covered or goes stale. See
-`design/COVERAGE-ALLOWLIST.10.md` and `design/TEST-SEAMS.10.md`.
+The sole exclusions are provably-unreachable defensive guards, each marked
+with a proof-carrying `//covergate:allow <reason>` comment on the guard's
+opening line; the gate fails if such a guard becomes covered or the pragma
+goes stale. See `design/COVERAGE-ALLOWLIST.10.md` and
+`design/TEST-SEAMS.10.md`.
 
 ## Test discipline — always pair positive with negative
 

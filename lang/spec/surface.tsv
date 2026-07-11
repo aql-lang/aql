@@ -17,7 +17,7 @@ def Shape surface {area: (fnsig [[Self] [Float]])} end Shape	surface<Surface/Sha
 def Shape surface {area: (fnsig [[Self] [Float]])} end typeof Shape	Shape	the def'd name is the type
 surface {}	ERROR:at least one operation	an empty schema is rejected
 surface {area: 1.0}	ERROR:must be an fnsig shape	operations must be fnsig shapes, not values
-surface [1 2]	ERROR:no matching signature	the schema must be a map (a list has no surface sig)
+surface [1 2]	ERROR:no signature matches	the schema must be a map (a list has no surface sig)
 #
 # §2  exposes — explicit conformance, checked loudly
 def Shape surface {area: (fnsig [[Self] [Float]])} def Circle class {r:1.0} def area fn [[c:Circle] [Float] [(c dot r) mul 2.0]] Circle exposes Shape end (make Circle {r:3.0}) is Shape	true	a checked exposer's instances are members

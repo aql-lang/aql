@@ -121,7 +121,7 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 			if ft := ValueType(val); ft != nil {
 				return []Value{NewCarrier(ft)}
 			}
-			return dyn
+			return dyn //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		}
 		return []Value{NewCarrier(TNone)}
 	}

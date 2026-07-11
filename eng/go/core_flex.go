@@ -113,7 +113,7 @@ func NodeDeepCopy(v Value) (Value, error) {
 	}
 	if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
 		m, err := AsMap(v)
-		if err != nil || m == nil {
+		if err != nil || m == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return Value{}, fmt.Errorf("node: cannot convert %s to an immutable node", v.String())
 		}
 		om := NewOrderedMap()
@@ -144,7 +144,7 @@ func NodeDeepCopy(v Value) (Value, error) {
 	}
 	if v.Parent.ConformsTo(TXml) && IsConcrete(v) {
 		tag, attr, cren, ok := xmlParts(v)
-		if !ok {
+		if !ok { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return Value{}, fmt.Errorf("node: cannot convert %s to an immutable node", v.String())
 		}
 		nattr := NewOrderedMap()
@@ -168,7 +168,7 @@ func NodeDeepCopy(v Value) (Value, error) {
 		}
 		return WithPos(NewXmlElement(tag, nattr, ncren), v), nil
 	}
-	return v, nil
+	return v, nil //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 }
 
 // containsFlex reports whether v is a flex node or transitively

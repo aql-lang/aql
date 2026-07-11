@@ -123,6 +123,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatalf("inactive StartFnCompile = %d finish-nil=%v %v", unit, finish == nil, ok)
 	}
 	e.SetUnitParamTypes(0, nil, nil)
+	e.SetUnitDecl(0, DeclSite{})
 	if e.unitVariadic(0) {
 		t.Fatal("inactive unitVariadic should be false")
 	}

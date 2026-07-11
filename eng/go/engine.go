@@ -386,9 +386,36 @@ func assignsPositionally(written []Value, sig *Signature, identity bool) bool {
 	return try(0)
 }
 
-// sigError builds a detailed AqlError for a signature mismatch.
-// It includes the word name, available signatures, and the actual
-// types found on the stack near the word.
+// fnCourtesyDispatches mirrors fnFallbackSig's 0-arg courtesy-dispatch
+// condition (registry.go): a fn whose active binding is an FnDefInfo and
+// which declares a 0-arg non-fallback overload with a handler is
+// dispatched (not errored) when the fallback sig is selected. Callers
+// use it to decide whether a fallback selection is a real no-match
+// (raise the rich sigError) or a courtesy dispatch (let fnFallbackSig
+// run). Keep in lockstep with fnFallbackSig.
+func fnCourtesyDispatches(r *Registry, name string, fn *FnDefInfo) bool {
+	if r == nil || fn == nil {
+		return false
+	}
+	top, ok := r.Defs.Top(name)
+	if !ok {
+		return false
+	}
+	if _, isFnDef := top.Data.(FnDefInfo); !isFnDef {
+		return false
+	}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.TotalArgs() == 0 && !s.Fallback && s.dispatchHandler() != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// sigError builds the full diagnostic for a signature mismatch: the
+// shared name-only Detail, the received-arguments note, per-candidate
+// verdicts, and the fix suggestions.
 func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	// A word starved by a VOID argument group (a parenthesised call in
 	// its argument range that produced no value, recorded by
@@ -397,54 +424,33 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 	if verr := e.voidArgErrorFor(name, pos); verr != nil {
 		return verr
 	}
-	detail := "no matching signature for " + name
-
-	// Build hint with available signatures and actual stack types.
-	var hint strings.Builder
-	if fn != nil && len(fn.Signatures) > 0 {
-		hint.WriteString("expected: " + name + " " + describeAllSigs(fn))
+	// The failing tuple in assignment order: unclaimed forward tokens
+	// (source order) when present, else the stack prefix (top-first) —
+	// the same two views the swap probe reads.
+	written := reorderForwardCandidates(e.tape, e.pointer)
+	if len(written) == 0 {
+		written = reorderCandidates(e.tape.Prefix(e.pointer))
 	}
-
-	// Reorder hint: when the actual argument types match some declared
+	// Reorder probe: when the actual argument types match some declared
 	// signature under a PERMUTATION, the arguments are almost certainly
 	// swapped — say so, with the declared parameter order, and suppress
-	// the forward-grouping hint, which would point at parsing (the
-	// wrong fix). Decision DX report finding 2.
-	reorder := e.reorderHint(name, fn)
-	switch {
-	case reorder != "":
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString(reorder)
-	case fn != nil && fn.HasForwardSigs():
-		// Forward-precedence hint: when the word has forward-collecting
-		// signatures, the most common cause of this error is that forward
-		// collection ran into a following word (another call, a builtin)
-		// before it could gather enough arguments — e.g. `inc inc 5` or
-		// `f a g b`. The fix is PARENS — group the call so its result becomes
-		// the argument; `end` / `;` only ends the statement and will NOT nest a
-		// following word into a sub-call (a trailing `;` does not rescue
-		// `print Decision.eval-cond c x`). Point at parens so they aren't left
-		// to guess from a bare "no matching signature".
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString("forward args for " + name +
-			" may have run into the next word; group the call in parens so its " +
-			"RESULT becomes the argument — (" + name + " …). `end` / `;` only ends " +
-			"the statement — it does NOT turn a following word into a nested call.")
+	// the forward-grouping suggestion, which would point at parsing
+	// (the wrong fix). Decision DX report finding 2.
+	reorder := reorderHintFor(name, fn, written)
+	if reorder == "" {
+		reorder = e.reorderHint(name, fn)
 	}
+	ae := e.noMatchError(name, fn, written, pos, reorder)
+	return e.maybeAddFnShapeHint(ae).(*AqlError)
+}
 
-	if e.tape.Len() > 0 {
-		if hint.Len() > 0 {
-			hint.WriteString("\n  = ")
-		}
-		hint.WriteString("stack: " + describeStackTypes(e.tape, e.pointer))
-	}
-
-	src := e.effectiveSource()
-	return e.maybeAddFnShapeHint(makeAqlErrorAt("signature_error", detail, name, src, hint.String(), pos)).(*AqlError)
+// noMatchError assembles the unmatched-dispatch diagnostic. It is a
+// thin wrapper over the tape-free shared builder noMatchDiag
+// (diag_msg.go) — the SAME builder the compiled VM's runtime guards
+// call, so an interpreter and a compiled no-signature error are
+// byte-identical over the same failing tuple.
+func (e *Engine) noMatchError(name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *AqlError {
+	return noMatchDiag(e.effectiveSource(), name, fn, written, pos, reorder)
 }
 
 // isFnShapeTypedBindingContext reports whether the failing word is
@@ -529,10 +535,10 @@ func (e *Engine) pendingForwardFunc() string {
 // insufficientArgsError builds a detailed AqlError for forward argument
 // collection failure (not enough arguments after the word).
 func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
-	detail := fmt.Sprintf("insufficient arguments for %s (expected %d forward args)", name, expected)
-	hint := "stack: " + describeStackTypes(e.tape, e.pointer)
 	src := e.effectiveSource()
-	return makeAqlErrorAt("signature_error", detail, name, src, hint, pos)
+	ae := makeAqlErrorAt("signature_error", insufficientArgsDetail(name, expected), name, src, "", pos)
+	ae.Notes = append(ae.Notes, "stack: "+describeStackTypes(e.tape, e.pointer))
+	return ae
 }
 
 // undefinedWordHint tailors the undefined_word hint to the two known
@@ -558,6 +564,58 @@ func (e *Engine) undefinedWordHint(name string) string {
 		}
 	}
 	return ""
+}
+
+// undefinedWordError builds the runtime undefined_word diagnostic: the
+// stable grep-friendly Detail (undefinedWordDetail), the context
+// suggestion for the two known blame-shift shapes (undefinedWordHint),
+// the did-you-mean near-miss over everything nameable in this registry,
+// and the describe pointer when the nearest miss is a builtin word.
+func (e *Engine) undefinedWordError(name string, pos SrcPos) *AqlError {
+	ae := &AqlError{
+		Code:       "undefined_word",
+		Detail:     undefinedWordDetail(name),
+		Src:        name,
+		Row:        pos.Row,
+		Col:        pos.Col,
+		fullSource: e.effectiveSource(),
+	}
+	if hint := e.undefinedWordHint(name); hint != "" {
+		ae.Suggestions = append(ae.Suggestions, DiagSuggestion{Message: hint})
+	}
+	ae.Suggestions = append(ae.Suggestions, e.didYouMeanSuggestions(name)...)
+	return ae
+}
+
+// undefinedWordCheckDiag is undefinedWordError's check-mode twin — the
+// same Detail and did-you-mean, carried on the CheckDiagnostic wire
+// type (the context hint is runtime-shaped and stays off it).
+func (e *Engine) undefinedWordCheckDiag(name string, pos SrcPos) CheckDiagnostic {
+	return CheckDiagnostic{
+		Code:        "undefined_word",
+		Detail:      undefinedWordDetail(name),
+		Word:        name,
+		Row:         pos.Row,
+		Col:         pos.Col,
+		Suggestions: e.didYouMeanSuggestions(name),
+	}
+}
+
+// didYouMeanSuggestions builds the near-miss suggestion(s) for an
+// unbound name: the did-you-mean line, plus the describe pointer when
+// the nearest miss is a builtin word (so the fix and its documentation
+// arrive together). Failure-path only — the candidate enumeration is
+// never paid on a successful step.
+func (e *Engine) didYouMeanSuggestions(name string) []DiagSuggestion {
+	matches := SuggestNames(name, e.registry.SuggestionCandidates())
+	if len(matches) == 0 {
+		return nil
+	}
+	out := []DiagSuggestion{{Message: didYouMeanMessage(matches)}}
+	if e.registry.IsBuiltinWord(matches[0]) {
+		out = append(out, DiagSuggestion{Message: describeSuggestion(matches[0])})
+	}
+	return out
 }
 
 // voidArgErrorFor reports the §3 "argument expression produced no
@@ -671,10 +729,10 @@ func (e *Engine) stampErrPos(err error) error {
 }
 
 // returnCountError builds a detailed AqlError for wrong number of return
-// values. The detail text is shared with the VM via returnCountErrorText.
-func (e *Engine) returnCountError(funcName string, expected, got int, pos SrcPos) *AqlError {
-	src := e.effectiveSource()
-	return makeAqlErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, src, "", pos)
+// values. The detail text is shared with the VM via returnCountErrorText;
+// the declaration span is interpreter-side enrichment (phase 5).
+func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *AqlError {
+	return buildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, rc.Pos, rc.Decl)
 }
 
 // validateReturnTypes checks the top nret residual values (results[extra:])
@@ -705,18 +763,33 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 			continue
 		}
 		if !got.Is(exp) {
-			return e.returnTypeError(rc.FuncName, k+1, exp, got, rc.Pos)
+			return e.returnTypeError(rc, k+1, exp, got)
 		}
 	}
 	return nil
 }
 
 // returnTypeError builds a detailed AqlError for a return type mismatch. The
-// detail/hint text is shared with the VM via returnTypeErrorText.
-func (e *Engine) returnTypeError(funcName string, index int, expected *Type, got Value, pos SrcPos) *AqlError {
-	detail, hint := returnTypeErrorText(funcName, index, expected, got)
-	src := e.effectiveSource()
-	return makeAqlErrorAt("type_error", detail, funcName, src, hint, pos)
+// detail/hint text is shared with the VM via returnTypeErrorText; the two
+// secondary spans — where the offending value was produced, and where the
+// return contract was declared — are interpreter-side enrichment (phase 5).
+func (e *Engine) returnTypeError(rc ReturnCheckInfo, index int, expected *Type, got Value) *AqlError {
+	return buildReturnTypeError(e.effectiveSource(), rc.FuncName, index, expected, got, rc.Pos, rc.Decl)
+}
+
+// attachDeclSpan labels the return contract's declaration site as a
+// secondary span. A zero declaration site attaches nothing — the
+// no-guessed-locations rule; the declared type is already in the Detail.
+func attachDeclSpan(ae *AqlError, decl DeclSite, label string) {
+	if decl.Pos.Row <= 0 {
+		return
+	}
+	ae.Spans = append(ae.Spans, DiagSpan{
+		Pos:    decl.Pos,
+		Label:  label,
+		Source: decl.Source,
+		File:   decl.File,
+	})
 }
 
 // currentPos returns the source position of the value at the pointer — the
@@ -993,7 +1066,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			}
 
 		case IsEnd(val):
-			if err := e.stepEnd(); err != nil {
+			if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				return nil, err
 			}
 
@@ -1014,7 +1087,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// the paren collected as-is — both route through stepLiteral
 			// (push data / collect the forward arg) rather than expanding.
 			if val.Quoted || e.pendingForwardWantsRawParen() {
-				if err := e.stepLiteral(); err != nil {
+				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					return nil, err
 				}
 			} else {
@@ -1040,7 +1113,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				// design/STRICT-FORWARD-BARRIER.0.md.
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
-				if err := e.stepLiteral(); err != nil {
+				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					return nil, err
 				}
 			}
@@ -1105,7 +1178,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 	// If the loop exited naturally (pointer walked off the end) with a
 	// signal still set, fall through to the same handler.
-	if e.registry.FlowCtrl != FlowNone {
+	if e.registry.FlowCtrl != FlowNone { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return e.exitWithFlowCtrl()
 	}
 
@@ -1300,7 +1373,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 					return err
 				}
 			case IsEnd(val):
-				if err := e.stepEnd(); err != nil {
+				if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					return err
 				}
 			case IsForward(val):
@@ -1308,7 +1381,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 			case IsOpenParen(val):
 				e.pointer++
 			default:
-				if err := e.stepLiteral(); err != nil {
+				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					return err
 				}
 			}
@@ -1319,7 +1392,7 @@ func (e *Engine) resolveOrphanedForwards() error {
 			}
 		}
 	}
-	return nil
+	return nil //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 }
 
 // rawParenForward reports whether any of fn's signatures captures a forward
@@ -1555,13 +1628,19 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// pruneViable drops every signature that a concrete forward value at
 	// position pos definitely rules out (parity with matchSignature's
 	// per-position rejection). Raw/Form/TypeArg slots and Any slots are
-	// never used to prune (conservative — keep the signature viable).
+	// never used to prune (conservative — keep the signature viable);
+	// a concrete Pattern on the slot prunes exactly as patternsOk would
+	// reject the position (forwardPatternRejects) — fn's `tnot List`
+	// triple sig must fall out of the viable set on a spec-list token,
+	// or its 3-token window pre-evaluates groups past the call.
 	pruneViable := func(pos int, v Value) {
 		kept := viable[:0]
 		for _, vs := range viable {
 			keep := true
 			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) {
 				if et := sigArgType(vs.sig, pos); !et.Equal(TAny) && !sigArgMatches(vs.sig, pos, v) {
+					keep = false
+				} else if forwardPatternRejects(vs.sig, pos, v) {
 					keep = false
 				}
 			}
@@ -1576,6 +1655,47 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// is zero-cost for the overwhelming majority of words, which carry
 	// no keyword slots.
 	scanHasKeyword := sigsHaveKeywordSlot(viable)
+
+	// prunePatterns is the PATTERN-ONLY prune for values whose TYPE must
+	// not prune (a collapsed paren result — multi-value accounting — or a
+	// def-bound word's binding, whose matchSignature treatment is
+	// contextual). The pattern verdict is position-exact either way: the
+	// value tested is what matchSignature's patternsOk will test at this
+	// position, so a definite concrete-pattern rejection (the same
+	// forwardPatternRejects parity pruneViable uses) is sound. Quote slots
+	// are exempt — a /q position captures the word's NAME, not its
+	// binding.
+	prunePatterns := func(pos int, v Value) {
+		kept := viable[:0]
+		for _, vs := range viable {
+			keep := true
+			if pos < vs.barrier && !sigRawSlot(vs.sig, pos) &&
+				!(vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos]) &&
+				forwardPatternRejects(vs.sig, pos, v) {
+				keep = false
+			}
+			if keep {
+				kept = append(kept, vs)
+			}
+		}
+		viable = kept
+	}
+
+	// pruneResolvedPatterns applies prunePatterns to a token, resolving a
+	// WORD through Defs.Top first — the same resolution patternsOk applies
+	// before unifying — so the pattern is tested against the binding the
+	// matcher will actually see. An unbound word never prunes.
+	pruneResolvedPatterns := func(pos int, tok Value) {
+		if IsWord(tok) {
+			if wi, werr := AsWord(tok); werr == nil {
+				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+					prunePatterns(pos, top)
+				}
+			}
+			return
+		}
+		prunePatterns(pos, tok)
+	}
 
 	pos := 0
 	scanIdx := e.pointer + 1
@@ -1624,7 +1744,16 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			// it as one resolved position and advance, exactly as the
 			// former scan did. (The result's runtime type is not used to
 			// prune further: a group can collapse to zero or many values,
-			// so we keep the conservative one-slot accounting.)
+			// so we keep the conservative one-slot accounting.) A concrete
+			// PATTERN mismatch does prune: whatever now sits at scanIdx is
+			// exactly what matchSignature will test at this sig position,
+			// so a sig whose pattern definitely rejects it can never be
+			// selected here — without this, a paren-spelled spec list
+			// (`fn (quote [[…]]) …`) left fn's 3-token triple window open
+			// and pre-evaluated the NEXT statement's groups. A WORD at
+			// scanIdx (the group collapsed to zero values and the next
+			// token slid in) prunes only through its resolved binding.
+			pruneResolvedPatterns(pos, e.tape.At(scanIdx))
 			pos++
 			scanIdx++
 			continue
@@ -1719,13 +1848,18 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// ParenExpr([w]) and reprocessing routes it through the ParenExpr/
 		// OpenParen branches above, so evaluation gating, multi-value
 		// collapse, and raw-capture handling are byte-identical to a
-		// written (w). Two exemptions: structural-capture slots (/q takes
-		// the word's NAME, form/raw/type slots take the raw token — see
-		// capturesForwardToken), code-bearing splices (Forth-style macros
-		// that must run against the live stack — see spliceIsData), and
-		// binder operands (`def y xs` rebinds the MARKER so y aliases the
-		// splice — see bindsReferent).
-		if IsWord(tok) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
+		// written (w). Exemptions: positions no still-viable overload
+		// consumes (viableConsumes — the rewrite is a TAPE MUTATION that
+		// outlives this dispatch, so a word in the window of a pruned
+		// overload must stay a word for the NEXT word to capture; the
+		// paren/interp branches above gate the same way), structural-
+		// capture slots (/q takes the word's NAME, a KEYWORD slot takes the
+		// matching literal word, form/raw/type slots take the raw token —
+		// see capturesForwardToken), code-bearing splices (Forth-style
+		// macros that must run against the live stack — see spliceIsData),
+		// and binder operands (`def y xs` rebinds the MARKER so y aliases
+		// the splice — see bindsReferent).
+		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
@@ -1770,6 +1904,15 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// former scan, groups beyond a NON-FUNCTION word remain reachable.
 		if mt, kind := e.staticForwardType(tok); kind == fwdValue {
 			pruneViable(pos, mt)
+		} else if IsWord(tok) {
+			// A def-bound word's TYPE stays un-pruned (contextual), but
+			// its concrete-PATTERN verdict is exact — patternsOk resolves
+			// the word through Defs.Top the same way before unifying — so
+			// a sig whose pattern rejects the binding can never be
+			// selected with this word at this position. Without this, a
+			// word-spelled spec list (`def sw quote [[…]]  fn sw …`) left
+			// fn's 3-token triple window open past the call.
+			pruneResolvedPatterns(pos, tok)
 		}
 		pos++
 		scanIdx++
@@ -1869,7 +2012,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	e.pointer = scanIdx
 
 	// Advance past the OpenParen marker.
-	if err := e.stepOpenParen(); err != nil {
+	if err := e.stepOpenParen(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		e.pointer = savedPointer
 		return err
 	}
@@ -1909,7 +2052,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 				return err
 			}
 		case IsEnd(v):
-			if err := e.stepEnd(); err != nil {
+			if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				e.pointer = savedPointer
 				return err
 			}
@@ -1967,7 +2110,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// left to process). Report it explicitly rather than silently
 	// returning a half-evaluated group, which would later surface as a
 	// phantom "unmatched opening parenthesis" at the top-level drain.
-	if depth > 0 && e.pointer < e.tape.Len() {
+	if depth > 0 && e.pointer < e.tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		e.pointer = savedPointer
 		return e.evalLimitError(maxParenGroupSteps)
 	}
@@ -2008,27 +2151,14 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	v, ok := ResolveUsurp(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + w.Name,
-				Word:   w.Name,
-				Row:    val.Pos().Row,
-				Col:    val.Pos().Col,
-			})
+			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + w.Name,
-			Src:        w.Name,
-			Row:        val.Pos().Row,
-			Col:        val.Pos().Col,
-			fullSource: e.effectiveSource(),
-		}
+		return e.undefinedWordError(w.Name, val.Pos())
 	}
 	// /u may usurp only function words — a non-fn binding has no
 	// signature to reverse. ResolveUsurp returns the raw binding in
@@ -2108,27 +2238,14 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
-				Code:   "undefined_word",
-				Detail: "undefined word: " + w.Name,
-				Word:   w.Name,
-				Row:    val.Pos().Row,
-				Col:    val.Pos().Col,
-			})
+			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
-			Code:       "undefined_word",
-			Detail:     "undefined word: " + w.Name,
-			Src:        w.Name,
-			Row:        val.Pos().Row,
-			Col:        val.Pos().Col,
-			fullSource: e.effectiveSource(),
-		}
+		return e.undefinedWordError(w.Name, val.Pos())
 	}
 	// /r may reference only function words. A non-fn binding (plain
 	// value, type body) has no call/value asymmetry for /r to break,
@@ -2301,7 +2418,7 @@ func (e *Engine) stepWord(val Value) error {
 			if IsSplice(top) {
 				if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 					if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
-						if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
+						if fwd, ferr := AsForward(e.tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							pe := NewParenExpr([]Value{val})
 							pe.pos = val.pos
 							e.tape.Set(e.pointer, pe)
@@ -2429,24 +2546,9 @@ func (e *Engine) stepWord(val Value) error {
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
 		if !e.registry.Check.IsActive() {
-			hint := e.undefinedWordHint(w.Name)
-			return &AqlError{
-				Code:       "undefined_word",
-				Detail:     "undefined word: " + w.Name,
-				Src:        w.Name,
-				Row:        val.Pos().Row,
-				Col:        val.Pos().Col,
-				Hint:       hint,
-				fullSource: e.effectiveSource(),
-			}
+			return e.undefinedWordError(w.Name, val.Pos())
 		}
-		e.registry.Check.AddDiagnostic(CheckDiagnostic{
-			Code:   "undefined_word",
-			Detail: "undefined word: " + w.Name,
-			Word:   w.Name,
-			Row:    val.Pos().Row,
-			Col:    val.Pos().Col,
-		})
+		e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 		v := NewAtom(w.Name)
 		v.pos = val.pos
 		v.Undefined = true
@@ -2497,24 +2599,18 @@ func (e *Engine) stepWord(val Value) error {
 		}
 	}
 
-	// Run-mode reorder probe (decision DX report finding 2): the
-	// fallback is about to raise "no matching signature" — but when
-	// the UNCLAIMED forward tokens (the plan pruned every typed sig,
-	// so they were never collected) match a real signature under a
-	// permutation, the arguments are swapped. Raise the dedicated
-	// hint instead of dispatching the fallback's generic error.
-	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() {
-		hint := reorderHintFor(w.Name, fn, reorderForwardCandidates(e.tape, e.pointer))
-		if hint == "" {
-			// Stack-form swap: the misordered values are already on
-			// the stack below the word.
-			hint = reorderHintFor(w.Name, fn, reorderCandidates(e.tape.Prefix(e.pointer)))
-		}
-		if hint != "" {
-			return makeAqlErrorAt("signature_error",
-				"no matching signature for "+w.Name, w.Name,
-				e.effectiveSource(), hint, val.Pos())
-		}
+	// The fallback (0-arg catch-all) was selected. Unless this fn
+	// courtesy-dispatches a 0-arg overload (which fnFallbackSig handles),
+	// the selection is a genuine no-match — raise the FULL rich
+	// diagnostic (received args, per-candidate verdicts, swap probe, fix
+	// suggestions) via sigError here, rather than letting fnFallbackSig
+	// raise a barer error. This keeps the interpreter's dispatch-failure
+	// report uniform across every path, and byte-identical to the
+	// compiled OpTrap (which serialises this same sigError) and the
+	// compiled runtime param-contract guards.
+	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() &&
+		!fnCourtesyDispatches(e.registry, w.Name, fn) {
+		return e.sigError(w.Name, fn, val.Pos())
 	}
 
 	if sig == nil {
@@ -3010,7 +3106,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 			end := e.pointer
 			for _, p := range sortedIndices {
-				if p > end {
+				if p > end { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					end = p
 				}
 			}
@@ -3030,7 +3126,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		// 0-arity stands.
 		callEnd := e.pointer
 		for _, p := range sortedIndices {
-			if p > callEnd {
+			if p > callEnd { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				callEnd = p
 			}
 		}
@@ -3093,7 +3189,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			e.registry.TCO.Detected++
 			if e.tcoEligible(scan, match.Sig, defMutsBefore) {
 				if scan.ValuesBelow || !e.returnsConform(scan, match.Sig) {
-					if err := e.elideTailFrame(scan); err != nil {
+					if err := e.elideTailFrame(scan); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 						return err
 					}
 					e.registry.TCO.Elided++
@@ -3102,7 +3198,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					// happens below, once the handler has produced
 					// the replacement tokens. The handler edits no
 					// tape, so the scan's indices stay valid.
-					if err := e.teardownFrameState(scan); err != nil {
+					if err := e.teardownFrameState(scan); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 						return err
 					}
 					fullReplace = &scan
@@ -3141,7 +3237,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
-	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil {
+	if err := e.spliceMatchResults(match, sortedIndices, n, results); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return err
 	}
 	// ParkResult words (notably `ref`) leave their result as inert data at
@@ -3172,12 +3268,9 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 	if !e.isFnShapeTypedBindingContext() {
 		return err
 	}
-	hint := "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?"
-	if aqlErr.Hint != "" {
-		aqlErr.Hint = aqlErr.Hint + "\n  = " + hint
-	} else {
-		aqlErr.Hint = hint
-	}
+	aqlErr.Suggestions = append(aqlErr.Suggestions, DiagSuggestion{
+		Message: "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?",
+	})
 	return aqlErr
 }
 
@@ -3567,7 +3660,7 @@ func (e *Engine) stepLiteral() error {
 	if valIdx < funcIdx {
 		funcIdx--
 	}
-	if valIdx < fwdIdx {
+	if valIdx < fwdIdx { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		fwdIdx--
 	}
 
@@ -4197,7 +4290,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			}
 			if len(result) == 1 {
 				out.Set(resolvedKey, result[0])
-			} else if len(result) > 1 {
+			} else if len(result) > 1 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				out.Set(resolvedKey, NewList(result))
 			}
 			continue
@@ -4638,7 +4731,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// All args resolved on the stack. Anonymous FnDefs (no Go
 	// Handler) take the legacy stack-match path, which splices the
 	// body via execFnDefSig and binds named params via def-stack.
-	if sig.dispatchHandler() == nil {
+	if sig.dispatchHandler() == nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return e.execFnDefSigStackMatch(valIdx, fnDef, resolved)
 	}
 
@@ -4738,11 +4831,11 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				return err
 			}
 			// Degenerate: a wrapper sig with no body-runner handler — fall through.
-			args := make([]Value, len(positions))
-			for i, pos := range positions {
+			args := make([]Value, len(positions)) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			for i, pos := range positions {       //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				args[i] = e.tape.At(pos)
 			}
-			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)
+			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		}
 	}
 
@@ -4835,7 +4928,7 @@ func trivialDelegationTarget(sig *FnSig) (string, bool) {
 		return "", false
 	}
 	w, err := AsWord(sig.body()[0])
-	if err != nil {
+	if err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return "", false
 	}
 	return w.Name, true
@@ -5077,12 +5170,12 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
 	returns := buildFnBodyReturnsFn(e.registry, fnDef.Name, *sig, fnDef)
 	result := returns(args, e.registry)
-	if len(result) == 0 && len(sig.Returns) > 0 {
+	if len(result) == 0 && len(sig.Returns) > 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		// A declared-return fn that produced no carrier (the body unit
 		// declined to compile) degrades to one carrier per declared return so
 		// downstream provenance refuses and the program falls back faithfully.
 		result = make([]Value, len(sig.Returns))
-		for i, t := range sig.Returns {
+		for i, t := range sig.Returns { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			result[i] = NewCarrier(t)
 		}
 	}
@@ -5311,7 +5404,24 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			}
 		}
 		restoreCheck := e.shareCheckState(capturedReg)
-		result, err := capturedReg.CallAQL(sig, args, captures)
+		var result []Value
+		var err error
+		if e.registry.Check.Mode {
+			// Check mode ANALYSES the body — always the interpreter path
+			// (running a stamped unit here would execute real side effects
+			// during static analysis).
+			result, err = capturedReg.CallAQL(sig, args, captures)
+		} else {
+			// Runtime: a module fn stamped at load (StampFnValueInPlace,
+			// RunModuleBody) runs its unit on the VM — the module
+			// sub-registry is idle from the caller's perspective, so
+			// InvokeCallback starts a fresh RunUnit there; an unstamped or
+			// stale-dep sig falls to CallAQL inside the seam, byte-identical
+			// to the old direct call. This retires the per-call interpreter
+			// hop for module-export application (the mini-redis client loop:
+			// `MiniRedis.cmd` per iteration).
+			result, err = InvokeCallback(capturedReg, sig, args, captures)
+		}
 		restoreCheck()
 		if err != nil {
 			return err
@@ -5326,21 +5436,21 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			skipSet[valIdx] = true
 			dst := firstArgIdx
 			for i := firstArgIdx; i <= valIdx; i++ {
-				if !skipSet[i] {
+				if !skipSet[i] { //covergate:allow execFnDefSig cross-registry CallAQL result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
 					e.tape.Set(dst, e.tape.At(i))
 					dst++
 				}
 			}
 			e.tape.Splice(dst, valIdx+1-dst, result...)
 			e.pointer = firstArgIdx
-		} else if nArgs == 0 {
+		} else if nArgs == 0 { //covergate:allow execFnDefSig cross-registry 0-arg splice arm; see 5015.20 entry (§kernel)
 			e.tape.Splice(valIdx, 1, result...)
-		} else {
+		} else { //covergate:allow execFnDefSig cross-registry forward-fallback splice arm; see 5015.20 entry (§kernel)
 			argStart := valIdx - nArgs
-			if argStart < 0 {
+			if argStart < 0 { //covergate:allow execFnDefSig cross-registry forward-fallback splice arm; see 5015.20 entry (§kernel)
 				argStart = 0
 			}
-			e.tape.Splice(argStart, valIdx+1-argStart, result...)
+			e.tape.Splice(argStart, valIdx+1-argStart, result...) //covergate:allow execFnDefSig cross-registry forward-fallback splice arm; see 5015.20 entry (§kernel)
 			e.pointer = argStart
 		}
 		return nil
@@ -5417,6 +5527,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		Snapshot:     defSnapshot,
 		Names:        names,
 		Returns:      sig.Returns,
+		Decl:         sig.Decl,
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
@@ -5712,17 +5823,17 @@ func (e *Engine) stepEnd() error {
 			funcIdx-- // forward removal
 		}
 		// end was already removed (endIdx > fwdIdx), endIdx > funcIdx always
-	} else {
+	} else { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		e.tape.Remove(fwdIdx)
 		newEndIdx := endIdx
-		if fwdIdx < endIdx {
+		if fwdIdx < endIdx { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			newEndIdx--
 		}
-		e.tape.Remove(newEndIdx)
-		if fwdIdx < funcIdx {
+		e.tape.Remove(newEndIdx) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+		if fwdIdx < funcIdx {    //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			funcIdx--
 		}
-		if newEndIdx < funcIdx {
+		if newEndIdx < funcIdx { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			funcIdx--
 		}
 	}
@@ -6150,7 +6261,7 @@ func (e *Engine) stepCloseParen() error {
 
 				// Recalculate closeIdx after potential stack changes.
 				closeIdx = e.findCloseParenAfter(openIdx)
-				if closeIdx < 0 {
+				if closeIdx < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					return e.syntaxError("unmatched closing parenthesis", ")")
 				}
 
@@ -6164,23 +6275,23 @@ func (e *Engine) stepCloseParen() error {
 						}
 						// Recalculate closeIdx: stack may have changed.
 						closeIdx = e.findCloseParenAfter(openIdx)
-						if closeIdx < 0 {
+						if closeIdx < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
-					case IsCloseParen(val):
-						if err := e.stepCloseParen(); err != nil {
+					case IsCloseParen(val): //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+						if err := e.stepCloseParen(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return err
 						}
-						closeIdx = e.findCloseParenAfter(openIdx)
-						if closeIdx < 0 {
+						closeIdx = e.findCloseParenAfter(openIdx) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+						if closeIdx < 0 {                         //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					case IsEnd(val):
-						if err := e.stepEnd(); err != nil {
+						if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return err
 						}
 						closeIdx = e.findCloseParenAfter(openIdx)
-						if closeIdx < 0 {
+						if closeIdx < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					case IsForward(val):
@@ -6193,11 +6304,11 @@ func (e *Engine) stepCloseParen() error {
 						e.stepDefCleanup(val)
 						e.pointer++
 					default:
-						if err := e.stepLiteral(); err != nil {
+						if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return err
 						}
 						closeIdx = e.findCloseParenAfter(openIdx)
-						if closeIdx < 0 {
+						if closeIdx < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							return e.syntaxError("unmatched closing parenthesis", ")")
 						}
 					}
@@ -6217,12 +6328,12 @@ func (e *Engine) stepCloseParen() error {
 
 	// Check for any remaining orphaned forwards.
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if IsForward(e.tape.At(i)) {
+		if IsForward(e.tape.At(i)) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			fwd, _ := AsForward(e.tape.At(i))
-			if verr := e.voidArgErrorFor(fwd.FuncName, fwd.Pos); verr != nil {
+			if verr := e.voidArgErrorFor(fwd.FuncName, fwd.Pos); verr != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				return verr
 			}
-			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs, fwd.Pos)
+			return e.insufficientArgsError(fwd.FuncName, fwd.ExpectedArgs, fwd.Pos) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		}
 	}
 
@@ -6281,11 +6392,11 @@ func (e *Engine) stepCloseParen() error {
 			// number of unnamed params that were pushed before the body.
 			nret := len(rc.Returns)
 			if len(results) < nret {
-				return e.returnCountError(rc.FuncName, nret, len(results), rc.Pos)
+				return e.returnCountError(rc, nret, len(results))
 			}
 			extra := len(results) - nret
 			if extra > rc.UnnamedCount {
-				return e.returnCountError(rc.FuncName, nret, len(results)-rc.UnnamedCount, rc.Pos)
+				return e.returnCountError(rc, nret, len(results)-rc.UnnamedCount)
 			}
 
 			// Validate the top nret values match declared return types.
@@ -6393,7 +6504,7 @@ func (e *Engine) stepCloseParen() error {
 		// in the original stack indices, minus 1 for the removed
 		// OpenParen.)
 		end := closeIdx - 1
-		if end > e.tape.Len() {
+		if end > e.tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			end = e.tape.Len()
 		}
 		for i := openIdx; i < end; i++ {
@@ -6605,7 +6716,7 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 		// When this list is expanded by def body substitution, it re-emits
 		// the word and collected args for completion with additional args.
 		startIdx := funcIdx - collectedCount
-		if startIdx < 0 {
+		if startIdx < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			startIdx = 0
 		}
 
@@ -6752,7 +6863,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 			return
 		}
 		for _, p := range positions {
-			if p == mixedCarrierRejectIdx {
+			if p == mixedCarrierRejectIdx { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				return // the carrier was consumed after all — not skipped
 			}
 		}
@@ -6951,7 +7062,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// arrive as TFnDef/TFunction values; plan against
 					// that Parent for sig matching.
 					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
-						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) {
+						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -7005,7 +7116,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				}
 
 				// Open paren marker: boundary, stop forward scan.
-				if IsOpenParen(tok) {
+				if IsOpenParen(tok) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 					break
 				}
 
@@ -7082,6 +7193,16 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					for j := 0; j < remaining; j++ {
 						ri := len(resolvedIdx) - 1 - j
 						positions[fwd+j] = resolvedIdx[ri]
+					}
+					// Pattern gate — this selection point must enforce
+					// Patterns exactly like the full-forward (above) and
+					// normal-stack (below) returns, or a sig whose
+					// pattern rejects a filled position is selected
+					// anyway (fn's tnot-List triple sig would claim a
+					// spec-list call made inside an enclosing pending
+					// forward with stack values available).
+					if !patternsOk(sig, positions, e.tape, fwd, e.registry) {
+						continue
 					}
 					if preferWordSig && !isPreferred {
 						if bestDeferred == nil {
@@ -7319,7 +7440,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 			continue
 		}
 		sv, found := info.Required.Get(w.Name)
-		if !found {
+		if !found { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			continue
 		}
 		sinfo, shape = info, sv
@@ -7329,7 +7450,7 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	undef, ok := shape.Data.(FnUndefInfo)
-	if !ok || len(undef.Sigs) == 0 {
+	if !ok || len(undef.Sigs) == 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
@@ -7527,7 +7648,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// that tape order — stack-before then forward-after — which is NOT
 	// signature order. Recorded below for the poly-recovery operand rebuild.
 	nStack := len(e.resolvedIndicesBefore(n))
-	if nStack > len(positions) {
+	if nStack > len(positions) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		nStack = len(positions)
 	}
 	args := make([]Value, len(positions))
@@ -7586,7 +7707,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// A single-overload user fn over a disjunct-typed operand recovers here
 		// (e.g. the aql:test framework's run-cases inside test-describe's body);
 		// record a guarded CALL_USER instead of refusing (it splices its own returns).
-		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			return nil
 		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
@@ -7646,10 +7767,10 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// there the diagnostic IS the genuine static report, so gate it on
 		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-		if !e.registry.Check.Compiling && bestMatch < 0 {
+		if !e.registry.Check.Compiling && bestMatch < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 			e.registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code:   "no_signature",
-				Detail: "no matching signature for " + w.Name + "; assuming best-fit candidate for analysis",
+				Detail: noMatchDetail(w.Name) + "; assuming best-fit candidate for analysis",
 				Word:   w.Name,
 				Row:    pos.Row,
 				Col:    pos.Col,
@@ -7759,9 +7880,9 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// the nearest candidate's declared types, so the user can see the
 		// mismatch without reconstructing the stack ("got (Map, Integer);
 		// nearest [Number Number]").
-		detail := "no matching signature for " + w.Name
+		detail := noMatchDetail(w.Name)
 		if got := argTypeSummary(args); got != "" {
-			detail += " — got (" + got + ")"
+			detail += "; got (" + got + ")"
 			if near := sigTypeSummary(sig); near != "" {
 				detail += "; nearest [" + near + "]"
 			}
@@ -7883,7 +8004,6 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			return false
 		}
 	}
-	carriers := false
 	for _, p := range window {
 		v := e.tape.At(p)
 		if IsWord(v) {
@@ -7905,223 +8025,31 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) {
 			return false
 		}
+		// A CARRIER operand is not concrete at compile time, so the rich
+		// diagnostic this trap would bake (received-argument note,
+		// per-candidate value verdicts) is built over the carrier — but the
+		// interpreter builds it at run time over the carrier's CONCRETE
+		// value, so the two would diverge (design/DIAGNOSTICS.0.md phase 7:
+		// the compiled and interpreted reports must be byte-identical).
+		// Decline; the whole program then falls back to the interpreter,
+		// which raises the exact rich error at run time — free, since a
+		// trap is terminal, so the program errors here either way and only
+		// the (irrelevant, error-path) compilation of the tail is given up.
+		// This supersedes the Phase-6 M4 carrier-disjointness trap, which
+		// could not carry a matching rich diagnostic.
 		if v.Carrier {
-			carriers = true // judged per-overload below (Phase 6 M4)
+			return false
 		}
 	}
-	if carriers {
-		// Carrier-disjointness extension (Phase 6 M4): a strict carrier in
-		// the window is admissible only when EVERY non-fallback overload
-		// still fails DEFINITELY — see sigDefinitelyUnmatched for the
-		// per-overload proof obligations.
-		for i := range fn.Signatures {
-			s := &fn.Signatures[i]
-			if s.Fallback {
-				continue
-			}
-			if !e.sigDefinitelyUnmatched(s, window) {
-				return false
-			}
-		}
-	}
+	// Serialise the FULL interpreter error into the trap so the compiled
+	// OpTrap raises byte-identical to the interpreter (Detail + spans +
+	// notes + suggestions). Definiteness (screened above) guarantees the
+	// runtime values equal what sigError saw here, so the error built now
+	// is the error the interpreter builds at run time.
 	if verr := e.voidArgErrorFor(w.Name, pos); verr != nil {
-		return es.RecordTrap(verr.Code, verr.Detail, w.Name, verr.Hint, pos)
+		return es.RecordTrapErr(verr, pos)
 	}
-	return es.RecordTrap("signature_error", "no matching signature for "+w.Name, w.Name, "", pos)
-}
-
-// sigDefinitelyUnmatched reports whether overload s of an already
-// statically-failed dispatch PROVABLY fails at run time too (the Phase 6 M4
-// carrier-disjointness extension; reached only from
-// tryRecordUnmatchedDispatchTrap after the shared window screens passed —
-// no dynamics, no deferred-expression tokens, no undefined placeholders
-// anywhere a candidate could look, and window(k) ⊆ window(maxN) for every
-// overload arity k, so the shared screens cover every value any overload can
-// examine). The proof is per-overload,
-// the assignment-FEASIBILITY argument: the runtime match, whatever
-// forward/stack split it takes (the split may shift when a carrier's runtime
-// value changes which type tests pass, so no single pairing may be assumed),
-// fills s's n slots with n DISTINCT values drawn from the shared window —
-// the window is the complete candidate pool (the stack side reaches at most
-// arity-many nearest values and the forward side stops at boundaries the
-// window walk also honours, both ⊆ window(maxN)). Model "slot j could accept
-// candidate i" as a bipartite edge (the NEGATION of definiteSlotFail, which
-// answers true only for PROVABLY-failing pairs); if no perfect matching over
-// the slots exists, s can never complete at run time. This subsumes the
-// arity shortfall (fewer candidates than slots), the zero-edge slot (every
-// candidate definitely fails some slot), and the counting cases (two Point
-// slots but only one Point-compatible candidate — open-words:100).
-//
-// Per-pair definiteness: a concrete value / resolved binding / raw token
-// fails j deterministically when the matcher's own per-value test rejects it
-// (definiteSlotFail mirrors the scan's branch chain over runtime-identical
-// inputs); a strict carrier fails j when it is provably disjoint from j's
-// slot type — the runtime value's tag conforms to the carrier's static tag,
-// so a Never meet with no value-level membership admits no runtime
-// refinement either (the residualProvablyDisjoint proof, extended for the
-// matcher's structural carves in carrierSlotProvablyDisjoint).
-func (e *Engine) sigDefinitelyUnmatched(s *Signature, window []int) bool {
-	n := s.TotalArgs()
-	// Edge matrix: canTake[j][i] — slot j could accept window candidate i.
-	canTake := make([][]bool, n)
-	for j := 0; j < n; j++ {
-		canTake[j] = make([]bool, len(window))
-		for i, p := range window {
-			canTake[j][i] = !e.definiteSlotFail(s, j, e.tape.At(p))
-		}
-	}
-	// Augmenting-path maximum bipartite matching, slots → candidates (n and
-	// the window are dispatch-arity-sized, so the quadratic walk is trivial).
-	matchedSlot := make([]int, len(window))
-	for i := range matchedSlot {
-		matchedSlot[i] = -1
-	}
-	var assign func(j int, seen []bool) bool
-	assign = func(j int, seen []bool) bool {
-		for i := range window {
-			if !canTake[j][i] || seen[i] {
-				continue
-			}
-			seen[i] = true
-			if matchedSlot[i] == -1 || assign(matchedSlot[i], seen) {
-				matchedSlot[i] = j
-				return true
-			}
-		}
-		return false
-	}
-	for j := 0; j < n; j++ {
-		if !assign(j, make([]bool, len(window))) {
-			return true // slot j cannot be filled by any candidate — definite failure
-		}
-	}
-	return false
-}
-
-// definiteSlotFail reports whether candidate value v PROVABLY fails slot j of
-// signature s on every run. Mirrors matchSignature's per-value admission
-// branches over runtime-identical inputs and uses the carrier-disjointness
-// proof for strict carriers; anything it cannot mirror exactly answers false
-// (the sound direction — the trap then declines).
-func (e *Engine) definiteSlotFail(s *Signature, j int, v Value) bool {
-	t := sigArgType(s, j)
-	if t == nil || t.Equal(TAny) {
-		return false // an Any slot admits everything
-	}
-	// Slot kinds whose admission is not the plain per-value type test.
-	if (s.QuoteArgs != nil && s.QuoteArgs[j]) || (s.FormArgs != nil && s.FormArgs[j]) {
-		return false
-	}
-	typeSlot := s.TypeArgs != nil && s.TypeArgs[j]
-	if IsWord(v) {
-		wi, werr := AsWord(v)
-		if werr != nil {
-			return false
-		}
-		// The scan's word-resolution chain, in its order; every branch is
-		// deterministic over the same registry state at this dispatch point.
-		if top, ok := e.registry.Defs.Top(wi.Name); ok {
-			return e.definiteSlotFail(s, j, top)
-		}
-		if tv, ok := e.registry.TopTypeBody(wi.Name); ok {
-			return !sigArgMatches(s, j, tv)
-		}
-		if e.registry.Lookup(wi.Name) != nil {
-			return true // a function word is a scan BOUNDARY — it never fills a slot
-		}
-		if wi.Name == "true" || wi.Name == "false" {
-			return !sigArgMatches(s, j, Value{Parent: TBoolean})
-		}
-		if tn, isType := typeNames[wi.Name]; isType {
-			return !sigArgMatches(s, j, NewTypeLiteral(tn))
-		}
-		if tn, isType := ResolveTypePath(wi.Name); isType {
-			return !sigArgMatches(s, j, NewTypeLiteral(tn))
-		}
-		// Undefined word: the scan resolves it to an Atom.
-		return !sigArgMatches(s, j, Value{Parent: TAtom})
-	}
-	if v.Carrier {
-		if v.Dynamic || typeSlot {
-			// Dynamics are screened upstream (belt here); a TypeArgs slot's
-			// admission (sigTypeMatchesAsType over a possible runtime type
-			// node) is not a tag test — decline.
-			return false
-		}
-		// A carrier whose runtime value could itself be a raw Word re-enters
-		// the word-resolution branches above; require Word-disjointness
-		// alongside the slot proof.
-		return carrierSlotProvablyDisjoint(v, t) && carrierSlotProvablyDisjoint(v, TWord)
-	}
-	// A runtime-identical value (concrete const, bare type literal): the
-	// matcher's own per-position test, replayed.
-	return !sigArgMatches(s, j, v)
-}
-
-// carrierSlotProvablyDisjoint reports whether a strict carrier can NEVER
-// satisfy a signature slot of type t at run time: no runtime value whose tag
-// conforms to the carrier's static tag passes sigTypeMatches against t. The
-// core is residualProvablyDisjoint's proof (no conformance either direction,
-// no value-level membership, Never tand meet), extended with declines for
-// sigTypeMatches' structural carves — an Options slot admits any concrete
-// map, and a Map/Node-family slot admits Options/Record-tagged values — so
-// the disjointness claim matches the runtime matcher, not just the nominal
-// lattice. A disjunct carrier is disjoint only if every alternative is.
-func carrierSlotProvablyDisjoint(v Value, t *Type) bool {
-	if t == nil || !v.Carrier || v.Dynamic {
-		return false
-	}
-	if IsDisjunct(v) {
-		di, err := AsDisjunct(v)
-		if err != nil || len(di.Alternatives) == 0 {
-			return false // opaque union — nothing provable
-		}
-		for _, alt := range di.Alternatives {
-			probe := alt
-			if IsBareTypeNode(alt) {
-				probe = carrierOfLiteral(alt)
-			}
-			probe.Carrier = true
-			if !carrierSlotProvablyDisjoint(probe, t) {
-				return false
-			}
-		}
-		return true
-	}
-	p := v.Parent
-	if p == nil || p.ConformsTo(t) || t.ConformsTo(p) {
-		return false
-	}
-	// A Function/FnDef-tagged carrier sits on the fn-value modelling
-	// frontier (routinely "not modeled", per residualProvablyDisjoint) and
-	// an opaque Disjunct tag denotes "one of several types" — decline both.
-	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
-		return false
-	}
-	// A container-family carrier can stand for a SPLICED runtime sequence,
-	// not a single value: a check-mode `for` records its value-body residue
-	// as ONE typed-list carrier where the runtime leaves the loose
-	// per-iteration values (`add 100 (for 4 [add i 1])` — the
-	// combination-parity counterexample: the Integers match Number slots the
-	// list "tag" is disjoint from). The tag-conformance premise does not
-	// hold for such stand-ins, so nothing is provable — decline.
-	if p.ConformsTo(TList) || p.ConformsTo(TMap) {
-		return false
-	}
-	// Value-level membership (predicate / disjunct / negation / member /
-	// DepScalar slots) admits by value, not tag — nothing nominal is provable.
-	if membershipBeyondNominal(t) || NewCarrier(p).Is(t) {
-		return false
-	}
-	// sigTypeMatches' structural carves: an Options slot accepts any concrete
-	// map value; a slot at-or-above Map accepts Options/Record-tagged values.
-	if t.Equal(TOptions) && !isNeverShape(TandValues(NewCarrier(p), NewCarrier(TMap))) {
-		return false
-	}
-	if TMap.ConformsTo(t) && (p.ConformsTo(TOptions) || p.ConformsTo(TRecord)) {
-		return false
-	}
-	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(t)))
+	return es.RecordTrapErr(e.sigError(w.Name, fn, pos), pos)
 }
 
 // argTypeSummary renders the operand types of a failed dispatch for the

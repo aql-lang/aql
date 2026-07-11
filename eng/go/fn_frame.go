@@ -150,6 +150,9 @@ type FrameTailSpec struct {
 	UnnamedCount int
 	FuncName     string
 	Pos          SrcPos
+	// Decl is the return contract's declaration site (FnSig.Decl),
+	// forwarded onto the ReturnCheck for two-span return errors.
+	Decl DeclSite
 }
 
 // AppendFrameTail appends the canonical frame cleanup tail to tokens:
@@ -177,6 +180,7 @@ func AppendFrameTail(tokens []Value, spec FrameTailSpec) []Value {
 			Returns:      spec.Returns,
 			UnnamedCount: spec.UnnamedCount,
 			Pos:          spec.Pos,
+			Decl:         spec.Decl,
 		}))
 	}
 	return tokens

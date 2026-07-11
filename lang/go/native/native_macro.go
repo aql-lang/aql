@@ -399,7 +399,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 				} else {
 					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
 				}
-				if herr != nil {
+				if herr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					return nil, herr
 				}
 				if partial, pok := miniPartialFn(r, kind, target, hookToks); pok {

@@ -13,7 +13,7 @@
 # ─────────────────────────────────────────────────────────────────────
 # §1  an unnamed keyword slot matches ONLY its literal word
 def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	7	`in/q` admits the literal word `in`; a=3, b=10 → 10-3
-def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 to 10	ERROR:no matching signature	a different word (`to`) does not match the `in` keyword slot
+def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 to 10	ERROR:signature_error	a different word (`to`) does not match the `in` keyword slot
 #
 # §2  a keyword slot is BINDING-AGNOSTIC — a value bound to the keyword
 #     name is irrelevant; the slot still matches only the literal word.
@@ -21,7 +21,7 @@ def in 99  def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  betw
 #
 # §3  a named keyword slot binds the captured atom to its name
 def kw fn [[k:in/q] [Atom] [k]]  kw in	in/q	`k:in/q` matches `in` and binds k to the atom `in` (renders in canonical /q form)
-def kw fn [[k:in/q] [Atom] [k]]  kw out	ERROR:no matching signature	only the literal `in` matches
+def kw fn [[k:in/q] [Atom] [k]]  kw out	ERROR:signature_error	only the literal `in` matches
 #
 # §4  keyword slots compose with ordinary typed params and overloads
 def q fn [[from/q n:Integer] [Integer] [n]  [to/q n:Integer] [Integer] [n mul 10]]  q from 5	5	the `from` keyword selects the first overload

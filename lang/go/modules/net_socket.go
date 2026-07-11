@@ -395,7 +395,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 	go func() {
 		defer func() {
-			if rec := recover(); rec != nil {
+			if rec := recover(); rec != nil { //covergate:allow acceptor-goroutine recover body: the loop calls only Accept on a listener serveRawHandler itself minted (failure is an error at the covered 404 arm, never a panic) plus panic-free ForkConcurrent/newSocketValue (§native)
 				fmt.Fprintf(acceptorFork.ErrOutput, "[aql/net] acceptor crashed: %v\n", rec)
 			}
 		}()
@@ -410,7 +410,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 			sock := newSocketValue(conn)
 			go func() {
 				defer func() {
-					if rec := recover(); rec != nil {
+					if rec := recover(); rec != nil { //covergate:allow per-connection recover body: MatchFnSig is nil-safe and CallAQL runs the handler in a NewTop sub-engine whose own recover converts body panics to internal_error AqlErrors, which flow through the covered error-logging arm (§native)
 						fmt.Fprintf(connFork.ErrOutput, "[aql/net] connection handler crashed: %v\n", rec)
 					}
 					if sc, ok := asSocket(sock); ok {

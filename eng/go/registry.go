@@ -197,6 +197,15 @@ type Registry struct {
 	// stays copyable for ForkConcurrent's shallow clone.
 	vmRunning int32
 
+	// runtimeStamping arms detached fn-unit compilation (StampDetachedFn):
+	// see EnableRuntimeStamping. Set only by the compiled execution entry
+	// points; default false keeps plain interpreter runs stamp-free.
+	runtimeStamping bool
+	// stampLog collects stamp attempts for the -compile-report surface
+	// (stamp_report.go). Created at arming; SHARED (pointer) with forks and
+	// module sub-registries so one report covers the whole execution.
+	stampLog *stampLog
+
 	// interpRunDepth counts live interpreter Engine.Run activations on this
 	// registry — the top-level run AND every re-entrant sub-engine run (module
 	// loads, islands, higher-order bodies). It exists so a compiled RunProgram
@@ -405,6 +414,53 @@ func (r *Registry) interpRunActive() bool {
 // invoker/scopes a live run owns.
 func (r *Registry) canHostVM() bool {
 	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
+}
+
+// EnableRuntimeStamping arms detached fn-unit compilation (StampDetachedFn /
+// StampFnValue): store words and codec resolution may then compile a
+// runtime-constructed, capture-free fn body to a standalone unit so
+// InvokeCallback runs it on the VM. Armed only by the COMPILED execution
+// entry points (RunCompiled / RunCompiledStrict and the CLI's default mode)
+// and inherited by module sub-registries — a plain interpreter run
+// (`-no-compile`, `Run`) never stamps, keeping the mode contract exact.
+// ForkConcurrent's shallow copy carries the flag to per-connection forks.
+func (r *Registry) EnableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = true
+		if r.stampLog == nil {
+			r.stampLog = &stampLog{}
+		}
+	}
+}
+
+// InheritRuntimeStamping arms r exactly like parent — including SHARING the
+// parent's stamp-attribution log, so a module sub-registry's stamps land in
+// the one report. A no-op when the parent is unarmed.
+func (r *Registry) InheritRuntimeStamping(parent *Registry) {
+	if r == nil || parent == nil || !parent.runtimeStamping {
+		return
+	}
+	r.runtimeStamping = true
+	r.stampLog = parent.stampLog
+}
+
+// RuntimeStampingEnabled reports whether detached fn-unit compilation is
+// armed on this registry (see EnableRuntimeStamping).
+func (r *Registry) RuntimeStampingEnabled() bool {
+	return r != nil && r.runtimeStamping
+}
+
+// DisableRuntimeStamping disarms detached fn-unit compilation — the inverse of
+// EnableRuntimeStamping. It stops only NEW stamps: a callback already stamped
+// keeps its VM path (InvokeCallback gates on the stored CompiledRef, not this
+// flag), and the stamp-attribution log is left intact so StampReport still
+// reads after the run. RunCompiled / RunCompiledStrict use it to restore the
+// prior interpreter contract on return, so a compiled-mode request never leaks
+// the armed flag into a later plain Run (`-no-compile`) on a reused instance.
+func (r *Registry) DisableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = false
+	}
 }
 
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
@@ -912,6 +968,19 @@ type CheckDiagnostic struct {
 	// flag — the information (the expression always raises, and where the
 	// trap is) survives without a false error verdict.
 	CaughtAtRuntime bool `json:"caughtAtRuntime,omitempty"`
+
+	// --- Structured diagnostic payload (design/DIAGNOSTICS.0.md). ---
+	// The additive rich layer rendered by RenderCheckDiagnostic beneath
+	// the stable one-line `check:` header; every field omitempty so the
+	// JSON/LSP wire shape only grows.
+
+	// Src is the offending token's source text — the caret width for
+	// the rich source excerpt (falls back to Word when empty).
+	Src string `json:"src,omitempty"`
+	// Notes are freestanding explanatory lines (`= note: …`).
+	Notes []string `json:"notes,omitempty"`
+	// Suggestions are actionable fixes (`= help: …`).
+	Suggestions []DiagSuggestion `json:"suggestions,omitempty"`
 }
 
 // NewRegistry creates an empty registry.
@@ -1302,11 +1371,15 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 			if !ok {
 				return nil, fmt.Errorf("undefined: %s", name)
 			}
-			// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
+			// A 0-arg fn courtesy-dispatches its 0-arg sig. Every other
 			// shape (no 0-arg sig, a plain Function, any other binding)
-			// is an unmatched call returning the same signature error,
-			// so that return is hoisted out of the branches.
-			hasForwardSig := false
+			// is an unmatched call. A fn that TAKES arguments and reached
+			// this 0-arg fallback (e.g. `inc inc 5`, `f a g b` — forward
+			// collection could not gather them) is intercepted UPSTREAM:
+			// stepWord raises the rich sigError before the fallback is
+			// dispatched (the fnCourtesyDispatches guard in engine.go), so
+			// the only shape reaching the Impl without a 0-arg handler
+			// falls straight through to the shared no-match error.
 			if _, ok := top.Data.(FnDefInfo); ok {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
@@ -1314,27 +1387,10 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
 							return sig.dispatchHandler()(nil, nil, nil, r)
 						}
-						if sig.TotalArgs() > 0 {
-							hasForwardSig = true
-						}
 					}
 				}
 			}
-			// A fn that takes arguments reached its 0-arg fallback,
-			// which means forward collection couldn't gather them —
-			// almost always because the next word (another call, a
-			// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
-			// (Swapped-argument tuples are intercepted with a
-			// dedicated hint BEFORE this fallback dispatches — see
-			// the reorder probe in engine.go.)
-			if hasForwardSig {
-				return nil, r.AqlErrorHint("signature_error",
-					"no matching signature for "+name, name,
-					"forward args for "+name+" may have run into the next word; "+
-						"group the call in parens so its RESULT becomes the argument — ("+name+" …). "+
-						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
-			}
-			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
+			return nil, r.AqlError("signature_error", noMatchDetail(name), name)
 		}),
 	}
 }
@@ -1716,7 +1772,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Pop error here means the args stack is nil — a misconfigured
 	// registry; surface it only if sub.Run didn't already fail (the
 	// run error is more informative).
-	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
+	if _, popErr := r.Args.Pop(); popErr != nil && err == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		err = popErr
 	}
 	r.PopFnBaseline()
@@ -1920,7 +1976,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
 	if inputT := predSig.Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
-		if IsBareTypeNode(candidate) {
+		if IsBareTypeNode(candidate) { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
 		} else if !candidate.Parent.ConformsTo(inputT) {

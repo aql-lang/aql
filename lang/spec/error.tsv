@@ -14,7 +14,7 @@ raise "boom"	ERROR:user_error	a bare message raises code user_error
 raise bad_input "expected a list"	ERROR:bad_input	a bare word names the code
 raise {code: nope/q, message: "m"}	ERROR:nope	the spec-map form
 raise {message: "no code"}	ERROR:raise_error	code and message are both required in the map form
-raise 42	ERROR:no matching signature	a non-string/map operand has no raise sig
+raise 42	ERROR:no signature matches	a non-string/map operand has no raise sig
 #
 # §2  catching — one error [handler] form for native AND user errors
 do [raise "boom"] error [dot message] end	'boom'	a raised error is caught like a native one
@@ -25,7 +25,7 @@ def e (do [raise bad_input "nope"]) e dot code	bad_input/q	the code is dispatcha
 def e (do [raise bad_input "nope"]) e.message	'nope'	…and the message reads via dot access
 def e (do [raise {code: bad_input/q, message: "m", got: 42}]) e dot got	42	extra spec-map keys ride along for the handler
 def e (do [raise {code: bad_input/q, message: "m", got: 42}]) convert Map e	{code:bad_input/q message:'m' got:42}	convert Map projects code, message, and payload
-def e (do [1 div 0]) convert Map e	{message:'division by zero'}	a plain Go-error stays {message:…} (no code to project)
+def e (do [1 div 0]) convert Map e	{code:arith_error/q message:'division by zero'}	arith errors carry the arith_error code (phase-5 taxonomy normalisation)
 def e (do [raise "x"]) e dot nothere	None	an unknown key reads as none, mirroring map reads
 #
 # §3  void argument expressions are blamed at the causing site

@@ -275,7 +275,7 @@ func TestSeam7CheckNativeParamContractArms(t *testing.T) {
 	// Mismatch raises the byte-identical signature_error.
 	intSig := Signature{Args: []*Type{TInteger}, BarrierPos: -1}
 	err := checkNativeParamContract(r, &SigRef{Word: "iw", Sig: &intSig}, []Value{NewString("x")})
-	wantErr(t, err, "no matching signature for iw")
+	wantErr(t, err, "cannot call `iw`")
 }
 
 func TestSeam7CheckReturnContractUnderflow(t *testing.T) {
@@ -723,7 +723,7 @@ func TestSeam7CallUserPolyParamContract(t *testing.T) {
 		}},
 	}
 	_, err := RunProgram(p, r)
-	wantErr(t, err, "no matching signature for cpoly2")
+	wantErr(t, err, "cannot call `cpoly2`")
 }
 
 func TestSeam7CallNativeHandlerTokenScreened(t *testing.T) {

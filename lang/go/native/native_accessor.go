@@ -275,6 +275,35 @@ func getrNoneReturns(args []Value, r *Registry) []Value {
 	return []Value{}
 }
 
+// notFoundKeyError builds the strict-read not_found error with a
+// did-you-mean suggestion over the container's actual keys (the
+// diagnostics phase-4 hook: a typo'd key suggests its neighbours) and
+// the key's source position, so the report points at the offending
+// access. The compiled path records the SAME error (built by
+// buildNotFoundKeyError) via RecordTrapErr, so the two engines match.
+func notFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) error {
+	return buildNotFoundKeyError(r, detail, key, keyPos, keys)
+}
+
+// buildNotFoundKeyError is the shared not_found builder both the runtime
+// handlers and the compile-time trap use, so the strict-read miss error
+// is byte-identical across engines.
+func buildNotFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) *eng.AqlError {
+	ae := eng.MakeAqlErrorAt("not_found", detail, "getr", srcOf(r), "", keyPos)
+	if s := eng.DidYouMean(key, keys); s != "" {
+		ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+	}
+	return ae
+}
+
+// srcOf returns the registry's source text (for error excerpts), or "".
+func srcOf(r *Registry) string {
+	if r == nil {
+		return ""
+	}
+	return r.Source
+}
+
 func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	container := args[1]
@@ -299,7 +328,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in map", k), "getr")
+		return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in map", k), k, key.Pos(), m.Keys())
 	}
 	return []Value{val}, nil
 }
@@ -314,21 +343,21 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if m, err := AsMutableMap(container); err == nil {
 		val, found := m.Get(k)
 		if !found {
-			return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in object", k), "getr")
+			return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in object", k), k, key.Pos(), m.Keys())
 		}
 		return []Value{val}, nil
 	}
 	if ri, err := AsResourceInstance(container); err == nil {
 		val, ok := ri.GetField(k)
 		if !ok {
-			return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in resource", k), "getr")
+			return nil, notFoundKeyError(r, fmt.Sprintf("getr: field %q not found in resource", k), k, key.Pos(), ri.Fields.Keys())
 		}
 		return []Value{val}, nil
 	}
 	oi, _ := AsClassInstance(container)
 	val, ok := oi.GetField(k)
 	if !ok {
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in object", k), "getr")
+		return nil, notFoundKeyError(r, fmt.Sprintf("getr: field %q not found in object", k), k, key.Pos(), oi.Fields.Keys())
 	}
 	return []Value{val}, nil
 }
