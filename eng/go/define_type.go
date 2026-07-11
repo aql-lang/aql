@@ -32,7 +32,7 @@ func (r *Registry) DefineType(name string, body Value) (*Type, error) {
 		return nil, err
 	}
 	t := r.LookupTypeName(name)
-	if t == nil {
+	if t == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return nil, &AqlError{
 			Code:   "type_error",
 			Detail: "type " + name + ": installed but did not resolve",

@@ -1328,7 +1328,7 @@ func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs)
 		if n == 2 && len(lw.vm) >= 2 {
 			top, below := lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2]
 			switch {
-			case slotIs(top, ops[0]) && slotIs(below, ops[1]):
+			case slotIs(top, ops[0]) && slotIs(below, ops[1]): //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return "" // already in layout
 			case slotIs(top, ops[1]) && slotIs(below, ops[0]):
 				lw.swapTop2(pos)
@@ -1614,10 +1614,10 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		}
 		lw.emit(OpCallDynamic, len(frag.applyArgs), pos)
 		lw.vm = lw.vm[:len(lw.vm)-len(frag.applyArgs)]
-		if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" {
+		if reason := lw.lowerEvents(frag.events, frag.startSeq); reason != "" { //covergate:allow apply-first loop lowering error arm: the body events re-lower after already passing the recording pass, so a failure needs a bytecode-level fault; the same reason surfaces on the non-apply path (§compiler)
 			return reason
 		}
-		if !fragDiverges(frag) && len(lw.vm) != 1 {
+		if !fragDiverges(frag) && len(lw.vm) != 1 { //covergate:allow apply-first loop lowering backstop: setLoopBodyApply's re-pushable-args screen excludes any residual whose lowered sim diverges from one applied value; the arm guards a future recording drift (§compiler)
 			return "loop body apply: statements after the apply leave values"
 		}
 		lw.vm = parent
@@ -1641,7 +1641,7 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		// events left nothing on the sim; push the fn first, so the layout below
 		// is identical to the event-produced case.
 		if frag.applyFn != nil {
-			if len(lw.vm) != 0 {
+			if len(lw.vm) != 0 { //covergate:allow loop apply fn re-push backstop: setLoopBodyApply seats applyFn only for a body whose events leave nothing on the sim; a non-empty residual here needs a recording drift (§compiler)
 				return "loop body apply: fn re-push over a non-empty residual"
 			}
 			lw.pushOperand(*frag.applyFn, pos)

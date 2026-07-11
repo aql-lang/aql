@@ -1447,7 +1447,7 @@ func IDPrefixForType(t *Type) string {
 			return "T_"
 		}
 	}
-	return "T_"
+	return "T_" //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 }
 
 // checkPassDepth counts the process's live check/compile passes

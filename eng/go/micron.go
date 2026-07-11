@@ -1945,7 +1945,7 @@ func qionFromString(s string) ([]Value, error) {
 		canon = "-" + canon
 	}
 	d, _, derr := apd.NewFromString(canon)
-	if derr != nil || d.Form != apd.Finite {
+	if derr != nil || d.Form != apd.Finite { //covergate:allow Qion: apd.NewFromString over a regex-validated plain-decimal `canon` is always finite, so the parse/Form guard cannot fire (§kernel)
 		return nil, qionErr(fmt.Sprintf("Qion amount %q is not a finite decimal", amountStr))
 	}
 	if d.IsZero() {
@@ -2018,7 +2018,7 @@ func compareQions(a, b Value) int {
 		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
 	}
 	c, err := CompareValues(amtA, amtB)
-	if err != nil {
+	if err != nil { //covergate:allow Qion: CompareValues over two stored BigDecimal amounts never errors (cross-family pairs fall back to Rank, not error) (§kernel)
 		return strings.Compare(micronCompareKey(a), micronCompareKey(b))
 	}
 	return c

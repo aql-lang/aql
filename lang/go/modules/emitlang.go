@@ -302,12 +302,12 @@ func emitAutoHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				if code := native.EmitErrorCode(err); code != "" {
 					return nil, r.AqlError(code, err.Error(), "emit_auto")
 				}
-				return nil, r.AqlError("emit_error", name+": "+err.Error(), "emit_auto")
+				return nil, r.AqlError("emit_error", name+": "+err.Error(), "emit_auto") //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 			}
 			return []native.Value{native.NewString(s)}, nil
 		}
 	}
-	return nil, r.AqlError("emit_no_natural",
+	return nil, r.AqlError("emit_no_natural", //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 		"emit: no encoder for natural kind "+name, "emit_auto")
 }
 

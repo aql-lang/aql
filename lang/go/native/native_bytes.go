@@ -21,7 +21,7 @@ var TBytes = registerBytesType()
 
 func registerBytesType() *eng.Type {
 	t, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Bytes", 1009, bytesBehavior{})
-	if err != nil {
+	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		recordTypeInitErr(fmt.Errorf("native_bytes: register Scalar/Bytes: %w", err))
 	}
 	return t
@@ -783,7 +783,7 @@ func convertBinaryToBytes(args []Value, _ map[string]Value, _ []Value, r *Regist
 		return nil, r.AqlError("type_error", "convert Bytes: value is not a Binary instance", "convert")
 	}
 	segs, err := readBitSegments(rawLayout, r, "convert")
-	if err != nil {
+	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, err
 	}
 	oi, _ := AsClassInstance(args[1])
@@ -911,7 +911,7 @@ func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []
 		return Value{}, nil, frameTypeErr(r, specVal, word)
 	}
 	segs, err := readBitSegments(rawLayout, r, word)
-	if err != nil {
+	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return Value{}, nil, err
 	}
 	m, rest, derr := decodeSegs(b, segs, r, word, false)
@@ -920,7 +920,7 @@ func frameInstance(specVal Value, b []byte, r *Registry, word string) (Value, []
 	}
 	ot, _ := AsClassType(specVal)
 	inst, ierr := eng.MakeObject(ot, NewMap(m), r)
-	if ierr != nil {
+	if ierr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return Value{}, nil, ierr
 	}
 	return inst[0], rest, nil

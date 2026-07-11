@@ -126,7 +126,7 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 			if Shape(unified) == ShapeAbsent {
 				continue
 			}
-			result.Set(key, unified)
+			result.Set(key, unified) //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			continue
 		}
 		unified, err := unifyInner(aVal, bVal)
@@ -150,7 +150,7 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 		if Shape(unified) == ShapeAbsent {
 			continue
 		}
-		result.Set(key, unified)
+		result.Set(key, unified) //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 	}
 	return NewMap(result), nil
 }

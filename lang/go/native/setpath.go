@@ -223,7 +223,7 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 		}
 		if info.TypeRef != nil {
 			results, err := MakeResource(*info.TypeRef, out, r)
-			if err != nil {
+			if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return Value{}, fmt.Errorf("setpath: %w", err)
 			}
 			return results[0], nil

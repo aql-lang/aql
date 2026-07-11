@@ -158,7 +158,7 @@ func nodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, r.AqlError("node_error", "node: expected a concrete map or list, got "+args[0].String(), "node")
 	}
 	out, err := eng.NodeDeepCopy(args[0])
-	if err != nil {
+	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, r.AqlError("node_error", err.Error(), "node")
 	}
 	return []Value{out}, nil

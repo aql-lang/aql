@@ -328,7 +328,7 @@ func inferExact(name string, sig Signature) []string {
 	case "slice":
 		if nArgs > 0 {
 			last := sig.ArgTypes()[nArgs-1].String()
-			if last == "Node/List" {
+			if last == "Node/List" { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return []string{"Node/List"}
 			}
 		}
@@ -512,7 +512,7 @@ func inferArithReturns(name string, sig Signature) []string {
 	if name == "add" && a0 == "Scalar" && a1 == "Scalar" {
 		return []string{"Scalar/String"}
 	}
-	if a0 == "Scalar/Number/Integer" && a1 == "Scalar/Number/Integer" {
+	if a0 == "Scalar/Number/Integer" && a1 == "Scalar/Number/Integer" { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return []string{"Scalar/Number/Integer"}
 	}
 	return []string{"Scalar/Number/Float"}

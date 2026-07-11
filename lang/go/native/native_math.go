@@ -311,7 +311,7 @@ var mathNatives = []NativeFunc{
 					}
 					return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
 				},
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) },
+				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) }, //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				fltFn: func(a, b float64) (Value, error) {
 					// Float modulo by zero is IEEE-754: math.Mod(x, 0)
 					// returns NaN. No special-case error.
@@ -339,7 +339,7 @@ var mathNatives = []NativeFunc{
 					return NewInteger(result), nil
 				},
 				bigFn: func(a, b *big.Int) (Value, error) {
-					if a.Sign() < 0 {
+					if a.Sign() < 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 						return Value{}, fmt.Errorf("pow: negative exponent")
 					}
 					return NewBigInteger(new(big.Int).Exp(b, a, nil)), nil

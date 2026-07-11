@@ -664,12 +664,13 @@ reach falls into exactly one of two dispositions:
    win a coverage number would silently drop a real error if that call
    ever started failing.
 
-The allowlist is `test/go/covergate/allowlist.tsv`: one cover-profile
-block key per line with a one-line reason. `covergate` keeps it honest —
-the gate **fails** if an allowlisted block becomes covered (graduate it:
-cover it and drop the entry) or goes stale (remove it). Adding an entry
-is a reviewed act requiring a proof of unreachability. The policy and the
-category breakdown are in `design/COVERAGE-ALLOWLIST.10.md`.
+Exclusions are inline `//covergate:allow <reason>` comments on the guard's
+opening line — the exclusion travels WITH the code, so a refactor that
+shifts lines never invalidates it. `covergate` keeps them honest — the gate
+**fails** if a marked guard becomes covered (graduate it: cover it and drop
+the pragma) or the pragma goes stale (no block opens on its line). Adding
+one is a reviewed act requiring a proof of unreachability. The policy and
+the category breakdown are in `design/COVERAGE-ALLOWLIST.10.md`.
 
 This applies to the Go implementation only, for now. The TypeScript
 engine port (`eng/ts`) keeps its row-for-row spec-parity gate instead.

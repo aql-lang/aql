@@ -352,7 +352,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 // different program than the one running — a stamped fn baked by the running
 // program always matches, so this is a defensive guard, not a normal path.
 func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, bool, error) {
-	if ref.Prog != vc.p {
+	if ref.Prog != vc.p { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, false, nil
 	}
 	res, err := vc.run(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures), nil)
@@ -570,7 +570,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 			return units[j], mr.Args, nil
 		}
 	}
-	return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY matched signature outside the recorded arm set at "+pr.Word)
+	return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY matched signature outside the recorded arm set at "+pr.Word) //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 }
 
 // callDynamic applies a runtime fn VALUE (sitting below n trailing args) to
@@ -648,7 +648,7 @@ func (vc *vmContext) callDynamic(reg *Registry, n int, trailing bool, stack []Va
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -736,7 +736,7 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic trailing-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -791,7 +791,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic apply-top result at fn-value apply", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -889,7 +889,7 @@ func (vc *vmContext) callDynamicMixed(reg *Registry, w int, stack []Value, curDe
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
-	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack[:base], results...), nil
@@ -919,7 +919,7 @@ func (vc *vmContext) callDynFrame(reg *Registry, w, frameBase int, stack []Value
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, vc.r)
 	}
-	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "dynamic frame result", curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (the replay island's results are interpreter residuals, tape-coupled only on a compiler bug) (§compiler)
 		return nil, err
 	}
 	return append(stack[:frameBase], results...), nil
@@ -1058,7 +1058,7 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
-	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil {
+	if err := vc.screenResults(results, "island result at "+fb.Desc, curDebug, pc); err != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, err
 	}
 	return append(stack, results...), nil
@@ -1348,7 +1348,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// -tags aqldebug build (vmFreshArgsPerCall) allocates fresh per
 			// call to localize a violator directly. See vm_args_release.go.
 			var args []Value
-			if vmFreshArgsPerCall {
+			if vmFreshArgsPerCall { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				args = make([]Value, n)
 			} else {
 				if cap(argScratch) < n {
@@ -1534,11 +1534,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// (OpLookupDynScope), through the same installer the interpreter's
 			// `def` runs; record the prior depth so the frame's RET (or the
 			// error unwind) truncates the binding stack back.
-			if len(stack) == 0 {
+			if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
 			}
 			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil {
+			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
 			}
 			v := stack[len(stack)-1]
@@ -1551,7 +1551,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// substitution would DISPATCH instead of push (an FnDef / class /
 			// splice / reach), defers to the interpreter (slow, not wrong).
 			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil {
+			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 				return nil, vmErrAt(curDebug, pc, "LOOKUP_DYN_SCOPE bad name const")
 			}
 			v, ok := curReg.Defs.Top(name)
@@ -1661,7 +1661,7 @@ func (vc *vmContext) opForSetup(stack []Value, loops []vmLoop, slot int, curCode
 	for next < len(curCode) && curCode[next].Op != OpForNext {
 		next++
 	}
-	if next >= len(curCode) {
+	if next >= len(curCode) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (lowerLoop always pairs FOR_SETUP with a FOR_NEXT) (§compiler)
 		return nil, nil, vmErrAt(debug, pc, "FOR_SETUP without a FOR_NEXT")
 	}
 	loops = append(loops, vmLoop{

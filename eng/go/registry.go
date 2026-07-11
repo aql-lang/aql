@@ -1716,7 +1716,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Pop error here means the args stack is nil — a misconfigured
 	// registry; surface it only if sub.Run didn't already fail (the
 	// run error is more informative).
-	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
+	if _, popErr := r.Args.Pop(); popErr != nil && err == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		err = popErr
 	}
 	r.PopFnBaseline()
@@ -1920,7 +1920,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
 	if inputT := predSig.Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
-		if IsBareTypeNode(candidate) {
+		if IsBareTypeNode(candidate) { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
 		} else if !candidate.Parent.ConformsTo(inputT) {

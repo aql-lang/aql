@@ -725,7 +725,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			for root != nil && root.Origin == eng.OriginUserDef {
 				root = root.Parent
 			}
-			if root == nil {
+			if root == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, fmt.Errorf("def %s: refine subtype %s has no builtin ancestor",
 					name, describeType())
 			}
@@ -1061,7 +1061,7 @@ func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 			for j, p := range s.Params {
 				paramNames[j] = p.Name
 				t := p.Type
-				if t == nil {
+				if t == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					t = TAny
 				}
 				// A plain-Any param, or one typed by an unconstrained type

@@ -201,7 +201,7 @@ func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys 
 		}
 		if IsRecordType(src) {
 			rec, rErr := AsRecordType(src)
-			if rErr != nil {
+			if rErr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, nil, false, r.AqlError("unpack_error", "unpack: source record is malformed", "unpack")
 			}
 			return rec.Fields.Get, rec.Fields.Keys(), true, nil
