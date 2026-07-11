@@ -102,6 +102,18 @@ def mk fn [[x:Integer] [Box] [ def v (if (x gt 0) [ g x ] [ 0 ]) make Box {n: v 
 def a (mk 5)
 def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
 (a params)`, `[{n:15 p:0.5}]`},
+		// A VARIADIC-returning source (`maybe = if … [x] []`) has static nout==1
+		// but leaves 0 values at runtime for the empty arm. Promoting it emitted
+		// a lone STORE_LOCAL that underflowed the VM (compile != interpret — the
+		// `mk -1` crash Codex flagged on aql-lang/aql#261). It must refuse and
+		// fall back; the value-producing call still matches the interpreter.
+		{"variadic-returning dyn-bind source refuses, interp runs",
+			`def Box class { n:Integer p:Float }
+def maybe fn [[x:Integer] [] [ if (x gt 0) [ x ] [ ] ]]
+def mk fn [[x:Integer] [Box] [ def v (maybe x) make Box {n: v p: 0.5} ]]
+def a (mk 5)
+def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
+(a params)`, `[{n:5 p:0.5}]`},
 	}
 	for _, c := range negatives {
 		t.Run("refuses/"+c.name, func(t *testing.T) {

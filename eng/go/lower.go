@@ -1483,8 +1483,9 @@ func singleOutputCall(ev *emitEvent) bool {
 // unchanged; and a unit that finished AFTER the arming already promoted these
 // (they are in rec.promoted) so it is idempotent. A source that is not a
 // single-output call — a fragment RESULT that must stay on its sim, a
-// makeMap/branch/loop value, a multi-output producer — is left untouched for
-// lowerDynBind to refuse, a sound interpreter fallback (never a wrong store).
+// makeMap/branch/loop value, a multi-output OR variadic-returning producer —
+// is left untouched for lowerDynBind to refuse, a sound interpreter fallback
+// (never a wrong store).
 func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 	if !es.dynEnv || rec == nil || rec.frag == nil {
 		return
@@ -1504,7 +1505,12 @@ func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 		if _, done := rec.promoted[seq]; done {
 			continue
 		}
-		if fragResult[seq] || !singleOutputCall(bySeq[seq]) {
+		// A VARIADIC-returning producer's static nout==1 is only the check-run
+		// count, not a runtime guarantee: a `def v (maybe x)` over `maybe = if …
+		// [x] []` leaves 0 values when the empty arm runs. Promoting it emits a
+		// lone OpStoreLocal that underflows the VM stack (compile != interpret).
+		// Leave it for lowerDynBind to refuse — a sound interpreter fallback.
+		if fragResult[seq] || es.eventInfo[seq].variadicResult || !singleOutputCall(bySeq[seq]) {
 			continue
 		}
 		if rec.promoted == nil {
