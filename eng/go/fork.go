@@ -72,10 +72,12 @@ func (r *Registry) ForkConcurrent() *Registry {
 	// parent's registry and race with it.
 	fork.enginePool = nil
 	// dispatchCache is keyed by name against the PARENT DefTable's
-	// generation; the fork clones Defs (fresh generations), so a shared
-	// cache would serve parent aggregates at mismatched generations. Drop
-	// it — the fork rebuilds its own on first Lookup.
-	fork.dispatchCache = nil
+	// generation; the fork clones Defs (fresh generations), so sharing
+	// the parent's holder would serve parent aggregates at mismatched
+	// generations (and contend on its mutex). Give the fork a fresh,
+	// empty holder of its own; the reassignment happens here, on the
+	// parent-owning goroutine, before the fork is published.
+	fork.dispatchCache = newDispatchCache()
 	fork.FlowCtrl = FlowNone
 	fork.pendingGen = nil
 	fork.macroCache = nil

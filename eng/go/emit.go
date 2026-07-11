@@ -3736,11 +3736,22 @@ func (es *EmitState) recordShuffleElided(word string, sig *Signature, args, outs
 // untyped list. Guarded on pointer identity with the registry's own binding so
 // a shadowed name (a user `def swap …`, whose sig has an fnFrame anyway) never
 // rides the exemption. depth/pick/roll are full-stack words and refused earlier.
+// dynStackShuffleWords is the closed set of Forth-style stack words whose
+// dispatch the compiler may trust over dynamically-shaped stacks: each is
+// stack-only (BarrierPos 0 — it never forward-collects) and, when its
+// registered signature is the single all-Any one, one extra or differently-
+// typed stack value cannot flip which overload it takes. Shared by
+// dynamicStackShuffleOK (the refusal bypass for a MATCHED dispatch over a
+// dynamic operand) and dynShuffleConsumerAt (the gradual-arity modeling
+// gate for a mixed-arity mutator's statement-position result).
+var dynStackShuffleWords = map[string]bool{
+	"dup": true, "swap": true, "drop": true, "over": true, "rot": true,
+	"nip": true, "tuck": true, "dup2": true, "swap2": true, "drop2": true,
+	"over2": true,
+}
+
 func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
-	switch word {
-	case "dup", "swap", "drop", "over", "rot", "nip", "tuck",
-		"dup2", "swap2", "drop2", "over2":
-	default:
+	if !dynStackShuffleWords[word] {
 		return false
 	}
 	if es == nil || es.reg == nil || sig == nil {
@@ -5190,6 +5201,23 @@ func isInertConst(v Value) bool {
 		// mutation were ever allowed, pooled consts would corrupt
 		// across loop iterations and this arm must be removed.
 		return true
+	case ExtensionPayload:
+		// The kernel cannot see into an extension payload, so mutability
+		// is the OWNING TYPE's call: bake only when its Behavior declares
+		// the values immutable (the ConstBakeable capability — Bytes),
+		// reached by the same parent-chain walk every capability dispatch
+		// uses. Extension types without the capability — Socket, Listener,
+		// Timeout/Interval, Module instances, every plugin type that never
+		// opted in — keep the historical refusal. This is what lets a
+		// module-scope `def crlf (convert Bytes "\r\n")` bake into a
+		// stored-fn unit (mini-s3's recv-until delimiter) with freshness
+		// still owned by the existing frozen-read / dep-snapshot gates.
+		for t := v.Parent; t != nil; t = t.Parent {
+			if cb, ok := t.Behavior().(ConstBakeable); ok {
+				return cb.BakeableConst(v)
+			}
+		}
+		return false
 	case MicronTypeInfo:
 		// A Micron type body (`refine Micron {fields}`): structural
 		// descriptor like the RecordTypeInfo arm below — sound when its

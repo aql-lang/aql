@@ -86,6 +86,25 @@ type Sizer interface {
 	Size(v Value) int
 }
 
+// ConstBakeable is an optional capability interface for extension-backed
+// types (ExtensionPayload — the payload the kernel does not inspect).
+// Implementing it declares the type's concrete values IMMUTABLE: no word
+// mutates the payload in place, and clone/fork/send share the backing
+// storage zero-copy — the same sharing a pooled const performs. The
+// compiler's const gate (isInertConst) consults it, walking the parent
+// chain like every capability dispatch, when deciding whether such a
+// value may bake into a compiled program's const pool; pooled consts are
+// shared across calls and loop iterations, which is sound exactly when
+// the payload can never be written through. Types with any in-place
+// mutation path (sockets, listeners, timers, module instances, flex
+// containers) must NOT implement it — the extension default is refusal.
+type ConstBakeable interface {
+	// BakeableConst reports whether this specific value may bake. Most
+	// implementors return true unconditionally; the per-value hook exists
+	// for families whose kinds differ in mutability.
+	BakeableConst(v Value) bool
+}
+
 // Unifier is an optional capability interface. Types implementing it
 // supply their own structural intersection rule, called by Unify when
 // the lowest common ancestor of the two operands' types reaches a

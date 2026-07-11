@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"sync/atomic"
 )
 
@@ -268,9 +269,32 @@ type Registry struct {
 	// DefTable generation (Defs.Gen(name)) the aggregate was built at; the
 	// cache hits while that generation is unchanged and misses (rebuilds)
 	// the moment any binding for the name changes. Per-execution state,
-	// like enginePool: reset by ForkConcurrent so a fork never serves the
-	// parent's aggregates against its own cloned DefTable.
-	dispatchCache map[string]dispatchCacheEntry
+	// like enginePool: ForkConcurrent gives each fork a fresh holder so a
+	// fork never serves the parent's aggregates against its own cloned
+	// DefTable. Allocated once in NewRegistry and never reassigned — see
+	// dispatchCacheState for why the holder itself must be share-safe.
+	dispatchCache *dispatchCacheState
+}
+
+// dispatchCacheState is the mutex-guarded store behind Lookup's
+// memoization. The guard exists because the registry a Lookup runs
+// against is not always goroutine-confined: module FnDef wrappers carry
+// their module's ONE sub-registry (FnDefInfo.Registry), so every
+// concurrent execution — a `serve-raw` connection handler, a spawned
+// process, an `await` branch — that dispatches a module word Lookups on
+// that same shared registry (execFnDefLiteral's foreign-registry
+// branch). ForkConcurrent isolates each fork's OWN cache, but it cannot
+// isolate the sub-registry the forks all reach through the wrappers, so
+// the store itself must be safe for concurrent use. The sub-registry's
+// DefTable is read-only once the module is built, which is what makes
+// the cache the sole mutation on that shared path. Uncontended (the
+// common single-goroutine case) the lock costs a few ns per dispatch
+// and allocates nothing, so the aggregate-reuse win the cache exists
+// for is untouched. Methods are nil-receiver-safe in the DefTable
+// style: a zero Registry simply runs uncached.
+type dispatchCacheState struct {
+	mu sync.Mutex
+	m  map[string]dispatchCacheEntry
 }
 
 // dispatchCacheEntry is one memoized Lookup result plus the DefTable
@@ -280,6 +304,51 @@ type Registry struct {
 type dispatchCacheEntry struct {
 	gen int64
 	fn  *FnDefInfo
+}
+
+// newDispatchCache returns an empty holder ready for use.
+func newDispatchCache() *dispatchCacheState {
+	return &dispatchCacheState{m: make(map[string]dispatchCacheEntry)}
+}
+
+// get returns the aggregate cached for name at exactly gen. The second
+// result distinguishes a valid cached nil (a negative entry) from a
+// miss.
+func (c *dispatchCacheState) get(name string, gen int64) (*FnDefInfo, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.Lock()
+	e, ok := c.m[name]
+	c.mu.Unlock()
+	if !ok || e.gen != gen {
+		return nil, false
+	}
+	return e.fn, true
+}
+
+// put stores the aggregate for name at gen. Two goroutines missing on
+// the same name both build and both store; last write wins, and either
+// aggregate is valid for the generation it was built at.
+func (c *dispatchCacheState) put(name string, gen int64, fn *FnDefInfo) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.m[name] = dispatchCacheEntry{gen: gen, fn: fn}
+	c.mu.Unlock()
+}
+
+// reset drops every entry while keeping the holder (and its mutex) in
+// place, so a registry shared across goroutines never has its cache
+// pointer swapped out from under a concurrent reader.
+func (c *dispatchCacheState) reset() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.m = make(map[string]dispatchCacheEntry)
+	c.mu.Unlock()
 }
 
 // Engine-pool bounds. An engine whose tape grew past pooledTapeMaxEntries
@@ -1019,6 +1088,11 @@ func NewRegistry() (*Registry, error) {
 		// registries constructed without NewRegistry).
 		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
 		Procs: NewProcessRuntime(),
+		// The dispatch cache is allocated here and never reassigned, so
+		// a registry shared across goroutines (a module sub-registry
+		// reached through wrapper dispatch) always sees one stable,
+		// mutex-guarded holder.
+		dispatchCache: newDispatchCache(),
 	}
 	// Mint a process-stable scope id so fn-analysis memo keys can be
 	// namespaced per registry (parent vs module sub-registry). A
@@ -1252,14 +1326,11 @@ func (r *Registry) Lookup(name string) *FnDefInfo {
 		return r.lookupUncached(name)
 	}
 	gen := r.Defs.Gen(name)
-	if e, ok := r.dispatchCache[name]; ok && e.gen == gen {
-		return e.fn
+	if fn, ok := r.dispatchCache.get(name, gen); ok {
+		return fn
 	}
 	fn := r.lookupUncached(name)
-	if r.dispatchCache == nil {
-		r.dispatchCache = make(map[string]dispatchCacheEntry)
-	}
-	r.dispatchCache[name] = dispatchCacheEntry{gen: gen, fn: fn}
+	r.dispatchCache.put(name, gen, fn)
 	return fn
 }
 

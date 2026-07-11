@@ -50,11 +50,13 @@ func TestW8RestoreForCompileNilCheck(t *testing.T) {
 }
 
 // TestW8RestoreForCompileClearsDispatchCache pins that a compile rollback
-// drops the registry's dispatchCache. DefTable.Clone starts a fresh gen
-// timeline at 0, so reinstalling the clone under a cache keyed by (name, gen)
-// could otherwise serve a gen-0 entry cached before the rollback for a name
-// whose restored binding differs. The cache must be nil after restore so the
-// fallback interpreter rebuilds every aggregate from the restored state.
+// drops the registry's dispatchCache entries. DefTable.Clone starts a fresh
+// gen timeline at 0, so reinstalling the clone under a cache keyed by
+// (name, gen) could otherwise serve a gen-0 entry cached before the rollback
+// for a name whose restored binding differs. The cache must be EMPTIED IN
+// PLACE (holder kept, entries dropped) so the fallback interpreter rebuilds
+// every aggregate from the restored state without swapping the pointer a
+// shared registry's concurrent readers hold.
 func TestW8RestoreForCompileClearsDispatchCache(t *testing.T) {
 	r := w8reg(t)
 	r.upsertFnDef("w", Signature{Args: []*Type{TInteger}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return a, nil })})
@@ -63,12 +65,25 @@ func TestW8RestoreForCompileClearsDispatchCache(t *testing.T) {
 	if r.Lookup("w") == nil {
 		t.Fatal("Lookup(w) = nil")
 	}
-	if r.dispatchCache == nil {
+	holder := r.dispatchCache
+	if holder == nil {
+		t.Fatal("precondition: NewRegistry did not allocate the dispatch cache holder")
+	}
+	holder.mu.Lock()
+	populated := len(holder.m)
+	holder.mu.Unlock()
+	if populated == 0 {
 		t.Fatal("precondition: dispatch cache not populated")
 	}
 	r.RestoreForCompile(s)
-	if r.dispatchCache != nil {
-		t.Fatal("RestoreForCompile did not clear the dispatch cache")
+	if r.dispatchCache != holder {
+		t.Fatal("RestoreForCompile swapped the dispatch cache holder; must reset in place")
+	}
+	holder.mu.Lock()
+	remaining := len(holder.m)
+	holder.mu.Unlock()
+	if remaining != 0 {
+		t.Fatalf("RestoreForCompile left %d dispatch cache entries", remaining)
 	}
 	// A subsequent lookup rebuilds cleanly against the restored table.
 	if r.Lookup("w") == nil {

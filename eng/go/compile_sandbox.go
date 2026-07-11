@@ -98,10 +98,12 @@ func (r *Registry) RestoreForCompile(s CompileSandbox) {
 	// registry and is keyed by (name, gen). Reinstalling a reset-gen table
 	// under the old cache would let a gen-0 entry cached before this
 	// rollback be served for a name whose restored binding differs — the
-	// gen counter can no longer distinguish them. Drop the cache so the
+	// gen counter can no longer distinguish them. Drop every entry so the
 	// fallback interpreter rebuilds every aggregate from the restored state
 	// (this is the rare uncompilable path; correctness over the cache).
-	r.dispatchCache = nil
+	// reset() empties the holder in place rather than swapping the pointer,
+	// preserving the never-reassigned invariant shared registries rely on.
+	r.dispatchCache.reset()
 	r.Types = s.types
 	r.Contexts.Restore(s.ctx)
 	// Restore analysis state IN PLACE so a module sub-registry transiently

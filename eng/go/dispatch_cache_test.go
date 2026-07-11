@@ -1,6 +1,10 @@
 package eng
 
-import "testing"
+import (
+	"strconv"
+	"sync"
+	"testing"
+)
 
 // TestDefTableGenNil pins the nil-receiver read.
 func TestDefTableGenNil(t *testing.T) {
@@ -108,6 +112,88 @@ func TestDispatchCacheHitAndInvalidate(t *testing.T) {
 	}
 	if r.Lookup("nope") != nil {
 		t.Fatal("Lookup(nope) second call = non-nil")
+	}
+}
+
+// TestDispatchCacheConcurrentSharedRegistry pins that Lookup is safe on a
+// registry shared across goroutines. Module FnDef wrappers carry their
+// module's ONE sub-registry, so every concurrent execution (a serve-raw
+// connection handler, a spawned process, an await branch) that dispatches
+// a module word runs Lookup against the same Registry — the shape behind
+// the flaky aql:net socket tests, where the unguarded cache map raced
+// (concurrent map read/write is a runtime fatal, not just a detector
+// finding). The goroutines mix cache WRITES (a name each goroutine looks
+// up first, plus per-goroutine names) with cache READS (shared hot names
+// and a shared negative entry) so both sides of the old race stay
+// exercised under `make test-race`. Lookup results are asserted, not just
+// survived: the wrong aggregate would be a silent dispatch corruption.
+func TestDispatchCacheConcurrentSharedRegistry(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	echo := Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return a, nil })
+	r.upsertFnDef("shared", Signature{Args: []*Type{TInteger}, Impl: echo})
+	const goroutines = 8
+	const iterations = 400
+	for g := 0; g < goroutines; g++ {
+		// One distinct fn-bound name per goroutine: its first Lookup is
+		// always a cache write happening while siblings read.
+		r.upsertFnDef("own-"+strconv.Itoa(g), Signature{Args: []*Type{TInteger}, Impl: echo})
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan string, goroutines)
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			own := "own-" + strconv.Itoa(g)
+			for i := 0; i < iterations; i++ {
+				if r.Lookup("shared") == nil {
+					errs <- "Lookup(shared) = nil"
+					return
+				}
+				if fn := r.Lookup(own); fn == nil || fn.Name != own {
+					errs <- "Lookup(" + own + ") wrong aggregate"
+					return
+				}
+				// Negative entry: an unbound name must stay nil (a non-nil
+				// here would mean the cache served another name's aggregate).
+				if r.Lookup("unbound-name") != nil {
+					errs <- "Lookup(unbound-name) = non-nil"
+					return
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+	close(errs)
+	for msg := range errs {
+		t.Fatal(msg)
+	}
+}
+
+// TestDispatchCacheStateNilReceiver pins the DefTable-style nil-receiver
+// safety of the holder's methods: a registry constructed without
+// NewRegistry (zero value) runs uncached rather than crashing — get
+// misses, put and reset no-op.
+func TestDispatchCacheStateNilReceiver(t *testing.T) {
+	var c *dispatchCacheState
+	if fn, ok := c.get("x", 0); fn != nil || ok {
+		t.Fatalf("nil get = (%v, %v), want (nil, false)", fn, ok)
+	}
+	c.put("x", 0, nil) // must not panic
+	c.reset()          // must not panic
+
+	// A zero-value Registry (no NewRegistry) therefore Lookups uncached:
+	// nil result for an unbound name, no panic, nothing cached.
+	zero := &Registry{Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit}}
+	if zero.Lookup("anything") != nil {
+		t.Fatal("zero-registry Lookup = non-nil")
+	}
+	if zero.dispatchCache != nil {
+		t.Fatal("zero-registry Lookup lazily allocated a cache; it must stay uncached")
 	}
 }
 
