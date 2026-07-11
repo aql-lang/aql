@@ -107,24 +107,55 @@ The mechanism (prototyped, then reverted — see below):
   and is never mis-admitted. This flipped **7 of 8** Template files to fully
   compiled with byte-identical output.
 
-## Why it is NOT landed: a separate cross-registry `dynEnv` miscompile (Stage C)
+## Why it is NOT landed: a do-map residual mis-hoist under `dynEnv` (Stage C)
 
 Landing the read-site fix flips `liquid_unit_test` to a miscompile — but **not**
-through the flex read. A `do {…}` value-eval arms program-wide `dynEnv` mode
-(`tryRecordDynBody`), under which every `def` and param dyn-binds
-(`OpBindDynScope`) and dynamic body reads lower to `OpLookupDynScope`. In the
-**imported** `template.aql`, `split-args`'s `do {… q:[q]}` (q a `fold`
-body-local) emits an `OpLookupDynScope q` whose `OpBindDynScope` twin is not live
-when the value-eval sub-run reads it → a run-time miss that corrupts the fold
-(interp `fail-count 0`, compiled `1`).
+through the flex read. The root cause, from the disassembly of the compiled
+`split-args` unit (`f26`) at the run-time miss:
 
-Crucially this is **independent of the flex fix and of the module-scope read**:
+```
+f26 split-args (locals=[s …]):
+  0007 CALL_NATIVE  do (Map)          ; initial acc {cur:[""] q:[""]}
+  0011 CALL_NATIVE  iota              ; the range
+  0012 LOOKUP_DYN_SCOPE k92 ; 'q'     ; <-- MISS: q unbound in this unit
+  0013 MAKE_LIST    n1                ; assemble [q]
+  0014 DROP                          ; …and discard it (dead)
+  0015 LOOKUP_DYN_SCOPE k92 ; 'q'     ; (a second dead [q])
+  0016 MAKE_LIST    n1
+  0017 DROP
+  …
+  0024 PUSH_CLOSURE f27 ; fold$body   ; the REAL fold body is a closure
+  0025 CALL_NATIVE  fold
+```
 
-- `split-args` has NO module-scope read; the read-site fix does not touch it.
-- The identical `split-args` shape compiles byte-identically **standalone**
-  (`RunCompiledStrict == Run`) AND **through a 2-file import** — the defect only
-  surfaces inside the *full* Template module, a context-dependent cross-registry
-  `dynEnv`/`OpBindDynScope` coordination gap.
+The fold-body do-map `do {… q:[q]}`'s `[q]` list member — where `q` is a **fold
+body-local** bound per-iteration INSIDE the `fold$body` closure (`f27`) — is
+residual-**promoted into the enclosing `split-args` unit** (`f26`) as a *dead*
+`LOOKUP_DYN_SCOPE q; MAKE_LIST; DROP` sitting BEFORE the fold call, where `q` is
+never bound → run-time miss (interp `fail-count 0`, compiled `1`).
+
+Bisected precisely:
+
+- The mis-hoist is triggered by the **do-map non-variadic fix** (`e82ca4d`,
+  landed): with `mapValueEval=false` (the old always-variadic behaviour) the
+  member stays contained in the closure and `liquid` is byte-identical; with the
+  fix a fixed-arity do-map reconciliation residual-promotes the `[q]` member out
+  of the loop body.
+- It is **independent of the module-scope read** — `split-args` has no
+  module-scope read; the read-site fix merely compiles enough of the surrounding
+  module to *reach* `split-args`'s compilation, exposing the latent promotion.
+- The identical `split-args` shape compiles byte-identically **standalone** and
+  **through a 2-file import**; only the *full* Template module (deeper
+  compilation) reaches it.
+
+**Critical soundness note.** `make verify-bytecode` passed `e82ca4d` cleanly
+despite this latent mis-hoist — the langspec differential corpus has no
+fold-body-do-map-over-a-loop-local shape, so it is *blind* to the defect (exactly
+the hazard `VOXGIG-COMPILE-COMPLETION-PLAN.0.md` warns of). The only reliable
+check for this class is the **voxgig `--compile==interpret` sweep** — i.e. the
+corpus re-baseline Stage C is defined around. A fix (either stop the loop-body
+member promotion, or keep the do-map variadic when a member references a
+loop-body-local) must be gated on that sweep, not verify-bytecode alone.
 
 That is exactly Stage C in `aql-bytecode-next-stages.0.md` — "sound module-body
 compilation (cross-registry EmitState) … the one stage that is a *project*, not a
