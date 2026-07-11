@@ -75,8 +75,11 @@ func TestExecuteParseError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "parse error") {
-		t.Errorf("expected 'parse error' in stderr, got %q", stderr.String())
+	// Parse failures surface as AQL-voice syntax_errors with the
+	// closing-quote help (design/DIAGNOSTICS.0.md phase 2).
+	if !strings.Contains(stderr.String(), "[aql/syntax_error]") ||
+		!strings.Contains(stderr.String(), "this string is never closed") {
+		t.Errorf("expected an AQL-voice syntax_error in stderr, got %q", stderr.String())
 	}
 }
 

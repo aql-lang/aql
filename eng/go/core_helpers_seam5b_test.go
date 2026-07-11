@@ -53,6 +53,17 @@ func TestS5bEDescribeStackTypesEdges(t *testing.T) {
 	if !strings.Contains(got, "gt") {
 		t.Errorf("expected the DepScalar constraint rendering in %q", got)
 	}
+
+	// A Word, an Atom, and a Float each get their own label form. The
+	// pointer index is placed off this window so none is wrapped in the
+	// >>> <<< pointer marker.
+	wtape := NewTape([]Value{NewWord("foo"), NewAtom("bar"), NewFloat(3.5)}, 3)
+	wgot := describeStackTypes(wtape, 3)
+	for _, want := range []string{"word(foo)", "atom(bar)", "3.5"} {
+		if !strings.Contains(wgot, want) {
+			t.Errorf("expected %q in %q", want, wgot)
+		}
+	}
 }
 
 func TestS5bEDescribeAllSigsNil(t *testing.T) {

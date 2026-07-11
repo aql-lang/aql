@@ -699,7 +699,12 @@ type fnUnitRec struct {
 	returns       []*Type  // declared return types — enforced at the VM's RET
 	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
 	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
-	locals        []string // slot→name table (params then captures)
+	// decl is the return-contract declaration site (FnSig.Decl), stamped
+	// on CompiledFn.Decl so a compiled RET return error labels the
+	// declaration as a secondary span exactly as the interpreter does.
+	// Zero for closures / anonymous units (no meaningful declaration).
+	decl   DeclSite
+	locals []string // slot→name table (params then captures)
 	// reg is the fn's owning registry; stamped on CompiledFn.Reg when it
 	// differs from the check registry (see emitUnit.reg).
 	reg  *Registry
@@ -1519,7 +1524,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
 	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
-	if !realOK || unit < 0 {
+	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return emitOperand{}, false
 	}
 	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
@@ -1563,7 +1568,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		return 0, false
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
-	if !realOK || unit < 0 {
+	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return 0, false
 	}
 	return unit, true
@@ -1620,7 +1625,7 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 		return Value{}, false
 	}
 	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
-	if !realOK || unit < 0 {
+	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return Value{}, false
 	}
 	ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(tokens)}
@@ -2115,7 +2120,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				// FALSE path (it survives on the TRUE path as the result). Only the
 				// plain-event-cond layout [cond, thenVal] is handled; a const /
 				// condFrag / const-cond condition sits elsewhere, so refuse those.
-				if !computedArmCondOK(b, ev.br.cond) {
+				if !computedArmCondOK(b, ev.br.cond) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 					es.MarkUncompilable("if: computed then value with non-stack condition (Stage 2)")
 					return
 				}
@@ -2166,7 +2171,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 						// Single computed else: only the plain-event-cond layout
 						// [cond, elseVal] (SWAP), a list-form cond (inline), or a
 						// const/local cond (pushed) is handled — computedArmCondOK.
-						if !computedArmCondOK(b, ev.br.cond) {
+						if !computedArmCondOK(b, ev.br.cond) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 							es.MarkUncompilable("if: computed else value with non-stack condition (Stage 2)")
 							return
 						}
@@ -2704,7 +2709,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				if a := es.TrailingApplyArity(top.ID); a > 0 && a == len(bodyStk)-1 {
 					argsOK := true
 					for _, v := range bodyStk[:len(bodyStk)-1] {
-						if isFnValueResidual(v) {
+						if isFnValueResidual(v) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 							argsOK = false
 							break
 						}
@@ -2925,6 +2930,18 @@ func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*Type, paramPatter
 	}
 	es.fnRecs[unit].paramTypes = paramTypes
 	es.fnRecs[unit].paramPatterns = paramPatterns
+}
+
+// SetUnitDecl records the return-contract declaration site for a compiled fn
+// unit (FnSig.Decl), so a compiled RET return-type/count error labels the
+// declaration exactly as the interpreter does. Callers that have the FnSig in
+// hand (the named-fn and user-poly compile paths) set it; anonymous closures
+// leave it zero.
+func (es *EmitState) SetUnitDecl(unit int, decl DeclSite) {
+	if unit < 0 || unit >= len(es.fnRecs) {
+		return
+	}
+	es.fnRecs[unit].decl = decl
 }
 
 func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
@@ -3316,6 +3333,34 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) boo
 	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
 		spec: TrapSpec{Code: code, Detail: detail, Word: word, Hint: hint},
 		pos:  pos,
+	}})
+	return true
+}
+
+// RecordTrapErr is RecordTrap for a fully-built interpreter AqlError: it
+// serialises the whole diagnostic — code, detail, word, hint, and the
+// structured payload (secondary spans, notes, suggestions) — into the trap so
+// the compiled OpTrap raises a report byte-identical to the interpreter's. Used
+// where the check pass builds the interpreter's own error at compile time (a
+// statically-definite unmatched dispatch, whose runtime values are provably the
+// same the check pass saw — tryRecordUnmatchedDispatchTrap). Same top-level-only
+// guard as RecordTrap.
+func (es *EmitState) RecordTrapErr(ae *AqlError, pos SrcPos) bool {
+	if ae == nil {
+		return false
+	}
+	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+		return false
+	}
+	if es.trapAt != 0 {
+		return true
+	}
+	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+		spec: TrapSpec{
+			Code: ae.Code, Detail: ae.Detail, Word: ae.Src, Hint: ae.Hint,
+			Spans: ae.Spans, Notes: ae.Notes, Suggestions: ae.Suggestions,
+		},
+		pos: pos,
 	}})
 	return true
 }
@@ -5668,7 +5713,7 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || isFnValueResidual(fnv)) {
 		return residual, false
 	}
-	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 {
+	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return residual, false
 	}
 	arg := residual[0]
@@ -5995,7 +6040,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
 			reordered:    "residual shape beyond Stage 1 (call results reordered)",
 			unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
-		}, lastPos); reason != "" {
+		}, lastPos); reason != "" { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return nil, reason, false
 		}
 	}
@@ -6067,7 +6112,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, Decl: rec.decl, LocalNames: names}
 		if rec.reg != nil && rec.reg != es.progReg {
 			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
 			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):

@@ -369,7 +369,7 @@ func FreshenDefault(v Value) Value {
 	switch {
 	case IsClassInstance(v):
 		info, err := AsClassInstance(v)
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return v
 		}
 		fields := NewOrderedMap()
@@ -395,7 +395,7 @@ func FreshenDefault(v Value) Value {
 		// Plain Map and FlexMap share the MapPayload shape; the Parent
 		// tag (kept by the struct copy) preserves the flavor.
 		m, err := AsMap(v)
-		if err != nil || m == nil {
+		if err != nil || m == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return v
 		}
 		om := NewOrderedMap()
@@ -955,13 +955,13 @@ func CheckMakeConstruction(r *Registry, target, src Value, pos SrcPos) {
 	switch {
 	case IsClassType(target):
 		ot, err := AsClassType(target)
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return
 		}
 		allFields, label = ot.AllFields(), "class "+ot.Name
 	case IsResourceType(target):
 		rt, err := AsResourceType(target)
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return
 		}
 		allFields, label = rt.AllFields(), rt.Name

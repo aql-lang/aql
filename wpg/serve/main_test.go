@@ -107,3 +107,25 @@ func TestEvalRejections(t *testing.T) {
 		t.Error("aql error eval: empty error field, want undefined-word error")
 	}
 }
+
+// TestEvalErrorsArePlain pins the playground's ANSI-free contract
+// (design/DIAGNOSTICS.0.md): every error family renders through the
+// plain Error() path — the rich diagnostic (candidate verdicts,
+// did-you-mean, spans) arrives as plain text lines, never as ANSI
+// escapes leaking into the DOM (the pre-phase-2 jsonic leak).
+func TestEvalErrorsArePlain(t *testing.T) {
+	mux := testMux(t)
+	for _, code := range []string{
+		`{"code":"def s 'abc"}`, // parse error (unterminated string)
+		`{"code":"99 upper"}`,   // dispatch error (candidate verdicts)
+		`{"code":"pritn [1]"}`,  // undefined word (did-you-mean)
+	} {
+		status, resp := postEval(t, mux, code)
+		if status != 200 || resp.Error == "" {
+			t.Fatalf("%s: status %d, error %q — want a 200 with an error payload", code, status, resp.Error)
+		}
+		if strings.Contains(resp.Error, "\x1b[") {
+			t.Errorf("%s: error payload carries ANSI escapes: %q", code, resp.Error)
+		}
+	}
+}

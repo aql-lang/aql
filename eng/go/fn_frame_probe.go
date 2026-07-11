@@ -152,7 +152,7 @@ func (e *Engine) probeTailCall(sortedIndices []int, n int) (frameTailScan, bool)
 				return scan, false
 			}
 			info, err := AsFrameOpen(v)
-			if err != nil {
+			if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 				return scan, false
 			}
 			scan.FrameOpen = j

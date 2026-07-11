@@ -1,11 +1,12 @@
 package test
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
 	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // runWithSource parses and runs AQL source, returning the error.
@@ -69,7 +70,8 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 
 	assertErrorContains(t, err,
 		"[aql/signature_error]",
-		"no matching signature for upper",
+		"cannot call `upper`",
+		"no signature matches the arguments",
 		"-->",
 	)
 
@@ -78,11 +80,23 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 		t.Error("expected non-zero Row in error")
 	}
 
-	// Should include hint with expected signatures and stack
-	if ae.Hint == "" {
-		t.Error("expected non-empty Hint")
+	// Structured notes: the received argument, the candidate verdict
+	// (expected-vs-found), and the stack snapshot.
+	if len(ae.Notes) == 0 {
+		t.Error("expected structured Notes")
 	}
-	assertErrorContains(t, err, "expected:", "stack:")
+	assertErrorContains(t, err,
+		"the argument was 99 (an Integer)",
+		"candidate `upper (String)` — argument 1: expected String, got 99 (an Integer)",
+	)
+	// The dispatch diagnostic carries NO tape-internal "stack:" note —
+	// it has no compiled-mode equivalent, so it is deliberately absent
+	// (design/DIAGNOSTICS.0.md phase 7 cross-engine parity).
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "stack:") {
+			t.Errorf("dispatch error must not carry a tape-internal stack note, got %q", n)
+		}
+	}
 }
 
 func TestErrorFormatSignatureMissingArg(t *testing.T) {
@@ -91,11 +105,16 @@ func TestErrorFormatSignatureMissingArg(t *testing.T) {
 	ae := assertAqlError(t, err, "signature_error")
 	assertErrorContains(t, err,
 		"[aql/signature_error]",
-		"no matching signature for add",
+		"cannot call `add`",
+		"candidate `add ",
+		"were supplied",
 	)
-	if ae.Hint == "" {
-		t.Error("expected non-empty Hint")
+	if len(ae.Notes) == 0 {
+		t.Error("expected candidate-verdict Notes")
 	}
+	// add carries many overloads — the error must point at describe
+	// rather than listing them all.
+	assertErrorContains(t, err, "more signatures", "aql describe add")
 }
 
 func TestErrorFormatSignatureMultiLine(t *testing.T) {
@@ -123,7 +142,7 @@ func TestErrorFormatSignatureFnDef(t *testing.T) {
 	// Function signature mismatch at call time
 	err := runWithSource(t, `def f fn [[n:Integer] Integer [n]] "hello" f`)
 	ae := assertAqlError(t, err, "signature_error")
-	assertErrorContains(t, err, "no matching signature for f")
+	assertErrorContains(t, err, "cannot call `f`")
 	_ = ae
 }
 
@@ -152,23 +171,120 @@ func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
 		"f 5"
 	err := runWithSource(t, src)
 	ae := assertAqlError(t, err, "signature_error")
-	assertErrorContains(t, err, "no matching signature for upper")
+	assertErrorContains(t, err, "cannot call `upper`")
 	if ae.Row != 1 {
 		t.Errorf("expected Row=1 (the failing `upper` in f's body), got %d", ae.Row)
 	}
 }
 
-func TestErrorFormatSignatureStackContext(t *testing.T) {
-	// The hint should describe what types are actually on the stack
+func TestErrorFormatSignatureReceivedArg(t *testing.T) {
+	// The received-arguments note names the value the failed dispatch
+	// actually saw, in plain language — the plain-English successor to
+	// the old tape-internal "stack:" dump (which had no compiled-mode
+	// equivalent and was removed for cross-engine parity, phase 7).
+	// `upper` is 1-arg, so it dispatches on 42; the unrelated 'hello'
+	// leftover below it is not the argument and is not reported.
 	err := runWithSource(t, `"hello" 42 upper`)
 	ae := assertAqlError(t, err, "signature_error")
-	// Stack should show the types around the word
-	if !strings.Contains(ae.Hint, "stack:") {
-		t.Error("expected 'stack:' in hint")
+	argNote := ""
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "the argument") {
+			argNote = n
+		}
 	}
-	// Should mention the actual types present
-	if !strings.Contains(ae.Hint, "'hello'") || !strings.Contains(ae.Hint, "42") {
-		t.Errorf("stack hint should describe the actual values, got: %s", ae.Hint)
+	// The note names the values in the failing window, top-first — the
+	// same context the old stack note gave, in plain language, and
+	// reproduced identically by the compiled path.
+	if argNote != "the arguments were 42 (an Integer) and 'hello' (a ProperString)" {
+		t.Errorf("received-argument note = %q, want the plain-language arg description", argNote)
+	}
+	// And no tape-internal stack note survives.
+	for _, n := range ae.Notes {
+		if strings.HasPrefix(n, "stack:") {
+			t.Errorf("dispatch error must not carry a stack note, got %q", n)
+		}
+	}
+}
+
+// =====================================================================
+// Undefined words + did-you-mean
+// =====================================================================
+
+func TestErrorFormatUndefinedWordDidYouMean(t *testing.T) {
+	err := runWithSource(t, "def counter 1\ncountr")
+	ae := assertAqlError(t, err, "undefined_word")
+	assertErrorContains(t, err,
+		"undefined word: countr",
+		"did you mean `counter`?",
+	)
+	if len(ae.Suggestions) == 0 {
+		t.Error("expected structured Suggestions")
+	}
+}
+
+func TestErrorFormatUndefinedWordBuiltinDescribe(t *testing.T) {
+	// A typo'd BUILTIN also points at its describe entry.
+	err := runWithSource(t, `filtr [1 2 3] [true]`)
+	assertAqlError(t, err, "undefined_word")
+	assertErrorContains(t, err, "did you mean", "aql describe ")
+}
+
+func TestErrorFormatUndefinedWordNoWildGuess(t *testing.T) {
+	// Nothing plausible nearby → no did-you-mean at all (never guess).
+	err := runWithSource(t, `zzqzzqzz`)
+	assertAqlError(t, err, "undefined_word")
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("far name must not produce a guess:\n%s", err.Error())
+	}
+}
+
+func TestErrorFormatUndefinedTypeNameDidYouMean(t *testing.T) {
+	// A misspelt TYPE name in a binding suggests the type.
+	err := runWithSource(t, `def x:Intger 5`)
+	assertAqlError(t, err, "def_error")
+	assertErrorContains(t, err,
+		"type annotation must be a type value",
+		"did you mean `Integer`",
+	)
+}
+
+// =====================================================================
+// Strict-read key misses + did-you-mean
+// =====================================================================
+
+func TestErrorFormatKeyMissDidYouMean(t *testing.T) {
+	err := runWithSource(t, `{color:1 size:2} "colour" getr`)
+	ae := assertAqlError(t, err, "not_found")
+	assertErrorContains(t, err,
+		`key "colour" not found in map`,
+		"did you mean `color`?",
+	)
+	_ = ae
+}
+
+func TestErrorFormatKeyMissNoWildGuess(t *testing.T) {
+	err := runWithSource(t, `{color:1 size:2} "zzz" getr`)
+	assertAqlError(t, err, "not_found")
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("far key must not produce a guess:\n%s", err.Error())
+	}
+}
+
+func TestErrorFormatModuleExportMissDidYouMean(t *testing.T) {
+	// Native module imports need the full lang.New wiring (module
+	// resolver), not the bare DefaultRegistry fixture.
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Run("import \"aql:math-util\"\nMathUtil \"sqrtt\" getr")
+	if err == nil {
+		t.Fatal("expected an export-miss error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `export "sqrtt" not found in module`) ||
+		!strings.Contains(msg, "did you mean `sqrt`?") {
+		t.Errorf("missing export did-you-mean:\n%s", msg)
 	}
 }
 
@@ -187,6 +303,40 @@ func TestErrorFormatReturnType(t *testing.T) {
 		"got",
 	)
 	_ = ae
+}
+
+func TestErrorFormatReturnTypeTwoSpans(t *testing.T) {
+	// The rich report labels BOTH the declaration and the produced
+	// value alongside the primary call-site caret (phase 5).
+	err := runWithSource(t, "def f fn [[n:Integer] String [n]]\n42 f")
+	ae := assertAqlError(t, err, "type_error")
+	if len(ae.Spans) == 0 {
+		t.Fatalf("expected secondary spans, got none:\n%s", err.Error())
+	}
+	assertErrorContains(t, err,
+		"the declaration says `f` returns String",
+		"the returned value was produced here",
+	)
+}
+
+func TestErrorFormatReturnCountDeclSpan(t *testing.T) {
+	err := runWithSource(t, "def f fn [[n:Integer] [Integer Integer] [n]]\n42 f")
+	assertAqlError(t, err, "type_error")
+	assertErrorContains(t, err, "the declaration of `f` expects 2 return value(s)")
+}
+
+// =====================================================================
+// Arithmetic error taxonomy
+// =====================================================================
+
+func TestErrorFormatArithCode(t *testing.T) {
+	err := runWithSource(t, `20 div 0`)
+	assertAqlError(t, err, "arith_error")
+	assertErrorContains(t, err, "[aql/arith_error]", "division by zero")
+
+	err = runWithSource(t, `20 mod 0`)
+	assertAqlError(t, err, "arith_error")
+	assertErrorContains(t, err, "modulo by zero")
 }
 
 func TestErrorFormatReturnCount(t *testing.T) {

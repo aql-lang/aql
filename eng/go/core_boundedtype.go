@@ -163,7 +163,7 @@ func boundedChild(v Value) (Value, bool) {
 		return Value{}, false
 	}
 	info, ok := v.Data.(ChildTypeInfo)
-	if !ok {
+	if !ok { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return Value{}, false
 	}
 	return info.Child, true

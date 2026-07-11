@@ -719,16 +719,24 @@ type TypedBindSpec struct {
 }
 
 // TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
-// detail message, the word it is attributed to, and an optional hint — built
-// from the SAME strings the interpreter raises for the matching runtime error,
-// so error-scraping tooling can never tell which engine ran. It lowers a
+// detail message, the word it is attributed to, an optional hint, and the full
+// structured diagnostic payload (secondary spans, notes, suggestions) — built
+// from the SAME AqlError the interpreter raises for the matching runtime error,
+// so the compiled and interpreted diagnostics are byte-identical and
+// error-scraping tooling can never tell which engine ran. It lowers a
 // check-mode-suppressed runtime error (an orphan gen, an unpack of a missing
-// key) into the compiled stream rather than refusing the whole program.
+// key, a statically-definite unmatched dispatch) into the compiled stream
+// rather than refusing the whole program. The rich fields are populated by
+// RecordTrapErr (serialising a built AqlError); the plain string RecordTrap
+// leaves them nil for the simpler callers.
 type TrapSpec struct {
-	Code   string
-	Detail string
-	Word   string
-	Hint   string
+	Code        string
+	Detail      string
+	Word        string
+	Hint        string
+	Spans       []DiagSpan
+	Notes       []string
+	Suggestions []DiagSuggestion
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
@@ -850,6 +858,13 @@ type CompiledFn struct {
 	// param raises the same signature_error rather than running the body. Nil
 	// where the param has no pattern.
 	ParamPatterns []*Value
+	// Decl is the return-contract declaration site (FnSig.Decl): the
+	// output-signature token's position plus the declaring program's
+	// source/file. A compiled RET return error labels it as a secondary
+	// span exactly as the interpreter's ReturnCheck does — so the two
+	// engines' return diagnostics carry the same declaration span. Zero
+	// for anonymous closures (no meaningful declaration site).
+	Decl DeclSite
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely

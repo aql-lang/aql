@@ -171,6 +171,35 @@ func TestRunUnknownNotificationIgnored(t *testing.T) {
 	}
 }
 
+// TestCompletionBadParamsFallsBackToFullList covers handleCompletion's
+// unmarshal-error arm: malformed params do NOT error (as hover/formatting do)
+// — completion degrades to the full known-word list (buildCompletionItems).
+func TestCompletionBadParamsFallsBackToFullList(t *testing.T) {
+	var input bytes.Buffer
+	input.Write(frameBytes(t, rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}}))
+	// id=2: params is a bare number, so json.Unmarshal into
+	// CompletionParams fails and the handler falls back.
+	input.Write(frameBytes(t, rpcRequest{
+		JSONRPC: "2.0", ID: 2, Method: "textDocument/completion", Params: 42,
+	}))
+	input.Write(shutdownExitFrames(t, 9))
+
+	code, out, _ := runServer(t, input.Bytes())
+	if code != 0 {
+		t.Fatalf("run() = %d, want 0", code)
+	}
+	resp := responseFor(2, parseServerOutput(t, out))
+	if resp == nil {
+		t.Fatal("no response for completion id=2")
+	}
+	if resp.Error != nil {
+		t.Fatalf("completion with bad params = error %+v, want the full word list", resp.Error)
+	}
+	if items := decodeResult[[]CompletionItem](t, resp.Result); len(items) == 0 {
+		t.Error("expected the full known-word completion list on bad params")
+	}
+}
+
 func TestRunRequestsWithoutIDAreIgnored(t *testing.T) {
 	// initialize/hover/completion/formatting all bail out early when
 	// the message has no id: nothing may be written for them.

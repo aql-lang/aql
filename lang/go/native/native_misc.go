@@ -596,7 +596,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 			return nil, err
 		}
 		desc, err := loadFileModule(r, resolved)
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, err
 		}
 		return nil, installExports(r, desc, nil)
@@ -653,7 +653,7 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 			return nil, err
 		}
 		desc, err := loadFileModule(r, resolved)
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, err
 		}
 		_lst, _ := AsList(args[0])

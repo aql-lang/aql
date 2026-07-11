@@ -1,11 +1,44 @@
 # Coverage allowlist — provably-unreachable defensive guards
 
 `make cover-gate` (ADR-008) enforces **100% unit-test coverage of every
-*reachable* Go statement**. A small, reviewed allowlist —
-`test/go/covergate/allowlist.tsv` — names the blocks that are excluded
-from that floor because they are **provably unreachable through any test**
-while remaining **valuable defensive code**. This note explains what may go
-on the list, why, and the discipline that keeps it honest.
+*reachable* Go statement**. A small, reviewed set of exclusions covers the
+blocks that are **provably unreachable through any test** while remaining
+**valuable defensive code**. Each exclusion is an inline
+`//covergate:allow <reason>` comment on the guard's own opening line — the
+proof travels WITH the guard, so a refactor that shifts lines never
+invalidates it. This note explains what may be excluded, why, and the
+discipline that keeps it honest.
+
+## The mechanism — an inline pragma
+
+An exclusion is a line comment whose token IS the marker, placed on the
+guard's opening line:
+
+```go
+if unit < 0 || unit >= len(es.fnRecs) { //covergate:allow bounds guard — callers pass a StartFnCompile unit
+	return
+}
+```
+
+`covergate` (run with `-root <repo>`) parses every source file referenced by
+the merged profile with `go/parser` and collects the lines whose trailing
+comment token is `//covergate:allow` — detection is comment-exact, so the
+marker's appearance in prose (this document, covergate's own doc comment) or
+in a string literal is ignored. The reason after the marker is **mandatory**
+(covergate rejects a bare marker): it is the proof of unreachability.
+
+A pragma excludes the **uncovered** coverage block(s) opening on its line.
+Go's cover tool often splits an `if guard {` line into a *reaching* block
+(covered — control gets there) and the *guard-body* block (uncovered — the
+guard never fires); the pragma excludes only the uncovered body and counts
+the covered reaching block normally, so line granularity never over-excludes
+real coverage.
+
+This replaced the historical line-keyed `test/go/covergate/allowlist.tsv`,
+whose `<file>:<startLine>.<col>,<endLine>.<col>` keys went stale on every
+refactor that inserted or deleted a line above a guard — a large,
+signal-free churn (a single diagnostics refactor re-pointed ~80 entries at
+once). The pragma carries no absolute coordinate, so that churn is gone.
 
 ## Why an allowlist rather than "literally 100%"
 
@@ -30,10 +63,10 @@ allocation regression — see the reverted `screenResults` method-value
 seam) or cannot force the failure at all because the guarded call is
 total for every constructible input.
 
-## What is on the list (categories)
+## What is excluded (categories)
 
-Each entry is a cover-profile block key (`<file>:<startLine>.<col>,<endLine>.<col>`)
-and a one-line reason. The categories:
+Each exclusion is a `//covergate:allow <reason>` comment; the reason names
+the category. The categories:
 
 - **§engine** — interpreter step/dispatch defensive index and error arms
   in `eng/go/engine.go`. Tautological index comparisons (a backward scan
@@ -69,20 +102,21 @@ and a one-line reason. The categories:
   single `return s, nil`).
 
 The per-block proofs live in the wave-6…9 coverage-agent reports; the
-category reason on each line is the durable summary.
+category reason on each pragma is the durable summary.
 
-## Discipline — the list cannot rot
+## Discipline — the exclusions cannot rot
 
-`covergate` treats the allowlist as **live**, not fire-and-forget:
+`covergate` treats the pragmas as **live**, not fire-and-forget:
 
-- If an allowlisted block is **actually covered** by some suite, the gate
-  **fails** and names it: the guard became reachable, so cover it and
-  delete the exclusion ("graduate" it).
-- If an allowlisted key matches **no** profiled block (a rename or a
-  deletion left it dangling), the gate **fails** as stale.
+- If every block on a pragma's line is **actually covered** by some suite,
+  the gate **fails** and names the line: the guard became reachable, so
+  cover it and delete the pragma ("graduate" it).
+- If a pragma line opens **no** profiled block (a refactor moved the guard
+  off the line, or deleted it), the gate **fails** as stale.
 
-So the list can only shrink or move deliberately. Adding an entry is a
+So the exclusions can only shrink or move deliberately, and — because the
+pragma rides on the guard's line — a line-shifting refactor moves the pragma
+with the guard rather than dangling a stale coordinate. Adding one is a
 reviewed act: it needs a proof that no test can reach the block and an
-argument that the guard earns its keep as defence. When in doubt, prefer
-a seam (make it reachable) or deletion (if it is truly dead) over an
-allowlist entry.
+argument that the guard earns its keep as defence. When in doubt, prefer a
+seam (make it reachable) or deletion (if it is truly dead) over a pragma.

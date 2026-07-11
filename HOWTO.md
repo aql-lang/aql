@@ -85,6 +85,15 @@ def square fn [[x:Number] [Number] [mul x x]]
 square 5                      # returns 25
 ```
 
+A single-parameter, single-signature fn can drop the wrapping list —
+the 3-arg form `fn input output body` (the input must not be a list;
+a list after `fn` always means the list-of-triples form):
+
+```
+def square fn x:Number [Number] [mul x x]
+square 5                      # returns 25
+```
+
 Inside the body, named parameters (`x:Number`) bind to argument
 slots automatically. The first listed parameter is `args[0]`, the
 second is `args[1]`, etc. You can also access the full slot list via
@@ -105,8 +114,9 @@ the stack top-first. For details see
 
 ## Overload a word with multiple signatures
 
-Stack the signatures inside one `fn`. The first matching signature
-wins:
+Stack the signatures inside one `fn` — overloads need the
+list-of-triples form (the 3-arg form builds exactly one signature).
+The first matching signature wins:
 
 ```
 def add1 fn [

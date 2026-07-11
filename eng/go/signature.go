@@ -204,6 +204,12 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 			if !pok {
 				continue
 			}
+			// Carrier pattern: a check-mode placeholder for a computed
+			// pattern value — unknowable statically, never enforced
+			// (see patternsOk in match.go).
+			if pattern.Carrier {
+				continue
+			}
 			if pattern.Parent.Equal(TMap) && ordered[idx].Parent.Equal(TMap) &&
 				pattern.Data != nil && ordered[idx].Data != nil &&
 				!IsOptionsType(pattern) && !IsTypedMap(pattern) &&

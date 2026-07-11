@@ -93,7 +93,7 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	ref := &CompiledFnRef{Unit: unit, depNames: deps}
 	es.storedFnRefs = append(es.storedFnRefs, ref)
 	prog, _, ok := es.Finalize(nil)
-	if !ok || prog == nil || ref.Prog == nil {
+	if !ok || prog == nil || ref.Prog == nil { //covergate:allow detached-stamp Finalize belt: after a successful probe-then-real compileStoredFnUnit es.Compilable is true, Finalize of an empty top-level frame with nil residual cannot refuse, and the just-appended ref cannot be poisoned (no def/undef runs between append and Finalize) — unreachable without a bytecode-level fault (§compiler)
 		// Finalize refused (the real compile marked the state uncompilable)
 		// or left the ref unstamped — the value stays plain and interprets.
 		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})

@@ -163,3 +163,20 @@ func TestDecodePayloadCorruptLength(t *testing.T) {
 		t.Fatal("expected ok=false on corruption")
 	}
 }
+
+// EvalColor renders a structured runtime error through the ANSI
+// renderer when color is on, and stays byte-plain when off.
+func TestEvalColorErrorRendering(t *testing.T) {
+	var out bytes.Buffer
+	err := EvalColor(&out, "99 uppr", langOpts(), CompileOff, true)
+	if err == nil || !strings.Contains(err.Error(), "\x1b[") {
+		t.Fatalf("color=true must render ANSI, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "error: ") {
+		t.Errorf("the error: prefix must survive the colored path: %v", err)
+	}
+	err = EvalColor(&out, "99 uppr", langOpts(), CompileOff, false)
+	if err == nil || strings.Contains(err.Error(), "\x1b[") {
+		t.Fatalf("color=false must stay plain, got %v", err)
+	}
+}

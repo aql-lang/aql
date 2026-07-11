@@ -75,7 +75,7 @@ func TabnasKinds() []TabnasKind {
 	jsonicPlugin := func(defaults map[string]any, install func(*tabnasjsonic.Jsonic, map[string]any) error) TabnasParser {
 		return func(src string, opts map[string]any) (any, error) {
 			j := parser.SafeMake()
-			if err := install(j, mergeOpts(defaults, opts)); err != nil {
+			if err := install(j, mergeOpts(defaults, opts)); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, err
 			}
 			return j.Parse(src)
@@ -110,7 +110,7 @@ func TabnasKinds() []TabnasKind {
 		{"markdown", TList, func(s string, opts map[string]any) (any, error) {
 			j := parser.SafeMake()
 			if err := j.UseDefaults(tabnasmarkdown.Markdown, tabnasmarkdown.Defaults,
-				mergeOpts(map[string]any{"object": false}, opts)); err != nil {
+				mergeOpts(map[string]any{"object": false}, opts)); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, err
 			}
 			return j.Parse(s)
@@ -119,7 +119,7 @@ func TabnasKinds() []TabnasKind {
 		// AtomFeed struct, so a JSON round-trip flattens it to generic data.
 		{"feed", TMap, func(s string, opts map[string]any) (any, error) {
 			j := parser.SafeMake()
-			if err := tabnasfeed.Feed(j, mergeOpts(tabnasfeed.Defaults, opts)); err != nil {
+			if err := tabnasfeed.Feed(j, mergeOpts(tabnasfeed.Defaults, opts)); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 				return nil, err
 			}
 			v, err := j.Parse(s)
@@ -158,7 +158,7 @@ func OptsToMap(v Value) map[string]any {
 		return nil
 	}
 	m, ok := ValueToAny(v).(map[string]any)
-	if !ok {
+	if !ok { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil
 	}
 	return m

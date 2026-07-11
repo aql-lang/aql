@@ -274,7 +274,7 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	// so the "immutable" result can never change underneath through a
 	// live flex handle. Flex-free values pass through untouched.
 	val, aerr := eng.AdoptIntoNode(args[1])
-	if aerr != nil {
+	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
 	out := NewOrderedMap()
@@ -997,7 +997,7 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	// Entirely-immutable invariant for the copy-returning column: see
 	// setMapHandler.
 	val, aerr := eng.AdoptIntoNode(args[1])
-	if aerr != nil {
+	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
 	out := make([]Value, n)

@@ -41,8 +41,8 @@ func TestValueDivergesCompilesNative(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`def e (do [1 div 0]) convert Map e`, "{message:'division by zero'}"},
-		{`def e (do [7 mod 0]) convert Map e`, "{message:'modulo by zero'}"},
+		{`def e (do [1 div 0]) convert Map e`, "{code:arith_error message:'division by zero'}"},
+		{`def e (do [7 mod 0]) convert Map e`, "{code:arith_error message:'modulo by zero'}"},
 		{`10 div 2`, "5"},
 		{`10 mod 3`, "1"},
 	}

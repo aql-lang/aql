@@ -21,10 +21,11 @@ on `main` is a new step, added immediately after **Test (all modules)**:
 ```
 
 This enforces ADR-008 (100% coverage across the merged cross-suite profile,
-minus the reviewed `test/go/covergate/allowlist.tsv`) in CI. Without it the
-allowlist can drift as refactors shift line numbers — the exact failure that
-went unnoticed across the #236–#248 merge batch, because nothing ran
-`make cover-gate` on a PR.
+minus the guards marked `//covergate:allow <reason>`) in CI. Those pragmas
+live on the guard's own line, so they no longer drift as refactors shift
+line numbers — the class of failure that went unnoticed across the #236–#248
+merge batch, when the exclusions were a separate line-keyed file and nothing
+ran `make cover-gate` on a PR.
 
 ## How to apply
 

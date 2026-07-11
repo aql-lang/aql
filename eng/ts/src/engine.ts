@@ -279,7 +279,7 @@ export class Engine {
       }
       throw new AqlError(
         'signature_error',
-        `no matching signature for ${name}\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
+        `cannot call \`${name}\` — no signature matches the arguments\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
         name,
       )
     }
@@ -398,7 +398,7 @@ export class Engine {
 
     this.registry.check.addDiagnostic({
       code: 'no_signature',
-      detail: `no matching signature for ${name}; assuming best-fit candidate for analysis`,
+      detail: `cannot call \`${name}\` — no signature matches the arguments; assuming best-fit candidate for analysis`,
       word: name,
     })
     const out = carrierResults(this.registry, name, sig, args)
@@ -650,7 +650,7 @@ export class Engine {
     if (!result || !chosen) {
       throw new AqlError(
         'signature_error',
-        `no matching signature for ${name}\n  = stack: ${this.describeStack()}`,
+        `cannot call \`${name}\` — no signature matches the arguments\n  = stack: ${this.describeStack()}`,
         name,
       )
     }
@@ -764,7 +764,7 @@ export class Engine {
       replaceCount = stk + 1 + fwd
       this.registry.check.addDiagnostic({
         code: 'no_signature',
-        detail: `no matching signature for ${name}; assuming best-fit candidate for analysis`,
+        detail: `cannot call \`${name}\` — no signature matches the arguments; assuming best-fit candidate for analysis`,
         word: name,
       })
       // The assumed dispatch analyses the body under args the real match

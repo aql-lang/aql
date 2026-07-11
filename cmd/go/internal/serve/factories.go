@@ -107,7 +107,7 @@ func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servi
 		addr = fmt.Sprintf(":%d", *port)
 	}
 	srv, err := exec.NewServer(addr, pathutil.Expand(*registryPath), pol)
-	if err != nil {
+	if err != nil { //covergate:allow error arm after exec.NewServer, which only ever returns (s, nil) (§misc)
 		return nil, fmt.Errorf("%s", strings.TrimPrefix(err.Error(), "exec: "))
 	}
 	return srv, nil

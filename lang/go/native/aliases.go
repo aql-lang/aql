@@ -18,6 +18,9 @@ type (
 	BranchRecord       = eng.BranchRecord
 	EmitFragment       = eng.EmitFragment
 	AqlError           = eng.AqlError
+	RenderOpts         = eng.RenderOpts
+	DiagSpan           = eng.DiagSpan
+	DiagSuggestion     = eng.DiagSuggestion
 	CalDurationData    = eng.CalDurationData
 	CheckDiagnostic    = eng.CheckDiagnostic
 	CheckFullStackFunc = eng.CheckFullStackFunc
@@ -360,6 +363,9 @@ var (
 	TypePathOf                = eng.TypePathOf
 	ValueType                 = eng.ValueType
 	NewNone                   = eng.NewNone
+	NewNegation               = eng.NewNegation
+	IsNegation                = eng.IsNegation
+	AsNegation                = eng.AsNegation
 	FormatFloat               = eng.FormatFloat
 	NewTypedListWithElements  = eng.NewTypedListWithElements
 	NewTypedMapWithEntries    = eng.NewTypedMapWithEntries
@@ -426,6 +432,8 @@ var (
 	JoinCarriers              = eng.JoinCarriers
 	FoldVariadicArms          = eng.FoldVariadicArms
 	MakeAqlError              = eng.MakeAqlError
+	ResolveColor              = eng.ResolveColor
+	RenderCheckDiagnostic     = eng.RenderCheckDiagnostic
 	MapFieldBoolean           = eng.MapFieldBoolean
 	MapFieldFloat             = eng.MapFieldFloat
 	MapFieldInteger           = eng.MapFieldInteger

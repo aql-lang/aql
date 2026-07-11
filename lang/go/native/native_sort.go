@@ -66,7 +66,7 @@ func sortMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	if err != nil {
 		return nil, fmt.Errorf("sort: %w", err)
 	}
-	if m == nil {
+	if m == nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return []Value{args[0]}, nil
 	}
 	keys := m.Keys()

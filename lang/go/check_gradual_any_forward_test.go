@@ -49,7 +49,7 @@ def _ (caller "x")`
 	res2, _ := b.Check(bad)
 	flagged := false
 	for _, d := range res2.Diagnostics {
-		if d.Code == "no_signature" || strings.Contains(d.Detail, "no matching signature") {
+		if d.Code == "no_signature" || strings.Contains(d.Detail, "no signature matches") {
 			flagged = true
 			break
 		}

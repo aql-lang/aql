@@ -69,8 +69,8 @@ func TestPredicate_SigDispatch_RejectsFailingPredicate(t *testing.T) {
 	msg := runPredExpectErr(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def f fn [[x:Pos] [Integer] [x add 1]]
 f -3`)
-	if !strings.Contains(msg, "no matching signature") {
-		t.Errorf("got %q, want 'no matching signature'", msg)
+	if !strings.Contains(msg, "no signature matches") {
+		t.Errorf("got %q, want 'no signature matches'", msg)
 	}
 }
 
@@ -78,8 +78,8 @@ func TestPredicate_SigDispatch_RejectsWrongType(t *testing.T) {
 	msg := runPredExpectErr(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def f fn [[x:Pos] [Any] [x]]
 f "hello"`)
-	if !strings.Contains(msg, "no matching signature") {
-		t.Errorf("got %q, want 'no matching signature'", msg)
+	if !strings.Contains(msg, "no signature matches") {
+		t.Errorf("got %q, want 'no signature matches'", msg)
 	}
 }
 
@@ -403,8 +403,8 @@ func TestPredicate_HigherOrderEach_OneFails(t *testing.T) {
 	msg := runPredExpectErr(t, `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def f fn [[x:Pos] [Integer] [x add 1]]
 [1,-2,3] each [f]`)
-	if !strings.Contains(msg, "no matching signature") {
-		t.Errorf("got %q, want 'no matching signature' for -2", msg)
+	if !strings.Contains(msg, "no signature matches") {
+		t.Errorf("got %q, want 'no signature matches' for -2", msg)
 	}
 }
 

@@ -11,9 +11,7 @@ import (
 // RecordMakeMap, vm.go callDynamic / callDynamicOp / callDynamicMixed /
 // invokeClosure / vmMakeMap / callPoly / matchUserPoly, and engine.go
 // checkModeAssumeSig's plain-check summaries (argTypeSummary /
-// sigTypeSummary) plus the carrier-disjoint unmatched-dispatch trap
-// (sigDefinitelyUnmatched / definiteSlotFail). Reuses the harness from
-// compile_pipeline_cov_test.go.
+// sigTypeSummary). Reuses the harness from compile_pipeline_cov_test.go.
 
 // registerDynWords adds:
 //   - cany:  0-arg, declared Any (a dynamic carrier statically), returns 7.
@@ -330,12 +328,15 @@ func TestPlainCheckNoSignatureSummaries(t *testing.T) {
 	}
 }
 
-// --- carrier-disjoint unmatched dispatch trap ---------------------------------------------
+// --- carrier no-match dispatch: interpreter-fallback parity ------------------------------
 
 func TestCompiledCarrierDisjointTrapParity(t *testing.T) {
 	// The failing operand is a CARRIER (a ccat result — String) in an
-	// Integer-only slot: provably disjoint, so the compile records a
-	// terminal trap and both engines raise signature_error.
+	// Integer-only slot. A carrier is not concrete at compile time, so a
+	// trap built here could not carry a diagnostic matching the
+	// interpreter's runtime (concrete-value) one; the compile therefore
+	// DECLINES to trap and the program falls back to the interpreter. Both
+	// engines raise the identical signature_error either way (phase 7).
 	runErrParity(t, nil, func() []Value {
 		return []Value{
 			NewWord("cadd"),

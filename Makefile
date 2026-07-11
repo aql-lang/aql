@@ -328,11 +328,12 @@ COVER_DIR := coverage
 # suite reaches it — lang's tests legitimately cover eng, the spec corpus
 # covers both), the per-module profiles are merged block-by-block by
 # test/go/covergate, and the gate fails below GATE_FLOOR. The sole
-# exclusion is covergate/allowlist.tsv — provably-unreachable defensive
-# guards, each with a reason; the gate fails if an entry becomes covered
-# (graduate it) or goes stale. Seam conventions for reaching the hard
-# edges are in design/TEST-SEAMS.10.md; the allowlist policy is in
-# design/COVERAGE-ALLOWLIST.10.md and ADR-008.
+# exclusions are provably-unreachable defensive guards, each marked with a
+# //covergate:allow <reason> comment on its opening line (covergate reads
+# them from source via -root); the gate fails if such a guard becomes
+# covered (graduate it) or its pragma goes stale. Seam conventions for
+# reaching the hard edges are in design/TEST-SEAMS.10.md; the exclusion
+# policy is in design/COVERAGE-ALLOWLIST.10.md and ADR-008.
 GATE_FLOOR ?= 100
 GATE_PKGS := github.com/aql-lang/aql/...
 cover-gate:
@@ -342,7 +343,7 @@ cover-gate:
 	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
 	  ( cd $$m && go test -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
 	done
-	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -allow ./covergate/allowlist.tsv $(abspath $(COVER_DIR))/*.xout
+	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
 
 cover:
 	@mkdir -p $(COVER_DIR)

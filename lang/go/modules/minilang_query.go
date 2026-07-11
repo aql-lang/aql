@@ -33,7 +33,7 @@ func docToAny(v native.Value) any {
 	switch {
 	case v.Parent.ConformsTo(native.TMap):
 		m, err := native.AsMap(v)
-		if err != nil || m == nil {
+		if err != nil || m == nil { //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 			return native.ValueToAny(v)
 		}
 		out := make(map[string]any, m.Len())

@@ -164,16 +164,26 @@ func init() {
 	register(&Entry{
 		Word:    "fn",
 		Summary: "Create a function value with typed parameters.",
-		Description: "Parses a list of signature triples [input-types output-types body] " +
-			"into a function value. Usually used with def to bind the function to a name. " +
-			"Parameters can be named ({x: Number}) or unnamed. Multiple signatures " +
-			"(overloads) are supported by providing additional triples in the same list.",
+		Description: "Parses signature triples [input-types output-types body] " +
+			"into a function value. Two forms: the spec-list form `fn [[input] [output] [body] …]` " +
+			"takes a single list of triples (overloads are additional triples in the same list); " +
+			"the 3-arg form `fn input output body` takes one triple directly, for the common " +
+			"single-signature case. The 3-arg form requires a NON-LIST input (a bare type, a " +
+			"named param like x:Integer, or a literal pattern) — a list input always selects " +
+			"the spec-list form, so multi-param triples need the list form. Usually used with " +
+			"def to bind the function to a name. Parameters can be named (x:Integer) or unnamed.",
 		Notes: []string{
-			"fn takes a single list argument. The list length must be divisible by 3.",
+			"Spec-list form: fn takes a single list argument whose length is divisible by 3.",
 			"Each triple is: [input-params] [output-types] [body].",
-			"Named params use map syntax: {name: Type}. Unnamed params are bare types.",
+			"3-arg form: fn input output body — one triple; the input must be non-list and the body must be a […] list ([(tnot List) Any List] in the signature). fn x:Integer [Integer] [x mul 2] ≡ fn [[x:Integer] [Integer] [x mul 2]].",
+			"Named params use pair syntax: name:Type. Unnamed params are bare types. (An explicit map like {x: Integer} declares a single Map-typed param, not a named binding.)",
 			"Literal values (like 0) can be used as type constraints for pattern matching.",
 			"Use with def to bind: def name fn [...] or fn [...] def name.",
+		},
+		Examples: []string{
+			`def double fn [[x:Integer] [Integer] [x mul 2]]  double 5   ;# => 10`,
+			`def triple fn x:Integer [Integer] [x mul 3]  triple 5       ;# => 15 (3-arg form)`,
+			`def add10 fn Integer [Integer] [10 add]  add10 5            ;# => 15 (unnamed param)`,
 		},
 	})
 

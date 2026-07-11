@@ -32,7 +32,7 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 				match = false
 				break
 			}
-			if p.Pattern != nil {
+			if p.Pattern != nil && !p.Pattern.Carrier {
 				pat := *p.Pattern
 				if pat.Parent.Equal(TMap) && args[j].Parent.Equal(TMap) &&
 					pat.Data != nil && args[j].Data != nil {

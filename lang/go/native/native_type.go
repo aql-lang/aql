@@ -1244,7 +1244,7 @@ func convertToBigDecimal(src Value, base string) (Value, error) {
 	case src.Parent.ConformsTo(TBigInteger):
 		n, _ := AsBigInteger(src)
 		d, _, err := apd.NewFromString(n.String())
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return Value{}, fmt.Errorf("convert: cannot convert %s to BigDecimal", FormatBigInteger(n))
 		}
 		return NewBigDecimal(d), nil
@@ -1275,7 +1275,7 @@ func bigDecimalToBigIntTrunc(src Value) (*big.Int, error) {
 	if i := strings.IndexByte(s, '.'); i >= 0 {
 		s = s[:i]
 	}
-	if s == "" || s == "-" {
+	if s == "" || s == "-" { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		s = "0"
 	}
 	n, ok := new(big.Int).SetString(s, 10)
@@ -1295,13 +1295,13 @@ func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	switch {
 	case t.Equal(TMap):
 		m, err := eng.ConvertIdealToMap(src)
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, r.AqlError("convert_error", "convert to Map: "+err.Error(), "convert")
 		}
 		return []Value{m}, nil
 	case t.Equal(TList):
 		l, err := eng.ConvertIdealToList(src)
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return nil, r.AqlError("convert_error", "convert to List: "+err.Error(), "convert")
 		}
 		return []Value{l}, nil

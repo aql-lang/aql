@@ -217,7 +217,7 @@ func listenSvcHandler(args []native.Value, _ map[string]native.Value, _ []native
 
 	go func() {
 		defer func() {
-			if rec := recover(); rec != nil {
+			if rec := recover(); rec != nil { //covergate:allow acceptor-goroutine recover body: the loop calls only Accept (errors, never panics) and ForkConcurrent on a listener listenHandler mints valid; per-connection panics land in runConnSession's own covered recover (§native)
 				fmt.Fprintf(acceptorFork.ErrOutput, "[aql/net] listen acceptor crashed: %v\n", rec)
 			}
 		}()
@@ -394,7 +394,7 @@ func httpShape(msg native.Value) (string, string, bool) {
 func matchRouteTemplate(svc native.Value, method, path string) (string, native.Value, bool) {
 	for _, pat := range native.ServiceRoutePatterns(svc) {
 		mp, _ := native.AsMap(pat)
-		if mp == nil {
+		if mp == nil { //covergate:allow route patterns are stored only via serviceAddHandler, which gates them through RequireConcreteMap — a nil-AsMap pattern cannot be stored (§native)
 			continue
 		}
 		if mv, ok := mp.Get("method"); ok {
@@ -431,7 +431,7 @@ func matchPathTemplate(tmpl, path string) (native.Value, bool) {
 			if name == "" {
 				name = "rest"
 			}
-			if i > len(pSegs) {
+			if i > len(pSegs) { //covergate:allow star-case bounds guard: iteration i is reached only after i-1 passed the i>=len(pSegs) return, so i<=len(pSegs) always; the guard defends the pSegs[i:] slice (§native)
 				return native.Value{}, false
 			}
 			params.Set(name, native.NewString(strings.Join(pSegs[i:], "/")))

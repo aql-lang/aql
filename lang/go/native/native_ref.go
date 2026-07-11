@@ -218,6 +218,19 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 // forceArityAtomHandler is the by-name form `force-arity N foo`: it
 // resolves the captured atom to its bound function (sharing usurp's rules)
 // and wraps it. The function-form companion of the `/N` suffix.
+// unboundNameError raises undefined_word for a by-name reference whose
+// atom resolves to nothing, with the same did-you-mean the bare-word
+// path offers (diagnostics phase 4).
+func unboundNameError(reg *Registry, detail, name string) error {
+	err := reg.AqlError("undefined_word", detail, name)
+	if ae, ok := err.(*eng.AqlError); ok {
+		if s := eng.DidYouMean(name, reg.SuggestionCandidates()); s != "" {
+			ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
+		}
+	}
+	return err
+}
+
 func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	name, err := AsAtom(args[1])
 	if err != nil {
@@ -226,7 +239,7 @@ func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 	v, ok := eng.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
-			return nil, reg.AqlError("undefined_word", "force-arity: name "+name+" is not bound", name)
+			return nil, unboundNameError(reg, "force-arity: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("force-arity: name %s is not bound", name)
 	}
@@ -271,7 +284,7 @@ func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, re
 	v, ok := eng.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
-			return nil, reg.AqlError("undefined_word", word+": name "+name+" is not bound", name)
+			return nil, unboundNameError(reg, word+": name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("%s: name %s is not bound", word, name)
 	}
@@ -301,7 +314,7 @@ func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 	v, ok := eng.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
-			return nil, reg.AqlError("undefined_word", "usurp: name "+name+" is not bound", name)
+			return nil, unboundNameError(reg, "usurp: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("usurp: name %s is not bound", name)
 	}
@@ -329,7 +342,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 	v, ok := eng.ResolveRef(reg, name)
 	if !ok {
 		if reg != nil {
-			return nil, reg.AqlError("undefined_word", "ref: name "+name+" is not bound", name)
+			return nil, unboundNameError(reg, "ref: name "+name+" is not bound", name)
 		}
 		return nil, fmt.Errorf("ref: name %s is not bound", name)
 	}

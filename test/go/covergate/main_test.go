@@ -17,6 +17,23 @@ func writeProfile(t *testing.T, name, content string) string {
 	return p
 }
 
+// fixtureRoot writes repo-relative source files under a temp dir and returns
+// it, for tests that exercise //covergate:allow pragma scanning.
+func fixtureRoot(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for rel, src := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
 const profA = `mode: set
 github.com/aql-lang/aql/eng/go/a.go:1.1,2.2 3 1
 github.com/aql-lang/aql/eng/go/a.go:3.1,4.2 2 0
@@ -29,6 +46,15 @@ const profB = `mode: set
 github.com/aql-lang/aql/eng/go/a.go:3.1,4.2 2 7
 example.com/x/y.go:1.1,2.2 1 1
 `
+
+// plainFiles are source files matching profA/profB's repo paths with no
+// pragmas — enough lines to back every block's start line.
+func plainRoot(t *testing.T) string {
+	return fixtureRoot(t, map[string]string{
+		"eng/go/a.go":  "package a\nvar _ = 1\nvar _ = 2\nvar _ = 3\n",
+		"lang/go/b.go": "package b\nvar _ = 1\n",
+	})
+}
 
 func TestMergeAndTally(t *testing.T) {
 	blocks, err := mergeProfiles([]string{
@@ -73,6 +99,14 @@ func TestPctEmptyIsFull(t *testing.T) {
 	}
 }
 
+func TestBlockStart(t *testing.T) {
+	got := blockStart("github.com/aql-lang/aql/eng/go/a.go:42.7,45.3")
+	want := pragmaKey{"github.com/aql-lang/aql/eng/go/a.go", 42}
+	if got != want {
+		t.Errorf("blockStart = %+v, want %+v", got, want)
+	}
+}
+
 func TestMergeRejections(t *testing.T) {
 	cases := []struct{ name, content, wantErr string }{
 		{"missing fields", "mode: set\nnot-a-profile-line\n", "malformed profile line"},
@@ -90,12 +124,66 @@ func TestMergeRejections(t *testing.T) {
 	}
 }
 
+func TestScanPragmas(t *testing.T) {
+	root := fixtureRoot(t, map[string]string{
+		"eng/go/a.go": "package a\nvar _ = 1 //covergate:allow dead arm\nvar _ = 2\n",
+	})
+	blocks := map[string]block{
+		"github.com/aql-lang/aql/eng/go/a.go:2.1,3.2": {stmts: 1},
+		"example.com/out/z.go:1.1,2.2":                {stmts: 1}, // out-of-repo → skipped
+	}
+	pr, err := scanPragmas(root, blocks)
+	if err != nil {
+		t.Fatalf("scanPragmas: %v", err)
+	}
+	if len(pr) != 1 || pr[pragmaKey{"github.com/aql-lang/aql/eng/go/a.go", 2}] != "dead arm" {
+		t.Fatalf("pragmas = %v, want line 2 -> 'dead arm'", pr)
+	}
+
+	// A marker with no reason is rejected.
+	bad := fixtureRoot(t, map[string]string{
+		"eng/go/a.go": "package a\nvar _ = 1 //covergate:allow\n",
+	})
+	if _, err := scanPragmas(bad, map[string]block{
+		"github.com/aql-lang/aql/eng/go/a.go:2.1,2.2": {stmts: 1},
+	}); err == nil || !strings.Contains(err.Error(), "needs a reason") {
+		t.Errorf("empty-reason err = %v, want 'needs a reason'", err)
+	}
+
+	// A marker MENTIONED in a doc comment or a string literal is NOT a
+	// pragma (comment-token exact via go/parser), so it excludes nothing.
+	mention := fixtureRoot(t, map[string]string{
+		"eng/go/a.go": "package a\n\n// docs about //covergate:allow markers\nvar _ = \"//covergate:allow x\"\n",
+	})
+	if pr, err := scanPragmas(mention, map[string]block{
+		"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2": {stmts: 1},
+	}); err != nil || len(pr) != 0 {
+		t.Errorf("mention scan = %v, %v; want no pragmas", pr, err)
+	}
+
+	// A referenced source file missing under root is an error.
+	if _, err := scanPragmas(t.TempDir(), map[string]block{
+		"github.com/aql-lang/aql/eng/go/gone.go:1.1,2.2": {stmts: 1},
+	}); err == nil || !strings.Contains(err.Error(), "pragma scan") {
+		t.Errorf("missing-file err = %v, want 'pragma scan'", err)
+	}
+
+	// A source file that does not parse is an error.
+	broken := fixtureRoot(t, map[string]string{"eng/go/a.go": "package a\nfunc {\n"})
+	if _, err := scanPragmas(broken, map[string]block{
+		"github.com/aql-lang/aql/eng/go/a.go:1.1,2.2": {stmts: 1},
+	}); err == nil || !strings.Contains(err.Error(), "pragma scan") {
+		t.Errorf("parse-error err = %v, want 'pragma scan'", err)
+	}
+}
+
 func TestRunPassAndFail(t *testing.T) {
+	root := plainRoot(t)
 	full := writeProfile(t, "full.out", "mode: set\ngithub.com/aql-lang/aql/eng/go/a.go:1.1,2.2 3 1\n")
 	partial := writeProfile(t, "part.out", profA)
 
 	var out, errb bytes.Buffer
-	if code := run([]string{full}, &out, &errb); code != 0 {
+	if code := run([]string{"-root", root, full}, &out, &errb); code != 0 {
 		t.Fatalf("run(full) = %d, want 0; stderr %s", code, errb.String())
 	}
 	if !strings.Contains(out.String(), "PASS") || !strings.Contains(out.String(), "TOTAL") {
@@ -104,7 +192,7 @@ func TestRunPassAndFail(t *testing.T) {
 
 	out.Reset()
 	errb.Reset()
-	if code := run([]string{partial}, &out, &errb); code != 1 {
+	if code := run([]string{"-root", root, partial}, &out, &errb); code != 1 {
 		t.Fatalf("run(partial) = %d, want 1", code)
 	}
 	if !strings.Contains(errb.String(), "below the 100.0% floor") {
@@ -114,7 +202,7 @@ func TestRunPassAndFail(t *testing.T) {
 	// A lowered threshold admits the same partial profile (3/10 = 30%).
 	out.Reset()
 	errb.Reset()
-	if code := run([]string{"-threshold", "25", partial}, &out, &errb); code != 0 {
+	if code := run([]string{"-root", root, "-threshold", "25", partial}, &out, &errb); code != 0 {
 		t.Fatalf("run(-threshold 25) = %d, want 0; stderr %s", code, errb.String())
 	}
 }
@@ -132,29 +220,7 @@ func TestRunUsageErrors(t *testing.T) {
 	}
 }
 
-func TestLoadAllowlist(t *testing.T) {
-	path := writeProfile(t, "allow.tsv", strings.Join([]string{
-		"# a comment",
-		"",
-		"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2\treason: provably dead",
-		"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2",
-	}, "\n")+"\n")
-	allow, err := loadAllowlist(path)
-	if err != nil {
-		t.Fatalf("loadAllowlist: %v", err)
-	}
-	if len(allow) != 2 {
-		t.Fatalf("allowlist has %d entries, want 2: %v", len(allow), allow)
-	}
-	if _, ok := allow["github.com/aql-lang/aql/eng/go/a.go:3.1,4.2"]; !ok {
-		t.Error("reason-suffixed key not parsed to its bare block key")
-	}
-	if _, err := loadAllowlist(filepath.Join(t.TempDir(), "absent.tsv")); err == nil {
-		t.Error("missing allowlist file: want error, got none")
-	}
-}
-
-func TestAllowlistExcludes(t *testing.T) {
+func TestPragmaExcludes(t *testing.T) {
 	blocks, err := mergeProfiles([]string{
 		writeProfile(t, "a.out", profA),
 		writeProfile(t, "b.out", profB),
@@ -162,74 +228,109 @@ func TestAllowlistExcludes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Exclude lang/go's uncovered block; the remaining tree is fully
-	// covered, so the excluded 5 statements leave 6/6.
-	allow := map[string]struct{}{"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2": {}}
-	perModule, all, ex := tallyModules(blocks, allow)
+	// Exclude lang/go's uncovered block via a pragma on its opening line;
+	// the remaining tree is fully covered, so 6/6.
+	pragmas := map[pragmaKey]string{
+		{"github.com/aql-lang/aql/lang/go/b.go", 1}: "dead",
+	}
+	perModule, all, ex := tallyModules(blocks, pragmas)
 	if _, ok := perModule["lang/go"]; ok {
-		t.Errorf("allowlisted lang/go block still tallied: %+v", perModule["lang/go"])
+		t.Errorf("excluded lang/go block still tallied: %+v", perModule["lang/go"])
 	}
 	if all.covered != 6 || all.total != 6 {
-		t.Errorf("tally with allowlist = %+v, want 6/6", all)
+		t.Errorf("tally with pragma = %+v, want 6/6", all)
 	}
-	if ex.stmts != 5 {
-		t.Errorf("excluded stmts = %d, want 5", ex.stmts)
+	if ex.stmts != 5 || ex.blocks != 1 {
+		t.Errorf("excluded = %d stmts / %d blocks, want 5/1", ex.stmts, ex.blocks)
 	}
 
-	// An allowlisted block that is actually covered is reported for removal.
-	covered := map[string]struct{}{"github.com/aql-lang/aql/eng/go/a.go:1.1,2.2": {}}
-	if _, _, ex := tallyModules(blocks, covered); len(ex.nowCovered) != 1 {
-		t.Errorf("nowCovered = %v, want the covered a.go block", ex.nowCovered)
+	// A pragma whose line's blocks are all covered is reported for removal.
+	covered := map[pragmaKey]string{
+		{"github.com/aql-lang/aql/eng/go/a.go", 1}: "dead",
 	}
-	// A stale allowlist entry (no matching profiled block) is reported.
-	stale := map[string]struct{}{"github.com/aql-lang/aql/eng/go/gone.go:9.9,9.9": {}}
+	if _, _, ex := tallyModules(blocks, covered); len(ex.nowCovered) != 1 {
+		t.Errorf("nowCovered = %v, want the covered a.go line", ex.nowCovered)
+	}
+	// A pragma line that opens no profiled block is reported as stale.
+	stale := map[pragmaKey]string{
+		{"github.com/aql-lang/aql/eng/go/gone.go", 9}: "dead",
+	}
 	if _, _, ex := tallyModules(blocks, stale); len(ex.stale) != 1 {
 		t.Errorf("stale = %v, want the gone.go entry", ex.stale)
 	}
+
+	// Line collision: a pragma line holding BOTH a covered reaching block
+	// and an uncovered guard body excludes only the guard; the covered
+	// sibling is tallied, and there is no false now-covered/stale alarm.
+	collide, err := mergeProfiles([]string{writeProfile(t, "c.out",
+		"mode: set\n"+
+			"github.com/aql-lang/aql/eng/go/c.go:5.2,5.14 1 3\n"+
+			"github.com/aql-lang/aql/eng/go/c.go:5.14,7.3 1 0\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp := map[pragmaKey]string{{"github.com/aql-lang/aql/eng/go/c.go", 5}: "guard"}
+	_, cAll, cEx := tallyModules(collide, cp)
+	if len(cEx.nowCovered) != 0 || len(cEx.stale) != 0 {
+		t.Errorf("collision: nowCovered=%v stale=%v, want none", cEx.nowCovered, cEx.stale)
+	}
+	if cEx.blocks != 1 || cEx.stmts != 1 {
+		t.Errorf("collision: excluded %d stmts / %d blocks, want 1/1 (guard only)", cEx.stmts, cEx.blocks)
+	}
+	if cAll.covered != 1 || cAll.total != 1 {
+		t.Errorf("collision tally = %+v, want 1/1 (reaching block counted, covered)", cAll)
+	}
 }
 
-func TestRunWithAllowlist(t *testing.T) {
-	partial := writeProfile(t, "part.out", profA) // has one uncovered lang/go block
+func TestRunWithPragmas(t *testing.T) {
+	partial := writeProfile(t, "part.out", profA) // one uncovered lang/go block
 	var out, errb bytes.Buffer
 
-	// Allowlisting every uncovered block lets the gate pass at 100%.
-	allow := writeProfile(t, "ok.tsv",
-		"github.com/aql-lang/aql/lang/go/b.go:1.1,2.2\tdead\n"+
-			"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2\tdead\n")
-	if code := run([]string{"-allow", allow, partial}, &out, &errb); code != 0 {
-		t.Fatalf("run with allowlist = %d, want 0; stderr %s", code, errb.String())
+	// A pragma on the uncovered block's opening line lets the gate pass.
+	okRoot := fixtureRoot(t, map[string]string{
+		"eng/go/a.go":  "package a\nvar _ = 1\nvar _ = 2 //covergate:allow dead\nvar _ = 3\n",
+		"lang/go/b.go": "package b //covergate:allow dead\nvar _ = 1\n",
+	})
+	if code := run([]string{"-root", okRoot, partial}, &out, &errb); code != 0 {
+		t.Fatalf("run with pragmas = %d, want 0; stderr %s", code, errb.String())
 	}
 	if !strings.Contains(out.String(), "allowlisted") {
-		t.Errorf("pass output missing allowlist note: %q", out.String())
+		t.Errorf("pass output missing exclusion note: %q", out.String())
 	}
 
-	// A now-covered allowlist entry fails the gate (must be graduated).
+	// A pragma on a now-covered block fails the gate (must be graduated).
 	out.Reset()
 	errb.Reset()
-	nowCov := writeProfile(t, "cov.tsv", "github.com/aql-lang/aql/eng/go/a.go:1.1,2.2\n")
-	if code := run([]string{"-allow", nowCov, partial}, &out, &errb); code != 1 {
-		t.Fatalf("run with now-covered allowlist = %d, want 1", code)
+	nowCov := fixtureRoot(t, map[string]string{
+		"eng/go/a.go":  "package a //covergate:allow was-dead\nvar _ = 1\nvar _ = 2\nvar _ = 3\n",
+		"lang/go/b.go": "package b //covergate:allow dead\nvar _ = 1\n",
+	})
+	if code := run([]string{"-root", nowCov, partial}, &out, &errb); code != 1 {
+		t.Fatalf("run with now-covered pragma = %d, want 1", code)
 	}
 	if !strings.Contains(errb.String(), "now covered") {
 		t.Errorf("stderr = %q, want now-covered notice", errb.String())
 	}
 
-	// A stale allowlist entry fails the gate.
+	// A pragma on a line that opens no block fails as stale.
 	out.Reset()
 	errb.Reset()
-	stale := writeProfile(t, "stale.tsv", "github.com/aql-lang/aql/eng/go/gone.go:1.1,2.2\n")
-	if code := run([]string{"-allow", stale, partial}, &out, &errb); code != 1 {
-		t.Fatalf("run with stale allowlist = %d, want 1", code)
+	staleRoot := fixtureRoot(t, map[string]string{
+		"eng/go/a.go":  "package a\nvar _ = 1\nvar _ = 2 //covergate:allow dead\nvar _ = 3 //covergate:allow nothing-here\n",
+		"lang/go/b.go": "package b //covergate:allow dead\nvar _ = 1\n",
+	})
+	if code := run([]string{"-root", staleRoot, partial}, &out, &errb); code != 1 {
+		t.Fatalf("run with stale pragma = %d, want 1", code)
 	}
 	if !strings.Contains(errb.String(), "stale") {
 		t.Errorf("stderr = %q, want stale notice", errb.String())
 	}
 
-	// An unreadable allowlist file is a usage error.
+	// A referenced source file missing under -root is a usage error.
 	out.Reset()
 	errb.Reset()
-	if code := run([]string{"-allow", filepath.Join(t.TempDir(), "absent.tsv"), partial}, &out, &errb); code != 2 {
-		t.Errorf("run with missing allowlist = %d, want 2", code)
+	if code := run([]string{"-root", t.TempDir(), partial}, &out, &errb); code != 2 {
+		t.Errorf("run with unresolvable root = %d, want 2", code)
 	}
 }
 

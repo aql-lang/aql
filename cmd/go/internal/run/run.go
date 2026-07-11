@@ -60,6 +60,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	noCompileFlag := fs.Bool("no-compile", false, "run the interpreter instead of the default bytecode compiler; wins over --compile/--force-compile and their env vars (also enabled by AQL_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
+	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	compileReport := fs.Bool("compile-report", false, "after the run, print each runtime-constructed callback's stamp outcome (compiled to the VM, or the refusal reason) to stderr; requires a compiled mode")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
@@ -108,8 +109,9 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// keeps the verbose behavior (all diagnostics, every severity).
 		// Sequenced after the guard-narrowing legalization per the plan's
 		// FP-honesty rule; `aql check --soft` remains the advisory surface.
+		color := lang.ResolveColor(stderr, *colorMode)
 		if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
-			if err := check.Preflight(stderr, source, reg, *seed, *checkFirst); err != nil {
+			if err := check.PreflightColor(stderr, source, reg, *seed, *checkFirst, color); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
 			}
@@ -135,7 +137,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if *compileReport {
 			report = stderr
 		}
-		if err := buildrt.EvalReport(stdout, report, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag)); err != nil {
+		if err := buildrt.EvalReport(stdout, report, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -248,4 +250,10 @@ func envEnabled(name string) bool {
 // (design/aql-bytecode-plan.0.md, ground rules).
 func EvalOptionsMode(w io.Writer, source string, o lang.Options, mode CompileMode) error {
 	return buildrt.Eval(w, source, o, mode)
+}
+
+// EvalOptionsModeColor is EvalOptionsMode with the caller-resolved
+// color decision for structured error rendering (the --color flag).
+func EvalOptionsModeColor(w io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
+	return buildrt.EvalColor(w, source, o, mode, color)
 }

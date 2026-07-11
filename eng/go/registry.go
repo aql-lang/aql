@@ -968,6 +968,19 @@ type CheckDiagnostic struct {
 	// flag — the information (the expression always raises, and where the
 	// trap is) survives without a false error verdict.
 	CaughtAtRuntime bool `json:"caughtAtRuntime,omitempty"`
+
+	// --- Structured diagnostic payload (design/DIAGNOSTICS.0.md). ---
+	// The additive rich layer rendered by RenderCheckDiagnostic beneath
+	// the stable one-line `check:` header; every field omitempty so the
+	// JSON/LSP wire shape only grows.
+
+	// Src is the offending token's source text — the caret width for
+	// the rich source excerpt (falls back to Word when empty).
+	Src string `json:"src,omitempty"`
+	// Notes are freestanding explanatory lines (`= note: …`).
+	Notes []string `json:"notes,omitempty"`
+	// Suggestions are actionable fixes (`= help: …`).
+	Suggestions []DiagSuggestion `json:"suggestions,omitempty"`
 }
 
 // NewRegistry creates an empty registry.
@@ -1358,11 +1371,15 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 			if !ok {
 				return nil, fmt.Errorf("undefined: %s", name)
 			}
-			// A 0-arg fn courtesy-dispatches its 0-arg sig; every other
+			// A 0-arg fn courtesy-dispatches its 0-arg sig. Every other
 			// shape (no 0-arg sig, a plain Function, any other binding)
-			// is an unmatched call returning the same signature error,
-			// so that return is hoisted out of the branches.
-			hasForwardSig := false
+			// is an unmatched call. A fn that TAKES arguments and reached
+			// this 0-arg fallback (e.g. `inc inc 5`, `f a g b` — forward
+			// collection could not gather them) is intercepted UPSTREAM:
+			// stepWord raises the rich sigError before the fallback is
+			// dispatched (the fnCourtesyDispatches guard in engine.go), so
+			// the only shape reaching the Impl without a 0-arg handler
+			// falls straight through to the shared no-match error.
 			if _, ok := top.Data.(FnDefInfo); ok {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
@@ -1370,27 +1387,10 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
 							return sig.dispatchHandler()(nil, nil, nil, r)
 						}
-						if sig.TotalArgs() > 0 {
-							hasForwardSig = true
-						}
 					}
 				}
 			}
-			// A fn that takes arguments reached its 0-arg fallback,
-			// which means forward collection couldn't gather them —
-			// almost always because the next word (another call, a
-			// builtin) was hit first, e.g. `inc inc 5` or `f a g b`.
-			// (Swapped-argument tuples are intercepted with a
-			// dedicated hint BEFORE this fallback dispatches — see
-			// the reorder probe in engine.go.)
-			if hasForwardSig {
-				return nil, r.AqlErrorHint("signature_error",
-					"no matching signature for "+name, name,
-					"forward args for "+name+" may have run into the next word; "+
-						"group the call in parens so its RESULT becomes the argument — ("+name+" …). "+
-						"`end` / `;` only ends the statement — it does NOT turn a following word into a nested call.")
-			}
-			return nil, r.AqlError("signature_error", "no matching signature for "+name, name)
+			return nil, r.AqlError("signature_error", noMatchDetail(name), name)
 		}),
 	}
 }
@@ -1772,7 +1772,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Pop error here means the args stack is nil — a misconfigured
 	// registry; surface it only if sub.Run didn't already fail (the
 	// run error is more informative).
-	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
+	if _, popErr := r.Args.Pop(); popErr != nil && err == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		err = popErr
 	}
 	r.PopFnBaseline()
@@ -1976,7 +1976,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
 	if inputT := predSig.Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
-		if IsBareTypeNode(candidate) {
+		if IsBareTypeNode(candidate) { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
 		} else if !candidate.Parent.ConformsTo(inputT) {
