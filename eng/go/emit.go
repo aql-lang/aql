@@ -6200,6 +6200,10 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			}
 			return nil, "fn " + rec.name + " was never compiled", false
 		}
+		// A unit finished BEFORE a later dispatch armed es.dynEnv planned its
+		// value-def promotion un-widened; seat its dyn-bound computed sources
+		// now so lowerDynBind can re-push them (no-op unless es.dynEnv).
+		es.promoteLateDynBind(rec)
 		diverged := fragDiverges(rec.frag)
 		// A unit that installs dynamic-scope bindings — a body-local def of a
 		// dyn-read name, or a PARAM some other fn reads dynamically — must not
