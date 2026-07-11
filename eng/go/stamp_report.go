@@ -43,6 +43,15 @@ func (l *stampLog) record(ev StampEvent) {
 	l.mu.Unlock()
 }
 
+func (l *stampLog) reset() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.events = nil
+	l.mu.Unlock()
+}
+
 // StampEvents returns a copy of the stamp attempts recorded on this
 // registry's arming (nil when runtime stamping was never armed).
 func (r *Registry) StampEvents() []StampEvent {
@@ -60,5 +69,16 @@ func (r *Registry) StampEvents() []StampEvent {
 func (r *Registry) recordStampEvent(ev StampEvent) {
 	if r != nil {
 		r.stampLog.record(ev)
+	}
+}
+
+// ResetStampLog drops the recorded stamp attempts while leaving stamping armed
+// (a no-op when unarmed). RunCompiled's interpreter-fallback path calls it
+// after RestoreForCompile rolls back the check pass's in-place module-load
+// stamps, so only the fallback re-run's authoritative stamps reach the report
+// — otherwise -compile-report prints each rolled-back stamp twice.
+func (r *Registry) ResetStampLog() {
+	if r != nil {
+		r.stampLog.reset()
 	}
 }

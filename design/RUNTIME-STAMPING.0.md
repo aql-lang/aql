@@ -50,10 +50,24 @@ echo microbenchmark (whose handler IS a top-level store-fn const) got ~50×.
   see the stamp.
 
 Policy: `Registry.EnableRuntimeStamping()`, default OFF. Armed by
-`RunCompiled` / `RunCompiledStrict` (kept armed on their interpreter
-fallback — still compiled-mode requests), inherited by `ForkConcurrent`
-(shallow copy) and by module sub-registries (`RunModuleBody`). Plain `Run` /
-`-no-compile` never stamp — the mode contract stays exact.
+`RunCompiled` / `RunCompiledStrict` **for the duration of the request** (kept
+armed on their interpreter fallback — still compiled-mode requests) and
+RESTORED to its prior state on return (`DisableRuntimeStamping`, unless the
+caller had armed the registry itself). The restore keeps a compiled-mode
+request from leaking the armed flag into a later plain `Run` on a reused
+instance — a plain `Run` / `-no-compile` never stamps, and the mode contract
+stays exact. Disarming on return is sound because a callback already stamped
+keeps its VM path regardless of the flag (`InvokeCallback` gates on the stored
+`CompiledRef`, not the flag), so a service that keeps serving after the
+top-level run returns still dispatches its stored handlers on the VM. The flag
+is inherited by `ForkConcurrent` (shallow copy) and by module sub-registries
+(`RunModuleBody`).
+
+Attribution log freshness: on the interpreter-fallback path `RunCompiled`
+calls `ResetStampLog` after `RestoreForCompile`. The check pass's in-place
+module-load stamps are rolled back with the scopes, so the log must drop them
+before the fallback re-run records the authoritative ones — otherwise
+`-compile-report` prints each rolled-back stamp twice.
 
 Trigger sites:
 
@@ -163,7 +177,14 @@ trigger likely covers Model actions nearly for free).
 ## Invariants pinned by tests
 
 - Mode contract: unarmed registries never stamp
-  (`TestStampDetachedFnPolicyGate`, unarmed twins in every trigger test).
+  (`TestStampDetachedFnPolicyGate`, unarmed twins in every trigger test); a
+  compiled-mode request arms stamping only for its duration and restores the
+  prior state on return, so it never leaks into a later plain `Run` on a
+  reused instance (`TestCompiledEntriesArmRuntimeStamping`,
+  `TestRunCompiledDoesNotLeakStampingIntoLaterRun`,
+  `TestDisableAndResetStampLog`); the interpreter fallback drops the
+  rolled-back check-pass stamps so `-compile-report` never double-counts
+  (`TestRunCompiledFallbackNoDuplicateStampReport`).
 - Isolation: a mid-run stamp leaves the parent's Defs depths/gens,
   CheckState identity, and diagnostics untouched
   (`TestStampFnValueParentStateUntouched`).

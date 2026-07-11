@@ -230,50 +230,118 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	}
 }
 
-// RunCompiled / RunCompiledStrict arm the policy; a plain Run never does —
-// the mode contract that keeps -no-compile a pure interpreter path.
+// stampModuleSrc constructs a module whose helper fn stamps in place at load
+// when the importing registry is armed — the observable that proves runtime
+// stamping was active during a request.
+const stampModuleSrc = `module [ def helper (fn [[x:Integer] [Integer] [x add 1]]) export "M" {helper: helper/r} ]`
+
+// countStamped returns how many report events stamped a fn of the given name.
+func countStamped(events []eng.StampEvent, name string) int {
+	n := 0
+	for _, ev := range events {
+		if ev.Name == name && ev.Stamped {
+			n++
+		}
+	}
+	return n
+}
+
+// RunCompiled / RunCompiledStrict arm the policy FOR THE DURATION of the
+// request and RESTORE the prior state on return; a plain Run never arms it —
+// the mode contract that keeps -no-compile a pure interpreter path, and that
+// keeps a compiled-mode request from leaking the armed flag into a later Run.
 func TestCompiledEntriesArmRuntimeStamping(t *testing.T) {
 	a, _ := New()
-	if _, err := a.Run(`1 add 1`); err != nil {
+	if _, err := a.Run(`import ` + stampModuleSrc); err != nil {
 		t.Fatal(err)
 	}
 	if a.registry.RuntimeStampingEnabled() {
 		t.Fatalf("plain Run must not arm runtime stamping")
 	}
+	if got := countStamped(a.StampReport(), "helper"); got != 0 {
+		t.Fatalf("plain Run stamped the helper %d times; -no-compile must never stamp", got)
+	}
 
+	// RunCompiled: stamping is ACTIVE during the request (the module helper
+	// stamps at load) but RESTORED to unarmed on return.
 	b, _ := New()
-	if _, _, err := b.RunCompiled(`1 add 1`); err != nil {
+	if _, _, err := b.RunCompiled(`import ` + stampModuleSrc); err != nil {
 		t.Fatal(err)
 	}
-	if !b.registry.RuntimeStampingEnabled() {
-		t.Fatalf("RunCompiled must arm runtime stamping")
+	if b.registry.RuntimeStampingEnabled() {
+		t.Fatalf("RunCompiled must restore the prior (unarmed) flag on return")
+	}
+	if got := countStamped(b.StampReport(), "helper"); got != 1 {
+		t.Fatalf("RunCompiled must stamp the helper once during the request, got %d", got)
 	}
 
 	c, _ := New()
-	if _, err := c.RunCompiledStrict(`1 add 1`); err != nil {
+	if _, err := c.RunCompiledStrict(`import ` + stampModuleSrc); err != nil {
 		t.Fatal(err)
 	}
-	if !c.registry.RuntimeStampingEnabled() {
-		t.Fatalf("RunCompiledStrict must arm runtime stamping")
+	if c.registry.RuntimeStampingEnabled() {
+		t.Fatalf("RunCompiledStrict must restore the prior (unarmed) flag on return")
+	}
+	if got := countStamped(c.StampReport(), "helper"); got != 1 {
+		t.Fatalf("RunCompiledStrict must stamp the helper once during the request, got %d", got)
 	}
 
-	// The fallback path of RunCompiled (uncompilable program) keeps the flag:
-	// stored callbacks still earn the VM under compiled-mode requests. The
-	// mid-expression fn-value apply refuses whole-program compilation
-	// ("fn-value application bounded by a paren").
-	d, _ := New()
-	out, compiled, err := d.RunCompiled(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)`)
+	// A caller that armed the registry ITSELF keeps it armed: restore returns to
+	// the prior state, it does not force-disarm.
+	e, _ := New()
+	e.registry.EnableRuntimeStamping()
+	if _, _, err := e.RunCompiled(`1 add 1`); err != nil {
+		t.Fatal(err)
+	}
+	if !e.registry.RuntimeStampingEnabled() {
+		t.Fatalf("RunCompiled must not disarm a flag the caller armed")
+	}
+}
+
+// The mode contract, end to end: after a compiled-mode request restores the
+// flag, a subsequent plain Run must NOT stamp a newly-constructed callback —
+// the armed flag never leaks across the RunCompiled boundary. (Already-stamped
+// callbacks keep their VM path regardless — InvokeCallback gates on the stored
+// ref — so restoring the flag is safe.)
+func TestRunCompiledDoesNotLeakStampingIntoLaterRun(t *testing.T) {
+	a, _ := New()
+	// A service handler stamps at its store site during the compiled request.
+	if _, _, err := a.RunCompiled(`def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ 10 ]) svc`); err != nil {
+		t.Fatal(err)
+	}
+	if a.registry.RuntimeStampingEnabled() {
+		t.Fatalf("RunCompiled leaked the armed flag")
+	}
+	before := len(a.StampReport())
+
+	// A later plain Run that constructs a fresh handler must add no stamps.
+	if _, err := a.Run(`def svc2 (service {}) add {cmd:"Y"} ([req:Map state:Any] => [ 20 ]) svc2`); err != nil {
+		t.Fatal(err)
+	}
+	if after := len(a.StampReport()); after != before {
+		t.Fatalf("plain Run after RunCompiled recorded %d new stamps; -no-compile must never stamp", after-before)
+	}
+}
+
+// The interpreter-fallback path must not double-count the check pass's in-place
+// module-load stamps: RestoreForCompile rolls them back, so ResetStampLog drops
+// them and only the fallback re-run's authoritative stamps reach the report.
+func TestRunCompiledFallbackNoDuplicateStampReport(t *testing.T) {
+	// A stampable module import followed by an uncompilable tail (fn-value
+	// applied inside a paren — "fn-value application bounded by a paren") so the
+	// whole program falls back to the interpreter after the check pass stamped
+	// the module helper in place.
+	src := `import ` + stampModuleSrc + ` def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)`
+	a, _ := New()
+	_, compiled, err := a.RunCompiled(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if compiled {
 		t.Fatalf("expected the interpreter fallback for the refusing program")
 	}
-	if len(out) != 1 {
-		t.Fatalf("fallback result: %v", out)
-	}
-	if !d.registry.RuntimeStampingEnabled() {
-		t.Fatalf("the compiled-mode fallback must keep runtime stamping armed")
+	if got := countStamped(a.StampReport(), "helper"); got != 1 {
+		t.Fatalf("helper stamped %d times in the report; the rolled-back check-pass stamp must not double-count", got)
 	}
 }
 

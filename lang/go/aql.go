@@ -696,13 +696,26 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	// Compiled execution requested: arm detached fn-unit stamping so
 	// runtime-constructed callbacks (service handlers, custom codec fns)
 	// compile to units at their store sites (eng.StampDetachedFn). The flag
-	// stays armed on the interpreter FALLBACK below — the top level then
+	// stays armed through the interpreter FALLBACK below — the top level then
 	// interprets but stored callbacks still earn the VM path, which is the
-	// compiled mode's contract; a plain Run (-no-compile) never arms it.
+	// compiled mode's contract. It is RESTORED to its prior state on return
+	// (defer) so a compiled-mode request never leaks the armed flag into a
+	// later plain Run (-no-compile) on a reused instance; disarming is safe
+	// because a callback already stamped keeps its VM path regardless of the
+	// flag (InvokeCallback gates on the stored ref). Only this call's own
+	// arming is undone: a caller that armed the registry itself keeps it armed.
+	wasArmed := a.registry.RuntimeStampingEnabled()
 	a.registry.EnableRuntimeStamping()
+	if !wasArmed {
+		defer a.registry.DisableRuntimeStamping()
+	}
 	prog, _, _, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
 		a.registry.RestoreForCompile(snap)
+		// The check pass's in-place module-load stamps were rolled back with the
+		// scopes; drop them so -compile-report shows only the fallback re-run's
+		// authoritative stamps, not each rolled-back stamp twice.
+		a.registry.ResetStampLog()
 		out, rerr := a.Run(src)
 		return out, false, rerr
 	}
@@ -721,6 +734,7 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 		// only burn the same budget again.
 		if runtimeShouldFallback(err) {
 			a.registry.RestoreForCompile(snap)
+			a.registry.ResetStampLog()
 			out, rerr := a.Run(src)
 			return out, false, rerr
 		}
@@ -745,8 +759,14 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 func (a *AQL) RunCompiledStrict(src string) ([]any, error) {
 	snap := a.registry.SnapshotForCompile()
 	// Same arming as RunCompiled: force mode is compiled execution, so
-	// runtime-constructed callbacks stamp at their store sites too.
+	// runtime-constructed callbacks stamp at their store sites too. Restored to
+	// its prior state on return so the armed flag never leaks into a later plain
+	// Run on a reused instance (see RunCompiled).
+	wasArmed := a.registry.RuntimeStampingEnabled()
 	a.registry.EnableRuntimeStamping()
+	if !wasArmed {
+		defer a.registry.DisableRuntimeStamping()
+	}
 	prog, reason, _, err := a.CompileCheck(src)
 	if err != nil {
 		a.registry.RestoreForCompile(snap)

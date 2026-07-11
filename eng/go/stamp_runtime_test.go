@@ -349,3 +349,50 @@ func TestStampReportCollector(t *testing.T) {
 		t.Fatalf("unarmed record must stay inert")
 	}
 }
+
+// DisableRuntimeStamping / ResetStampLog are the compiled-request scope helpers
+// (RunCompiled restores the flag and drops the rolled-back check-pass stamps).
+// A disarm undoes ONLY the flag — the attribution log survives so StampReport
+// still reads after the run; a reset clears the log but leaves stamping armed.
+// Both stay inert on nil / unarmed registries.
+func TestDisableAndResetStampLog(t *testing.T) {
+	r := stampReg(t)
+	r.EnableRuntimeStamping()
+	r.recordStampEvent(StampEvent{Name: "a", Stamped: true})
+	r.recordStampEvent(StampEvent{Name: "b", Stamped: true})
+	if got := len(r.StampEvents()); got != 2 {
+		t.Fatalf("armed log must hold 2 events, got %d", got)
+	}
+	// ResetStampLog clears the events but keeps stamping armed.
+	r.ResetStampLog()
+	if got := len(r.StampEvents()); got != 0 {
+		t.Fatalf("reset must clear the log, got %d", got)
+	}
+	if !r.RuntimeStampingEnabled() {
+		t.Fatalf("reset must not disarm stamping")
+	}
+	// DisableRuntimeStamping disarms WITHOUT wiping the log.
+	r.recordStampEvent(StampEvent{Name: "c", Stamped: true})
+	r.DisableRuntimeStamping()
+	if r.RuntimeStampingEnabled() {
+		t.Fatalf("DisableRuntimeStamping must disarm")
+	}
+	if got := len(r.StampEvents()); got != 1 {
+		t.Fatalf("disarm must leave the log intact, got %d", got)
+	}
+
+	// Unarmed registry: ResetStampLog hits the nil-log guard (stampLog.reset),
+	// inert.
+	plain := stampReg(t)
+	plain.ResetStampLog()
+	if plain.StampEvents() != nil {
+		t.Fatalf("reset on an unarmed registry must stay inert")
+	}
+	// nil receivers stay inert (no panic).
+	var nilR *Registry
+	nilR.DisableRuntimeStamping()
+	nilR.ResetStampLog()
+	if nilR.RuntimeStampingEnabled() {
+		t.Fatalf("nil registry reports armed")
+	}
+}

@@ -450,6 +450,19 @@ func (r *Registry) RuntimeStampingEnabled() bool {
 	return r != nil && r.runtimeStamping
 }
 
+// DisableRuntimeStamping disarms detached fn-unit compilation — the inverse of
+// EnableRuntimeStamping. It stops only NEW stamps: a callback already stamped
+// keeps its VM path (InvokeCallback gates on the stored CompiledRef, not this
+// flag), and the stamp-attribution log is left intact so StampReport still
+// reads after the run. RunCompiled / RunCompiledStrict use it to restore the
+// prior interpreter contract on return, so a compiled-mode request never leaks
+// the armed flag into a later plain Run (`-no-compile`) on a reused instance.
+func (r *Registry) DisableRuntimeStamping() {
+	if r != nil {
+		r.runtimeStamping = false
+	}
+}
+
 // NextGensym mints the next fresh gensym name (`tmp$g<n>`, n starting at 1).
 // Monotonic per registry; the `gensym` word wraps the result in an Atom. The
 // name is a valid word identifier so it can be used as a `def` binder.
