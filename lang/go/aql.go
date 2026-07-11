@@ -683,6 +683,27 @@ func convertResults(result []eng.Value) []any {
 //     A genuine runaway trips evaluation_limit fast in both (the VM does not
 //     fall back on it — that would only re-burn the same budget).
 func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
+	out, ran, _, err := a.RunCompiledReason(src)
+	return out, ran, err
+}
+
+// RunCompiledReason is RunCompiled with the whole-program compilation-refusal
+// reason surfaced as a third return, for tooling (chiefly the CLI's performance
+// warning) that needs to know WHY a run fell back to the interpreter. It runs
+// identically to RunCompiled — same results, same ranCompiled, same error — and
+// additionally reports:
+//
+//   - "" when the program ran on the VM (ranCompiled true), or when the fallback
+//     was NOT a performance refusal: a statically-invalid program (a parse/check
+//     error, or the "check diagnostics" sentinel — it would fail in both engines)
+//     and a runtime soundness bailout (an internal_error re-run, a latent
+//     compiler bug the differential gate catches, not a compilable-subset gap).
+//   - the first offending construct otherwise: a GENUINE whole-program refusal
+//     (CompileCheck returned a nil Program with no check error) that silently
+//     fell back to the slower interpreter (design/COMPILABLE-SUBSET.md §1 — the
+//     refusal is "slow, not wrong"). A refusal is surprising performance debt,
+//     so the CLI surfaces this reason as a warning.
+func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 	// CompileCheck executes the program in check mode, so its
 	// RunInCheckMode words (def/import/type/macro, the Test harness)
 	// leave real side effects on the registry. The COMPILED path needs
@@ -709,7 +730,7 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 	if !wasArmed {
 		defer a.registry.DisableRuntimeStamping()
 	}
-	prog, _, _, err := a.CompileCheck(src)
+	prog, reason, _, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
 		a.registry.RestoreForCompile(snap)
 		// The check pass's in-place module-load stamps were rolled back with the
@@ -717,7 +738,14 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 		// authoritative stamps, not each rolled-back stamp twice.
 		a.registry.ResetStampLog()
 		out, rerr := a.Run(src)
-		return out, false, rerr
+		// Report the reason ONLY for a genuine performance refusal. A
+		// statically-invalid program (err != nil, or the "check diagnostics"
+		// sentinel) fails in both engines — the interpreter fallback raises the
+		// real error — so it is not a fallback worth warning about.
+		if err != nil || reason == "check diagnostics" {
+			reason = ""
+		}
+		return out, false, reason, rerr
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
@@ -731,16 +759,17 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 		// interpreter by the differential gate and are returned as-is — the
 		// resource limits in particular fail FAST in both engines by design
 		// (see the step-budget note above), so re-running the interpreter would
-		// only burn the same budget again.
+		// only burn the same budget again. The program DID compile, so this is
+		// not a compilable-subset refusal — report no reason.
 		if runtimeShouldFallback(err) {
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
 			out, rerr := a.Run(src)
-			return out, false, rerr
+			return out, false, "", rerr
 		}
-		return nil, true, err
+		return nil, true, "", err
 	}
-	return convertResults(result), true, nil
+	return convertResults(result), true, "", nil
 }
 
 // RunCompiledStrict is RunCompiled in FORCE mode: it REQUIRES the bytecode

@@ -37,6 +37,7 @@ type census struct {
 	refused  int // nil Program, no check error
 
 	refusalBuckets map[string]int // normaliseReason -> count, over refused rows only
+	refusedRows    []refusedRow   // one entry per refused row, in corpus order
 
 	// Re-scoped P7 partition (design/aql-bytecode-completion.0.md §3) over the
 	// not-fully-native rows (refused OR islanded): tier 1 interpreter-only
@@ -49,6 +50,16 @@ type census struct {
 	tier1By    map[string]int
 	tier2By    map[string]int
 	computeBy  map[string]int
+}
+
+// refusedRow identifies one spec row the bytecode compiler refused to lower —
+// enough for TestRefusalsAreFailures to fail on it by exact source and point a
+// contributor at the offending row.
+type refusedRow struct {
+	file   string // spec basename, e.g. "apply.tsv"
+	line   int    // 1-based line within the file
+	input  string // the row's source (the trimmed first TSV column)
+	reason string // the whole-program refusal reason
 }
 
 var (
@@ -100,7 +111,9 @@ func computeCensus() (*census, error) {
 		}
 		scanner := bufio.NewScanner(f)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+		lineNo := 0
 		for scanner.Scan() {
+			lineNo++
 			line := strings.TrimRight(scanner.Text(), " \t")
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
@@ -134,6 +147,9 @@ func computeCensus() (*census, error) {
 			} else {
 				c.refused++
 				c.refusalBuckets[normaliseReason(reason)]++
+				c.refusedRows = append(c.refusedRows, refusedRow{
+					file: e.Name(), line: lineNo, input: input, reason: reason,
+				})
 			}
 			if prog != nil && !islanded {
 				continue // fully native — outside the tier partition
