@@ -88,6 +88,15 @@ type bytesBehavior struct{}
 
 func (bytesBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
 
+// BakeableConst opts Bytes into the compiler's const pool
+// (eng.ConstBakeable): Bytes is immutable — no word mutates the backing
+// array in place (BYTES.10.md §4; newBytes's ownership contract) — and
+// already shares that array zero-copy on clone/fork/send, so a pooled
+// const shares exactly as the interpreter does. This is what lets a
+// module-scope Bytes binding (mini-s3's s3-crlf delimiter) bake into a
+// stored-fn unit instead of refusing the unit.
+func (bytesBehavior) BakeableConst(_ Value) bool { return true }
+
 // Format renders Bytes as length-capped hex, e.g. Bytes<68 65 6c 6c 6f>.
 func (bytesBehavior) Format(v Value) string {
 	b, ok := asBytes(v)

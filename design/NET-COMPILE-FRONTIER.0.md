@@ -1,5 +1,60 @@
 # NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
 
+> **ADDENDUM 2 (2026-07-11 — mini-s3 walls, 2 closed / 2 mapped).** Two of
+> mini-s3's walls are CLOSED as compiler extensions, taking its stamp state
+> from 9/22 units to **18/22** (measured with `-compile-report` over the
+> full PUT/HEAD/resume/range/list/delete flow, byte-correct output):
+>
+> 1. **Module-binding Bytes operand (was `dynamic input at recv-until`,
+>    6 units).** Every `recv-until conn s3-crlf {…}` site refused because
+>    the module-level `def s3-crlf (convert Bytes "\r\n")` read had no
+>    compiled home: Bytes is ExtensionPayload-backed, and `isInertConst`
+>    could not admit an opaque extension payload. Fixed with the
+>    `ConstBakeable` TypeBehavior capability (typebehavior.go): an
+>    extension type whose values are immutable (Bytes — BYTES.10.md §4)
+>    opts its values into the const pool; every other extension type
+>    (Socket, Listener, timers, flex) keeps the refusal. Freshness is
+>    owned by the existing frozen-read / dep-snapshot gates. Pinned in
+>    `lang/go/test/stamp_module_binding_test.go`.
+> 2. **Statement-position `set … drop` over a dynamic receiver (was
+>    `unmatched dispatch recovered at drop`, 4 units).** execMatch's
+>    paren-tail lookahead now also accepts a PLAIN stack-shuffle consumer
+>    (`dynStackShuffleWords` — drop/dup/…: stack-only, single all-Any sig)
+>    as a consumed tail, so `applyGradualContagion` models the optimistic
+>    single value at statement position too. Soundness owner is unchanged:
+>    callPoly's result-count-claim check defers to the interpreter when
+>    the runtime overload returns a different arity (vm.go). Pinned in
+>    `lang/go/test/stamp_setdrop_test.go` (incl. the modified-shuffle
+>    negative and the claim-mismatch fallback parity).
+>
+> The two REMAINING mini-s3 walls, precisely mapped:
+>
+> - **`s3-handle-one` / `s3-handle-get` — `fn s3-parse-range: body result
+>   of unknown provenance` — BLOCKED on an interpreter semantic fork, not
+>   a missing compiler feature.** s3-parse-range's trailing computed map
+>   `{from: from upto: upto}` is evaluated at DIFFERENT times by the two
+>   interpreter dispatch paths: a CallAQL-class call (cross-registry or
+>   fork context — every serve-raw request, which is why the app works)
+>   evaluates it at the callee sub-run's end, IN-frame; a same-registry
+>   spliced call defers it to the CONSUMER's scope, where the body-locals
+>   are gone (verified: `M.handle-get …` from the top engine raises
+>   `undefined_word: from` interpreted, while the identical call inside a
+>   fork context returns the values). The list twin of the deferred
+>   direction is spec-pinned (`def-node-binding.tsv:54`). Recording the
+>   in-frame assembly (extending the storedfn$body `elemEvalRecordable`
+>   admission) would bake one side of the fork and diverge from the other
+>   interpreter context, so the compiler keeps refusing. Follow-up: an
+>   ARG-SEMANTICS-UNIFICATION-style decision on residual-evaluation
+>   timing (+ spec re-pin), after which the recording extension is a
+>   two-line gate.
+> - **the bucket-list handler — `function-valued operand at filter
+>   (Stage 3)`.** The genuine higher-order frontier: a CAPTURING lambda
+>   (over `objects`/`prefix`/`plen`) as filter's operand inside a service
+>   handler. A capture-free top-level filter lambda compiles today; the
+>   capturing service-handler shape needs the closure path extended to
+>   the stored-handler context. (`s3-serve`'s "finalize left the unit
+>   unstamped" is consequence-level.)
+>
 > **ADDENDUM (2026-07-10, supersedes the per-app status below —
 > see design/RUNTIME-STAMPING.0.md).** This note conflated two different
 > claims: "the handler bodies pass their compile probe" and "the handlers

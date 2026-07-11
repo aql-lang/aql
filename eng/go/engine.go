@@ -2818,6 +2818,44 @@ func forwardLiteralOperand(t Value) bool {
 	return t.Parent.ConformsTo(TScalar) || t.Parent.ConformsTo(TAtom)
 }
 
+// dynShuffleConsumerAt reports whether the tape token at idx is a PLAIN
+// (modifier-free) Forth-style stack-shuffle word — dup/swap/drop/… with a
+// single all-Any registered signature (the dynStackShuffleWords set the
+// emitter already trusts over a dynamic stack). Such a word is stack-only
+// (BarrierPos 0 — it never forward-collects) and its dispatch shape cannot
+// be flipped by one extra stack value, so an optimistic gradual result
+// modeled right before it is consumed as safely as a paren-tail one
+// (execMatch's consumed-tail lookahead).
+func (e *Engine) dynShuffleConsumerAt(idx int) bool {
+	if idx < 0 || idx >= e.tape.Len() {
+		return false
+	}
+	tok := e.tape.At(idx)
+	if !IsWord(tok) {
+		return false
+	}
+	w, err := AsWord(tok)
+	if err != nil || !dynStackShuffleWords[w.Name] {
+		return false
+	}
+	// A modifier (/N, /f, /s, /q, /r, /u) changes the collection shape —
+	// stay conservative and treat the modified word as an ordinary
+	// statement-position consumer.
+	if w.ArgCount != -1 || w.ForceForward || w.ForceStack || w.ForceRef || w.ForceUsurp {
+		return false
+	}
+	fn := e.registry.Lookup(w.Name)
+	if fn == nil || len(fn.Signatures) != 1 {
+		return false
+	}
+	for _, t := range fn.Signatures[0].ArgTypes() {
+		if t == nil || !t.Equal(TAny) {
+			return false
+		}
+	}
+	return true
+}
+
 // execMatch executes a matched signature, splicing args and results.
 func (e *Engine) execMatch(match *MatchResult) error {
 	n := match.Sig.TotalArgs()
@@ -2976,20 +3014,34 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			return nil
 		}
 
-		// Paren-tail lookahead: is the token right after this call's consumed
-		// range a CloseParen? If so the result is the enclosing group's value
-		// (consumed), which lets carrierResults safely model the mixed-arity
-		// gradual arity under a real compile (a `set` over a dynamic receiver
-		// bound by `def`). A statement-position call (next token is a word that
-		// could collect the result) gets tailConsumed=false and the faithful
-		// 0-arity stands.
+		// Consumed-tail lookahead: is the token right after this call's
+		// consumed range one that CONSUMES the result without forward-
+		// collecting past it? Then carrierResults may safely model the
+		// mixed-arity gradual arity under a real compile (a `set` over a
+		// dynamic receiver bound by `def`). Two qualifying shapes:
+		//   - a CloseParen — the result is the enclosing group's value; and
+		//   - a PLAIN stack-shuffle word (drop/dup/… — dynShuffleConsumerAt):
+		//     stack-only, single all-Any sig, so it consumes the modeled
+		//     value from the stack exactly as the interpreter's does, and one
+		//     modeled value can never flip its dispatch shape. The mixed-
+		//     arity risk (the runtime overload returns 0 where the model
+		//     claimed 1 — a Store/Class receiver) is owned by the VM:
+		//     callPoly enforces the recorded result-count claim and defers
+		//     to the interpreter on mismatch (slow, not wrong). This is what
+		//     compiles the mini-s3/mini-redis statement idiom
+		//     `X set (k) v` newline `drop` without source grouping.
+		// Any other statement-position call (next token is a word that could
+		// forward-collect the result as its own arg — the
+		// TestSetOverDynamicReceiverPolyCompiles underflow) gets
+		// tailConsumed=false and the faithful 0-arity stands.
 		callEnd := e.pointer
 		for _, p := range sortedIndices {
 			if p > callEnd { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				callEnd = p
 			}
 		}
-		tailConsumed := callEnd+1 < e.tape.Len() && IsCloseParen(e.tape.At(callEnd+1))
+		tailConsumed := callEnd+1 < e.tape.Len() &&
+			(IsCloseParen(e.tape.At(callEnd+1)) || e.dynShuffleConsumerAt(callEnd+1))
 		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
