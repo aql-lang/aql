@@ -134,6 +134,15 @@ type eventFlags struct {
 	// discipline (finish()'s loop-apply residual detection) instead of the
 	// variadic refusal.
 	applyLoop bool
+	// dynBodyResult marks a DYN-BODY dispatch's event (tryRecordDynBody —
+	// a CALL_NATIVE whose handler re-runs the body at run time): its
+	// runtime results are REAL stack values delivered before the frame's
+	// RET, so a DECLARED return tuple pins the count there (the VM RET
+	// raises the interpreter's exact "expected N return value(s)" on a
+	// mismatch). Distinguishes it from a variadic BRANCH/LOOP residual,
+	// whose 0-value runtime shape the interpreter tolerates and fixed
+	// consumers must keep refusing.
+	dynBodyResult bool
 	// variadicResult marks an event whose result count is RUNTIME-VARIABLE — a
 	// loop, or a branch whose arms leave different / multiple counts (`if c [] [a
 	// b]`). Only a variadic-absorbing position (the program residual or a
@@ -2868,8 +2877,21 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 			// a runtime-variable count (a variadic branch / loop, or a call to an
 			// already-variadic fn — RecordUserCall flags that on the event). A call
 			// site marks its result variadic (lowerUserCall) so only a
-			// variadic-absorbing position consumes it.
-			if n := len(ops); n > 0 && ops[n-1].kind == opEvent && es.eventInfo[ops[n-1].idx].variadicResult {
+			// variadic-absorbing position consumes it. EXCEPTION: a DECLARED
+			// return tuple over a DYN-BODY residual (dynBodyResult) overrides
+			// the marking — the sub-run's results are real stack values at the
+			// RET, where the VM enforces the declared count exactly as the
+			// interpreter ("expected N return value(s)"), so the call site may
+			// seat the declared shape. Without this, `def make-point fn [[…]
+			// [Map] [ do {…} ]]` (a fn whose whole body is a dyn-do computed
+			// map) marked its result variadic and any fixed-arity consumer
+			// refused "consumes loop results". A variadic BRANCH/LOOP residual
+			// keeps the marking even under a declared tuple: its runtime
+			// 0-value shape flows through the interpreter's return path
+			// differently, and the pinned divergence test
+			// (TestEmitRaiseArmDivergence) requires the refusal.
+			if n := len(ops); n > 0 && ops[n-1].kind == opEvent && es.eventInfo[ops[n-1].idx].variadicResult &&
+				!(len(rec.returns) > 0 && es.eventInfo[ops[n-1].idx].dynBodyResult) {
 				rec.variadic = true
 			}
 			// Out-of-order residual (an event result above an inert bottom —

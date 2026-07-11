@@ -1561,6 +1561,7 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
 	f.variadicResult = true
+	f.dynBodyResult = true
 	es.eventInfo[seq] = f
 	// Carrier-identity de-collision, extended to INTRA-event repeats: the
 	// modeled outs of a dyn-body sub-run may repeat one value — an unrolled
