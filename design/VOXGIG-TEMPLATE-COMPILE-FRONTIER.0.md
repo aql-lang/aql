@@ -164,6 +164,37 @@ the correct Stage-E/F piece and should land **together with** the Stage-C
 cross-registry `dynEnv` fix, so it never exposes the latent miss. Until then the
 flex read refuses and falls back (sound).
 
+### Attempt log — the record-time variadic heuristic is insufficient
+
+A targeted fix was prototyped and **verified against the full Template corpus**
+(the reliable gate), then reverted as insufficient — the findings narrow the real
+fix:
+
+1. **Closure gate (`!es.inClosureUnit()`).** Marking a do-map non-variadic only
+   when NOT inside a higher-order body closure correctly makes the fold-BODY
+   do-maps (`split-args` lines 413–419, recorded in `fold$body`) variadic — no
+   hoist — while keeping the gen-program / `compile-tagged-seq` fn-return do-maps
+   non-variadic (they compile). d2/d4/d5 + `TestDoMapVariadicArmCompiles` pass.
+2. **But it is insufficient.** `liquid` still misses. The residual driver is the
+   fold's **initial-accumulator** do-map (`do {cur:[""] q:[""]}`, line 407) —
+   recorded in `split-args`'s OWN unit (`inClosure=false`), so still non-variadic —
+   whose fixed-arity reconciliation promotes the loop-carried accumulator's
+   member assemblies (`[q]`) into the enclosing unit.
+3. **The real discriminator is the CONSUMER, not the record-time context.** A
+   do-map consumed by `get` at fixed arity (gen-program) needs single-value
+   modeling; one consumed by `fold` as an accumulator tolerates a variadic. That
+   is **not knowable at `tryRecordDynBody`** (the consumer is chosen later), so no
+   record-time flag can be right for both.
+
+**Therefore the clean fix is at CONSUMPTION, not the variadic flag:** keep do-maps
+variadic (revert the `e82ca4d` flag change), and relax `layoutOperands`
+(`lower.go:1236`, the "consumes loop results" refusal) to accept a single-valued
+do-map operand — `lw.es.eventInfo[op.idx].dynBodyResult && nout==1` — seating it
+as one value. That touches the sim-stack count model on a corpus-wide hot path, so
+it must be gated on the voxgig `--compile==interpret` sweep (a do-map producing
+!=1 value, and a genuinely variadic loop result, must still refuse). This is the
+concrete Stage-C task; it is a residual/consumption-model change, not a heuristic.
+
 ## Langspec Stage D/E/F status (for reference)
 
 At the internal langspec surface these stages are **already cleared** (prior
