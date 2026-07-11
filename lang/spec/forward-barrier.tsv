@@ -68,7 +68,7 @@ def n 0 if (n eq 0) [99] ; add 1 2	99 3	; is end
 #     be committed — that would turn a waiting call into an error), and
 #     a smaller real overload fires at the boundary, mirroring the
 #     plan-time behaviour of typed overloads.
-def g fn [[a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	6	exact-arity only: 2-arg g waits; def's x feeds the second slot
+def g fn [[a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	ERROR:signature	exact-arity only: 2-arg g cannot commit with one arg and `def` is a barrier — g strands (no wait-through)
 def g fn [[a:Any] [Any] [a] [a:Any b:Any] [Any] [add a b]] g 1 def x 5 x	1 5	a real smaller overload commits at the boundary
 def g fn [[a:Integer] [Integer] [a] [a:Integer b:Integer] [Integer] [add a b]] g 1 def x 5 x	1 5	typed overloads resolve the same way at plan time
 add 1 def x 5 x	ERROR:signature	a typed 2-arg native with no smaller overload fails loudly at plan time

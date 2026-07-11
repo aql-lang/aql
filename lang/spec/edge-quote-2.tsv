@@ -59,7 +59,7 @@ def w word [1,2] quote [0 w 9] size	3	held: the reference is one raw node betwee
 zork/q	zork/q	the suffix form parses straight to an atom
 quote foo	foo/q	the function form captures the upcoming word
 (quote foo)	foo/q	…and the paren form is the same capture, grouped
-foo/q eq quote foo	true	suffix and function form produce the SAME atom
+foo/q eq (quote foo)	true	suffix and function form produce the SAME atom
 add/q eq (quote add)	true	quoting a BOUND name still yields the plain atom
 quote mul	mul/q	a registered word quotes to its name — no dispatch
 typeof foo/q	Atom	an atom's type

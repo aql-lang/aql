@@ -175,7 +175,7 @@ def a 1 { outer:{ inner:a } }	{outer:{inner:1}}	def ref inside a nested map valu
 def a 1 [ { x:a } { y:a } ]	[{x:1} {y:1}]	def refs inside maps inside a list
 		
 # A list-bound def referenced as a node value resolves to the list itself.		
-def lst quote [ 10 20 ] { xs:lst }	{xs:(quote [10 20])}	canonical render preserves the Quoted flag on the resolved list
+def lst (quote [ 10 20 ]) { xs:lst }	{xs:(quote [10 20])}	canonical render preserves the Quoted flag on the resolved list
 		
 # ====================================================================		
 # 7. Quoting — suppress list auto-eval		
@@ -206,15 +206,15 @@ quote { a:( 1 addq 2 ) }	{a:3}	the inner paren value still evaluates
 		
 def doub word [ 1 addq ] 5 doub	6	body splices: stack=[5], 1, addq → 6
 def square word [ dup mulq ] 7 square	49	dup, mulq: 7*7
-def lst quote [ 1 2 3 ] lengthq lst	3	quoted list resolves as data — three elements
-def lst quote [ 1 2 3 ] firstq lst	1	
+def lst (quote [ 1 2 3 ]) lengthq lst	3	quoted list resolves as data — three elements
+def lst (quote [ 1 2 3 ]) firstq lst	1	
 def m { a:1 b:2 } m	{a:1 b:2}	map binding round-trips
-def m quote { a:1 b:2 } m	{a:1 b:2}	quote on a map binding — still just the map value
+def m (quote { a:1 b:2 }) m	{a:1 b:2}	quote on a map binding — still just the map value
 def empty word [ ] 5 empty	5	empty-body splice is a no-op; 5 stays
 		
 # A def-bound list flows into a list-consuming word.		
-def lst quote [ 1 2 3 4 ] lengthq lst	4	
-def lst quote [ 9 8 7 ] firstq lst	9	
+def lst (quote [ 1 2 3 4 ]) lengthq lst	4	
+def lst (quote [ 9 8 7 ]) firstq lst	9	
 		
 # ====================================================================		
 # 9. Nesting and round-trips		

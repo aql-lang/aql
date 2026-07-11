@@ -279,7 +279,7 @@ def Person class {name:String age:Integer} def x:Person {name:'A' age:30} typeof
 def Person class {name:String age:Integer} behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]]) def x:Person {name:'A' age:30} def y:Person {name:'B' age:25} x y lt	false	30 lt 25 → false; Comparer wired through typed-def
 
 # `def x:Person make Person {map}` accepts a pre-made instance.
-def Person class {name:String age:Integer} def x:Person make Person {name:'A' age:30} typeof x	Person	pre-made ObjectInstance accepted by typed def
+def Person class {name:String age:Integer} def x:Person (make Person {name:'A' age:30}) typeof x	Person	pre-made ObjectInstance accepted by typed def
 
 # ---------------------------------------------------------------------
 # 7. SORT — uses Comparer dispatch

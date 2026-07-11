@@ -109,7 +109,7 @@ List unify (refine Table (refine Record [x:Number]))	'~unify-fail' false
 refine Record [x:Number y:[String tor None]]	record{x:Number y:None tor String}
 
 # Record with inline disjunct - unification narrows
-refine Record [x:Number y:[String tor None]] unify refine Record [x:Number y:String]	record{x:Number y:String} true
+refine Record [x:Number y:[String tor None]] unify (refine Record [x:Number y:String])	record{x:Number y:String} true
 
 # Make record with inline disjunct - none value
 def Foo refine Record [x:Number y:[String tor None]] make Foo [42 None]	{x:42 y:None}
@@ -121,7 +121,7 @@ def Foo refine Record [x:Number y:[String tor None]] make Foo [42 "hello"]	{x:42
 def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo	record{x:Number y:None tor String}
 
 # Record with user-defined type - unification narrows disjunct
-def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] Foo unify refine Record [x:Number y:String]	record{x:Number y:String} true
+def OptStr (String tor None) def Foo (refine Record [x:Number y:OptStr]) Foo unify (refine Record [x:Number y:String])	record{x:Number y:String} true
 
 # Make record with optional field - string value
 def OptStr (String tor None) def Foo refine Record [x:Number y:OptStr] make Foo [42 "hello"]	{x:42 y:'hello'}
@@ -362,7 +362,7 @@ tpartial (refine Record [x:Number y:Boolean z:String])	record{x:None tor Number 
 
 # tpartial - idempotent on fields already including None
 tpartial (refine Record [x:Integer y:[String tor None]])	record{x:None tor Integer y:None tor String}
-tpartial (tpartial (refine Record [x:Integer])) teq tpartial (refine Record [x:Integer])	true
+tpartial (tpartial (refine Record [x:Integer])) teq (tpartial (refine Record [x:Integer]))	true
 
 # is - per-element type List: type Names in lists match element-wise
 ["a" 1.1] is [String Float]	true
@@ -419,10 +419,10 @@ def R refine Record [x:Number] (refine Table R) is (refine Table R)	true
 {:Number} neq {:String}	true
 
 # eq/neq - record types
-refine Record [x:Number y:String] eq refine Record [x:Number y:String]	true
-refine Record [x:Number y:String] eq refine Record [x:Number y:Number]	false
-refine Record [x:Number y:String] neq refine Record [x:Number y:Number]	true
-refine Record [x:Number] eq refine Record [x:Number y:String]	false
+refine Record [x:Number y:String] eq (refine Record [x:Number y:String])	true
+refine Record [x:Number y:String] eq (refine Record [x:Number y:Number])	false
+refine Record [x:Number y:String] neq (refine Record [x:Number y:Number])	true
+refine Record [x:Number] eq (refine Record [x:Number y:String])	false
 
 # eq/neq - table types
 def R refine Record [x:Number] (refine Table R) eq (refine Table R)	true

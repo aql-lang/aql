@@ -1,0 +1,33 @@
+# AQL Language Specification: KEYWORD SLOTS in fn signatures
+# Format: input<TAB>expected<TAB>description
+#
+# A /q param whose atom names NO type is a KEYWORD slot: it matches
+# exactly that one literal word (binding-agnostically, like every /q
+# slot). This is the AQL-source spelling of the keyword slots the def
+# constructor forms use internally (`def name fn […]` matches the
+# literal word `fn`) — the syntax-rules-literal mechanism, usable for
+# user binder / DSL keywords. The kernel branch is patternsOk
+# (eng/go/match.go); the parse is keywordParam (eng/go/fn_params.go).
+# See design/STRICT-FORWARD-BARRIER.0.md.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  an unnamed keyword slot matches ONLY its literal word
+def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	7	`in/q` admits the literal word `in`; a=3, b=10 → 10-3
+def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 to 10	ERROR:signature_error	a different word (`to`) does not match the `in` keyword slot
+#
+# §2  a keyword slot is BINDING-AGNOSTIC — a value bound to the keyword
+#     name is irrelevant; the slot still matches only the literal word.
+def in 99  def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	7	`in` is bound to 99, but the keyword slot captures the literal word, not the binding
+#
+# §3  a named keyword slot binds the captured atom to its name
+def kw fn [[k:in/q] [Atom] [k]]  kw in	in/q	`k:in/q` matches `in` and binds k to the atom `in` (renders in canonical /q form)
+def kw fn [[k:in/q] [Atom] [k]]  kw out	ERROR:signature_error	only the literal `in` matches
+#
+# §4  keyword slots compose with ordinary typed params and overloads
+def q fn [[from/q n:Integer] [Integer] [n]  [to/q n:Integer] [Integer] [n mul 10]]  q from 5	5	the `from` keyword selects the first overload
+def q fn [[from/q n:Integer] [Integer] [n]  [to/q n:Integer] [Integer] [n mul 10]]  q to 5	50	the `to` keyword selects the second overload
+#
+# §5  a capture-ANY /q slot (Atom/q, where Atom IS a type) is unchanged —
+#     it captures any word, NOT a fixed literal.
+def any fn [[w:Atom/q] [Atom] [w]]  any anything	anything/q	`Atom/q` still captures any bare word as its atom (canonical /q render)
+def any fn [[w:Atom/q] [Atom] [w]]  any other	other/q	…any word at all

@@ -34,6 +34,12 @@ type SigInfo struct {
 	Args       []string // type names per arg, e.g. ["Integer", "Integer"]
 	Returns    []string // inferred return type abbreviations
 	BarrierPos int      // forward-eligible boundary; positions [BarrierPos..N-1] are stack-only
+	// Keywords overrides the rendered slot at a position with a KEYWORD
+	// literal (a /q slot carrying a concrete Atom pattern — it admits
+	// exactly that one word). e.g. def's `def name fn [...]` form renders
+	// position 1 as "fn/q" instead of the bare "Atom". Nil when the sig
+	// has no keyword slots.
+	Keywords map[int]string
 }
 
 // FuncInfo carries everything needed for dynamic help rendering.
@@ -348,7 +354,11 @@ func writeSigs(b *strings.Builder, sigs []SigInfo) {
 	for _, sig := range sigs {
 		abbrevArgs := make([]string, len(sig.Args))
 		for i, a := range sig.Args {
-			abbrevArgs[i] = typeAbbrev(a)
+			if kw, ok := sig.Keywords[i]; ok {
+				abbrevArgs[i] = kw
+			} else {
+				abbrevArgs[i] = typeAbbrev(a)
+			}
 		}
 		argsStr := "[" + strings.Join(abbrevArgs, " ") + "]"
 

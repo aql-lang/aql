@@ -464,10 +464,67 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		reg.Defs.Push(name, body)
 		return nil, nil
 	}
+	// `def name word BODY` — the Forth-style splice binder. `word` is a
+	// KEYWORD SLOT (quoted, pattern-matched), so def captures it structurally
+	// instead of stranding on it under the strict forward-barrier. Mirrors
+	// the lang layer's synthesized keyword form (registerDefKeywordForms);
+	// the eng fixture spells it directly since it has no lang registry.
+	defWord := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		name, _ := args[0].AsConcreteAtom()
+		if err := eng.ValidateWordName(name); err != nil {
+			return nil, err
+		}
+		reg.Check.RecordDef(name, eng.SrcPos{})
+		reg.Defs.Push(name, eng.NewSplice(args[2]))
+		return nil, nil
+	}
+	// `def name fn [triples]` — the fn KEYWORD SLOT. Captures `fn`
+	// structurally and binds the FnDef by name, mirroring the lang keyword
+	// form. Without it, `def name fn […]` would strand on `fn` under strict,
+	// and paren-wrapping (`def name (fn […])`) is WRONG for a fn with a
+	// 0-arg overload — the group auto-invokes the nullary sig instead of
+	// yielding the FnDef value.
+	defFn := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
+		name, _ := args[0].AsConcreteAtom()
+		if err := eng.ValidateWordName(name); err != nil {
+			return nil, err
+		}
+		if !eng.IsConcrete(args[2]) {
+			return nil, &eng.AqlError{Code: "type_error", Detail: "def fn: body must be a concrete list"}
+		}
+		lst, _ := eng.AsList(args[2])
+		elems := lst.Slice()
+		if len(elems) == 0 || len(elems)%3 != 0 {
+			return nil, &eng.AqlError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
+		}
+		fnDef, err := eng.ParseFnDef(reg, elems)
+		if err != nil {
+			return nil, err
+		}
+		reg.Check.RecordDef(name, eng.SrcPos{})
+		eng.InstallFnDef(reg, name, fnDef)
+		return nil, nil
+	}
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "def",
 
 		Signatures: []eng.Signature{
+			{
+				Args:       []*eng.Type{eng.TAtom, eng.TAtom, eng.TAny},
+				QuoteArgs:  map[int]bool{0: true, 1: true},
+				Patterns:   map[int]eng.Value{1: eng.NewAtom("word")},
+				NoEvalArgs: map[int]bool{2: true},
+				Impl:       eng.Go(defWord, eng.RunInCheck()),
+				Returns:    []*eng.Type{}, BarrierPos: -1,
+			},
+			{
+				Args:       []*eng.Type{eng.TAtom, eng.TAtom, eng.TList},
+				QuoteArgs:  map[int]bool{0: true, 1: true},
+				Patterns:   map[int]eng.Value{1: eng.NewAtom("fn")},
+				NoEvalArgs: map[int]bool{2: true},
+				Impl:       eng.Go(defFn, eng.RunInCheck()),
+				Returns:    []*eng.Type{}, BarrierPos: -1,
+			},
 			{
 				Args:          []*eng.Type{eng.TMap, eng.TAny},
 				NoEvalMapArgs: map[int]bool{0: true},

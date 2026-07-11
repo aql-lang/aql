@@ -95,8 +95,8 @@ import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [
 # own class anchors the signature), and exports both; the importer
 # makes Points through the exported type and `p0 add p1` dispatches
 # the transplant, whose body runs in module scope (`make Point …`).
-import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  def p1 make Pointer.Point {x:4 y:6}  def p2 (p0 add p1)  p2.x	5	Point addition via the transplanted class overload — x field
-import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  def p1 make Pointer.Point {x:4 y:6}  def p2 (p0 add p1)  p2 is Pointer.Point	true	the sum is a Point of the module's minted class
+import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  def p2 (p0 add p1)  p2.x	5	Point addition via the transplanted class overload — x field
+import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  def p2 (p0 add p1)  p2 is Pointer.Point	true	the sum is a Point of the module's minted class
 import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  add p0 1	ERROR:signature_error	the overload is anchored to Point on BOTH operands — a Point plus a number stays refused (negative twin)
 #
 # ─────────────────────────────────────────────────────────────────────

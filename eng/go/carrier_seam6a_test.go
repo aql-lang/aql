@@ -841,3 +841,37 @@ func TestS6aIsDeferredWordListShapes(t *testing.T) {
 		t.Error("a word-free list is not deferred")
 	}
 }
+
+// A CONCRETE fn-valued arg (FnDefInfo in .Data) under a NON-Function sig slot
+// reaches the args-data guard (past the ArgTypes-Function check) and declines
+// the dyn-out bake / the poly record.
+func TestS6aDynOutNativeOKFnValueDataDeclines(t *testing.T) {
+	r := newTestRegistry(t)
+	armEmit(r)
+	sig := &Signature{Args: []*Type{TAny}}
+	args := []Value{NewValueRaw(TFnDef, FnDefInfo{Name: "s6afn"})}
+	outs := []Value{NewDynamicCarrier(TAny)}
+	if dynOutNativeOK(r, "s6adynv", sig, args, outs) {
+		t.Error("a concrete fn-valued arg must refuse the dyn-out bake")
+	}
+}
+
+func TestS6aTryRecordPolyFnValueDataDeclines(t *testing.T) {
+	r := newTestRegistry(t)
+	armEmit(r)
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "s6apolyv",
+		Signatures: []Signature{
+			{Args: []*Type{TAny}, Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return nil, nil }), Returns: []*Type{TAny}, BarrierPos: -1},
+			{Args: []*Type{TAny, TAny}, Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return nil, nil }), Returns: []*Type{TAny}, BarrierPos: -1},
+		},
+	})
+	if err := r.Err(); err != nil {
+		t.Fatalf("registration: %v", err)
+	}
+	sig := &r.Lookup("s6apolyv").Signatures[0]
+	args := []Value{NewValueRaw(TFnDef, FnDefInfo{Name: "s6afn2"})}
+	if tryRecordPoly(r, "s6apolyv", sig, args, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, false, nil, false) {
+		t.Error("a concrete fn-valued arg must not poly")
+	}
+}

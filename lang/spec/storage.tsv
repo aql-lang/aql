@@ -71,11 +71,11 @@ context dot quote nope	ERROR:unknown key
 # observes the change on subsequent reads.
 		
 # String-key set		
-def Foo (class { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .a	'bye'	String key updates the field
-def Foo (class { a:String b:Integer }) def f make Foo { a:'hi' b:1 } set 'a' 'bye' f f .b	1	other fields are untouched
+def Foo (class { a:String b:Integer }) def f (make Foo { a:'hi' b:1 }) set 'a' 'bye' f f .a	'bye'	String key updates the field
+def Foo (class { a:String b:Integer }) def f (make Foo { a:'hi' b:1 }) set 'a' 'bye' f f .b	1	other fields are untouched
 		
 # Numeric field via String value — set replaces the value verbatim.		
-def Foo (class { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99	
+def Foo (class { a:Integer }) def f (make Foo { a:5 }) set 'a' 99 f f .a	99	
 		
 # ====================================================================		
 # 3. None propagation		
@@ -85,7 +85,7 @@ def Foo (class { a:Integer }) def f make Foo { a:5 } set 'a' 99 f f .a	99
 		
 None get 'a'	None	None passes through string-key access
 None get 0	None	None passes through integer-key access
-None dot quote x	None	
+None dot (quote x)	None	
 		
 # ====================================================================		
 # 4. Map / List read summary		

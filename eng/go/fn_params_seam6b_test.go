@@ -52,27 +52,44 @@ func TestS6b2ParseFnParamsParenAnnotationMultiValue(t *testing.T) {
 	}
 }
 
-func TestS6b2ParseFnParamsNamedQuoteAtomErrors(t *testing.T) {
+func TestS6b2ParseFnParamsNamedQuoteAtom(t *testing.T) {
 	r := newTestRegistry(t)
 
-	// Atom in the type slot that names NO type: def-time error.
+	// Named /q atom in the type slot that names NO type is a KEYWORD
+	// slot: `s6b2z:S6b2NotAType/q` matches only the literal word
+	// `S6b2NotAType`, bound to s6b2z (Quote + an Atom pattern).
 	sig := NewList([]Value{s6b2ImplicitParamMap("s6b2z", NewAtom("S6b2NotAType"))})
-	if _, _, err := ParseFnParams(r, sig); err == nil ||
-		!strings.Contains(err.Error(), "invalid type") {
-		t.Errorf("unknown atom type must error, got %v", err)
+	params, _, err := ParseFnParams(r, sig)
+	if err != nil {
+		t.Fatalf("named keyword slot must parse, got %v", err)
+	}
+	if len(params) != 1 || !params[0].Quote || params[0].Pattern == nil || params[0].Name != "s6b2z" {
+		t.Fatalf("want a named keyword slot, got %+v", params)
+	}
+	if name, _ := AsAtom(*params[0].Pattern); name != "S6b2NotAType" {
+		t.Errorf("keyword pattern = %q, want S6b2NotAType", name)
 	}
 
-	// Atom names a real type but the param name is invalid.
+	// Atom names a real type but the param name is invalid → error
+	// (name validation happens before the type lookup).
 	sig = NewList([]Value{s6b2ImplicitParamMap("Bad", NewAtom("Integer"))})
 	if _, _, err := ParseFnParams(r, sig); err == nil {
 		t.Error("invalid word name in a /q param must error")
 	}
 
-	// Positive twin: valid name + valid atom type is a quote param.
+	// A capitalised name on a keyword slot also errors (name validated
+	// before the keyword branch).
+	sig = NewList([]Value{s6b2ImplicitParamMap("Bad", NewAtom("S6b2NotAType"))})
+	if _, _, err := ParseFnParams(r, sig); err == nil {
+		t.Error("invalid word name on a keyword slot must error")
+	}
+
+	// Positive twin: valid name + valid atom TYPE is a capture-any /q
+	// param (Quote, NO pattern).
 	sig = NewList([]Value{s6b2ImplicitParamMap("s6b2q", NewAtom("Integer"))})
-	params, _, err := ParseFnParams(r, sig)
-	if err != nil || len(params) != 1 || !params[0].Quote {
-		t.Errorf("named /q param must parse quoted, got %+v (%v)", params, err)
+	params, _, err = ParseFnParams(r, sig)
+	if err != nil || len(params) != 1 || !params[0].Quote || params[0].Pattern != nil {
+		t.Errorf("named /q param on a type must be capture-any, got %+v (%v)", params, err)
 	}
 }
 
@@ -252,5 +269,107 @@ func TestS6b2ResolveTypeNameNever(t *testing.T) {
 	typ, err := ResolveTypeName("Never")
 	if err != nil || typ == nil || typ.ID != TNever.ID {
 		t.Errorf("ResolveTypeName(Never) = %v (%v), want TNever", typ, err)
+	}
+}
+
+// --- KEYWORD slots (keywordParam / PatternsFromParams) -----------------------
+
+// s6bKwSig wraps a single unnamed-atom param in the list-of-one-param
+// input-sig shape ParseFnParams consumes.
+func s6bKwSig(atom string) Value {
+	return NewList([]Value{NewAtom(atom)})
+}
+
+func TestParseFnParamsUnnamedKeywordSlot(t *testing.T) {
+	r := newTestRegistry(t)
+	// `in/q` — `in` names no type, so it is a keyword slot: QuoteArgs
+	// set AND an Atom pattern of the same name.
+	params, _, err := ParseFnParams(r, s6bKwSig("in"))
+	if err != nil {
+		t.Fatalf("ParseFnParams: %v", err)
+	}
+	if len(params) != 1 {
+		t.Fatalf("want 1 param, got %d", len(params))
+	}
+	p := params[0]
+	if !p.Quote || p.Pattern == nil {
+		t.Fatalf("keyword slot must set Quote AND a Pattern, got %+v", p)
+	}
+	if name, _ := AsAtom(*p.Pattern); name != "in" {
+		t.Errorf("pattern must be the literal atom `in`, got %q", name)
+	}
+	if !p.Type.Equal(TAtom) {
+		t.Errorf("keyword slot type must be Atom, got %v", p.Type)
+	}
+}
+
+func TestParseFnParamsTypeNameQSlotStaysCaptureAny(t *testing.T) {
+	r := newTestRegistry(t)
+	// `Atom/q` — Atom IS a type, so it stays a capture-any /q slot:
+	// Quote set, NO pattern.
+	params, _, err := ParseFnParams(r, s6bKwSig("Atom"))
+	if err != nil {
+		t.Fatalf("ParseFnParams: %v", err)
+	}
+	if !params[0].Quote || params[0].Pattern != nil {
+		t.Errorf("a type-named /q slot must capture any word (Quote, no Pattern), got %+v", params[0])
+	}
+}
+
+func TestKeywordParamShape(t *testing.T) {
+	p := keywordParam("k", "in")
+	if p.Name != "k" || !p.Quote || !p.Type.Equal(TAtom) || p.Pattern == nil {
+		t.Fatalf("keywordParam shape wrong: %+v", p)
+	}
+	if name, _ := AsAtom(*p.Pattern); name != "in" {
+		t.Errorf("pattern atom = %q, want in", name)
+	}
+}
+
+func TestPatternsFromParams(t *testing.T) {
+	if PatternsFromParams(nil) != nil {
+		t.Error("no params → nil patterns")
+	}
+	lit := NewInteger(0)
+	kw := NewAtom("in")
+	params := []FnParam{
+		{Type: TInteger, Pattern: &lit},
+		{Type: TString}, // no pattern
+		{Type: TAtom, Quote: true, Pattern: &kw},
+	}
+	pats := PatternsFromParams(params)
+	if len(pats) != 2 {
+		t.Fatalf("want 2 patterns (positions 0,2), got %v", pats)
+	}
+	if n, _ := AsInteger(pats[0]); n != 0 {
+		t.Errorf("pos 0 pattern = %v, want 0", pats[0])
+	}
+	if name, _ := AsAtom(pats[2]); name != "in" {
+		t.Errorf("pos 2 pattern = %q, want in", name)
+	}
+}
+
+func TestParseFnParamsColonFormKeywordSlot(t *testing.T) {
+	r := newTestRegistry(t)
+	// The single-Word colon form (minimal tokenizers): `n:in/q` where
+	// `in` names no type is a keyword slot bound to n.
+	params, _, err := ParseFnParams(r, NewList([]Value{NewWord("n:in/q")}))
+	if err != nil {
+		t.Fatalf("colon-form keyword slot must parse, got %v", err)
+	}
+	if len(params) != 1 || !params[0].Quote || params[0].Pattern == nil || params[0].Name != "n" {
+		t.Fatalf("want a named keyword slot, got %+v", params)
+	}
+	if name, _ := AsAtom(*params[0].Pattern); name != "in" {
+		t.Errorf("keyword pattern = %q, want in", name)
+	}
+	// Colon form with a real type + /q stays capture-any (no pattern).
+	params, _, err = ParseFnParams(r, NewList([]Value{NewWord("k:Atom/q")}))
+	if err != nil || params[0].Pattern != nil || !params[0].Quote {
+		t.Errorf("colon /q on a type must be capture-any, got %+v (%v)", params, err)
+	}
+	// Colon form with an unknown NON-/q type still errors.
+	if _, _, err := ParseFnParams(r, NewList([]Value{NewWord("k:NotAType")})); err == nil {
+		t.Error("colon form with an unknown non-/q type must error")
 	}
 }

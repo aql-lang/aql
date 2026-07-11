@@ -160,7 +160,7 @@ def P class {x:1} (make P {x:1}) deq {x:1}	false	an instance is never deq to a b
 def R (refine Record [ { a:Integer } ]) def r (make R {a:1}) (r eq r)	true	record instances alias like class instances
 def R (refine Record [ { a:Integer } ]) def r (make R {a:1}) def s r (r eq s)	true	two bindings, one record
 def R (refine Record [ { a:Integer } ]) (make R {a:1}) eq (make R {a:1})	false	record twins are two instances
-context eq context	false	a Store has NO aliasable identity — context is never eq to itself
-def s context (s eq s)	false	…not even through a binding read twice
+(context) eq (context)	false	a Store has NO aliasable identity — context is never eq to itself
+def s (context) (s eq s)	false	…not even through a binding read twice
 import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) deq p	true	jsonify→reify round-trips the instance structurally ($class tag)
 import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) eq p	false	…but reify constructs a NEW instance, not the original

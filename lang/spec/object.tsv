@@ -117,7 +117,7 @@ def Foo (class { a:Integer }) def f ( make Foo { a:42 } ) f .a addq 8	50	field a
 # ====================================================================		
 # Each `make` call yields a fresh class instance; they're independent.
 		
-def Foo (class { a:Integer }) def x make Foo { a:1 } def y make Foo { a:2 } ( x .a ) addq ( y .a )	3	
+def Foo (class { a:Integer }) def x (make Foo { a:1 }) def y (make Foo { a:2 }) ( x .a ) addq ( y .a )	3	
 		
 # ====================================================================		
 # §  The former open Object container and fixed Array were removed;		

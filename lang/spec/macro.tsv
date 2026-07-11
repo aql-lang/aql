@@ -8,8 +8,8 @@
 # §0  gensym — fresh, never-colliding atoms (Phase 0).
 gensym	tmp$g1/q	first gensym in a fresh registry
 [gensym gensym gensym]	[tmp$g1/q tmp$g2/q tmp$g3/q]	monotonic + unique per call
-gensym eq gensym	false	two gensyms never collide
-typeof gensym	Atom	gensym is an Atom
+(gensym) eq (gensym)	false	two gensyms never collide
+typeof (gensym)	Atom	gensym is an Atom
 #
 # §1  macro definer + unquote — operands arrive as code, spliced at the call site.
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])  twice 5	10	unquote inserts the operand form (twice)

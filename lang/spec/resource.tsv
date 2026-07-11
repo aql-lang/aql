@@ -108,8 +108,8 @@ make Entity { kind:'api' spec:'x' }	ERROR:missing field	missing entity
 		
 def planet ( make Entity { kind:'api' spec:'solardemo' entity:'planet' } ) planet .kind	'api'	
 def planet ( make Entity { kind:'api' spec:'solardemo' entity:'planet' } ) planet .entity	'planet'	
-def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Entity	true	
-def planet make Entity { kind:'api' spec:'solardemo' entity:'planet' } planet is Resource	true	
+def planet (make Entity { kind:'api' spec:'solardemo' entity:'planet' }) planet is Entity	true	
+def planet (make Entity { kind:'api' spec:'solardemo' entity:'planet' }) planet is Resource	true	
 		
 # ====================================================================		
 # 8. Resource and Entity at the type-stack level		

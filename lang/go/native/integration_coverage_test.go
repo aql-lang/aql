@@ -359,7 +359,7 @@ func TestIntegModuleImportAll(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -388,7 +388,7 @@ func TestIntegModuleImportRename(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod2"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -415,7 +415,7 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -462,7 +462,7 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("wmod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -486,7 +486,7 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -510,7 +510,7 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
@@ -534,7 +534,7 @@ func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 	})
 	runAQL(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
-		NewWord("module"), moduleBody,
+		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 

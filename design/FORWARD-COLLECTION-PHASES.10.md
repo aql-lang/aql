@@ -1,5 +1,17 @@
 # Forward Collection Is Two Phases
 
+> **Superseded in part by the strict forward barrier**
+> (design/STRICT-FORWARD-BARRIER.0.md), now the default. A bare function
+> word beginning its own dispatch is a barrier of ANY arity: the
+> *wait-through / speculative arrival* described below — where a parked
+> forward waits for a following fn word's RESULT — no longer happens;
+> such a parked forward is STRANDED (`signature_error`) instead. What
+> survives is the statement-boundary **commit** (`commitBarrierForward`):
+> a parked word with a real overload consuming exactly the args it already
+> holds still fires at the boundary. Read the sections below as the
+> mechanism they describe, with the wait-through arrivals now replaced by
+> a strand. The sole non-barrier is dot-access navigation (`m.a`).
+
 Status: **documents shipped behaviour** (the statement-boundary commit
 and template evaluation landed in `00cb7a7`; the speculation recording
 — ForwardInfo.Speculative/SpeculativeAt, the trace marker, the

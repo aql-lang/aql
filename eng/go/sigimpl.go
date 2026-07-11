@@ -143,6 +143,22 @@ func (s *Signature) dispatchHandler() Handler {
 	return s.Impl.dispatchHandler()
 }
 
+// DispatchSig invokes sig's run implementation directly over
+// already-resolved args (sig order). It is the invocation seam for
+// synthesized COMPOSITE forms — def's keyword overloads (`def name fn
+// […]`, `def name class {…}`, …) dispatch the captured constructor's
+// own signature through it, keeping the constructor's handler the
+// single implementation. Errors when the signature carries no
+// runnable implementation (a match-only shape).
+func DispatchSig(sig *Signature, args []Value, r *Registry) ([]Value, error) {
+	h := sig.dispatchHandler()
+	if h == nil {
+		return nil, r.AqlError("signature_error",
+			"signature has no run implementation", "")
+	}
+	return h(args, nil, nil, r)
+}
+
 // body returns the sig's AQL token body (nil for a Go sig / no impl).
 func (s *Signature) body() []Value {
 	if a, ok := s.Impl.(*AQLImpl); ok {

@@ -38,9 +38,9 @@ def l [1 2] (shift l) drop drop l	[1 2]	…receiver untouched
 
 def r (context set 'k' 1) r	ERROR:undefined word	Store set yields no value — the def binds nothing
 def P class {x:1} def p (make P {}) def r (p set x 2) r	ERROR:undefined word	class-instance set yields no value either
-def s context s set 'k' 1 end context get 'k'	1	a write through a captured store alias reaches the context
-context set 'x' 1 end def s context s get 'x'	1	a store captured AFTER a write sees it
-def s context context set 'j' 2 end s get 'j'	ERROR:unknown key	…but a store captured BEFORE the write does NOT — set pushes a new layer
+def s (context) s set 'k' 1 end context get 'k'	1	a write through a captured store alias reaches the context
+context set 'x' 1 end def s (context) s get 'x'	1	a store captured AFTER a write sees it
+def s (context) context set 'j' 2 end s get 'j'	ERROR:unknown key	…but a store captured BEFORE the write does NOT — set pushes a new layer
 
 # ====================================================================
 # §3  flex set/push family — in place, returning the SAME node
@@ -105,8 +105,8 @@ context set 'x' 1 end context set 'x' 2 end context set 'x' 3 end context get 'x
 context set k/q 3 end context dot k	3	atom keys work against the store
 context set 'x' 5 end def g fn [[] [Integer] [context get 'x']] (g)	5	a fn body reads the caller's context (dynamic scope)
 def g fn [[] [Integer] [context set 'y' 7 end context get 'y']] (g) context get 'y'	7 7	a fn body runs in the SAME engine — its context write PERSISTS after the call (contrast `do`)
-context deq context	false	Stores opt out of deq as well as eq — never equal, even to themselves
-def s1 context def s2 context (s1 deq s2)	false	…including two captures of the same context
+(context) deq (context)	false	Stores opt out of deq as well as eq — never equal, even to themselves
+def s1 (context) def s2 (context) (s1 deq s2)	false	…including two captures of the same context
 
 # ====================================================================
 # §8  class-instance writes are in place and visible through every view

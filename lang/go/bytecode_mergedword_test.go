@@ -124,7 +124,7 @@ func TestMergedWordSeam_ClassTuple(t *testing.T) {
 	const pointModule = `import module [def Point class {x:Integer y:Integer} ` +
 		`def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] ` +
 		`export "Pointer" {Point: Point add: add/r}]  ` +
-		`def p0 make Pointer.Point {x:1 y:2}  def p1 make Pointer.Point {x:4 y:6}  `
+		`def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  `
 	mergedWordCompilesNative(t, pointModule+`def p2 (p0 add p1)  p2.x`)
 	mergedWordCompilesNative(t, pointModule+`def p2 (p0 add p1)  p2 is Pointer.Point`)
 }
@@ -164,7 +164,7 @@ func TestMergedWordSeam_NegativeTwins(t *testing.T) {
 			`import module [def Point class {x:Integer y:Integer} ` +
 				`def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] ` +
 				`export "Pointer" {Point: Point add: add/r}]  ` +
-				`def p0 make Pointer.Point {x:1 y:2}  add p0 1`,
+				`def p0 (make Pointer.Point {x:1 y:2})  add p0 1`,
 		},
 		{
 			// open-words.tsv:32 — a body-local merge is INVISIBLE after fn exit.

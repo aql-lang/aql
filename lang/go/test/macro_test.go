@@ -38,12 +38,12 @@ func TestGensymUniqueAndMonotonic(t *testing.T) {
 	}
 
 	// Negative: two gensyms never compare equal.
-	res, err = runNativeSteps(t, nil, []string{`gensym eq gensym`})
+	res, err = runNativeSteps(t, nil, []string{`(gensym) eq (gensym)`})
 	if err != nil {
 		t.Fatalf("eq run: %v", err)
 	}
 	if b, _ := eng.AsBoolean(res[0]); b {
-		t.Error("gensym eq gensym should be false (always distinct)")
+		t.Error("(gensym) eq (gensym) should be false (always distinct)")
 	}
 }
 

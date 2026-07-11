@@ -74,7 +74,40 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 	last := valIdx
 	for len(operands) < arity && idx < e.tape.Len() {
 		t := e.tape.At(idx)
-		if IsEnd(t) || IsCloseParen(t) || IsOpenParen(t) || IsForward(t) ||
+		// A RAW paren group is one operand FORM: fold the balanced span
+		// into a ParenExpr — the same shape a group reaches a macro in
+		// when the PRECEDING statement's parked forward folded it during
+		// collection. A structurally-dispatched preceding statement
+		// (def's keyword forms) leaves the group as markers, and the
+		// macro must not depend on which path the previous statement
+		// took.
+		if IsOpenParen(t) {
+			depth := 1
+			j := idx + 1
+			var inner []Value
+			for ; j < e.tape.Len(); j++ {
+				v := e.tape.At(j)
+				if IsOpenParen(v) {
+					depth++
+				} else if IsCloseParen(v) {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+				inner = append(inner, v)
+			}
+			if depth != 0 {
+				break // unbalanced — treat as a structural boundary
+			}
+			pe := NewParenExpr(inner)
+			pe.pos = t.pos
+			operands = append(operands, pe)
+			last = j
+			idx = j + 1
+			continue
+		}
+		if IsEnd(t) || IsCloseParen(t) || IsForward(t) ||
 			t.Parent.ConformsTo(TMark) || t.Parent.ConformsTo(TMove) ||
 			t.Parent.ConformsTo(TInternal) || t.Parent.ConformsTo(TReturnCheck) {
 			break

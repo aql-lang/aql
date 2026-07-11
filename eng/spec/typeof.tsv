@@ -107,15 +107,15 @@ typeof Type	Any	Type's lattice parent is Any
 # 4. typeof — function / fnsig / enum / tor values		
 # ====================================================================		
 		
-typeof fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]	Function	a one-signature function value
-typeof fn [ Integer Integer [ addq 1 ] ]	Function	abbreviated form: bare input/output types, no param lists; body uses the stack
-typeof fn [ [ a:Integer ] [ Integer ] [ a ] [ s:String ] [ String ] [ s ] ]	Function	a multi-signature function (two full triples) — params `a` and `s` are bound in their bodies
-typeof fn [ Integer Integer [ addq 1 ] String String [ concatq '!' ] ]	Function	multi-signature, abbreviated form — bodies are param-free (the abbreviated form binds no names)
-typeof fnsig [ [ Integer ] [ Integer ] ]	FunctionSignature	a one-signature function-shape type value
-typeof fnsig [ Integer Integer ]	FunctionSignature	abbreviated form: bare types, no body
-typeof fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ]	FunctionSignature	a multi-signature shape — still a FunctionSignature
-typeof fnsig [ Integer Integer String String ]	FunctionSignature	multi-signature shape, abbreviated form
-typeof enum [ red green blue ]	Enum	an enum value is an Enum (a subtype of Disjunct)
+typeof (fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ])	Function	a one-signature function value
+typeof (fn [ Integer Integer [ addq 1 ] ])	Function	abbreviated form: bare input/output types, no param lists; body uses the stack
+typeof (fn [ [ a:Integer ] [ Integer ] [ a ] [ s:String ] [ String ] [ s ] ])	Function	a multi-signature function (two full triples) — params `a` and `s` are bound in their bodies
+typeof (fn [ Integer Integer [ addq 1 ] String String [ concatq '!' ] ])	Function	multi-signature, abbreviated form — bodies are param-free (the abbreviated form binds no names)
+typeof (fnsig [ [ Integer ] [ Integer ] ])	FunctionSignature	a one-signature function-shape type value
+typeof (fnsig [ Integer Integer ])	FunctionSignature	abbreviated form: bare types, no body
+typeof (fnsig [ [ Integer ] [ Integer ] [ String ] [ String ] ])	FunctionSignature	a multi-signature shape — still a FunctionSignature
+typeof (fnsig [ Integer Integer String String ])	FunctionSignature	multi-signature shape, abbreviated form
+typeof (enum [ red green blue ])	Enum	an enum value is an Enum (a subtype of Disjunct)
 typeof ( Integer tor Boolean )	Disjunct	a `tor` union is a plain Disjunct
 		
 # ====================================================================		
@@ -139,13 +139,13 @@ Integer is Type	true	Integer is a type — every type literal satisfies the meta
 Integer is ( typeof Integer )	true	`typeof Integer` is `Type`, and `Integer is Type` -> true
 typeof 5 is Type	true	`typeof 5` is `Integer`; `Integer is Type` -> true
 typeof Integer is Type	true	`typeof Integer` IS the type literal `Type`; `Type is Type` -> true
-typeof typeof 5	Number	typeof of any type literal is `Type`
-typeof typeof 'a'	String	
-typeof typeof [ 1 ]	Node	
-typeof typeof { a:1 }	Node	
-typeof typeof Integer	Scalar	
-typeof typeof Enum	Type	
-typeof typeof none	None	`typeof none` is the type literal `None`; `typeof None` saturates at None
+typeof (typeof 5)	Number	typeof of any type literal is `Type`
+typeof (typeof 'a')	String	
+typeof (typeof [ 1 ])	Node	
+typeof (typeof { a:1 })	Node	
+typeof (typeof Integer)	Scalar	
+typeof (typeof Enum)	Type	
+typeof (typeof none)	None	`typeof none` is the type literal `None`; `typeof None` saturates at None
 		
 # ====================================================================		
 # 6. pathof — the ancestry path of a TYPE		

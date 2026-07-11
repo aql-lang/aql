@@ -2,9 +2,27 @@ package eng
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
+
+// strictForwardBarrier is the forward-collection rule and the language
+// DEFAULT: every bare function word beginning its own dispatch is a
+// forward-collection barrier — uniformly, regardless of arity. It is a
+// fundamental design property, not a mode. When the nearest parked forward
+// cannot commit with the args it already holds (commitBarrierForward's
+// exact-arity probe fails), the stranded word raises a signature error
+// rather than letting the fn word's result arrive into the open slot — so
+// `print add 1 2` is an error and `print (add 1 2)` is the spelling.
+// `context eq context` strands the same way (a nullary is still a function
+// dispatch): group it as `(context) eq (context)`. The SOLE exemption is
+// structural, not arity-based: a dot-access chain (`m.a`, `MathUtil.now`)
+// is implicitly-parenthesized navigation, so its `dot` dispatch is grouped
+// and the outer word sees one value. AQL_NO_STRICT_BARRIER=1 restores the
+// legacy wait-through behaviour (transitional; slated for removal). See
+// design/STRICT-FORWARD-BARRIER.0.md.
+var strictForwardBarrier = os.Getenv("AQL_NO_STRICT_BARRIER") == ""
 
 // stackHeadroom is the extra capacity allocated beyond current need,
 // so that most insert/splice operations avoid heap allocation.
@@ -1084,6 +1102,15 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// or a codequote'd one (Quoted) is data — left via stepLiteral.
 			if isEvalReach(val) && !e.pendingForwardWantsRawParen() {
 				info, _ := AsReach(val)
+				// A dot-access chain (`m.a`, `MathUtil.now`) is a self-
+				// delimiting navigation that produces exactly ONE value — it
+				// reads as an implicit `(m.a)` group and feeds forward
+				// collection like any other value, so it is NOT a barrier
+				// under the strict rule. (The barrier exists for a function
+				// word that forward-collects its OWN args — `print add 1 2`;
+				// a Reach collects nothing further, its key is bound in the
+				// chain.) Lower to its get-chain marker span in place.
+				// design/STRICT-FORWARD-BARRIER.0.md.
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -1420,13 +1447,34 @@ func bindsReferent(name string) bool {
 // def binding, so the `f w ≡ f (w)` equivalence deliberately does not apply
 // there (`quote vs` captures the NAME vs even when vs is splice-bound —
 // word-splice spec §3).
-func capturesForward(fn *FnDefInfo, pos int) bool {
+// capturesForwardToken reports whether any of fn's signatures captures
+// THIS token structurally at position pos. A /q slot carrying a
+// concrete Atom PATTERN (a KEYWORD slot — it admits only that one
+// literal word, e.g. def's `fn` form) captures only a token with that
+// exact name; every other word keeps its barrier/expansion treatment
+// at this position. Unpatterned /q slots and raw/form/type slots
+// capture unconditionally. Without the token check, one keyword
+// signature would flip the per-word capture gate and disable the
+// function-word barrier at its position for EVERY statement of that
+// word — the cross-barrier pre-evaluation bug class the scan's
+// barrier stop exists to prevent.
+func capturesForwardToken(fn *FnDefInfo, pos int, tok Value) bool {
 	if fn == nil {
 		return false
+	}
+	tokName := ""
+	if w, err := AsWord(tok); err == nil {
+		tokName = w.Name
 	}
 	for i := range fn.Signatures {
 		sig := &fn.Signatures[i]
 		if sig.QuoteArgs != nil && sig.QuoteArgs[pos] {
+			if pat, ok := sigPattern(sig, pos); ok && IsAtom(pat) {
+				if pn, err := AsAtom(pat); err == nil && pn == tokName {
+					return true
+				}
+				continue
+			}
 			return true
 		}
 		if sigRawSlot(sig, pos) {
@@ -1482,14 +1530,65 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 // 1 the paren is consumed by no viable overload, so it is left raw — import
 // selects `[String]`, installs the namespace, and the paren then runs as an
 // ordinary trailing statement.
+// viableSig pairs a forward-eligible signature with its effective
+// barrier during resolveForwardArgs' pre-evaluation scan.
+type viableSig struct {
+	sig     *Signature
+	barrier int
+}
+
+// sigsHaveKeywordSlot reports whether any viable signature carries a
+// KEYWORD slot — a /q position with a concrete Atom pattern, admitting
+// exactly one literal word (see patternsOk).
+func sigsHaveKeywordSlot(viable []viableSig) bool {
+	for _, vs := range viable {
+		if vs.sig.QuoteArgs == nil {
+			continue
+		}
+		for p := range vs.sig.QuoteArgs {
+			if pat, ok := sigPattern(vs.sig, p); ok && IsAtom(pat) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pruneKeywordViable filters the viable set in place, dropping every
+// signature whose slot at pos is a KEYWORD slot this token cannot
+// satisfy: only a Word token bearing the pattern's name matches, and
+// the match is binding-agnostic like every /q capture. Without this
+// prune a keyword overload keeps the viable set wide past its own
+// miss, raising the scan's reach so a LATER paren group is
+// pre-evaluated across the true dispatch's barrier.
+func pruneKeywordViable(viable []viableSig, pos int, tok Value) []viableSig {
+	tokName := ""
+	if IsWord(tok) {
+		if wi, err := AsWord(tok); err == nil {
+			tokName = wi.Name
+		}
+	}
+	kept := viable[:0]
+	for _, vs := range viable {
+		keep := true
+		if pos < vs.barrier && vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos] {
+			if pat, ok := sigPattern(vs.sig, pos); ok && IsAtom(pat) {
+				if pn, err := AsAtom(pat); err != nil || pn != tokName {
+					keep = false
+				}
+			}
+		}
+		if keep {
+			kept = append(kept, vs)
+		}
+	}
+	return kept
+}
+
 func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// Forward-eligible signatures paired with their effective barrier
 	// (the /s and /f modifiers override the declared BarrierPos, mirroring
 	// matchSignature's forwardLimit computation).
-	type viableSig struct {
-		sig     *Signature
-		barrier int
-	}
 	viable := make([]viableSig, 0, len(fn.Signatures))
 	maxBarrier := 0
 	for si := range fn.Signatures {
@@ -1552,6 +1651,11 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		viable = kept
 	}
 
+	// scanHasKeyword: computed once so the per-token keyword prune below
+	// is zero-cost for the overwhelming majority of words, which carry
+	// no keyword slots.
+	scanHasKeyword := sigsHaveKeywordSlot(viable)
+
 	// prunePatterns is the PATTERN-ONLY prune for values whose TYPE must
 	// not prune (a collapsed paren result — multi-value accounting — or a
 	// def-bound word's binding, whose matchSignature treatment is
@@ -1609,6 +1713,16 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			break
 		}
 
+		// Keyword slots are decided by the raw token at their position —
+		// prune before any group evaluation or word expansion below, so a
+		// keyword overload's larger arity never widens the scan past the
+		// dispatch the non-keyword overloads will actually make: `def g
+		// (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
+		// 2-arg def binds g.
+		if scanHasKeyword {
+			viable = pruneKeywordViable(viable, pos, tok)
+		}
+
 		// Open paren: a forward group of unknown type.
 		if IsOpenParen(tok) {
 			// Structure-first gate: evaluate ONLY if some still-viable
@@ -1654,7 +1768,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// InterpString type would prune every typed signature and a
 		// `raise `bad: ${x}`` mis-dispatched to the 0-arg fallback.
 		if IsInterpString(tok) {
-			if !viableConsumes(pos) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			if !viableConsumes(pos) {
 				break
 			}
 			result, err := e.evalInterpString(tok)
@@ -1673,7 +1787,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// (Node/Xml) is only knowable after evaluation, so evaluate in
 		// place when a viable overload consumes this position, then prune.
 		if IsXmlInterp(tok) {
-			if !viableConsumes(pos) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			if !viableConsumes(pos) {
 				break
 			}
 			result, err := e.evalXmlInterp(tok)
@@ -1716,6 +1830,12 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 				scanIdx++
 				continue
 			}
+			// A dot-access chain is a single-value navigation, not a
+			// forward-collection barrier (see the statement-branch Reach
+			// hook): pre-evaluate it into the collecting word's slot exactly
+			// like a paren group — uniformly, strict or not. Only a bare
+			// function word that collects its own args stops the scan
+			// (below). design/STRICT-FORWARD-BARRIER.0.md.
 			info, _ := AsReach(tok)
 			e.tape.Splice(scanIdx, 1, expandReach(info)...)
 			continue
@@ -1733,12 +1853,13 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// outlives this dispatch, so a word in the window of a pruned
 		// overload must stay a word for the NEXT word to capture; the
 		// paren/interp branches above gate the same way), structural-
-		// capture slots (/q takes the word's NAME, form/raw/type slots
-		// take the raw token — see capturesForward), code-bearing splices
-		// (Forth-style macros that must run against the live stack — see
-		// spliceIsData), and binder operands (`def y xs` rebinds the
-		// MARKER so y aliases the splice — see bindsReferent).
-		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForward(fn, pos) {
+		// capture slots (/q takes the word's NAME, a KEYWORD slot takes the
+		// matching literal word, form/raw/type slots take the raw token —
+		// see capturesForwardToken), code-bearing splices (Forth-style
+		// macros that must run against the live stack — see spliceIsData),
+		// and binder operands (`def y xs` rebinds the MARKER so y aliases
+		// the splice — see bindsReferent).
+		if IsWord(tok) && viableConsumes(pos) && !bindsReferent(fn.Name) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok && IsSplice(top) {
 					if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
@@ -1764,11 +1885,12 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// simulated stack and the operand layout refused "not adjacent on
 		// top". Stop so each dispatch pre-evaluates only the groups IT
 		// collects, in source order. Lookup mirrors commitBarrierForward's own
-		// function-word test. The capturesForward guard preserves a word the
-		// collecting sig takes STRUCTURALLY as an operand (a /q name like
-		// `undef foo`, a raw/form/type slot) — there the function word is the
-		// argument, not a barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForward(fn, pos) {
+		// function-word test. The capturesForwardToken guard preserves a word
+		// the collecting sig takes STRUCTURALLY as an operand (a /q name like
+		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
+		// def's `fn`) — there the function word is the argument, not a
+		// barrier, and the scan must walk past it.
+		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) {
 			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil {
 				break
 			}
@@ -2096,6 +2218,11 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	if e.commitBarrierForward() {
 		return nil
 	}
+	if strictForwardBarrier {
+		if serr := e.strandedForwardError(w.Name); serr != nil {
+			return serr
+		}
+	}
 	e.tape.Set(e.pointer, v)
 	// Dispatch the unquoted wrapper now: stepLiteral routes it through
 	// execFnDefLiteral, which forward-collects any trailing args.
@@ -2352,6 +2479,20 @@ func (e *Engine) stepWord(val Value) error {
 		// commitBarrierForward.
 		if e.commitBarrierForward() {
 			return nil
+		}
+		// Every bare function word beginning its own dispatch is a barrier —
+		// uniformly, regardless of arity. The strict rule does not ask "how
+		// many args does this word collect"; a nullary `context` and a
+		// binary `add` are both function dispatches, so both strand a parked
+		// forward that cannot commit (`(context) eq (context)`, `print (add
+		// 1 2)`). The ONLY exemption is structural, not arity-based: a
+		// dot-access chain is implicitly parenthesized navigation, so its
+		// `dot` dispatch is grouped and the outer word sees one value (the
+		// Reach hook above never strands). design/STRICT-FORWARD-BARRIER.0.md.
+		if strictForwardBarrier {
+			if serr := e.strandedForwardError(w.Name); serr != nil {
+				return serr
+			}
 		}
 		// Macro dispatch (design/MACROS-PHASE1.10.md §5): a macro word is
 		// applied to its raw operands ahead on the tape — BEFORE preEvalParens
@@ -3677,6 +3818,24 @@ func (e *Engine) autoEvalStack() error {
 // returning a new list containing the results. For example, [1 add 2] → [3].
 // consumed marks the list as a word/fn ARGUMENT being auto-evaluated (execMatch /
 // execFnDefSig), as opposed to the end-of-Run residual eval (autoEvalStack).
+// AutoEvalConsumedList evaluates a list operand exactly as execMatch
+// does for a consumed List argument. Exported for synthesized
+// composite forms whose gen-chain DEFERS a tail operand's evaluation
+// until after the pending-gen placeholder bindings are installed
+// (def's `gen [T] refine Record [v:T]` form): the chain signature
+// suppresses execMatch's eager evaluation, and the form handler
+// re-applies the tail constructor's own evaluation policy here.
+func AutoEvalConsumedList(r *Registry, v Value) (Value, error) {
+	return NewTop(r).autoEvalList(v, true)
+}
+
+// AutoEvalConsumedMap is AutoEvalConsumedList's map counterpart
+// (autoEvalMap with consumed=true; dataMap follows the caller's
+// constructor semantics — false for everything except `make`).
+func AutoEvalConsumedMap(r *Registry, v Value, dataMap bool) (Value, error) {
+	return NewTop(r).autoEvalMap(v, dataMap, true)
+}
+
 func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	elems, _ := AsList(val)
 	if elems.Len() == 0 {
@@ -5505,7 +5664,11 @@ func (e *Engine) policyGateWord(name string) error {
 // value-producing statement could be swallowed into the else slot. A
 // pending forward that CANNOT yet fire keeps waiting, since its
 // missing args may be the very results the stepping word produces
-// (`add 1 def x 5 x` still binds x and completes add).
+// (with `def g fn [[a:Any b:Any] [Any] [add a b]]`, `g 1 def x 5 x`
+// keeps g waiting through the boundary and def's bound value feeds
+// the second slot — forward-barrier.tsv §6; the same shape on a
+// typed native like `add 1 def x 5 x` never parks at all, it fails
+// loudly at plan time).
 //
 // Returns true when a forward was committed; the caller must return
 // to the engine loop (the pointer has moved to the committed word).
@@ -5606,6 +5769,43 @@ func (e *Engine) commitBarrierForward() bool {
 	e.pointer = funcIdx
 	e.rearrangeForForward(fwd.StackArgs, fwd.CollectedArgs)
 	return true
+}
+
+// strandedForwardError implements the strict-barrier rule's failure
+// case (PROTOTYPE, see strictForwardBarrier): called from stepWord
+// after commitBarrierForward has declined, it reports the nearest
+// pending forward in the current paren scope as STRANDED — the
+// boundary word will never feed it under the strict rule, and no
+// overload can fire with what it holds. Returns nil when no forward
+// is pending (the normal case). Engine-internal frame-tail words
+// (__pa and friends) are exempt: they are not source-level statement
+// boundaries.
+func (e *Engine) strandedForwardError(boundary string) *AqlError {
+	if strings.HasPrefix(boundary, "__") {
+		return nil
+	}
+	fwdIdx := -1
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.tape.At(i)) {
+			break
+		}
+		if IsForward(e.tape.At(i)) {
+			fwdIdx = i
+			break
+		}
+	}
+	if fwdIdx < 0 {
+		return nil
+	}
+	fwd, _ := AsForward(e.tape.At(fwdIdx))
+	missing := fwd.ExpectedArgs - fwd.CollectedArgs
+	detail := fmt.Sprintf(
+		"%s is still waiting for %d argument(s) when `%s` begins its own dispatch — "+
+			"a function word is a barrier and never feeds forward collection (strict rule); "+
+			"group the call in parens so its RESULT becomes the argument: %s (%s …)",
+		fwd.FuncName, missing, boundary, fwd.FuncName, boundary)
+	return makeAqlErrorAt("signature_error", detail, fwd.FuncName,
+		e.effectiveSource(), "", fwd.Pos)
 }
 
 // noteSpeculativeBarrierCommit emits the speculative_forward_commit

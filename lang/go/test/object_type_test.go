@@ -1005,7 +1005,7 @@ func TestMakeObjectPrototypeChainRef(t *testing.T) {
 	// instances are flat, there is no chain to seed.
 	_, err := runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
-		`def foo1 make Foo {x:42}`,
+		`def foo1 (make Foo {x:42})`,
 		`def Bar refine Foo {y:String}`,
 		`make Bar {y:"hi"} foo1`,
 	})
@@ -1064,7 +1064,7 @@ func TestMakeObjectAutoPrototypeWithDefaults(t *testing.T) {
 func TestMakeObjectPrototypeOverrideInherited(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
-		`def foo1 make Foo {x:1}`,
+		`def foo1 (make Foo {x:1})`,
 		`def Bar refine Foo {y:String}`,
 		`make Bar {y:"A",x:99} foo1`,
 	})
@@ -1395,7 +1395,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	// Dot access reads flat instance fields — own and inherited alike.
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
-		`def foo1 make Foo {x:1}`,
+		`def foo1 (make Foo {x:1})`,
 		`foo1 dot x`,
 	})
 	if err != nil {
@@ -1408,7 +1408,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	result, err = runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
 		`def Bar refine Foo {y:String}`,
-		`def bar-a make Bar {x:1, y:"A"}`,
+		`def bar-a (make Bar {x:1, y:"A"})`,
 		`bar-a dot y`,
 	})
 	if err != nil {
@@ -1421,7 +1421,7 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 	result, err = runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
 		`def Bar refine Foo {y:String}`,
-		`def bar-a make Bar {x:1, y:"A"}`,
+		`def bar-a (make Bar {x:1, y:"A"})`,
 		`bar-a dot x`,
 	})
 	if err != nil {
@@ -1439,10 +1439,10 @@ func TestMakeObjectPrototypeDotAccess(t *testing.T) {
 func TestMakeObjectPrototypeDotAccessEndToEnd(t *testing.T) {
 	result, err := runNativeSteps(t, nil, []string{
 		`def Foo class {x:Integer}`,
-		`def foo1 make Foo {x:1}`,
+		`def foo1 (make Foo {x:1})`,
 		`foo1.x`,
 		`def Bar refine Foo {y:String}`,
-		`def bar-a make Bar {x:1, y:"A"}`,
+		`def bar-a (make Bar {x:1, y:"A"})`,
 		`bar-a.y`,
 		`bar-a.x`,
 	})

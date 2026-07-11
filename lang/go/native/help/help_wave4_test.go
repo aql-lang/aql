@@ -594,3 +594,34 @@ func TestW4Overview(t *testing.T) {
 		}
 	}
 }
+
+func TestW4FormatDynamicKeywordSlot(t *testing.T) {
+	// A signature with a keyword slot (position 1) renders the literal
+	// `fn/q` instead of the bare `Atom`; the other positions keep their
+	// abbreviated types. This is the def-form display fix.
+	info := FuncInfo{
+		Name:        "w4-kwdef",
+		ForwardArgs: true,
+		Sigs: []SigInfo{{
+			Args:     []string{"Scalar/Atom", "Scalar/Atom", "Node/List"},
+			Returns:  []string{"Any"},
+			Keywords: map[int]string{1: "fn/q"},
+		}},
+	}
+	out := FormatDynamic(info)
+	if !strings.Contains(out, "[Atom fn/q List]") {
+		t.Errorf("keyword slot must render as fn/q:\n%s", out)
+	}
+}
+
+func TestW4FormatDynamicNoKeywordStaysBare(t *testing.T) {
+	// Negative: a sig without Keywords renders every atom slot bare.
+	info := FuncInfo{
+		Name: "w4-plaindef",
+		Sigs: []SigInfo{w4Sig([]string{"Scalar/Atom", "Any"}, []string{"Any"})},
+	}
+	out := FormatDynamic(info)
+	if !strings.Contains(out, "[Atom Any]") {
+		t.Errorf("plain atom slot must stay bare:\n%s", out)
+	}
+}

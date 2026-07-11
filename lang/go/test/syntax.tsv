@@ -500,7 +500,7 @@ def myval 42 myval	42
 def greeting "hello" greeting	'hello'
 
 # def with string name (quoted)
-def "inc" word [1 add] 10 inc	11
+def "inc" (word [1 add] 10) inc	11
 
 # def with prefix body — semicolon separates def from call.
 # A prefix list body binds the list VALUE; splicing needs the forward
@@ -1020,8 +1020,8 @@ def f fn [[Atom/q] [Atom] [args.0]] f world	world
 def kv fn [[k:Atom/q v:Any] [Any] [v]] kv color 7	7
 # lambda sigs share the same param parser
 (k:Atom/q => [k]) hi	hi
-# an atom that names no type is NOT a /q declaration (reserved space)
-def f fn [[foo/q] [Any] [args.0]] f x		fn_spec_error
+# an atom that names no type is a KEYWORD slot — matches only that literal word
+def f fn [[foo/q] [Any] [args.0]] f foo	foo
 
 # === Type-valued params: t:Type, the /t bound, and Type<B> ===
 

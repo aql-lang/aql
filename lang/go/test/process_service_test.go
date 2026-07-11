@@ -194,7 +194,7 @@ func TestProcessSpawnBadOptsRejected(t *testing.T) {
 }
 
 func TestProcessSelfIsAPid(t *testing.T) {
-	out, err := runNativeSteps(t, nil, []string{`(typeof self) eq Pid`})
+	out, err := runNativeSteps(t, nil, []string{`(typeof (self)) eq Pid`})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestServiceSharedAcrossProcesses(t *testing.T) {
 		   send {op:"bump"} svc
 		   send {done: 1} main
 		 ]]`,
-		`def me self`,
+		`def me (self)`,
 		`spawn [ worker me ] drop`,
 		`spawn [ worker me ] drop`,
 		`receive [ {done: 1} [ 1 ] after 5000 [ -1 ] ] drop`,

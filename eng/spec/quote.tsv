@@ -16,8 +16,8 @@ quote true	true/q	`true`/`false` parse as Words; quote captures the upcoming Wor
 quote [ 1 2 3 ]	(quote [1 2 3])	quoted list preserves the quote wrapper through rendering (the /q suffix is words-only)
 
 # Round-trip through def: x bound to (quote NAME), then resolved.
-def x quote a x	a/q	define x as a/q, then resolve x → a/q
-def x quote dup x	dup/q	define x as dup/q; resolving x yields the atom (dup is never dispatched)
+def x (quote a) x	a/q	define x as a/q, then resolve x → a/q
+def x (quote dup) x	dup/q	define x as dup/q; resolving x yields the atom (dup is never dispatched)
 
 # `/q` suffix on a word produces an Atom at parse time — equivalent to
 # `(quote NAME)`.
