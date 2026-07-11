@@ -8,9 +8,11 @@
 # canonical shape form `Matrix(rowsXcols)`. Numeric results are Floats.
 #
 # Note: zeros/ones take (cols rows) in forward order — `zeros 3 2`
-# builds a 2x3 matrix. The accessors elem/row/col read the matrix from
-# the stack (`(matrix) MatrixUtil.row 1`) because the matrix arg is
-# produced by a paren group and the trailing indices are forward args.
+# builds a 2x3 matrix. The accessors elem/row/col/scale carry DUAL
+# signature orders: the natural matrix-first forward form
+# (`MatrixUtil.row m 1`, `MatrixUtil.elem m row col`) and the legacy
+# stack form (`(matrix) MatrixUtil.row 1`) both dispatch — the matched
+# order disambiguates by type.
 #
 # ---------------------------------------------------------------------
 # §1  construction
@@ -24,9 +26,12 @@ import "aql:matrix-util"  MatrixUtil.rows (MatrixUtil.create [[1 2 3] [4 5 6]])	
 import "aql:matrix-util"  MatrixUtil.cols (MatrixUtil.create [[1 2 3] [4 5 6]])	3	cols: number of columns
 #
 # §3  access (matrix read from the stack; indices are forward args)
-import "aql:matrix-util"  (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.elem 1 0	2.0	elem: a single entry — here row 0, col 1
-import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.row 1	[4.0 5.0 6.0]	row: one row as a list
-import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col 2	[3.0 6.0]	col: one column as a list
+import "aql:matrix-util"  (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.elem 1 0	2.0	elem: a single entry — here row 0, col 1 (legacy stack form, col-row order)
+import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.row 1	[4.0 5.0 6.0]	row: one row as a list (legacy stack form)
+import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col 2	[3.0 6.0]	col: one column as a list (legacy stack form)
+import "aql:matrix-util"  def m (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.elem m 0 1	2.0	elem forward form: matrix first, then row col — the wrapper's declared order
+import "aql:matrix-util"  def m (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.row m 1	[4.0 5.0 6.0]	row forward form: matrix first
+import "aql:matrix-util"  def m (MatrixUtil.create [[1 2 3] [4 5 6]]) MatrixUtil.col m 2	[3.0 6.0]	col forward form: matrix first
 #
 # §4  arithmetic
 import "aql:matrix-util"  MatrixUtil.mat-add (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[10 20] [30 40]])	Matrix(2x2)	mat-add: element-wise sum
@@ -35,7 +40,8 @@ import "aql:matrix-util"  MatrixUtil.mat-mul (MatrixUtil.create [[1 2] [3 4]]) (
 import "aql:matrix-util"  MatrixUtil.mat-mul (MatrixUtil.create [[1 2 3] [4 5 6]]) (MatrixUtil.create [[1 0] [0 1] [1 1]])	Matrix(3x3)	mat-mul forward form is B·A (operand-order pin: A is 2x3, B is 3x2, so B·A is 3x3 — a square spec row cannot catch a reversal)
 import "aql:matrix-util"  (MatrixUtil.create [[1 2 3] [4 5 6]]) (MatrixUtil.create [[1 0] [0 1] [1 1]]) MatrixUtil.mat-mul	Matrix(2x2)	mat-mul stack/swap form is A·B (the mirror of the forward row above; A·B is 2x2)
 import "aql:matrix-util"  MatrixUtil.mat-emul (MatrixUtil.create [[1 2] [3 4]]) (MatrixUtil.create [[5 6] [7 8]])	Matrix(2x2)	mat-emul: element-wise (Hadamard) product
-import "aql:matrix-util"  MatrixUtil.scale 2 (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	scale: multiply every entry by a scalar
+import "aql:matrix-util"  MatrixUtil.scale 2 (MatrixUtil.create [[1 2] [3 4]])	Matrix(2x2)	scale: multiply every entry by a scalar (scalar-first legacy order)
+import "aql:matrix-util"  def m (MatrixUtil.create [[1 2] [3 4]]) MatrixUtil.scale m 2	Matrix(2x2)	scale forward form: matrix first
 #
 # §5  transform
 import "aql:matrix-util"  MatrixUtil.transpose (MatrixUtil.create [[1 2 3] [4 5 6]])	Matrix(3x2)	transpose: swap rows and columns

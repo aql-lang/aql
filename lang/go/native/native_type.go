@@ -722,6 +722,23 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			aNode := &a
 			return []Value{NewBoolean(aNode.Equal(bNode) || aNode.IsSubtypeOf(bNode))}, nil
 		}
+		// One-predicate doctrine (design/REFINE-NEWTYPE-VS-SUBSET.10.md):
+		// a CONCRETE value against a bare-node RHS whose Behavior carries
+		// a CUSTOM matcher asks that Match first — the same predicate
+		// signature dispatch asks — so a type whose Match admits values
+		// beyond nominal ancestry (aql:matrix-util's per-import tensor
+		// mints match structurally across imports) answers `is`
+		// consistently with dispatch. Gated OFF DefaultBehavior nodes:
+		// their Match is plain conformance, whose `is` nuances the paths
+		// below own (notably the pinned `none is Any → false` — absence
+		// is outside Any's membership even though ConformsTo admits it).
+		// A false here is not final: the Unify path below still owns the
+		// membership types it always answered (const singletons,
+		// DepScalar construction), so this only ADDS agreement, never
+		// removes an admission.
+		if bNode.Behavior() != nil && bNode.Behavior() != DefaultBehavior && a.Is(bNode) {
+			return []Value{NewBoolean(true)}, nil
+		}
 	}
 	unified, ok := eng.UnifyR(a, b, r)
 	if !ok {

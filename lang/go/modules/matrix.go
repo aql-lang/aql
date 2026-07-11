@@ -88,7 +88,54 @@ func (t TensorData) Cols() int {
 type tensorFormatBehavior struct{}
 
 func (tensorFormatBehavior) Match(v native.Value, t *native.Type) bool {
-	return native.DefaultBehavior.Match(v, t)
+	if native.DefaultBehavior.Match(v, t) {
+		return true
+	}
+	// Cross-import identity: every `import "aql:matrix-util"` mints its
+	// own Tensor/Matrix/Vector nodes (per-import, like StreamKind), so a
+	// tensor VALUE constructed by one import carries a Parent the
+	// NOMINAL rule above cannot conform to another import's sig slots —
+	// `MatrixUtil.cols mat` inside an imported library then finds no
+	// signature for a caller-made Matrix, the wrapper parks as data, and
+	// the library's whole matrix surface breaks. A tensor is a tensor:
+	// match STRUCTURALLY by payload rank (only matrix-util code mints
+	// TensorData, and this Match is only reachable through a
+	// tensor-family node's Behavior). Matrix is a rank-2 tensor, Vector
+	// rank-1, Tensor any rank — the same lattice meaning the minted
+	// family declares.
+	if td, ok := tensorPayload(v); ok {
+		switch tensorKindName(t) {
+		case "Matrix":
+			return td.Rank() == 2
+		case "Vector":
+			return td.Rank() == 1
+		default: // "Tensor"
+			return true
+		}
+	}
+	// A NON-concrete v (a check-mode carrier of another import's node —
+	// the declared return of the caller's own `MatrixUtil.create`) has no
+	// payload to rank; match by FAMILY KIND instead, gated on v's Parent
+	// chain actually carrying this module's Behavior so an unrelated user
+	// type that happens to be named "Matrix" cannot slip in.
+	if v.Parent != nil && isTensorFamilyNode(v.Parent) {
+		vk := tensorKindName(v.Parent)
+		tk := tensorKindName(t)
+		return tk == "Tensor" || vk == tk
+	}
+	return false
+}
+
+// isTensorFamilyNode reports whether t (or an ancestor) is a node minted
+// by MintTensorTypes — identified by the module's own Behavior, the one
+// marker every per-import mint shares and nothing else can forge.
+func isTensorFamilyNode(t *native.Type) bool {
+	for n := t; n != nil; n = n.Parent {
+		if _, ok := n.Behavior().(tensorFormatBehavior); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (tensorFormatBehavior) Equal(a, b native.Value) bool {
@@ -155,6 +202,75 @@ func tensorPayload(v native.Value) (TensorData, bool) {
 func AsTensor(v native.Value) TensorData {
 	td, _ := tensorPayload(v)
 	return td
+}
+
+// matrixRowCore / matrixColCore / matrixAtCore / matrixScaleCore are the
+// order-free cores behind the DUAL-signature accessors: each word carries
+// its natural matrix-first forward sig AND the legacy data-last sig, and
+// both handlers destructure into the same core (the matched sig disambiguates
+// which slot holds what — Matrix and Integer/Number are disjoint).
+func matrixRowCore(idx, mat native.Value) ([]native.Value, error) {
+	r64, err := idx.AsConcreteInteger()
+	if err != nil {
+		return nil, err
+	}
+	m := AsTensor(mat)
+	row := int(r64)
+	if row < 0 || row >= m.Rows() {
+		return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows())
+	}
+	elems := make([]native.Value, m.Cols())
+	for j := 0; j < m.Cols(); j++ {
+		elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
+	}
+	return []native.Value{native.NewList(elems)}, nil
+}
+
+func matrixColCore(idx, mat native.Value) ([]native.Value, error) {
+	c64, err := idx.AsConcreteInteger()
+	if err != nil {
+		return nil, err
+	}
+	m := AsTensor(mat)
+	col := int(c64)
+	if col < 0 || col >= m.Cols() {
+		return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols())
+	}
+	elems := make([]native.Value, m.Rows())
+	for i := 0; i < m.Rows(); i++ {
+		elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
+	}
+	return []native.Value{native.NewList(elems)}, nil
+}
+
+func matrixAtCore(rowV, colV, mat native.Value) ([]native.Value, error) {
+	r64, err := rowV.AsConcreteInteger()
+	if err != nil {
+		return nil, err
+	}
+	c64, err := colV.AsConcreteInteger()
+	if err != nil {
+		return nil, err
+	}
+	m := AsTensor(mat)
+	row, col := int(r64), int(c64)
+	if row < 0 || row >= m.Rows() || col < 0 || col >= m.Cols() {
+		return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
+	}
+	return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
+}
+
+func (tt TensorModuleTypes) matrixScaleCore(factor, mat native.Value) ([]native.Value, error) {
+	s, err := native.AsNumber(factor)
+	if err != nil {
+		return nil, err
+	}
+	m := AsTensor(mat)
+	data := make([]float64, len(m.Data))
+	for i := range data {
+		data[i] = m.Data[i] * s
+	}
+	return []native.Value{tt.newMatrix(m.Rows(), m.Cols(), data)}, nil
 }
 
 // tensorValue wraps a TensorData as a value of the given tensor type.
@@ -233,15 +349,23 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// order `mat row col` (deepest→top) so the wrapper resolves as
 	// before; the underlying NativeFunc sig is the reverse (top-down)
 	// and is "data-last" by virtue of mat being deepest.
-	exports.Set("elem", makeTypedFnDef("matrix-at", subReg, native.TFloat, tt.Matrix, native.TInteger, native.TInteger))
-	exports.Set("row", makeTypedFnDef("matrix-row", subReg, native.TList, tt.Matrix, native.TInteger))
-	exports.Set("col", makeTypedFnDef("matrix-col", subReg, native.TList, tt.Matrix, native.TInteger))
+	exports.Set("elem", makeWrapFnDef("matrix-at", subReg,
+		typeSig([]*native.Type{tt.Matrix, native.TInteger, native.TInteger}, native.TFloat),
+		typeSig([]*native.Type{native.TInteger, native.TInteger, tt.Matrix}, native.TFloat)))
+	exports.Set("row", makeWrapFnDef("matrix-row", subReg,
+		typeSig([]*native.Type{tt.Matrix, native.TInteger}, native.TList),
+		typeSig([]*native.Type{native.TInteger, tt.Matrix}, native.TList)))
+	exports.Set("col", makeWrapFnDef("matrix-col", subReg,
+		typeSig([]*native.Type{tt.Matrix, native.TInteger}, native.TList),
+		typeSig([]*native.Type{native.TInteger, tt.Matrix}, native.TList)))
 
 	// Arithmetic
 	exports.Set("mat-add", makeTypedFnDef("matrix-mat-add", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
 	exports.Set("mat-sub", makeTypedFnDef("matrix-mat-sub", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
 	exports.Set("mat-mul", makeTypedFnDef("matrix-mat-mul", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
-	exports.Set("scale", makeTypedFnDef("matrix-scale", subReg, tt.Matrix, tt.Matrix, native.TNumber))
+	exports.Set("scale", makeWrapFnDef("matrix-scale", subReg,
+		typeSig([]*native.Type{tt.Matrix, native.TNumber}, tt.Matrix),
+		typeSig([]*native.Type{native.TNumber, tt.Matrix}, tt.Matrix)))
 	exports.Set("mat-emul", makeTypedFnDef("matrix-mat-emul", subReg, tt.Matrix, tt.Matrix, tt.Matrix))
 
 	// Transform. The flat row-major list of entries is exported as
@@ -463,26 +587,20 @@ func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
 		{
 			Name: "matrix-at",
 
+			// DUAL sig orders (see matrix-row): matrix-first is the natural
+			// forward form (`MatrixUtil.elem mat row col`); data-last
+			// [col, row, mat] keeps the legacy stack form (`mat row col
+			// matrix-at` binds sig[0]=col (top), sig[1]=row, sig[2]=mat).
 			Signatures: []native.Signature{{
-				// Data-last: [col, row, mat]. Under §1.4 stack-top-first matching,
-				// `mat row col matrix-at` binds sig[0]=col (top), sig[1]=row,
-				// sig[2]=mat (deepest).
+				Args: []*native.Type{tt.Matrix, native.TInteger, native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return matrixAtCore(args[1], args[2], args[0])
+				}),
+				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
+			}, {
 				Args: []*native.Type{native.TInteger, native.TInteger, tt.Matrix},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					c64, err := args[0].AsConcreteInteger()
-					if err != nil {
-						return nil, err
-					}
-					r64, err := args[1].AsConcreteInteger()
-					if err != nil {
-						return nil, err
-					}
-					m := AsTensor(args[2])
-					row, col := int(r64), int(c64)
-					if row < 0 || row >= m.Rows() || col < 0 || col >= m.Cols() {
-						return nil, fmt.Errorf("at: index (%d,%d) out of bounds for %dx%d matrix", row, col, m.Rows(), m.Cols())
-					}
-					return []native.Value{native.NewFloat(m.Data[row*m.Cols()+col])}, nil
+					return matrixAtCore(args[1], args[0], args[2])
 				}),
 				Returns: []*native.Type{native.TFloat}, BarrierPos: -1,
 			}},
@@ -490,23 +608,21 @@ func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
 		{
 			Name: "matrix-row",
 
+			// DUAL sig orders: matrix-first is the natural forward form
+			// (`MatrixUtil.row mat 1` — the order the wrapper advertises);
+			// index-first keeps the legacy stack form (`(mat) MatrixUtil.row 1`)
+			// dispatching. Matrix and Integer are disjoint, so the matched
+			// sig tells the shared core which slot holds what.
 			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix, native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return matrixRowCore(args[1], args[0])
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}, {
 				Args: []*native.Type{native.TInteger, tt.Matrix},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					r64, err := args[0].AsConcreteInteger()
-					if err != nil {
-						return nil, err
-					}
-					m := AsTensor(args[1])
-					row := int(r64)
-					if row < 0 || row >= m.Rows() {
-						return nil, fmt.Errorf("row: index %d out of bounds for %d rows", row, m.Rows())
-					}
-					elems := make([]native.Value, m.Cols())
-					for j := 0; j < m.Cols(); j++ {
-						elems[j] = native.NewFloat(m.Data[row*m.Cols()+j])
-					}
-					return []native.Value{native.NewList(elems)}, nil
+					return matrixRowCore(args[0], args[1])
 				}),
 				Returns: []*native.Type{native.TList}, BarrierPos: -1,
 			}},
@@ -514,23 +630,17 @@ func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
 		{
 			Name: "matrix-col",
 
+			// DUAL sig orders — see matrix-row.
 			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix, native.TInteger},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return matrixColCore(args[1], args[0])
+				}),
+				Returns: []*native.Type{native.TList}, BarrierPos: -1,
+			}, {
 				Args: []*native.Type{native.TInteger, tt.Matrix},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					c64, err := args[0].AsConcreteInteger()
-					if err != nil {
-						return nil, err
-					}
-					m := AsTensor(args[1])
-					col := int(c64)
-					if col < 0 || col >= m.Cols() {
-						return nil, fmt.Errorf("col: index %d out of bounds for %d cols", col, m.Cols())
-					}
-					elems := make([]native.Value, m.Rows())
-					for i := 0; i < m.Rows(); i++ {
-						elems[i] = native.NewFloat(m.Data[i*m.Cols()+col])
-					}
-					return []native.Value{native.NewList(elems)}, nil
+					return matrixColCore(args[0], args[1])
 				}),
 				Returns: []*native.Type{native.TList}, BarrierPos: -1,
 			}},
@@ -568,19 +678,17 @@ func matrixNatives(tt TensorModuleTypes) []native.NativeFunc {
 		{
 			Name: "matrix-scale",
 
+			// DUAL sig orders — see matrix-row.
 			Signatures: []native.Signature{{
+				Args: []*native.Type{tt.Matrix, native.TNumber},
+				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+					return tt.matrixScaleCore(args[1], args[0])
+				}),
+				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
+			}, {
 				Args: []*native.Type{native.TNumber, tt.Matrix},
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					s, err := native.AsNumber(args[0])
-					if err != nil {
-						return nil, err
-					}
-					m := AsTensor(args[1])
-					data := make([]float64, len(m.Data))
-					for i := range data {
-						data[i] = m.Data[i] * s
-					}
-					return []native.Value{tt.newMatrix(m.Rows(), m.Cols(), data)}, nil
+					return tt.matrixScaleCore(args[0], args[1])
 				}),
 				Returns: []*native.Type{tt.Matrix}, BarrierPos: -1,
 			}},
