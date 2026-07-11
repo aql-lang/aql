@@ -1388,25 +1388,45 @@ func embedsEnclosingCompound(v Value, enclosing map[string]bool) bool {
 //     and the shared const is exact parity — keep it. Otherwise refuse:
 //     cross-call identity of an escaping multi-read literal needs a per-call
 //     local seat (a deferred lowering), and refusal is the sound fallback.
-func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec) string {
+func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec, p *Program) string {
 	if len(es.freshenConst) == 0 {
 		return ""
 	}
-	counts := map[int]int{}
-	last := map[int]int{}
+	sites := map[int][]int{}
 	for pc, in := range cf.Code {
 		if in.Op == OpPushConst && es.freshenConst[int(in.Arg)] {
-			counts[int(in.Arg)]++
-			last[int(in.Arg)] = pc
+			sites[int(in.Arg)] = append(sites[int(in.Arg)], pc)
 		}
 	}
-	for idx, n := range counts {
-		if n == 1 {
-			cf.Code[last[idx]].Op = OpPushConstFresh
+	for idx, pcs := range sites {
+		if len(pcs) == 1 {
+			// One read site: construct fresh each time this pc executes (and each
+			// loop iteration, which a single re-executed site models exactly).
+			cf.Code[pcs[0]].Op = OpPushConstFresh
 			continue
 		}
-		if !returnsAllScalar(rec.returns) {
-			return "fn " + rec.name + ": compound body literal read at multiple sites may escape (per-call identity needs a local seat)"
+		if returnsAllScalar(rec.returns) {
+			// No compound can escape a Scalar-returning fn, so the shared pooled
+			// const is exact within-call parity — keep the bare pushes.
+			continue
+		}
+		// Multiple read sites of ONE compound binding in an escape-capable unit:
+		// seat a single per-call construction in a fresh frame local, and rewrite
+		// every read to OpPushConstFreshLocal (lazy clone-on-first-read, shared
+		// thereafter). This is the "per-call local seat" the shared const cannot
+		// give — one instance per call, shared by every read, fresh across calls,
+		// exactly the interpreter's `def x {…}` semantics. In-place rewrites only,
+		// so jump targets stay valid.
+		slot := cf.NLocals
+		cf.NLocals++
+		for len(cf.LocalNames) < cf.NLocals {
+			cf.LocalNames = append(cf.LocalNames, "")
+		}
+		ref := len(p.ConstLocals)
+		p.ConstLocals = append(p.ConstLocals, ConstLocalRef{ConstIdx: idx, Slot: slot})
+		for _, pc := range pcs {
+			cf.Code[pc].Op = OpPushConstFreshLocal
+			cf.Code[pc].Arg = int32(ref)
 		}
 	}
 	return ""
@@ -6322,7 +6342,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
-		if reason := freshenFnUnitConsts(&cf, es, rec); reason != "" {
+		if reason := freshenFnUnitConsts(&cf, es, rec, p); reason != "" {
 			return nil, reason, false
 		}
 		p.Fns = append(p.Fns, cf)

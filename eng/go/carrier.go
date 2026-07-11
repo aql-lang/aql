@@ -1560,8 +1560,22 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
-	f.variadicResult = true
 	f.dynBodyResult = true
+	// A VALUE-EVAL body (`do {map}`) — a CONCRETE, non-dynamic Map arg on the
+	// non-fallback (value-eval) sig — produces EXACTLY len(outs) values
+	// deterministically (the evaluated map: always one). Its result count is
+	// FIXED, not runtime-variable, so it must NOT be marked variadic: the lowerer
+	// already lowers it to a fixed-nout CALL_NATIVE (lowerCall never flags a
+	// dyn-body event in lw.variadic), and a spurious record-time variadic mark
+	// only poisons an enclosing branch/fn residual (armOutVariadic →
+	// branchVariadicResult → rec.variadic), refusing a downstream fixed-arity
+	// consumer (`print (if c [do {a:1}] [do {b:2}])`) the VM runs correctly. A
+	// CODE-BODY (List/CompileFallbackBody) or a GRADUAL (Dynamic) body — whose
+	// runtime net count / overload is genuinely variable — keeps the marking.
+	fixedValueEval := IsConcrete(body) && !body.Dynamic && !sig.CompileEffect.Has(CompileFallbackBody)
+	if !fixedValueEval {
+		f.variadicResult = true
+	}
 	es.eventInfo[seq] = f
 	// Carrier-identity de-collision, extended to INTRA-event repeats: the
 	// modeled outs of a dyn-body sub-run may repeat one value — an unrolled
@@ -1587,8 +1601,18 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 		seen[outs[i].ID] = true
 		es.setProducedAt(outs[i], seq, i)
 	}
-	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc).
-	es.dynEnv = true
+	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc) —
+	// but ONLY for a body whose handler RE-RUNS a code body at run time
+	// (resolving names against r.Defs / reading r.Args). A value-eval `do {map}`
+	// runs no such sub-body: its map arg is fully assembled (OpMakeMap) before the
+	// baked CALL_NATIVE, and doMapHandler just returns it — no dynamic-scope
+	// mirror is needed. Arming dynEnv for it would force every unrelated def in
+	// the program to a registry-visible OpBindDynScope twin and refuse the ones
+	// whose value has no compiled home (`def found None` → "dynamic-scope def of
+	// unknown provenance"), an unnecessary, whole-program refusal.
+	if !fixedValueEval {
+		es.dynEnv = true
+	}
 	return true
 }
 
