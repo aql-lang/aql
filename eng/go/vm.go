@@ -1107,6 +1107,20 @@ func (vc *vmContext) unwindDynBinds(base int) {
 // not reducible without obscuring the flat decode loop. Same documented exception
 // as the engine.go step dispatch and matchSignature (.golangci.yml).
 //
+// seatConstLocal backs OpPushConstFreshLocal: a multi-read compound body literal
+// is constructed ONCE per call into frame local cl.Slot and shared by every read
+// site. Frame locals start zero-valued (Parent==nil) and a compound clone always
+// carries a Parent, so Parent==nil is an unambiguous "not yet seated this call"
+// sentinel — deep-clone on the first read of the call, re-use the seated instance
+// after. Interpreter parity for `def x {…}` read at several sites: one instance
+// per call, shared within a call, fresh across calls.
+func seatConstLocal(p *Program, locals []Value, cl ConstLocalRef) Value {
+	if locals[cl.Slot].Parent == nil {
+		locals[cl.Slot] = CloneValue(p.Consts[cl.ConstIdx])
+	}
+	return locals[cl.Slot]
+}
+
 //nolint:gocyclo // the VM instruction dispatch is inherently one big switch — one
 func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut []Value, runErr error) {
 	p, r := vc.p, vc.r
@@ -1200,6 +1214,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// enclosing fn unit re-evaluates per call — interpreter parity
 			// for `(mk) eq (mk)` (see OpPushConstFresh in bytecode.go).
 			stack = append(stack, CloneValue(p.Consts[in.Arg]))
+		case OpPushConstFreshLocal:
+			// A multi-read compound body literal: construct ONE fresh instance per
+			// call, seated in a frame local, shared by every read site (see
+			// OpPushConstFreshLocal / seatConstLocal for the sentinel + parity).
+			stack = append(stack, seatConstLocal(p, locals, p.ConstLocals[in.Arg]))
 		case OpPushLocal:
 			stack = append(stack, locals[in.Arg])
 		case OpStoreLocal:

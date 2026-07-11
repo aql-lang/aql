@@ -3508,16 +3508,39 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: the one shape per-call identity cannot yet model — a
-	// multi-read body literal that may escape — must REFUSE (sound
-	// interpreter fallback), never compile with shared identity.
-	const escaping = `def mk fn [[] [List] [def a [1] (a eq a) drop a]] (mk)`
-	prog, reason, _, _ := mustNew(t).CompileCheck(escaping)
-	if prog != nil {
-		t.Fatalf("escaping multi-read literal compiled; want refusal")
+	// A multi-read body literal in an escape-capable fn now COMPILES via the
+	// per-call local seat (OpPushConstFreshLocal): one construction per call,
+	// seated in a frame local and shared by every read — exactly the
+	// interpreter's `def a {…}` semantics. Two soundness properties, each of
+	// which a wrong lowering fails:
+	//   - WITHIN a call the reads share ONE instance (`a eq a` is true;
+	//     a per-site OpPushConstFresh would mint two distinct lists → false);
+	//   - ACROSS calls the instance is fresh (`(mk) eq (mk)` stays false;
+	//     a shared pooled const would leak one identity → true).
+	seat := []struct{ name, src, want string }{
+		{"multi-read escaping literal compiles", `def mk fn [[] [List] [def a [1] def _ (a eq a) a]] (mk)`, "[[1]]"},
+		{"within-call reads are one instance", `def mk fn [[] [Boolean] [def a [1] def r (a eq a) def _ a r]] (mk)`, "[true]"},
+		{"across-call instances are fresh", `def mk fn [[] [List] [def a [1] def _ (a eq a) a]] ((mk) eq (mk))`, "[false]"},
 	}
-	if !strings.Contains(reason, "multiple sites") {
-		t.Errorf("refusal reason = %q; want the multi-site identity reason", reason)
+	for _, c := range seat {
+		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
+		if prog == nil || cerr != nil {
+			t.Fatalf("%s: expected a native compile, refused: reason=%q err=%v", c.name, reason, cerr)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		if errC != nil || !compiled {
+			t.Fatalf("%s: compiled run: compiled=%v err=%v", c.name, compiled, errC)
+		}
+		gotI, errI := mustNew(t).Run(c.src)
+		if errI != nil {
+			t.Fatalf("%s: interp run: %v", c.name, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: parity compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+		if fmt.Sprint(gotC) != c.want {
+			t.Errorf("%s: got %v, want %s", c.name, gotC, c.want)
+		}
 	}
 }
 

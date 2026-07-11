@@ -2856,6 +2856,18 @@ func (e *Engine) refuseForwardStackDrift(sig *Signature, positions []int) {
 	if !es.active() || sig == nil || sig.BarrierPos == 0 || sig.fullStack() || len(positions) < 2 {
 		return
 	}
+	// A word with NoEvalArgs (code-body / quoted) positions — `if`, `for`, the
+	// higher-order words — forward-collects THOSE body/quote tokens, never a
+	// trailing SCALAR after them: the drift this guard models is the `add`-style
+	// re-collection of a bare scalar operand (`island add 1`), where a concrete
+	// top would pull the next literal into a value slot. For `if ok [t] [e] 0`
+	// the check-mode all-stack match is an ANALYSIS-ORDER artifact — the recorded
+	// branch event still binds the correct operands (cond=ok, the two arm bodies)
+	// and the trailing `0` is a separate statement, so compiled == interpreter.
+	// Firing here is a false positive that refuses a faithfully-compilable `if`.
+	if len(sig.NoEvalArgs) > 0 {
+		return
+	}
 	// Find the top-of-stack matched arg (highest tape position) and whether any
 	// deeper matched arg is non-dynamic.
 	topPos, deeperConcrete := -1, false

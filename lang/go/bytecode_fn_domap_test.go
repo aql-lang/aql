@@ -59,3 +59,46 @@ func TestFnDoMapCountMismatchParity(t *testing.T) {
 		t.Errorf("return-count error parity: compiled=%v interp=%v, both must say %q", errC, errI, want)
 	}
 }
+
+// TestDoMapValueEvalInBranchArm pins the value-eval `do {map}` fix: a
+// CONCRETE, non-dynamic Map value-eval body always yields exactly one value
+// (the assembled map), so it must NOT be marked a variadic loop result. Before
+// the fix, a do-map in a BRANCH ARM (`if c [do {a:1}] [do {b:2}]`) propagated a
+// spurious variadic mark up through the branch merge to the enclosing fn, so any
+// fixed-arity consumer of the fn's result refused "consumes loop results" — even
+// though the VM runs the branch correctly. The decision library's eval-table-*
+// helpers (`if … [do {ok:false error:"no-match"}] …`) are exactly this shape.
+func TestDoMapValueEvalInBranchArm(t *testing.T) {
+	// A do-map arm result consumed by a FIXED-ARITY word (get) — the shape
+	// that used to refuse.
+	mustCompileWithParity(t,
+		`def pick fn [[c:Boolean] [Map] [if c [do {a:1}] [do {b:2}]]] ((pick true) get "a")`, "[1]")
+	// One do-arm, one literal-map arm.
+	mustCompileWithParity(t,
+		`def pick fn [[c:Boolean] [Map] [if c [do {a:1}] [{b:2}]]] ((pick false) get "b")`, "[2]")
+	// The decision eval-table-unique tail shape: nested `if` whose arms are
+	// do-map error results, consumed by a fixed-arity word.
+	mustCompileWithParity(t,
+		`def f fn [[n:Integer] [Map] [if (n gt 0) [do {ok:[true]}] [if (n eq 0) [do {ok:[false] error:["z"]}] [do {ok:[false] error:["neg"]}]]]] ((f 0) get "error")`,
+		"[z]")
+}
+
+// TestDoMapValueEvalNoDynEnv pins that a value-eval `do {map}` does NOT arm the
+// program-wide DynEnv mirror (its handler runs no dynamic-name-resolving code
+// body). Before the fix, arming DynEnv forced every unrelated `def` in the
+// program to a registry-visible OpBindDynScope twin, refusing a sibling fn whose
+// binding has no compiled home (`def found None` → "dynamic-scope def `found` of
+// unknown provenance") — the decision eval-tree/find-node shape.
+func TestDoMapValueEvalNoDynEnv(t *testing.T) {
+	// A `do {map}` and a separate loop-with-`def x None` in the same program:
+	// the loop def must not be forced dyn-scope by the do-map.
+	mustCompileWithParity(t, `
+def find fn [[k:Integer ns:List] [Any] [
+  def found None
+  for (ns size) [ def i2 i def nd (ns i2 get) if ((nd get "id") k eq) [def found nd] [] ] end
+  found
+]]
+def mk fn [[] [Map] [do {ok:[true]}]]
+def _ (mk)
+((find 2 [{id:1} {id:2}]) get "id")`, "[2]")
+}

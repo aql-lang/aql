@@ -299,6 +299,23 @@ const (
 	// capture slots (locals), never consts, so closure identity is preserved.
 	OpPushConstFresh
 
+	// OpPushConstFreshLocal is the MULTI-read twin of OpPushConstFresh: a compound
+	// body literal bound once and read at SEVERAL sites (`def tree {…}` used in two
+	// statements). A single OpPushConstFresh per site would mint a DISTINCT instance
+	// at each read (breaking `(x) eq (x)` identity within a call); a shared pooled
+	// const would leak ONE instance across ALL calls (breaking per-call freshness).
+	// The interpreter's semantics are exactly one construction per call, shared by
+	// every read — so every read site lowers to this op, keyed (Arg indexes
+	// Program.ConstLocals) to a {ConstIdx, Slot} pair: on first execution in a frame
+	// it deep-clones Consts[ConstIdx] into frame local Slot and pushes it; every
+	// later read pushes the seated local. The frame's locals start zero-valued
+	// (Parent==nil) and a compound clone always carries a Parent, so Parent==nil is
+	// an unambiguous "not yet seated this call" sentinel. Lazy init needs no
+	// dominating construction site, so the in-place rewrite (freshenFnUnitConsts)
+	// leaves every jump target untouched. Only fn units emit it (main-unit literals
+	// evaluate once, straight-line).
+	OpPushConstFreshLocal
+
 	// OpBindTyped is the runtime validate/reparent step of a typed value-def
 	// (`def x:Pos n`) whose constraint is a REFINEMENT — a predicate type, a
 	// bare-refine newtype, or an inline/named DepScalar subset — and whose body
@@ -408,6 +425,7 @@ var opcodeNames = [...]string{
 	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
 	OpCallDynFrame:        "CALL_DYN_FRAME",
 	OpPushConstFresh:      "PUSH_CONST_FRESH",
+	OpPushConstFreshLocal: "PUSH_CONST_FRESH_LOCAL",
 	OpBindTyped:           "BIND_TYPED",
 	OpCallDynMethod:       "CALL_DYN_METHOD",
 	OpLookupDynScope:      "LOOKUP_DYN_SCOPE",
@@ -718,6 +736,14 @@ type TypedBindSpec struct {
 	Cons     *Value // constraint value: TypedBindPredicate (the fn) and TypedBindDepScalar (the DepScalar); nil for TypedBindRefine
 }
 
+// ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names
+// the pooled Program.Consts entry to deep-clone once per call, Slot the fn-unit
+// frame-local it is seated in and re-read from.
+type ConstLocalRef struct {
+	ConstIdx int
+	Slot     int
+}
+
 // TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
 // detail message, the word it is attributed to, an optional hint, and the full
 // structured diagnostic payload (secondary spans, notes, suggestions) — built
@@ -765,10 +791,16 @@ type Program struct {
 	Traps      []TrapSpec
 	TypedBinds []TypedBindSpec
 	DynMethods []DynMethodSpec
-	Fns        []CompiledFn
-	Debug      []SrcPos // 1:1 with Code
-	MaxStack   int      // a floor when the program loops (results accumulate)
-	NumLocals  int
+	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
+	// pooled const to deep-clone and the frame-local slot to seat it in, for a
+	// multi-read compound body literal that needs one per-call construction shared
+	// across its read sites. Slot is frame-relative to the fn unit whose Code holds
+	// the op (each op appears in exactly one unit). Nil for programs with none.
+	ConstLocals []ConstLocalRef
+	Fns         []CompiledFn
+	Debug       []SrcPos // 1:1 with Code
+	MaxStack    int      // a floor when the program loops (results accumulate)
+	NumLocals   int
 	// DynEnv marks a program containing a dynamic code-body dispatch
 	// (CompileDynBody — tryRecordDynBody): the VM brackets every CALL_USER
 	// frame with an args-stack push so a body's runtime sub-run reads `args`
