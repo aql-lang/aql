@@ -876,8 +876,10 @@ func (es *EmitState) forkForProbe() *EmitState {
 	copy(p.openUnitRecs, es.openUnitRecs)
 	// The probe inherits the gradual-nesting mode: probe and real must
 	// compile under the SAME modality or the probe's verdict is about a
-	// different unit (see compileStoredFnUnit / tryReturnedClosure).
+	// different unit (see compileStoredFnUnit / tryReturnedClosure). Same
+	// for the environment mode (dynEnv).
 	p.storedGradualDepth = es.storedGradualDepth
+	p.dynEnv = es.dynEnv
 	return p
 }
 
@@ -1526,6 +1528,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	// refused "unmatched dispatch recovered", and surfaced as the misleading
 	// "function-valued operand at filter (Stage 3)".
 	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
@@ -1533,6 +1536,19 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
+	}
+	// The probe ran the body END TO END, so it knows the pass's terminal
+	// environment mode: a dyn-body dispatch (tryRecordDynBody) anywhere
+	// inside armed probe.dynEnv. Arm the REAL state NOW — before the real
+	// compile — so every unit it finishes plans under the widened mode.
+	// DynEnv arming mid-pass otherwise drifts plan against lowering: a unit
+	// finished BEFORE the arming plans without dyn-bind source promotion,
+	// then Finalize lowers it widened and refuses "dynamic-scope def of
+	// unpromoted computed value" (mini-s3's s3-serve — the store's append
+	// handler finishes before the serve-raw closure reaches s3-conn's
+	// `do … error …`).
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
 	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
@@ -1570,6 +1586,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	// on the real state) — probe and real must compile under the SAME
 	// modality or the probe's verdict is about a different unit.
 	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	r.Check.Emit = es
@@ -1578,6 +1595,13 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		// (stamp_report.go); the compile-time bake ignores the field.
 		es.storedFnProbeReason = probe.Reason
 		return 0, false
+	}
+	// Carry the probe's TERMINAL environment mode into the real pass (see
+	// tryReturnedClosure): a dyn-body dispatch inside the body arms dynEnv,
+	// and units the real pass finishes before reaching that dispatch must
+	// plan under the widened mode or Finalize refuses their dyn-binds.
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -1632,11 +1656,16 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	probe.reg = r
 	// Same-modality probe (see tryReturnedClosure / compileStoredFnUnit).
 	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
 	if !probeOK {
 		return Value{}, false
+	}
+	// Probe-terminal environment mode → real pass (see tryReturnedClosure).
+	if probe.dynEnv {
+		es.dynEnv = true
 	}
 	unit, realOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
