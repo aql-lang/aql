@@ -1,6 +1,7 @@
 package repl
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -86,6 +87,13 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 
 	meta := NewMetaRegistry()
 	var lastStack []native.Value
+	// Diagnostics render with the ANSI palette when out is a real
+	// terminal (NO_COLOR honored); the plain rendering is byte-identical
+	// to the historical output.
+	color := native.ResolveColor(out, "auto")
+	renderErr := func(err error) string {
+		return renderREPLError(err, color)
+	}
 
 	for {
 		line, err := rl.Readline()
@@ -125,14 +133,14 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 
 		values, err := parser.Parse(line)
 		if err != nil {
-			fmt.Fprintf(out, "  parse error: %s\n", err)
+			fmt.Fprintf(out, "  parse error: %s\n", renderErr(err))
 			continue
 		}
 
 		eng := native.NewTop(registry)
 		result, err := eng.Run(values)
 		if err != nil {
-			fmt.Fprintf(out, "  error: %s\n", err)
+			fmt.Fprintf(out, "  error: %s\n", renderErr(err))
 			continue
 		}
 
@@ -176,4 +184,16 @@ func toReadCloser(r io.Reader) io.ReadCloser {
 		return rc
 	}
 	return io.NopCloser(r)
+}
+
+// renderREPLError formats an error for the REPL: a structured AqlError
+// re-renders through the diagnostic renderer with the ANSI palette when
+// color is on; everything else (and the color-off path) keeps the plain
+// Error() text.
+func renderREPLError(err error, color bool) string {
+	var ae *native.AqlError
+	if color && errors.As(err, &ae) {
+		return ae.Render(native.RenderOpts{Color: true})
+	}
+	return err.Error()
 }

@@ -73,3 +73,12 @@ func TestW9GetrObjectResourceArms(t *testing.T) {
 		t.Fatalf("getrObject missing resource field: %v", err)
 	}
 }
+
+// TestW9SrcOfNil covers the nil-registry guard of srcOf, the helper
+// notFoundKeyError uses to fetch the source text for a key-miss excerpt.
+// Every caller passes the live registry; nil yields the empty source.
+func TestW9SrcOfNil(t *testing.T) {
+	if got := srcOf(nil); got != "" {
+		t.Fatalf("srcOf(nil) = %q, want empty", got)
+	}
+}

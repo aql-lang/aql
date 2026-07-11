@@ -54,6 +54,7 @@ type EmitRecorder interface {
 	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
 	RecordTrap(code, detail, word, hint string, pos SrcPos) bool
+	RecordTrapErr(ae *AqlError, pos SrcPos) bool
 	RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool)
 	RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool
 	recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool
@@ -98,6 +99,7 @@ type EmitRecorder interface {
 	// --- fn-unit compilation ---------------------------------------------
 	StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool)
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
+	SetUnitDecl(unit int, decl DeclSite)
 	unitVariadic(unit int) bool
 }
 
@@ -153,6 +155,7 @@ func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) boo
 }
 func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool   { return false }
+func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                     { return false }
 func (inactiveEmit) RecordTypedBind(_ TypedBindSpec, _, out Value, _ SrcPos) (Value, bool) {
 	return out, false
 }
@@ -199,4 +202,5 @@ func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, 
 	return -1, nil, false
 }
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}
+func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
 func (inactiveEmit) unitVariadic(int) bool                    { return false }

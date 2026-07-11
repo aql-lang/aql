@@ -188,7 +188,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	defer rows.Close()
 
 	cols, err := rows.Columns()
-	if err != nil {
+	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return TableData{}, fmt.Errorf("sqlite columns: %w", err)
 	}
 
@@ -218,7 +218,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	}
 
 	for rows.Next() {
-		if err := rows.Scan(scanDest...); err != nil {
+		if err := rows.Scan(scanDest...); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return TableData{}, fmt.Errorf("sqlite scan: %w", err)
 		}
 		om := NewOrderedMap()

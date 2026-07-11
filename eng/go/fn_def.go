@@ -88,9 +88,16 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			}
 		}
 
+		decl := DeclSite{Pos: outputSig.Pos()}
+		if r != nil {
+			decl.Source = r.Source
+			decl.File = r.BaseFile
+		}
+
 		sigs = append(sigs, FnSig{
 			Params:     params,
 			Returns:    returns,
+			Decl:       decl,
 			Impl:       AQL(bodyElems),
 			BarrierPos: barrierPos,
 			QuoteArgs:  QuoteArgsFromParams(params),

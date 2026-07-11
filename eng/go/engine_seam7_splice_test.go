@@ -44,23 +44,24 @@ func TestS7MaybeAddFnShapeHintNonSigError(t *testing.T) {
 	}
 }
 
-func TestS7MaybeAddFnShapeHintSetsHint(t *testing.T) {
+func TestS7MaybeAddFnShapeHintSetsSuggestion(t *testing.T) {
 	e := fnShapeCtxEngine(t)
-	// Empty existing hint → hint is set.
-	err := &AqlError{Code: "signature_error", Src: "double", Hint: ""}
+	err := &AqlError{Code: "signature_error", Src: "double"}
 	out := e.maybeAddFnShapeHint(err).(*AqlError)
-	if !strings.Contains(out.Hint, "double/q") {
-		t.Errorf("hint = %q, want the /q suggestion", out.Hint)
+	if len(out.Suggestions) != 1 || !strings.Contains(out.Suggestions[0].Message, "double/q") {
+		t.Errorf("suggestions = %v, want the /q suggestion", out.Suggestions)
 	}
 }
 
-func TestS7MaybeAddFnShapeHintAppendsHint(t *testing.T) {
+func TestS7MaybeAddFnShapeHintAppendsSuggestion(t *testing.T) {
 	e := fnShapeCtxEngine(t)
-	// Non-empty existing hint → appended.
-	err := &AqlError{Code: "signature_error", Src: "double", Hint: "prior"}
+	// Existing suggestions are kept; the /q one is appended after them.
+	err := &AqlError{Code: "signature_error", Src: "double",
+		Suggestions: []DiagSuggestion{{Message: "prior"}}}
 	out := e.maybeAddFnShapeHint(err).(*AqlError)
-	if !strings.Contains(out.Hint, "prior") || !strings.Contains(out.Hint, "double/q") {
-		t.Errorf("hint = %q, want prior + /q suggestion", out.Hint)
+	if len(out.Suggestions) != 2 || out.Suggestions[0].Message != "prior" ||
+		!strings.Contains(out.Suggestions[1].Message, "double/q") {
+		t.Errorf("suggestions = %v, want prior + /q suggestion", out.Suggestions)
 	}
 }
 

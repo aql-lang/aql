@@ -125,14 +125,25 @@ func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, 
 		return codecFuncs{}, r.AqlErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
 			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
 	}
+	// Detached-stamp each custom AQL codec fn so the per-request invokeFn →
+	// InvokeCallback dispatch runs it on the VM instead of CallAQL. The codec
+	// fns live INSIDE this map, where the compile-time store-fn bake never
+	// reaches (recordCallOperands stamps only direct fn operands), so the
+	// resolve site is their stamping seam. StampFnValue declines silently —
+	// Go-backed built-ins, policy off (-no-compile), capturing or refusing
+	// bodies — returning the value unchanged, so behaviour is byte-identical
+	// on every decline. Stamp BEFORE the client-side defaulting below so a
+	// symmetric codec's aliases share one stamped clone (one compile, not two).
+	dec, _ = eng.StampFnValue(r, dec)
+	enc, _ = eng.StampFnValue(r, enc)
 	cf.decode, cf.encode = dec, enc
 	if v, ok := get("encode-req"); ok {
-		cf.encodeReq = v
+		cf.encodeReq, _ = eng.StampFnValue(r, v)
 	} else {
 		cf.encodeReq = enc
 	}
 	if v, ok := get("decode-resp"); ok {
-		cf.decodeResp = v
+		cf.decodeResp, _ = eng.StampFnValue(r, v)
 	} else {
 		cf.decodeResp = dec
 	}
@@ -206,7 +217,7 @@ func listenSvcHandler(args []native.Value, _ map[string]native.Value, _ []native
 
 	go func() {
 		defer func() {
-			if rec := recover(); rec != nil {
+			if rec := recover(); rec != nil { //covergate:allow acceptor-goroutine recover body: the loop calls only Accept (errors, never panics) and ForkConcurrent on a listener listenHandler mints valid; per-connection panics land in runConnSession's own covered recover (§native)
 				fmt.Fprintf(acceptorFork.ErrOutput, "[aql/net] listen acceptor crashed: %v\n", rec)
 			}
 		}()
@@ -383,7 +394,7 @@ func httpShape(msg native.Value) (string, string, bool) {
 func matchRouteTemplate(svc native.Value, method, path string) (string, native.Value, bool) {
 	for _, pat := range native.ServiceRoutePatterns(svc) {
 		mp, _ := native.AsMap(pat)
-		if mp == nil {
+		if mp == nil { //covergate:allow route patterns are stored only via serviceAddHandler, which gates them through RequireConcreteMap — a nil-AsMap pattern cannot be stored (§native)
 			continue
 		}
 		if mv, ok := mp.Get("method"); ok {
@@ -420,7 +431,7 @@ func matchPathTemplate(tmpl, path string) (native.Value, bool) {
 			if name == "" {
 				name = "rest"
 			}
-			if i > len(pSegs) {
+			if i > len(pSegs) { //covergate:allow star-case bounds guard: iteration i is reached only after i-1 passed the i>=len(pSegs) return, so i<=len(pSegs) always; the guard defends the pSegs[i:] slice (§native)
 				return native.Value{}, false
 			}
 			params.Set(name, native.NewString(strings.Join(pSegs[i:], "/")))

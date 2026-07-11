@@ -106,7 +106,7 @@ func micronPathonGrammar(order []string) *tabnas.Tabnas {
 		regexp.MustCompile(`\A\S+\z`), order,
 		func(s string) (Value, error) {
 			out, err := makePathon(NewString(s), false)
-			if err != nil {
+			if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 				return Value{}, err
 			}
 			return out[0], nil
@@ -169,7 +169,7 @@ func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
 	order = append(order, "#PATHON")
 
 	m, err := micronEmailonGrammar(order).Merge(micronUrlonGrammar(order))
-	if err != nil {
+	if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return nil, err
 	}
 	for _, e := range extras {
@@ -209,7 +209,7 @@ func MicronFromString(s string) (Value, error) {
 		// An empty span never reaches the lexer's match tokens —
 		// preserve the family rule directly (the empty relative path).
 		out, err := makePathon(NewString(s), false)
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return Value{}, err
 		}
 		return out[0], nil

@@ -226,6 +226,7 @@ WORD flatten
 WORD flex
   [Node] barrier=1 returns=[Node] +returnsfn
 WORD fn
+  [Any Any Node/List] barrier=3 runcheck noeval={0,1,2} returns=[Type/Function]
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
 WORD fnsig
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/FunctionSignature]

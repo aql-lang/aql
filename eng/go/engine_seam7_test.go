@@ -119,7 +119,7 @@ func TestS7InsufficientArgsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "insufficient arguments for need2") {
+	if !strings.Contains(err.Error(), "cannot call `need2` — it expects 2 forward arguments") {
 		t.Errorf("err = %q", err.Error())
 	}
 }

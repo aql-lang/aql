@@ -1228,6 +1228,31 @@ bad                           # returns [aql/type_error] return value 1: expecte
 Multiple triples declare overloads (the engine tries each in order);
 multiple output types declare multiple return values.
 
+**The 3-arg single-triple form.** For the common single-signature
+case, `fn` also accepts one triple directly, without the wrapping
+list: `fn input output body`. Its signature is
+`[(tnot List) Any List]` — the input must NOT be a list (so the two
+forms stay disjoint: a list following `fn` always means the spec-list
+form) and the body MUST be a `[…]` code list. The non-list input is
+auto-wrapped as a one-param list (the same abbreviation `afn` uses),
+so a bare type, a `name:Type` pair, or a literal value pattern all
+work:
+
+```
+def inc fn n:Integer [Integer] [add n 1]     # ≡ fn [[n:Integer] [Integer] [add n 1]]
+inc 5                         # returns 6
+
+def add10 fn Integer [Integer] [10 add]     # unnamed param, body reads the stack
+add10 5                       # returns 15
+```
+
+Multi-param triples, overloads, bare positional `?` markers, and `|`
+barriers need the spec-list form (the input list is where they live);
+the `x?:Type` optional suffix works in both forms. The List-typed
+body slot keeps the form honest: a truncated triple (`fn input
+output` with no body) or a non-list body fails loudly with a
+signature error instead of collecting into the following code.
+
 **`/q` params capture names.** A param typed `Atom/q` takes the next
 *bare word* as its atom name — the argument is presented as if quoted,
 exactly like the built-in name-takers (`def`, `inspect`, `quote`) —
@@ -1303,8 +1328,9 @@ The body must be **one** token — wrap multi-token bodies as `[…]` or
 associatively, as in `make-adder` above: each inner lambda is
 constructed at call time with the outer params bound and captured.
 The arrow produces exactly one signature with return type `Any`; for
-declared returns or multiple overloads use the full
-`fn [[input] [output] [body] …]` form.
+a declared return use the 3-arg triple form `fn input output body`
+(non-list input, see [`fn` shape](#fn-shape)), and for multiple
+overloads use the full `fn [[input] [output] [body] …]` form.
 
 Parameter and return annotations may name **any** type — builtins,
 and user-defined types introduced with `def NAME refine …`. A value
@@ -1341,7 +1367,7 @@ strict rule holds at parameters and returns:
 def Pos (refine Integer)
 42 is Pos                                          # returns false
 def g fn [[n:Pos] [Integer] [n]]
-42 g                                               # returns [aql/signature_error] no matching signature for g
+42 g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
 def x:Pos 42   x g                                 # returns 42
 
 def mk fn [[] [Pos] [7]]
@@ -1362,7 +1388,7 @@ def Big (Integer gt 10)
 5  is Big                                          # returns false
 def g fn [[n:Big] [Integer] [n]]
 50 g                                               # returns 50
-5  g                                               # returns [aql/signature_error] no matching signature for g
+5  g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
 
 def mk fn [[] [Big] [50]]
 mk                                                 # returns 50
@@ -2125,6 +2151,49 @@ modules keep plain names.
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
 
+## Diagnostic reports
+
+Every engine error renders as a structured diagnostic report, designed
+to help fix the problem rather than merely name it:
+
+```
+[aql/signature_error]: cannot call `wp` — no signature matches the arguments
+  --> 2:1
+  1 | def wp fn [[policy:String n:Integer] [Integer] [n]]
+  2 | wp 3 "collect"
+      ^^ cannot call `wp` — no signature matches the arguments
+  = note: the arguments were 3 (an Integer) and 'collect' (a ProperString)
+  = note: candidate `wp (String, Integer)` — argument 1: expected String, got 3 (an Integer)
+  = note: stack: >>>word(wp)<<< 3 'collect'
+  = help: no signature matches (Integer, ProperString); one exists for
+    (String, Integer) — did you swap the arguments? expected: wp policy:String n:Integer
+```
+
+The shape is always: the `[aql/<code>]` header with the detail line, a
+`-->` position (or the honest `source position unknown` — locations are
+never guessed), the source excerpt with a `^^^` caret under the failing
+token, then zero or more of:
+
+* **secondary spans** — additional labeled locations with `---`
+  underlines: where a violated return contract was *declared*, where
+  the offending value was *produced*. Cross-file spans (a declaration
+  inside an imported module) render with their own `--> file:row:col`
+  header and that file's excerpt.
+* **`= note:` lines** — explanations: the argument tuple a failed call
+  received, per-candidate verdicts for each rejected overload
+  (nearest-first, capped at three), a stack snapshot.
+* **`= help:` lines** — actionable fixes: ``did you mean `upper`?``
+  (near-miss suggestions for undefined words, misspelt keys, and
+  unknown type names), "did you swap the arguments?", the
+  forward-grouping parens fix, and `see aql describe <word>` pointers.
+
+`error.Error()` (and every string-matching surface: spec rows, logs,
+JSON, the wasm playground) is always the plain rendering; interactive
+terminals opt into the ANSI palette via `--color` (see CLI.md). Hosts
+embedding the engine reach the structure itself — code, positions,
+spans, notes, suggestions — via `errors.As` with `*lang.AqlError` and
+re-render with `Render(lang.RenderOpts{Color: true})`.
+
 ## Error codes
 
 Errors are values of type `Ideal/Error` with a `code` atom and a
@@ -2158,7 +2227,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
 | `type_mismatch` | A value didn't match an expected signature slot. |
 | `arity_mismatch` | Wrong number of arguments. |
-| `div_zero` | Division by zero. |
+| `arith_error` | Arithmetic failure — division/modulo by zero on an exact numeric leaf, an arbitrary-precision fault. |
 | `out_of_range` | Index or numeric value outside the legal range. |
 | `unify_fail` | Two values cannot unify. |
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |

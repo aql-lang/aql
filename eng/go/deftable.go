@@ -353,8 +353,17 @@ func (dt *DefTable) Clone() *DefTable {
 		copy(cp, st)
 		stacks[name] = cp
 	}
-	// A fresh gen map (not copied): the clone starts its own generation
-	// timeline. dispatchCache is reset on the forked registry anyway
-	// (fork.go), so no cross-registry generation comparison occurs.
-	return &DefTable{stacks: stacks, gen: make(map[string]int64)}
+	// The gen map is COPIED so the clone continues the parent's generation
+	// timeline rather than restarting it. dispatchCache is reset on the
+	// forked registry (fork.go), so cache validity never depended on either
+	// choice — but a runtime-stamped CompiledFnRef's dep snapshot
+	// (depSnapEntry.Gen) IS compared across the stamp registry and its
+	// forks: a per-connection fork must see the stamp-time generation for
+	// an untouched module binding, or every stamped callback would read as
+	// stale on arrival and permanently fall back to the interpreter.
+	gen := make(map[string]int64, len(dt.gen))
+	for name, g := range dt.gen {
+		gen[name] = g
+	}
+	return &DefTable{stacks: stacks, gen: gen}
 }

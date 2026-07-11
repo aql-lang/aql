@@ -113,10 +113,18 @@ the interpreter then owns the whole program:
   (a check-mode-suppressed error) also refuses.
 - **Context-dependent word** — `args` / `__pa` (no per-call args stack in a VM
   frame), `FullStack` words.
-- **Fn-INVOKING word** — `apply` of a non-re-stepped value, the higher-order
-  forms over a fn value, `is` over a predicate fn: their handlers re-step the fn
-  on the tape, which the VM cannot honour. (Fn-INTROSPECTION words are exempt —
-  they only read the value.)
+- **Fn-INVOKING word** — `apply` of a non-re-stepped value, `is` over a
+  predicate fn: their handlers re-step the fn on the tape, which the VM cannot
+  honour. (Fn-INTROSPECTION words are exempt — they only read the value.) A
+  higher-order form over a LAMBDA value (filter/each/fold/scan, and walk's
+  hook slots) compiles to a closure unit via `tryRecordLambdaClosure` when the
+  lambda has a single own sig and the word has a callback convention; the BODY
+  lambda may carry LEXICAL captures (resolved to compiled homes and threaded
+  at OpPushClosure — the mini-redis KEYS shape) and the collection operand may
+  be a typed non-dynamic carrier (a computed `keys` result). Still refusing:
+  multi-overload lambdas, DYNAMIC (gradual) collections (the pair-vs-KeyVal
+  convention is ambiguous), captures on the extras/hook path, and unreachable
+  captures.
 - **Quoted-operand word** — usurp / force-arity / ref-family (results re-stepped)
   — except `get`/`getr`/`set` and module-inner natives over inert atom keys.
 - **Code-body word** — a `NoEvalArgs` body that is not inert (a computed paren,

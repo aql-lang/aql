@@ -34,12 +34,12 @@ import module [export "M" {t: Integer}] def x:(M.t) 5 x	5	an exported TYPE ancho
 import module [export "foo" {a:1}] foo.a	1	a lowercase export name is accepted — it binds like any export
 import module [export "foo" {a:1}] typeof foo	ModuleExport	…as a regular ModuleExport
 import module [export Foo {a:1}]	ERROR:undefined_word	the export name must be a String — a bare word is evaluated (and is unbound)
-import module [export "M" 42]	ERROR:no matching signature	a non-map export payload has no export sig
+import module [export "M" 42]	ERROR:no signature matches	a non-map export payload has no export sig
 #
 # §4  referent-form exports vs the bare-name gotcha
 import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] M.double 21	42	`d/r` holds the fn as data — the export dispatches on use
 import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d/r}] 21 M.double	42	…in swap form too
-import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no matching signature	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /r
+import module [def d fn [[n:Integer] [Integer] [n mul 2]] export "M" {double: d}]	ERROR:no signature matches	GOTCHA: a BARE fn name in the export map auto-evaluates 0-arg and fails — use /r
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v	42	a 0-arg fn exported bare fires at export build — the VALUE is exported
 import module [def z fn [[] [Integer] [42]] export "M" {v: z}] M.v typeof	Integer	…so the export is an Integer, not a Function
 import module [def z fn [[] [Integer] [42]] export "M" {v: z/r}] M.v	42	with /r the 0-arg fn is held and fires on access — same value, later

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,18 +57,69 @@ var langNew = lang.New
 // writes the residual stack (carriers joined by spaces) to w. This is the body
 // the run subcommand's EvalOptionsMode forwards to.
 func Eval(w io.Writer, source string, o lang.Options, mode CompileMode) error {
+	return EvalColor(w, source, o, mode, false)
+}
+
+// EvalColor is Eval with the color decision resolved by the caller
+// (lang.ResolveColor over the stream the error will be printed to):
+// a structured AqlError renders through the diagnostic renderer with
+// the ANSI palette; color=false keeps the byte-identical plain text.
+func EvalColor(w io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
+	return EvalReport(w, nil, source, o, mode, color)
+}
+
+// EvalReport is Eval plus the -compile-report surface and caller-resolved
+// color. When report is non-nil, the instance's detached-stamp attribution
+// (lang.AQL.StampReport — design/RUNTIME-STAMPING.0.md) is printed to it after
+// the run, one line per runtime-constructed callback with its outcome or
+// refusal reason. color renders a structured AqlError through the ANSI
+// diagnostic renderer; color=false keeps the byte-identical plain text.
+func EvalReport(w, report io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
 	a, err := langNew(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
-	return runAndPrint(w, a, source, mode)
+	runErr := runAndPrint(w, a, source, mode, color)
+	if report != nil {
+		PrintStampReport(report, a.StampReport())
+	}
+	return runErr
+}
+
+// PrintStampReport renders stamp attribution events one per line. An empty
+// report still prints a header line so `-compile-report` under -no-compile
+// (never armed, nil events) tells the user why it is empty.
+func PrintStampReport(w io.Writer, events []lang.StampEvent) {
+	if len(events) == 0 {
+		fmt.Fprintln(w, "compile-report: no runtime-stamp attempts (interpreter mode, or no runtime-constructed callbacks)")
+		return
+	}
+	for _, ev := range events {
+		name := ev.Name
+		if name == "" {
+			name = "(anonymous fn)"
+		}
+		where := ""
+		if ev.Pos.Row > 0 {
+			where = fmt.Sprintf(" @ %d:%d", ev.Pos.Row, ev.Pos.Col)
+		}
+		if ev.Stamped {
+			fmt.Fprintf(w, "compile-report: stamped %s%s\n", name, where)
+		} else {
+			reason := ev.Reason
+			if reason == "" {
+				reason = "body refused the stored-fn compile"
+			}
+			fmt.Fprintf(w, "compile-report: refused %s%s — %s\n", name, where, reason)
+		}
+	}
 }
 
 // runAndPrint executes source on an already-constructed instance (so callers
 // that need to configure the instance first — e.g. seed an in-memory file
 // system for bundled imports — can do so before running) and prints the
 // residual stack exactly as the run subcommand does.
-func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode) error {
+func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode, color bool) error {
 	var result []any
 	var err error
 	switch mode {
@@ -79,6 +131,13 @@ func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode) erro
 		result, err = a.Run(source)
 	}
 	if err != nil {
+		// A structured diagnostic re-renders with the ANSI palette when
+		// the caller resolved color for the output stream; anything else
+		// (and the color-off path) keeps the historical plain text.
+		var ae *lang.AqlError
+		if color && errors.As(err, &ae) {
+			return fmt.Errorf("error: %s", ae.Render(lang.RenderOpts{Color: true}))
+		}
 		return fmt.Errorf("error: %s", err)
 	}
 
@@ -156,7 +215,7 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		a.SetFileOps(mem)
 	}
 
-	if err := runAndPrint(stdout, a, cfg.Source, cfg.Compile); err != nil {
+	if err := runAndPrint(stdout, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

@@ -248,17 +248,25 @@ func serviceAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, err
 	}
+	// Detached-stamp the handler at its store site so runHandlerChain's
+	// InvokeCallback runs it on the VM: a handler added from an interpreted
+	// context (a module fn's body — the real apps) is otherwise invisible to
+	// every compile pass. StampFnValue declines silently (policy off,
+	// already stamped, capturing, refusing body) returning the input
+	// unchanged, so behaviour is byte-identical on every decline; the stamp
+	// runs BEFORE the lock (it forks the registry, no service state).
+	handler, _ := eng.StampFnValue(r, args[1])
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.stacks[sig]; !exists {
 		h := sig
 		s.pm.pm.Add(pat, &h)
-		s.pm.side[sig] = patrunRule{raw: args[0], val: args[1], disp: patrunDisp(keys, pat)}
+		s.pm.side[sig] = patrunRule{raw: args[0], val: handler, disp: patrunDisp(keys, pat)}
 		s.pm.order = append(s.pm.order, sig)
 	}
 	// Same-pattern add PUSHES (layering, newest outermost) — deliberately
 	// different from raw patrun, which overwrites (SERVICES.0.md §1).
-	s.stacks[sig] = append(s.stacks[sig], args[1])
+	s.stacks[sig] = append(s.stacks[sig], handler)
 	return nil, nil
 }
 
@@ -270,8 +278,10 @@ func serviceWrapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	if err := requireHandlerFn(r, args[0], "wrap"); err != nil {
 		return nil, err
 	}
+	// Same store-site stamping as `add` (see serviceAddHandler).
+	wrap, _ := eng.StampFnValue(r, args[0])
 	s.mu.Lock()
-	s.wraps = append(s.wraps, args[0])
+	s.wraps = append(s.wraps, wrap)
 	s.mu.Unlock()
 	return nil, nil
 }

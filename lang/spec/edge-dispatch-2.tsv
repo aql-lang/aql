@@ -106,7 +106,7 @@ false is (Boolean lt true)	true	false < true in the Boolean order
 def Neg (Integer lt 0) -5 is Neg	true	the predicate type binds under def like any type
 def Neg (Integer lt 0) 5 is Neg	false	…keeping its membership rule
 def Neg (Integer lt 0) def f fn [[n:Neg][String]["neg"]] f -3	'neg'	predicate types dispatch fn params (subset typing)
-def Neg (Integer lt 0) def f fn [[n:Neg][String]["neg"]] f 3	ERROR:no matching signature	…and reject non-members at the same boundary
+def Neg (Integer lt 0) def f fn [[n:Neg][String]["neg"]] f 3	ERROR:no signature matches	…and reject non-members at the same boundary
 Integer lt "a"	ERROR:does not match dependent base	a bound outside the base family cannot construct a predicate
 #
 # §6  equality stays total and cross-type-false; numeric magnitude unifies leaves

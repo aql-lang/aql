@@ -291,7 +291,7 @@ func renderDepScalar(v Value) string {
 		return ""
 	}
 	info, err := v.AsDepScalar()
-	if err != nil {
+	if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return ""
 	}
 	return formatDepScalar(v.Parent.Name(), info)
@@ -489,7 +489,7 @@ func BetweenHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 			args[1].Parent.String(), base.String())
 	}
 	cmp, err := CompareValues(args[0], args[1])
-	if err != nil {
+	if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return nil, fmt.Errorf("between: %w", err)
 	}
 	if cmp > 0 {

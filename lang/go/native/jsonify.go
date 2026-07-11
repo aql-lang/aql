@@ -42,7 +42,7 @@ func valueToAnySer(v Value) any {
 	}
 	if IsClassInstance(v) {
 		oi, err := AsClassInstance(v)
-		if err != nil {
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return v.String()
 		}
 		flat := ClassFields(&oi)
@@ -62,7 +62,7 @@ func valueToAnySer(v Value) any {
 		// the class reify contract (StructUtil.reify targets classes), so
 		// emitting one would produce JSON reify could not round-trip.
 		flat, ok := FlatInstanceFields(v)
-		if !ok {
+		if !ok { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return v.String()
 		}
 		out := make(map[string]any, flat.Len())

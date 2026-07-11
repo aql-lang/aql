@@ -8,9 +8,16 @@
 // as covered when ANY suite reaches it. It prints a per-module table
 // and fails (exit 1) when total coverage is below the threshold.
 //
+// Provably-unreachable defensive guards are excluded from the floor by an
+// inline `//covergate:allow <reason>` comment on the guard's OPENING line —
+// the exclusion travels WITH the code, so inserting or deleting lines above
+// a guard never invalidates it (the historical line-keyed allowlist.tsv went
+// stale on every refactor above a guard). A reason is mandatory: it is the
+// proof the block is unreachable. See design/COVERAGE-ALLOWLIST.10.md.
+//
 // Usage (normally via `make cover-gate`):
 //
-//	covergate -threshold 100 coverage/*.xout
+//	covergate -threshold 100 -root . coverage/*.xout
 package main
 
 import (
@@ -18,8 +25,11 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +40,12 @@ import (
 var osExit = os.Exit
 
 const modulePrefix = "github.com/aql-lang/aql/"
+
+// pragmaMarker is the inline comment that excludes the coverage block(s)
+// opening on its line from the floor. The text after it is the REQUIRED
+// reason — the proof the guard is unreachable; covergate rejects a bare
+// marker.
+const pragmaMarker = "//covergate:allow"
 
 // block is one profile entry's statement weight and best-seen hit count.
 type block struct {
@@ -106,37 +122,105 @@ func moduleOf(file string) string {
 	return parts[0]
 }
 
+// pragmaKey identifies a source line by instrumented file path and 1-based
+// line number — the granularity at which a `//covergate:allow` comment
+// excludes the coverage block(s) that OPEN on that line.
+type pragmaKey struct {
+	file string
+	line int
+}
+
+// blockStart maps a profile block key (file:sl.sc,el.ec) to the pragmaKey of
+// its opening line. Go's cover tool anchors a block at the line where it
+// begins, which is where the `//covergate:allow` comment sits.
+func blockStart(key string) pragmaKey {
+	i := strings.LastIndexByte(key, ':')
+	rng := key[i+1:] // sl.sc,el.ec
+	line, _ := strconv.Atoi(rng[:strings.IndexByte(rng, '.')])
+	return pragmaKey{key[:i], line}
+}
+
+// scanPragmas parses every source file referenced by the merged blocks and
+// records the lines whose trailing comment IS a `//covergate:allow` marker,
+// mapped to the reason that follows. Detection is comment-token exact (via
+// go/parser), not a substring scan — so covergate's own documentation of the
+// marker, and the marker's appearance inside string literals, are correctly
+// ignored. A marker with no reason is a hard error: an exclusion must carry
+// its proof. Out-of-repo files (bucketed "other") hold no pragmas and are
+// skipped.
+func scanPragmas(root string, blocks map[string]block) (map[pragmaKey]string, error) {
+	files := map[string]struct{}{}
+	for key := range blocks {
+		files[key[:strings.LastIndexByte(key, ':')]] = struct{}{}
+	}
+	out := map[pragmaKey]string{}
+	for f := range files {
+		rel, ok := strings.CutPrefix(f, modulePrefix)
+		if !ok {
+			continue
+		}
+		fset := token.NewFileSet()
+		af, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("covergate: pragma scan: %w", err)
+		}
+		for _, cg := range af.Comments {
+			for _, c := range cg.List {
+				if !strings.HasPrefix(c.Text, pragmaMarker) {
+					continue
+				}
+				line := fset.Position(c.Slash).Line
+				reason := strings.TrimSpace(c.Text[len(pragmaMarker):])
+				if reason == "" {
+					return nil, fmt.Errorf("covergate: %s:%d: %s needs a reason", f, line, pragmaMarker)
+				}
+				out[pragmaKey{f, line}] = reason
+			}
+		}
+	}
+	return out, nil
+}
+
 // tally aggregates merged blocks into per-module and total counters.
 type tally struct{ covered, total int }
 
-// exclusions reports how the allowlist interacted with the merged blocks:
-// how many statements it removed from the denominator, and the block keys
-// that the allowlist named but that are either already covered (the
-// exclusion is now unnecessary — the guard became reachable) or absent
-// from every profile (a stale entry). Both are surfaced so the allowlist
-// cannot silently rot.
+// exclusions reports how the pragmas interacted with the merged blocks: how
+// many statements (across how many blocks) they removed from the denominator,
+// and the pragma LINES that are either already fully covered (every block on
+// the line is covered — the guard became reachable, so remove the pragma) or
+// that no profiled block opens on (stale). Both are surfaced so the
+// exclusions cannot silently rot.
 type exclusions struct {
 	stmts      int      // statements excluded from the denominator
-	nowCovered []string // allowlisted keys whose block is actually covered
-	stale      []string // allowlisted keys not present in any profile
+	blocks     int      // number of profiled blocks excluded
+	nowCovered []string // pragma lines whose every block is covered
+	stale      []string // pragma lines that open no profiled block
 }
 
-// tallyModules aggregates merged blocks into per-module and total
-// counters, skipping any block whose key is in allow (excluded from both
-// numerator and denominator). It also computes allowlist bookkeeping.
-func tallyModules(blocks map[string]block, allow map[string]struct{}) (map[string]tally, tally, exclusions) {
+// tallyModules aggregates merged blocks into per-module and total counters. A
+// `//covergate:allow` pragma on a block's opening line excludes that block
+// from both numerator and denominator ONLY IF the block is UNCOVERED — a
+// covered block sharing the line (e.g. the reaching block of an `if guard {`)
+// is counted normally, so line granularity never over-excludes real coverage.
+// A pragma line that excluded no uncovered block is reported: fully covered
+// (graduate it) if some block opens there, stale if none does.
+func tallyModules(blocks map[string]block, pragmas map[pragmaKey]string) (map[string]tally, tally, exclusions) {
 	perModule := map[string]tally{}
 	var all tally
 	var ex exclusions
-	seen := map[string]bool{}
+	guarded := map[pragmaKey]bool{} // pragma excluded >=1 uncovered block
+	onLine := map[pragmaKey]bool{}  // pragma line has >=1 profiled block
 	for key, b := range blocks {
-		if _, ok := allow[key]; ok {
-			seen[key] = true
-			ex.stmts += b.stmts
-			if b.count > 0 {
-				ex.nowCovered = append(ex.nowCovered, key)
+		pk := blockStart(key)
+		if _, ok := pragmas[pk]; ok {
+			onLine[pk] = true
+			if b.count == 0 {
+				guarded[pk] = true
+				ex.stmts += b.stmts
+				ex.blocks++
+				continue
 			}
-			continue
+			// A covered block on a pragma line falls through and is tallied.
 		}
 		file := key[:strings.LastIndexByte(key, ':')]
 		m := moduleOf(file)
@@ -149,40 +233,20 @@ func tallyModules(blocks map[string]block, allow map[string]struct{}) (map[strin
 		}
 		perModule[m] = t
 	}
-	for key := range allow {
-		if !seen[key] {
-			ex.stale = append(ex.stale, key)
+	for pk := range pragmas {
+		if guarded[pk] {
+			continue
+		}
+		loc := fmt.Sprintf("%s:%d", pk.file, pk.line)
+		if onLine[pk] {
+			ex.nowCovered = append(ex.nowCovered, loc)
+		} else {
+			ex.stale = append(ex.stale, loc)
 		}
 	}
 	sort.Strings(ex.nowCovered)
 	sort.Strings(ex.stale)
 	return perModule, all, ex
-}
-
-// loadAllowlist reads a covergate allowlist: one profile block key
-// (file:sl.sc,el.ec) per line, optionally followed by whitespace and a
-// human-readable reason (ignored here — the reason documents the proof
-// for reviewers). Blank lines and #-comments are skipped.
-func loadAllowlist(path string) (map[string]struct{}, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("covergate: allowlist: %w", err)
-	}
-	allow := map[string]struct{}{}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key := line
-		if i := strings.IndexAny(line, " \t"); i >= 0 {
-			key = line[:i]
-		}
-		allow[key] = struct{}{}
-	}
-	return allow, sc.Err()
 }
 
 func pct(t tally) float64 {
@@ -197,29 +261,25 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("covergate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	threshold := fs.Float64("threshold", 100, "minimum total coverage percentage")
-	allowPath := fs.String("allow", "", "path to an allowlist of provably-unreachable block keys to exclude")
+	root := fs.String("root", ".", "repository root for resolving //covergate:allow pragmas in source")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() == 0 {
-		fmt.Fprintln(stderr, "covergate: no profiles given (usage: covergate [-threshold N] [-allow FILE] profile...)")
+		fmt.Fprintln(stderr, "covergate: no profiles given (usage: covergate [-threshold N] [-root DIR] profile...)")
 		return 2
-	}
-	allow := map[string]struct{}{}
-	if *allowPath != "" {
-		loaded, err := loadAllowlist(*allowPath)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		allow = loaded
 	}
 	blocks, err := mergeProfiles(fs.Args())
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	perModule, all, ex := tallyModules(blocks, allow)
+	pragmas, err := scanPragmas(*root, blocks)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	perModule, all, ex := tallyModules(blocks, pragmas)
 
 	names := make([]string, 0, len(perModule))
 	for m := range perModule {
@@ -231,19 +291,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%-20s %6.1f%%  (%d/%d stmts)\n", m, pct(t), t.covered, t.total)
 	}
 	fmt.Fprintf(stdout, "%-20s %6.1f%%  (%d/%d stmts)\n", "TOTAL", pct(all), all.covered, all.total)
-	if ex.stmts > 0 || len(allow) > 0 {
-		fmt.Fprintf(stdout, "allowlisted (excluded): %d statements across %d blocks\n", ex.stmts, len(allow)-len(ex.stale))
+	if len(pragmas) > 0 {
+		fmt.Fprintf(stdout, "allowlisted (excluded): %d statements across %d blocks\n", ex.stmts, ex.blocks)
 	}
 
-	// A stale or now-covered allowlist entry is a soft failure: it must be
-	// removed (the block is gone) or graduated (the guard is now reachable,
-	// so cover it and drop the exclusion). Keeping the allowlist honest is
-	// the whole point of the mechanism.
+	// A stale or now-covered pragma is a soft failure: it must be removed
+	// (the guard is gone or moved off the line) or graduated (the guard is
+	// now reachable, so cover it and drop the pragma). Keeping the
+	// exclusions honest is the whole point of the mechanism.
 	for _, k := range ex.nowCovered {
-		fmt.Fprintf(stderr, "covergate: allowlisted block is now covered — remove it from the allowlist: %s\n", k)
+		fmt.Fprintf(stderr, "covergate: guard marked %s is now covered — remove the pragma: %s\n", pragmaMarker, k)
 	}
 	for _, k := range ex.stale {
-		fmt.Fprintf(stderr, "covergate: allowlist entry matches no profiled block (stale) — remove it: %s\n", k)
+		fmt.Fprintf(stderr, "covergate: %s on a line that opens no profiled block (stale) — remove it: %s\n", pragmaMarker, k)
 	}
 	if len(ex.nowCovered) > 0 || len(ex.stale) > 0 {
 		return 1

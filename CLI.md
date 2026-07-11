@@ -265,6 +265,28 @@ aql --check script.aql       # verbose pre-flight: advisories too
 aql --no-check script.aql    # skip the pre-flight (runtime errors only)
 ```
 
+**Rich diagnostics.** Errors and check findings render as full
+diagnostic reports: the source excerpt with a caret under the failing
+word, secondary labeled locations (the declaration a violated contract
+came from, where an offending value was produced), `= note:` lines
+explaining *why* — for a failed call, per-candidate verdicts like
+``candidate `upper (String)` — argument 1: expected String, got 99 (an
+Integer)`` — and `= help:` lines with actionable fixes (``did you mean
+`upper`?``, "did you swap the arguments?", `see aql describe <word>`).
+Each `check:` one-liner keeps its stable grep-able format; the rich
+block below it is additive.
+
+**Color.** `run`, `do`, and `check` take `--color auto|always|never`
+(default `auto`: color only when the output is a real terminal, and
+never when `NO_COLOR` is set). The REPL auto-detects the same way.
+Machine-read surfaces — `check --json`, the LSP, the wasm playground —
+are always plain.
+
+```bash
+aql do --color always '99 upper'   # force the ANSI palette (e.g. under a pager)
+aql check --color never script.aql # plain text even on a terminal
+```
+
 **In your editor.** `aql lsp` publishes these same diagnostics as you
 type — see [`aql lsp`](#aql-lsp).
 

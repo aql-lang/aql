@@ -47,8 +47,16 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	soft := false
 	emit := false
 	strict := false
+	colorMode := "auto"
 	for len(args) > 0 {
 		switch args[0] {
+		case "--color", "-color":
+			if len(args) > 1 {
+				colorMode = args[1]
+				args = args[2:]
+				continue
+			}
+			args = args[1:]
 		case "--json", "-json":
 			jsonOut = true
 			args = args[1:]
@@ -95,7 +103,7 @@ done:
 		}
 		return 0
 	}
-	if err := Run(stdout, stderr, source, "", 0, jsonOut, soft, strict); err != nil {
+	if err := RunColor(stdout, stderr, source, "", 0, jsonOut, soft, strict, lang.ResolveColor(stderr, colorMode)); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
@@ -168,6 +176,13 @@ func atPos(row, col int) string {
 // to advisory: Run returns nil as long as the underlying analysis
 // completes.
 func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict bool) error {
+	return RunColor(stdout, stderr, source, registry, seed, jsonOut, soft, strict, false)
+}
+
+// RunColor is Run with the color decision resolved by the caller
+// (lang.ResolveColor); the rich per-diagnostic blocks render through
+// the shared diagnostic renderer either way.
+func RunColor(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut, soft, strict, color bool) error {
 	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
@@ -192,7 +207,7 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 		return nil
 	}
 
-	printDiagnostics(stderr, res.Diagnostics)
+	printDiagnostics(stderr, res.Diagnostics, source, color)
 	if err != nil {
 		return fmt.Errorf("check error: %s", err)
 	}
@@ -212,8 +227,11 @@ func Run(stdout, stderr io.Writer, source, registry string, seed int64, jsonOut,
 }
 
 // printDiagnostics writes each diagnostic to w in the `check: row:col:
-// [sev] code: detail` form shared by Run and Preflight.
-func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
+// [sev] code: detail` form shared by Run and Preflight. The one-liner
+// is a parsing contract (editors and CI scripts key on it); the RICH
+// block underneath — source excerpt, notes, suggestions — is additive
+// (design/DIAGNOSTICS.0.md, phase 6).
+func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic, source string, color bool) {
 	for _, d := range diags {
 		sev := string(d.Severity)
 		if sev == "" {
@@ -224,6 +242,9 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
 		} else {
 			fmt.Fprintf(w, "check: [%s] %s: %s\n", sev, d.Code, d.Detail)
 		}
+		if block := lang.RenderCheckDiagnostic(d, source, "", lang.RenderOpts{Color: color}); block != "" {
+			fmt.Fprintln(w, block)
+		}
 	}
 }
 
@@ -233,6 +254,12 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic) {
 // caller aborts before executing. Unlike Run it prints no summary or
 // result-stack line — stdout is left entirely for the program.
 func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bool) error {
+	return PreflightColor(stderr, source, registry, seed, verbose, lang.ResolveColor(stderr, "auto"))
+}
+
+// PreflightColor is Preflight with the color decision resolved by the
+// caller (the run subcommand's --color flag).
+func PreflightColor(stderr io.Writer, source, registry string, seed int64, verbose, color bool) error {
 	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
@@ -242,7 +269,7 @@ func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bo
 	// diagnostics surface only when the run is about to abort, or when
 	// the caller asked for the verbose pre-flight (--check).
 	if verbose || cerr != nil || res.Summary.Errors > 0 {
-		printDiagnostics(stderr, res.Diagnostics)
+		printDiagnostics(stderr, res.Diagnostics, source, color)
 	}
 	if cerr != nil {
 		return fmt.Errorf("check error: %s", cerr)

@@ -40,13 +40,13 @@ func TestGradualArgParamGuard(t *testing.T) {
 			if errC == nil {
 				t.Fatalf("compiled must raise (param guard), not return %v", gotC)
 			}
-			if !strings.Contains(fmt.Sprint(errC), "no matching signature") {
+			if !strings.Contains(fmt.Sprint(errC), "no signature matches") {
 				t.Errorf("compiled error = %v, want a signature_error", errC)
 			}
 			// And the interpreter raises the SAME thing.
 			b, _ := New()
 			_, errI := b.Run(c.src)
-			if errI == nil || !strings.Contains(fmt.Sprint(errI), "no matching signature") {
+			if errI == nil || !strings.Contains(fmt.Sprint(errI), "no signature matches") {
 				t.Errorf("interpreter error = %v, want a signature_error", errI)
 			}
 		})

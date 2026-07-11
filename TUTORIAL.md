@@ -363,6 +363,18 @@ aql> square 5                        # returns 25
 aql> square 2.5                      # returns 6.25
 ```
 
+For the common one-signature, one-parameter case there is also a
+3-arg form — the triple without the wrapping list:
+
+```
+aql> def square fn x:Number [Number] [mul x x]
+aql> square 5                        # returns 25
+```
+
+The 3-arg form's input must not be a list (a list after `fn` always
+means the list-of-triples shape above), so multi-parameter and
+multi-signature functions use the list form.
+
 Named parameters (like `x:Number`) bind to stack values automatically
 inside the body. You can also use the implicit `args` list:
 

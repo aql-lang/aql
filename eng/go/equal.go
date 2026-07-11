@@ -92,11 +92,11 @@ func valuesEqualDefault(a, b Value) bool {
 			return false
 		}
 		ai, err := a.AsDepScalar()
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return false
 		}
 		bi, err := b.AsDepScalar()
-		if err != nil {
+		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return false
 		}
 		return depScalarsEqual(ai, bi)

@@ -67,7 +67,7 @@ def f fn [[n:Integer] [String] [ helper n ]]
 	res, _ := a.Check(src)
 	flagged := false
 	for _, d := range res.Diagnostics {
-		if d.Severity == "error" || strings.Contains(d.Detail, "no matching signature") {
+		if d.Severity == "error" || strings.Contains(d.Detail, "no signature matches") {
 			flagged = true
 			break
 		}

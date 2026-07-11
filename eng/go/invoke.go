@@ -57,7 +57,10 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []CapturedBinding) ([]Value, error) {
 	// sig is the matched signature (callers dispatch it via MatchFnSig and check
 	// it non-nil first — serve-raw's handler dispatch is the canonical caller).
-	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil {
+	// depsFresh guards RUNTIME-stamped refs (StampDetachedFn): a module dep
+	// rebound or shadowed since the stamp means the frozen unit would diverge
+	// from live resolution, so the seam takes the interpreter instead.
+	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil && ref.depsFresh(r) {
 		// A stamped unit runs on the VM (fresh run on an idle registry, or nested
 		// in the enclosing compiled run). Its result is used ONLY when the unit did
 		// not raise an internal_error: that class means a VM/lowering soundness

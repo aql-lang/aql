@@ -33,122 +33,79 @@ type AqlError struct {
 	// spec map, so a catching handler can read them off the Error
 	// value (ErrorInfo.Data via NewError). Nil for every other error.
 	Data *OrderedMap
+
+	// --- Structured diagnostic payload (design/DIAGNOSTICS.0.md). ---
+	// The Row/Col/Src trio above remains the PRIMARY span; the fields
+	// below are the additive Rust/Elm-style layer. All render through
+	// Render (Error() is the plain-color rendering); message builders
+	// (diag_msg.go) populate them so the interpreter, the VM, and the
+	// checker share one text source.
+
+	// Spans are SECONDARY labeled source locations — the declaration a
+	// constraint came from, the operand that failed a slot, the other
+	// half of an expected-vs-found pair. Order is render order.
+	Spans []DiagSpan
+	// Notes are freestanding explanatory lines (`= note: …`). They
+	// supersede the legacy convention of embedding "\n  = " separators
+	// inside Hint; Hint still renders (first, unchanged) while call
+	// sites migrate.
+	Notes []string
+	// Suggestions are actionable fixes (`= help: …`), optionally with a
+	// concrete replacement snippet.
+	Suggestions []DiagSuggestion
+
 	// fullSource is the complete source text for generating context extracts.
 	fullSource string
 }
 
-// TODO: this should use jsonic error formatting
-
-// Error implements the error interface with jsonic-style formatting.
-func (e *AqlError) Error() string {
-	var b strings.Builder
-
-	// Line 1: [aql/<code>]: <detail>
-	b.WriteString("[aql/")
-	b.WriteString(e.Code)
-	b.WriteString("]: ")
-	b.WriteString(e.Detail)
-
-	// Line 2: --> <row>:<col>, or an explicit unknown marker. The parser
-	// stamps real positions on values; an error with no position is one the
-	// engine could not attribute to a source token. We say so rather than
-	// guess a location by text-searching the source (which is wrong whenever
-	// a word appears more than once).
-	if e.Row > 0 {
-		b.WriteString("\n  --> ")
-		if e.File != "" {
-			b.WriteString(e.File)
-			b.WriteString(":")
-		}
-		b.WriteString(strconv.Itoa(e.Row))
-		b.WriteString(":")
-		if e.Col > 0 {
-			b.WriteString(strconv.Itoa(e.Col))
-		} else {
-			b.WriteString("1")
-		}
-	} else {
-		b.WriteString("\n  --> source position unknown")
-	}
-
-	// Source site extract
-	if e.fullSource != "" && e.Row > 0 {
-		site := aqlErrSite(e.fullSource, e.Src, e.Detail, e.Row, e.Col)
-		if site != "" {
-			b.WriteString("\n")
-			b.WriteString(site)
-		}
-	}
-
-	// Hint
-	if e.Hint != "" {
-		b.WriteString("\n  = ")
-		b.WriteString(e.Hint)
-	}
-
-	return b.String()
+// DiagSpan is one secondary labeled source location attached to an
+// AqlError. The error's own Row/Col/Src is the primary span (rendered
+// with a ^^^ underline); secondaries render with a --- underline and
+// their Label. A span whose Pos.Row is 0 has no usable location and
+// renders its Label as a plain note instead — the same honesty rule as
+// the primary position (no guessed locations).
+type DiagSpan struct {
+	Pos   SrcPos // Row/Col/Src of the labeled location
+	Label string // e.g. "the declaration says `f` returns Integer"
+	// File names the source file Pos points into when it differs from
+	// the error's own File. Empty = same file as the error.
+	File string
+	// Source is the full source text Pos indexes into when it differs
+	// from the error's own source (a declaration inside an imported
+	// module). Empty = same source as the error.
+	Source string
 }
 
-// aqlErrSite generates a source code extract showing the error location,
-// matching the jsonic errsite() output format.
-func aqlErrSite(src, sub, msg string, row, col int) string {
-	if row < 1 {
-		row = 1
-	}
-	if col < 1 {
-		col = 1
-	}
+// DeclSite records where a contract was DECLARED — the fn output
+// signature a return check enforces — so the enforcing error can label
+// that location as a secondary span (design/DIAGNOSTICS.0.md, phase 5).
+// Source/File pin the text Pos indexes into, captured at declaration
+// time, because the declaring program (an imported module) may differ
+// from the one executing when the check fires. A zero DeclSite means
+// the declaration site is unknown (Go-registered sigs, tests).
+type DeclSite struct {
+	Pos    SrcPos
+	Source string
+	File   string
+}
 
-	lines := strings.Split(src, "\n")
+// DiagSuggestion is one actionable fix attached to an AqlError.
+type DiagSuggestion struct {
+	Message string `json:"message"` // "did you mean `upper`?"
+	// Replacement is a concrete snippet the user can apply verbatim
+	// (rendered on its own line; the seed for editor code actions).
+	// nil = the suggestion has no mechanical replacement — distinct
+	// from an empty string per the no-zero-value-overload rule.
+	Replacement *string `json:"replacement,omitempty"`
+}
 
-	// row is 1-based, convert to 0-based index
-	lineIdx := row - 1
-	if lineIdx >= len(lines) {
-		lineIdx = len(lines) - 1
-	}
-
-	// Determine padding width based on largest line number shown
-	maxLineNum := row + 2
-	pad := len(strconv.Itoa(maxLineNum)) + 2
-
-	// Build context lines: 2 before, error line, caret line, 2 after
-	var result []string
-
-	ln := func(num int, text string) string {
-		numStr := strconv.Itoa(num)
-		return strings.Repeat(" ", pad-len(numStr)) + numStr + " | " + text
-	}
-
-	// 2 lines before
-	if lineIdx-2 >= 0 {
-		result = append(result, ln(row-2, lines[lineIdx-2]))
-	}
-	if lineIdx-1 >= 0 {
-		result = append(result, ln(row-1, lines[lineIdx-1]))
-	}
-
-	// Error line
-	if lineIdx >= 0 && lineIdx < len(lines) {
-		result = append(result, ln(row, lines[lineIdx]))
-	}
-
-	// Caret line
-	caretCount := len(sub)
-	if caretCount < 1 {
-		caretCount = 1
-	}
-	indent := strings.Repeat(" ", pad) + "   " + strings.Repeat(" ", col-1)
-	result = append(result, indent+strings.Repeat("^", caretCount)+" "+msg)
-
-	// 2 lines after
-	if lineIdx+1 < len(lines) {
-		result = append(result, ln(row+1, lines[lineIdx+1]))
-	}
-	if lineIdx+2 < len(lines) {
-		result = append(result, ln(row+2, lines[lineIdx+2]))
-	}
-
-	return strings.Join(result, "\n")
+// Error implements the error interface with the PLAIN (color-free)
+// rendering — exactly Render(RenderOpts{}). Every string-comparing
+// consumer (spec ERROR rows, %w chains, logs, the wasm playground)
+// reads this path, so it stays ANSI-free forever; interactive surfaces
+// opt into color by calling Render with ResolveColor's verdict.
+func (e *AqlError) Error() string {
+	return e.Render(RenderOpts{})
 }
 
 // SrcPos holds source position information for a value.
@@ -165,6 +122,15 @@ type SrcPos struct {
 // whenever the offending token is in hand.
 func MakeAqlError(code, detail, word, fullSource, hint string) *AqlError {
 	return makeAqlError(code, detail, word, fullSource, hint)
+}
+
+// MakeAqlErrorAt creates an AqlError at an explicit source position — the
+// exported twin of makeAqlErrorAt for packages outside eng that hold a
+// real position (the parser translating a lexer failure, hosts embedding
+// the engine). When pos is unknown (Row 0) the error renders "source
+// position unknown"; there is no text-search fallback.
+func MakeAqlErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *AqlError {
+	return makeAqlErrorAt(code, detail, word, fullSource, hint, pos)
 }
 
 // makeAqlError creates an AqlError with no source position (Row 0).

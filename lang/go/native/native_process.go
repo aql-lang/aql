@@ -504,7 +504,7 @@ func splitClausePattern(r *Registry, pat Value) (recvClause, error) {
 			c.route[k] = ValToString(v)
 		case IsTypeLiteral(v):
 			t := eng.ValueType(v)
-			if t == nil {
+			if t == nil { //covergate:allow IsTypeLiteral(v) implies a bare type node, so eng.ValueType returns a non-nil pointer; the t==nil default cannot fire (§native)
 				t = TAny
 			}
 			c.binds = append(c.binds, recvBind{name: k, t: CanonicalType(r, t)})
@@ -548,7 +548,7 @@ func routeMessage(clauses []recvClause, msg Value) int {
 		return -1
 	}
 	idx, err := strconv.Atoi(*h)
-	if err != nil {
+	if err != nil { //covergate:allow patrun handles are strconv.Itoa(idx) stored by routeMessage itself, so Atoi on a returned handle cannot fail (§native)
 		return -1
 	}
 	return idx
