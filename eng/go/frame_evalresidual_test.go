@@ -154,6 +154,10 @@ func TestPendingResidualContainerArms(t *testing.T) {
 		{"already evaluated map", NewMap(NewOrderedMap()), false},
 		{"quoted map", quoted, false},
 		{"scalar", NewInteger(3), false},
+		// A PENDING (Eval) scalar clears the Eval/Quoted/Parent guard but is
+		// neither TMap nor TList, so it falls through to the terminal `return
+		// false` — the non-container fall-through path.
+		{"pending scalar", pend(NewInteger(3)), false},
 		{"typed map", pend(NewValueRaw(TMap, ChildTypeInfo{})), false},
 		{"record type", pend(NewValueRaw(TMap, RecordTypeInfo{})), false},
 		{"options type", pend(NewValueRaw(TMap, OptionsTypeInfo{})), false},

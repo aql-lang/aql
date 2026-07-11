@@ -4222,9 +4222,24 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 		return
 	}
 	src, srcSeq := emitOperand{}, -1
-	if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
+	cur := es.units[len(es.units)-1]
+	if slot, ok := cur.localByID[v.ID]; ok && cur.capID[v.ID] {
+		// A CAPTURE of the CURRENT unit overrides events-first, mirroring
+		// resolveOperand's capID override (emit.go ~1241): the captured value
+		// may still carry a producedBy entry from the ENCLOSING unit (a
+		// persistent module-scope instance built by a parent `def`, or a
+		// computed def snapshotted into the closure) whose event lives in the
+		// parent frame and is unreachable here — so binding from that foreign
+		// seq refuses "dynamic-scope def of unpromoted computed value" (the
+		// promotion has no local event to promote). Re-push this unit's own
+		// capture SLOT instead. Gating on capID (never a join result) is
+		// load-bearing: a plain localByID-first reorder would misbind the
+		// JoinCarriers ID-reuse case (a branch result reusing a live local's
+		// ID) to the local instead of the branch event.
+		src = localOperand(slot)
+	} else if pr, ok := es.producedBy[v.ID]; ok && pr.idx == 0 {
 		srcSeq = pr.seq
-	} else if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
+	} else if slot, ok := cur.localByID[v.ID]; ok {
 		src = localOperand(slot)
 	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
