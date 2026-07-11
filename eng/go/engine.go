@@ -1151,7 +1151,9 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			e.pointer++
 
 		case IsDefCleanup(val):
-			e.stepDefCleanup(val)
+			if err := e.stepDefCleanup(val, e.pointer); err != nil {
+				return nil, err
+			}
 			e.pointer++
 
 		default:
@@ -2068,7 +2070,10 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 		case IsReturnCheck(v):
 			e.pointer++
 		case IsDefCleanup(v):
-			e.stepDefCleanup(v)
+			if err := e.stepDefCleanup(v, e.pointer); err != nil {
+				e.pointer = savedPointer
+				return err
+			}
 			e.pointer++
 		case IsInterpString(v):
 			// Mirror the main loop: evaluate the template in place and
@@ -5583,6 +5588,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
+		EvalResidual: len(sig.body()) > 1,
 	})
 	tokens = append(tokens, NewCloseParen())
 
@@ -5898,12 +5904,50 @@ func (e *Engine) stepEnd() error {
 // stepDefCleanup removes defs that were created during fn body execution.
 // The DefCleanupInfo carries a snapshot of DefStacks lengths taken before
 // the body ran. Any defs added since are popped via UninstallDef.
-func (e *Engine) stepDefCleanup(val Value) {
+func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 	info, _ := AsDefCleanup(val)
+	if info.EvalResidual {
+		// A MULTI-TOKEN body's residual pending containers evaluate
+		// IN-frame — before the body-local defs pop — so the spliced
+		// dispatch path agrees with the CallAQL sub-run drain (mini-s3's
+		// s3-parse-range trailing `{from: from upto: upto}`; previously
+		// the spliced path deferred the container to the CONSUMER scope,
+		// where the body-locals are gone — the residual-timing fork,
+		// design/NET-COMPILE-FRONTIER.0.md addendum 2). The frame is a
+		// paren group and every nested group below has already collapsed,
+		// so the first OpenParen below the marker is the frame's own open:
+		// the scan touches exactly the frame's residual, never a caller
+		// value. Single-literal bodies leave EvalResidual false and keep
+		// the no-closures transparency (def-node-binding.tsv §3).
+		for i := markerIdx - 1; i >= 0; i-- {
+			v := e.tape.At(i)
+			if IsOpenParen(v) {
+				break
+			}
+			if !v.Eval || v.Quoted || v.Parent == nil {
+				continue
+			}
+			if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
+				ev, err := e.autoEvalMap(v, false, true)
+				if err != nil {
+					return err
+				}
+				ev.Eval = false
+				e.tape.Set(i, ev)
+			} else if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
+				ev, err := e.autoEvalList(v, true)
+				if err != nil {
+					return err
+				}
+				ev.Eval = false
+				e.tape.Set(i, ev)
+			}
+		}
+	}
 	if info.SkipCleanup {
 		// The frame installs no body-local defs — nothing to truncate,
 		// and no Names() scan to pay (design/INTERPRETER-SPEED-PLAN.10.md #5).
-		return
+		return nil
 	}
 	reg := info.Registry
 	for _, name := range reg.Defs.Names() {
@@ -5912,6 +5956,7 @@ func (e *Engine) stepDefCleanup(val Value) {
 			UninstallDef(reg, name)
 		}
 	}
+	return nil
 }
 
 func (e *Engine) stepMark(val Value) {
@@ -6353,7 +6398,9 @@ func (e *Engine) stepCloseParen() error {
 					case IsReturnCheck(val):
 						e.pointer++
 					case IsDefCleanup(val):
-						e.stepDefCleanup(val)
+						if err := e.stepDefCleanup(val, e.pointer); err != nil { //covergate:allow interpreter step/dispatch defensive error arm: a marker reaching the implicit-end re-run was already stepped by the main loop (its residual containers are no longer pending, so the EvalResidual scan no-ops); a first-time step here needs a frame spliced DURING forward resolution carrying a pending failing residual — a pathological shape the census does not produce (§engine)
+							return err
+						}
 						e.pointer++
 					default:
 						if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -6419,7 +6466,9 @@ func (e *Engine) stepCloseParen() error {
 	// Remove any surviving def-cleanup markers.
 	for i := openIdx + 1; i < closeIdx; i++ {
 		if IsDefCleanup(e.tape.At(i)) {
-			e.stepDefCleanup(e.tape.At(i))
+			if err := e.stepDefCleanup(e.tape.At(i), i); err != nil {
+				return err
+			}
 			e.tape.Remove(i)
 			closeIdx--
 			i--

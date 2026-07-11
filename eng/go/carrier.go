@@ -3682,18 +3682,22 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// mini-redis catch-all shape). Mirrors the branch arm's treatment
 	// (RunCarrierBodyWithDefs, peekCaptureArm).
 	//
-	// SCOPED TO CALLBACK BODIES on purpose. A callback is only ever invoked
-	// via InvokeCallback / CallAQL, which evaluate the body residual IN the
-	// live frame on BOTH engines — so the recorded OpMakeMap (which
-	// re-assembles per run) matches the interpreter exactly. A NORMAL
-	// user-fn body must NOT enable this: a directly-applied `f x` at top
-	// level leaves its result as a DEFERRED autoEvalStack residual, which the
-	// interpreter evaluates AFTER the frame pops (frame-locals gone) while a
-	// compiled CALL_USER would assemble it in-frame — recording here would
-	// diverge (the deferred-residual hazard the `consumed` gate guards, see
-	// engine.go's autoEvalMap). Such a body keeps refusing and falls back,
+	// Admitted for CALLBACK bodies and MULTI-TOKEN fn bodies. A callback is
+	// only ever invoked via InvokeCallback / CallAQL, which evaluate the
+	// body residual IN the live frame on both engines. A multi-token body's
+	// trailing computed container now ALSO evaluates in-frame on every
+	// interpreter dispatch path — CallAQL-class and same-registry spliced,
+	// consumed and unconsumed alike (mini-s3's s3-parse-range
+	// `{from: from upto: upto}`; the historical spliced-path deferral that
+	// blocked this admission is gone) — so the recorded OpMakeMap /
+	// OpMakeList (which re-assembles per run) matches the interpreter
+	// exactly. A SINGLE-LITERAL container body must NOT enable this: that
+	// is the pinned no-closures transparency (`def mk fn [[c1:Integer]
+	// [List] [[c1]]] mk 9` → the MODULE binding, def-node-binding.tsv §3 —
+	// maps behave identically), where in-frame assembly would bake the
+	// param and diverge. Such a body keeps refusing and falls back,
 	// byte-identically.
-	if r.Check.Recorder().active() && isCallbackBodyName(name) {
+	if r.Check.Recorder().active() && (isCallbackBodyName(name) || len(body) > 1) {
 		sub.elemEvalRecordable = true
 	}
 	result, err := sub.Run(input)

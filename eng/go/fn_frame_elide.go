@@ -161,8 +161,13 @@ func (e *Engine) returnsConform(scan frameTailScan, sig *Signature) bool {
 // replacement deletes the whole frame after the callee's tokens are
 // in hand.
 func (e *Engine) teardownFrameState(scan frameTailScan) error {
-	// __DC: truncate body-local defs to the frame's entry snapshot.
-	e.stepDefCleanup(e.tape.At(scan.TailStart))
+	// __DC: truncate body-local defs to the frame's entry snapshot
+	// (running the multi-token in-frame residual eval first, exactly as
+	// the parked marker would — the eager teardown must not change WHERE
+	// a residual container's names resolve).
+	if err := e.stepDefCleanup(e.tape.At(scan.TailStart), scan.TailStart); err != nil {
+		return err
+	}
 	// __pa: pop the per-call Args list and FnBaseline, paired.
 	if err := PopFrameArgs(e.registry); err != nil {
 		return err

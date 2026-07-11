@@ -153,6 +153,10 @@ type FrameTailSpec struct {
 	// Decl is the return contract's declaration site (FnSig.Decl),
 	// forwarded onto the ReturnCheck for two-span return errors.
 	Decl DeclSite
+	// EvalResidual marks a multi-token body — the DefCleanup marker
+	// evaluates the frame's residual pending containers in-frame before
+	// the truncation (see DefCleanupInfo.EvalResidual).
+	EvalResidual bool
 }
 
 // AppendFrameTail appends the canonical frame cleanup tail to tokens:
@@ -163,9 +167,10 @@ type FrameTailSpec struct {
 // frame's close paren is NOT appended — callers own the (ₘ … ) pair.
 func AppendFrameTail(tokens []Value, spec FrameTailSpec) []Value {
 	tokens = append(tokens, NewDefCleanup(DefCleanupInfo{
-		Snapshot:    spec.Snapshot,
-		Registry:    spec.Registry,
-		SkipCleanup: spec.SkipCleanup,
+		Snapshot:     spec.Snapshot,
+		Registry:     spec.Registry,
+		SkipCleanup:  spec.SkipCleanup,
+		EvalResidual: spec.EvalResidual,
 	}))
 	tokens = append(tokens, NewWord("__pa"))
 	for i := len(spec.Names) - 1; i >= 0; i-- {
@@ -271,7 +276,11 @@ func (e *Engine) unwindFrameTail(openIdx, to int) {
 				return
 			}
 		case depth == 1 && IsDefCleanup(v):
-			e.stepDefCleanup(v)
+			// Registry-balance replay of a DISCARDED frame: the region's
+			// values (any pending residual included) are dropped by the
+			// flow resolver, so the in-frame residual eval is skipped —
+			// markerIdx -1 disables the scan and no error is possible.
+			_ = e.stepDefCleanup(v, -1)
 		case depth == 1 && IsWord(v):
 			w, _ := AsWord(v)
 			switch {

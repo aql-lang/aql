@@ -54,6 +54,12 @@ def c1 10 def x word [c1] undef c1 x	ERROR:undefined	splice word resolved at use
 def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] mk 9	[1]	returned list resolves c1 to the module binding, not the param
 def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a `=>` lambda captures the param
 
+# The transparency is the SINGLE-LITERAL body shape only. A MULTI-token
+# body's trailing container evaluates IN-frame (before the body-locals
+# pop), on every dispatch path — so the PARAM wins, uniformly.
+def c1 1 def mk fn [[c1:Integer] [List] [def z 0 [c1]]] mk 9	[9]	multi-token body: trailing list evaluates in-frame — the param
+def c1 1 def mkm fn [[c1:Integer] [Map] [def z 0 {a: c1}]] def r (mkm 9) r.a	9	map twin: multi-token trailing map evaluates in-frame
+
 
 # =====================================================================
 # 4. Nesting: value-bind nests as data; `word` splice flattens
