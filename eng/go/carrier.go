@@ -1560,7 +1560,20 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
-	f.variadicResult = true
+	// A concrete-MAP body is the value-eval overload (`do {…}` — autoEvalMap
+	// over the map's members): it produces exactly ONE value (the map),
+	// whatever its members compute, so its result count is STATIC, not
+	// runtime-variable. Only the code-body (List) overload runs a sub-program
+	// whose residual is variadic, and the DYNAMIC-body poly case (either
+	// overload at run time) must stay variadic. Marking a single-value do-map
+	// non-variadic lets it sit in an `if` arm without forcing the branch merge
+	// (and any fn whose body is that if) variadic — the "consumes loop results"
+	// refusal a fixed-arity consumer of `(if c [do{…}] [do{…}]) get k` otherwise
+	// hit. The declared-return exception at RecordUserCall handled only the
+	// WHOLE-body do-map; this handles the arm case at the source. dynBodyResult
+	// stays set so the RET still pins the count as real stack values.
+	mapValueEval := !body.Dynamic && len(outs) == 1 && body.Parent != nil && body.Parent.ConformsTo(TMap)
+	f.variadicResult = !mapValueEval
 	f.dynBodyResult = true
 	es.eventInfo[seq] = f
 	// Carrier-identity de-collision, extended to INTRA-event repeats: the
