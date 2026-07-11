@@ -81,7 +81,65 @@ silent miscompile the langspec differential is blind to, caught only by running
 the Template suites compiled).
 
 The sound fix needs a module-scope signal that survives the higher-order-body
-sub-run — e.g. threading the genuine module/global binding set through the
-sub-run compile context, or lowering the `flex` read some other faithful way —
-and belongs with the Stage D/E/F (dynamic-scope) work, not a read-side heuristic.
-Until then the `flex` read correctly **refuses and falls back** (sound, slower).
+sub-run. **This was found and works** (see next section) — but it unmasks a
+deeper, separate cross-registry defect, so the `flex` read still **refuses and
+falls back** (sound, slower) pending that Stage-C work.
+
+## Update — the read-site classification is the sound module-scope signal
+
+The mis-classification above is entirely an artifact of asking the question in
+the **emit recorder** (a higher-order-body sub-run, where the baseline is
+detached). Asking it at the **READ site** (`engine.go` stepWord, where the live
+baseline is the reading fn's own) is exact: instrumented over the whole Template
+suite, `ModuleScopeBinding` returns `true` for every `*-acc` flex-cell read and
+`false` for every `fold` body-local `q` read — 100% reliable, no exceptions.
+
+The mechanism (prototyped, then reverted — see below):
+
+- `CheckState.ModuleScopeReads` — a per-pass set. `engine.go`'s def-read site
+  records `w.Name` when `ModuleScopeBinding(e.registry, w.Name)` (the *reading
+  fn's* baseline). A concrete module reference is also `SetDynFrom`-tagged so
+  `dynScopeRescue` can recover its name (a `flex` value carries no `Value.ID`).
+- `dynScopeRescue` admits `name` when `c.ModuleScopeReads[name]` **or** the
+  existing `dynamicScopeReachable` gate — the module case needs no call-graph
+  proof (a module def is unconditionally live in the registry). A fold/each
+  body-local is never in `ModuleScopeReads`, so it keeps the reachability gate
+  and is never mis-admitted. This flipped **7 of 8** Template files to fully
+  compiled with byte-identical output.
+
+## Why it is NOT landed: a separate cross-registry `dynEnv` miscompile (Stage C)
+
+Landing the read-site fix flips `liquid_unit_test` to a miscompile — but **not**
+through the flex read. A `do {…}` value-eval arms program-wide `dynEnv` mode
+(`tryRecordDynBody`), under which every `def` and param dyn-binds
+(`OpBindDynScope`) and dynamic body reads lower to `OpLookupDynScope`. In the
+**imported** `template.aql`, `split-args`'s `do {… q:[q]}` (q a `fold`
+body-local) emits an `OpLookupDynScope q` whose `OpBindDynScope` twin is not live
+when the value-eval sub-run reads it → a run-time miss that corrupts the fold
+(interp `fail-count 0`, compiled `1`).
+
+Crucially this is **independent of the flex fix and of the module-scope read**:
+
+- `split-args` has NO module-scope read; the read-site fix does not touch it.
+- The identical `split-args` shape compiles byte-identically **standalone**
+  (`RunCompiledStrict == Run`) AND **through a 2-file import** — the defect only
+  surfaces inside the *full* Template module, a context-dependent cross-registry
+  `dynEnv`/`OpBindDynScope` coordination gap.
+
+That is exactly Stage C in `aql-bytecode-next-stages.0.md` — "sound module-body
+compilation (cross-registry EmitState) … the one stage that is a *project*, not a
+commit," gated on a corpus re-baseline. The read-site module-scope mechanism is
+the correct Stage-E/F piece and should land **together with** the Stage-C
+cross-registry `dynEnv` fix, so it never exposes the latent miss. Until then the
+flex read refuses and falls back (sound).
+
+## Langspec Stage D/E/F status (for reference)
+
+At the internal langspec surface these stages are **already cleared** (prior
+work): `reach.tsv:38` (Stage D, `getpath ∘ setpath` over a dynamic receiver) →
+`7`; `flex` push/drop alias reference semantics (Stage E) → `[1 2 3]`;
+`recursion.tsv:72` (Stage F, a callee reading the caller's `n` by dynamic scope)
+→ `42` — all compile natively under `-force-compile`. The 9 residual langspec
+refusals are all documented **Stage-H** "unmatched dispatch recovered" ERROR
+rows (`knownRefusals`), where the program raises and a static guess would
+diverge — correct-by-design soundness refusals, not D/E/F gaps.
