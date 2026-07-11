@@ -60,6 +60,12 @@ def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f	7	contrast: a 
 def c1 1 def mk fn [[c1:Integer] [List] [def z 0 [c1]]] mk 9	[9]	multi-token body: trailing list evaluates in-frame — the param
 def c1 1 def mkm fn [[c1:Integer] [Map] [def z 0 {a: c1}]] def r (mkm 9) r.a	9	map twin: multi-token trailing map evaluates in-frame
 
+# A PAREN-wrapped computation is one token but NOT one literal: it
+# evaluates in-frame exactly like its unwrapped spelling — harmless
+# grouping cannot flip a body back to the consumer-scope transparency.
+def c1 1 def mkp fn [[c1:Integer] [Map] [(def z 0 {a: c1})]] def r (mkp 9) r.a	9	paren-wrapped body: the param wins, same as unwrapped
+def c1 1 def mkq fn [[c1:Integer] [List] [(def z 0 [c1])]] mkq 9	[9]	list twin: paren-wrapped body evaluates in-frame
+
 
 # =====================================================================
 # 4. Nesting: value-bind nests as data; `word` splice flattens

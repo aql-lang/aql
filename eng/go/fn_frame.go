@@ -153,10 +153,25 @@ type FrameTailSpec struct {
 	// Decl is the return contract's declaration site (FnSig.Decl),
 	// forwarded onto the ReturnCheck for two-span return errors.
 	Decl DeclSite
-	// EvalResidual marks a multi-token body — the DefCleanup marker
-	// evaluates the frame's residual pending containers in-frame before
-	// the truncation (see DefCleanupInfo.EvalResidual).
+	// EvalResidual marks a COMPUTING body (BodyEvalsResidual) — the
+	// DefCleanup marker evaluates the frame's residual pending
+	// containers in-frame before the truncation (see
+	// DefCleanupInfo.EvalResidual).
 	EvalResidual bool
+}
+
+// BodyEvalsResidual reports whether a fn body's residual pending
+// containers evaluate IN-frame at the DefCleanup marker: any
+// multi-token body, and a single paren-expression token — a
+// COMPUTATION whose grouping must not change where residual names
+// resolve (`[(def z 0 {a: c1})]` binds the param exactly like
+// `[def z 0 {a: c1}]`). A single bare literal stays consumer-evaluated:
+// that is the pinned no-closures node-binding transparency
+// (def-node-binding.tsv §3). Every frame-tail builder and the
+// compile-side residual-recording admission route through this ONE
+// predicate so the engines cannot disagree about the timing.
+func BodyEvalsResidual(body []Value) bool {
+	return len(body) > 1 || (len(body) == 1 && IsParenExpr(body[0]))
 }
 
 // AppendFrameTail appends the canonical frame cleanup tail to tokens:

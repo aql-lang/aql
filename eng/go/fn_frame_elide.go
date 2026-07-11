@@ -112,6 +112,15 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	if dcInfo.Registry != e.registry {
 		return false
 	}
+	// An EvalResidual frame with a pending Eval container parked below
+	// the call would have that residual EVALUATED by the eager teardown
+	// — before the callee runs — where the parked marker evaluates it
+	// after the callee returns. A side-effectful residual would observe
+	// the reorder, so the frame nests: the parked __DC then sequences
+	// the residual exactly as under nesting.
+	if dcInfo.EvalResidual && scan.PendingEvalBelow {
+		return false
+	}
 	// A SkipCleanup frame installs no body-local defs, so its (nil) Snapshot
 	// truncation removes nothing — trivially covered, no need to walk the
 	// def table. Without this shortcut the nil Snapshot would read every

@@ -3697,8 +3697,11 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// [List] [[c1]]] mk 9` → the MODULE binding, def-node-binding.tsv §3 —
 	// maps behave identically), where in-frame assembly would bake the
 	// param and diverge. Such a body keeps refusing and falls back,
-	// byte-identically.
-	if r.Check.Recorder().active() && (isCallbackBodyName(name) || len(body) > 1) {
+	// byte-identically. The admission is BodyEvalsResidual — the same
+	// predicate the frame-tail builders use — so a single
+	// paren-expression body (which the interpreter also evaluates
+	// in-frame) records too.
+	if r.Check.Recorder().active() && (isCallbackBodyName(name) || BodyEvalsResidual(body)) {
 		sub.elemEvalRecordable = true
 	}
 	result, err := sub.Run(input)
