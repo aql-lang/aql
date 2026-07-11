@@ -65,21 +65,25 @@ func Eval(w io.Writer, source string, o lang.Options, mode CompileMode) error {
 // a structured AqlError renders through the diagnostic renderer with
 // the ANSI palette; color=false keeps the byte-identical plain text.
 func EvalColor(w io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
-	return EvalReport(w, nil, source, o, mode, color)
+	return EvalReport(w, nil, nil, source, o, mode, color)
 }
 
-// EvalReport is Eval plus the -compile-report surface and caller-resolved
-// color. When report is non-nil, the instance's detached-stamp attribution
-// (lang.AQL.StampReport — design/RUNTIME-STAMPING.0.md) is printed to it after
-// the run, one line per runtime-constructed callback with its outcome or
-// refusal reason. color renders a structured AqlError through the ANSI
-// diagnostic renderer; color=false keeps the byte-identical plain text.
-func EvalReport(w, report io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
+// EvalReport is Eval plus the -compile-report surface, a compilation-refusal
+// warning stream, and caller-resolved color. When report is non-nil, the
+// instance's detached-stamp attribution (lang.AQL.StampReport —
+// design/RUNTIME-STAMPING.0.md) is printed to it after the run, one line per
+// runtime-constructed callback with its outcome or refusal reason. When warn is
+// non-nil and the default compile-try mode falls back because the WHOLE program
+// refused to compile, a one-line performance warning naming the refusal reason
+// is printed to it (a refusal runs on the slower interpreter). color renders a
+// structured AqlError through the ANSI diagnostic renderer; color=false keeps
+// the byte-identical plain text.
+func EvalReport(w, report, warn io.Writer, source string, o lang.Options, mode CompileMode, color bool) error {
 	a, err := langNew(o)
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
-	runErr := runAndPrint(w, a, source, mode, color)
+	runErr := runAndPrint(w, warn, a, source, mode, color)
 	if report != nil {
 		PrintStampReport(report, a.StampReport())
 	}
@@ -119,14 +123,24 @@ func PrintStampReport(w io.Writer, events []lang.StampEvent) {
 // that need to configure the instance first — e.g. seed an in-memory file
 // system for bundled imports — can do so before running) and prints the
 // residual stack exactly as the run subcommand does.
-func runAndPrint(w io.Writer, a *lang.AQL, source string, mode CompileMode, color bool) error {
+func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode, color bool) error {
 	var result []any
 	var err error
 	switch mode {
 	case CompileForce:
 		result, err = a.RunCompiledStrict(source)
 	case CompileTry:
-		result, _, err = a.RunCompiled(source)
+		var reason string
+		result, _, reason, err = a.RunCompiledReason(source)
+		// A whole-program compilation refusal silently fell back to the slower
+		// interpreter (design/COMPILABLE-SUBSET.md §1: "slow, not wrong"). That
+		// is surprising performance debt, so surface it — once per run, naming
+		// the first offending construct. Only genuine refusals carry a reason;
+		// a compiled run, a statically-invalid program, and a runtime bailout
+		// all report "" (see lang.AQL.RunCompiledReason).
+		if warn != nil && reason != "" {
+			fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
+		}
 	default:
 		result, err = a.Run(source)
 	}
@@ -215,7 +229,7 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		a.SetFileOps(mem)
 	}
 
-	if err := runAndPrint(stdout, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
+	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

@@ -137,7 +137,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if *compileReport {
 			report = stderr
 		}
-		if err := buildrt.EvalReport(stdout, report, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
+		if err := buildrt.EvalReport(stdout, report, stderr, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
