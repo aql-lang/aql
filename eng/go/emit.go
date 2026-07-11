@@ -874,6 +874,10 @@ func (es *EmitState) forkForProbe() *EmitState {
 	copy(p.units, es.units)
 	p.openUnitRecs = make([]int, len(es.openUnitRecs))
 	copy(p.openUnitRecs, es.openUnitRecs)
+	// The probe inherits the gradual-nesting mode: probe and real must
+	// compile under the SAME modality or the probe's verdict is about a
+	// different unit (see compileStoredFnUnit / tryReturnedClosure).
+	p.storedGradualDepth = es.storedGradualDepth
 	return p
 }
 
@@ -1514,6 +1518,14 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	// that refuses leaves THIS program untouched and the value stays unresolved.
 	probe := NewEmitState()
 	probe.reg = r
+	// The probe inherits the gradual-nesting mode (a detached stamp arms it on
+	// the real state): probe and real must compile under the SAME modality or
+	// the probe's verdict is about a different unit — without this, an inner
+	// lambda inside a stored service handler (mini-s3's bucket-list filter,
+	// whose body runs `convert … e.value` over an Any param) probed STRICT,
+	// refused "unmatched dispatch recovered", and surfaced as the misleading
+	// "function-valued operand at filter (Stage 3)".
+	probe.storedGradualDepth = es.storedGradualDepth
 	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
@@ -1618,6 +1630,8 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	r := es.reg
 	probe := NewEmitState()
 	probe.reg = r
+	// Same-modality probe (see tryReturnedClosure / compileStoredFnUnit).
+	probe.storedGradualDepth = es.storedGradualDepth
 	r.Check.Emit = probe
 	_, probeOK := compileClosureBody(r, "spawnbody", 0, true, false, tokens, nil, nil, nil, ClosureInValue, bodyList.Pos())
 	r.Check.Emit = es
@@ -3899,7 +3913,31 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	}
 	ops := make([]emitOperand, len(args))
 	for i := range args {
-		op, ok := es.resolveOperand(args[i])
+		a := args[i]
+		// A TYPE-NAME word in the claimed window — the un-stepped `Bytes` in
+		// `convert Bytes <dynamic>`: the dispatch could not commit statically
+		// (the data operand's type is unknown), so the plan's claimed args
+		// still hold the RAW name token. At runtime the interpreter steps the
+		// name to its canonical type literal before the word dispatches; give
+		// the poly window the same value — the canonical literal lowers via
+		// resolveOperand's type-operand path (OpPushType by ID), so callPoly's
+		// re-match sees exactly the operand the interpreter's dispatch does.
+		// Only a PLAIN word naming a live type qualifies; anything else keeps
+		// the unresolvable-operand decline below.
+		if IsWord(a) && es.reg != nil {
+			if w, wErr := AsWord(a); wErr == nil &&
+				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceRef && !w.ForceUsurp {
+				// Mirror stepWord's type-name cascade exactly: the kernel
+				// name table, then the external-builtin path resolver, then
+				// the registry's dynamic type bindings.
+				if t, tOK := typeNames[w.Name]; tOK {
+					a = NewTypeLiteral(t)
+				} else if t, tOK := ResolveTypePath(w.Name); tOK {
+					a = NewTypeLiteral(t)
+				}
+			}
+		}
+		op, ok := es.resolveOperand(a)
 		if !ok {
 			return false
 		}
