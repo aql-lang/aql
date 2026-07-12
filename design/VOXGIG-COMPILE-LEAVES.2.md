@@ -155,3 +155,35 @@ a hand-pinned off-corpus `RunCompiledStrict`==`Run` regression (the differential
 is structurally blind to these recursive-trie / fallible-do / dynamic-each
 shapes), the trie `--compile`==interpret sweep (green output, not merely
 "compiles"), and `cover-gate` 100%.
+
+---
+
+## L-DUP — a chained whole-program duplication miscompile (found while probing)
+
+Attempting the SAFEST possible way to close L-JOIN — a behaviour-preserving AQL
+restructure of `longest-t` (push the `end`-node choice into the arms, so no
+branch-join is fed to the recursion) — makes `tst.aql`'s `longest-t` compile
+natively (verified in isolation). But in the FULL `trie_smoke_test.aql` (four
+imports, ~30 top-level statements, a mix of now-compiling and still-falling-back
+sections) it converts a SOUND full fallback into a broken compile: `--compile`
+emits the **entire program output twice** (61 lines vs the interpreter's 31),
+while `--no-compile` is correct. Reverted immediately.
+
+This is the chained-leaf hazard from `.1`/`.0` again: clearing an outer refusal
+unhides a deeper one. The duplication is **structure-dependent** — it does NOT
+reproduce with the four imports + the tst section alone, nor with a minimal
+recursive-fn + a few prints; it needs the fuller mix of compiled and
+fallback top-level statements. So it is a program-level (top-level residual /
+partial-compile) miscompile, distinct from L-JOIN's operand provenance, and it
+is a HARD `compile==interpret` violation that must be fixed before L-JOIN can be
+closed by EITHER a compiler fix or a library refactor.
+
+**Consequence for sequencing.** "Fully compile the trie suites" is not a matter
+of clearing three independent leaves; it is a CHAIN per program (as `.1` L0-L7
+already found for the other repos), and each newly-compiling region can unhide a
+deeper miscompile the fallback was masking. Every step must re-run the trie
+`--compile`==`--no-compile` byte-identical sweep over the WHOLE suite (not just
+the changed construct) plus `verify-bytecode`, because the differential corpus
+is blind to these multi-section program shapes. The current
+4-native/5-sound-fallback state is byte-identical everywhere; it must stay so at
+every step.
