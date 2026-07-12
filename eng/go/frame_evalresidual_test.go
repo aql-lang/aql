@@ -160,6 +160,7 @@ func TestPendingResidualContainerArms(t *testing.T) {
 		{"typed list", pend(NewValueRaw(TList, ChildTypeInfo{})), false},
 		{"table", pend(NewValueRaw(TList, TableTypeInfo{})), false},
 		{"map type literal", NewTypeLiteral(TMap), false},
+		{"pending non-container", pend(NewInteger(3)), false},
 	}
 	for _, c := range cases {
 		if got := isPendingResidualContainer(c.v); got != c.want {
@@ -288,8 +289,11 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 		t.Fatal("__pa must still pop before the malformed pair stops the walk")
 	}
 
-	// Empty args stack: the __pa replay declines and the walk stops.
+	// Nil args stack (an uninitialised registry — the only shape
+	// Args.Pop errors on; an EMPTY stack pops as a no-op): the __pa
+	// replay declines and the walk stops.
 	r4 := runReg(t)
+	r4.Args = nil
 	snap4 := r4.Defs.Snapshot()
 	e4 := New(r4)
 	failMap4 := pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}}))
