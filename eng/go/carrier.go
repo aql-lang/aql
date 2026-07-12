@@ -3603,6 +3603,37 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	return sb.String()
 }
 
+// fnQuotaKey identifies a fn DEFINITION for the per-fn analysis quota:
+// scope + name + body source position. It deliberately differs from
+// FnAnalysisKey in two ways. It OMITS the arg shapes — the quota exists to
+// COUNT distinct arg shapes per definition, so the shapes cannot be part of
+// the key that groups them. And unlike a bare name it distinguishes the many
+// closure bodies that share a synthetic "<word>$body" name (each$body,
+// fold$body, scan$body, …) by their source position: a name-only key
+// conflated every higher-order closure in the whole program under one budget,
+// so a module with 64+ distinct `each` loops exhausted the quota and forced
+// later loops to bail to a provenance-less dynamic Any — which the compiler
+// then refused ("code-body word each (Stage 2)"). Keyed by definition site,
+// each distinct closure gets its own budget while the same body re-analysed
+// under many arg shapes still shares one counter.
+// The name may be empty (a transparent anonymous body); it is written
+// verbatim, since the body position that follows already distinguishes
+// distinct anonymous sites. The human-facing diagnostic uses a separate
+// displayName, so the key need not spell "<anon>".
+func fnQuotaKey(scopeID uint64, name string, body []Value) string {
+	var sb strings.Builder
+	sb.WriteString(strconv.FormatUint(scopeID, 10))
+	sb.WriteByte('#')
+	sb.WriteString(name)
+	if len(body) > 0 {
+		sb.WriteByte('@')
+		sb.WriteString(strconv.Itoa(body[0].Pos().Row))
+		sb.WriteByte(':')
+		sb.WriteString(strconv.Itoa(body[0].Pos().Col))
+	}
+	return sb.String()
+}
+
 // declaredReturnBail synthesizes the result carriers for an analysis that
 // cannot (or need not) run the body: one fresh carrier per declared return
 // type, or a single dynamic Any when nothing is declared. Shared by the
@@ -3828,20 +3859,24 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// Per-fn analysis quota (A9): a polymorphic helper reached with
 	// many distinct arg shapes re-analyses once per shape; past the
 	// quota, answer from the declaration (or dynamic Any) and say so
-	// once, instead of silently consuming the global step budget.
+	// once, instead of silently consuming the global step budget. Keyed
+	// by DEFINITION SITE (fnQuotaKey), not by bare name, so genuinely-
+	// distinct closure bodies that share a synthetic "<word>$body" name
+	// do not pool one budget across the whole program.
 	if r.Check.FnAnalysisCounts == nil {
 		r.Check.FnAnalysisCounts = map[string]int{}
 	}
-	quotaKey := name
-	if quotaKey == "" {
-		quotaKey = "<anon>"
+	quotaKey := fnQuotaKey(r.AnalysisScopeID(), name, body)
+	displayName := name
+	if displayName == "" {
+		displayName = "<anon>"
 	}
 	r.Check.FnAnalysisCounts[quotaKey]++
 	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
 		if n == FnAnalysisQuota+1 {
 			r.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "analysis_truncated",
-				Detail: "fn " + quotaKey + " was analysed for more than " +
+				Detail: "fn " + displayName + " was analysed for more than " +
 					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
 				Word: name,
 			})
