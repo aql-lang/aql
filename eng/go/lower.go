@@ -1451,6 +1451,85 @@ func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
 	return dynBindSrc
 }
 
+// singleOutputCall reports whether ev is a single-result native or user call —
+// the one producer shape promoteLateDynBind can seat as a lone frame local. A
+// nil event (a source in a multi-value arm collectPromotableEvents does not
+// recurse into) is not one.
+func singleOutputCall(ev *emitEvent) bool {
+	if ev == nil {
+		return false
+	}
+	switch ev.kind {
+	case evCall:
+		return ev.call.nout == 1
+	case evCallUser:
+		return ev.uc.nout == 1
+	default:
+		return false
+	}
+}
+
+// promoteLateDynBind seats a finished fn unit's dyn-bound COMPUTED def sources
+// into frame locals, for the case where es.dynEnv armed AFTER the unit's
+// value-def promotion was planned (a later tryRecordDynBody — e.g. a `do {…}`
+// map body in another fn, or a dynamically-dispatched subject — widens the
+// program to DynEnv). At plan time es.dynEnv was still false, so
+// planValueDefLocals' `(es.dynEnv && valueDef)` trigger did not fire and the
+// source was left on the single-consume sim stack; Finalize then lowers the
+// unit widened and lowerDynBind refuses "unpromoted computed value". This
+// applies exactly that trigger, deferred, over rec.frag's recorded events
+// (recursing arms/bodies via collectPromotableEvents). It is a no-op unless
+// es.dynEnv is set, so a program that never becomes DynEnv is byte-for-byte
+// unchanged; and a unit that finished AFTER the arming already promoted these
+// (they are in rec.promoted) so it is idempotent. A source that is not a
+// single-output call — a fragment RESULT that must stay on its sim, a
+// makeMap/branch/loop value, a multi-output OR variadic-returning producer —
+// is left untouched for lowerDynBind to refuse, a sound interpreter fallback
+// (never a wrong store).
+func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
+	if !es.dynEnv || rec == nil || rec.frag == nil {
+		return
+	}
+	allEvents, _, _ := collectPromotableEvents(rec.frag.events)
+	fragResult := fragmentResultSeqs(allEvents)
+	bySeq := make(map[int]*emitEvent, len(allEvents))
+	for _, ev := range allEvents {
+		bySeq[ev.seq] = ev
+	}
+	changed := false
+	for _, ev := range allEvents {
+		if ev.kind != evDynBind || ev.dyn == nil || ev.dyn.srcSeq < 0 {
+			continue
+		}
+		seq := ev.dyn.srcSeq
+		if _, done := rec.promoted[seq]; done {
+			continue
+		}
+		// A VARIADIC-returning producer's static nout==1 is only the check-run
+		// count, not a runtime guarantee: a `def v (maybe x)` over `maybe = if …
+		// [x] []` leaves 0 values when the empty arm runs. Promoting it emits a
+		// lone OpStoreLocal that underflows the VM stack (compile != interpret).
+		// Leave it for lowerDynBind to refuse — a sound interpreter fallback.
+		if fragResult[seq] || es.eventInfo[seq].variadicResult || !singleOutputCall(bySeq[seq]) {
+			continue
+		}
+		if rec.promoted == nil {
+			rec.promoted = map[int]int{}
+		}
+		rec.promoted[seq] = rec.numLoc
+		rec.numLoc++
+		changed = true
+	}
+	if changed {
+		for i := range rec.frag.events {
+			rewritePromotedRefs(&rec.frag.events[i], rec.promoted)
+		}
+		for i := range rec.outOps {
+			promoteOperand(&rec.outOps[i], rec.promoted)
+		}
+	}
+}
+
 // sameEventRunToEnd reports whether ops is entirely the SAME event's results
 // in ascending result order — the contiguous multi-out variadic run the
 // seatResults relaxation admits (all of a dyn-body do's outputs land together
