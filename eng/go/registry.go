@@ -682,11 +682,14 @@ type CheckState struct {
 	Compiling bool
 
 	// FnAnalysisCounts tracks distinct body analyses (memo misses)
-	// per fn name. Past FnAnalysisQuota the analyser stops re-running
-	// the body for new arg shapes — it answers from the declaration
-	// or dynamic(Any) — and emits ONE analysis_truncated diagnostic
-	// naming the fn, so heavy polymorphic use degrades loudly instead
-	// of silently eating the whole step budget
+	// per fn DEFINITION SITE (fnQuotaKey: scope + name + body position,
+	// NOT bare name — every higher-order closure shares a synthetic
+	// "<word>$body" name, so a name-only key pooled unrelated closures
+	// across the whole program). Past FnAnalysisQuota the analyser stops
+	// re-running the body for new arg shapes — it answers from the
+	// declaration or dynamic(Any) — and emits ONE analysis_truncated
+	// diagnostic naming the fn, so heavy polymorphic use degrades loudly
+	// instead of silently eating the whole step budget
 	// (design/checker-accuracy-review.10.md A9).
 	FnAnalysisCounts map[string]int
 
