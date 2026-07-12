@@ -101,6 +101,21 @@ func TestEdgeFindingForwardAcrossErrorResidual(t *testing.T) {
 	mustCompileWithParity(t, `5 do [7] error [drop 9] add "z"`, "[5 7z]")
 	mustCompileWithParity(t, `do [7] error [drop 9] add 1`, "[8]")
 	mustCompileWithParity(t, `5 do [9] add 1`, "[5 10]")
+
+	// A word with NoEvalArgs (code-body) positions — `if` here — forward-
+	// collects its BODY tokens, never a trailing SCALAR after them, so the
+	// drift model (a bare-scalar re-collection like `add 1`) does not apply.
+	// `if ok [t] [e] 0` with a dynamic `ok` matched all-stack (an analysis-order
+	// artifact) and a trailing `0` used to false-positive here; the recorded
+	// branch binds the correct operands and the `0` is a separate residual, so
+	// it compiles with parity. This is the decision prop_test summary-each shape
+	// (`each [ … if ok [print] [print] 0 ]` over dynamic-typed results).
+	mustCompileWithParity(t,
+		`def xs [{ok:true} {ok:false}] def _ (xs each [ var [[r] def ok (r "ok" get) def res (if ok [1] [2]) def _2 res 0 ] ]) 9`,
+		"[9]")
+	mustCompileWithParity(t,
+		`def m {ok:true} def ok (m get "ok") if ok [ 1 print ] [ 2 print ] 7`,
+		"[7]")
 }
 
 // §2 — an applied member-fn boundary mid-expression. A parked fn read from a

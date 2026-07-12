@@ -154,12 +154,17 @@ func TestPendingResidualContainerArms(t *testing.T) {
 		{"already evaluated map", NewMap(NewOrderedMap()), false},
 		{"quoted map", quoted, false},
 		{"scalar", NewInteger(3), false},
+		// A PENDING (Eval) scalar clears the Eval/Quoted/Parent guard but is
+		// neither TMap nor TList, so it falls through to the terminal `return
+		// false` — the non-container fall-through path.
+		{"pending scalar", pend(NewInteger(3)), false},
 		{"typed map", pend(NewValueRaw(TMap, ChildTypeInfo{})), false},
 		{"record type", pend(NewValueRaw(TMap, RecordTypeInfo{})), false},
 		{"options type", pend(NewValueRaw(TMap, OptionsTypeInfo{})), false},
 		{"typed list", pend(NewValueRaw(TList, ChildTypeInfo{})), false},
 		{"table", pend(NewValueRaw(TList, TableTypeInfo{})), false},
 		{"map type literal", NewTypeLiteral(TMap), false},
+		{"pending non-container", pend(NewInteger(3)), false},
 	}
 	for _, c := range cases {
 		if got := isPendingResidualContainer(c.v); got != c.want {
@@ -288,8 +293,11 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 		t.Fatal("__pa must still pop before the malformed pair stops the walk")
 	}
 
-	// Empty args stack: the __pa replay declines and the walk stops.
+	// Nil args stack (an uninitialised registry — the only shape
+	// Args.Pop errors on; an EMPTY stack pops as a no-op): the __pa
+	// replay declines and the walk stops.
 	r4 := runReg(t)
+	r4.Args = nil
 	snap4 := r4.Defs.Snapshot()
 	e4 := New(r4)
 	failMap4 := pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}}))

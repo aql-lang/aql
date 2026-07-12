@@ -136,3 +136,75 @@ for 3 [ MiniRedis.cmd ep "SET k v" drop  no-such-word-xyz ep drop ]`
 		t.Errorf("expected an undefined_word error for no-such-word-xyz inside the loop; got %d error(s): %v", len(errs), errs)
 	}
 }
+
+// loadImportedLib returns a lang.AQL whose import resolver holds `lib` at
+// /lib.aql, so a `src` that does `import "/lib.aql"` type-checks against it.
+func loadImportedLib(t *testing.T, lib string) *AQL {
+	t.Helper()
+	mem := capabilities.NewMem()
+	mem.Files["/lib.aql"] = []byte(lib)
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.SetFileOps(mem)
+	return a
+}
+
+// A cross-module fn that calls a private 0-return helper (a validator run for
+// its effects, declared `[]`) BEFORE producing its own return must not fail the
+// return-count check. The helper's call nets ZERO runtime values, so the fn
+// returns exactly its declared one — but when the helper's body unit did not
+// compile (plain check pass, fnUnit < 0), the fn-value ReturnsFn approximates
+// the 0-net call with a bare strict Any carrier, inflating the caller's
+// residual by one phantom. checkBodyReturnConformance's count mirror then
+// flagged a false "expected 1 return value(s), got 2". This is the shape of
+// sort.aql's distribution sorts (`counting-sort` → `ensure-ints`), reached
+// through the exported namespace with a concrete literal argument. The count
+// mirror now excludes the bare strict-Any phantom (stackHasApproxAny), like
+// the variadic / fn-value / dynamic seams it already skips.
+func TestCheckNoFalsePositiveCrossModuleZeroReturnHelper(t *testing.T) {
+	lib := `def validate fn [[name:String lst:List] [] [
+  def _ (iota (lst size) each [ var [[i] if (((lst get i) is Integer) not) [ raise bad_input name ] [0] ] ])
+]]
+def mysort fn [[lst:List] [List] [
+  lst "mysort" validate
+  def n (lst size)
+  if (n eq 0) [ [] ] [ lst ]
+]]
+export "Ns" { sort: mysort/r }`
+	a := loadImportedLib(t, lib)
+	src := `import "/lib.aql"
+print ((([5 3 1] Ns.sort end))) end`
+	if errs := errorDiags(t, a, src); len(errs) > 0 {
+		for _, d := range errs {
+			t.Errorf("false-positive check error: [%s] %s (%d:%d)", d.Code, d.Detail, d.Row, d.Col)
+		}
+	}
+}
+
+// NEGATIVE guard: clearing the phantom-Any false positive must not silence a
+// GENUINE over-return. A cross-module fn declared `[List]` whose body actually
+// leaves TWO concrete values (`[7]` before the trailing `lst`) must still be
+// flagged — proving the fix removed only the modelling-seam phantom, not the
+// real exact-count check.
+func TestCheckCrossModuleGenuineOverReturnStillReports(t *testing.T) {
+	lib := `def mysort fn [[lst:List] [List] [
+  [7]
+  lst
+]]
+export "Ns" { sort: mysort/r }`
+	a := loadImportedLib(t, lib)
+	src := `import "/lib.aql"
+print ((([5 3 1] Ns.sort end))) end`
+	errs := errorDiags(t, a, src)
+	found := false
+	for _, d := range errs {
+		if d.Code == "type_error" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a type_error for the genuine 2-value over-return; got %d error(s): %v", len(errs), errs)
+	}
+}

@@ -1560,21 +1560,22 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
-	// A concrete-MAP body is the value-eval overload (`do {…}` — autoEvalMap
-	// over the map's members): it produces exactly ONE value (the map),
-	// whatever its members compute, so its result count is STATIC, not
-	// runtime-variable. Only the code-body (List) overload runs a sub-program
-	// whose residual is variadic, and the DYNAMIC-body poly case (either
-	// overload at run time) must stay variadic. Marking a single-value do-map
-	// non-variadic lets it sit in an `if` arm without forcing the branch merge
-	// (and any fn whose body is that if) variadic — the "consumes loop results"
-	// refusal a fixed-arity consumer of `(if c [do{…}] [do{…}]) get k` otherwise
-	// hit. The declared-return exception at RecordUserCall handled only the
-	// WHOLE-body do-map; this handles the arm case at the source. dynBodyResult
-	// stays set so the RET still pins the count as real stack values.
-	mapValueEval := !body.Dynamic && len(outs) == 1 && body.Parent != nil && body.Parent.ConformsTo(TMap)
-	f.variadicResult = !mapValueEval
 	f.dynBodyResult = true
+	// A VALUE-EVAL body (`do {map}`) — a CONCRETE, non-dynamic Map arg on the
+	// non-fallback (value-eval) sig — produces EXACTLY len(outs) values
+	// deterministically (the evaluated map: always one). Its result count is
+	// FIXED, not runtime-variable, so it must NOT be marked variadic: the lowerer
+	// already lowers it to a fixed-nout CALL_NATIVE (lowerCall never flags a
+	// dyn-body event in lw.variadic), and a spurious record-time variadic mark
+	// only poisons an enclosing branch/fn residual (armOutVariadic →
+	// branchVariadicResult → rec.variadic), refusing a downstream fixed-arity
+	// consumer (`print (if c [do {a:1}] [do {b:2}])`) the VM runs correctly. A
+	// CODE-BODY (List/CompileFallbackBody) or a GRADUAL (Dynamic) body — whose
+	// runtime net count / overload is genuinely variable — keeps the marking.
+	fixedValueEval := IsConcrete(body) && !body.Dynamic && !sig.CompileEffect.Has(CompileFallbackBody)
+	if !fixedValueEval {
+		f.variadicResult = true
+	}
 	es.eventInfo[seq] = f
 	// Carrier-identity de-collision, extended to INTRA-event repeats: the
 	// modeled outs of a dyn-body sub-run may repeat one value — an unrolled
@@ -1600,8 +1601,18 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 		seen[outs[i].ID] = true
 		es.setProducedAt(outs[i], seq, i)
 	}
-	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc).
-	es.dynEnv = true
+	// Arm the program-wide environment mirror (see the EmitState.dynEnv doc) —
+	// but ONLY for a body whose handler RE-RUNS a code body at run time
+	// (resolving names against r.Defs / reading r.Args). A value-eval `do {map}`
+	// runs no such sub-body: its map arg is fully assembled (OpMakeMap) before the
+	// baked CALL_NATIVE, and doMapHandler just returns it — no dynamic-scope
+	// mirror is needed. Arming dynEnv for it would force every unrelated def in
+	// the program to a registry-visible OpBindDynScope twin and refuse the ones
+	// whose value has no compiled home (`def found None` → "dynamic-scope def of
+	// unknown provenance"), an unnecessary, whole-program refusal.
+	if !fixedValueEval {
+		es.dynEnv = true
+	}
 	return true
 }
 
@@ -3592,6 +3603,37 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 	return sb.String()
 }
 
+// fnQuotaKey identifies a fn DEFINITION for the per-fn analysis quota:
+// scope + name + body source position. It deliberately differs from
+// FnAnalysisKey in two ways. It OMITS the arg shapes — the quota exists to
+// COUNT distinct arg shapes per definition, so the shapes cannot be part of
+// the key that groups them. And unlike a bare name it distinguishes the many
+// closure bodies that share a synthetic "<word>$body" name (each$body,
+// fold$body, scan$body, …) by their source position: a name-only key
+// conflated every higher-order closure in the whole program under one budget,
+// so a module with 64+ distinct `each` loops exhausted the quota and forced
+// later loops to bail to a provenance-less dynamic Any — which the compiler
+// then refused ("code-body word each (Stage 2)"). Keyed by definition site,
+// each distinct closure gets its own budget while the same body re-analysed
+// under many arg shapes still shares one counter.
+// The name may be empty (a transparent anonymous body); it is written
+// verbatim, since the body position that follows already distinguishes
+// distinct anonymous sites. The human-facing diagnostic uses a separate
+// displayName, so the key need not spell "<anon>".
+func fnQuotaKey(scopeID uint64, name string, body []Value) string {
+	var sb strings.Builder
+	sb.WriteString(strconv.FormatUint(scopeID, 10))
+	sb.WriteByte('#')
+	sb.WriteString(name)
+	if len(body) > 0 {
+		sb.WriteByte('@')
+		sb.WriteString(strconv.Itoa(body[0].Pos().Row))
+		sb.WriteByte(':')
+		sb.WriteString(strconv.Itoa(body[0].Pos().Col))
+	}
+	return sb.String()
+}
+
 // declaredReturnBail synthesizes the result carriers for an analysis that
 // cannot (or need not) run the body: one fresh carrier per declared return
 // type, or a single dynamic Any when nothing is declared. Shared by the
@@ -3817,20 +3859,34 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// Per-fn analysis quota (A9): a polymorphic helper reached with
 	// many distinct arg shapes re-analyses once per shape; past the
 	// quota, answer from the declaration (or dynamic Any) and say so
-	// once, instead of silently consuming the global step budget.
+	// once, instead of silently consuming the global step budget. Keyed
+	// by DEFINITION SITE (fnQuotaKey), not by bare name, so genuinely-
+	// distinct closure bodies that share a synthetic "<word>$body" name
+	// do not pool one budget across the whole program.
 	if r.Check.FnAnalysisCounts == nil {
 		r.Check.FnAnalysisCounts = map[string]int{}
 	}
-	quotaKey := name
-	if quotaKey == "" {
-		quotaKey = "<anon>"
+	quotaKey := fnQuotaKey(r.AnalysisScopeID(), name, body)
+	displayName := name
+	if displayName == "" {
+		displayName = "<anon>"
 	}
 	r.Check.FnAnalysisCounts[quotaKey]++
-	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
+	// The quota is a CHECK-mode accuracy/step-budget heuristic: past the quota
+	// it fabricates a declared-return `declaredReturnBail` carrier that no event
+	// produced. That carrier has no producedBy entry, so a real COMPILE pass —
+	// which must lower the body's true residual to an operand — cannot resolve
+	// it and refuses "fn <name>: body result of unknown provenance" (the trie
+	// `match-go` / recursive-collector shape, pushed past the name-keyed count
+	// by the re-entrant Test.test compile scopes). The compiler must see the
+	// real body events, so the quota does not apply while Compiling; recursion
+	// still terminates via the FnInflight cycle-breaker below, and runaway
+	// non-recursive shape growth is bounded by the step budget.
+	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota && !r.Check.Compiling {
 		if n == FnAnalysisQuota+1 {
 			r.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "analysis_truncated",
-				Detail: "fn " + quotaKey + " was analysed for more than " +
+				Detail: "fn " + displayName + " was analysed for more than " +
 					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
 				Word: name,
 			})
