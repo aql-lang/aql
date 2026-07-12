@@ -1,0 +1,157 @@
+# voxgig-aql compile leaves — trie suites, post-3-fix state (continuation of .1)
+
+Continuation of `VOXGIG-COMPILE-LEAVES.1.md`, scoped to the **trie** repo after
+the three Stage-D fixes landed (branch `claude/voxgig-aql-baseline-pctxto`,
+commit `3e94429`: the `AnalyseFnBody` quota skip, the `RecordDynBind` capID
+override, and the `doListReturnsFn` fallible-multi-value refusal). Those fixes
+made the four `*_prop_spec` + `trie_unit_spec` suites compile natively and the
+rest fall back **soundly** (every suite stdout-byte-identical interpreter-vs-
+`--compile`, all green). This note records, with fresh traces, the **exact
+unmasked root cause** of each of the three refusals that remain, so a focused
+follow-up can implement them one at a time behind the usual gates
+(`verify-bytecode` byte-identical + off-corpus `RunCompiledStrict`-vs-`Run`
+regression + `--compile`==interpret sweep + `cover-gate` 100%).
+
+Current trie split (aql branch build, `203ea2f` + the 3 fixes):
+
+| Suite | `--force-compile` | Unmasked reason |
+|---|---|---|
+| `burst_prop_spec` `radix_prop_spec` `trie_prop_spec` `trie_unit_spec` | native | — |
+| `burst_unit_test` `radix_unit_test` `trie_unit_test` `tst_unit_test` | fallback | **L-DO** (below) |
+| `trie_prop_test` | fallback | **L-EACH** |
+| `trie_smoke_test` | fallback | **L-JOIN** |
+
+Every "code-body word X (Stage 2)" string is the closure-probe mask
+(`callable_words.go` `recordClosureDispatch` → the probe's `probe.Reason` is
+swallowed on decline). Unmasked by an env-gated print of `probe.Reason` at the
+`!probeOk` decline (temporary, reverted). Each reduces to one leaf:
+
+---
+
+## L-DO — fallible multi-value `do` under a catch (variable arity)
+
+Surfaces in the four `*_unit_test` codec-roundtrip cases:
+
+```aql
+def msg (do [ ((s TrieSet.encode) TrieMap.decode) "no-raise" ]
+         error [ var [[e] convert String (e "message" get) ] ])
+```
+
+The `do` body nets **2** values on no-raise (`[decode-result, "no-raise"]`) but
+**1** Error on raise (`do` catches into one Error). `error`'s sig is
+`[TList, TAny]` (BarrierPos 1) — it consumes exactly ONE stack value (the
+do-result) plus the handler, so the no-raise path leaves a **stray**
+decode-result on the stack below `error`'s result while the raise path leaves
+none. The static VM stack model can't seat a region whose depth depends on
+whether a runtime raise fired. This is the refusal `doListReturnsFn` now emits
+("do: fallible multi-value body under a catch (variable arity — Stage 3)"); the
+pre-fix behaviour was a `STORE_LOCAL` underflow (seating the 2-value residual at
+a fixed slot count that the 1-value caught path underflowed).
+
+**What compiling it needs.** A variable-arity residual model for `do`/`error`:
+the do-unit RETs its actual residual (already count-agnostic — see
+`compileClosureBody`'s `BodyOutResidual` declared-nil path), and the
+`do…error` lowering must track a runtime-variable stack depth across the
+catch merge (or normalise the do residual to a fixed count before `error`
+consumes it — e.g. an explicit "keep top-N" the emitter inserts when the
+consumer arity is known). Not a bug; a genuine Stage-3 VM feature. Highest
+leverage — closes 4 suites.
+
+---
+
+## L-EACH — forward-operand accounting across a dynamic/island residual
+
+Surfaces in `trie_prop_test`'s `each`. Refused by
+`engine.go::refuseForwardStackDrift` ("forward operand accounting across a
+dynamic/island residual (Stage 3)"). This is a **soundness guard**, not a
+missing feature in the naive sense: it refuses when the checker's all-stack
+operand match (forced because the top-of-stack operand is `Dynamic`, blocking
+the narrower forward overload) would DIVERGE from the interpreter's runtime
+forward collection once that operand is concrete. Refusing is correct today
+(sound fallback). Compiling it requires modelling the dynamic-operand forward
+collection in the compiled path so check-mode and the VM agree on which trailing
+literal the word grabs — a real accounting feature. One suite.
+
+---
+
+## L-JOIN — recursive branch-join accumulator, operand provenance (FULLY TRACED)
+
+Surfaces in `trie_smoke_test` via `TstSet.longest-prefix` → the recursive
+`longest-t` (and `radix.aql`'s `node-at`). Minimal off-corpus repro:
+
+```aql
+def rec fn [
+  [nd:Any key:Any consumed:Any best:Any] [Any] [
+    if (nd eq none) [best] [
+      def pc (consumed "x" add)
+      def best2 (if (nd "end" get) [pc] [best])   # join of pc & best
+      best2 consumed key (nd "mid" get) rec        # self-call: best2 → best slot
+    ]
+  ]
+]
+(rec none "hi" "" none) print end
+```
+
+Refused by `RecordUserCall` → `resolveOperand` fails on the `best2` operand
+("fn call operand of unknown provenance"). It is NOT in `producedBy`,
+`localByID`, or `capID`.
+
+**Pointer/id trace** (temporary instrumentation of `RecordDynBind`,
+`RecordBranch`, and the `RecordUserCall` decline; reverted). For one compiled
+unit of `rec`, the SAME source `def best2 (if …)` binds repeatedly with
+different ids AND types, and the branch records repeatedly, because the
+recursive-return fixpoint re-analyses the body several times:
+
+```
+DEF best2  id=T_314…  parent=Any            # iteration A (pre-join)
+BRANCH     seq=5  out=T_497…  parent=Disjunct   # producedBy[T_497…]=5
+DEF best2  id=T_497…  parent=Disjunct       # best2 := branch out (matches)
+BRANCH     seq=12 out=T_ef4…  parent=Disjunct   # producedBy[T_ef4…]=12
+DEF best2  id=T_ef4…  parent=Disjunct       # best2 rebound (next iteration)
+PROVFAIL   argi=3  id=S_dad…  parent=Integer prod=false local=false
+```
+
+The self-call's `best2` operand is captured as `S_dad…(Integer)` — an id/type
+from YET ANOTHER iteration (the carrier-analysis evaluation of `if`, whose
+`JoinCarriers` mints its own id via the global `GenerateID` counter and infers
+`Integer` in that iteration's type context), matching NONE of the branch outputs
+recorded in `producedBy` (all `T_…` Disjuncts). So the operand and the
+provenance record come from **different fixpoint iterations with independently
+minted ids and divergent inferred types**.
+
+Why the simple cases compile: when the two `if` arms have the SAME parent type,
+`JoinCarriers` (`carrier.go:2881-2891`) collapses and mints one id, and the
+carrier pass and emit pass converge on it; when the arms differ (here
+`pc:String` vs `best:None` → `Disjunct`, later narrowed to `Integer`), the
+passes diverge in both id and type. `GenerateID` is a global monotonic counter
+(`value.go:1412`), so it is non-deterministic across passes — but making it
+deterministic is NOT sufficient, because the arm ids and inferred types
+themselves differ per iteration.
+
+**What compiling it needs.** Either (a) unify the operand-capture pass with the
+provenance-recording pass for recursive bodies (one fixpoint iteration is the
+source of truth for both the value flowing to the self-call and the
+`producedBy` entry), or (b) make the whole recursive-body re-analysis
+identity-stable across iterations (stable value ids AND a converged join type
+before operands are captured). Both are core recursive-analysis /
+`EmitState.producedBy` changes with real regression surface against the
+byte-identical differential; a fix must ship with an off-corpus
+`RunCompiledStrict`-vs-`Run` regression on the repro above. This is the only
+one of the three that blocks LIBRARY code (`tst.aql`, `radix.aql`), not just a
+test file — and it is a genuine provenance BUG, not a missing feature.
+
+---
+
+## Order of attack (leverage / risk)
+
+1. **L-DO** — 4 suites, self-contained to the do/error lowering + VM residual
+   model. Highest leverage.
+2. **L-JOIN** — 1 suite but the only LIBRARY-code blocker and a real bug;
+   requires recursive-fixpoint provenance coordination.
+3. **L-EACH** — 1 suite; dynamic-forward-collection accounting.
+
+Each must land behind: `verify-bytecode` (byte-identical differential),
+a hand-pinned off-corpus `RunCompiledStrict`==`Run` regression (the differential
+is structurally blind to these recursive-trie / fallible-do / dynamic-each
+shapes), the trie `--compile`==interpret sweep (green output, not merely
+"compiles"), and `cover-gate` 100%.
