@@ -89,3 +89,55 @@ func TestComputedMapInFnBodyCompiles(t *testing.T) {
 		})
 	}
 }
+
+// A `do {…}` value-eval map produces EXACTLY ONE value (the map), so it is not a
+// runtime-variable (variadic) result even when it sits in an `if` arm or is the
+// return of a RECURSIVE fn. tryRecordDynBody used to flag EVERY dyn-body event
+// variadic; the whole-body case was rescued by RecordUserCall's declared-return
+// exception, but a do-map inside a branch arm left the branch merge (and any fn
+// whose body is that branch) variadic, so a fixed-arity consumer of the fn
+// result — `(mk …) get "code"` — refused "consumes loop results (Stage 2 loops
+// only feed the program residual)". Marking the concrete-map value-eval overload
+// non-variadic at the source fixes both. Each case REFUSED before the fix; the
+// RunCompiledStrict success here is also the no-FALLBACK-island proof (force mode
+// does not fall back), and the byte-identical interpreter comparison guards the
+// arity model. Only the code-body (List) overload and the dynamic-body poly case
+// stay variadic.
+func TestDoMapVariadicArmCompiles(t *testing.T) {
+	positives := []struct {
+		name, src string
+	}{
+		// do-map in BOTH if arms, fn result consumed by get.
+		{"do-map both if arms, result get",
+			`def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [do {code:["y"] next:[i]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)`},
+		// RECURSIVE fn returning a do-map, result consumed by get (the gen-program /
+		// compile-tagged-seq shape from the voxgig Template library).
+		{"recursive do-map return, result get",
+			`def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [def more (mk (i sub 1)) do {code:[(more get "code")] next:[(more get "next")]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)`},
+		// do-map arm whose members read a value bound earlier in the same arm.
+		{"do-map arm reads arm-local, result get",
+			`def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"]}] [def t (i add 100) do {code:[(t 0 add)]}] ]]  def use fn [[i:Integer] [Integer] [ ((mk i) get "code") ]] (mk 3 get "code")`},
+	}
+	for _, c := range positives {
+		t.Run("compiles/"+c.name, func(t *testing.T) {
+			a, _ := New()
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("expected the do-map arm to compile, got refusal: %v", err)
+			}
+			b, _ := New()
+			want, werr := b.Run(c.src)
+			if werr != nil {
+				t.Fatalf("interpreter errored on a positive case: %v", werr)
+			}
+			if len(got) != len(want) {
+				t.Fatalf("result arity %d != interpreter %d", len(got), len(want))
+			}
+			for i := range got {
+				if fmt.Sprintf("%v", got[i]) != fmt.Sprintf("%v", want[i]) {
+					t.Fatalf("compiled %v != interpreter %v", got[i], want[i])
+				}
+			}
+		})
+	}
+}

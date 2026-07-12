@@ -400,6 +400,24 @@ func TestS6aTryRecordFallbackStackFormRebuild(t *testing.T) {
 	}
 }
 
+func TestS6aTryRecordFallbackBakedNonInertDeclines(t *testing.T) {
+	r := newTestRegistry(t)
+	armEmit(r)
+	sig := registerIslandWord(t, r, "s6afb6", CompileIslandPure, 1, -1)
+	// A FlexList is CONCRETE (materialise bakes it) but MUTABLE, so
+	// isInertConst rejects it: baking a mutable instance into the island's
+	// const span would let a later mutation corrupt the frozen bake. The
+	// non-inert-data arg branch declines, so the program falls back to the
+	// interpreter unchanged. (An enclosing-scope binding read of such a value
+	// no longer reaches here — resolveOperand routes it to a dynamic-scope
+	// lookup — so this direct unit test pins the refusal contract.)
+	args := []Value{NewFlexList([]Value{NewInteger(1)})}
+	outs := []Value{NewDynamicCarrier(TAny)} // dynamic out: island is legitimate
+	if tryRecordFallback(r, "s6afb6", sig, args, outs, SrcPos{}) {
+		t.Error("a baked but non-inert (mutable) data arg must decline the island")
+	}
+}
+
 // --- bodyFreeForFallback --------------------------------------------------------
 
 func TestS6aBodyFreeForFallbackLiteralAndTypeWords(t *testing.T) {

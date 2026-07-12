@@ -230,6 +230,53 @@ const fn), `eng/go/emit.go` (`resolveDynamicApply` extension to a branch result)
 
 ## Stage C — sound module-body compilation (cross-registry EmitState) — LARGEST
 
+### Update (2026-07) — cross-scope binding reads now compile via dynamic scope
+
+The cross-registry EmitState *sharing* mechanism (`shareCheckStateFrom`,
+`execFnDefSig`) was already in place, so module-preamble fn bodies are
+*attempted* as units. The residual blocker was a specific read shape inside
+those units: **an enclosing-scope binding read whose value carries a producing
+event from the parent/module frame** — a module-scope `flex` accumulator
+(`mustache-acc` in the Template lexers), a computed module `def` (a seeded
+`Rand.with-seed` carrier). Such a read resolved to the enclosing event operand,
+which is unreachable across the fn unit's scope floor → refused ("branch reads
+enclosing computation") or islanded into a non-inert refusal.
+
+The fix (this session) routes it through the dynamic-scope path that Stages
+E/F already built:
+
+- **`resolveOperand`** (emit.go): when a value's producing event is an
+  enclosing-scope binding (its ID is in the reading unit's `enclosingBindIDs`
+  snapshot, taken at unit open) and we are inside a fn unit, route to
+  `dynScopeRescue` instead of the in-frame event operand. Immutable list/scalar
+  literals are consts with no producing event, so they still const-fold — only
+  computed / mutable enclosing bindings take this path.
+- **`dynScopeRescue`** (emit.go): admit an enclosing binding unconditionally
+  (it is genuinely in dynamic scope for the fn), bypassing the fn-binder
+  reachability model, which only covers names bound *inside* a fn frame. A
+  typo is still refused (absent from the snapshot AND has no fn binder).
+- **`collectDynBindSources`** (lower.go): promote a `def`'s computed source for
+  its `OpBindDynScope` install whenever the name is dynamically read
+  (`dynScopeNames`), not only under full `dynEnv` mode — so a module-scope
+  `def (flex …)` becomes registry-visible for the unit's `OpLookupDynScope`.
+
+At run time `OpLookupDynScope` re-resolves the live binding per call against the
+module registry — for a mutable flex/rand carrier that is the SAME cell the
+interpreter reads/mutates (by-reference, Stage E), so the compiled read advances
+in lockstep. Verified byte-identical `compile == interpret` across the Template
+corpus (mustache/handlebars/liquid/jinja render, the mutating `mustache-acc`
+lexers) and the rand receiver-closure case across many seeds; `verify-bytecode`
+and the full corpus differential stay clean. Landed refusals 11 → 9 in the
+langspec census (the `Rand.with-seed` receiver closure + the compute-frontier
+gap); `module-rand.tsv:38` compiles. `TestRandCarrierReceiverClosureCompiles`'
+frozen-draw guard was updated to recognise a `LOOKUP_DYN_SCOPE` receiver as
+dynamically resolved (not frozen); `tryRecordFallback`'s non-inert-arg refusal
+gained a direct unit test (`TestS6aTryRecordFallbackBakedNonInertDeclines`)
+since the compiler front-end no longer reaches it for this shape.
+
+The Test-harness / parselang rows below remain (they need the hermetic
+dynamic-help eval + corpus re-baseline of the original plan, steps 2–4).
+
 **Rows.** `module-test.tsv:38` (Test harness), `module-parselang.tsv:23`
 (sublanguage parse), `module-rand.tsv:38` (seeded generator) — plus the 2
 **reducible** rows (Test/Assert, quote-macro) and several `computeRefusalCeiling`
