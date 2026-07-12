@@ -3872,7 +3872,17 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		displayName = "<anon>"
 	}
 	r.Check.FnAnalysisCounts[quotaKey]++
-	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota {
+	// The quota is a CHECK-mode accuracy/step-budget heuristic: past the quota
+	// it fabricates a declared-return `declaredReturnBail` carrier that no event
+	// produced. That carrier has no producedBy entry, so a real COMPILE pass —
+	// which must lower the body's true residual to an operand — cannot resolve
+	// it and refuses "fn <name>: body result of unknown provenance" (the trie
+	// `match-go` / recursive-collector shape, pushed past the name-keyed count
+	// by the re-entrant Test.test compile scopes). The compiler must see the
+	// real body events, so the quota does not apply while Compiling; recursion
+	// still terminates via the FnInflight cycle-breaker below, and runaway
+	// non-recursive shape growth is bounded by the step budget.
+	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota && !r.Check.Compiling {
 		if n == FnAnalysisQuota+1 {
 			r.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "analysis_truncated",

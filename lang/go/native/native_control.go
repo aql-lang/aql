@@ -304,7 +304,97 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// island paths require a single output, so a genuinely multi-value body
 	// (rare) declines those and rides the whole-program fallback — correct,
 	// just not natively compiled.
+	//
+	// COMPILE PASS: a multi-value body that can RAISE must decline EVERY native
+	// lowering path (closure, dyn-body backstop, and the generic RecordCall the
+	// closure-probe-failing dynamic-dispatch shapes fall through to). `do`
+	// CATCHES a body raise into ONE Error value (doListHandler), so a fallible
+	// N-value body's runtime count varies (N no-raise vs 1 caught) — every fixed
+	// N-seat underflows on the caught path (`def msg (do [(s decode) "x"] error
+	// […])`). This ReturnsFn is the single point that sets the dispatch's output
+	// arity, so refusing here covers all paths uniformly. A pure / infallible
+	// multi-value body (`do [10 20 30]`, `do [1 add 2 10 mul 4]`) keeps its exact
+	// residual and compiles. Gated to Compiling so check-mode precision is intact.
+	if r.Check.Compiling && len(stk) > 1 && doBodyMayRaise(body, r) {
+		r.Check.Recorder().MarkUncompilable("do: fallible multi-value body under a catch (variable arity — Stage 3)")
+	}
 	return stk
+}
+
+// doBodyMayRaise reports whether a `do` body can RAISE at run time — the
+// discriminator for whether a MULTI-VALUE body is safe to seat at a fixed
+// arity (a raise makes `do` net ONE Error instead of the N-value residual). See
+// tokensMayRaise for the fallibility rule. A non-list / nil body is conservative
+// (fallible).
+func doBodyMayRaise(body Value, r *Registry) bool {
+	bl, err := AsList(body)
+	if err != nil || bl.IsNil() { //covergate:allow do's TList sig + the len(stk)>1 caller guard guarantee a concrete non-empty list body
+		return true
+	}
+	return tokensMayRaise(bl.Slice(), r)
+}
+
+// tokensMayRaise recursively scans body tokens for a fallible invocation,
+// descending into PAREN-EXPRESSIONS and nested lists so a fallible call buried
+// in a group is not missed. A token is fallible if it is a REACH (`m.decode` —
+// a dot/method/module dispatch), or a word bound to something fallible
+// (wordMayRaise). Pure literals, plain value reads, and infallible core natives
+// (`add`/`mul`/stack/accessor words) cannot raise, so an all-such multi-value
+// body stays natively seatable.
+func tokensMayRaise(toks []Value, r *Registry) bool {
+	for i := range toks {
+		t := toks[i]
+		switch {
+		case IsReach(t):
+			return true
+		case IsParenExpr(t):
+			inner, _ := AsParenExpr(t)
+			if tokensMayRaise(inner, r) {
+				return true
+			}
+		case IsConcrete(t) && t.Parent != nil && t.Parent.ConformsTo(TList):
+			if inner, err := AsList(t); err == nil && !inner.IsNil() && tokensMayRaise(inner.Slice(), r) {
+				return true
+			}
+		case IsWord(t):
+			if w, _ := AsWord(t); wordMayRaise(w.Name, r) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// wordMayRaise reports whether the word `name` resolves to something that can
+// raise: a MODULE-export value, or a callable (a `Function`/`FnDef` value whose
+// FnDefInfo is fallible — see fnDefMayRaise). A plain value read (`x` → 5) or an
+// unbound name (which would error at dispatch anyway) cannot raise here.
+func wordMayRaise(name string, r *Registry) bool {
+	v, ok := r.Defs.Top(name)
+	if !ok {
+		return false
+	}
+	if p := v.Parent; p != nil && p.ConformsTo(TModuleExport) {
+		return true
+	}
+	fd, isFn := v.Data.(FnDefInfo)
+	if !isFn {
+		return false
+	}
+	return fnDefMayRaise(&fd)
+}
+
+// fnDefMayRaise reports whether invoking fd can raise: a USER fn (any sig carries an AQL body — Go natives have none), or a native
+// that diverges always (CompileDiverges: `raise`) or value-dependently
+// (CompileValueDiverges: `div`/`mod` by zero).
+func fnDefMayRaise(fd *FnDefInfo) bool {
+	for i := range fd.Signatures {
+		s := &fd.Signatures[i]
+		if len(s.Body()) > 0 || s.CompileEffect.Has(CompileDiverges|CompileValueDiverges) {
+			return true
+		}
+	}
+	return false
 }
 
 func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

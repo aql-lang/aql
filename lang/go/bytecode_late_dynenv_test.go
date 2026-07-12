@@ -60,6 +60,18 @@ def bx (make Box {n: 1 p: 0.5})
 def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
 def _ (bx params)
 a`, `[16]`},
+		// A BRANCH-valued dyn-bound source (`def v (if … [g x] [0])`) whose two
+		// arms EACH net one value: planBranchPromotion seats the branch merge to a
+		// unit frame local and the late OpBindDynScope re-pushes it, byte-identical
+		// to the interpreter. (Contrast the VARIADIC source in the negatives below,
+		// whose empty arm nets 0 at runtime and genuinely must refuse.)
+		{"branch-valued dyn-bind source, both arms single-value, seated late",
+			`def Box class { n:Integer p:Float }
+def g fn [[x:Integer] [Integer] [x mul 3]]
+def mk fn [[x:Integer] [Box] [ def v (if (x gt 0) [ g x ] [ 0 ]) make Box {n: v p: 0.5} ]]
+def a (mk 5)
+def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
+(a params)`, `[{n:15 p:0.5}]`},
 	}
 	for _, c := range strict {
 		t.Run(c.name, func(t *testing.T) {
@@ -89,19 +101,11 @@ a`, `[16]`},
 		})
 	}
 
-	// A dyn-bound source that is NOT a single-output call — here a BRANCH value
-	// (`def v (if … [g x] [0])`) — is left untouched by promoteLateDynBind and
-	// refuses at lowerDynBind, a sound interpreter fallback (never a wrong
+	// A dyn-bound source the late-arming promotion CANNOT seat is left untouched
+	// and refuses at lowerDynBind, a sound interpreter fallback (never a wrong
 	// store). RunCompiledStrict must surface the refusal, and the interpreter
 	// must still produce the value.
 	negatives := []struct{ name, src, want string }{
-		{"branch-valued dyn-bind source refuses, interp runs",
-			`def Box class { n:Integer p:Float }
-def g fn [[x:Integer] [Integer] [x mul 3]]
-def mk fn [[x:Integer] [Box] [ def v (if (x gt 0) [ g x ] [ 0 ]) make Box {n: v p: 0.5} ]]
-def a (mk 5)
-def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
-(a params)`, `[{n:15 p:0.5}]`},
 		// A VARIADIC-returning source (`maybe = if … [x] []`) has static nout==1
 		// but leaves 0 values at runtime for the empty arm. Promoting it emitted
 		// a lone STORE_LOCAL that underflowed the VM (compile != interpret — the
