@@ -170,7 +170,18 @@ emits the **entire program output twice** (61 lines vs the interpreter's 31),
 while `--no-compile` is correct. Reverted immediately.
 
 This is the chained-leaf hazard from `.1`/`.0` again: clearing an outer refusal
-unhides a deeper one. The duplication is **structure-dependent** — it does NOT
+unhides a deeper one. **Root cause now confirmed** (`--force-compile` on the
+refactored full smoke): the compiled run prints every section, then raises
+`[aql/internal_error]: bytecode: internal: dynamic-scope read miss for` \`np\`
+at the BurstMap `decode` section (`src 261:13`) — a NEW deeper leaf (**L-NP**: a
+fold/var-body local `np` in `burst.aql` misses under the compiled dynamic-scope
+path, the same class the `.1` critical-finding flagged). `RunCompiledReason`
+(`lang/go/aql.go:750-768`) catches that runtime bail via `runtimeShouldFallback`
+and re-runs the WHOLE program on the interpreter — but `RestoreForCompile` only
+rolls back registry SCOPES, it cannot un-`print` the compiled run's
+already-emitted output, so every side effect is doubled. On the CURRENT library
+this never fires because L-NP is masked by an EARLIER compile-time refusal
+(L-JOIN); clearing L-JOIN unmasks L-NP, whose runtime bail then duplicates. The duplication is **structure-dependent** — it does NOT
 reproduce with the four imports + the tst section alone, nor with a minimal
 recursive-fn + a few prints; it needs the fuller mix of compiled and
 fallback top-level statements. So it is a program-level (top-level residual /
@@ -187,3 +198,15 @@ the changed construct) plus `verify-bytecode`, because the differential corpus
 is blind to these multi-section program shapes. The current
 4-native/5-sound-fallback state is byte-identical everywhere; it must stay so at
 every step.
+
+
+**Two distinct fixes are entangled here.** (i) L-NP — make the fold/var-body
+`np` local resolve under the compiled dynamic-scope path (or refuse it at compile
+time, restoring a clean pre-output fallback). (ii) The `RunCompiledReason`
+runtime-bail fallback is itself unsound for side-effecting programs: once the
+compiled run has emitted observable output, re-running the whole source
+DUPLICATES it. A sound contract must either prove the program compilable
+end-to-end BEFORE any effect (so a runtime bail is impossible), or buffer/guard
+effects, or propagate the internal_error instead of silently re-running. The
+differential corpus is pure-value, so it never exercises the emit-output-then-bail
+path — which is why this ships latent.
