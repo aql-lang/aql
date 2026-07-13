@@ -544,3 +544,48 @@ VM-side policy gate at CALL_NATIVE / CALL_USER / poly / dynamic dispatch
 (arg-conditional rules need the runtime window, so the gate must live at
 dispatch, not compile time), then delete the CompileCheck refusal and the
 reason string.
+
+## L-DO implementation map (Step 3 analysis, 2026-07-13 — execute next)
+
+The closure path already compiles do bodies COUNT-AGNOSTIC (tryRecordClosureCall
+callable_words.go:200-205: BodyOutResidual multi-out; the VM's frameless RET
+returns the full residual). The exact-N seat is the only unsound piece for a
+fallible body (catch → 1 Error vs N): the gate at callable_words.go:508-516
+(closureResidualExact) admits the exact-N unit and the dispatch seats N.
+Two-part fix:
+
+1. **Variadic mark at the record sites.** Move the fallibility scan
+   (doBodyMayRaise/tokensMayRaise/wordMayRaise/fnDefMayRaise,
+   native_control.go:324-398) into eng (ModuleExport detected by type PATH —
+   the isModuleFamilyValue precedent, carrier.go:1089-1104). In
+   recordClosureDispatch (callable_words.go:412-541): when
+   sig.CompileEffect.Has(CompileFallbackBody) && len(outs) > 1 &&
+   tokensMayRaise(bodyToks, r), set f.variadicResult on the event
+   RecordClosureCall appends (add a flag param). Same condition at the
+   generic RecordCall fall-through (emit.go:3570) and keep
+   tryRecordDynBody's existing unconditional variadic mark. Then DELETE
+   doListReturnsFn's MarkUncompilable arm (native_control.go:318-320) — the
+   ReturnsFn keeps returning the full residual for check precision.
+
+2. **Region-top consumption for `error`** (the catch merge). `error` is
+   StripsUnconsumedInput (stripResidualShapeOK callable_words.go:559-587):
+   its runtime read is EXACTLY the top of stack — depth-agnostic — so a
+   variadic region below it is consumable: teach layoutOperands/the lowerer
+   that a strip-input dispatch over a variadic region pops 1 at runtime and
+   yields region' = variadic (region minus top plus handler result). The
+   program residual absorbs region'; any OTHER fixed-arity consumer of the
+   region keeps the refusal ("unseatable residuals keep the refusal").
+   OpStackMark/OpDropToMark (bytecode.go:190-192, vm.go:1784-1808) are
+   available if the lowering needs an explicit region boundary; the
+   variadic-if claiming lowering (lower.go:424/2198/2206) is the model.
+
+Verification: the 8 frontier-do-catch.tsv rows graduate row-by-row (ledger
+stale arms fire); TestDoCatchMultiValueArity's fallback list flips to
+native (update wantCompiled + the comment); the migrated infallible rows
+must stay native; whole-suite differential + verify-bytecode after EVERY
+sub-change (the chained-leaf hazard); watch the vary gate's do-catch bucket
+graduate.
+
+Net drivers (for:) reuse part 1's variadic mark at RecordLoop
+(emit.go:3267-3274) + per-iteration mark/collect; L-EACH and Stage-D as
+scoped in the Step 3 plan above.
