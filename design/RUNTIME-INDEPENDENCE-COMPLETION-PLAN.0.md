@@ -210,7 +210,22 @@ engine per line over a persistent registry is already the model — check-pass
 contract); `exec`/wasm route to `RunAuto`; debug-serve interactive stepping
 stays a C4 user-opt-out seam. The public `Run` does NOT flip until Phase 11.
 
-### Phase 3 — Dispatch-error parity + `OpDispatchRematch` (XL, the effort center)
+### Phase 3 — Dispatch-error parity + `OpDispatchRematch` (XL → L, de-risked 2026-07-13)
+
+**Re-sizing note (frontier-suite exploration):** all 9 `knownRefusals` rows
+are ERROR rows in the corpus (signature/signature_error — apply.tsv:37/38,
+edge-types-3.tsv:35/119, generics-sugar.tsv:37, generics.tsv:60,
+forward-barrier.tsv:80, open-words.tsv:32, word-splice.tsv:115). For them
+`OpDispatchRematch` degenerates to a RUNTIME-EVALUATED TRAP: re-run
+`MatchSignature` over the concrete window at VM time, expect no-match, raise
+via the shared builder (`diag_msg.go` noMatchDiag/runtimeNoMatch — already
+shared by the interpreter's sigError and the VM param-contract guards). No
+dispatch arm is ever selected for these rows, so the matched-arm execution
+half of 3b can land later with 3c. The blocker each row hits today is
+`tryRecordUnmatchedDispatchTrap`'s carrier/dynamic/splice decline
+(engine.go:8194-8233) — every row carries a non-concrete operand, so the
+rich diagnostic must be built at runtime over the concrete window rather
+than baked.
 
 **3a. Error-parity layer.** The pure renderer exists
 (`diag_msg.go::noMatchDiag`/`runtimeNoMatch`). What keeps `callPoly`'s
@@ -300,6 +315,22 @@ registry) + `SnapshotForCompile` rollback; a refused runtime string
 interprets from the start (pre-effect — no L-DUP hazard).
 `interpreterOnlyCeiling = 3` is retained with a rewritten rationale.
 
+**Do-unit registry replay (added 2026-07-13, found by the variation
+sweep).** Root cause: `RunCarrierBodyWithDefs` (carrier.go) rolls back only
+`r.Defs` after the check-time do-body run — the body's `def Big`/`import`
+also mutate `r.Types.parts` + the minted lattice + `Modules.loaded`, which
+are NOT rolled back and ARE kept on the compiled path (by design:
+OpPushType resolves minted IDs). The VM replays the baked const-list body
+via RunResolved over the same registry → `InstallType` parts conflict for
+typed defs; the import half re-binds a PLAIN MAP instead of a ModuleExport
+(`ensureExportsBound`) so mini/parse kind lookups fail. Near-term fix
+(landed with the frontier suite follow-up): refuse to bake replay-hazard
+bodies (import / capitalised def) — "slow, not wrong" — plus the
+ensureExportsBound value-kind fix. Full graduation belongs HERE: the JIT
+detached-unit cache compiles dyn do-bodies as units (no token replay), and
+the unit's RunInCheckMode-word semantics become idempotent by construction
+(the check-time install is the only install).
+
 ### Phases 7–9 — the multi-session features
 
 **7** Module-fn param-slot compilation: execute the
@@ -314,6 +345,18 @@ dispatch still cannot statically resolve — subject to C3, never static
 baking. **9** radix-msd: the parameterised-mutable-Array carrier (gradual
 element types + set-widening) — a genuine type-system feature, deliberately
 last; nothing depends on it.
+
+**Re-scoping (2026-07-13, frontier bootstrap):** several Phase 7–9 target
+shapes ALREADY COMPILE and are pinned green in lang/spec/frontier/: the
+aql:test recursion rows ×2 (frontier-aql-test.tsv), the module-fn-param
+inline-lambda comparator (frontier-module-fn-param.tsv), template-each
+(frontier-template-each.tsv), and stage-d ×2. Re-baseline each phase
+against the live census before executing — the remaining work is narrower
+than the phase descriptions above (e.g. Phase 7's comparator seam may only
+need the /r-parked named-fn form; Phase 8's remainder is spec-data
+inference breadth). The radix-msd repro is unconstructible in-repo
+(frontier-array-carrier.tsv, dated note) — Phase 9 is driven by the
+external voxgig sweep.
 
 ### Phase 10 — Runtime-bail census to zero (M-L)
 
