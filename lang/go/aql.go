@@ -2,6 +2,7 @@ package lang
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 
@@ -166,6 +167,19 @@ func New(opts ...Options) (*AQL, error) {
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
+// NewFromRegistry wraps an ALREADY-WIRED registry in an *AQL instance so a
+// host with a long-lived registry of its own — the REPL, a service — can use
+// the compiled-by-default entry points (RunAutoValues / RunCompiledReason)
+// over it. The caller owns the wiring (parse func, module resolver, Manager,
+// Output, policy): nothing is installed or re-installed here, and the zero
+// Options apply. Plan Phase 2 prerequisite (entry-point routing).
+func NewFromRegistry(reg *native.Registry) (*AQL, error) {
+	if reg == nil {
+		return nil, fmt.Errorf("NewFromRegistry: nil registry")
+	}
+	return &AQL{registry: reg}, nil
+}
+
 // Options returns the Options the instance was created with.
 func (a *AQL) Options() Options {
 	return a.options
@@ -322,6 +336,18 @@ func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 // the Program is nil and reason names the first offender; the
 // CheckResult is valid either way.
 func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
+	// SECURITY GATE: compiled dispatch does not consult the engine word
+	// policy — the interpreter's policyGateWord runs per stepWord dispatch
+	// (and deliberately not in check mode), so a compiled program would
+	// BYPASS every word deny rule (found 2026-07-13: a "deny add" policy
+	// interpreted `1 add 2` to permission-denied but ran it compiled to 3).
+	// A policy-gated registry therefore refuses compilation outright and the
+	// interpreter, where the gate lives, owns every dispatch. Lifting this
+	// requires a VM-side policy gate at CALL_NATIVE/CALL_USER/poly dispatch
+	// (recorded as a Phase 10 item in the completion plan).
+	if eng.LookupWordChecker(a.registry) != nil {
+		return nil, "policy-gated registry (compiled dispatch does not consult word rules)", CheckResult{}, nil
+	}
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, "parse error", CheckResult{}, err
@@ -618,6 +644,18 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 //
 // State from set/get persists across multiple Run calls on the same instance.
 func (a *AQL) Run(src string) ([]any, error) {
+	result, err := a.runValues(src)
+	if err != nil {
+		return nil, err
+	}
+	return convertResults(result), nil
+}
+
+// runValues is Run without the host-value projection: the raw engine stack.
+// The Value-returning entry points (RunAutoValues' fallback arms) need the
+// unprojected Values so a host renderer (the REPL's v.String()) stays
+// byte-identical with what the engine produced.
+func (a *AQL) runValues(src string) ([]native.Value, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, err
@@ -626,11 +664,7 @@ func (a *AQL) Run(src string) ([]any, error) {
 	a.registry.Source = src
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
-	result, err := eng.Run(values)
-	if err != nil {
-		return nil, err
-	}
-	return convertResults(result), nil
+	return eng.Run(values)
 }
 
 // convertResults maps a residual engine stack to host-friendly Go
@@ -731,6 +765,21 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 //     refusal is "slow, not wrong"). A refusal is surprising performance debt,
 //     so the CLI surfaces this reason as a warning.
 func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
+	vals, ran, reason, err := a.RunAutoValues(src)
+	if err != nil {
+		return nil, ran, reason, err
+	}
+	return convertResults(vals), ran, reason, nil
+}
+
+// RunAutoValues is the compiled-by-default entry point returning the RAW
+// engine Values — RunCompiledReason without the host-value projection
+// (convertResults collapses Integer→int64/String→string, which cannot back
+// a renderer that needs the engine's own Value.String() — the REPL's
+// per-line echo and /stack). Identical semantics: same compiled/fallback
+// arms, same fence, same reason contract (plan Phase 2's prerequisite for
+// entry-point routing).
+func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// CompileCheck executes the program in check mode, so its
 	// RunInCheckMode words (def/import/type/macro, the Test harness)
 	// leave real side effects on the registry. The COMPILED path needs
@@ -796,7 +845,7 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 				a.registry.AqlError("internal_error",
 					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
 		}
-		out, rerr := a.Run(src)
+		out, rerr := a.runValues(src)
 		// Report the reason ONLY for a genuine performance refusal. A
 		// statically-invalid program (err != nil, or the "check diagnostics"
 		// sentinel) fails in both engines — the interpreter fallback raises the
@@ -804,7 +853,10 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 		if err != nil || reason == "check diagnostics" {
 			reason = ""
 		}
-		return out, false, reason, rerr
+		if rerr != nil {
+			return nil, false, reason, rerr
+		}
+		return out, false, reason, nil
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
@@ -831,12 +883,15 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 			}
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
-			out, rerr := a.Run(src)
-			return out, false, "", rerr
+			out, rerr := a.runValues(src)
+			if rerr != nil {
+				return nil, false, "", rerr
+			}
+			return out, false, "", nil
 		}
 		return nil, true, "", err
 	}
-	return convertResults(result), true, "", nil
+	return result, true, "", nil
 }
 
 // RunCompiledStrict is RunCompiled in FORCE mode: it REQUIRES the bytecode

@@ -12,6 +12,7 @@ import (
 	"github.com/chzyer/readline"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 
@@ -37,6 +38,11 @@ var newRegistry = func() (*native.Registry, error) {
 	modules.InstallResolver(reg)
 	return reg, nil
 }
+
+// langNewFromRegistry is a test seam (design/TEST-SEAMS.10.md); tests swap
+// it to drive the instance-construction error arm — NewFromRegistry only
+// fails on a nil registry, which newRegistry never produces.
+var langNewFromRegistry = lang.NewFromRegistry
 
 // readliner abstracts the readline interface for testing.
 type readliner interface {
@@ -85,6 +91,19 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 
 	registry.Output = out
 
+	// One *AQL per session over the persistent registry: each line runs
+	// COMPILED-BY-DEFAULT (RunAutoValues — the same CompileTry semantics as
+	// `aql run`), with the interpreter as the sound fallback for refused
+	// lines. Check-pass def/import effects persist across lines on the
+	// compiled path by SnapshotForCompile's keep-on-compile contract;
+	// fallback lines interpret against the same registry, so state
+	// persistence is unchanged either way (plan Phase 2).
+	aqlInst, aqlErr := langNewFromRegistry(registry)
+	if aqlErr != nil {
+		fmt.Fprintf(out, "init error: %s\n", aqlErr)
+		return
+	}
+
 	meta := NewMetaRegistry()
 	var lastStack []native.Value
 	// Diagnostics render with the ANSI palette when out is a real
@@ -131,14 +150,15 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			continue
 		}
 
-		values, err := parser.Parse(line)
-		if err != nil {
-			fmt.Fprintf(out, "  parse error: %s\n", renderErr(err))
+		// The parse probe keeps the historical "parse error:" prefix for
+		// malformed lines (RunAutoValues would fold a parse failure into the
+		// generic error arm); a well-formed line then runs compiled-by-default.
+		if _, perr := parser.Parse(line); perr != nil {
+			fmt.Fprintf(out, "  parse error: %s\n", renderErr(perr))
 			continue
 		}
 
-		eng := native.NewTop(registry)
-		result, err := eng.Run(values)
+		result, _, _, err := aqlInst.RunAutoValues(line)
 		if err != nil {
 			fmt.Fprintf(out, "  error: %s\n", renderErr(err))
 			continue

@@ -517,3 +517,30 @@ corpus unification (lang/go/test/*.tsv, 12 files, older schema) and
 priority-3 lang/go/test value tests remain as scoped in the plan. The
 p2 entry-point frontier cases (repl/exec runner copies) also remain as
 the WS1b follow-on.
+
+## Phase 2 landed + a security discovery (2026-07-13)
+
+Entry-point routing landed: `lang.NewFromRegistry` + `RunAutoValues` (the
+Value-returning twin of RunCompiledReason — one shared core, the []any
+variant is now a converting wrapper); the REPL runs one `*AQL` per session
+with per-line `RunAutoValues` (parse-probe preserved for the historical
+"parse error:" prefix; state persistence unchanged via the
+keep-on-compile contract); `aql exec` routes through `RunCompiledReason`.
+p2 pins live in cmd/go/internal/{repl,exec} (compiled line + zero
+unattributed interp entries + refused-line fallback).
+
+**SECURITY DISCOVERY (new Phase 10 item): compiled dispatch bypassed the
+engine word policy.** `policyGateWord` runs per interpreter stepWord
+dispatch (skipped in check mode by design) and the VM never consulted it —
+so `aql run` (default CompileTry) with a "deny add" policy RAN `1 add 2`
+compiled to 3 where the interpreter raises permission-denied; exec
+inherited the hole the moment it moved to the compiled entry (caught by
+its policy test). Closed conservatively in CompileCheck: a registry with
+an installed word checker refuses compilation ("policy-gated registry"),
+so the interpreter — where the gate lives — owns every dispatch. Pinned by
+lang/go/policy_compiled_gate_test.go (deny parity + strict-mode surfacing
++ the no-policy negative). LIFTING the refusal is a Phase 10 item: a
+VM-side policy gate at CALL_NATIVE / CALL_USER / poly / dynamic dispatch
+(arg-conditional rules need the runtime window, so the gate must live at
+dispatch, not compile time), then delete the CompileCheck refusal and the
+reason string.

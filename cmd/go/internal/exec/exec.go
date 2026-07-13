@@ -178,7 +178,10 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 	var outBuf strings.Builder
 	a.SetOutput(&outBuf)
 
-	stack, runErr := a.Run(req.Code)
+	// Compiled-by-default (the same CompileTry semantics as `aql run`),
+	// with the interpreter as the sound fallback for refused programs
+	// (plan Phase 2 — entry-point routing).
+	stack, _, _, runErr := a.RunCompiledReason(req.Code)
 	resp := execResponse{Output: outBuf.String()}
 	if runErr != nil {
 		resp.Error = runErr.Error()
