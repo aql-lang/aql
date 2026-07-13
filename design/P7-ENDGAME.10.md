@@ -91,6 +91,20 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > unwind). The 4 remaining refusals are the three sound non-definite
 > error rows and the fn-value-reaches-`drop` row (`refusalGate = 4`).
 
+> **Addendum 4 (2026-07-13, staleness notice):** the corpus has grown again
+> (5,941 → 6,267 rows) and the residue table below is one generation stale:
+> the carrier-parity, module-fnvalue-boundary, G5 flex, M6 dynamic-scope, and
+> compute-frontier-island rows have all since compiled, and the live refusal
+> set is **9 rows, all one tier** — the "unmatched dispatch recovered"
+> soundness rows pinned row-exact in
+> `test/go/langspec/compiled_refusals_test.go` (`knownRefusals`), which is the
+> authoritative per-row ledger. Gates ratcheted to match (`refusalGate = 9`,
+> `computeRefusalCeiling = 0`). The completion program for the remaining
+> distance — these 9 rows, the off-corpus leaves (L-DO/L-EACH/L-JOIN/L-NP),
+> the L-DUP fallback-soundness bug, the never-compiled entry points, and the
+> Stage-J fallback deletion — is
+> [`RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md`](RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md).
+
 ## The three endgame actions
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns
