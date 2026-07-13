@@ -449,3 +449,28 @@ Refusal buckets (count @ default breadth): dynamic/opaque output ×12, check
 diagnostics (wrapped-context false positive) ×11, runtime bail ×7, for-multi
 ×3, dynamic input ×2, L-DO do-catch ×2, residual lowering ×2, stack
 discipline ×2, operand provenance ×1.
+
+## TSV migration (WS4 priority-1 batch, landed 2026-07-13)
+
+41 off-corpus Go parity regressions migrated into the main shared corpus as
+`lang/spec/bytecode-migrated.tsv` (expected values interpreter-derived;
+every row verified native — no refusal, no island — before entry):
+computed-map fn-body/do-map shapes (bytecode_computedmap_test.go, whose
+positive loops were removed — the negatives, deferred-residual divergence
+guards, stay in Go), infallible multi-value do bodies
+(bytecode_do_catch_test.go native list removed; the fallible fallback list
+stays, coupled to frontier-do-catch.tsv), OpCallUserPoly dispatch
+directions, and the EDGE-SPEC-FINDINGS over-widening guards
+(bytecode_edge_findings_test.go — the Go file keeps the refusal/reason
+pairing). Census: 5934 → 5975 fallback-free native rows;
+`minCompiledRows` 2224 → 2265; refusals unchanged at 9;
+`COMPILED_STATUS.md` regenerated.
+
+Follow-on batches (recorded, not yet executed): mergedword/fnvalue-m2/
+stage2 value halves already mirror existing corpus rows (open-words.tsv,
+path-modifier.tsv, recursion.tsv, module-minilang.tsv) — their Go files
+keep the native-lowering/no-island halves and stay put; priority-2 legacy
+corpus unification (lang/go/test/*.tsv, 12 files, older schema) and
+priority-3 lang/go/test value tests remain as scoped in the plan. The
+p2 entry-point frontier cases (repl/exec runner copies) also remain as
+the WS1b follow-on.
