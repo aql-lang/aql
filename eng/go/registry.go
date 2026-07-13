@@ -51,6 +51,13 @@ type Registry struct {
 	Output    io.Writer // output writer for print/printstr and stdout
 	ErrOutput io.Writer // error output writer for stderr
 	Input     io.Reader // input reader for stdin
+	// Effects is the observable-side-effect ledger the compiled-mode
+	// fallback fence reads (effects.go, design/RUNTIME-INDEPENDENCE-
+	// COMPLETION-PLAN.0.md C1): a silent interpreter re-run is permitted
+	// only while the count is unchanged since before the check pass.
+	// Shared by pointer into forks (ForkConcurrent's shallow copy) and
+	// module sub-registries (RunModuleBody threads it with Output).
+	Effects *EffectLedger
 	// TapeConfig bounds the execution tape's growth (initial size, max
 	// grows, growth factor). The zero value uses the defaults; hosts set
 	// it via lang.Options. See eng/go/tape.go.
@@ -1080,6 +1087,7 @@ func NewRegistry() (*Registry, error) {
 		Output:       os.Stdout,
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
+		Effects:      &EffectLedger{},
 		SDKCache:     make(map[string]any),
 		// StepBudget uses -1 as the "unset, use the project default"
 		// sentinel. The Go zero (0) is honored as "abort on the first

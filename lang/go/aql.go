@@ -671,7 +671,12 @@ func convertResults(result []eng.Value) []any {
 //     error, are NOT surfaced: the run rolls back and re-executes on the
 //     interpreter, so a latent compiler bug degrades to the correct result
 //     rather than a raw failure (the differential gate's row-count floor still
-//     catches the regression).
+//     catches the regression). EXCEPT when observable output already escaped:
+//     rolling back cannot un-print, so a re-run would duplicate every effect
+//     (the L-DUP class, design/VOXGIG-COMPILE-LEAVES.2.md). The effect fence
+//     (eng effects.go, design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md C1)
+//     then PROPAGATES the internal_error, annotated with a run-with
+//     --no-compile hint, instead of silently re-running.
 //   - The step budget. The interpreter counts it per tape token stepped, the
 //     VM per bytecode instruction, both capped at eng.DefaultStepLimit. Only
 //     iteration/recursion can approach that ceiling, and for those the compiled
@@ -714,6 +719,16 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 	// the mutable scopes before the check pass and roll them back on the
 	// fallback path; keep them on the compiled path.
 	snap := a.registry.SnapshotForCompile()
+	// C1 effect fence (eng effects.go): a silent interpreter re-run — on
+	// either fallback arm below — is sound only while NO observable effect
+	// has escaped, because RestoreForCompile rolls back registry scopes but
+	// cannot un-print emitted output; a re-run after an effect duplicates it
+	// (the L-DUP class the pure-value differential is blind to). Armed BEFORE
+	// the check pass, which executes module imports: an import-time effect
+	// must count against the refusal arm too.
+	disarmFence := a.registry.ArmEffectFence()
+	defer disarmFence()
+	effectsAt := a.registry.Effects.Count()
 	// Compiled execution requested: arm detached fn-unit stamping so
 	// runtime-constructed callbacks (service handlers, custom codec fns)
 	// compile to units at their store sites (eng.StampDetachedFn). The flag
@@ -730,13 +745,35 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 	if !wasArmed {
 		defer a.registry.DisableRuntimeStamping()
 	}
-	prog, reason, _, err := a.CompileCheck(src)
+	prog, reason, res, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
 		a.registry.RestoreForCompile(snap)
 		// The check pass's in-place module-load stamps were rolled back with the
 		// scopes; drop them so -compile-report shows only the fallback re-run's
 		// authoritative stamps, not each rolled-back stamp twice.
 		a.registry.ResetStampLog()
+		// C1 fence on the REFUSAL arm: the check pass executed module imports
+		// (and any other RunInCheckMode word) for real — if one of them emitted
+		// an observable effect, re-running the whole source would emit it
+		// twice. A statically-invalid program still surfaces its own verdict —
+		// the check error, or the first model-undermining diagnostic behind
+		// the "check diagnostics" sentinel (CompileCheck returns that sentinel
+		// only when one exists, and a genuine refusal never carries one, so
+		// the loop and the fall-through partition exactly). A genuine refusal
+		// surfaces as a blocked-fallback internal_error carrying the reason.
+		if a.registry.Effects.Count() != effectsAt {
+			if err != nil {
+				return nil, false, "", err
+			}
+			for _, d := range res.Diagnostics {
+				if !d.RuntimeMirror && (d.Severity == SeverityError || d.CaughtAtRuntime) {
+					return nil, false, "", a.registry.AqlError(d.Code, d.Detail, d.Word)
+				}
+			}
+			return nil, false, "", fenceBlockedFallback(a.registry,
+				a.registry.AqlError("internal_error",
+					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
+		}
 		out, rerr := a.Run(src)
 		// Report the reason ONLY for a genuine performance refusal. A
 		// statically-invalid program (err != nil, or the "check diagnostics"
@@ -762,6 +799,14 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 		// only burn the same budget again. The program DID compile, so this is
 		// not a compilable-subset refusal — report no reason.
 		if runtimeShouldFallback(err) {
+			// C1 fence on the RUNTIME-BAIL arm: the compiled run may already
+			// have printed/written before bailing (the L-DUP shape: every
+			// section prints, then a dynamic-scope read misses); a silent
+			// whole-source re-run would double every effect. Propagate the
+			// internal_error, annotated, instead.
+			if a.registry.Effects.Count() != effectsAt {
+				return nil, true, "", fenceBlockedFallback(a.registry, err)
+			}
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
 			out, rerr := a.Run(src)
@@ -824,6 +869,24 @@ func forceCompileReason(reason string) string {
 		return "program is not compilable"
 	}
 	return reason
+}
+
+// fenceBlockedFallback annotates a compiled-mode error whose silent
+// interpreter re-run the effect fence blocked (eng effects.go,
+// design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md C1): observable output
+// already escaped, so re-running the source would duplicate it. The original
+// error survives — an AqlError gains an explanatory note; a foreign Go error
+// is wrapped in an internal_error carrying its text — so the caller sees both
+// what failed and what to do about it.
+func fenceBlockedFallback(r *native.Registry, err error) error {
+	const note = "the interpreter fallback was blocked: output was already emitted, so re-running would duplicate it; run with --no-compile and report this as a compiler bug"
+	var ae *eng.AqlError
+	if errors.As(err, &ae) {
+		cp := *ae
+		cp.Notes = append(append([]string(nil), ae.Notes...), note)
+		return &cp
+	}
+	return r.AqlErrorHint("internal_error", err.Error(), "", note)
 }
 
 // runtimeShouldFallback reports whether a compiled-mode RUN error should be

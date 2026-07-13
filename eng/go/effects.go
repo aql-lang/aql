@@ -1,0 +1,93 @@
+package eng
+
+import (
+	"io"
+	"sync/atomic"
+)
+
+// The compiled-mode effect fence (design/RUNTIME-INDEPENDENCE-COMPLETION-
+// PLAN.0.md, contract C1 — the L-DUP class).
+//
+// RunCompiled resolves a genuine refusal or a runtime internal_error by
+// silently re-running the WHOLE source on the interpreter. That re-run is
+// sound only while the compiled request has emitted NO observable effect:
+// SnapshotForCompile/RestoreForCompile roll back registry scopes, but nothing
+// can un-print already-written output or un-send a network payload, so a
+// re-run after an effect DUPLICATES it (design/VOXGIG-COMPILE-LEAVES.2.md
+// §L-DUP — the full trie smoke suite printed twice). The pure-value
+// differential corpus never exercises emit-then-fall-back, which is exactly
+// why the class ships latent; the ledger makes the fallback arms prove
+// "nothing escaped yet" before re-running.
+//
+// The ledger is a monotonic generation counter, not an effect log: fence
+// sites snapshot Count() before the check pass and compare afterwards. Writes
+// to the registry's output writers mark it via ArmEffectFence's wrapper —
+// which forks (ForkConcurrent's shallow copy) and module sub-registries
+// (RunModuleBody copies the parent's writers) inherit by value — and
+// non-writer effect seams call Registry.NoteEffect directly.
+
+// EffectLedger counts observable side effects emitted during a compiled-mode
+// request. Concurrent branches share the parent's ledger pointer and may mark
+// it simultaneously, so the counter is atomic.
+type EffectLedger struct{ n atomic.Uint64 }
+
+// Note marks one observable effect. Nil-safe: a registry assembled without
+// NewRegistry has no ledger, and counting nothing there keeps the fallback
+// behaviour it had before the fence existed.
+func (l *EffectLedger) Note() {
+	if l == nil {
+		return
+	}
+	l.n.Add(1)
+}
+
+// Count returns the number of effects marked so far (0 for a nil ledger).
+func (l *EffectLedger) Count() uint64 {
+	if l == nil {
+		return 0
+	}
+	return l.n.Load()
+}
+
+// NoteEffect marks one observable effect on the registry's ledger — the seam
+// non-writer effects (file writes, network sends, process spawns) call so the
+// fallback fence sees them alongside output writes.
+func (r *Registry) NoteEffect() {
+	r.Effects.Note()
+}
+
+// noteEffectWriter marks the ledger on every non-empty write before
+// delegating. Wrapping the registry's writers once (ArmEffectFence) covers
+// the whole print/stdout/stderr effect class without instrumenting each
+// printing word: forks and module sub-registries copy the wrapped writer
+// VALUE, so their writes count too.
+type noteEffectWriter struct {
+	w io.Writer
+	l *EffectLedger
+}
+
+func (nw noteEffectWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		nw.l.Note()
+	}
+	return nw.w.Write(p)
+}
+
+// ArmEffectFence wraps the registry's Output/ErrOutput writers so every write
+// marks the effect ledger, and returns a restore func reinstating the
+// original writers. Compiled-mode entry points arm the fence BEFORE the check
+// pass: the check pass executes module imports, so an import-time effect (a
+// module body printing at load) must count against the refusal fallback arm
+// too, not only the runtime-bail arm.
+func (r *Registry) ArmEffectFence() func() {
+	savedOut, savedErr := r.Output, r.ErrOutput
+	if r.Output != nil {
+		r.Output = noteEffectWriter{w: r.Output, l: r.Effects}
+	}
+	if r.ErrOutput != nil {
+		r.ErrOutput = noteEffectWriter{w: r.ErrOutput, l: r.Effects}
+	}
+	return func() {
+		r.Output, r.ErrOutput = savedOut, savedErr
+	}
+}

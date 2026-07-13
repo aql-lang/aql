@@ -68,8 +68,18 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 		// catch it out here past the enclosing run — the seam itself falls back to
 		// CallAQL, exactly as RunCompiled does. Genuine AQL runtime errors are the
 		// interpreter's answer too and pass straight through.
-		if res, err, ran := invokeCompiledUnit(r, ref, args); ran && !isInternalErr(err) {
-			return res, err
+		effectsAt := r.Effects.Count()
+		if res, err, ran := invokeCompiledUnit(r, ref, args); ran {
+			if !isInternalErr(err) {
+				return res, err
+			}
+			// C1 effect fence (effects.go): the retry re-runs the whole body,
+			// so it is sound only while the failed unit emitted NO observable
+			// effect — a callback that wrote to the peer and THEN bailed must
+			// surface the internal_error rather than double its output.
+			if r.Effects.Count() != effectsAt {
+				return nil, err
+			}
 		}
 	}
 	return r.CallAQL(sig, args, captures)
