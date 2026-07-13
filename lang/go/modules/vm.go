@@ -319,6 +319,11 @@ func newSubEngineRegistry(parent *native.Registry, pol policy.Policy) (*native.R
 		return nil, fmt.Errorf("vm: init sub-engine: %w", err)
 	}
 	subReg.SetParseFunc(parent.ParseFunc)
+	// The sub-engine executes user source on the tree-walker, so the
+	// enclosing request's observability hooks must see its entries
+	// (eng interp_entry.go) — without this a Vm.run body is invisible to
+	// the no-interpreter-execution census.
+	subReg.InheritObserveHooks(parent)
 	// Indirect through resolveFn (initialised in init()) so the
 	// package-level modules map can reference BuildVMModule without
 	// creating an initialisation cycle through Resolve.

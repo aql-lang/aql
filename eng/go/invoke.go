@@ -82,6 +82,10 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 			}
 		}
 	}
+	// Observability seam (interp_entry.go): the callback seam's interpreter
+	// fallback — its own name so the C4 decline tag can attach later without
+	// conflating it with a direct CallAQL.
+	r.noteInterp("InvokeCallback:callaql")
 	return r.CallAQL(sig, args, captures)
 }
 
@@ -129,6 +133,8 @@ func isInternalErr(err error) bool {
 // recording flag (see Engine.elemEvalRecordable); pass false when the
 // caller does not evaluate recordable container elements.
 func runPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value, error) {
+	// Observability seam (interp_entry.go): the per-element sub-evaluation path.
+	r.noteInterp("runPooledSub")
 	sub := r.takeSubEngine()
 	sub.elemEvalRecordable = elemEvalRecordable
 	res, err := sub.Run(input)

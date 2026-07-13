@@ -37,8 +37,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Input = parent.Input
 	// The effect ledger rides with the writers: a module body's non-writer
 	// effects (file writes, net sends) must count against the SAME fence
-	// the parent's compiled request armed (eng effects.go, C1).
+	// the parent's compiled request armed (eng effects.go, C1). The
+	// observability hooks ride along too — a module body's interpreter
+	// entries and runtime bails report to the request's observers.
 	modReg.Effects = parent.Effects
+	modReg.InheritObserveHooks(parent)
 	// A compiled execution arms runtime stamping on the top registry; module
 	// bodies (and the store words their fns execute later — service `add`,
 	// codec resolution) run on THIS sub-registry, so the policy must ride

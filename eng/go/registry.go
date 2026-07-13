@@ -58,6 +58,13 @@ type Registry struct {
 	// Shared by pointer into forks (ForkConcurrent's shallow copy) and
 	// module sub-registries (RunModuleBody threads it with Output).
 	Effects *EffectLedger
+	// interpHook / bailHook are the arm-able observability seams for the
+	// frontier suite (interp_entry.go): interpreter-machinery entries and
+	// designed VM defer-to-interpreter bails. Pointer-shared into forks by
+	// the shallow copy; module sub-registries inherit via
+	// InheritObserveHooks. Inert (one atomic load) unless a test arms them.
+	interpHook *interpEntryHook
+	bailHook   *bailHook
 	// TapeConfig bounds the execution tape's growth (initial size, max
 	// grows, growth factor). The zero value uses the defaults; hosts set
 	// it via lang.Options. See eng/go/tape.go.
@@ -1088,6 +1095,8 @@ func NewRegistry() (*Registry, error) {
 		ErrOutput:    os.Stderr,
 		Input:        os.Stdin,
 		Effects:      &EffectLedger{},
+		interpHook:   &interpEntryHook{},
+		bailHook:     &bailHook{},
 		SDKCache:     make(map[string]any),
 		// StepBudget uses -1 as the "unset, use the project default"
 		// sentinel. The Go zero (0) is honored as "abort on the first
@@ -1782,6 +1791,8 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 //	sig := MatchFnSig(fn, args)
 //	result, err := r.CallAQL(sig, args, fnDef.Captured)
 func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
+	// Observability seam (interp_entry.go): the interpreter fn-call path.
+	r.noteInterp("CallAQL")
 	// Build token sequence (same as InstallFnDef handler).
 	var tokens []Value
 	var names []string

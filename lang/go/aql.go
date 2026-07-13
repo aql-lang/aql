@@ -292,6 +292,28 @@ func (a *AQL) StampReport() []eng.StampEvent {
 	return a.registry.StampEvents()
 }
 
+// InterpEntry / BailEvent are the observability-seam event types (eng
+// interp_entry.go), re-exported for the frontier test suite.
+type InterpEntry = eng.InterpEntry
+
+// BailEvent is one designed VM defer-to-interpreter (see InterpEntry).
+type BailEvent = eng.BailEvent
+
+// ArmInterpEntryHook forwards to the registry's interpreter-entry
+// observability seam (eng interp_entry.go — a TEST seam, not API): fn fires
+// on every entry into tree-walking machinery until the returned disarm func
+// runs.
+func (a *AQL) ArmInterpEntryHook(fn func(InterpEntry)) func() {
+	return a.registry.ArmInterpEntryHook(fn)
+}
+
+// ArmRuntimeBailHook forwards to the registry's runtime-bail observability
+// seam (eng interp_entry.go — a TEST seam, not API): fn fires on every
+// designed VM defer-to-interpreter until the returned disarm func runs.
+func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
+	return a.registry.ArmRuntimeBailHook(fn)
+}
+
 // CompileCheck runs the source through the checker with the bytecode
 // recording pass enabled (Stage 1: straight-line, monomorphic native
 // calls only) and linearises the trace into a Program. When the

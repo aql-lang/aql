@@ -889,6 +889,9 @@ func resolveAtomReferents(r *Registry, vals []Value) {
 }
 
 func (e *Engine) Run(input []Value) (result []Value, runErr error) {
+	// Observability seam (interp_entry.go): report this tree-walk entry to an
+	// armed frontier hook. One atomic load when unarmed.
+	e.registry.noteInterp("Engine.Run")
 	// Count this interpreter activation against the registry so a compiled
 	// RunProgram can see (at its entry) that an interpreter run is in flight.
 	// Balanced on every exit path, including panic unwind.

@@ -482,7 +482,7 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 		// the interpreter), which raises the canonical, byte-identical error.
 		// Sound because the interpreter takes the SAME MatchSignature first-match
 		// and so reaches the same no-match.
-		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		return nil, vmDefer(r, curDebug, pc, "vm:poly-no-match", "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
 	}
 	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
@@ -504,7 +504,7 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	// silently shift every downstream operand, so defer to the interpreter
 	// instead (runtimeShouldFallback — slow, not wrong).
 	if len(results) != pr.NOut {
-		return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+		return nil, vmDefer(r, curDebug, pc, "vm:poly-nout-drift", fmt.Sprintf(
 			"poly dispatch %s: result count %d differs from the recorded claim %d; deferring to the interpreter",
 			pr.Word, len(results), pr.NOut))
 	}
@@ -537,7 +537,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	}
 	fd := lookupReg.Lookup(pr.Word)
 	if fd == nil {
-		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
+		return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-unresolved", "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
 	}
 	subset := make([]Signature, 0, len(pr.SigIdx))
 	units := make([]int, 0, len(pr.SigIdx))
@@ -546,7 +546,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 			si < 0 || si >= len(fd.Signatures) ||
 			fd.Signatures[si].Impl != pr.Impls[k] ||
 			fd.Signatures[si].TotalArgs() != n {
-			return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
+			return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-drift", "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
 		}
 		u := pr.Units[k]
 		if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n {
@@ -563,7 +563,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	}
 	mr := MatchSignature(subset, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil {
-		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-no-match", "CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
 	}
 	for j := range subset {
 		if mr.Sig == &subset[j] {
@@ -828,7 +828,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	}
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
-			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+			return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method", fmt.Sprintf(
 				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
 				spec.Word, len(results), spec.NOut))
 		}
@@ -849,7 +849,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 		// method value. The interpreter would leave it as data and continue
 		// with a DIFFERENT stack shape, which this program cannot express —
 		// defer wholesale.
-		return nil, vmErrAt(curDebug, pc, "shaped method apply "+spec.Word+
+		return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
 	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
@@ -1575,14 +1575,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			v, ok := curReg.Defs.Top(name)
 			if !ok {
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-miss", "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
 			}
 			switch v.Data.(type) {
 			case FnDefInfo, *ClassTypeInfo:
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of a dispatching binding `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-dispatching", "dynamic-scope read of a dispatching binding `"+name+"`; deferring to the interpreter")
 			}
 			if IsSplice(v) || IsReach(v) || IsWord(v) || IsMark(v) || IsMove(v) {
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-active-token", "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
 			}
 			stack = append(stack, v)
 		case OpRet:
@@ -1960,7 +1960,7 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 			produced -= trim
 		}
 		if produced != len(rets) {
-			return stack, vmErrAt(nil, 0, fmt.Sprintf(
+			return stack, vmDefer(r, nil, 0, "vm:dyn-frame-replay", fmt.Sprintf(
 				"dynamic frame replay %s: result count %d differs from the declared %d; deferring to the interpreter",
 				fn.Name, produced, len(rets)))
 		}

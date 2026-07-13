@@ -1,0 +1,325 @@
+package lang
+
+import (
+	"bytes"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
+)
+
+// The lang-package frontier inventory (see frontier_ledger_test.go for the
+// contract): cases whose TARGET assertions need Go-level observability — the
+// stamp report, the interp-entry hook, the runtime-bail hook. Pure
+// source→value/error frontier repros live as shared TSV rows instead
+// (lang/spec/frontier/, WS2 of the plan) so the TS port runs them too.
+
+// --- error-returning assertion helpers --------------------------------------
+
+// fcNew builds a fresh instance or reports why it could not.
+func fcNew() (*AQL, error) {
+	a, err := New()
+	if err != nil {
+		return nil, fmt.Errorf("New: %w", err)
+	}
+	return a, nil
+}
+
+// fcParityCompiledZeroBails asserts the FULL target for a source-level
+// frontier gap: the program compiles (no refusal), runs on the VM with zero
+// designed runtime bails, and its values, error taxonomy, AND printed output
+// are byte-identical to the interpreter's.
+func fcParityCompiledZeroBails(src string) error {
+	a, err := fcNew()
+	if err != nil {
+		return err
+	}
+	var outC bytes.Buffer
+	a.SetOutput(&outC)
+	var bails []BailEvent
+	defer a.ArmRuntimeBailHook(func(e BailEvent) { bails = append(bails, e) })()
+	gotC, compiled, reason, errC := a.RunCompiledReason(src)
+	if !compiled {
+		if reason != "" {
+			return fmt.Errorf("refused: %s", reason)
+		}
+		return fmt.Errorf("did not run compiled (err=%v)", errC)
+	}
+	if len(bails) > 0 {
+		return fmt.Errorf("runtime bails: %s", bailCensus(bails))
+	}
+
+	b, err := fcNew()
+	if err != nil {
+		return err
+	}
+	var outI bytes.Buffer
+	b.SetOutput(&outI)
+	gotI, errI := b.Run(src)
+	if codeOf(errC) != codeOf(errI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
+		return fmt.Errorf("error parity: compiled [%s] %v vs interp [%s] %v", codeOf(errC), errC, codeOf(errI), errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		return fmt.Errorf("value parity: compiled %v vs interp %v", gotC, gotI)
+	}
+	if outC.String() != outI.String() {
+		return fmt.Errorf("output parity: compiled %q vs interp %q", outC.String(), outI.String())
+	}
+	return nil
+}
+
+// fcStampedRun runs src through RunCompiled and asserts the stamp report
+// carries a SUCCESSFUL stamp for a binding whose name contains name.
+func fcStampedRun(src, name string) error {
+	a, err := fcNew()
+	if err != nil {
+		return err
+	}
+	a.SetOutput(&bytes.Buffer{})
+	if _, _, err := a.RunCompiled(src); err != nil {
+		return fmt.Errorf("run failed before the stamp assertion: %w", err)
+	}
+	var attempted *StampEvent
+	for i, ev := range a.StampReport() {
+		if strings.Contains(ev.Name, name) {
+			if ev.Stamped {
+				return nil
+			}
+			attempted = &a.StampReport()[i]
+		}
+	}
+	if attempted != nil {
+		return fmt.Errorf("stamp refused for %q: %s", name, attempted.Reason)
+	}
+	return fmt.Errorf("no stamp attempt recorded for %q", name)
+}
+
+// fcNoUnattributedInterp arms the interp-entry hook, runs drive, and fails
+// when any interpreter entry lacks a C4 attribution — the end-state invariant
+// ("no interpreter execution of an accepted program on a default path").
+func fcNoUnattributedInterp(drive func(a *AQL) error) error {
+	a, err := fcNew()
+	if err != nil {
+		return err
+	}
+	a.SetOutput(&bytes.Buffer{})
+	var (
+		mu      sync.Mutex
+		entries []InterpEntry
+	)
+	disarm := a.ArmInterpEntryHook(func(e InterpEntry) {
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, e)
+	})
+	defer disarm()
+	if err := drive(a); err != nil {
+		return fmt.Errorf("drive failed before the entry assertion: %w", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	counts := map[string]int{}
+	for _, e := range entries {
+		if e.Attribution == "" {
+			counts[e.Seam]++
+		}
+	}
+	if len(counts) > 0 {
+		return fmt.Errorf("unattributed interpreter entries: %s", seamCensus(counts))
+	}
+	return nil
+}
+
+func seamCensus(counts map[string]int) string {
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = fmt.Sprintf("%s×%d", k, counts[k])
+	}
+	return strings.Join(parts, " ")
+}
+
+func bailCensus(bails []BailEvent) string {
+	counts := map[string]int{}
+	for _, b := range bails {
+		counts[b.Site]++
+	}
+	return seamCensus(counts)
+}
+
+// --- shared frontier sources -------------------------------------------------
+
+// lJoinRepro is the L-JOIN minimal repro verbatim from
+// design/VOXGIG-COMPILE-LEAVES.2.md — the recursive branch-join accumulator
+// whose self-call operand loses provenance across fixpoint iterations. The
+// only library-code blocker (tst.aql / radix.aql).
+const lJoinRepro = `def rec fn [
+  [nd:Any key:Any consumed:Any best:Any] [Any] [
+    if (nd eq none) [best] [
+      def pc (consumed "x" add)
+      def best2 (if (nd "end" get) [pc] [best])
+      best2 consumed key (nd "mid" get) rec
+    ]
+  ]
+]
+(rec none "hi" "" none) print end`
+
+// --- the inventory ------------------------------------------------------------
+
+var frontierCases = []frontierCase{
+	// Phase 4 — L-NP rides behind L-JOIN: today this fails at the compile
+	// refusal (stage 1); when L-JOIN lands, the failure is designed to DRIFT
+	// to the vm:dyn-scope-miss runtime bail (stage 2 — update failsWith),
+	// and it graduates only when L-NP resolves the read under the compiled
+	// dynamic scope.
+	{"p4/l-np-no-runtime-bail-after-join", func() error {
+		return fcParityCompiledZeroBails(lJoinRepro)
+	}},
+
+	// Phase 6 — stamping extensions.
+	{"p6/predicate-stamps-and-runs-vm", func() error {
+		return fcStampedRun(`def Pos fn [[n:Integer] [Boolean] [n gt 0]] def x:Pos 5 x`, "Pos")
+	}},
+	{"p6/model-action-stamps", func() error {
+		return fcStampedRun(`import "aql:model" def m (Model.new {src:'a: 1 b: 2', actions:{gen:([mod:Any] => [true])}}) (Model.run m) get 'ok'`, "gen")
+	}},
+	{"p6/capturing-handler-stamps", func() error {
+		// The capture-decline shape from run_compile_report_test.go (verbatim
+		// — the leading map-lambda statement is load-bearing for the parse):
+		// the service handler closes over n, so StampDetachedFn declines.
+		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
+	}},
+	{"p6/check-prop-body-on-vm", func() error {
+		// Module-scope check-prop (the compiling half of
+		// bytecode_checkprop_interp_test.go). Target: the per-iteration
+		// gen/property bodies run as JIT'd units — zero unattributed
+		// interpreter entries. The fn-scope-refuses miscompile guard
+		// (TestCheckPropInterpStringFnScopeRefuses) stays green forever and
+		// is never ledgered.
+		src := "import \"aql:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ var [[k] (`v${k}`) eq `v${k}` ] ] 5 1 0)\nres get \"ok\""
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, err := a.RunCompiledStrict(src)
+			return err
+		})
+	}},
+	{"p6/concurrent-fork-bodies-on-vm", func() error {
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, _, err := a.RunCompiled(`import "aql:time-util" TimeUtil.await [[1 add 2] [3 add 4]]`)
+			return err
+		})
+	}},
+	{"p6/vm-run-on-vm", func() error {
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, _, err := a.RunCompiled(`import "aql:vm" Vm.run "1 add 2"`)
+			return err
+		})
+	}},
+
+	// Phase 10 — the executed-census seeds.
+	{"p10/no-unattributed-interp-on-islanded-program", func() error {
+		// A genuine whole-program refusal (the word-splice knownRefusals row):
+		// today the silent fallback re-runs the source unattributed. Target:
+		// every residual interpreter entry belongs to a named C4 seam.
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, _, _ = a.RunCompiled(zzRefusingRow) // the row raises; the entries are the assertion
+			return nil
+		})
+	}},
+	{"p10/runtime-bail-census-canary", func() error {
+		// The zz-inst shape-claim violation is a real, reachable runtime bail;
+		// the executed census must reach zero before Stage J.
+		a := zzShapedInstanceE()
+		if a == nil {
+			return fmt.Errorf("zz-inst fixture unavailable")
+		}
+		a.SetOutput(&bytes.Buffer{})
+		var bails []BailEvent
+		defer a.ArmRuntimeBailHook(func(e BailEvent) { bails = append(bails, e) })()
+		if _, _, err := a.RunCompiled(`def i (zz-inst) ; i.m 5 ; 42`); err != nil {
+			return fmt.Errorf("run failed before the bail assertion: %w", err)
+		}
+		if len(bails) > 0 {
+			return fmt.Errorf("runtime bails: %s", bailCensus(bails))
+		}
+		return nil
+	}},
+
+	// Phase 11 — Stage J.
+	{"p11/public-run-is-compiled", func() error {
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, err := a.Run(`1 add 2`)
+			return err
+		})
+	}},
+	{"p11/no-unbounded-fallback", func() error {
+		// Post-Stage-J a refusal returns an error instead of silently
+		// re-running the whole source on the interpreter; graduation is
+		// coupled with rewriting the mustRefuseWithParity-family contracts.
+		return fcNoUnattributedInterp(func(a *AQL) error {
+			_, _, _ = a.RunCompiled(zzRefusingRow)
+			return nil
+		})
+	}},
+}
+
+// zzShapedInstanceE is zzShapedInstance without the *testing.T (cases are
+// data): it returns nil if the fixture cannot be built.
+func zzShapedInstanceE() *AQL {
+	a, err := New()
+	if err != nil {
+		return nil
+	}
+	zzInstallShapedInstance(a)
+	return a
+}
+
+var frontierLedger = map[string]frontierEntry{
+	"p4/l-np-no-runtime-bail-after-join": {
+		why:       "plan Phase 4: L-JOIN's recursive-fixpoint operand provenance refuses the repro today; landing L-JOIN is designed to UNMASK the L-NP vm:dyn-scope-miss runtime bail (commit f219725) — on that drift, re-pin failsWith to 'dynamic-scope read miss' (stage 2) and graduate only when L-NP resolves the compiled dyn-scope read",
+		failsWith: "refused: fn call operand of unknown provenance",
+	},
+	"p6/predicate-stamps-and-runs-vm": {
+		why:       "plan Phase 6.1: predicates route through RunPredicate→InvokeCallback but are never stamped (eng registry.go), so refine/is/typed-def bodies always interpret",
+		failsWith: "no stamp attempt recorded for \"Pos\"",
+	},
+	"p6/model-action-stamps": {
+		why:       "plan Phase 6.2: the model builder does not stamp its action fns (lang/go/modules/model.go makeAction — 'a no-op today')",
+		failsWith: "no stamp attempt recorded for \"gen\"",
+	},
+	"p6/capturing-handler-stamps": {
+		why:       "plan Phase 6.3: StampDetachedFn declines lexical captures (eng stamp_runtime.go); capturing bodies need closure units with capture slots",
+		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
+	},
+	"p6/check-prop-body-on-vm": {
+		why:       "plan Phase 6.4: check-prop gen/property bodies are baked as data and re-interpreted per iteration in a pooled sub-engine; the JIT detached-unit cache is unbuilt",
+		failsWith: "unattributed interpreter entries: CallAQL",
+	},
+	"p6/concurrent-fork-bodies-on-vm": {
+		why:       "plan Phase 6.5: concurrent-word fork bodies run as interpreter fallbacks in v1 (test/go/langspec/compiled_concurrent_test.go)",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
+	"p6/vm-run-on-vm": {
+		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
+	"p10/no-unattributed-interp-on-islanded-program": {
+		why:       "plan Phase 10: the whole-program refusal fallback re-runs the source with no seam attribution; attribution + per-seam ratchets are unbuilt",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
+	"p10/runtime-bail-census-canary": {
+		why:       "plan Phase 10: the shaped-method claim-violation defer is a live designed bail; the executed census must be driven to zero before Stage J",
+		failsWith: "runtime bails: vm:shaped-method",
+	},
+	"p11/public-run-is-compiled": {
+		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
+	"p11/no-unbounded-fallback": {
+		why:       "plan Phase 11 (C2): the nil-Program branch silently re-runs the whole source; post-Stage-J a refusal returns an error and only the bounded static-error oracle touches the interpreter",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
+}
