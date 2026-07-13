@@ -26,7 +26,7 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 | interpreter islands (OpFallback) | 0 | 0 | → 0 |
 | tier 1 interpreter-only | 0 | 3 | capped (permanent) |
 | tier 2 reducible | 0 | 0 | → 0 |
-| compute frontier | 0 | 17 | → 0 |
+| compute frontier | 0 | 0 | → 0 |
 
 ## Refusals by reason
 
