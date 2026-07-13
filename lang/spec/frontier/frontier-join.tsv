@@ -1,0 +1,4 @@
+# L-JOIN — recursive branch-join accumulator operand provenance (plan Phase 4;
+# design/VOXGIG-COMPILE-LEAVES.2.md). The self-call's best2 operand loses
+# provenance across fixpoint iterations; the only library-code blocker.
+def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)	none

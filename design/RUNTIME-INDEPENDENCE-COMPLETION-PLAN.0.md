@@ -365,3 +365,49 @@ attribution required), `TestRuntimeBailCensus == 0`, `TestNoUnboundedFallback`,
 `TestRefusalsAreFailures` with empty `knownRefusals` + `refusalGate = 0`,
 `compiled_fullcorpus` error-taxonomy parity, and the external voxgig
 `--force-compile` sweep as a follow-on when the client repos are reachable.
+
+## Test-first frontier suite (landed 2026-07-13)
+
+Every remaining gap above now has a FAILING-BY-DESIGN test pinned under an
+expected-red ledger (the knownRefusals stale/drift/bootstrap contract,
+generalized). Three layers:
+
+- **Go frontier cases** — `lang/go/frontier_ledger_test.go` (runner) +
+  `frontier_cases_test.go` (cases): stamping (p6), hook-based interp-entry /
+  bail censuses (p10), end-state Run (p11), built on the WS1 observability
+  seams (`eng/go/interp_entry.go`: InterpEntry + BailEvent hooks).
+- **Shared frontier TSV corpus** — `lang/spec/frontier/*.tsv` (join, do-catch,
+  forward-drift, stage-d, for-multi, module-fn-param, aql-test,
+  template-each): standard `input⇥expected` rows, interpreter-verified
+  (`TestFrontierSpecInterp` — what a TS port runs), compile status pinned by
+  `frontierCompileLedger` (`TestFrontierSpecCompiled`,
+  `test/go/langspec/frontier_spec_test.go`). Graduation = row compiles →
+  delete the entry, usually move the row into the main corpus.
+- **knownRefusals target inventory** — `TestFrontierRefusalRowsCompile`:
+  ledger DERIVED from knownRefusals (auto-coupled graduation), asserting the
+  Phase-3 target (compile + byte-identical parity) per row.
+
+### Bootstrap census (2026-07-13)
+
+13 frontier TSV rows red: L-DO ×8 (7 × "fallible multi-value body under a
+catch" + 1 chained leaf, below), net-driver ×1 ("for: body nets multiple
+values per iteration"), L-EACH ×3 ("forward operand accounting across a
+dynamic/island residual"), L-JOIN ×1 ("fn call operand of unknown
+provenance"). Plus the 9 knownRefusals rows ("unmatched dispatch recovered").
+
+### Discoveries (unexpected passes — green pins, noted per plan §Verification)
+
+- **Constant dry-pass beats fnDefMayRaise**: `import "aql:struct-util" def g
+  StructUtil.parse/r do [(g "x") 2] error [dot code]` COMPILES natively —
+  parse's pure ReturnsFn dry-pass proves the constant call cannot raise, so
+  the exact arity is sound. The raising twin (`(g "")`) refuses on a
+  DIFFERENT leaf ("dynamic value precedes residual args (fn-value-call
+  boundary)") — pinned as a chained-leaf ledger entry. The
+  `bytecode_do_catch_test.go` fallback-list comment predates this
+  (requireEngineParity's wantCompiled=false never asserted non-compilation).
+- **aql-test recursion rows ×2, template-each, module-fn-param
+  (inline-lambda comparator), stage-d ×2** already compile natively — kept
+  as green must-COMPILE pins in the frontier TSVs.
+- **radix-msd Array-carrier repro unconstructible** in-repo (no Array
+  constructor reachable from spec wiring) — dropped with a dated comment in
+  `frontier-array-carrier.tsv`; the external voxgig sweep owns it.

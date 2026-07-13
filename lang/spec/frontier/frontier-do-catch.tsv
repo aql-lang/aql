@@ -1,0 +1,20 @@
+# L-DO — fallible multi-value do/error under a catch (plan Phase 5): the body
+# nets N values on no-raise but 1 Error on raise; needs the variable-arity
+# residual model (OpStackMark/OpDropToMark across the catch merge).
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg	ERROR:uncalled_function
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg	ERROR:uncalled_function
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(M.boom 5) "x"] error [dot code]	bad_input/q
+def y 5  do [(10 div y) 2]	2 2
+def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
+# DISCOVERY (2026-07-13): the next row COMPILES natively today — parse has a
+# pure ReturnsFn dry-pass, so with a CONSTANT argument the checker proves the
+# call cannot raise at this input and soundly seats the exact arity. It stays
+# here unledgered as a green pin (the must-COMPILE arm guards it); the Go
+# test's fallback-list comment (bytecode_do_catch_test.go) predates this.
+import "aql:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]	'x' 2
+# The RAISING constant twin refuses on a DIFFERENT leaf (chained-leaf note):
+# the dry-pass proves the raise, and the refusal surfaces at the
+# fn-value-call boundary, not the do-catch arity leaf.
+import "aql:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]	parse_error/q
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [M 3] error [dot code]	ModuleExport(M){boom dec} 3
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(if true [M.boom 5] [7]) 8] error [dot code]	bad_input/q
