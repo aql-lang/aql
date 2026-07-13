@@ -1533,8 +1533,11 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	// tokens are unknowable — the interpreter faces the same tokens through
 	// the same sub-engine, so a runtime sentinel behaves identically there;
 	// what differs is only tape-coupled RE-STEPPING, which the sub-run
-	// contains entirely.
-	if IsConcrete(body) && bodyHasSentinel(body) {
+	// contains entirely. It must also be replay-hazard-free: a capitalised
+	// def / import inside the baked body re-runs a registry mutation the
+	// check pass already applied and half-rolled-back (the do-unit
+	// registry-replay miscompile — see bodyHasReplayHazard).
+	if IsConcrete(body) && (bodyHasSentinel(body) || bodyHasReplayHazard(body)) {
 		return false
 	}
 	// Every operand must have a compiled home: the body rides as a threaded

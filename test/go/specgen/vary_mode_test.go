@@ -5,7 +5,49 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aql-lang/aql/test/go/vary"
 )
+
+// TestVarySweepDivergedReport — the diverged-classification file + the
+// MISCOMPILES note are drivable only through the varySweep seam: a healthy
+// build has no reachable divergence (the do-unit registry-replay class is
+// fixed), and this arm must stay exercised so a future real divergence is
+// reported, not dropped.
+func TestVarySweepDivergedReport(t *testing.T) {
+	dir := t.TempDir()
+	seedDir := filepath.Join(dir, "seeds")
+	outDir := filepath.Join(dir, "out")
+	for _, d := range []string{seedDir, outDir} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "s.tsv"), []byte("1 add 2\t3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prev := varySweep
+	t.Cleanup(func() { varySweep = prev })
+	varySweep = func(seeds []vary.Seed, report func(done, total int)) []vary.Variant {
+		report(1, 1)
+		sd := seeds[0]
+		return []vary.Variant{
+			{Seed: sd, Transform: "seed", Src: sd.Input, Res: vary.Result{Outcome: vary.Pass}},
+			{Seed: sd, Transform: "do-body", Src: "do [" + sd.Input + "]",
+				Res: vary.Result{Outcome: vary.Diverged, Detail: "value divergence: compiled [9] vs interp [3]"}},
+		}
+	}
+	if got := exitCode(t, func() { runVarySweep(seedDir, outDir, 1) }); got != -1 {
+		t.Fatalf("seam-driven sweep exited %d, want normal return", got)
+	}
+	div, err := os.ReadFile(filepath.Join(outDir, "vary-diverged.tsv"))
+	if err != nil {
+		t.Fatalf("vary-diverged.tsv: %v", err)
+	}
+	if !strings.Contains(string(div), "value divergence") {
+		t.Errorf("vary-diverged.tsv missing the divergence detail:\n%s", div)
+	}
+}
 
 // TestVaryUsageExits — -vary without -vary-out exits 2.
 func TestVaryUsageExits(t *testing.T) {
@@ -49,10 +91,9 @@ func TestVarySweepEndToEnd(t *testing.T) {
 	}
 	corpus := "1 add 2\t3\n" + // passing base: fans out into every transform
 		"for 3 [1 2]\t1 2 1 2 1 2\n" + // refused base: skipped, no variants
-		// A passing base whose do-body variant DIVERGES (the known do-unit
-		// registry-replay miscompile, lang/spec/frontier/
-		// frontier-do-registry-replay.tsv) — drives the divergence report arm
-		// through the real pipeline.
+		// A passing base whose do-body variant REFUSES soundly (the
+		// replay-hazard refusal that fixed the do-unit registry-replay
+		// miscompile, lang/spec/frontier/frontier-do-registry-replay.tsv).
 		"def Big Integer 15 is Big\ttrue\n" +
 		"# comment\nbroken zz\tERROR:undefined_word\n" // error row: not a seed
 	if err := os.WriteFile(filepath.Join(seedDir, "s.tsv"), []byte(corpus), 0o644); err != nil {
@@ -70,12 +111,15 @@ func TestVarySweepEndToEnd(t *testing.T) {
 	if !strings.Contains(string(pass), "1 add 2") {
 		t.Errorf("vary-pass.tsv has no variant of the passing seed:\n%s", pass)
 	}
-	div, err := os.ReadFile(filepath.Join(outDir, "vary-diverged.tsv"))
+	ref, err := os.ReadFile(filepath.Join(outDir, "vary-refused.tsv"))
 	if err != nil {
-		t.Fatalf("vary-diverged.tsv (the do-unit registry-replay variant must diverge): %v", err)
+		t.Fatalf("vary-refused.tsv (the registry-replay variant must refuse soundly): %v", err)
 	}
-	if !strings.Contains(string(div), "do [def Big Integer 15 is Big]") {
-		t.Errorf("vary-diverged.tsv missing the registry-replay divergence:\n%s", div)
+	if !strings.Contains(string(ref), "do [def Big Integer 15 is Big]") {
+		t.Errorf("vary-refused.tsv missing the replay-hazard refusal:\n%s", ref)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "vary-diverged.tsv")); !os.IsNotExist(err) {
+		t.Errorf("vary-diverged.tsv exists — a healthy build must produce no divergence (stat err=%v)", err)
 	}
 	// The refusing seed contributes NO variant rows (its base is skipped) —
 	// no row of any output file may reference s.tsv:2.

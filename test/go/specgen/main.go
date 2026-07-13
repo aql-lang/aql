@@ -95,6 +95,10 @@ var (
 	// seams make those arms drivable.
 	newNativeRegistry = native.DefaultRegistry
 	compileCheck      = (*lang.AQL).CompileCheck
+	// varySweep: the healthy build has no reachable divergence (the do-unit
+	// registry-replay class is fixed), so the vary mode's diverged-report arm
+	// is drivable only by swapping the sweep.
+	varySweep = vary.SweepSeeds
 )
 
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
@@ -1172,7 +1176,7 @@ func runVarySweep(seedDir, outDir string, nSeeds int) {
 		osExit(1)
 	}
 	sample := vary.Sample(seeds, nSeeds)
-	variants := vary.SweepSeeds(sample, func(done, total int) {
+	variants := varySweep(sample, func(done, total int) {
 		if done%50 == 0 || done == total {
 			fmt.Fprintf(os.Stderr, "specgen -vary: %d/%d seeds\n", done, total)
 		}

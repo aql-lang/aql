@@ -740,10 +740,15 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 // module whose namespace binding was torn down (e.g. by CallAQL's
 // fn-body def-cleanup). Only absent names are installed, so a plain
 // repeated top-level import stays a no-op rather than stacking bindings.
+// The re-bind MUST be a real ModuleExport, exactly like the first-load
+// installExports — a plain Map here made the re-bound namespace a
+// DIFFERENT value kind (asModuleExportInfo fails), so mini/parse kind
+// lookups and `$module`/`$name` reads broke after any teardown+re-import.
 func ensureExportsBound(r *Registry, desc ModuleDesc) {
+	mod := NewModuleInstance(desc)
 	for name, exportMap := range desc.Exports {
 		if !r.Defs.Has(name) {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 	}
 }

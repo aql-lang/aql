@@ -129,44 +129,28 @@ const defaultVarySeeds = 32
 var varyRefusalLedger = map[string]string{
 	"do: fallible multi-value body under a catch":        "plan Phase 5 (L-DO) — the frontier-do-catch.tsv class reached via the do-catch transform",
 	"for: body nets multiple values per iteration":       "plan Phase 5 (net drivers) — the frontier-for-multi.tsv class reached via the for-body transform over multi-value seeds",
-	"runtime bail (VM defer, interpreter fallback)":      "plan Phase 10 (bail census to zero) — module-body wrapping reaches VM defer sites; the fallback is sound but not runtime-independent",
 	"check diagnostics (wrapped-context false positive)": "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
-	"dynamic/opaque output":                              "plan Phase 7 (module-fn param slots) — a module fn's dot-dispatch result is opaque inside fn/lambda units",
-	"dynamic input":                                      "poly-extension to non-core words over dynamic carriers (plan Phase 5 leverage list)",
+	"code-body word (NoEvalArgs)":                        "the replay-hazard refusal (do-unit registry replay, bodyHasReplayHazard): a baked body with a capitalised def refuses soundly; graduates via the Phase 6 JIT detached-unit cache",
 	"operand provenance":                                 "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
 	"residual lowering (Stage 1 limit)":                  "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
 	"stack discipline (lowering)":                        "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
 }
 
-// varyKnownMiscompiles pins the KNOWN divergences (the do-unit
-// registry-replay class, minimal repro in
-// lang/spec/frontier/frontier-do-registry-replay.tsv): a compiled do-body
-// re-runs typed defs / registrations against the check pass's surviving
-// registry state — type defs conflict at VM time, check-time registrations
-// are invisible. Keyed by EXACT variant source (derived from the seed ×
-// transform, so the pins track the transform table); the stale arm forces
-// graduation when the class is fixed. A divergence NOT in this map always
-// fails — new miscompiles are never silently ledgerable.
-var varyKnownMiscompiles = func() map[string]string {
-	wrap := map[string]func(string) string{}
-	for _, tr := range vary.Transforms() {
-		wrap[tr.Name] = tr.Wrap
-	}
-	m := map[string]string{}
-	for _, s := range []struct{ seed, why string }{
-		{`def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x`,
-			"do-unit registry replay: predicate-type defs re-install (type-conflict Error vs 15)"},
-		{`def Big (Integer gt 10) def W (Big tand (Integer lt 20)) 10 is W`,
-			"do-unit registry replay: predicate-type defs re-install (type-conflict Error vs false)"},
-		{`def Pos (Integer gt 0) def H gen [(T extends Pos)] refine Record [x:T] end H of [Pos]`,
-			"do-unit registry replay: generic + refine defs re-install (type-conflict Error vs the record)"},
-		{`import "aql:minilang"  +re/[a-z]+/ typeof`,
-			"do-unit registry replay (mirror half): the check-time minilang kind registration is invisible at VM time (mini_unknown_lang vs Function)"},
-		{`import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {abnf:[{src:'op = "inc" / "dec"' start:'op'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [9])  Parse.register sp6 g  end  parse sp6 'inc'`,
-			"do-unit registry replay (mirror half): the check-time ParseLang registration is invisible at VM time (parse_unknown_lang vs 9)"},
-	} {
-		m[wrap["do-body"](s.seed)] = s.why
-		m[wrap["do-catch"](s.seed)] = s.why
-	}
-	return m
-}()
+// Graduated 2026-07-13 (the do-unit replay fix's collateral): "dynamic/
+// opaque output" (module-fn dot results now compile inside units once
+// ensureExportsBound re-binds a real ModuleExport), "dynamic input", and
+// "runtime bail (VM defer, interpreter fallback)" (module-body wraps now
+// compile without bailing).
+
+// varyKnownMiscompiles pins KNOWN divergences by EXACT variant source, with
+// a stale arm forcing graduation when a pinned variant stops diverging. A
+// divergence NOT in this map always fails — new miscompiles are never
+// silently ledgerable.
+//
+// EMPTY since 2026-07-13: the do-unit registry-replay class (10 pins, 5
+// seeds × do-body/do-catch — minimal repro preserved in
+// lang/spec/frontier/frontier-do-registry-replay.tsv) graduated when the
+// replay-hazard bake refusal (eng bodyHasReplayHazard) + the
+// ensureExportsBound ModuleExport re-bind fix landed: the typed-def half
+// refuses soundly, the import half compiles natively as a closure unit.
+var varyKnownMiscompiles = map[string]string{}

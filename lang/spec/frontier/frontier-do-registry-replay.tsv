@@ -1,14 +1,14 @@
-# MISCOMPILE class found by the variation sweep (WS3 bootstrap, 2026-07-13):
-# a compiled `do [...]` closure unit whose body contains a registry-mutating
-# statement REPLAYS it against the check pass's surviving state. A capitalised
-# (type) def re-installs and hits "conflicts with an existing type name" at VM
-# time (the interpreter installs once and returns the body value); the mirror
-# half — a check-time registration (ParseLang.register, MiniLang) — is
-# INVISIBLE to the compiled run ("no parser registered"). Value defs
-# (`do [def b 5 ...]`) are unaffected. These rows COMPILE and fail PARITY —
-# the ledger pins the divergence mode; graduation = the do-unit's
-# RunInCheckMode-word semantics made idempotent (plan Phase 5/6).
-# The full 10-variant set stays exercised every CI run via
-# varyKnownMiscompiles (test/go/langspec/vary_differential_test.go).
+# The do-unit registry-replay class (found by the variation sweep,
+# 2026-07-13; fixed to a SOUND REFUSAL the same day). Was: a compiled
+# `do [...]` body containing a registry-mutating statement replayed it
+# against the check pass's surviving state (typed defs raised a
+# type-conflict Error; check-time registrations were invisible). Now: the
+# bake decision refuses a body carrying a capitalised def
+# (eng bodyHasReplayHazard) so the interpreter owns these rows with full
+# parity, and the import half compiles natively as a closure unit after the
+# ensureExportsBound ModuleExport re-bind fix. Value defs (`do [def b 5 …]`)
+# were never affected. Full graduation = the Phase 6 JIT detached-unit
+# cache compiles these bodies as units, at which point the rows compile
+# natively and their ledger entries delete.
 do [def Big Integer 15 is Big]	true
 do [def Big (Integer gt 10) 15 is Big]	true

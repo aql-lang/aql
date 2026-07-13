@@ -4907,8 +4907,74 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		if bodyHasSentinel(args[i]) {
 			return false
 		}
+		if bodyHasReplayHazard(args[i]) {
+			return false
+		}
 	}
 	return true
+}
+
+// bodyHasReplayHazard reports whether a code body that would bake as an
+// inert const and be RE-RUN by its handler at VM time (InvokeBody replaying
+// the token list through a sub-engine over the live registry) contains a
+// statement whose check-time execution left registry state the replay
+// double-applies or half-misses — the do-unit registry-replay miscompile
+// class (design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md, Phase 6 item):
+//
+//   - a CAPITALISED def/var (a type install): the check-time run of the body
+//     (RunCarrierBodyWithDefs) rolls back only the Defs binding — the minted
+//     lattice node and the Types name-part registration survive into the
+//     kept compiled-path state, so the replayed InstallType raises a
+//     name-part conflict where the interpreter installs cleanly;
+//   - an `import`: the module-loaded record survives while the namespace
+//     binding is truncated, so the replay re-binds through the
+//     already-loaded path with different state than a first-load.
+//
+// Value defs (`do [def b 5 …]`) replay soundly (InstallDef re-push over the
+// truncated binding) and keep baking. `undef` of a capitalised name is the
+// mirror mutation (retires a minted type) and is equally hazardous.
+// Graduation: the Phase 6 JIT detached-unit cache compiles these bodies as
+// units instead of baking tokens, making the check-time install the only
+// install.
+func bodyHasReplayHazard(v Value) bool {
+	var toks []Value
+	switch d := v.Data.(type) {
+	case ListPayload:
+		toks = d.Elems
+	case ParenExprPayload:
+		toks = d.Toks
+	default:
+		return false
+	}
+	for i, t := range toks {
+		if w, ok := t.Data.(WordInfo); ok {
+			switch w.Name {
+			case "import":
+				return true
+			case "def", "var", "undef":
+				if i+1 < len(toks) && IsCapitalisedName(bindNameToken(toks[i+1])) {
+					return true
+				}
+			}
+		}
+		if bodyHasReplayHazard(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// bindNameToken extracts the name a def/var/undef token binds when its
+// operand token is a bare word or a quoted atom; "" otherwise (computed
+// names cannot statically install a type).
+func bindNameToken(v Value) string {
+	switch d := v.Data.(type) {
+	case WordInfo:
+		return d.Name
+	case AtomPayload:
+		return d.Name
+	}
+	return ""
 }
 
 // noEvalBodiesInertScoped is noEvalBodiesInert plus a MODULE-SCOPE allowance for
@@ -4937,6 +5003,9 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 			return false
 		}
 		if bodyHasSentinel(args[i]) {
+			return false
+		}
+		if bodyHasReplayHazard(args[i]) {
 			return false
 		}
 	}
