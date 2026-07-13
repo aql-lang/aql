@@ -411,3 +411,41 @@ provenance"). Plus the 9 knownRefusals rows ("unmatched dispatch recovered").
 - **radix-msd Array-carrier repro unconstructible** in-repo (no Array
   constructor reachable from spec wiring) — dropped with a dated comment in
   `frontier-array-carrier.tsv`; the external voxgig sweep owns it.
+
+## Variation sweep (WS3, landed 2026-07-13)
+
+`test/go/vary` re-embeds passing corpus rows in 14 compile contexts
+(paren/fn/lambda/do/do-catch/if-arms/for/each/module bodies, statement
+mixing, dirty-stack prefixes, splice) and classifies every variant through
+the dual pipeline — the interpreter recomputes every expectation, so no
+generated corpus is checked in. Consumers: `specgen -vary` (full-breadth
+triage; outputs are artifacts, not committed) and langspec's standing
+`TestVariationDifferential` gate (deterministic nested sampling —
+`vary.Sample` orders by input hash so `AQL_VARY_SEEDS` cranking strictly
+ADDS variants; default 32 seeds).
+
+### First triage run (default breadth: 32 seeds × 14 transforms)
+
+pass=384, refused=42 (9 buckets, all pinned in `varyRefusalLedger`),
+islanded=0, interp/check-reject=12 (discards), **diverged=10 — a genuine
+MISCOMPILE class found on the first run**:
+
+**do-unit registry replay.** A compiled `do [...]` body containing
+registry-mutating statements replays them against the check pass's surviving
+state: typed defs re-install and raise "conflicts with an existing type
+name" at VM time (minimal repro `do [def Big Integer 15 is Big]` — compiled
+yields an Error value, interpreter yields `true`); the mirror half is that
+CHECK-TIME registrations (ParseLang.register, minilang kinds) are INVISIBLE
+to the compiled run (`parse_unknown_lang` vs `9`). Value defs are
+unaffected. This ships today for any user writing `do [def T … …]` — it is
+not a variation-only artifact. Pinned: 10 variants (5 seeds × do-body/
+do-catch) in `varyKnownMiscompiles` (stale-armed) + 2 minimal frontier rows
+in `lang/spec/frontier/frontier-do-registry-replay.tsv` ledgered on the
+parity-failure mode. Fix belongs to the do-unit RunInCheckMode-word
+semantics (Phase 5/6): the unit's type-def/registration path must be
+idempotent the way top-level `OpPushType` already is.
+
+Refusal buckets (count @ default breadth): dynamic/opaque output ×12, check
+diagnostics (wrapped-context false positive) ×11, runtime bail ×7, for-multi
+×3, dynamic input ×2, L-DO do-catch ×2, residual lowering ×2, stack
+discipline ×2, operand provenance ×1.

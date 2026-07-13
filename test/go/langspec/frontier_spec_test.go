@@ -170,6 +170,14 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`5 do [7] error [drop 9] add 1`:            {why: "plan Phase 5 (L-EACH): same shape, no raise at runtime", failsWith: "forward operand accounting across a dynamic/island residual"},
 	`1 2 3 do [7] error [drop 9] add 1`:        {why: "plan Phase 5 (L-EACH): deeper pre-island prefix", failsWith: "forward operand accounting across a dynamic/island residual"},
 
+	// do-unit registry replay — MISCOMPILE class (variation sweep, 2026-07-13):
+	// these COMPILE and fail PARITY (the compiled do-unit re-installs the type
+	// def against the check pass's kept binding). failsWith pins the parity
+	// failure mode, not a refusal reason. Graduation = idempotent
+	// RunInCheckMode-word semantics in do units (plan Phase 5/6).
+	`do [def Big Integer 15 is Big]`:         {why: "MISCOMPILE (do-unit registry replay): compiled re-runs the type def and yields a type-conflict Error where the interpreter yields true", failsWith: "value parity: compiled"},
+	`do [def Big (Integer gt 10) 15 is Big]`: {why: "MISCOMPILE (do-unit registry replay): predicate-type twin of the alias row", failsWith: "value parity: compiled"},
+
 	// L-JOIN — plan Phase 4: converge-then-record over the recursive fixpoint;
 	// today the recursive branch-join leaves a fn-call operand unproven.
 	`def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)`: {why: "plan Phase 4 (L-JOIN): recursive branch-join operand of unknown provenance", failsWith: "fn call operand of unknown provenance"},

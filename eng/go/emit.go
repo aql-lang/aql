@@ -1681,7 +1681,10 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 		es.dynEnv = true
 	}
 	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
-	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if !realOK || unit < 0 {
+		// Reachable: a body the probe pass accepted can still refuse in the
+		// real pass (the variation sweep produces such shapes — a splice-
+		// wrapped seed whose stored-fn body declines under the widened env).
 		return 0, false
 	}
 	return unit, true
@@ -6254,7 +6257,10 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
 			reordered:    "residual shape beyond Stage 1 (call results reordered)",
 			unconsumed:   "residual shape beyond Stage 1 (unconsumed call results)",
-		}, lastPos); reason != "" { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		}, lastPos); reason != "" {
+			// Reachable: a dirty-stack prefix under a dynamic-apply residual
+			// (the variation sweep's prefix-stack transform) seats a shape
+			// this refuses — a genuine Stage-1 refusal path, not a fault arm.
 			return nil, reason, false
 		}
 	}
