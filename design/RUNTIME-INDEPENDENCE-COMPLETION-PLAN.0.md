@@ -1221,26 +1221,35 @@ evidence on the lJoinRepro family:
 - The failing RecordUserCall operand is the recursive call's IF-JOIN
   argument (`best2`, sig position 3 / the bisected twins' position 2): a
   fresh `S_…` join-minted carrier ID that was NEVER setProduced.
-- Arity matters, nothing else does: the 2-param twin of the same shape
-  (join-fed recursive call, same inner `if … [7] [best]`) COMPILES; the
-  3-param and 4-param twins refuse. Forward vs stack call form and the
-  `def pc (consumed "x" add)` indirection are irrelevant (bisect rows 4-12).
-- Join mints happen on TWO independent paths: the emit's RecordBranch
-  (which registers ITS join result as produced) and the if word's VALUE
-  join — native if3ReturnsFn (conditional.go:624-5) → InstallJoinedDefs +
-  JoinCarrierStacks → JoinCarriers — whose result is what `def best2`
-  BINDS. When these two mints diverge, the binding's ID has no compiled
-  provenance and the recursive call site refuses.
-- The failing ID is minted in a joinCarriersInner arm OTHER than the
-  same-parent collapse (the only arm instrumented): the subtype-widen arms
-  return `NewCarrier(parent)` — a fresh ID with no registration path — and
-  JoinCarrierStacks' gradual flip is also unlogged. Next probe: instrument
-  those arms to pin the exact mint, then decide whether the fix is (a)
-  registering the ReturnsFn's join value as an alias of the branch event's
-  produced ID (a produced-ID alias table, the stable-ID keying the plan
-  anticipated), or (b) making the branch record and the ReturnsFn share ONE
-  join value. The arity-2-vs-3 divergence should fall out of the exact mint
-  site — find WHY the 2-param twin's binding ID matches its branch record.
+- The trigger is the JOIN SHAPE, not arity (the arity correlation in the
+  first bisect round was an artifact of which OUTER argument was `none`):
+  a SAME-PARENT arm join (`[7]` vs an Integer-typed hypothesis) compiles at
+  every arity; an ALTERNATIVES-UNION join — a None arm (`[7]` vs a
+  None-typed param) or distant cousins (`[7]` vs a String `pc`) — refuses
+  at the recursive call. Forward vs stack call form is irrelevant.
+- RECURSION is load-bearing for the in-body variant: the NON-recursive twin
+  of the same union-join shape (`def b2 (if (n "e" get) [7] ["s"]) b2 g`
+  inside a plain fn body) COMPILES — only the recursive fn's union-join
+  operand loses provenance. Separately, a TOP-LEVEL twin
+  (`def m {e:true} def b2 (if (m "e" get) [7] ["s"]) (b2 g)`) ALSO refuses
+  with the same reason — likely a DIFFERENT gap (the concrete map folds the
+  condition constant → if3ReturnsFn's LiteralCondValue arm, and/or the
+  DISJUNCT operand routes the call through disjunctPartitionReturns, whose
+  joinReturnRows mints appear in the traces) — triage the two shapes
+  separately.
+- if3ReturnsFn itself registers and returns ONE value (out := joined top;
+  RecordBranch(Out: out) — no drift inside a single invocation). The drift
+  is across RUNS: the failing RecordUserCall's args carry types from a
+  DIFFERENT hypothesis than the outer call site (an Integer `key` in a
+  program with no Integer key anywhere), so identify WHICH AnalyseFnBody
+  run (memo key + armed state) records the failing call, and where ITS
+  binding's join ID was minted. Next probe: tag AnalyseFnBody entries
+  (key, armed, suspended) and instrument ALL joinCarriersInner exits (the
+  union arm, the subtype-widen NewCarrier arms, JoinCarrierStacks' gradual
+  flip) plus joinReturnRows — the same-parent collapse arm was the only one
+  logged this round. Fix directions unchanged: (a) a produced-ID alias for
+  the ReturnsFn's join value onto the branch event, or (b) one shared join
+  value between the record and the binding.
 
 Converge-then-record remains needed for the REFINEMENT half (non-armed
 rounds feeding stale IDs into memoised summaries), but it lands after the
