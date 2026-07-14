@@ -478,6 +478,39 @@ type PolyRef struct {
 	// is the same sub-registry the check pass created on the shared registry, so
 	// it stays valid for the compiled run (RunProgram runs on that registry).
 	Reg *Registry
+	// NoMatch, when non-nil, is the FAITHFUL-RAISE plan for the runtime
+	// no-match arm (plan 3c): the check pass proved, at the failed-dispatch
+	// tape state it recovered from, that the interpreter's sigError diagnostic
+	// is rebuildable from the runtime operand window alone, so callPoly raises
+	// the byte-identical signature_error directly instead of deferring the
+	// whole run to the interpreter. Nil (the record-time gates declined, or an
+	// older/foreign record site) keeps the sound defer.
+	NoMatch *PolyNoMatchSpec
+}
+
+// PolyNoMatchSpec carries the tape-derived pieces of the interpreter's
+// unmatched-dispatch diagnostic (sigError) that the VM cannot see at run
+// time, resolved at record time into operand-window indices. sigError reads
+// the tape twice — the WRITTEN tuple its notes render (unclaimed concrete
+// forward tokens in source order, else the stack prefix top-first) and the
+// SECONDARY reorder-probe tuple (always the stack prefix) — and both were
+// proven at record time to be exactly window values, position for position
+// (Value.ID equality, the RecordDispatchRematchValues gate). Everything else
+// in the diagnostic (the candidate verdicts, the value-based reorder probe,
+// the suggestions) is a pure function of the word, its live signature table,
+// and these tuples (noMatchDiag / reorderHintFor).
+type PolyNoMatchSpec struct {
+	// Written / StackTuple index the runtime operand window (window[i] = sig
+	// position i, the callPoly layout) to rebuild the two tape tuples.
+	Written    []int
+	StackTuple []int
+	// NSigs pins the record-time signature-table length: a table that grew or
+	// shrank between the record and the run invalidates the record-time arity
+	// screen (an other-arity overload could now match where this raise claims
+	// nothing can), so the VM falls back to the defer.
+	NSigs int
+	// Pos is the word's source position — the interpreter's raise anchor.
+	Pos SrcPos
 }
 
 // UserPolyRef names one runtime-dispatched multi-overload USER-FN call: the

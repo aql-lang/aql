@@ -1641,7 +1641,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.
 		pi := len(lw.p.PolyRefs)
-		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, NOut: c.nout, Reg: c.polyReg})
+		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, NOut: c.nout, Reg: c.polyReg, NoMatch: c.polyNoMatch})
 		lw.emit(OpCallNativePoly, pi, c.pos)
 	} else {
 		si, ok := lw.sigIdx[c.sig]

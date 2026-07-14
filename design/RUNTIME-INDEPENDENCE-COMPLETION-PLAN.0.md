@@ -1138,3 +1138,43 @@ must be re-baselined through their stale/drift arms, never hand-edited;
 (3) do-defs visible to the post-do tail also changes what the RECORDER
 sees for the tail (previously unresolved reads become bound) — the
 census may move in both directions; run the full differential.
+
+### Phase 3 tail progress — 3c part 1: the native-poly no-match raise (2026-07-14)
+
+`vm:poly-no-match` converts to a FAITHFUL runtime raise for the record-gated
+subset (PolyNoMatchSpec on PolyRef). Mechanism: sigError's diagnostic has
+exactly two tape dependencies — the WRITTEN tuple its notes render
+(forward-else-stack derivation) and the SECONDARY reorder-probe tuple (the
+stack prefix); everything else (candidate verdicts, the value-based reorder
+probe, suggestions) is a pure function of the word, its live table, and those
+tuples (noMatchDiag / reorderHintFor). The recovery sites
+(checkModeAssumeSig's three tryRecordPoly calls) run AT the failed-dispatch
+tape state — the same state the runtime interpreter raises from — so the
+record probes both tuples there (polyNoMatchProbe, snapshotted BEFORE the
+operand-resolution loop's eval-map tape.Set) and resolves them onto the
+operand window by Value.ID (mapTupleToWindow, the rematch's identity gate).
+The VM's no-match arm rebuilds the tuples from the live window and raises the
+byte-identical error (vm_poly_nomatch.go); no spec → the sound defer stands.
+
+Gates. Record-time: the two tape-only diagnostic layers must not apply
+(void-arg group, fn-shape typed-binding hint); both tuples must map onto the
+window (the deeper-stack `9 1 x add` shape declines — the local-add lesson);
+every other-arity overload must be excluded — NARROWER arity declines
+outright (its runtime collection could match where the raise claims failure),
+WIDER arity needs the structural reach bound below it (polyReachBound — an
+over-estimate of collectable operands; the IsConcrete trap: markers carry
+payloads, so the stop-set screens them explicitly). Runtime drift guards:
+table length pinned (NSigs), no narrower-arity live sig, indices in-window.
+
+This CLOSES a live user-facing bug: an effect before a poly no-match tripped
+the C1 fence — fallback blocked, the user saw internal_error + "report this
+as a compiler bug" instead of the signature_error (pinned by
+TestPolyNoMatchAfterEffectRaisesCanonical: effects once, canonical raise,
+compiled). Byte-identity battery: TestPolyNoMatchRaisesByteIdentical (the
+three written-derivation modes: one forward token, full stack prefix, stack
+fallback after a word breaks the forward walk).
+
+Remaining for 3c: the vm:user-poly-no-match twin (matchUserPoly — same spec,
+recorded at the RecordUserPolyCall site; needs the subset==full-table screen
+on top), and the non-recovery poly record sites (carrier.go dispatch paths —
+no Engine tape in scope; they pass nil and keep the defer).

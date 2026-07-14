@@ -464,8 +464,9 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	if pr.Reg != nil {
 		lookupReg = pr.Reg
 	}
+	fn := lookupReg.Lookup(pr.Word)
 	var sigs []Signature
-	if fn := lookupReg.Lookup(pr.Word); fn != nil {
+	if fn != nil {
 		sigs = fn.Signatures
 	}
 	// Build the args in sig order (position 0 = top of stack, as OpCallNative
@@ -478,14 +479,21 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		// No runtime match. The interpreter's signature_error is built from its
-		// live tape / forward-collection state (engine.go sigError) — available
-		// signatures, a reorder hint, the nearby stack types — which the VM
-		// cannot faithfully reproduce, so emitting a bare signature_error here
-		// DIVERGES from the interpreter's detail/hint. Route through the
-		// whole-program fallback instead (internal_error → RunCompiled re-runs
-		// the interpreter), which raises the canonical, byte-identical error.
-		// Sound because the interpreter takes the SAME MatchSignature first-match
-		// and so reaches the same no-match.
+		// live tape / forward-collection state (engine.go sigError) — the
+		// written tuple, a reorder hint, two tape-only layers — which the VM
+		// alone cannot reproduce. When the record carried a faithfulness plan
+		// (PolyNoMatchSpec — the check pass proved, at the failed-dispatch
+		// state it recovered from, that the diagnostic is rebuildable from the
+		// window), raise the byte-identical signature_error right here (plan
+		// 3c). Otherwise route through the whole-program fallback
+		// (internal_error → RunCompiled re-runs the interpreter), which raises
+		// the canonical error — sound because the interpreter takes the SAME
+		// MatchSignature first-match and so reaches the same no-match.
+		if mr == nil || mr.Sig == nil {
+			if err := vc.polyNoMatchRaise(r, pr, fn, window, curDebug, pc); err != nil {
+				return nil, err
+			}
+		}
 		return nil, vmDefer(r, curDebug, pc, "vm:poly-no-match", "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
 	}
 	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)

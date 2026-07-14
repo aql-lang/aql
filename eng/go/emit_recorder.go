@@ -58,7 +58,7 @@ type EmitRecorder interface {
 	// --- dispatch / value recording -------------------------------------
 	RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool)
 	RecordPoly(word string)
-	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool
+	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
 	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
@@ -158,8 +158,10 @@ func (inactiveEmit) Finalize([]Value) (*Program, string, bool) {
 
 func (inactiveEmit) RecordCall(string, *Signature, []Value, []Value, SrcPos, bool, bool) {}
 func (inactiveEmit) RecordPoly(string)                                                   {}
-func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry) bool     { return false }
-func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos)                        {}
+func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry, *PolyNoMatchSpec) bool {
+	return false
+}
+func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
 func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Value, []Value, SrcPos) {
 }
 func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }

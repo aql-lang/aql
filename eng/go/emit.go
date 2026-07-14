@@ -161,12 +161,13 @@ type emitCall struct {
 	ops             []emitOperand
 	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos             SrcPos
-	poly            bool      // dispatch via OpCallNativePoly (runtime MatchSignature)
-	polyReg         *Registry // the sub-registry to re-match a module poly word in (nil = main registry)
-	makeList        bool      // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
-	dynApply        int       // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
-	dynApplyUnquote bool      // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
-	makeMap         bool      // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
+	poly            bool             // dispatch via OpCallNativePoly (runtime MatchSignature)
+	polyReg         *Registry        // the sub-registry to re-match a module poly word in (nil = main registry)
+	polyNoMatch     *PolyNoMatchSpec // faithful-raise plan for the poly's runtime no-match arm (nil = defer)
+	makeList        bool             // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
+	dynApply        int              // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
+	dynApplyUnquote bool             // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	makeMap         bool             // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys         []string
 	mapImpl         bool // the source map's Implicit flag
 	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
@@ -4272,7 +4273,10 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // OpCallNativePoly, which re-matches the word's signatures at run time (plan
 // P3). Operands resolve normally (the dynamic one is a prior event's result);
 // returns false, leaving es untouched, when one is of unknown provenance.
-func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool {
+// noMatch, when non-nil, rides onto the PolyRef as the faithful-raise plan
+// for the runtime no-match arm (plan 3c) — the caller derived and gated it at
+// the failed-dispatch tape state; nil keeps the sound defer.
+func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool {
 	if !es.active() || len(outs) > 1 {
 		return false
 	}
@@ -4318,7 +4322,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg}})
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg, polyNoMatch: noMatch}})
 	// A 0-output poly (a side-effect word like the test framework's
 	// `test-record`) produces no stack value to register.
 	if len(outs) == 1 {

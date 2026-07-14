@@ -342,6 +342,174 @@ func (e *Engine) rematchWritten() []Value {
 	return written
 }
 
+// polyNoMatchProbe snapshots, at a FAILED dispatch's tape state, the pieces
+// of sigError's diagnostic that live only on the tape — before the recovery
+// path (checkModeAssumeSig's operand-resolution loop) mutates that state.
+// The runtime interpreter raises sigError from exactly this state, so a poly
+// recorded during the recovery can prove its no-match raise faithful against
+// this snapshot (PolyNoMatchSpec, plan 3c).
+type polyNoMatchProbe struct {
+	// ok: the two TAPE-ONLY diagnostic layers a runtime rebuild has no access
+	// to — the void-argument-group error and the fn-shape typed-binding hint
+	// — do not apply at this state.
+	ok bool
+	// written / stackVals are sigError's two tape tuples at this state: the
+	// WRITTEN tuple its notes render (rematchWritten — the carrier-aware twin
+	// of the forward-else-stack derivation) and the SECONDARY reorder-probe
+	// tuple (reorderCandidates over the stack prefix).
+	written   []Value
+	stackVals []Value
+	// reach over-estimates how many operands ANY signature's collection could
+	// claim at this state; reachOK marks the bound trustworthy. Used to prove
+	// a WIDER-arity overload can never match at run time (it fails on operand
+	// availability, not on drift-prone types).
+	reach   int
+	reachOK bool
+	pos     SrcPos
+}
+
+func (e *Engine) polyNoMatchProbe(name string, pos SrcPos) polyNoMatchProbe {
+	p := polyNoMatchProbe{pos: pos}
+	if e.voidArgErrorFor(name, pos) != nil || e.isFnShapeTypedBindingContext() {
+		return p
+	}
+	p.ok = true
+	p.written = e.rematchWritten()
+	p.stackVals = reorderCandidates(e.tape.Prefix(e.pointer))
+	p.reach, p.reachOK = e.polyReachBound()
+	return p
+}
+
+// polyReachBound over-estimates the operands a dispatch at the current
+// pointer could collect: claimable forward tokens (concrete values, carriers,
+// def-bound plain values, the reserved literals) until a structural stop (a
+// function word, a paren boundary, a statement end), plus the stack-prefix
+// values down to the nearest boundary. Tokens whose runtime contribution is
+// unboundable — an unbound word, a splice, a marker inside the prefix — make
+// the bound untrustworthy (reachOK=false), which declines every wider-arity
+// exclusion that would rely on it. Over-estimating is sound (declines more);
+// under-estimating is not.
+func (e *Engine) polyReachBound() (int, bool) {
+	n := 0
+	for i := e.pointer + 1; i < e.tape.Len(); i++ {
+		v := e.tape.At(i)
+		if IsOpenParen(v) || IsCloseParen(v) || IsEnd(v) {
+			break // structural collection boundary
+		}
+		if polyReachUnboundable(v) {
+			return 0, false
+		}
+		if IsWord(v) {
+			wi, werr := AsWord(v)
+			if werr != nil { //covergate:allow AsWord cannot fail after an IsWord guard — the payload IS a WordInfo (§engine)
+				return 0, false
+			}
+			if top, ok := e.registry.Defs.Top(wi.Name); ok {
+				if _, isFn := top.Data.(FnDefInfo); isFn {
+					break // a function word stops forward collection
+				}
+				n++ // a plain value binding: the word steps to exactly one value
+				continue
+			}
+			switch wi.Name {
+			case "true", "false", "none":
+				n++ // reserved literals resolve to one value
+				continue
+			}
+			// Unbound word: undefined_word preempts the dispatch. (A
+			// REGISTERED word never reaches here — registration pushes its
+			// FnDefInfo binding, so Defs.Top caught it above.)
+			return 0, false
+		}
+		if IsConcrete(v) || v.Carrier {
+			n++
+			continue
+		}
+		return 0, false // anything else: unboundable
+	}
+	stack := e.tape.Prefix(e.pointer)
+	for i := len(stack) - 1; i >= 0; i-- {
+		v := stack[i]
+		if IsOpenParen(v) || IsEnd(v) {
+			break // dispatch never collects across a paren/statement boundary
+		}
+		if polyReachUnboundable(v) || IsWord(v) || !(IsConcrete(v) || v.Carrier) {
+			return 0, false // word/marker in the prefix: unboundable
+		}
+		n++
+	}
+	return n, true
+}
+
+// polyReachUnboundable — tokens whose runtime contribution to a collection
+// window has no static bound: an in-flight collection marker, a deferred
+// expression that expands at step time (a reach, an unexpanded paren, a
+// template string, a splice), or an engine marker. NOTE the IsConcrete trap:
+// every one of these carries a payload, so the bare concrete probe counts
+// them — screen them first (the reorderCandidates stop-set lesson).
+func polyReachUnboundable(v Value) bool {
+	return IsForward(v) || IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) ||
+		v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) || v.Parent.ConformsTo(TInternal)
+}
+
+// spec resolves the probe into a PolyNoMatchSpec against the recorded operand
+// window (sig order, the callPoly layout), or nil when any faithfulness gate
+// declines: a tape-only diagnostic layer applies, a NARROWER-arity overload
+// exists (its runtime match would dispatch where the raise claims failure), a
+// wider-arity overload is not structurally excluded, or a tape tuple is not
+// exactly window values (the deeper-stack local-add lesson).
+func (p polyNoMatchProbe) spec(fn *FnDefInfo, window []Value) *PolyNoMatchSpec {
+	if !p.ok || fn == nil || len(window) == 0 {
+		return nil
+	}
+	arity := len(window)
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.Fallback || s.TotalArgs() == arity {
+			continue
+		}
+		if s.TotalArgs() < arity || !p.reachOK || p.reach >= s.TotalArgs() {
+			return nil
+		}
+	}
+	written, ok := mapTupleToWindow(p.written, window)
+	if !ok {
+		return nil
+	}
+	stackTuple, ok := mapTupleToWindow(p.stackVals, window)
+	if !ok {
+		return nil
+	}
+	return &PolyNoMatchSpec{Written: written, StackTuple: stackTuple, NSigs: len(fn.Signatures), Pos: p.pos}
+}
+
+// mapTupleToWindow resolves each tape-tuple value to a distinct operand-window
+// index by Value.ID (the RecordDispatchRematchValues identity gate). An empty
+// ID or an unlocatable value declines — the runtime rebuild could not prove it
+// re-renders the interpreter's tuple.
+func mapTupleToWindow(tuple, window []Value) ([]int, bool) {
+	idx := make([]int, len(tuple))
+	used := make([]bool, len(window))
+	for i, v := range tuple {
+		if v.ID == "" {
+			return nil, false
+		}
+		found := -1
+		for j := range window {
+			if !used[j] && window[j].ID == v.ID {
+				found = j
+				break
+			}
+		}
+		if found < 0 {
+			return nil, false
+		}
+		used[found] = true
+		idx[i] = found
+	}
+	return idx, true
+}
+
 // reorderHintFor is the shared probe behind the signature errors.
 // written is the failing tuple in the ASSIGNMENT order the dispatch
 // used (sig[i] ↔ written[i]): source order for forward tokens,
@@ -7878,6 +8046,11 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	if nStack > len(positions) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		nStack = len(positions)
 	}
+	// Snapshot the failed-dispatch tape state for the poly no-match spec
+	// BEFORE the operand-resolution loop below mutates it in place (the
+	// eval-map tape.Set) — the runtime interpreter's sigError reads exactly
+	// this state (plan 3c).
+	noMatchProbe := e.polyNoMatchProbe(w.Name, pos)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
 		av := e.tape.At(p)
@@ -7927,7 +8100,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), out, pos, true, nil, false) {
+		if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.spec(fn, sw)) {
 			e.spliceCheckResults(positions, out)
 			return nil
 		}
@@ -7965,7 +8138,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// export). For a core builtin e.registry is the main registry, so
 		// PolyRef.Reg then equals the VM's own registry — the no-op the
 		// get/add path already relied on.
-		if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, e.registry, true) {
+		if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
 			e.spliceCheckResults(positions, results)
 			return nil
 		}
@@ -8050,7 +8223,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				resume := es.Suspend()
 				results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 				resume()
-				if tryRecordPoly(e.registry, w.Name, sig, sigOrderArgs(args, nStack), results, pos, false, e.registry, true) {
+				if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
 					e.spliceCheckResults(positions, results)
 					recovered = true
 				}

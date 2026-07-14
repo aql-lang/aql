@@ -631,7 +631,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
 		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
+		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
 			r.Check.Recorder().RecordPoly(word)
 		}
 		return out
@@ -1030,7 +1030,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordDynBody(r, word, sig, args, out, pos) &&
-		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
+		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false, nil) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
 		// A CompileRunsBodyIsolated word (Test.check-prop) whose dynamic operands
@@ -1400,7 +1400,10 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // faithfully; only the dynamic-only gate is bypassed, every other safety gate
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
-func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
+// noMatch, when non-nil, is the faithful-raise plan for the runtime no-match
+// arm (PolyNoMatchSpec, plan 3c) — derived by the caller at the failed-
+// dispatch tape state it recovered from; nil keeps the sound defer.
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool, noMatch *PolyNoMatchSpec) bool {
 	es := r.Check.Recorder()
 	// 0 outputs (a side-effect word like the test framework's `test-record`) or
 	// 1 output (the common get/size/is shape). A multi-result poly is beyond
@@ -1500,7 +1503,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// looked the word up in the main registry, found 0 sigs, and deferred. Safe for
 	// core words too: poly only ever records BUILTINS (guarded above), which exist
 	// identically in every registry instance, so matchReg.Lookup always resolves.
-	return es.RecordPolyCall(word, args, outs, pos, matchReg)
+	return es.RecordPolyCall(word, args, outs, pos, matchReg, noMatch)
 }
 
 // tryRecordDynBody is the universal `do` backstop (the always-compile goal):
