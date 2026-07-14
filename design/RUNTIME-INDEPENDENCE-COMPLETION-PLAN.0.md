@@ -1457,3 +1457,30 @@ verifyMarkWindow ("mark-window residual does not match the lowered
 stack") — the fn-unit finish seats its residual differently, so the
 window declines there soundly; a part-2c widening could anchor fn-unit
 windows if the voxgig sweep ever surfaces the shape.
+
+### L-EACH LANDED — errorReturnsFn narrows the catch bound (2026-07-14)
+
+The forward-drift refusal's mechanism, probed precisely: the catch result
+reached a downstream word as dynamic(Any), whose not-disjoint matching made
+`add`'s String catch-all overload viable ALL-STACK (consuming the leading
+residual `5`), while a concrete runtime top fails String and takes the
+Number FORWARD collection — a genuinely runtime-dependent dispatch, refused
+soundly by refuseForwardStackDrift. The graduation is TYPE PRECISION, not
+new machinery: `error` gains a ReturnsFn (compile-pass-gated) that joins
+the pass-through do-result type with the handler body's netted residual
+over a seeded Error (the check twin of errorHandler's historical
+`Run([err, body…])` stream, strip-unconsumed mirrored by ID identity), and
+returns dynamic(CommonAncestorType(join)) — dynamic(Integer) for the
+L-EACH rows, so the String overload is DISJOINT, check mode selects the
+interpreter's forward collection, and the drift guard has nothing to
+refuse. A PROVEN-Error do-result (strict Error carrier — the body always
+raises) skips the join: the pass-through arm is statically dead. Anything
+inconclusive (non-token handler, multi-value/empty handler residual,
+dynamic(Error) bound) keeps dynamic(Any) — the wide-join negative
+`5 do [7] error ["x"] add 1` (join Integer|String → Scalar keeps the
+String match viable) pins that genuinely dynamic boundaries KEEP the
+refusal. Three frontier-forward-drift rows graduated to
+bytecode-migrated.tsv; family pinned in bytecode_edge_findings_test.go §1.
+Remaining in Step 3: net drivers (for: per-iteration mark/collect), the
+def-msg promoted re-push (part 2c), the module-export region entry, the
+each variadic-if row (mark-bounded rematch parts 2+3).

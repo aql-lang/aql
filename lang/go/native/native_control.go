@@ -205,7 +205,8 @@ var controlNatives = []NativeFunc{
 				// do-result (position 1) MUST come from the stack — never a trailing
 				// token. The former TError sig filtered a following `3` by type; the
 				// merged Any sig would otherwise grab it (`error [print] 3 mul 4`).
-				Returns: []*Type{TAny}, BarrierPos: 1,
+				ReturnsFn: errorReturnsFn,
+				Returns:   []*Type{TAny}, BarrierPos: 1,
 			},
 		},
 	},
@@ -1197,6 +1198,52 @@ func asInt64Or(v Value, def int64) int64 {
 // errorPassHandler is `error`'s success path: the guarded body
 // produced a normal value, so the handler list is discarded and the
 // value passes through unchanged.
+// errorReturnsFn narrows `error`'s result bound to the JOIN of its two
+// runtime paths — the pass-through do-result (no raise) and the handler
+// body's netted residual over a caught Error (the check twin of
+// errorHandler's InvokeBody([err, body…]) stream). The bound stays DYNAMIC
+// (which path runs is a runtime fact), so a downstream dispatch over it uses
+// not-disjoint matching against a REAL family instead of Any — the L-EACH
+// graduation (`5 do [7] error [drop 9] add 1`): with dynamic(Integer) the
+// String catch-all overload of `add` is disjoint and check mode selects the
+// same forward collection the interpreter takes, so refuseForwardStackDrift
+// has nothing to refuse. Anything inconclusive — a non-token handler, a
+// multi-value or empty handler residual, a nil parent — keeps the historical
+// dynamic(Any), so genuinely dynamic boundaries keep refusing. Gated to the
+// compile pass: plain check keeps its diagnostics surface unchanged (the
+// seeded body run could surface handler-body diagnostics plain check never
+// reported).
+func errorReturnsFn(args []Value, r *Registry) []Value {
+	wide := []Value{NewDynamicCarrier(TAny)}
+	if !r.Check.Compiling || !IsConcrete(args[0]) || args[1].Parent == nil {
+		return wide
+	}
+	body, err := AsList(args[0])
+	if err != nil || body.IsNil() {
+		return wide
+	}
+	seeded := append([]Value{NewCarrier(TError)}, body.Slice()...)
+	stk := RunCarrierBody(r, NewList(seeded))
+	// The handler nets ONE value (BodyOut 1): the seeded error still at the
+	// residual bottom is the strip-unconsumed shape (`["fallback"]`), so drop
+	// it before the count check — mirroring errorHandler's identity probe.
+	if len(stk) >= 2 && stk[0].ID == seeded[0].ID {
+		stk = stk[1:]
+	}
+	if len(stk) != 1 || stk[0].Parent == nil {
+		return wide
+	}
+	// A PROVEN-Error do-result (a strict Error carrier — the body always
+	// raises, doListReturnsFn's raising-residual arm) makes the pass-through
+	// arm statically dead: the result is the handler's alone, no join. A
+	// dynamic(Error) bound keeps the join — the bound is best-effort, not
+	// proof, so the pass-through may still run.
+	if !args[1].Dynamic && args[1].Parent.ConformsTo(TError) {
+		return []Value{NewDynamicCarrier(stk[0].Parent)}
+	}
+	return []Value{NewDynamicCarrier(CommonAncestorType(args[1].Parent, stk[0].Parent))}
+}
+
 func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.AqlError("error_error", "error: handler must be a concrete list, got type literal", "error")

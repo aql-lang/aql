@@ -171,11 +171,13 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 
 	// Net drivers — plan Phase 5: per-iteration mark/collect in the for: lowering.
 
-	// L-EACH — plan Phase 5: record the forward-collection plan from static
-	// token text so a pre-island stack prefix survives the residual.
-	`5 do [raise aa "x"] error [drop 9] add 1`: {why: "plan Phase 5 (L-EACH): stack prefix consumed by a word after a caught do", failsWith: "forward operand accounting across a dynamic/island residual"},
-	`5 do [7] error [drop 9] add 1`:            {why: "plan Phase 5 (L-EACH): same shape, no raise at runtime", failsWith: "forward operand accounting across a dynamic/island residual"},
-	`1 2 3 do [7] error [drop 9] add 1`:        {why: "plan Phase 5 (L-EACH): deeper pre-island prefix", failsWith: "forward operand accounting across a dynamic/island residual"},
+	// GRADUATED 2026-07-14 (L-EACH, plan Phase 5): the three forward-drift
+	// rows compile natively — errorReturnsFn narrows the catch result to
+	// dynamic(join(pass-through, handler-residual)), so the String catch-all
+	// overload is disjoint and check mode selects the interpreter's forward
+	// collection (rows moved to lang/spec/bytecode-migrated.tsv; family
+	// pinned in lang/go/bytecode_edge_findings_test.go with the genuinely
+	// wide-join negative keeping the drift refusal).
 
 	// do-unit registry replay — was a MISCOMPILE (variation sweep,
 	// 2026-07-13); now a SOUND REFUSAL (drift graduated the same day): the
