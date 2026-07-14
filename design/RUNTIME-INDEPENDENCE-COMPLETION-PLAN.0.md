@@ -1074,3 +1074,37 @@ row (0-arg courtesy screen — a different recovery path), the word-splice
 row (deferred-expression screen). Then 3c: the vm:poly-no-match /
 vm:user-poly-no-match defers can convert to faithful runtimeNoMatch
 raises the same way the rematch's no-match arm does.
+
+### do-rows idempotent type lowering — the exact conflict (2026-07-14 probe)
+
+For `do [def Big Integer 15 is Big]`, tryRecordClosure's probe declines
+with: `fn body analysis error in do$body: type: name part "Big" in "Big"
+conflicts with an existing type name`. Mechanism confirmed: do's
+ReturnsFn pass (RunCarrierBodyWithDefs) ran the body once — InstallType
+minted "Big" into the KEPT state (Types.parts + lattice; Defs rolled
+back) — and the closure compile's AnalyseFnBody re-runs the SAME def
+site, whose InstallType now trips IsKnownPart (registry.go:1674 →
+types.go:357). Top-level `def Big Integer 15 is Big` compiles fine
+(prog=true): the single check-pass install is the only install and the
+lowering resolves the mint (OpPushType/OpBindTyped).
+
+Fix directions for the implementation session (choose one):
+1. CHECK-MODE re-analysis idempotence in InstallType: a re-install of
+   the same name at the SAME def site with a unifying body resolves to
+   the existing mint instead of erroring — needs site provenance
+   (SrcPos on the minted type or the parts entry) so genuine duplicate
+   defs (`def Big Integer def Big Integer` — the interpreter errors)
+   still mirror the runtime error. Distinguishing signal: the re-run of
+   ONE source position vs two positions.
+2. Sandbox the ReturnsFn body pass's TYPE state (parts + lattice) the
+   way snapshotPredicateState does, now that the replay-hazard REFUSAL
+   means no baked capitalized-def body survives to need the kept mint —
+   the closure compile then mints fresh with no conflict, and the
+   unit's kept mint serves OpPushType. Risk: other consumers of the
+   mint between the ReturnsFn pass and the closure compile; audit
+   compile_sandbox.go's keep-on-compile contract before choosing this.
+Whichever lands, the frontier-do-registry-replay TSV rows and the
+"code-body word (NoEvalArgs)" vary bucket graduate together, and the
+unit's runtime InstallType execution must ALSO be idempotent against
+the check-time mint (the unit re-runs the def per invocation — the
+same OpPushType-resolution discipline, not a re-install).
