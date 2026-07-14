@@ -142,6 +142,24 @@ const (
 	// (shared taxonomy text) at exactly the point execution reaches it. Terminal:
 	// the recorder ends the program at the trap (everything after is unreachable).
 	OpTrap
+	// OpDispatchRematch re-runs a STATICALLY-FAILED dispatch over the live
+	// runtime values — the runtime-evaluated twin of OpTrap for an unmatched
+	// dispatch whose window held CARRIER operands (a concrete value at run
+	// time, only a typed stand-in at check time — tryRecordUnmatchedDispatchTrap
+	// declines the definite trap for those). The recorder pushed the failed
+	// window's operands so stack[top-i] is sig position i (the callPoly
+	// layout); the op re-matches them against the word's LIVE signatures
+	// (Program.Dispatches[Arg] names the word; the live registry binding is
+	// what the interpreter would consult at this point). NO MATCH — the
+	// expected case, this compiled an ERROR row — raises the shared rich
+	// diagnostic built over the CONCRETE values (noMatchDiag via
+	// runtimeNoMatch), byte-identical to the interpreter's sigError at the
+	// same point. A MATCH means the static model was wrong (a refined
+	// runtime tag, a value-sensitive predicate satisfied) — the tail was
+	// truncated at this terminal op, so the run defers to the interpreter
+	// (vm:rematch-matched, the fenced whole-program fallback — slow, not
+	// wrong). Terminal like OpTrap.
+	OpDispatchRematch
 	// OpReverse reverses the top Arg operand-stack values in place. It is the
 	// stack-scheduling primitive for an N-operand call whose computed args sit in
 	// exact REVERSE signature order — the common forward-call shape `f (a)(b)(c)`,
@@ -411,6 +429,7 @@ var opcodeNames = [...]string{
 	OpMakeList:            "MAKE_LIST",
 	OpMakeMap:             "MAKE_MAP",
 	OpTrap:                "TRAP",
+	OpDispatchRematch:     "DISPATCH_REMATCH",
 	OpReverse:             "REVERSE",
 	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
 	OpFlowBreak:           "FLOW_BREAK",
@@ -765,6 +784,17 @@ type TrapSpec struct {
 	Suggestions []DiagSuggestion
 }
 
+// DispatchSpec describes one OpDispatchRematch (see the opcode doc): the
+// word whose dispatch statically failed, the failed window's operand count
+// (the values the recorder pushed, stack[top-i] = sig position i), and the
+// dispatch site's source position, stamped onto the runtime-built
+// diagnostic so it labels the same site the interpreter's would.
+type DispatchSpec struct {
+	Word  string
+	NArgs int
+	Pos   SrcPos
+}
+
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
 // word name (diagnostics only — dispatch is over the runtime VALUE, never the
 // name), the arity the check-mode match consumed, and the result count the
@@ -789,6 +819,7 @@ type Program struct {
 	MakeMaps   []MakeMapSpec
 	Interps    []InterpSpec
 	Traps      []TrapSpec
+	Dispatches []DispatchSpec
 	TypedBinds []TypedBindSpec
 	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the

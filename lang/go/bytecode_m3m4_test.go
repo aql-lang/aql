@@ -276,25 +276,27 @@ func diagNotesEqual(a, b *eng.AqlError) bool {
 }
 
 // TestTrapKeepsPriorCallEffects pins that a carrier no-match with prior
-// effects (inc's body prints before apply raises) falls back cleanly: the
-// program refuses to compile, runs interpreted, and its prior effects
-// still run in order before the identical signature_error — the same abort
-// point either way (phase 7 fallback; formerly an M4 carrier trap).
+// effects (inc's body prints before apply raises) keeps them in order: the
+// program compiles to a runtime rematch (OpDispatchRematch — formerly a
+// whole-program refusal, before that an M4 carrier trap), inc's unit runs
+// natively and PRINTS, then the rematch raises the identical
+// signature_error — the same effects and abort point as the interpreter,
+// with no fallback re-run to duplicate the print.
 func TestTrapKeepsPriorCallEffects(t *testing.T) {
 	const src = `def inc fn [[n:Integer][Integer][print 'a' n add 1]]  5 inc apply`
-	prog, _, _, cerr := mustNew(t).CompileCheck(src)
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
 	if cerr != nil {
 		t.Fatalf("check error: %v", cerr)
 	}
-	if prog != nil {
-		t.Errorf("a carrier no-match must refuse (fall back), got a compiled program")
+	if prog == nil {
+		t.Errorf("the carrier no-match must compile to a runtime rematch (reason %q)", reason)
 	}
 	var outC, outI strings.Builder
 	ac := mustNew(t)
 	ac.SetOutput(&outC)
 	_, compiled, errC := ac.RunCompiled(src)
-	if compiled {
-		t.Fatalf("a carrier no-match must fall back, but ran compiled")
+	if !compiled {
+		t.Fatalf("the rematch program must run compiled")
 	}
 	ai := mustNew(t)
 	ai.SetOutput(&outI)

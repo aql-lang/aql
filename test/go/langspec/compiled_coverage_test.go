@@ -213,7 +213,7 @@ func TestCompiledCoverage(t *testing.T) {
 	// parity rows) described an earlier corpus generation; those rows now
 	// compile and the carrier-parity error doctrine they recorded lives on
 	// in DIAGNOSTICS.0.md.
-	const refusalGate = 9 // ratcheted 11 -> 9 (2026-07-13): the gate meets the live census; every remaining row is a knownRefusals dispatch-recovery soundness row
+	const refusalGate = 3 // ratcheted 9 -> 3 (2026-07-14): OpDispatchRematch compiles the six single-carrier-window dispatch rows to runtime rematches; the three left are the wide-window / courtesy-screen / splice shapes (knownRefusals)
 	const islandGate = 0  // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)

@@ -1284,6 +1284,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			ae.Notes = tr.Notes
 			ae.Suggestions = tr.Suggestions
 			return nil, stampAt(ae, curDebug, pc, r)
+		case OpDispatchRematch:
+			// Terminal either way: the rematch raises or defers (vm_rematch.go).
+			return nil, vc.dispatchRematch(&p.Dispatches[in.Arg], stack, curDebug, pc)
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {

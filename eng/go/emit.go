@@ -361,6 +361,12 @@ type emitFallback struct {
 type emitTrap struct {
 	spec TrapSpec
 	pos  SrcPos
+	// rematchWord, when non-empty, makes this a RUNTIME-REMATCH trap
+	// (OpDispatchRematch): the statically-failed dispatch's window operands
+	// ride in rematchOps (sig-position order — index 0 is what the failed
+	// match examined first), re-matched over the live values at run time.
+	rematchWord string
+	rematchOps  []emitOperand
 }
 
 // emitEvent is one node of the recorded trace, tagged by kind. The two largest
@@ -3647,6 +3653,53 @@ func (es *EmitState) RecordTrapErr(ae *AqlError, pos SrcPos) bool {
 			Spans: ae.Spans, Notes: ae.Notes, Suggestions: ae.Suggestions,
 		},
 		pos: pos,
+	}})
+	return true
+}
+
+// RecordDispatchRematchValues is the value-level entry over
+// RecordDispatchRematch: it resolves each window VALUE to its operand
+// (a make-result carrier resolves to its producing event; a concrete
+// forward token to a const) and declines — leaving the caller's refusal to
+// stand — when any value has no resolvable provenance.
+func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, pos SrcPos) bool {
+	if !es.active() || len(vals) == 0 {
+		return false
+	}
+	ops := make([]emitOperand, len(vals))
+	for i, v := range vals {
+		op, ok := es.resolveOperand(v)
+		if !ok {
+			return false
+		}
+		ops[i] = op
+	}
+	return es.RecordDispatchRematch(word, ops, pos)
+}
+
+// RecordDispatchRematch records a TERMINAL runtime-rematch trap
+// (OpDispatchRematch) for a statically-failed dispatch whose window held
+// CARRIER operands: the failure is expected but not statically DEFINITE (a
+// carrier's runtime tag could still match), so instead of serialising the
+// error now (RecordTrapErr) the compiled program re-runs the match over the
+// live values and raises the shared rich diagnostic built over them — or
+// defers to the interpreter when the match unexpectedly succeeds. ops are
+// the window operands in the order the failed match examined them. Same
+// top-level-only guard and first-trap-wins latch as RecordTrap.
+func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, pos SrcPos) bool {
+	if word == "" || len(ops) == 0 {
+		return false
+	}
+	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+		return false
+	}
+	if es.trapAt != 0 {
+		return true
+	}
+	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+		rematchWord: word,
+		rematchOps:  append([]emitOperand(nil), ops...),
+		pos:         pos,
 	}})
 	return true
 }

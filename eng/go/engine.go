@@ -306,6 +306,42 @@ func reorderForwardCandidates(tape *Tape, pointer int) []Value {
 	return written
 }
 
+// rematchWritten is the CHECK-TIME twin of sigError's written-tuple
+// derivation (unclaimed concrete forward tokens in source order, else the
+// stack prefix top-first), widened to admit CARRIERS where the runtime
+// tape holds the concrete value — the check pass mirrors the interpreter
+// step-for-step, so position-for-position the runtime derivation walks
+// the same shape and yields the concrete twins of these values. Used by
+// the runtime-rematch record to prove its operand window IS the tuple the
+// interpreter's error renders.
+func (e *Engine) rematchWritten() []Value {
+	var written []Value
+	for i := e.pointer + 1; i < e.tape.Len() && len(written) < 4; i++ {
+		v := e.tape.At(i)
+		if IsWord(v) || IsParenExpr(v) || IsForward(v) || IsOpenParen(v) || IsEnd(v) {
+			break
+		}
+		if !IsConcrete(v) && !v.Carrier {
+			break
+		}
+		written = append(written, v)
+	}
+	if len(written) > 0 {
+		return written
+	}
+	stack := e.tape.Prefix(e.pointer)
+	for i := len(stack) - 1; i >= 0 && len(written) < 4; i-- {
+		v := stack[i]
+		if IsOpenParen(v) || IsForward(v) || IsWord(v) || IsEnd(v) ||
+			v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
+			v.Parent.ConformsTo(TInternal) {
+			break
+		}
+		written = append(written, v)
+	}
+	return written
+}
+
 // reorderHintFor is the shared probe behind the signature errors.
 // written is the failing tuple in the ASSIGNMENT order the dispatch
 // used (sig[i] ↔ written[i]): source order for forward tokens,
@@ -8195,15 +8231,30 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			return false
 		}
 	}
+	vals := make([]Value, 0, len(window))
+	hasCarrier := false
 	for _, p := range window {
 		v := e.tape.At(p)
 		if IsWord(v) {
 			if wi, werr := AsWord(v); werr == nil {
 				if top, ok := e.registry.Defs.Top(wi.Name); ok {
 					v = top // the binding is what matchSignature examined
+				} else {
+					// Known literals resolve exactly as the match's forward
+					// walk resolved them (true/false → Boolean) — the value
+					// the runtime dispatch examines.
+					switch wi.Name {
+					case "true":
+						v = NewBoolean(true)
+					case "false":
+						v = NewBoolean(false)
+					case "none":
+						v = NewNone()
+					}
 				}
 			}
 		}
+		vals = append(vals, v)
 		if v.Dynamic || v.Undefined {
 			return false
 		}
@@ -8227,10 +8278,45 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// trap is terminal, so the program errors here either way and only
 		// the (irrelevant, error-path) compilation of the tail is given up.
 		// This supersedes the Phase-6 M4 carrier-disjointness trap, which
-		// could not carry a matching rich diagnostic.
+		// could not carry a matching rich diagnostic. Since the RUNTIME
+		// REMATCH landed the decline is no longer terminal: the window
+		// classifies as rematchable below, and the compiled program
+		// re-runs the match over the CONCRETE values and builds the same
+		// rich diagnostic at run time (or defers when it matches).
 		if v.Carrier {
+			hasCarrier = true
+		}
+	}
+	if hasCarrier {
+		// Not statically definite — but every position is a runtime-stable
+		// value or a provenance-carrying carrier: record the runtime
+		// rematch (OpDispatchRematch), under three byte-identity guards.
+		// (1) The window must EQUAL the written tuple sigError renders
+		// (the carrier-aware twin of its forward-else-stack derivation) —
+		// a wider match view than the raise view (the local-add shape,
+		// where the match probed 3 positions but the error renders 1)
+		// cannot yet be rebuilt faithfully at run time; it stays refused
+		// until the DispatchErrCtx window-bound lands. (2)+(3) The two
+		// TAPE-state diagnostic layers the runtime rebuild has no access
+		// to — the tape reorder probe and the fn-shape typed-binding hint
+		// — must not apply; runtimeNoMatch rebuilds the value-based
+		// reorderHintFor itself. Declines leave the caller's refusal.
+		written := e.rematchWritten()
+		if len(written) != len(vals) {
 			return false
 		}
+		for i := range vals {
+			if written[i].ID != vals[i].ID {
+				return false
+			}
+		}
+		if e.voidArgErrorFor(w.Name, pos) != nil {
+			return false
+		}
+		if e.reorderHint(w.Name, fn) != "" || e.isFnShapeTypedBindingContext() {
+			return false
+		}
+		return es.RecordDispatchRematchValues(w.Name, vals, pos)
 	}
 	// Serialise the FULL interpreter error into the trap so the compiled
 	// OpTrap raises byte-identical to the interpreter (Detail + spans +

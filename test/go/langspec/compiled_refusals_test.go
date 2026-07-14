@@ -27,17 +27,14 @@ import "testing"
 // then delete its entry. Do NOT add a row here to silence a real gap — an entry
 // is a promise that compiling the row would be UNSOUND, not merely unimplemented.
 var knownRefusals = map[string]string{
-	// apply.tsv — a bare fn auto-fires on the value before `apply` sees it, so
-	// `apply` has no fn: an unmatched dispatch the interpreter raises (ERROR rows).
-	`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`:       "unmatched dispatch recovered at apply (bare inc fires on 5 first)",
-	`def inc fn [[n:Integer][Integer][n add 1]]  5 (ref inc) apply`: "unmatched dispatch recovered at apply ((ref inc) re-steps inc on 5)",
-
-	// generics — a generic-typed param called with the WRONG instantiation is a
-	// no-match the interpreter raises; the checker's recovery is a best guess.
-	`def Box gen [T] class {v:T} def f fn [[x:(Box of [Number])] [Integer] [1]] end f (make (Box of [Integer]) {v:1})`:                               "unmatched dispatch recovered at f (Box of Number vs Box of Integer)",
-	`def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def BoxS (Box of [String]) def g fn [[b:BoxI] [Integer] [1]] end g (make BoxS {v:'s'})`: "unmatched dispatch recovered at g (BoxI vs BoxS)",
-	`def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x dot value]] end f (make Box<String> {value:'s'})`:                            "unmatched dispatch recovered at f (Box<Integer> vs Box<String>)",
-	`def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [String]) {value:'s'})`:           "unmatched dispatch recovered at f (Box of Integer vs Box of String)",
+	// GRADUATED 2026-07-14 (OpDispatchRematch, plan Phase 3): the apply.tsv
+	// pair and the four generics rows compile to a terminal runtime rematch —
+	// the failed window (a single event-carrier in every one) re-matches over
+	// the live values at run time and raises the shared rich diagnostic
+	// byte-identical to the interpreter (or defers when it unexpectedly
+	// matches). The three rows below stay refused: their windows exceed the
+	// written-tuple bound (local add), take a different recovery path (each's
+	// variadic-if operand — the 0-arg courtesy screen), or hold a splice.
 
 	// a variadic-if result feeding a higher-order word (`each`) over a recovered
 	// dispatch — the interpreter resolves it at runtime; a static guess diverges.

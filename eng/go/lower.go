@@ -542,8 +542,15 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		for _, c := range ev.loop.carried {
 			visit(c.init)
 		}
-	case evBreak, evContinue, evTrap:
+	case evBreak, evContinue:
 		// no operands
+	case evTrap:
+		// A plain trap has no operands; a runtime-rematch trap's window
+		// operands are reference-counted like call ops so their producers
+		// stay live (and promoted refs rewrite).
+		for _, op := range ev.trap.rematchOps {
+			visit(op)
+		}
 	case evCallUser:
 		for _, op := range ev.uc.ops {
 			visit(op)
@@ -712,6 +719,10 @@ func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
 // event operand the closed-fragment lowering expects.
 func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	switch ev.kind {
+	case evTrap:
+		for i := range ev.trap.rematchOps {
+			promoteOperand(&ev.trap.rematchOps[i], promoted)
+		}
 	case evCall:
 		for i := range ev.call.ops {
 			promoteOperand(&ev.call.ops[i], promoted)
@@ -1881,6 +1892,31 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 // lowerTrap emits the terminal OpTrap for a check-mode-suppressed runtime error,
 // pooling its TrapSpec. Execution never continues past it.
 func (lw *lowerer) lowerTrap(ev *emitEvent) string {
+	if ev.trap.rematchWord != "" {
+		// A runtime-rematch trap: seat the failed window's operands like a
+		// call's args — ops[0] (examined first, sig position 0) ends on TOP
+		// (layoutOperands' contract, the callPoly window layout), event
+		// results consumed from where they lie, consts pushed. A layout the
+		// scheduler cannot seat refuses the trap; the caller's whole-program
+		// fallback stands (slow, not wrong).
+		if reason := lw.layoutOperands(ev.trap.rematchOps, ev.trap.pos, layoutMsgs{
+			loopResults:  "rematch operands include a variadic loop result",
+			resultNotTop: "stack discipline: rematch operand is not on top (rematch of " + ev.trap.rematchWord + ")",
+			reorder:      "rematch operand shape needs reordering beyond Stage 3",
+			shapeBeyond:  "rematch operand shape beyond Stage 3",
+			notAdjacent:  "stack discipline: rematch operands not adjacent on top",
+		}); reason != "" {
+			return reason
+		}
+		idx := len(lw.p.Dispatches)
+		lw.p.Dispatches = append(lw.p.Dispatches, DispatchSpec{
+			Word:  ev.trap.rematchWord,
+			NArgs: len(ev.trap.rematchOps),
+			Pos:   ev.trap.pos,
+		})
+		lw.emit(OpDispatchRematch, idx, ev.trap.pos)
+		return ""
+	}
 	idx := len(lw.p.Traps)
 	lw.p.Traps = append(lw.p.Traps, ev.trap.spec)
 	lw.emit(OpTrap, idx, ev.trap.pos)

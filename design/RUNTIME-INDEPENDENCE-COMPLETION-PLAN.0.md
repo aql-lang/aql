@@ -1028,3 +1028,49 @@ Sequencing: land generics rows first (single event-carrier window, the
 cleanest shape), then local-add (window bounding), apply/each, splice
 last. Full battery + census + refusalGate ratchet per row; knownRefusals
 rows delete via the stale arm as each compiles.
+
+### Phase 3 progress — OpDispatchRematch LANDED, refusals 9 → 3 (2026-07-14)
+
+The runtime-evaluated trap is in, on the implementation map's exact
+insertion point. tryRecordUnmatchedDispatchTrap's screen loop now
+CLASSIFIES the window: hard declines unchanged (dynamic / undefined /
+reach / paren / interp-string / splice, in-window open paren, 0-arg
+courtesy screen); zero carriers → today's definite serialised OpTrap;
+≥1 carrier → the RUNTIME REMATCH record, under three byte-identity
+guards — (1) the window must EQUAL the written tuple sigError renders
+(rematchWritten, the carrier-aware twin of the forward-else-stack
+derivation; known literals true/false/none resolve as the match's
+forward walk resolved them), (2) the tape reorder probe must not apply,
+(3) the fn-shape typed-binding hint must not apply. The record resolves
+every window value to an operand (RecordDispatchRematchValues →
+RecordDispatchRematch, an emitTrap variant sharing the trap's terminal
+truncation), lowering seats the operands via layoutOperands (the
+lowerUserCall discipline — the first draft's pushOperand of an event
+operand baked Consts[seq] and the differential caught the wrong-value
+window immediately) and emits OpDispatchRematch over
+Program.Dispatches[{Word, NArgs, Pos}]. The VM arm rebuilds the window
+(callPoly's layout), re-matches via MatchSignature over the word's LIVE
+registry binding, and on NO MATCH raises runtimeNoMatch (diag_msg.go)
+stamped at the recorded pos — byte-identical to the interpreter's
+sigError, full-error compare pinned per row; on a MATCH (the static
+model was wrong) defers via vm:rematch-matched — pinned by the
+refined-return shape compiling, deferring, and producing the
+interpreter's value.
+
+Graduations: all six single-carrier-window knownRefusals rows (the
+apply.tsv pair + four generics rows) — stale arms fired, entries
+deleted; refusalGate ratcheted 9 → 3; census 5981 → 5987 fully-native
+(refused 3). The M4-era carrier-hazard negatives graduated WITH their
+soundness pin: the refinement-escape and predicate-param shapes now
+compile and their guard moved from "must refuse" to "the rematch must
+DEFER with parity" (TestUnmatchedDispatchTrapNegatives rematches
+section, TestDispatchRematchMatchDefers). TestTrapKeepsPriorCallEffects
+upgraded: the printing-body row now runs compiled — effects once, in
+order, then the identical raise, no fallback duplicate.
+
+Remaining 3 rows: local-add (match window 3 positions, written tuple 1 —
+needs the DispatchErrCtx window-bound, plan 3a), the each variadic-if
+row (0-arg courtesy screen — a different recovery path), the word-splice
+row (deferred-expression screen). Then 3c: the vm:poly-no-match /
+vm:user-poly-no-match defers can convert to faithful runtimeNoMatch
+raises the same way the rematch's no-match arm does.
