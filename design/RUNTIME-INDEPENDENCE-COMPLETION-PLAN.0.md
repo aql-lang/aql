@@ -663,3 +663,14 @@ static types so Function is excluded (the guard's existing not-disjoint
 carve-out then admits them) — worth checking whether typed fn returns
 ([Any] on f) can narrow through the catch merge. Both routes preserve the
 auto-apply hazard soundly.
+
+### L-DO END-TO-END CONFIRMED for typed returns (2026-07-14)
+
+`def f fn [[x:Any] [Integer] [raise …]] do [(f 5) 2] error [dot code]`
+COMPILES NATIVELY with byte-identical parity on the CAUGHT path — the
+variadic latch + strip-input propagation carry the full catch merge when
+the body's static types exclude Function. Pinned in the main corpus
+(bytecode-migrated.tsv). The 6 remaining frontier rows are Any-typed
+(module exports / [Any] returns) — held by the CORRECT parked-fn
+auto-apply guard; they graduate via the verbatim-window generalisation or
+by future return-type narrowing through the catch merge.

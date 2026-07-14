@@ -58,3 +58,9 @@ def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3	0
 # fallible multi-value do body records a VARIADIC result and the program
 # residual absorbs it — the first catch-arity row to compile natively.
 def y 5  do [(10 div y) 2]	2 2
+# L-DO end-to-end pin (2026-07-14): a TYPED-return fallible multi-value do
+# body under a catch compiles natively — the variadic latch + strip-input
+# propagation carry the caught path (runtime nets 1 Error where the static
+# model says 2) with byte-identical parity. Any-typed returns stay refused
+# (the parked-fn auto-apply carve-out) pending the window lowering.
+def f fn [[x:Any] [Integer] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
