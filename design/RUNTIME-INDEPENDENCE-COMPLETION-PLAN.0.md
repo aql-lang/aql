@@ -1320,3 +1320,45 @@ primitives extended to the branch merge): once the 1-vs-2 residual seats,
 the each dispatch becomes a fixed-window terminal rematch (both directions
 raise the identical signature_error, so the raise arm is already proven).
 knownRefusals comment corrected.
+
+### Mark-bounded rematch — the each-row / L-DO convergence design (2026-07-14)
+
+The each variadic-if row and Step 3's L-DO/net-driver items share ONE
+missing primitive: a VARIADIC REGION as a first-class lowered value range.
+The existing mark machinery (OpStackMark / OpDropToMark, lower.go
+markBefore/variadicElse) serves only the chained variadic-STATEMENT-if (a
+2-arg if's 0-or-1 result claimed as a following if's else). The extension,
+in three parts:
+
+1. BRANCH-MERGE VARIADIC REGION: a 3-arg if whose arms leave DIFFERENT
+   counts (each row: then 1, else 2) lowers with OpStackMark before the
+   branch and NO fixed merge slot — the arm bodies leave their real counts
+   above the mark. The check side already knows the mismatch
+   (JoinCarrierStacks' sentinel merge produces the None|T disjunct at the
+   shorter positions; fragMulti/branchVariadicResult account it) — the
+   refusal today is recordCallRefusal/RecordLoop's fixed-count model, not a
+   soundness wall.
+
+2. MARK-BOUNDED TERMINAL REMATCH: OpDispatchRematch gains a variadic mode
+   (NArgs = -1, window = stack[mark:] plus the recorded fixed operands —
+   each's code body rides as a const operand). At run time the region holds
+   the taken arm's real values; the rematch re-runs MatchSignature over
+   them and raises the interpreter's byte-identical no-match (both each-row
+   directions are ERROR rows, so the terminal truncation is free), or
+   defers on an unexpected match. The written-tuple derivation for the
+   raise must be runtime-computed over the region (reorderCandidates on the
+   live window — the region IS the stack prefix at the failure), not
+   index-recorded like PolyNoMatchSpec — record-time gates then reduce to
+   the void-arg / fn-shape screens plus a "region ends the statement"
+   structural check.
+
+3. RECORD PATH: checkModeAssumeSig's carrier-recovery arm, when the failing
+   operand set contains the VARIADIC-MERGE disjunct (the None|T sentinel
+   join of a count-mismatched branch — detectable from the branch record's
+   variadic accounting, not from the disjunct shape alone), records the
+   mark-bounded rematch instead of MarkUncompilable.
+
+Order of work: land 1 alone first (the L-DO/net-driver rows graduate on it
+— they need only the region, no rematch); then 2+3 for the each row. The
+local-add row stays on the DispatchErrCtx window-bound (3a) — unrelated
+machinery.
