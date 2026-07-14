@@ -1362,3 +1362,41 @@ Order of work: land 1 alone first (the L-DO/net-driver rows graduate on it
 — they need only the region, no rematch); then 2+3 for the each row. The
 local-add row stays on the DispatchErrCtx window-bound (3a) — unrelated
 machinery.
+
+### L-DO part 2b — mark-window island implementation map (2026-07-14, execute next)
+
+The 6 Any-typed do-catch rows' residuals are [region-out(Dynamic Any,
+variadic), handler-result] — ONE residual entry stands for the whole
+variadic region (the do event's out), and the fn-boundary guard
+(emit.go ~6230 "dynamic value precedes residual args") correctly refuses a
+verbatim push. The verbatim-window generalisation, concretely:
+
+1. NEW OPCODE OpCallDynMixedFromMark ("island stack[mark:] verbatim"): the
+   VM pops the topmost OpStackMark boundary and re-steps the whole window
+   above it through the SAME island machinery OpCallDynamicMixed uses
+   (vm.go:712 callDynamicMixed — factor its island core to take an explicit
+   window slice), pushing back the island residual. The auto-apply hazard
+   is handled BY the island — that is the verbatim-window contract.
+
+2. FINALIZE ORDER CONSTRAINT: the residual disposition (the dynOp decision,
+   emit.go ~6160-6244) and seatResults run AFTER lowerEvents, but the
+   region's OpStackMark must be emitted BEFORE its producing event —
+   markBefore[seq] is read DURING lowerEvents. So the detection runs twice:
+   a light PRE-LOWERING probe in Finalize (residual[i] Dynamic + producing
+   event variadicResult + everything after it fixed → set markBefore[seq]
+   on the region event), and the post-lowering disposition arm returns the
+   new opcode for the same shape (guarded to fire only when the pre-pass
+   marked — the latch keeps the two in lockstep). seatResults must treat
+   the marked region entry as pre-seated (live above the mark — it never
+   re-pushes; only the fixed tail entries after it lay out normally).
+
+3. EMIT ARG: the op takes NO count (the mark is the boundary); the fixed
+   tail above the region is part of stack[mark:] automatically.
+
+4. Verification: the 6 frontier-do-catch ledger rows graduate through their
+   stale arms row-by-row (full battery per row — the chained-leaf hazard);
+   the L-EACH rows (5 do [7] error [drop 9] add 1 — a stack PREFIX below
+   the region) are the immediate next family and may fall out of the same
+   mark-window contract (the prefix sits BELOW the mark, untouched);
+   TestDoCatchMultiValueArity's fallback list flips; watch the vary gate's
+   buckets.
