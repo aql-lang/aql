@@ -964,3 +964,67 @@ program (parity via fallback, pinned).
 Remaining Phase 6: capturing closures via OpPushClosure capture slots;
 Vm.run runtime compile (Phase 10 policy gate); do-registry-replay rows
 (idempotent type lowering — see the scoping section above).
+
+### Phase 3 OpDispatchRematch — implementation map (2026-07-14 read)
+
+The 9 knownRefusals' actual refusal reason IS "unmatched dispatch
+recovered at <word>" — latched at engine.go:8025 (and the sibling
+single-overload path at :7960) after BOTH recoveries decline:
+tryRecordUnmatchedDispatchTrap (engine.go:7992 → :8154) and the
+imprecise-carrier poly re-match (:8013-8021). The shared rich-diagnostic
+builders are DONE (diag_msg.go): `runtimeNoMatch(r, name, written)`
+builds the interpreter-identical error from runtime values alone —
+exactly the rematch's no-match arm.
+
+Insertion point: NOT a new site — restructure the trap's per-position
+screen loop (engine.go:8198-8234). Today a CARRIER position declines the
+whole trap immediately; instead classify the full window first:
+- any DYNAMIC / UNDEFINED / Reach / ParenExpr / InterpString / Splice
+  position, in-window open paren, or a 0-arg real sig → decline (today's
+  arms, unchanged);
+- zero carriers → today's definite OpTrap (byte-identical serialised
+  error);
+- ≥1 carrier → attempt the RUNTIME REMATCH record: resolve EVERY window
+  value via es.resolveOperand (a make-result carrier is event-produced →
+  resolvable), mirror RecordTrap's depth-1/top-level guard, and record a
+  terminal OpDispatchRematch {word, operand list in the written-tuple
+  order sigError uses, pos} into Program.Dispatches. VM semantics: gather
+  the operand values, fn := r.Lookup(word) (LIVE binding — matches the
+  local-add row where the body-scoped overload is gone by the time the
+  top-level dispatch runs), value-level re-match; NO MATCH → raise
+  runtimeNoMatch(r, word, written) with the recorded pos stamped —
+  byte-identical to the interpreter; MATCH (static model was wrong — a
+  refined tag / predicate satisfied at run time) → vmDefer-class internal
+  error → RunCompiled's fenced interpreter fallback (slow, not wrong; the
+  tail was truncated at the terminal op so it cannot continue).
+- the diagnostic parity: the recovery's no_signature diagnostic is
+  emitted only on !Compiling passes (engine.go:8028-8035), so the compile
+  pass needs no RuntimeMirror plumbing — the rematch record simply
+  replaces the MarkUncompilable at :8025 (and Finalize truncation follows
+  the trap precedent).
+
+Open per-row questions for the implementation session (probe each):
+1. WINDOW vs STACK operands: checkModeFallbackPositions covers forward
+   TAPE positions; rows whose failing operand was already ON THE STACK
+   at dispatch (`5 inc apply` — inc fired, apply sees a non-fn) need the
+   written-tuple reconstruction to include stack operands — find what
+   sigError passes as `written` at these sites and mirror it exactly.
+2. The word-splice row (`f p`, p = `word [1 add 2]`): IsSplice declines
+   today; the plan note says the window rides the STATIC splice residual
+   — needs its own record shape; probe whether the splice fires before
+   f's match in check mode.
+3. The variadic-if each-row: the raw list operand must be recorded for
+   render parity (the plan's per-row note).
+4. Arity: some candidates examine fewer positions than maxN — confirm
+   noMatchDiag's written tuple for these rows equals the interpreter's
+   (run each row interpreted, capture the error, then assert the trap's
+   runtime build matches — the differential's Detail-equality gate does
+   this per row).
+5. RecordDispatchRematch emit/lower plumbing: mirror emitTrap
+   (evTrap sibling or a new evRematch), terminal/diverging; lowering
+   pushes the operands then OpDispatchRematch(specIdx).
+
+Sequencing: land generics rows first (single event-carrier window, the
+cleanest shape), then local-add (window bounding), apply/each, splice
+last. Full battery + census + refusalGate ratchet per row; knownRefusals
+rows delete via the stale arm as each compiles.
