@@ -396,3 +396,68 @@ func TestDisableAndResetStampLog(t *testing.T) {
 		t.Fatalf("nil registry reports armed")
 	}
 }
+
+// storedBodySpecFor + compileStoredParamBody degenerate arms (the
+// stored-param-body machinery behind Signature.StoredBodies): an undeclared
+// position yields no spec; a nil/inactive state, a non-list body, and an
+// empty body all decline the compile and leave the operand untouched.
+func TestStoredParamBodyDeclines(t *testing.T) {
+	sig := &Signature{StoredBodies: []StoredBodySpec{{Pos: 2, Params: []FnParam{{Name: "r", Type: TMap}}}}}
+	if storedBodySpecFor(sig, 2) == nil {
+		t.Error("declared position must yield its spec")
+	}
+	if storedBodySpecFor(sig, 1) != nil {
+		t.Error("an undeclared position must yield nil")
+	}
+
+	params := []FnParam{{Name: "r", Type: TMap}}
+	var nilES *EmitState
+	if _, ok := nilES.compileStoredParamBody(NewList([]Value{NewInteger(1)}), params); ok {
+		t.Error("nil EmitState must decline")
+	}
+	if _, ok := (&EmitState{}).compileStoredParamBody(NewList([]Value{NewInteger(1)}), params); ok {
+		t.Error("registry-less EmitState must decline")
+	}
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	es := &EmitState{reg: r}
+	if _, ok := es.compileStoredParamBody(NewInteger(1), params); ok {
+		t.Error("a non-list body must decline")
+	}
+	if _, ok := es.compileStoredParamBody(NewList(nil), params); ok {
+		t.Error("an empty body must decline")
+	}
+	if _, ok := es.compileStoredParamBody(NewList([]Value{NewWord("break")}), params); ok {
+		t.Error("a flow-sentinel body must decline")
+	}
+	// A nil param Type defaults to Any (the input carrier's generalisation);
+	// the compile itself declines here (no armed pass), which is the point —
+	// every decline leaves the operand untouched.
+	if _, ok := es.compileStoredParamBody(NewList([]Value{NewInteger(1)}), []FnParam{{Name: "x"}}); ok {
+		t.Error("an unarmed pass must decline")
+	}
+}
+
+// interpMemberInert's all-inert MAP arm went corpus-invisible when check-prop
+// bodies moved to stored-param units (the map-bearing prop-spec bodies now
+// take the StoredBodies edge before the inert-bake gates) — pin it directly.
+func TestInterpMemberInertMapArms(t *testing.T) {
+	inert := NewOrderedMap()
+	inert.Set("a", NewInteger(1))
+	if !interpMemberInert(NewMap(inert)) {
+		t.Error("a map of inert members IS interp-inert")
+	}
+	active := NewOrderedMap()
+	active.Set("a", NewCarrier(TInteger))
+	if interpMemberInert(NewMap(active)) {
+		t.Error("a map bearing a non-inert member (a carrier) is NOT interp-inert")
+	}
+	if !interpMemberInert(NewParenExpr([]Value{NewInteger(1)})) {
+		t.Error("a paren-expr of inert tokens IS interp-inert")
+	}
+	if interpMemberInert(NewParenExpr([]Value{NewCarrier(TInteger)})) {
+		t.Error("a paren-expr bearing a non-inert token is NOT interp-inert")
+	}
+}

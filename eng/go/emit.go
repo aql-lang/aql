@@ -1792,6 +1792,85 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	return carrier, true
 }
 
+// storedBodySpecFor returns the StoredBodySpec declared for sig position i,
+// or nil when the position carries no param-carrying stored body.
+func storedBodySpecFor(sig *Signature, i int) *StoredBodySpec {
+	for j := range sig.StoredBodies {
+		if sig.StoredBodies[j].Pos == i {
+			return &sig.StoredBodies[j]
+		}
+	}
+	return nil
+}
+
+// compileStoredParamBody is compileStoredBody for a PARAM-CARRYING stored
+// body (a Signature.StoredBodies position — Test.check-prop's gen/property):
+// the body compiles to a closure unit whose leading param slots bind the
+// declared params (a named param binds the body's reads of that name, the
+// handler's own CallAQL frame shape; an unnamed one rides the stack), and
+// the carrier's single sig mirrors the handler's CallAQL sig — same Params,
+// same raw Body tokens — plus the CompiledFnRef, so the handler dispatches
+// it through InvokeCallback with byte-identical interpreter fallback. The
+// unit is compiled INLINE into the current program, so a mid-run invoke is
+// a same-program nested run (runUnitNested hosts it), not a foreign ref.
+func (es *EmitState) compileStoredParamBody(bodyList Value, params []FnParam) (Value, bool) {
+	if es == nil || es.reg == nil {
+		return Value{}, false
+	}
+	lst, err := AsList(bodyList)
+	if err != nil || lst.IsNil() {
+		return Value{}, false
+	}
+	tokens := lst.Slice()
+	if len(tokens) == 0 || bodyToksHaveSentinel(tokens) {
+		return Value{}, false
+	}
+	inputs := make([]Value, len(params))
+	names := make([]string, len(params))
+	for i, p := range params {
+		t := p.Type
+		if t == nil {
+			t = TAny
+		}
+		inputs[i] = NewCarrier(t)
+		names[i] = p.Name
+	}
+	r := es.reg
+	probe := NewEmitState()
+	probe.reg = r
+	// Same-modality probe (see tryReturnedClosure / compileStoredBody).
+	probe.storedGradualDepth = es.storedGradualDepth
+	probe.dynEnv = es.dynEnv
+	r.Check.Emit = probe
+	_, probeOK := compileClosureBody(r, "storedfn", BodyOutResidual, true, false, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
+	r.Check.Emit = es
+	if !probeOK {
+		return Value{}, false
+	}
+	// Probe-terminal environment mode → real pass (see tryReturnedClosure).
+	es.dynEnv = es.dynEnv || probe.dynEnv
+	unit, realOK := compileClosureBody(r, "storedfn", BodyOutResidual, true, false, tokens, inputs, names, nil, ClosureInValue, bodyList.Pos())
+	if !realOK || unit < 0 {
+		// Unlike compileStoredBody's spawn shape, the real pass CAN decline
+		// after a clean probe here: it records into the LIVE mid-recording
+		// state, whose memo / poisoning / uncompilable latches the fresh
+		// probe state doesn't carry. The decline is per-body and sound — the
+		// raw list rides and the handler interprets it.
+		return Value{}, false
+	}
+	ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(tokens)}
+	es.storedFnRefs = append(es.storedFnRefs, ref)
+	carrier := Value{Parent: TFunction, Data: FnDefInfo{
+		Signatures: []Signature{{
+			Params:     append([]FnParam(nil), params...),
+			Returns:    []*Type{TAny},
+			BarrierPos: -1,
+			Impl:       &AQLImpl{Body: tokens, Compiled: ref},
+		}},
+	}}
+	return carrier, true
+}
+
 // stampCompiledRef records ref on the fn value's first own (non-fallback) AQL
 // body sig, so the runtime FnDefInfo the store-fn word receives carries the VM
 // edge alongside its raw Body. Mutates the shared *AQLImpl pointer, so the
@@ -4075,6 +4154,24 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 				}
 				if any {
 					ops[i] = constOperand(es.intern(WithPos(NewList(rebuilt), a)))
+					continue
+				}
+			}
+		}
+		// STORED-PARAM-BODY edge: a declared param-carrying stored body
+		// (Signature.StoredBodies — Test.check-prop's gen/property) compiles
+		// to a closure unit with the declared params bound and rides as a
+		// carrier mirroring the handler's own CallAQL sig; a body that
+		// refuses keeps its raw list and the handler interprets, unchanged.
+		// MODULE SCOPE ONLY (the noEvalBodiesInertScoped discipline): inside
+		// a compiled fn frame the body's ${interp} / bare reads of frame
+		// locals resolve against the REGISTRY in the handler's isolated
+		// frame, which the VM's locals never reach — the fn-scope check-prop
+		// guard (TestCheckPropInterpStringFnScopeRefuses) must keep refusing.
+		if len(es.units) == 1 && len(sig.StoredBodies) > 0 && sig.NoEvalArgs != nil && sig.NoEvalArgs[i] {
+			if spec := storedBodySpecFor(sig, i); spec != nil {
+				if carrier, cok := es.compileStoredParamBody(a, spec.Params); cok {
+					ops[i] = constOperand(es.intern(carrier))
 					continue
 				}
 			}

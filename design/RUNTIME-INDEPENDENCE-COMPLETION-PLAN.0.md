@@ -931,3 +931,36 @@ declines → tryRecordDynBody declines on bodyHasReplayHazard
 fires "code-body word do" (emit.go:3855) — pinned at
 frontier_spec_test.go:185, bytecode_replayhazard_test.go:20, TSV rows
 frontier-do-registry-replay.tsv:13-14.
+
+### Phase 6 progress — check-prop bodies as stored-param units (2026-07-14)
+
+The JIT-cache scoping's check-prop half landed WITHOUT a runtime cache:
+`Signature.StoredBodies []StoredBodySpec{Pos, Params}` declares a word's
+param-carrying stored code-body positions (registration folds it like
+Callable), and the recorder's new STORED-PARAM-BODY edge —
+`compileStoredParamBody`, MODULE SCOPE ONLY — compiles each declared
+position to a closure unit whose param slots bind the declared params,
+riding as a carrier whose single sig mirrors the handler's own CallAQL
+sig (same Params, same raw Body) plus the CompiledFnRef. `runCheckProp`
+(storedBodyArg) dispatches a carrier through InvokeCallback: the unit
+runs NESTED on the VM (same-program ref) with the identical CallAQL
+frame as its per-invoke fallback. Declines everywhere leave the raw list
+and the interpreter path byte-identical.
+
+Ledger motion: p6/check-prop-body-on-vm DRIFTED, not graduated — the
+per-iteration CallAQL entries are GONE and iteration count adds ZERO
+entries (TestCheckPropIterationsAddNoInterpEntries pins invariance
+2 vs 60 runs), but the case still sees Engine.Run×68 + runPooledSub×65:
+`import "aql:test"` MODULE-LOAD AQL (BuildTestModule preambles),
+identical for an import-only program. Re-pinned as a Phase 10 item —
+the module-load C4 attribution seam, not body compilation. The fn-scope
+guard held only after gating the new edge to module scope (the first
+attempt compiled the ${frame-local} body and
+TestCheckPropInterpStringFnScopeRefuses caught the miscompile risk
+immediately — the module-scope gate is load-bearing). The replay-hazard
+gen body falls through to the standing NoEvalArgs gates and refuses the
+program (parity via fallback, pinned).
+
+Remaining Phase 6: capturing closures via OpPushClosure capture slots;
+Vm.run runtime compile (Phase 10 policy gate); do-registry-replay rows
+(idempotent type lowering — see the scoping section above).

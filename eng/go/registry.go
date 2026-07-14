@@ -1777,6 +1777,9 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 		if s.Callable == nil {
 			s.Callable = fn.Callable
 		}
+		if s.StoredBodies == nil {
+			s.StoredBodies = fn.StoredBodies
+		}
 		r.Register(fn.Name, s)
 	}
 }

@@ -295,8 +295,17 @@ var frontierLedger = map[string]frontierEntry{
 		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
 	},
 	"p6/check-prop-body-on-vm": {
-		why:       "plan Phase 6.4: check-prop gen/property bodies are baked as data and re-interpreted per iteration in a pooled sub-engine; the JIT detached-unit cache is unbuilt",
-		failsWith: "unattributed interpreter entries: CallAQL",
+		// DRIFTED 2026-07-14 (the body half LANDED): the gen/property bodies
+		// compile as same-program stored-param-body units
+		// (Signature.StoredBodies → compileStoredParamBody) and run nested on
+		// the VM via InvokeCallback — the per-iteration CallAQL entries are
+		// GONE, and iteration count adds ZERO entries (pinned by
+		// TestCheckPropIterationsAddNoInterpEntries). The residual entries
+		// are `import "aql:test"` MODULE-LOAD AQL (BuildTestModule preamble
+		// runs — identical counts for an import-only program), which needs
+		// the Phase 10 module-load attribution seam, not body compilation.
+		why:       "plan Phase 10: aql:test module-load AQL runs unattributed (Engine.Run/runPooledSub at BuildTestModule) — the module-load C4 seam is unbuilt",
+		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 	// GRADUATED 2026-07-14: p6/concurrent-fork-bodies-on-vm — await's
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody

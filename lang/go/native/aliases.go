@@ -82,6 +82,7 @@ type (
 	GoOpt                = eng.GoOpt   // optional dispatch knob for Go(...)
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
+	StoredBodySpec       = eng.StoredBodySpec
 	ClassInstanceInfo    = eng.ClassInstanceInfo
 	ClassTypeInfo        = eng.ClassTypeInfo
 	ResourceInstanceInfo = eng.ResourceInstanceInfo
