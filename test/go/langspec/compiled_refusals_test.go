@@ -52,9 +52,14 @@ var knownRefusals = map[string]string{
 	// type: an operand outside the overload stays a no-match (negative rows).
 	`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`: "unmatched dispatch recovered at add (local add overload)",
 
-	// word-splice — `word` is a live-stack splice, not a spread; `f p` is a
-	// no-match the interpreter raises (code splice is NOT spread).
-	`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`: "unmatched dispatch recovered at f (code splice is not spread)",
+	// GRADUATED 2026-07-14 (word-splice): a PARKED `__SP` marker (def-bound,
+	// collected by value — never stepped before the dispatch) is identical at
+	// run time, so the definiteness screen no longer lists IsSplice and the
+	// row compiles to a serialized terminal trap raising the interpreter's
+	// byte-identical no-match. The cascade fn_body_error of the post-trap
+	// assumed-dispatch body analysis joined the SuppressBodyErrors codes. A
+	// splice AT the pointer fires before any dispatch on both engines, so no
+	// window ever holds a would-have-fired marker.
 }
 
 // TestRefusalsAreFailures fails on any spec-row compilation refusal that is not

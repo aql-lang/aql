@@ -83,9 +83,13 @@ func zzCheckEmit(a *AQL) {
 	})
 }
 
-// zzRefusingRow is a knownRefusals dispatch-recovery row (word-splice): it
-// compiles to a nil Program with no check error, driving the refusal arm.
-const zzRefusingRow = `def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`
+// zzRefusingRow is a knownRefusals dispatch-recovery row (the local-add
+// overload — its window exceeds the written-tuple bound until DispatchErrCtx
+// 3a lands): it compiles to a nil Program with no check error, driving the
+// refusal arm, and the interpreter raises its canonical signature_error at
+// run time. (The word-splice row that used to sit here graduated 2026-07-14
+// to a serialized terminal trap.)
+const zzRefusingRow = `def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`
 
 // A REFUSAL after the check pass emitted an effect must not re-run the
 // source (the re-run would execute zz-emit a second time): it surfaces a

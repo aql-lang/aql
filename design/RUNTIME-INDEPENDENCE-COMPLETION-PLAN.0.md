@@ -1484,3 +1484,30 @@ bytecode-migrated.tsv; family pinned in bytecode_edge_findings_test.go §1.
 Remaining in Step 3: net drivers (for: per-iteration mark/collect), the
 def-msg promoted re-push (part 2c), the module-export region entry, the
 each variadic-if row (mark-bounded rematch parts 2+3).
+
+### Word-splice refusal GRADUATED — refusals 3→2 (2026-07-14)
+
+`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p` — two
+stacked blockers, both cascade artifacts, no new machinery:
+
+1. The definiteness screen listed IsSplice alongside Reach/ParenExpr/
+   InterpString. Those three EVALUATE at runtime where the static match saw
+   the raw token; a PARKED `__SP` marker does not — it is collected BY
+   VALUE (the TAny match) or rejected by a typed param, and only fires when
+   STEPPED at the pointer, which never happens before the failing dispatch
+   on either engine. A window can never hold a would-have-fired marker: a
+   pointer-position splice fires before any dispatch on both engines
+   identically. IsSplice removed from the screen; the marker window value
+   is concrete, so the row serialises the FULL interpreter error into a
+   terminal OpTrap (byte-identical raise, the strongest form).
+2. The post-trap assumed-dispatch analysis (checkModeAssumeSig's
+   continuation) ran f's body against the rejected splice arg and HALTED —
+   fn_body_error escaped SuppressBodyErrors (its switch listed only the
+   four dispatch codes) and CompileCheck refused on "check diagnostics".
+   fn_body_error joined the suppression list: a body run that halts under
+   args the real match already rejected is the same cascade noise; the
+   honest diagnostic is the call-site trap.
+
+Remaining refusals (2): the local-add overload (window exceeds the
+written-tuple bound — DispatchErrCtx window-bound, 3a) and the each
+variadic-if row (mark-bounded rematch parts 2+3).

@@ -8439,7 +8439,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// abstractly — a reach over a mutated flex cell resolved at run time
 		// where the static match saw the raw Reach token (flex.tsv L88/L95).
 		// Its presence makes the failure non-definite; decline.
-		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) {
+		if IsReach(v) || IsParenExpr(v) || IsInterpString(v) {
 			return false
 		}
 		// A CARRIER operand is not concrete at compile time, so the rich

@@ -181,7 +181,14 @@ func (c *CheckState) AddDiagnostic(d CheckDiagnostic) {
 	// emergent error-level dispatch diagnostics; warnings/info still flow.
 	if c.SuppressBodyErrors > 0 && d.Severity == SeverityError {
 		switch d.Code {
-		case "no_signature", "undefined_word", "uncalled_function", "branch_error":
+		case "no_signature", "undefined_word", "uncalled_function", "branch_error",
+			// fn_body_error: an assumed-dispatch analysis runs a body against
+			// args the REAL match already rejected (checkModeAssumeSig's
+			// post-trap continuation) — a body run that HALTS under those args
+			// (a splice operand bound to a typed param) is the same cascade
+			// noise as the dispatch codes above; the honest diagnostic is the
+			// no_signature / trap at the call site.
+			"fn_body_error":
 			return
 		}
 	}

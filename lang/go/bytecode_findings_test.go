@@ -3873,10 +3873,17 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		{"disjunct matching-alternative declines",
 			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
 			"unmatched dispatch recovered at each"},
-		// A deferred-expression token (a word splice) expands at dispatch/step
-		// time; its expansion is not statically modelled, so decline.
-		{"splice operand declines",
-			`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`,
+		// A RAW deferred-expression token in the failed window — a flex-cell
+		// Reach the static match sees unresolved but the runtime EVALUATES
+		// (to 1 here) before dispatching: neither a serialized trap nor a
+		// rematch can model the evaluation, so the definiteness screen
+		// declines and the program falls back whole. (The word-splice decline
+		// that used to sit here GRADUATED 2026-07-14 — a PARKED __SP marker
+		// is identical at run time; pinned positively in
+		// TestUnmatchedDispatchTrapSpliceGraduated below. The splice was the
+		// screen's only corpus reach, so this row is now its coverage.)
+		{"flex-reach operand declines",
+			`def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`,
 			"unmatched dispatch recovered at f"},
 	}
 	for _, c := range refusals {
@@ -3918,6 +3925,39 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("flex-reach parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// The graduated word-splice trap (GRADUATED 2026-07-14, refusals 3->2): a
+// PARKED __SP marker (def-bound, collected by value — never stepped before
+// the failing dispatch) is identical at run time, so the definiteness screen
+// admits it and the row compiles to a serialized terminal OpTrap raising the
+// interpreter's byte-identical signature_error. A pointer-position splice
+// fires before any dispatch on BOTH engines, so no window ever holds a
+// would-have-fired marker (the flex-reach pin above guards the Reach family
+// that stays screened).
+func TestUnmatchedDispatchTrapSpliceGraduated(t *testing.T) {
+	const src = `def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("the splice trap must compile, got refusal %q / err %v", reason, cerr)
+	}
+	if !strings.Contains(prog.Disassemble(), "TRAP") {
+		t.Fatalf("the row must lower to a terminal trap:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Fatal("the trap program must run compiled")
+	}
+	gotI, errI := mustNew(t).Run(src)
+	if errC == nil || errI == nil {
+		t.Fatalf("both engines must raise: compiled=%v interp=%v", errC, errI)
+	}
+	if errC.Error() != errI.Error() {
+		t.Errorf("diagnostic drift:\n compiled: %s\n interp:   %s", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("residuals must agree: compiled=%v interp=%v", gotC, gotI)
 	}
 }
 

@@ -1453,3 +1453,33 @@ func TestW8DispatchRematchFnShapeDeclines(t *testing.T) {
 		t.Error("the fn-shape context must decline the rematch record")
 	}
 }
+
+// TestW8DispatchTrapDeferredTokenDeclines — a RAW deferred-expression token
+// in the failed window (a Reach here) EXPANDS at dispatch/step time, so
+// neither a serialized trap nor a runtime rematch models what the runtime
+// match examines (flex.tsv L88/L95): the definiteness screen declines. The
+// graduated word-splice trap removed the screen's only corpus reach, so this
+// pins the arm directly. (A PARKED __SP splice marker deliberately no longer
+// declines — see TestUnmatchedDispatchTrapSpliceGraduated in lang/go.)
+func TestW8DispatchTrapDeferredTokenDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	r.RegisterNativeFunc(NativeFunc{Name: "w8dt", Signatures: []Signature{{
+		Args: []*Type{TList}, BarrierPos: -1,
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		}),
+	}}})
+	done := w8ArmCompile(t, r)
+	defer done()
+	e := NewTop(r)
+	reach := NewReachFromKeys(NewWord("m"), []Value{NewString("a")})
+	e.tape = NewTape([]Value{NewWord("w8dt"), reach}, stackHeadroom)
+	e.pointer = 0
+	fn := r.Lookup("w8dt")
+	if fn == nil {
+		t.Fatal("w8dt not registered")
+	}
+	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8dt", ArgCount: -1}, fn, SrcPos{}) {
+		t.Error("a raw Reach window token must decline the trap/rematch record")
+	}
+}
