@@ -164,9 +164,11 @@ func TestClassifyRealArms(t *testing.T) {
 	if r := Classify("zzvnosuchword"); r.Outcome != InterpReject {
 		t.Errorf("undefined word: %v %q, want interp-reject", r.Outcome, r.Detail)
 	}
-	r := Classify("for 3 [1 2]")
-	if r.Outcome != Refused || !strings.Contains(r.Detail, "nets multiple values") {
-		t.Errorf("for 3 [1 2]: %v %q, want the net-driver refusal", r.Outcome, r.Detail)
+	// The Any-typed do-catch region (the parked-fn guard) — a stable
+	// refusal; earlier fixtures (`for 3 [1 2]`) graduated to corpus-native.
+	r := Classify(`def zf fn [[x:Any] [Any] [raise bad_input 'no']]  do [(zf 5) 2] error [dot code]`)
+	if r.Outcome != Refused || r.Detail == "" {
+		t.Errorf("do-catch region: %v %q, want a refusal", r.Outcome, r.Detail)
 	}
 }
 
