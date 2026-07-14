@@ -880,3 +880,54 @@ Remaining Phase 6 items: JIT detached-unit cache (graduates the
 do-registry-replay rows + p6/check-prop-body-on-vm), capturing closures
 via OpPushClosure capture slots, Vm.run runtime compile (needs the
 Phase 10 VM-side policy gate — sub-engines are always policy-composed).
+
+### Phase 6 JIT detached-unit cache — scoping (2026-07-14 explorer read)
+
+Two re-interpretation seams feed the cache, plus the auto-eval seam:
+(a) code-body: InvokeBody (invoke.go:21) → vmContext.invokeClosureOn
+(vm.go:382) whose RAW-LIST arm (vm.go:388) RunResolved-s into the pooled
+sub-engine — fed by `do`'s baked CALL_NATIVE (doListHandler
+native_control.go:224; noEvalBodiesInert emit.go:5024 / tryRecordDynBody
+carrier.go:1520); (b) check-prop: runCheckProp (modules/test.go:734) runs
+gen/property bodies PER ITERATION via parent.CallAQL (test.go:782/:809,
+throwaway FnSig per call) — the "CallAQL" unattributed entries;
+(c) runPooledSub auto-eval sites (engine.go:3866/3956/4119/4213/4229/
+4266/4391/4623) are the Phase-10 census seam, not this cache's target.
+
+Key machinery: CompiledFnRef.depSnap/depsFresh (bytecode.go:591/608,
+per-name Defs.Gen deftable.go:61); body identity should key on the
+STRUCTURAL FnAnalysisKey precedent (callable_words.go:57), not Value.ID
+(recorder re-mints IDs; not a content hash). runUnitNested refuses
+foreign-program refs (vm.go:359) — a detached unit invoked mid-run takes
+the interpreter, so units that must run inside the live program compile
+INLINE into its Fns, not as detached Programs.
+
+Decisions from the read:
+1. **check-prop bodies graduate via compile-time closure units, not a
+   runtime cache**: the Test.check-prop dispatch site can compile its
+   MODULE-SCOPE gen/property bodies like any code-body word
+   (compileStoredBody-style carriers or closure units at the record
+   site), and runCheckProp runs a carrier via RunUnit/InvokeCallback per
+   iteration instead of the throwaway-FnSig CallAQL. The fn-scope
+   ${frame-local} interpolation case MUST keep refusing
+   (TestCheckPropInterpStringFnScopeRefuses stays green forever).
+2. **do-registry-replay rows are NOT graduated by the cache alone**: the
+   body-unit's `def Big Integer` must lower idempotently against the
+   KEPT check-pass state (Types.parts / minted lattice / Modules.loaded
+   survive by design — compile_sandbox.go:9; RunCarrierBodyWithDefs
+   rolls back only r.Defs, carrier.go:3043). The unit must resolve the
+   check-time mint via OpPushType/OpBindTyped (the top-level typed-def
+   path, emit.go:3575 / lower.go:1587) rather than re-running
+   InstallType (which trips IsKnownPart → "conflicts with an existing
+   type name", types.go:357). And it must be compiled INLINE against the
+   live registry's mint — a detached fork compile mints on the fork
+   (fork.go:41) and its OpPushType IDs mean nothing to the live
+   registry. Sequence: land the check-prop half first; the typed-def
+   do-body half is its own item (InstallType-idempotent body lowering).
+
+Refusal-path map for the do rows (for the later half): tryRecordClosure
+declines → tryRecordDynBody declines on bodyHasReplayHazard
+(carrier.go:1540; emit.go:5068) → the code-body refusal at emit.go:3830
+fires "code-body word do" (emit.go:3855) — pinned at
+frontier_spec_test.go:185, bytecode_replayhazard_test.go:20, TSV rows
+frontier-do-registry-replay.tsv:13-14.
