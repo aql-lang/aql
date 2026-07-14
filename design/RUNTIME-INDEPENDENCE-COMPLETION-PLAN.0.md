@@ -602,3 +602,17 @@ shape beyond Stage 1", "dynamic value precedes residual args", "residual
 value not statically materialisable") — part 2 (region-top consumption for
 the strip-input `error` dispatch over a variadic region) is the next
 execution item, per the implementation map above.
+
+### L-DO part 2 — next probe (continuation note)
+
+The 6 remaining do-catch rows' drifted refusals come from the PROGRAM
+residual layout (emit.go ~5985-6000: "dynamic value precedes residual
+args" fires in the unhandled-dynamic loop; "residual shape beyond Stage 1"
+from seatResults; "residual value not statically materialisable" from
+resolveOperand/materialise). Per-row check-time shapes differ (an
+always-raising body nets a single Error carrier at check time — no latch —
+while the runtime also nets 1: consistent; the def-msg rows net 2). Next:
+probe each row's residual shape at Finalize (which carriers, which flags),
+then extend the strip-input consumption per the L-DO map. Row 6-family may
+need the `error` handler result de-dynamified (dot code over a concrete
+Error field read) rather than region work.
