@@ -295,3 +295,87 @@ func TestPolyReachBound(t *testing.T) {
 		})
 	}
 }
+
+// --- the fence-blocked best-effort alt (vmDeferAlt / DeferAlt) -------------
+
+func TestBestEffortNoMatch(t *testing.T) {
+	r := pnmRegistry(t, []Signature{pnmSig(-1, TInteger, TString), {Fallback: true}})
+	fn := r.Lookup("pnmw")
+	window := []Value{NewBoolean(true), NewBoolean(false)}
+	if bestEffortNoMatch(r, nil, "pnmw", window, seam7Dbg, 0) != nil {
+		t.Error("a nil fn must build no alt")
+	}
+	if bestEffortNoMatch(r, fn, "pnmw", nil, seam7Dbg, 0) != nil {
+		t.Error("an empty window must build no alt")
+	}
+	// A mixed-arity table: another arity's collection could match at run
+	// time, so the interpreter is not proven to fail — no alt.
+	rMixed := pnmRegistry(t, []Signature{pnmSig(-1, TInteger, TString), pnmSig(-1, TInteger, TString, TBoolean)})
+	if bestEffortNoMatch(rMixed, rMixed.Lookup("pnmw"), "pnmw", window, seam7Dbg, 0) != nil {
+		t.Error("a mixed-arity table must build no alt")
+	}
+	alt := bestEffortNoMatch(r, fn, "pnmw", window, seam7Dbg, 0)
+	if alt == nil || alt.Code != "signature_error" {
+		t.Fatalf("alt = %v, want the rich signature_error", alt)
+	}
+	if !strings.Contains(alt.Error(), "the arguments were true (a Boolean) and false (a Boolean)") {
+		t.Errorf("the alt must render the live window:\n%v", alt)
+	}
+	if alt.Row != seam7Dbg[0].Row {
+		t.Errorf("alt Row = %d, want the stamped debug pos %d", alt.Row, seam7Dbg[0].Row)
+	}
+}
+
+func TestVmDeferAltAttaches(t *testing.T) {
+	r := covRegistry(t, nil)
+	plain := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", nil)
+	if ae, ok := plain.(*AqlError); !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
+		t.Errorf("a nil alt must be a plain defer, got %v", plain)
+	}
+	alt := &AqlError{Code: "signature_error", Detail: "d"}
+	err := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", alt)
+	ae, ok := err.(*AqlError)
+	if !ok || ae.Code != "internal_error" || ae.DeferAlt != alt {
+		t.Errorf("the alt must ride the internal defer, got %v", err)
+	}
+}
+
+// TestUserPolyNoMatchAltCoverageScreen pins the subset-coverage screen: the
+// alt rides the user-poly no-match defer only when the recorded arm subset
+// covers EVERY non-fallback overload of the live table — an uncovered
+// same-arity arm could match at run time where the raise claims failure.
+func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
+	r := covRegistry(t, nil)
+	InstallFnDef(r, "upnm", FnDefInfo{
+		Signatures: []Signature{
+			{Params: []FnParam{{Name: "a", Type: TInteger}}, Returns: []*Type{TAny},
+				BarrierPos: BarrierAllForward, Impl: AQL([]Value{NewWord("a")})},
+			{Params: []FnParam{{Name: "a", Type: TString}}, Returns: []*Type{TAny},
+				BarrierPos: BarrierAllForward, Impl: AQL([]Value{NewWord("a")})},
+		},
+	})
+	fd := r.Lookup("upnm")
+	if fd == nil || len(fd.Signatures) < 2 {
+		t.Fatal("upnm not installed")
+	}
+	vc := &vmContext{r: r, p: &Program{Fns: []CompiledFn{
+		{Name: "upnm", NParams: 1}, {Name: "upnm", NParams: 1},
+	}}}
+	window := []Value{NewBoolean(true)} // matches neither arm
+	full := &UserPolyRef{Word: "upnm", Arity: 1,
+		SigIdx: []int{0, 1}, Units: []int{0, 1},
+		Impls: []SigImpl{fd.Signatures[0].Impl, fd.Signatures[1].Impl}}
+	_, _, err := vc.matchUserPoly(full, window, seam7Dbg, 0)
+	ae, ok := err.(*AqlError)
+	if !ok || ae.DeferAlt == nil || ae.DeferAlt.Code != "signature_error" {
+		t.Errorf("a covering subset must ride the alt, got %v", err)
+	}
+	partial := &UserPolyRef{Word: "upnm", Arity: 1,
+		SigIdx: []int{0}, Units: []int{0},
+		Impls: []SigImpl{fd.Signatures[0].Impl}}
+	_, _, err = vc.matchUserPoly(partial, window, seam7Dbg, 0)
+	ae, ok = err.(*AqlError)
+	if !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
+		t.Errorf("an uncovered live arm must keep the plain defer, got %v", err)
+	}
+}

@@ -1178,3 +1178,32 @@ Remaining for 3c: the vm:user-poly-no-match twin (matchUserPoly — same spec,
 recorded at the RecordUserPolyCall site; needs the subset==full-table screen
 on top), and the non-recovery poly record sites (carrier.go dispatch paths —
 no Engine tape in scope; they pass nil and keep the defer).
+
+### 3c part 2 (bounded): the fence-blocked alt (2026-07-14)
+
+The FULL user-poly spec is a multi-session item: the record site
+(core_helpers.go buildFnBodyReturnsFn -> RecordUserPolyCall) runs at a
+SUCCESSFUL ambiguous dispatch with no Engine in scope, and the
+failure-equivalent tape state exists only at the dispatch's FIRST
+(pre-collection) entry — the park/splice/retry cycle re-enters the dispatch
+with the args moved BEFORE the word, so a probe taken at the retry or at the
+ReturnsFn would derive the WRONG written tuple (a spliced [x] where the
+runtime interpreter renders "none were supplied"). Threading needs a
+dispatch-identity latch that survives park/retry and nests LIFO across
+same-name dispatches; mapped, not built.
+
+What landed instead — the bounded sound half, fixing the SAME live bug for
+user-polys (probe-confirmed: an effect before a user-poly no-match produced
+internal_error + "report this as a compiler bug"): the two no-match defer
+sites attach a best-effort rich raise (AqlError.DeferAlt via vmDeferAlt)
+that lang's fenceBlockedFallback surfaces INSTEAD of the internal error when
+the effect fence blocks the re-run. Soundness screen (bestEffortNoMatch):
+every non-fallback live overload takes exactly the window's arity (no
+other-arity collection, no 0-arg courtesy could succeed), and for user-polys
+the recorded subset must COVER the live table's non-fallback arms (an
+appended same-arity arm slips past the index drift guard). Best-effort by
+design: Detail + candidate verdicts are canonical over the live values; the
+rendered tuple is the full window, which may be wider than the interpreter's
+tape-derived tuple. The OPEN-fallback arm is untouched (byte-identity by
+re-running); ungated shapes (mixed-arity add) keep the honest internal error
+(TestPolyNoMatchUngatedAfterEffectKeepsInternal pins the edge).

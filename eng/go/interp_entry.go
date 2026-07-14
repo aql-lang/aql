@@ -143,3 +143,21 @@ func vmDefer(r *Registry, curDebug []SrcPos, pc int, site, msg string) error {
 	r.noteBail(site, msg)
 	return vmErrAt(curDebug, pc, msg)
 }
+
+// vmDeferAlt is vmDefer carrying a best-effort user-facing raise for the
+// fence-blocked arm (AqlError.DeferAlt): when the interpreter re-run this
+// defer requests is blocked by the effect fence, the caller surfaces alt —
+// the rich diagnostic the defer site built over its live values — instead of
+// the internal error. A nil alt is plain vmDefer.
+func vmDeferAlt(r *Registry, curDebug []SrcPos, pc int, site, msg string, alt *AqlError) error {
+	err := vmDefer(r, curDebug, pc, site, msg)
+	if alt == nil {
+		return err
+	}
+	ae, ok := err.(*AqlError)
+	if !ok { //covergate:allow vmErrAt always builds an *AqlError (§compiler)
+		return err
+	}
+	ae.DeferAlt = alt
+	return ae
+}

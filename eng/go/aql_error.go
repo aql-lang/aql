@@ -54,6 +54,20 @@ type AqlError struct {
 	// concrete replacement snippet.
 	Suggestions []DiagSuggestion
 
+	// DeferAlt, set only on a DESIGNED VM defer-to-interpreter
+	// (internal_error, vmDeferAlt), is the best-effort user-facing raise the
+	// defer site prepared for the arm where the interpreter re-run is BLOCKED
+	// by the effect fence: a no-match defer whose site proved the interpreter
+	// would also fail this dispatch builds the rich signature_error over the
+	// live window, so the fence-blocked caller (lang fenceBlockedFallback)
+	// surfaces a real diagnostic instead of an internal error telling the
+	// user to report a compiler bug. Best-effort: the Detail and candidate
+	// verdicts are canonical, but the rendered argument tuple may be wider
+	// than the tape-derived tuple the interpreter would show (the fallback
+	// arm, when open, stays byte-identical by re-running). Nil everywhere
+	// else.
+	DeferAlt *AqlError
+
 	// fullSource is the complete source text for generating context extracts.
 	fullSource string
 }

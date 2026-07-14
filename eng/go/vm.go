@@ -494,7 +494,9 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 				return nil, err
 			}
 		}
-		return nil, vmDefer(r, curDebug, pc, "vm:poly-no-match", "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		return nil, vmDeferAlt(r, curDebug, pc, "vm:poly-no-match",
+			"CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error",
+			bestEffortNoMatch(r, fn, pr.Word, window, curDebug, pc))
 	}
 	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
@@ -575,7 +577,25 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	}
 	mr := MatchSignature(subset, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil {
-		return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-no-match", "CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		// The fence-blocked alt (vmDeferAlt) additionally needs the recorded
+		// subset to COVER the live table's non-fallback overloads: an arm
+		// appended after the record (same arity, so the index drift guard
+		// above stayed quiet) could match at run time where this raise would
+		// claim failure — bestEffortNoMatch's own arity screen cannot see it.
+		alt := bestEffortNoMatch(vc.r, fd, pr.Word, window, curDebug, pc)
+		if alt != nil {
+			nonFallback := 0
+			for i := range fd.Signatures {
+				if !fd.Signatures[i].Fallback {
+					nonFallback++
+				}
+			}
+			if nonFallback != len(subset) {
+				alt = nil
+			}
+		}
+		return 0, nil, vmDeferAlt(vc.r, curDebug, pc, "vm:user-poly-no-match",
+			"CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error", alt)
 	}
 	for j := range subset {
 		if mr.Sig == &subset[j] {

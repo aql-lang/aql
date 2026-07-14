@@ -959,6 +959,13 @@ func fenceBlockedFallback(r *native.Registry, err error) error {
 	const note = "the interpreter fallback was blocked: output was already emitted, so re-running would duplicate it; run with --no-compile and report this as a compiler bug"
 	var ae *eng.AqlError
 	if errors.As(err, &ae) {
+		// A designed defer that PREPARED for this arm (a no-match whose site
+		// proved the interpreter would also fail the dispatch) carries the
+		// rich user-facing raise — surface it instead of an internal error
+		// telling the user to report a compiler bug (plan 3c).
+		if ae.DeferAlt != nil {
+			return ae.DeferAlt
+		}
 		cp := *ae
 		cp.Notes = append(append([]string(nil), ae.Notes...), note)
 		return &cp

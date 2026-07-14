@@ -55,3 +55,30 @@ func tupleAt(window []Value, idx []int) ([]Value, bool) {
 	}
 	return vals, true
 }
+
+// bestEffortNoMatch builds the DeferAlt raise a no-match defer carries for
+// the fence-blocked arm (vmDeferAlt): the rich no-signature diagnostic over
+// the live window. Returns nil — no alt, the internal error stands — unless
+// the live table PROVES the interpreter's re-run would also fail this
+// dispatch: every non-fallback overload takes exactly the window's arity
+// (n >= 1), so no other-arity collection and no 0-arg courtesy dispatch can
+// succeed where this raise claims failure. Best-effort: the rendered tuple
+// is the full window, which may be wider than the tape-derived tuple the
+// interpreter would show — the open-fallback arm keeps byte-identity by
+// re-running instead.
+func bestEffortNoMatch(r *Registry, fn *FnDefInfo, word string, window []Value, curDebug []SrcPos, pc int) *AqlError {
+	if fn == nil || len(window) == 0 {
+		return nil
+	}
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if !s.Fallback && s.TotalArgs() != len(window) {
+			return nil
+		}
+	}
+	ae := noMatchDiag(r.Source, word, fn, window, SrcPos{}, reorderHintFor(word, fn, window))
+	if stamped, ok := stampAt(ae, curDebug, pc, r).(*AqlError); ok {
+		return stamped
+	}
+	return ae //covergate:allow stampAt returns the same *AqlError it was given (§compiler)
+}

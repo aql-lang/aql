@@ -106,3 +106,62 @@ def x (m get "k")
 		t.Errorf("fallback parity: compiled-path err %v != interp err %v", errC, errI)
 	}
 }
+
+// TestUserPolyNoMatchAfterEffectRaisesRich pins the user-poly half of the
+// fence-blocked fix (3c part 2, the bounded alt): a laundered-Any
+// multi-overload call whose runtime value matches no arm, AFTER a print
+// effect. The open-fallback arm keeps byte-identity by re-running (pinned by
+// TestUserPolyNoMatchErrorAgreement); here the fence blocks the re-run, and
+// the defer's DeferAlt surfaces the rich signature_error — canonical Detail,
+// live-value candidate verdicts — instead of an internal error telling the
+// user to report a compiler bug. Best-effort by design: the rendered tuple
+// is the operand window, which may be wider than the tape-derived tuple the
+// interpreter would show.
+func TestUserPolyNoMatchAfterEffectRaisesRich(t *testing.T) {
+	const src = `def g fn [[a:Integer] [String] ["i"] [a:String] [String] ["s"]]
+print "pre-effect"
+def get-k fn [[m:Map] [Any] [m get "k"]]
+def x (get-k {k:[1 2]})
+(g x)`
+	var out strings.Builder
+	a := mustNew(t)
+	a.SetOutput(&out)
+	_, ran, err := a.RunCompiled(src)
+	if !ran {
+		t.Fatal("the effectful row must run COMPILED (the fence owns the arm)")
+	}
+	if codeOf(err) != "signature_error" {
+		t.Fatalf("err = %v, want the rich signature_error alt", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "cannot call `g` — no signature matches the arguments") ||
+		!strings.Contains(msg, "candidate `g (Integer)`") {
+		t.Errorf("the alt must carry the canonical detail and candidate verdicts:\n%v", msg)
+	}
+	if strings.Contains(msg, "report this as a compiler bug") {
+		t.Errorf("the compiler-bug note must be gone:\n%v", msg)
+	}
+	if strings.Count(out.String(), "pre-effect") != 1 {
+		t.Errorf("the effect must run exactly once, output %q", out.String())
+	}
+}
+
+// TestPolyNoMatchUngatedAfterEffectKeepsInternal — the bounded edge: the
+// deeper-stack native shape both declines the faithful spec (the written
+// tuple is wider than the window) AND fails the alt's arity-uniformity
+// screen (`add` has 3-arg overloads), so the fence-blocked arm keeps the
+// honest internal error + note. When either bound is later lifted, this pin
+// forces the re-diagnosis.
+func TestPolyNoMatchUngatedAfterEffectKeepsInternal(t *testing.T) {
+	const src = `print "pre-effect"
+def m (flex {k:[1 2]})
+def x (m get "k")
+9 1 x add`
+	var out strings.Builder
+	a := mustNew(t)
+	a.SetOutput(&out)
+	_, _, err := a.RunCompiled(src)
+	if codeOf(err) != "internal_error" || !strings.Contains(err.Error(), "report this as a compiler bug") {
+		t.Errorf("the ungated shape must keep the fence-blocked internal error, got %v", err)
+	}
+}
