@@ -400,6 +400,15 @@ const (
 	// bindings live across the call in its body tail), so bindings stack
 	// per-activation and pop innermost-first.
 	OpBindDynScope
+	// OpCallDynMixedFromMark is the VARIADIC-REGION twin of OpCallDynamicMixed
+	// (plan Phase 5, L-DO part 2b): the window is bounded by the topmost
+	// OpStackMark instead of a fixed count — stack[mark:] islands verbatim
+	// through the same re-step machinery, so a runtime-variable region (a
+	// fallible do-catch residual: 1 Error caught vs N values) plus the fixed
+	// values above it reproduce the interpreter exactly, auto-apply hazard
+	// included. The mark is consumed. An empty window is a no-op (the mark
+	// still pops).
+	OpCallDynMixedFromMark
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -408,47 +417,48 @@ const (
 // only to format each opcode's ARGUMENT (a different concern — it reads the
 // program's const/sig/type/fallback pools).
 var opcodeNames = [...]string{
-	OpPushConst:           "PUSH_CONST",
-	OpSwap:                "SWAP",
-	OpCallNative:          "CALL_NATIVE",
-	OpJmp:                 "JMP",
-	OpJmpIfFalse:          "JMP_IF_FALSE",
-	OpPushLocal:           "PUSH_LOCAL",
-	OpForSetup:            "FOR_SETUP",
-	OpForNext:             "FOR_NEXT",
-	OpCallUser:            "CALL_USER",
-	OpTailCallUser:        "TAIL_CALL_USER",
-	OpRet:                 "RET",
-	OpPushType:            "PUSH_TYPE",
-	OpFallback:            "FALLBACK",
-	OpPushClosure:         "PUSH_CLOSURE",
-	OpCallNativePoly:      "CALL_NATIVE_POLY",
-	OpCallDynamic:         "CALL_DYNAMIC",
-	OpStoreLocal:          "STORE_LOCAL",
-	OpDrop:                "DROP",
-	OpMakeList:            "MAKE_LIST",
-	OpMakeMap:             "MAKE_MAP",
-	OpTrap:                "TRAP",
-	OpDispatchRematch:     "DISPATCH_REMATCH",
-	OpReverse:             "REVERSE",
-	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
-	OpFlowBreak:           "FLOW_BREAK",
-	OpFlowContinue:        "FLOW_CONTINUE",
-	OpStackMark:           "STACK_MARK",
-	OpDropToMark:          "DROP_TO_MARK",
-	OpPopMark:             "POP_MARK",
-	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
-	OpInterp:              "INTERP",
-	OpCallUserPoly:        "CALL_USER_POLY",
-	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
-	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
-	OpCallDynFrame:        "CALL_DYN_FRAME",
-	OpPushConstFresh:      "PUSH_CONST_FRESH",
-	OpPushConstFreshLocal: "PUSH_CONST_FRESH_LOCAL",
-	OpBindTyped:           "BIND_TYPED",
-	OpCallDynMethod:       "CALL_DYN_METHOD",
-	OpLookupDynScope:      "LOOKUP_DYN_SCOPE",
-	OpBindDynScope:        "BIND_DYN_SCOPE",
+	OpPushConst:            "PUSH_CONST",
+	OpSwap:                 "SWAP",
+	OpCallNative:           "CALL_NATIVE",
+	OpJmp:                  "JMP",
+	OpJmpIfFalse:           "JMP_IF_FALSE",
+	OpPushLocal:            "PUSH_LOCAL",
+	OpForSetup:             "FOR_SETUP",
+	OpForNext:              "FOR_NEXT",
+	OpCallUser:             "CALL_USER",
+	OpTailCallUser:         "TAIL_CALL_USER",
+	OpRet:                  "RET",
+	OpPushType:             "PUSH_TYPE",
+	OpFallback:             "FALLBACK",
+	OpPushClosure:          "PUSH_CLOSURE",
+	OpCallNativePoly:       "CALL_NATIVE_POLY",
+	OpCallDynamic:          "CALL_DYNAMIC",
+	OpStoreLocal:           "STORE_LOCAL",
+	OpDrop:                 "DROP",
+	OpMakeList:             "MAKE_LIST",
+	OpMakeMap:              "MAKE_MAP",
+	OpTrap:                 "TRAP",
+	OpDispatchRematch:      "DISPATCH_REMATCH",
+	OpReverse:              "REVERSE",
+	OpCallDynamicTrailing:  "CALL_DYNAMIC_TRAILING",
+	OpFlowBreak:            "FLOW_BREAK",
+	OpFlowContinue:         "FLOW_CONTINUE",
+	OpStackMark:            "STACK_MARK",
+	OpDropToMark:           "DROP_TO_MARK",
+	OpPopMark:              "POP_MARK",
+	OpCallDynamicMixed:     "CALL_DYNAMIC_MIXED",
+	OpInterp:               "INTERP",
+	OpCallUserPoly:         "CALL_USER_POLY",
+	OpCallDynTrailTop:      "CALL_DYN_TRAIL_TOP",
+	OpCallDynApplyTop:      "CALL_DYN_APPLY_TOP",
+	OpCallDynFrame:         "CALL_DYN_FRAME",
+	OpPushConstFresh:       "PUSH_CONST_FRESH",
+	OpPushConstFreshLocal:  "PUSH_CONST_FRESH_LOCAL",
+	OpBindTyped:            "BIND_TYPED",
+	OpCallDynMethod:        "CALL_DYN_METHOD",
+	OpLookupDynScope:       "LOOKUP_DYN_SCOPE",
+	OpBindDynScope:         "BIND_DYN_SCOPE",
+	OpCallDynMixedFromMark: "CALL_DYN_MIXED_FROM_MARK",
 }
 
 func (o Opcode) String() string {
