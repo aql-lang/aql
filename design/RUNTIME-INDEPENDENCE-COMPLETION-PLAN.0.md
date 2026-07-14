@@ -674,3 +674,17 @@ the body's static types exclude Function. Pinned in the main corpus
 (module exports / [Any] returns) — held by the CORRECT parked-fn
 auto-apply guard; they graduate via the verbatim-window generalisation or
 by future return-type narrowing through the catch merge.
+
+### Net drivers — first attempt REVERTED (2026-07-14)
+
+The naive route (multi-out loop body: out=nil + allowVariadic through
+lowerFragment, per-iteration values accumulating on the VM stack) compiled
+but DIVERGED: `for 3 [1 2]` → compiled [] vs interp [1 2 1 2 1 2] — the
+fragment reconciliation with no out operand DISCARDS the per-iteration
+residual rather than leaving it. Reverted on the spot (the differential
+probe caught it pre-commit). The correct route is the plan's per-iteration
+mark/collect: an OpStackMark region per iteration with the fragment's
+values retained above it (or an explicit per-iteration collect op),
+mirroring how lowerFragment's out-operand path STORES the single value.
+Inspect lowerFragment's out=nil path (what pops the sim values) before the
+next attempt.
