@@ -94,9 +94,10 @@ func TestVarySweepEndToEnd(t *testing.T) {
 		// skipped, no variants. (`for 3 [1 2]` graduated to corpus-native when
 		// net drivers landed, so it can no longer serve as the refusing seed.)
 		"def zf fn [[x:Any] [Any] [raise bad_input 'no']]  do [(zf 5) 2] error [dot code]\tbad_input/q\n" +
-		// A passing base whose do-body variant REFUSES soundly (the
-		// replay-hazard refusal that fixed the do-unit registry-replay
-		// miscompile, lang/spec/frontier/frontier-do-registry-replay.tsv).
+		// A passing base whose FOR-BODY variant refuses soundly (a typed def
+		// re-embedded in a loop body — the conditional-body rollback keeps
+		// this a wrapped-context refusal; the DO-body wrap compiles natively
+		// since do-def leak fidelity landed 2026-07-14).
 		"def Big Integer 15 is Big\ttrue\n" +
 		"# comment\nbroken zz\tERROR:undefined_word\n" // error row: not a seed
 	if err := os.WriteFile(filepath.Join(seedDir, "s.tsv"), []byte(corpus), 0o644); err != nil {
@@ -118,8 +119,8 @@ func TestVarySweepEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("vary-refused.tsv (the registry-replay variant must refuse soundly): %v", err)
 	}
-	if !strings.Contains(string(ref), "do [def Big Integer 15 is Big]") {
-		t.Errorf("vary-refused.tsv missing the replay-hazard refusal:\n%s", ref)
+	if !strings.Contains(string(ref), "for 2 [def Big Integer 15 is Big]") {
+		t.Errorf("vary-refused.tsv missing the wrapped typed-def refusal:\n%s", ref)
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "vary-diverged.tsv")); !os.IsNotExist(err) {
 		t.Errorf("vary-diverged.tsv exists — a healthy build must produce no divergence (stat err=%v)", err)

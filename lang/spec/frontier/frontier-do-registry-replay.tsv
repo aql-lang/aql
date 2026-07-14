@@ -10,5 +10,5 @@
 # were never affected. Full graduation = the Phase 6 JIT detached-unit
 # cache compiles these bodies as units, at which point the rows compile
 # natively and their ledger entries delete.
-do [def Big Integer 15 is Big]	true
-do [def Big (Integer gt 10) 15 is Big]	true
+# GRADUATED 2026-07-14 (do-def leak fidelity): both typed-def rows compile
+# natively as closure units and moved to lang/spec/bytecode-migrated.tsv.

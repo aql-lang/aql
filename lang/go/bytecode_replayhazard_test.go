@@ -18,6 +18,15 @@ import (
 //     the only install) once ensureExportsBound re-binds a real ModuleExport
 //     — parity, never mini/parse_unknown_lang.
 func TestReplayHazardTypedDefRefusesWithParity(t *testing.T) {
+	// GRADUATED 2026-07-14 (do-def leak fidelity): the typed-def do bodies
+	// COMPILE now — the check pass keeps do-body defs (RunCarrierBodyKeepDefs,
+	// matching the runtime leak), so the closure re-analysis shadow-rebinds
+	// instead of tripping the parts conflict, and the body lowers to a
+	// closure unit whose runtime def is registry-visible. The pin's contract
+	// moves from "must refuse" to "must compile and run byte-identical" —
+	// including the leak-semantics edges: the repeated fn-scoped install
+	// (the interpreter's own parts conflict, reproduced via fallback), the
+	// post-do redefinition, and undef-after-do.
 	for _, src := range []string{
 		`do [def Big Integer 15 is Big]`,
 		`do [def Big (Integer gt 10) 15 is Big]`,
@@ -28,21 +37,35 @@ func TestReplayHazardTypedDefRefusesWithParity(t *testing.T) {
 		if cerr != nil {
 			t.Fatalf("%q: check error %v", src, cerr)
 		}
-		if prog != nil {
-			t.Fatalf("%q: compiled — a replay-hazard body must refuse", src)
-		}
-		if !strings.Contains(reason, "code-body word do") {
-			t.Errorf("%q: refusal reason %q, want the code-body refusal", src, reason)
+		if prog == nil {
+			t.Fatalf("%q: refused (%q) — the leak-fidelity compile must lower this body", src, reason)
 		}
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(src)
 		c, _ := New()
 		gotI, errI := c.Run(src)
-		if compiled {
-			t.Errorf("%q: ran compiled; want interpreter fallback", src)
+		if !compiled {
+			t.Errorf("%q: fell back; want the compiled run", src)
 		}
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
-			t.Errorf("%q: fallback parity: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
+			t.Errorf("%q: parity: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
+		}
+	}
+	// The leak-semantics edges hold parity whichever path runs them (the
+	// repeated fn-scoped install falls back and reproduces the interpreter's
+	// own parts-conflict Error value).
+	for _, src := range []string{
+		`def rpt fn [[][Any][do [def Big Integer 15 is Big]]] (rpt) (rpt)`,
+		`do [def Big Integer 15 is Big] end def Big String 'x' is Big`,
+		`do [def Big Integer] end undef Big 15 is Big`,
+		`for 2 [do [def Big Integer 15 is Big]]`,
+	} {
+		b, _ := New()
+		gotC, _, errC := b.RunCompiled(src)
+		c, _ := New()
+		gotI, errI := c.Run(src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
+			t.Errorf("%q: parity: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
 		}
 	}
 }

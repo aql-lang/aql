@@ -2981,6 +2981,20 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 	return stk
 }
 
+// RunCarrierBodyKeepDefs is RunCarrierBody WITHOUT the def rollback — the
+// check-mode twin of `do`'s runtime scoping, where body defs LEAK to the
+// enclosing scope (`do [def x 5] end x add 1` → 6; a do-installed TYPE stays
+// bound after the do). Rolling do-defs back was an infidelity with two
+// symptoms: post-do reads flagged undefined (the wrapped-context
+// false-positive family) and a do-installed type's binding vanishing while
+// its minted part survived, so a later re-analysis of the SAME body tripped
+// the parts conflict instead of the type-shadow path (validateTypeName's
+// Defs.IsType skip). Branch / loop / quotation bodies keep the rollback —
+// their execution is conditional and their defs are join-managed.
+func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
+	return runCarrierBodyDefs(r, body, true)
+}
+
 // RunCarrierBodyWithDefs is the branch-aware helper that snapshots
 // DefStack depths, runs the body through a sub-engine in check
 // mode, and returns both the residual carrier stack and a map of
@@ -2992,6 +3006,17 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
 func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
+	stk, adds := runCarrierBodyDefsAdds(r, body, false)
+	return stk, adds
+}
+
+// runCarrierBodyDefs is the keep-defs entry over the shared body run.
+func runCarrierBodyDefs(r *Registry, body Value, keep bool) []Value {
+	stk, _ := runCarrierBodyDefsAdds(r, body, keep)
+	return stk
+}
+
+func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[string]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -3037,6 +3062,11 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 		result = nil
 	}
 
+	// Keep-defs mode (`do` — leak fidelity): the body's bindings stay,
+	// exactly as the runtime leaves them; nothing to report.
+	if keep {
+		return result, nil
+	}
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
 	adds := map[string]Value{}

@@ -582,6 +582,7 @@ var (
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen
 	RunCarrierBody         = eng.RunCarrierBody
+	RunCarrierBodyKeepDefs = eng.RunCarrierBodyKeepDefs
 	AnalyseCodeEffect      = eng.AnalyseCodeEffectCarrier
 	SetIDSeed              = eng.SetIDSeed
 	SeverityFor            = eng.SeverityFor

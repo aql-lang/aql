@@ -273,7 +273,9 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// this body is not a program error — raise CaughtBodyDepth so those
 	// emitters (CheckAddUniqueDiagnostic, emitIndexOOB) stay silent here.
 	r.Check.CaughtBodyDepth++
-	stk := RunCarrierBody(r, body)
+	// Leak fidelity: do-body defs stay bound in the enclosing scope, exactly
+	// as the runtime leaves them (RunCarrierBodyKeepDefs doc).
+	stk := RunCarrierBodyKeepDefs(r, body)
 	r.Check.CaughtBodyDepth--
 	if len(stk) == 0 {
 		// A NON-EMPTY body that produced an empty residual ran to nothing —

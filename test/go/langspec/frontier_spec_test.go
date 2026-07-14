@@ -182,8 +182,12 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// parity. Full graduation = the Phase 6 JIT detached-unit cache compiles
 	// these bodies as units (the check-time install becomes the only
 	// install), at which point the rows compile and this entry deletes.
-	`do [def Big Integer 15 is Big]`:         {why: "replay-hazard refusal (was the do-unit registry-replay miscompile); graduates with the Phase 6 detached-unit cache", failsWith: "code-body word do"},
-	`do [def Big (Integer gt 10) 15 is Big]`: {why: "replay-hazard refusal (predicate-type twin); graduates with the Phase 6 detached-unit cache", failsWith: "code-body word do"},
+	// GRADUATED 2026-07-14: the do-unit registry-replay rows — do-def LEAK
+	// fidelity (RunCarrierBodyKeepDefs) lets the closure re-analysis
+	// shadow-rebind instead of tripping the parts conflict, so the typed-def
+	// bodies compile as closure units with byte-identical results (rows
+	// moved to lang/spec/bytecode-migrated.tsv; leak-semantics edges pinned
+	// in lang/go/bytecode_replayhazard_test.go).
 
 	// L-JOIN — plan Phase 4: converge-then-record over the recursive fixpoint;
 	// today the recursive branch-join leaves a fn-call operand unproven.
