@@ -688,3 +688,23 @@ values retained above it (or an explicit per-iteration collect op),
 mirroring how lowerFragment's out-operand path STORES the single value.
 Inspect lowerFragment's out=nil path (what pops the sim values) before the
 next attempt.
+
+## Phase 5 state after the 2026-07-14 push (Step 3 consolidation)
+
+CLEARED: L-DO machinery end-to-end (typed-return catch merges compile the
+caught path natively; the variadic latch + strip-input propagation are
+in); net drivers part 1 (computed multi-value loop bodies accumulate
+per-iteration via residualN reconciliation, parked-fn screened). Already
+green from the WS2 discoveries: Stage-D rows ×2, template-each,
+module-fn-param (lambda form), aql-test recursion ×2 — i.e. the Phase 5
+"Stage-D 3/4 & 4/4, template each" items and the Phase 7/8 lambda-form
+and recursion shapes were narrower than planned or already done.
+
+REMAINING in Phase 5: L-DO part 2b (Any-typed regions — the verbatim-
+window generalisation, mapped); L-EACH (the forward-plan recording:
+redirect the recorded dispatch to the INTERPRETER's forward/stack split
+[forward-literal → sig0, concrete-stack → sig1] where the check pass's
+Dynamic-blocked all-stack match diverges — deep matcher work, needs
+FORWARD-COLLECTION-PHASES.10.md study first); net-driver residues
+(inert-const tails need const re-push in the reconciliation; Function
+regions stay refused by design).
