@@ -766,3 +766,20 @@ on the resolveOperand failure signal, not on every recursive bail); (2)
 the Rollback units-extension changes the loop-analysis caller's semantics
 too — land it separately with its own unit test; (3) the aql-test pins
 double as the regression canary for ANY recording-pass restructure.
+
+### L-EACH mechanics (2026-07-14 close-out read)
+
+refuseForwardStackDrift (engine.go:2857) fires when: active recording, a
+forward-eligible non-NoEvalArgs sig matched ALL-STACK with the top tape
+operand Dynamic + a deeper concrete operand consumed, and the next tape
+token is a forwardLiteralOperand. The divergence: the checker's all-stack
+split consumed [Dynamic-top, 5] while the runtime's concrete top lets the
+word forward-collect the literal → [1(fwd), 7(stack)] — DIFFERENT
+OPERANDS, different consumed set. The fix must RE-DISPATCH at check time
+under the runtime's split: re-run matchSignature with the forward token
+offered, adopt its operand assignment for the recorded call, consume the
+forward token from the tape walk (pointer coordination —
+FORWARD-COLLECTION-PHASES.10.md's two-phase contract), and leave `5`
+unconsumed. Multi-session item: touches the dispatch commit path, not
+just the recorder. The 3 frontier rows + the edge-findings negatives
+(mul/sub/String-token forms that already compile) are the gates.
