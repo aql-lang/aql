@@ -1108,3 +1108,33 @@ Whichever lands, the frontier-do-registry-replay TSV rows and the
 unit's runtime InstallType execution must ALSO be idempotent against
 the check-time mint (the unit re-runs the def per invocation — the
 same OpPushType-resolution discipline, not a re-install).
+
+### do-rows — the fix IS do-def leak fidelity (2026-07-14 follow-up probe)
+
+Interpreter semantics established: **do-body defs LEAK to the enclosing
+scope** (`do [def x 5] end x add 1` → 6; `do [def Big Integer] end 15
+is Big` → true; a REPEATED fn-scoped do-typed-def conflicts in the
+interpreter too — the fn cleanup pops the binding but not the part, a
+pre-existing language asymmetry the compiled path must reproduce, not
+fix). The check pass's RunCarrierBodyWithDefs rollback of do-body defs
+is therefore an INFIDELITY: it produces the standing post-do
+undefined_word-class diagnostics (both probe rows check with 1-2
+diagnostics and fall back today — the "check diagnostics
+(wrapped-context false positive)" vary bucket) AND the parts conflict
+(with the binding rolled back, validateTypeName's Defs.IsType skip
+does not fire, so the closure re-analysis trips IsKnownPart).
+
+The aligned fix: the DO body's check-mode run keeps its def bindings
+(matching the leak), scoped to `do` only — branch/loop/fn bodies stay
+rolled back (conditionally executed). Consequences to verify in the
+implementation session: (1) the closure re-analysis then shadows
+(IsType true → parts check skipped) and the do rows compile as closure
+units, with the unit's runtime def lowering registry-visible
+(evDynBind/OpBindDynScope — the leak); (2) the post-do
+false-positive diagnostics disappear — the checker-accuracy ratchets
+(TestCheckAccuracyRatchet) and the vary bucket
+"check diagnostics (wrapped-context false positive)" will MOVE and
+must be re-baselined through their stale/drift arms, never hand-edited;
+(3) do-defs visible to the post-do tail also changes what the RECORDER
+sees for the tail (previously unresolved reads become bound) — the
+census may move in both directions; run the full differential.
