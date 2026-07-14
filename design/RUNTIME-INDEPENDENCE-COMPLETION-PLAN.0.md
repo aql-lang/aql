@@ -646,3 +646,20 @@ absorbable unit (OpStackMark region or force-locals promotion like the
 out-of-order mirror at ~2996) instead of walking its entries into the
 Dynamic-matches-Function guard. Next: trace seatResults' handling of
 `do [for 3 [1]]` (the working single-entry case) and generalise.
+
+### L-DO part 2b — corrected target (2026-07-14, final for this pass)
+
+seatResults ALREADY absorbs contiguous same-event variadic runs to the end
+(lower.go:1382 sameEventRunToEnd); the 6 rows refuse EARLIER at the
+fn-boundary guard, and the guard is CORRECT: an Any-typed region entry
+could be a parked Function, and the interpreter's stepLiteral auto-applies
+values landing above a parked fn — a verbatim push would be unsound. The
+sound lowering is the VERBATIM WINDOW family (OpCallDynamicMixed /
+trailingWindowApplyShape, emit.go ~5960-5985): island the region + its
+consumers as one window the VM re-steps exactly as the interpreter,
+generalised from the single-dynamic-entry gate to a VARIADIC REGION
+(bounded by OpStackMark). Alternatively per-row: narrow the do body's
+static types so Function is excluded (the guard's existing not-disjoint
+carve-out then admits them) — worth checking whether typed fn returns
+([Any] on f) can narrow through the catch merge. Both routes preserve the
+auto-apply hazard soundly.
