@@ -735,3 +735,17 @@ read emitCheckpoint's fields; if units are outside it, take the checkpoint
 inside the unit's fragment instead. Gate: the L-JOIN frontier row
 (frontier-join.tsv) + the whole-program multi-section
 --compile==--no-compile sweep (the trie_smoke shape).
+
+### L-JOIN open question RESOLVED (2026-07-14): Rollback is not units-aware
+
+emitCheckpoint records {seq, consts, types, fallbacks, fnRecs,
+siteCounts}; Rollback GUARDS on len(fnRecs) != cp.fnRecs and silently
+NO-OPS — a recursive body's runOnce mints units via StartFnCompile, so the
+converge-then-record flow requires extending Rollback to unwind fnRecs >
+cp.fnRecs first: truncate es.fnRecs, delete their unitKey memo entries and
+any localByID/promoted state keyed to the dropped units — StartFnCompile's
+own fn-unit cleanup ("mirroring" comment inside Rollback's provenance
+loop) is the model. THEN the checkpoint/rollback/suspend/re-record
+sequence from the flow above applies unchanged. Verify with the L-JOIN
+frontier row + the fnRecs-guard unit test (a rollback across a minted
+unit must fully unwind, not no-op).
