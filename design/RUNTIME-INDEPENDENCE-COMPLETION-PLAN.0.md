@@ -1207,3 +1207,41 @@ rendered tuple is the full window, which may be wider than the interpreter's
 tape-derived tuple. The OPEN-fallback arm is untouched (byte-identity by
 re-running); ungated shapes (mixed-arity add) keep the honest internal error
 (TestPolyNoMatchUngatedAfterEffectKeepsInternal pins the edge).
+
+### L-JOIN pinpoint — the refusal is a JOIN-ID identity drift, not
+### refinement instability (2026-07-14 probe)
+
+The Phase 4 L-JOIN design ("converge-then-record": suspend recording through
+refineRecursiveSummary's rounds, record once with the converged environment)
+targets the WRONG layer as stated: the `fn call operand of unknown
+provenance` refusal reproduces on the FIRST armed body run, where refinement
+is already skipped (`armed` gate at the AnalyseFnBody call site). Probe
+evidence on the lJoinRepro family:
+
+- The failing RecordUserCall operand is the recursive call's IF-JOIN
+  argument (`best2`, sig position 3 / the bisected twins' position 2): a
+  fresh `S_…` join-minted carrier ID that was NEVER setProduced.
+- Arity matters, nothing else does: the 2-param twin of the same shape
+  (join-fed recursive call, same inner `if … [7] [best]`) COMPILES; the
+  3-param and 4-param twins refuse. Forward vs stack call form and the
+  `def pc (consumed "x" add)` indirection are irrelevant (bisect rows 4-12).
+- Join mints happen on TWO independent paths: the emit's RecordBranch
+  (which registers ITS join result as produced) and the if word's VALUE
+  join — native if3ReturnsFn (conditional.go:624-5) → InstallJoinedDefs +
+  JoinCarrierStacks → JoinCarriers — whose result is what `def best2`
+  BINDS. When these two mints diverge, the binding's ID has no compiled
+  provenance and the recursive call site refuses.
+- The failing ID is minted in a joinCarriersInner arm OTHER than the
+  same-parent collapse (the only arm instrumented): the subtype-widen arms
+  return `NewCarrier(parent)` — a fresh ID with no registration path — and
+  JoinCarrierStacks' gradual flip is also unlogged. Next probe: instrument
+  those arms to pin the exact mint, then decide whether the fix is (a)
+  registering the ReturnsFn's join value as an alias of the branch event's
+  produced ID (a produced-ID alias table, the stable-ID keying the plan
+  anticipated), or (b) making the branch record and the ReturnsFn share ONE
+  join value. The arity-2-vs-3 divergence should fall out of the exact mint
+  site — find WHY the 2-param twin's binding ID matches its branch record.
+
+Converge-then-record remains needed for the REFINEMENT half (non-armed
+rounds feeding stale IDs into memoised summaries), but it lands after the
+identity drift above is fixed — the drift owns the current refusal.
