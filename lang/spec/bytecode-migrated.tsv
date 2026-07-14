@@ -64,3 +64,7 @@ def y 5  do [(10 div y) 2]	2 2
 # model says 2) with byte-identical parity. Any-typed returns stay refused
 # (the parked-fn auto-apply carve-out) pending the window lowering.
 def f fn [[x:Any] [Integer] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
+# Net drivers part 1 (2026-07-14): a computed multi-value loop body compiles
+# via the residualN>1 fragment reconciliation — per-iteration values
+# accumulate exactly as the interpreter.
+for 2 [(1 add 2) (3 mul 4)]	3 12 3 12

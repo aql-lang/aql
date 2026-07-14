@@ -168,7 +168,12 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`import "aql:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]`: {why: "plan Phase 5 (L-DO, chained leaf): dry-pass-proven raise refuses at the fn-value-call boundary", failsWith: "dynamic value precedes residual args"},
 
 	// Net drivers — plan Phase 5: per-iteration mark/collect in the for: lowering.
-	`for 3 [1 2]`: {why: "plan Phase 5 (net drivers): for body nets 2 values per iteration", failsWith: "for: body nets multiple values per iteration"},
+	// Net drivers PART 1 landed (2026-07-14): computed multi-value loop
+	// bodies compile via the residualN>1 reconciliation (`for 2 [(1 add 2)
+	// (3 mul 4)]` is corpus-native now); an INERT-CONST body's values are
+	// not event-produced, so its reconstruction stays refused — sound, with
+	// fallback parity.
+	`for 3 [1 2]`: {why: "plan Phase 5 (net drivers, inert-const tail): const per-iteration values are not event-produced; needs const re-push in the fragment reconciliation", failsWith: "branch leaves extra values"},
 
 	// L-EACH — plan Phase 5: record the forward-collection plan from static
 	// token text so a pre-island stack prefix survives the residual.

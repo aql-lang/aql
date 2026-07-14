@@ -81,7 +81,9 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	if lp.hasBodyOut {
 		out = &lp.bodyOut
 	}
-	reason := lw.lowerFragment(lp.body, out, false, lp.pos)
+	// A multi-out body (net drivers) allows the residualN>1 variadic
+	// reconciliation; its per-iteration values accumulate across iterations.
+	reason := lw.lowerFragment(lp.body, out, lp.multiOut, lp.pos)
 	lw.loops = lw.loops[:len(lw.loops)-1]
 	if reason != "" {
 		return reason

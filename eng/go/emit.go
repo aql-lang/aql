@@ -270,6 +270,7 @@ type emitLoop struct {
 	body             *EmitFragment
 	bodyOut          emitOperand
 	hasBodyOut       bool // false: the body nets no value per iteration (or diverges)
+	multiOut         bool // the body nets >1 value per iteration (net drivers): residualN reconciliation
 	iterSlot         int
 	pos              SrcPos
 	// carried seeds the loop-carried def slots (a pre-loop `def` the body
@@ -3297,8 +3298,30 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			// value per iteration, so keeping only bodyStk[last] would silently DROP
 			// the rest — a miscompile ([e f e f] -> [f f]). Refuse and let the
 			// interpreter island run the multi-value body faithfully.
-			es.MarkUncompilable("for: body nets multiple values per iteration")
-			return
+			// NET DRIVERS (plan Phase 5): ride the residualN>1 fragment
+			// reconciliation (the Stage-A multi-value arm model): the TOP
+			// operand rides as bodyOut, residualN carries the full count, and
+			// lowerFragment seats every event-produced value (or refuses the
+			// inert-tail shapes it cannot reconstruct — the sound fallback).
+			// Per-iteration values then accumulate exactly as the interpreter.
+			// PARKED-FN screen (mirrors the program-residual fn-boundary
+			// guard): a Function value anywhere in the region auto-applies in
+			// the interpreter when a later value lands above it — including
+			// ACROSS iterations (iteration k's top sits below k+1's first) —
+			// so a verbatim accumulation would diverge. Keep those refused.
+			for i := range bodyStk {
+				if sigTypeMatches(bodyStk[i], TFunction) || sigTypeMatches(bodyStk[i], TFnDef) {
+					es.MarkUncompilable("for: body nets multiple values per iteration")
+					return
+				}
+			}
+			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
+			if !ok {
+				es.MarkUncompilable("for: body result of unknown provenance")
+				return
+			}
+			body.residualN = len(bodyStk)
+			lp.bodyOut, lp.hasBodyOut, lp.multiOut = bodyOut, true, true
 		} else {
 			bodyOut, ok := es.resolveOperand(bodyStk[len(bodyStk)-1])
 			if !ok {
