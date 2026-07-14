@@ -4907,6 +4907,24 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 		f.variadicResult = true
 		es.eventInfo[seq] = f
 	}
+	// VARIADIC PROPAGATION through a strip-input dispatch (L-DO part 2):
+	// `error` over a variadic region consumes exactly the region's TOP at
+	// run time (a depth-agnostic pop) and pushes its result — the region
+	// stays a region, so this event's result is variadic too and the
+	// program residual absorbs it. Fixed-arity consumers keep refusing.
+	if sig.Callable != nil && sig.Callable.StripsUnconsumedInput {
+		for i := range args {
+			if i == bodyPos {
+				continue
+			}
+			if pr, ok := es.producedBy[args[i].ID]; ok && es.eventInfo[pr.seq].variadicResult {
+				f := es.eventInfo[seq]
+				f.variadicResult = true
+				es.eventInfo[seq] = f
+				break
+			}
+		}
+	}
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
