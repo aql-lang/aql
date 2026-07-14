@@ -90,10 +90,13 @@ func TestVarySweepEndToEnd(t *testing.T) {
 		}
 	}
 	corpus := "1 add 2\t3\n" + // passing base: fans out into every transform
-		// refused base (the Any-typed do-catch region — the parked-fn guard):
-		// skipped, no variants. (`for 3 [1 2]` graduated to corpus-native when
-		// net drivers landed, so it can no longer serve as the refusing seed.)
-		"def zf fn [[x:Any] [Any] [raise bad_input 'no']]  do [(zf 5) 2] error [dot code]\tbad_input/q\n" +
+		// refused base (a def-PROMOTED do-catch read — the result leaves the
+		// stack for a frame slot, so neither the mark window nor the paren
+		// apply can reproduce it): skipped, no variants. (`for 3 [1 2]`
+		// graduated when net drivers landed; the bare do-catch region
+		// `do [(zf 5) 2] error [dot code]` graduated when the mark-window
+		// island landed — neither can serve as the refusing seed anymore.)
+		"def zf fn [[x:Any] [Any] [raise bad_input 'no']]  def msg (do [(zf 5) 2] error [dot code])  msg\tbad_input/q\n" +
 		// A passing base whose FOR-BODY variant refuses soundly (a typed def
 		// re-embedded in a loop body — the conditional-body rollback keeps
 		// this a wrapped-context refusal; the DO-body wrap compiles natively

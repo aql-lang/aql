@@ -1400,3 +1400,60 @@ verbatim push. The verbatim-window generalisation, concretely:
    mark-window contract (the prefix sits BELOW the mark, untouched);
    TestDoCatchMultiValueArity's fallback list flips; watch the vary gate's
    buckets.
+
+### L-DO part 2b LANDED — the mark-window island (2026-07-14)
+
+The emit half wired per the implementation map, with two corrections found
+empirically: (1) the residual's region representative is NOT necessarily
+Dynamic or idx-0 — the def-msg twins carry the do event's SECOND out
+(Integer, idx 1), and the error result on top is itself Dynamic AND
+variadic (the strip-input propagation) — so markWindowShape requires only
+"every residual entry is an unpromoted event result and residual[0]'s
+producer is variadic"; order/completeness are enforced post-lowering
+against the sim stack (verifyMarkWindow: the residual must BE the lowered
+stack — nothing re-pushes). (2) planVariadicClaims returns a nil map when
+no statement-if claims exist — the probe initialises markBefore before
+writing (the panic the first probe run caught).
+
+GRADUATED through stale arms: FOUR frontier-do-catch rows — do [(M.boom 5)
+"x"], the [Any] user-fn twin, the branch-arm nesting, and the
+StructUtil.parse raising constant (the chained leaf surfaced at the same
+boundary) — moved to lang/spec/bytecode-migrated.tsv; family pinned in
+lang/go/bytecode_markwindow_test.go (compile + run-compiled + parity, and
+the two DECLINE pins with drift-armed reasons). Still refused, correctly:
+the def-msg rows (a PROMOTED def read is popped to a frame slot — not live
+in the window) and the bare module-export row (a non-event region entry).
+Next widenings: promoted-entry support (re-push from the slot INSIDE the
+window order), and the L-EACH prefix rows (`5 do [7] error [drop 9] add 1`
+— the prefix sits BELOW the mark; the add consumes across the region — a
+different contract).
+
+### L-DO part 2b coverage findings — the chain walk was a wrong model (2026-07-14)
+
+Cover-gate on the landing surfaced that markWindowShape's producer-chain
+walk (anchor hops from an error event's operand to the prior variadic
+event) NEVER fires: residual[0] is the DEEPEST surviving stack entry, so
+its producer is already the chain's FIRST variadic event — a later
+strip-input hop's result can only be residual[0] if the region beneath it
+was fully consumed at check time, and a fully-consumed region is a 1-out
+region, which catchVariadicFor never marks variadic (1 on both paths).
+Probes confirmed: the graduated rows map residual[0] straight to the do
+event (the error event's operands are CLOSURES — the strip-input consume
+is depth-agnostic, not a recorded operand). The walk is removed; what
+REMAINS is the top-level containment guard (topLevelEventBySeq(pr.seq) !=
+nil) — load-bearing because lowerEvents reads markBefore only over
+frames[0]: a fragment anchor would arm the window with no OpStackMark ever
+emitted and the VM island would raise where the interpreter succeeds. The
+guard, the static-fn-value window arm, and verifyMarkWindow's mismatch
+arms are pinned in eng/go/emit_markwindow_test.go.
+
+Cascade: the vary sweep's refusing SEED (`do [(zf 5) 2] error [dot code]`)
+graduated with the window — TestVarySweepEndToEnd's stale arm fired; the
+seed is now the def-PROMOTED read (`def msg (do […] error […]) msg`,
+refusal "fn-value application bounded by a paren"), the second such
+replacement (the first: `for 3 [1 2]` at net-drivers). The sweep also
+showed the lambda-body wrap of the graduated shape refusing via
+verifyMarkWindow ("mark-window residual does not match the lowered
+stack") — the fn-unit finish seats its residual differently, so the
+window declines there soundly; a part-2c widening could anchor fn-unit
+windows if the voxgig sweep ever surfaces the shape.

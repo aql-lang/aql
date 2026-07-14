@@ -637,6 +637,14 @@ type EmitState struct {
 	// Finalize ends the program at the trap. seqs start at 1, so 0 is a safe
 	// "none" sentinel.
 	trapAt int
+	// markWindowSeq is the REGION-ANCHOR event seq of a planned mark-window
+	// island (plan Phase 5, L-DO part 2b), or 0 for none: Finalize's
+	// pre-lowering probe (markWindowShape) sets it alongside
+	// lw.markBefore[seq], and resolveDynamicApply's post-lowering arm returns
+	// OpCallDynMixedFromMark only when this latch armed — the two phases stay
+	// in lockstep (the Finalize-order constraint: markBefore is read during
+	// lowerEvents, the dynOp is decided after). seqs start at 1.
+	markWindowSeq int
 	// loopCarried is the stack of OPEN armed-loop carried-def scopes (one per
 	// nested AnalyseLoopBody running with loop capture). Each maps a rebound
 	// pre-loop def NAME to the unit frame slot carrying it across iterations;
@@ -6136,6 +6144,83 @@ func inertReachMember(v Value) bool {
 	return true
 }
 
+// planMarkWindow arms the mark-window island (L-DO part 2b) when the
+// program residual has the shape: it opens an OpStackMark before the
+// region-starting event (markBefore is read during lowerEvents) and latches
+// markWindowSeq for the post-lowering disposition, which takes
+// OpCallDynMixedFromMark ONLY where the residual would otherwise refuse.
+// Declines when the chained variadic-statement-if machinery already planned
+// marks — the chain leaves its mark OPEN across events and consumes the
+// TOPMOST mark at its claiming branch, so an interleaved window mark would
+// corrupt the LIFO pairing (the TestChainedVariadicIfCompiles regression the
+// first wiring caused).
+func (es *EmitState) planMarkWindow(lw *lowerer, residual []Value) {
+	if len(lw.markBefore) > 0 {
+		return
+	}
+	seq, ok := es.markWindowShape(residual, lw.promoted)
+	if !ok {
+		return
+	}
+	if lw.markBefore == nil {
+		lw.markBefore = map[int]bool{}
+	}
+	lw.markBefore[seq] = true
+	es.markWindowSeq = seq
+}
+
+// markWindowShape reports the REGION-ANCHOR event seq of a mark-window
+// residual (plan Phase 5, L-DO part 2b), or (0,false): residual[0] is
+// produced by a VARIADIC top-level event (a fallible do-catch's
+// runtime-variable results, re-marked through strip-input hops), and EVERY
+// residual entry is an unpromoted event result — live on the stack where its
+// event left it, so once an OpStackMark opens before the region-STARTING
+// event the whole residual IS stack[mark:] at run time and
+// OpCallDynMixedFromMark re-steps it verbatim (dynamic and fn-valued entries
+// included — auto-apply is exactly what the island reproduces). Order and
+// completeness are enforced separately against the post-lowering sim stack
+// (verifyMarkWindow). residual[0]'s producer IS the region start: it is the
+// DEEPEST surviving entry, so any earlier variadic event in a strip-input
+// chain either had its outs consumed away entirely (its survivors would sit
+// beneath residual[0], contradiction) or still owns residual[0] itself — a
+// later hop's result can never be the window's bottom. A producer outside
+// the top-level frame declines: lowerEvents reads markBefore only over
+// frames[0], so a fragment anchor would arm the window with no OpStackMark
+// ever emitted and the VM would raise where the interpreter succeeds.
+func (es *EmitState) markWindowShape(residual []Value, promoted map[int]int) (int, bool) {
+	if len(residual) < 2 {
+		return 0, false
+	}
+	pr, ok := es.producedBy[residual[0].ID]
+	if !ok || !es.eventInfo[pr.seq].variadicResult {
+		return 0, false
+	}
+	for _, rv := range residual {
+		p2, ok := es.producedBy[rv.ID]
+		if !ok || es.eventInfo[p2.seq].zeroOut {
+			return 0, false // a non-event entry would need a re-push the window forbids
+		}
+		if _, isProm := promoted[p2.seq]; isProm {
+			return 0, false // a promoted result was POPPED to its slot — not live in the window
+		}
+	}
+	if es.topLevelEventBySeq(pr.seq) == nil {
+		return 0, false // the producer lowers outside lowerEvents' markBefore reads
+	}
+	return pr.seq, true
+}
+
+// topLevelEventBySeq finds the top-level frame's event with the given seq
+// (nil when the seq belongs to a nested fragment or unit).
+func (es *EmitState) topLevelEventBySeq(seq int) *emitEvent {
+	for i := range es.frames[0] {
+		if es.frames[0][i].seq == seq {
+			return &es.frames[0][i]
+		}
+	}
+	return nil
+}
+
 // resolveDynamicApply classifies the residual's fn-value-call boundary (report
 // §9.1) and returns the residual (rotated for a trailing apply), the apply
 // opcode to emit once the residual is on the stack (0 = none), and a refusal
@@ -6220,7 +6305,12 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	}
 	// Unhandled: a dynamic value mid-residual, a fn value preceding args, or an
 	// unconsumed fn-value carrier (a VM closure renders unlike the interpreter's
-	// FnDefInfo). All refuse so the program falls back faithfully — EXCEPT a
+	// FnDefInfo). All refuse so the program falls back faithfully — UNLESS the
+	// MARK-WINDOW island armed (L-DO part 2b): Finalize's pre-lowering probe
+	// opened an OpStackMark before the region-starting event, so the whole
+	// residual IS stack[mark:] at run time and OpCallDynMixedFromMark re-steps
+	// it verbatim, auto-apply hazard included — the arm fires ONLY at these
+	// refusal points, never on a shape the ordinary lowering handles. Also
 	// dynamic whose static bound provably excludes every callable (the
 	// sigTypeMatches not-disjoint rule against Function/FnDef): such a value
 	// can never auto-apply to the values above it, so both engines leave it
@@ -6230,9 +6320,15 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	for i := 0; i+1 < len(residual); i++ {
 		if residual[i].Dynamic &&
 			(sigTypeMatches(residual[i], TFunction) || sigTypeMatches(residual[i], TFnDef)) {
+			if es.markWindowSeq != 0 {
+				return residual, OpCallDynMixedFromMark, ""
+			}
 			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
 		}
 		if isFnValueResidual(residual[i]) {
+			if es.markWindowSeq != 0 {
+				return residual, OpCallDynMixedFromMark, ""
+			}
 			return residual, 0, "fn value precedes residual args (auto-dispatch boundary)"
 		}
 	}
@@ -6347,6 +6443,51 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 		return 0, false // not event-produced — cannot promote to a local
 	}
 	return dynIdx, true
+}
+
+// resolveResidualOperands resolves each program-residual value to its operand
+// — skipping a 0-output statement guard's phantom None (zeroOut), re-pushing a
+// promoted value-def local from its slot, and materialising a bare type node /
+// inert const — for Finalize to hand to the shared seat primitive. A variadic
+// loop result is allowed here (the program residual may absorb it), unlike a
+// fn body. A non-empty reason refuses the program.
+func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]emitOperand, string) {
+	ops := make([]emitOperand, 0, len(residual))
+	for _, rv := range residual {
+		if pr, ok := es.producedBy[rv.ID]; ok {
+			if es.eventInfo[pr.seq].zeroOut {
+				continue
+			}
+			if slot, isProm := lw.promoted[pr.seq]; isProm {
+				// slot is the producer's BASE slot; output idx i lives at slot+i
+				// (multi-output stack words store one slot per result).
+				ops = append(ops, localOperand(slot+pr.idx))
+				continue
+			}
+			ops = append(ops, eventOperand(pr.seq, pr.idx))
+			continue
+		}
+		// A frame-0 local (a loop-carried def's slot — the post-loop read of a
+		// module-scope rebind resolves the joined binding to its cell). Events
+		// first, mirroring resolveOperand's precedence.
+		if slot, okLoc := es.units[0].localByID[rv.ID]; okLoc {
+			ops = append(ops, localOperand(slot))
+			continue
+		}
+		if IsBareTypeNode(rv) && rv.ID != "" {
+			ops = append(ops, typeOperand(es.internType(rv)))
+			continue
+		}
+		lit, okLit := es.materialise(rv)
+		if !okLit {
+			return nil, "residual value of unknown provenance"
+		}
+		if !isInertConst(lit) {
+			return nil, "residual value not statically materialisable"
+		}
+		ops = append(ops, constOperand(es.intern(lit)))
+	}
+	return ops, ""
 }
 
 // Finalize linearises the recorded events into a Program. residual
@@ -6535,6 +6676,8 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
 	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
+	// Mark-window plan (L-DO part 2b): see planMarkWindow.
+	es.planMarkWindow(lw, residual)
 	// Seed the lowerer's frame-local counter from the unit's planned locals;
 	// spillSeat bumps it for spill temps. Written back below so Program.NumLocals
 	// covers them.
@@ -6558,45 +6701,9 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	if dynReason != "" {
 		return nil, dynReason, false
 	}
-	// Resolve each residual value to its operand — skipping a 0-output statement
-	// guard's phantom None (zeroOut), re-pushing a promoted value-def local from
-	// its slot, and materialising a bare type node / inert const — then hand the
-	// operand sequence to the shared seat primitive. A variadic loop result is
-	// allowed here (the program residual may absorb it), unlike a fn body.
-	ops := make([]emitOperand, 0, len(residual))
-	for _, rv := range residual {
-		if pr, ok := es.producedBy[rv.ID]; ok {
-			if es.eventInfo[pr.seq].zeroOut {
-				continue
-			}
-			if slot, isProm := lw.promoted[pr.seq]; isProm {
-				// slot is the producer's BASE slot; output idx i lives at slot+i
-				// (multi-output stack words store one slot per result).
-				ops = append(ops, localOperand(slot+pr.idx))
-				continue
-			}
-			ops = append(ops, eventOperand(pr.seq, pr.idx))
-			continue
-		}
-		// A frame-0 local (a loop-carried def's slot — the post-loop read of a
-		// module-scope rebind resolves the joined binding to its cell). Events
-		// first, mirroring resolveOperand's precedence.
-		if slot, okLoc := es.units[0].localByID[rv.ID]; okLoc {
-			ops = append(ops, localOperand(slot))
-			continue
-		}
-		if IsBareTypeNode(rv) && rv.ID != "" {
-			ops = append(ops, typeOperand(es.internType(rv)))
-			continue
-		}
-		lit, okLit := es.materialise(rv)
-		if !okLit {
-			return nil, "residual value of unknown provenance", false
-		}
-		if !isInertConst(lit) {
-			return nil, "residual value not statically materialisable", false
-		}
-		ops = append(ops, constOperand(es.intern(lit)))
+	ops, opsReason := es.resolveResidualOperands(lw, residual)
+	if opsReason != "" {
+		return nil, opsReason, false
 	}
 	// A trap-truncated program seats nothing: the residual was dropped above,
 	// and results the kept event prefix leaves on the stack are legitimately
@@ -6604,7 +6711,15 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// still on its stack (`5 inc apply`: inc's result is live when apply
 	// raises), and OpTrap aborts before anything could read them. Only a
 	// program that RUNS TO COMPLETION owes the residual seating discipline.
-	if es.trapAt == 0 {
+	if es.trapAt == 0 && dynOp == OpCallDynMixedFromMark {
+		// The mark window re-pushes NOTHING — the residual must BE the lowered
+		// stack, in place and in order; anything else declines to a refusal
+		// (the shape would have refused before the window landed anyway).
+		if reason := lw.verifyMarkWindow(ops); reason != "" {
+			return nil, reason, false
+		}
+	}
+	if es.trapAt == 0 && dynOp != OpCallDynMixedFromMark {
 		if reason := lw.seatResults(ops, false, false, seatMsgs{
 			aboveLiteral: "residual shape beyond Stage 1 (call result above a literal)",
 			reordered:    "residual shape beyond Stage 1 (call results reordered)",
@@ -6626,6 +6741,9 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		arg := len(residual) - 1
 		if dynOp == OpCallDynamicMixed {
 			arg = len(residual)
+		}
+		if dynOp == OpCallDynMixedFromMark {
+			arg = 0 // the mark is the boundary; the op takes no count
 		}
 		lw.emit(dynOp, arg, lastPos)
 	}

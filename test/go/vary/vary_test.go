@@ -164,11 +164,14 @@ func TestClassifyRealArms(t *testing.T) {
 	if r := Classify("zzvnosuchword"); r.Outcome != InterpReject {
 		t.Errorf("undefined word: %v %q, want interp-reject", r.Outcome, r.Detail)
 	}
-	// The Any-typed do-catch region (the parked-fn guard) — a stable
-	// refusal; earlier fixtures (`for 3 [1 2]`) graduated to corpus-native.
-	r := Classify(`def zf fn [[x:Any] [Any] [raise bad_input 'no']]  do [(zf 5) 2] error [dot code]`)
+	// A def-PROMOTED do-catch read — a stable refusal (the result leaves the
+	// stack for a frame slot, so neither the mark window nor the paren apply
+	// reproduces it). Earlier fixtures graduated to corpus-native: `for 3
+	// [1 2]` at net drivers, the bare do-catch region `do [(zf 5) 2] error
+	// [dot code]` at the mark-window island (L-DO part 2b).
+	r := Classify(`def zf fn [[x:Any] [Any] [raise bad_input 'no']]  def msg (do [(zf 5) 2] error [dot code])  msg`)
 	if r.Outcome != Refused || r.Detail == "" {
-		t.Errorf("do-catch region: %v %q, want a refusal", r.Outcome, r.Detail)
+		t.Errorf("promoted do-catch read: %v %q, want a refusal", r.Outcome, r.Detail)
 	}
 }
 

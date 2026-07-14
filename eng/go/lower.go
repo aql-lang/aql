@@ -419,6 +419,21 @@ func planVariadicClaims(events []emitEvent) (markBefore, variadicElse map[int]bo
 	return markBefore, variadicElse
 }
 
+// verifyMarkWindow checks the post-lowering sim stack IS the mark-window
+// residual — nothing seats, nothing re-pushes: slot i (deepest-first) must be
+// exactly the event result the residual lists (plan Phase 5, L-DO part 2b).
+func (lw *lowerer) verifyMarkWindow(ops []emitOperand) string {
+	if len(lw.vm) != len(ops) {
+		return "mark-window residual does not match the lowered stack"
+	}
+	for i, op := range ops {
+		if op.kind != opEvent || lw.vm[i].seq != op.idx || lw.vm[i].idx != op.resIdx {
+			return "mark-window residual does not match the lowered stack"
+		}
+	}
+	return ""
+}
+
 func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
