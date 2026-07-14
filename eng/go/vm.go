@@ -349,10 +349,14 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 // fresh operand stack exactly as invokeClosureOn does for a compiled closure, so
 // the outer run resumes cleanly when it returns. Returns handled=false (letting
 // InvokeCallback fall back to the interpreter) when the ref belongs to a
-// different program than the one running — a stamped fn baked by the running
-// program always matches, so this is a defensive guard, not a normal path.
+// different program than the one running: a compile-time stamp baked by the
+// running program always matches, but a DETACHED stamp (StampDetachedFn — a
+// model action, a runtime-stamped codec) carries its own standalone Program
+// whose unit indices mean nothing against vc.p, so a mid-run invoke of one
+// takes the interpreter seam. Hosting a foreign program's unit nested is the
+// Phase 6 JIT detached-unit cache's territory.
 func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, bool, error) {
-	if ref.Prog != vc.p { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if ref.Prog != vc.p {
 		return nil, false, nil
 	}
 	res, err := vc.run(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures), nil)

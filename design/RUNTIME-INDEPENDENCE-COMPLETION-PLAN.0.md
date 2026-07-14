@@ -783,3 +783,74 @@ FORWARD-COLLECTION-PHASES.10.md's two-phase contract), and leave `5`
 unconsumed. Multi-session item: touches the dispatch commit path, not
 just the recorder. The 3 frontier rows + the edge-findings negatives
 (mul/sub/String-token forms that already compile) are the gates.
+
+### Phase 6 progress — predicate + model-action stamps landed (2026-07-14)
+
+Two of the six stamping extensions are in, both via the established
+detached-unit primitives (no new machinery):
+
+- **Predicates** (`p6/predicate-stamps-and-runs-vm` graduated):
+  `InstallType`'s predicate arm stamps the body at construction —
+  `StampDetachedFn` over a NAMED copy (the type name labels the stamp
+  event; anonymous predicate bodies otherwise record unfindable
+  empty-name events) + `stampCompiledRef` onto the original shared impl,
+  gated on `RuntimeStampingEnabled`. `RunPredicate`'s existing
+  `InvokeCallback` then runs refine/is/typed-def predicate bodies on the
+  VM.
+- **Model actions** (`p6/model-action-stamps` graduated): `buildActions`
+  stamps each action at model build via `stampActionFn` —
+  `eng.StampFnValue` (the net-codec/service-handler CLONE precedent: the
+  user's spec value stays plain) over the model's private copy, which
+  takes the ACTION name when the spec lambda is anonymous (event label +
+  action-error attribution, applied on compiled and interpreted paths
+  alike so parity holds). `makeAction`'s `InvokeCallback` runs the unit;
+  captures decline to CallAQL unchanged.
+
+Discovery while pinning the negatives: a lambda written directly as a
+map VALUE (`actions:{gen:([mod:Any] => [flag])}` inside a fn body) runs
+NO capture analysis — data-context ParenExpr construction never sees the
+enclosing frame, so the body's `flag` read fails at action-invoke time
+with undefined_word on the interpreter TODAY (pre-existing, independent
+of stamping; pinned in `TestModelActionDataContextLambdaDeclineIsRenamed`).
+The capturing form that works is word-context construction (`def act
+([mod:Any] => [flag])` then `actions:{gen: act/r}`), which captures and
+declines the stamp with the lexical-captures reason. Whether data-context
+lambda construction SHOULD capture is a language-semantics question for
+the maintainer, not a compiler gap — the compiled path faithfully
+reproduces the interpreter either way.
+
+Remaining Phase 6 items: capturing closures via OpPushClosure capture
+slots, the JIT detached-unit cache (also graduates the
+do-registry-replay rows natively), concurrent fork bodies under -race,
+`Vm.run` runtime compile.
+
+### Coverage-gate repair riding the model-action commit (2026-07-14)
+
+The model-action battery surfaced a LATENT cover-gate failure that predates
+this branch — CI runs `make test` but never `make cover-gate`, so the gate
+only holds when it is actually run locally, and two regressions had slipped
+through:
+
+- `freshenFnUnitConsts`'s refusal return became DEAD on main (b2e3989,
+  2026-07-11: the multi-read escaping case seats a per-call local instead
+  of refusing) — the caller's `return nil, reason, false` arm in Finalize
+  was unreachable ever since. Removed: the pass returns nothing now, and
+  the stale "Otherwise refuse" doc text names the local seat instead.
+- `promoteLateDynBind`'s promotion tail (lower.go, 11 statements) went
+  corpus-invisible: plan-time value-def promotion now seats every
+  dyn-bound source the corpus produces before Finalize, so the late pass
+  finds each srcSeq already in rec.promoted. The pass remains the sound
+  backstop for late DynEnv arming; its contract is pinned directly by
+  `TestPromoteLateDynBind` (seat + rewrite, all four skip gates, the
+  disarmed no-ops).
+- The net-drivers multi-value arm's unknown-provenance refusal
+  (emit.go RecordLoop) had no deterministic pin. A Module instance atop
+  a multi-value loop body is the minimal in-repo shape;
+  `TestForBodyUnknownProvenanceRefuses` pins reason + fallback parity
+  for both net arms.
+- The vm.go runUnitNested cross-program covergate pragma GRADUATED: a
+  detached-stamped ref (model action, predicate) invoked mid-VM-run is a
+  normal interpreter-fallback path now, hit by the p6 frontier cases.
+
+Follow-up recorded for the maintainer: CI should run `make cover-gate`
+(the gate is only as strong as its least-run invocation).

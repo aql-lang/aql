@@ -1446,12 +1446,13 @@ func embedsEnclosingCompound(v Value, enclosing map[string]bool) bool {
 //     binding, so they must share within a call; the shared pooled const is
 //     indistinguishable from that unless an instance escapes the fn. When
 //     every declared return conforms to Scalar nothing compound can escape,
-//     and the shared const is exact parity — keep it. Otherwise refuse:
-//     cross-call identity of an escaping multi-read literal needs a per-call
-//     local seat (a deferred lowering), and refusal is the sound fallback.
-func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec, p *Program) string {
+//     and the shared const is exact parity — keep it. Otherwise the reads
+//     seat a single per-call construction in a fresh frame local
+//     (OpPushConstFreshLocal) — every marked shape now lowers; the pass
+//     cannot refuse.
+func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec, p *Program) {
 	if len(es.freshenConst) == 0 {
-		return ""
+		return
 	}
 	sites := map[int][]int{}
 	for pc, in := range cf.Code {
@@ -1490,7 +1491,6 @@ func freshenFnUnitConsts(cf *CompiledFn, es *EmitState, rec *fnUnitRec, p *Progr
 			cf.Code[pc].Arg = int32(ref)
 		}
 	}
-	return ""
 }
 
 // returnsAllScalar reports whether every declared return conforms to Scalar
@@ -6604,9 +6604,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 		// A fully diverging body (every path tail-calls) emits no RET —
 		// control leaves via the callee's eventual RET.
-		if reason := freshenFnUnitConsts(&cf, es, rec, p); reason != "" {
-			return nil, reason, false
-		}
+		freshenFnUnitConsts(&cf, es, rec, p)
 		p.Fns = append(p.Fns, cf)
 	}
 

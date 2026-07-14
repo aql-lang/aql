@@ -302,9 +302,25 @@ func buildActions(specMap native.ReadMap, h *modelHandle, r *native.Registry) (m
 		if err != nil {
 			return nil, err
 		}
-		out[name] = makeAction(h, fnVal, step)
+		out[name] = makeAction(h, stampActionFn(r, name, fnVal), step)
 	}
 	return out, nil
+}
+
+// stampActionFn compiles an action body to a detached unit at model build so
+// makeAction's InvokeCallback runs it on the VM (the net-codec / service-
+// handler precedent). StampFnValue clones, so the user's spec value stays
+// plain; the model's private copy takes the ACTION name — spec lambdas are
+// anonymous, and the name is what labels the stamp event and any action
+// error, on the compiled and interpreted paths alike. A decline (captures,
+// ineligible shape, stamping off) returns the input unchanged.
+func stampActionFn(r *native.Registry, name string, fnVal native.Value) native.Value {
+	if fd, ok := fnVal.Data.(native.FnDefInfo); ok && fd.Name == "" {
+		fd.Name = name
+		fnVal.Data = fd
+	}
+	stamped, _ := eng.StampFnValue(r, fnVal)
+	return stamped
 }
 
 // actionFnAndStep resolves one action entry to its Function value and step.
@@ -356,10 +372,9 @@ func parseStep(s string) model.Step {
 // {ok, reload}; anything else (including no result) is treated as OK. An error
 // is stashed on the handle (the model.Action signature has no error return) and
 // surfaces in the build result. InvokeCallback is the uniform seam: the action
-// runs on the VM once its sig carries a compiled unit, else falls back to the
-// interpreter (CallAQL) — a no-op today because the model builder word does not
-// stamp its action fns (CompileStoresFn), exactly as RunPredicate routes now and
-// benefits when predicate stamping lands.
+// runs on the VM when its sig carries a compiled unit (stampActionFn stamps at
+// model build), else falls back to the interpreter (CallAQL) — captures and
+// ineligible shapes decline the stamp and interpret unchanged.
 func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
 	var caps []native.CapturedBinding
 	if fd, ok := fnVal.Data.(native.FnDefInfo); ok {

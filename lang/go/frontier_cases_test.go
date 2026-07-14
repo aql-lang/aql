@@ -286,10 +286,10 @@ var frontierLedger = map[string]frontierEntry{
 	// stamp at construction (InstallType stamps the body in place, naming
 	// the stamp event with the type name; RunPredicate's InvokeCallback then
 	// runs the unit on the VM). The case above stays as a permanent pin.
-	"p6/model-action-stamps": {
-		why:       "plan Phase 6.2: the model builder does not stamp its action fns (lang/go/modules/model.go makeAction — 'a no-op today')",
-		failsWith: "no stamp attempt recorded for \"gen\"",
-	},
+	// GRADUATED 2026-07-14: p6/model-action-stamps — buildActions stamps each
+	// action at model build (stampActionFn: the model's private copy takes the
+	// action name and a detached unit; InvokeCallback runs it on the VM). The
+	// case above stays as a permanent pin.
 	"p6/capturing-handler-stamps": {
 		why:       "plan Phase 6.3: StampDetachedFn declines lexical captures (eng stamp_runtime.go); capturing bodies need closure units with capture slots",
 		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
