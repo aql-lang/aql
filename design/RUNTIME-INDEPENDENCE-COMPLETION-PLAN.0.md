@@ -1293,3 +1293,19 @@ top-level shape" from the pinpoint note was the SAME leak reached from the
 top-level dispatch — graduated with the family
 (TestLJoinTopLevelDisjunctCallCompiles). The earlier converge-then-record
 design is retired unless a refinement-round instability repro appears.
+
+### each variadic-if row — the "0-arg courtesy screen" claim is stale (2026-07-14 probe)
+
+`each` carries FOUR 2-arg non-fallback sigs and NO 0-arg overload, so
+tryRecordUnmatchedDispatchTrap's `n == 0` courtesy screen cannot be what
+declines `def n 0 if (n eq 0) [99] [1 2] each [dup mul]` — the refusal
+("unmatched dispatch recovered at each") comes from somewhere else. Probe
+facts: BOTH const-condition directions raise the SAME
+"cannot call `each`" signature_error on both engines (the then arm leaves a
+lone 99, the else arm's [1 2] splices to two loose Integers; neither is the
+collection each's sigs want), so the row is a terminal-raise candidate for
+the rematch/trap machinery. Next: trace WHERE the each dispatch failure
+recovers in check mode — a higher-order code-body word's failed dispatch may
+take a recovery path that never reaches tryRecordUnmatchedDispatchTrap, or
+the trap's window/written gates decline on the branch-event operand.
+Correct the knownRefusals comment when the real mechanism is pinned.
