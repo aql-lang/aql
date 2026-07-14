@@ -708,3 +708,30 @@ Dynamic-blocked all-stack match diverges — deep matcher work, needs
 FORWARD-COLLECTION-PHASES.10.md study first); net-driver residues
 (inert-const tails need const re-push in the reconciliation; Function
 regions stay refused by design).
+
+## L-JOIN converge-then-record — concrete flow (2026-07-14)
+
+Seam: carrier.go ~3979-4004 (AnalyseFnBody's refinement block). The armed
+case currently SKIPS refinement because each extra runOnce re-records into
+the same open fragment — and the FIRST armed runOnce records under the
+weakest (Any-bail) hypothesis, which is exactly the iteration-mismatch
+L-JOIN divergence (operand and producedBy from different rounds). The fix
+uses the EXISTING recorder primitives, in this order:
+
+    cp := rec.Checkpoint()          // before the first runOnce (armed only)
+    result := runOnce()             // records under the weak hypothesis
+    if InflightBails grew && armed && !stackHasVariadic(result) {
+        rec.Rollback(cp)            // discard the weak-hypothesis recording
+        resume := rec.Suspend()
+        result = refineRecursiveSummary(...)   // converge, recording OFF
+        r.Check.FnSummaries[key] = result      // seed the converged memo
+        resume()
+        result = runOnce()          // ONE recording pass, stable IDs/types
+    }
+
+Open question to verify first: Rollback's blast radius across an open
+StartFnCompile unit (does it restore units/fragments or only events?) —
+read emitCheckpoint's fields; if units are outside it, take the checkpoint
+inside the unit's fragment instead. Gate: the L-JOIN frontier row
+(frontier-join.tsv) + the whole-program multi-section
+--compile==--no-compile sweep (the trie_smoke shape).
