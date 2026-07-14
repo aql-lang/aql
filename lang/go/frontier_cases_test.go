@@ -282,10 +282,10 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 4: L-JOIN's recursive-fixpoint operand provenance refuses the repro today; landing L-JOIN is designed to UNMASK the L-NP vm:dyn-scope-miss runtime bail (commit f219725) — on that drift, re-pin failsWith to 'dynamic-scope read miss' (stage 2) and graduate only when L-NP resolves the compiled dyn-scope read",
 		failsWith: "refused: fn call operand of unknown provenance",
 	},
-	"p6/predicate-stamps-and-runs-vm": {
-		why:       "plan Phase 6.1: predicates route through RunPredicate→InvokeCallback but are never stamped (eng registry.go), so refine/is/typed-def bodies always interpret",
-		failsWith: "no stamp attempt recorded for \"Pos\"",
-	},
+	// GRADUATED 2026-07-14: p6/predicate-stamps-and-runs-vm — predicates
+	// stamp at construction (InstallType stamps the body in place, naming
+	// the stamp event with the type name; RunPredicate's InvokeCallback then
+	// runs the unit on the VM). The case above stays as a permanent pin.
 	"p6/model-action-stamps": {
 		why:       "plan Phase 6.2: the model builder does not stamp its action fns (lang/go/modules/model.go makeAction — 'a no-op today')",
 		failsWith: "no stamp attempt recorded for \"gen\"",
