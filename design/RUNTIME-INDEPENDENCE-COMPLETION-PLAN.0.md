@@ -1511,3 +1511,24 @@ stacked blockers, both cascade artifacts, no new machinery:
 Remaining refusals (2): the local-add overload (window exceeds the
 written-tuple bound — DispatchErrCtx window-bound, 3a) and the each
 variadic-if row (mark-bounded rematch parts 2+3).
+
+### Local-add probe facts — the 3a window-bound's exact shape (2026-07-14)
+
+At the local-add row's rematch gate: vals (the failed match's window) =
+[f-result carrier, true, false] (n=3), but rematchWritten = [f-result]
+(n=1) — the FORWARD walk breaks immediately because `true`/`false` on the
+tape are WORD tokens (IsWord breaks the walk; they resolve to Booleans
+only inside the match), so the derivation falls to the STACK PREFIX,
+which holds just the f-result. The interpreter's sigError therefore
+renders a ONE-value received tuple while the match examined three
+positions. The 3a extension, concretely: DispatchSpec gains the RENDER
+BOUND — which window operand(s) form the written tuple (here: the single
+stack-prefix operand) — recorded at the gate from rematchWritten's
+ID-intersection with vals instead of requiring full equality;
+runtimeNoMatch then renders its received note over that slice while
+re-matching over the FULL window. Byte-identity requires replicating
+sigError's note set over the runtime values (received note + candidate
+verdicts + the word-resolved literals in the window) — verify with the
+render-parity probe before wiring. The each variadic-if row stays after
+this (mark-bounded rematch parts 2+3 — needs the branch-merge variadic
+region first).
