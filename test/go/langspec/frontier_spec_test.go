@@ -148,13 +148,19 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// merge. One entry per fallibility route (Reach raise, no-raise-at-input,
 	// always-raise, value-diverging native, user fn body, bare module-export
 	// value, branch-arm nesting).
-	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:          {why: "plan Phase 5 (L-DO): fallible Reach call that raises, caught, bound", failsWith: "fallible multi-value body under a catch"},
-	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`:         {why: "plan Phase 5 (L-DO): same fallible shape, does not raise at this input", failsWith: "fallible multi-value body under a catch"},
-	docMod + `do [(M.boom 5) "x"] error [dot code]`:                                    {why: "plan Phase 5 (L-DO): always-raising module fn", failsWith: "fallible multi-value body under a catch"},
-	`def y 5  do [(10 div y) 2]`:                                                       {why: "plan Phase 5 (L-DO): value-diverging native (div) with non-static divisor", failsWith: "fallible multi-value body under a catch"},
-	`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]`: {why: "plan Phase 5 (L-DO): user (AQL-body) fn that raises, caught", failsWith: "fallible multi-value body under a catch"},
-	docMod + `do [M 3] error [dot code]`:                                               {why: "plan Phase 5 (L-DO): bare module-export value in the body (wordMayRaise TModuleExport)", failsWith: "fallible multi-value body under a catch"},
-	docMod + `do [(if true [M.boom 5] [7]) 8] error [dot code]`:                        {why: "plan Phase 5 (L-DO): fallible call nested in a branch-arm list", failsWith: "fallible multi-value body under a catch"},
+	// L-DO PART 1 LANDED (2026-07-13): fallible multi-value do results now
+	// record VARIADIC (the SetCatchVariadic latch) instead of refusing at the
+	// ReturnsFn — the div row graduated to the main corpus, and the remaining
+	// rows drifted to the DOWNSTREAM refusals below: `error` consuming the
+	// variadic region's top needs the part-2 region-top lowering
+	// (strip-input over a variadic region; see the L-DO implementation map
+	// in the completion plan).
+	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:          {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding", failsWith: "residual shape beyond Stage 1"},
+	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`:         {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input", failsWith: "residual shape beyond Stage 1"},
+	docMod + `do [(M.boom 5) "x"] error [dot code]`:                                    {why: "plan Phase 5 (L-DO part 2): error over the variadic region top", failsWith: "dynamic value precedes residual args"},
+	`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]`: {why: "plan Phase 5 (L-DO part 2): error over the variadic region top", failsWith: "dynamic value precedes residual args"},
+	docMod + `do [M 3] error [dot code]`:                                               {why: "plan Phase 5 (L-DO part 2): module-export value in the variadic region", failsWith: "residual value not statically materialisable"},
+	docMod + `do [(if true [M.boom 5] [7]) 8] error [dot code]`:                        {why: "plan Phase 5 (L-DO part 2): error over the variadic region top", failsWith: "dynamic value precedes residual args"},
 	// Chained leaf: parse's pure ReturnsFn dry-pass PROVES the raise for the
 	// constant "" input, and the refusal then surfaces at the fn-value-call
 	// boundary, not the do-catch arity leaf. (The "x" twin row compiles — the

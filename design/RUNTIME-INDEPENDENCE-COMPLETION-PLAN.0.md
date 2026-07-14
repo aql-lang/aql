@@ -589,3 +589,16 @@ graduate.
 Net drivers (for:) reuse part 1's variadic mark at RecordLoop
 (emit.go:3267-3274) + per-iteration mark/collect; L-EACH and Stage-D as
 scoped in the Step 3 plan above.
+
+### L-DO part 1 LANDED (2026-07-14)
+
+The SetCatchVariadic latch is in (EmitRecorder + EmitState; consumed by
+RecordClosureCall, the generic RecordCall, and tryRecordDynBody, keyed to
+the CompileFallbackBody sig); doListReturnsFn latches instead of refusing.
+First graduation: `def y 5 do [(10 div y) 2]` compiles natively (moved to
+the main corpus); the vary gate's do-catch bucket graduated. The remaining
+6 frontier do-catch rows drifted to the DOWNSTREAM refusals ("residual
+shape beyond Stage 1", "dynamic value precedes residual args", "residual
+value not statically materialisable") — part 2 (region-top consumption for
+the strip-input `error` dispatch over a variadic region) is the next
+execution item, per the implementation map above.

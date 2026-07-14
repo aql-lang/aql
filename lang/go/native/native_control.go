@@ -305,18 +305,20 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// (rare) declines those and rides the whole-program fallback — correct,
 	// just not natively compiled.
 	//
-	// COMPILE PASS: a multi-value body that can RAISE must decline EVERY native
-	// lowering path (closure, dyn-body backstop, and the generic RecordCall the
-	// closure-probe-failing dynamic-dispatch shapes fall through to). `do`
-	// CATCHES a body raise into ONE Error value (doListHandler), so a fallible
-	// N-value body's runtime count varies (N no-raise vs 1 caught) — every fixed
-	// N-seat underflows on the caught path (`def msg (do [(s decode) "x"] error
-	// […])`). This ReturnsFn is the single point that sets the dispatch's output
-	// arity, so refusing here covers all paths uniformly. A pure / infallible
-	// multi-value body (`do [10 20 30]`, `do [1 add 2 10 mul 4]`) keeps its exact
-	// residual and compiles. Gated to Compiling so check-mode precision is intact.
-	if r.Check.Compiling && len(stk) > 1 && doBodyMayRaise(body, r) {
-		r.Check.Recorder().MarkUncompilable("do: fallible multi-value body under a catch (variable arity — Stage 3)")
+	// COMPILE PASS: a multi-value body that can RAISE has a runtime-VARIABLE
+	// count — `do` CATCHES a body raise into ONE Error value (doListHandler),
+	// so the count is N on no-raise but 1 caught, and a static N-seat
+	// underflows on the caught path (`def msg (do [(s decode) "x"] error
+	// […])`). This ReturnsFn is the single point that both computes the
+	// fallibility and runs immediately before the dispatch records, so it
+	// LATCHES the recorder: the record paths (RecordClosureCall / the generic
+	// RecordCall / tryRecordDynBody) mark the event's result VARIADIC — the
+	// residual absorbs the variable region and a fixed-arity consumer keeps
+	// the refusal (plan Phase 5, L-DO). A pure / infallible multi-value body
+	// (`do [10 20 30]`, `do [1 add 2 10 mul 4]`) keeps its exact residual and
+	// fixed seating. Gated to Compiling so check-mode precision is intact.
+	if r.Check.Compiling {
+		r.Check.Recorder().SetCatchVariadic(len(stk) > 1 && doBodyMayRaise(body, r))
 	}
 	return stk
 }

@@ -584,6 +584,10 @@ type EmitState struct {
 	// push (Program.DynEnv). Costs are paid only by programs that use
 	// dynamic code bodies.
 	dynEnv bool
+	// catchVariadicPending latches the next CompileFallbackBody dispatch's
+	// recorded result as VARIADIC (SetCatchVariadic / catchVariadicFor —
+	// the fallible multi-value `do` body, plan Phase 5 L-DO).
+	catchVariadicPending bool
 	// frozenReads holds the module-scope binding names whose CONCRETE values
 	// a fn/closure UNIT analysis read (NoteFrozenRead) — the value bakes into
 	// the unit (a const, or splice-fired tokens) that re-runs on every call,
@@ -1048,6 +1052,29 @@ func (es *EmitState) TrailingApplyArity(fnID string) int {
 		return 0
 	}
 	return es.trailingApplies[fnID]
+}
+
+// SetCatchVariadic latches the next catch-word dispatch's recorded result
+// as variadic (see the EmitRecorder doc; consumed by catchVariadicFor).
+func (es *EmitState) SetCatchVariadic(pending bool) {
+	if es == nil {
+		return
+	}
+	es.catchVariadicPending = pending
+}
+
+// catchVariadicFor consumes the catch-variadic latch for a
+// CompileFallbackBody dispatch: true exactly once, for the dispatch whose
+// ReturnsFn set it (the fallible multi-value `do` body — its runtime count
+// is N on no-raise but 1 on the caught path, so the recorded event must be
+// variadic rather than seated at the static N).
+func (es *EmitState) catchVariadicFor(sig *Signature) bool {
+	if es == nil || !es.catchVariadicPending || sig == nil ||
+		!sig.CompileEffect.Has(CompileFallbackBody) {
+		return false
+	}
+	es.catchVariadicPending = false
+	return true
 }
 
 // MarkUncompilable latches the program uncompilable, keeping the
@@ -3594,6 +3621,14 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 	diverges := sig.CompileEffect.Has(CompileDiverges) ||
 		(sig.CompileEffect.Has(CompileValueDiverges) && len(outs) == 0)
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges}})
+	// A fallible multi-value catch body reaching the generic path (the
+	// closure probe declined): same variadic mark as RecordClosureCall —
+	// the caught path nets 1 where the static seat expects N (L-DO).
+	if es.catchVariadicFor(sig) {
+		f := es.eventInfo[seq]
+		f.variadicResult = true
+		es.eventInfo[seq] = f
+	}
 	// Carrier-identity de-collision (the deferred runtime-independence item, in
 	// its targeted form). A call OUTPUT whose ID already maps to a PRIOR event is
 	// a repeated identical computed call: `(context get 'n') add (context get
@@ -4863,6 +4898,15 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	// A fallible multi-value catch body (the ReturnsFn latched it): the
+	// runtime count is N on no-raise but 1 on the caught path, so the
+	// result region is VARIADIC — the residual absorbs it; a fixed-arity
+	// consumer keeps the refusal (plan Phase 5, L-DO).
+	if es.catchVariadicFor(sig) {
+		f := es.eventInfo[seq]
+		f.variadicResult = true
+		es.eventInfo[seq] = f
+	}
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}

@@ -54,3 +54,7 @@ def f fn [[a:Integer Integer] [Integer] [args.0]] f 3 4	3
 def f fn [[a:Integer b:String] [String] [args.1]] f 1 "hi"	'hi'
 def f fn [[a:Integer b:Integer] [Integer] [args.0 add args.1]] f 3 4	7
 def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3	0
+# Graduated from frontier-do-catch.tsv (L-DO part 1, 2026-07-13): a
+# fallible multi-value do body records a VARIADIC result and the program
+# residual absorbs it — the first catch-arity row to compile natively.
+def y 5  do [(10 div y) 2]	2 2

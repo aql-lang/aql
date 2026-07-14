@@ -127,7 +127,6 @@ const defaultVarySeeds = 32
 // which seeds are sampled and legitimately graduate a bucket. Bootstrap
 // census (2026-07-13, 32 seeds): pass=384 refused=42 islanded=0.
 var varyRefusalLedger = map[string]string{
-	"do: fallible multi-value body under a catch":        "plan Phase 5 (L-DO) — the frontier-do-catch.tsv class reached via the do-catch transform",
 	"for: body nets multiple values per iteration":       "plan Phase 5 (net drivers) — the frontier-for-multi.tsv class reached via the for-body transform over multi-value seeds",
 	"check diagnostics (wrapped-context false positive)": "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
 	"code-body word (NoEvalArgs)":                        "the replay-hazard refusal (do-unit registry replay, bodyHasReplayHazard): a baked body with a capitalised def refuses soundly; graduates via the Phase 6 JIT detached-unit cache",
@@ -140,7 +139,9 @@ var varyRefusalLedger = map[string]string{
 // opaque output" (module-fn dot results now compile inside units once
 // ensureExportsBound re-binds a real ModuleExport), "dynamic input", and
 // "runtime bail (VM defer, interpreter fallback)" (module-body wraps now
-// compile without bailing).
+// compile without bailing). Graduated 2026-07-14: "do: fallible
+// multi-value body under a catch" (L-DO part 1 — the SetCatchVariadic
+// latch records fallible do results variadic instead of refusing).
 
 // varyKnownMiscompiles pins KNOWN divergences by EXACT variant source, with
 // a stale arm forcing graduation when a pinned variant stops diverging. A

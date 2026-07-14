@@ -44,6 +44,17 @@ type EmitRecorder interface {
 	Sites() map[string]int
 	Finalize(residual []Value) (*Program, string, bool)
 
+	// SetCatchVariadic latches the NEXT catch-word (CompileFallbackBody)
+	// dispatch's recorded result as VARIADIC: `do` catches a body raise into
+	// ONE Error value, so a fallible multi-value body's runtime count varies
+	// (N no-raise vs 1 caught) and a static N-seat underflows on the caught
+	// path. The word's ReturnsFn — the single point that both computes the
+	// fallibility (lang doBodyMayRaise) and runs immediately before its own
+	// dispatch records — sets/clears it per dispatch; the record paths
+	// consume it keyed to the CompileFallbackBody sig, so it can never leak
+	// onto an unrelated word's event. Plan Phase 5, L-DO.
+	SetCatchVariadic(pending bool)
+
 	// --- dispatch / value recording -------------------------------------
 	RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool)
 	RecordPoly(word string)
@@ -135,6 +146,7 @@ func (inactiveEmit) bodyAnalysisGuard() func() { return func() {} }
 func (inactiveEmit) fnBodyGuard() func()       { return func() {} }
 
 func (inactiveEmit) MarkUncompilable(string) {}
+func (inactiveEmit) SetCatchVariadic(bool)   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
