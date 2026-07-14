@@ -73,6 +73,10 @@ func TestCompiledConcurrencyRaceFree(t *testing.T) {
 		{`def f fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [f (n sub 1) (acc add n)]]] f 10 0`, "55"},
 		{`each [mul 2] [1 2 3]`, "[2 4 6]"},    // baked island
 		{`each [mul 2] (iota 4)`, "[0 2 4 6]"}, // threaded island
+		// await: per-branch fork units (CompileStoresBodyList) — every program
+		// run spawns branch goroutines that RunUnit the SHARED Program's units
+		// on their forks, so this is the nested-concurrency stamp gate.
+		{`import "aql:time-util" TimeUtil.await [[1 add 2] [3 mul 4]]`, "[3 12]"},
 	}
 
 	for _, c := range cases {

@@ -505,6 +505,15 @@ const (
 	// refuses to compile rides as the plain inert const list and the word runs it
 	// on the interpreter, unchanged.
 	CompileStoresBody
+	// CompileStoresBodyList marks a word that stores a NoEvalArgs LIST OF
+	// code-body lists to run later on per-branch registry forks — `await`'s
+	// parallels. The recorder compiles each list element to its own 0-param
+	// unit (compileStoredBody) and rebuilds the list with synthetic fn-value
+	// carriers in place of the elements that compiled, so the word runs each
+	// branch via RunUnit on its fork. An element that refuses to compile
+	// rides as its plain list and that branch interprets — per-element and
+	// sound.
+	CompileStoresBodyList
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A

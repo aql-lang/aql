@@ -119,6 +119,11 @@ func isInternalErr(err error) bool {
 	return errors.As(err, &ae) && ae.Code == "internal_error"
 }
 
+// IsInternalError is the exported face of isInternalErr, for run-side seams
+// outside eng that take the same degrade-to-interpreter decision on a stamped
+// unit's result (await's per-branch fork runs — native_temporal_await.go).
+func IsInternalError(err error) bool { return isInternalErr(err) }
+
 // runPooledSub runs input on a pooled reusable sub-engine and returns a
 // caller-owned COPY of the results. It is the shared seam behind every
 // per-element sub-evaluation (higher-order bodies, list/paren/interp-hole

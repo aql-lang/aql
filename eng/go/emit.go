@@ -4056,6 +4056,29 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 				continue
 			}
 		}
+		// STORE-BODY-LIST edge: a word that stores a LIST of code bodies to run
+		// later on per-branch forks (await's parallels). Each element compiles
+		// to its own 0-param unit and rides as a carrier in a rebuilt list;
+		// an element that refuses keeps its raw list and that branch runs on
+		// the interpreter, per-element and unchanged.
+		if sig.CompileEffect.Has(CompileStoresBodyList) && sig.NoEvalArgs != nil && sig.NoEvalArgs[i] {
+			if lst, lerr := AsList(a); lerr == nil && !lst.IsNil() {
+				elems := lst.Slice()
+				rebuilt := make([]Value, len(elems))
+				any := false
+				for j := range elems {
+					if carrier, cok := es.compileStoredBody(elems[j]); cok {
+						rebuilt[j], any = carrier, true
+						continue
+					}
+					rebuilt[j] = elems[j]
+				}
+				if any {
+					ops[i] = constOperand(es.intern(WithPos(NewList(rebuilt), a)))
+					continue
+				}
+			}
+		}
 		op, ok := es.resolveOperand(a)
 		if !ok && (introspect || inertFn || sig.FnInertArgs[i]) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn {

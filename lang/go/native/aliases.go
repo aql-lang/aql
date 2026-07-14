@@ -239,6 +239,7 @@ const (
 	CompileDiverges         = eng.CompileDiverges
 	CompileValueDiverges    = eng.CompileValueDiverges
 	CompileStoresBody       = eng.CompileStoresBody
+	CompileStoresBodyList   = eng.CompileStoresBodyList
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 	CompileDynBody          = eng.CompileDynBody

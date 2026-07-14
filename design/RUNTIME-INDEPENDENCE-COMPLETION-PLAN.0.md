@@ -854,3 +854,29 @@ through:
 
 Follow-up recorded for the maintainer: CI should run `make cover-gate`
 (the gate is only as strong as its least-run invocation).
+
+### Phase 6 progress — concurrent fork bodies landed (2026-07-14)
+
+`p6/concurrent-fork-bodies-on-vm` graduated: await's parallels arg gets a
+new CompileEffect, `CompileStoresBodyList` — the spawn store-body pattern
+applied PER ELEMENT. The recorder compiles each parallels element to its
+own 0-param unit (`compileStoredBody`) and rebuilds the list with
+synthetic fn-value carriers; `runParallelBranch` recognises a carrier and
+runs it via `RunUnit` on the branch's ForkConcurrent fork (exactly
+`spawnHandler`'s run side), with the C1 effect fence on an internal_error
+(re-run the raw tokens on the interpreter only when the unit emitted no
+observable effect — `eng.IsInternalError` is the exported face of the
+seam's taxonomy check). An element that refuses to compile keeps its raw
+list and THAT branch interprets — per-element and sound (pinned:
+a Module construction in one branch interprets while the sibling runs
+compiled, with parity). Modes all/full/first/any share one outcome
+mapping (`branchOutcome`) so compiled and interpreted branches agree
+exactly. The nested-concurrency shape (program forks per goroutine ×
+branch forks per run, all sharing one Program) rides the CI -race gate as
+a new TestCompiledConcurrencyRaceFree case; two corpus rows carry the
+shape into the shared TSV suite.
+
+Remaining Phase 6 items: JIT detached-unit cache (graduates the
+do-registry-replay rows + p6/check-prop-body-on-vm), capturing closures
+via OpPushClosure capture slots, Vm.run runtime compile (needs the
+Phase 10 VM-side policy gate — sub-engines are always policy-composed).

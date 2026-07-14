@@ -298,10 +298,10 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 6.4: check-prop gen/property bodies are baked as data and re-interpreted per iteration in a pooled sub-engine; the JIT detached-unit cache is unbuilt",
 		failsWith: "unattributed interpreter entries: CallAQL",
 	},
-	"p6/concurrent-fork-bodies-on-vm": {
-		why:       "plan Phase 6.5: concurrent-word fork bodies run as interpreter fallbacks in v1 (test/go/langspec/compiled_concurrent_test.go)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
+	// GRADUATED 2026-07-14: p6/concurrent-fork-bodies-on-vm — await's
+	// parallels compile per element (CompileStoresBodyList → compileStoredBody
+	// carriers) and runParallelBranch runs each via RunUnit on its fork.
+	// The case above stays as a permanent pin.
 	"p6/vm-run-on-vm": {
 		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
 		failsWith: "unattributed interpreter entries: Engine.Run",

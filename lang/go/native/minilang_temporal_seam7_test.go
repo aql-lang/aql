@@ -46,6 +46,16 @@ func TestRunParallelBranchError(t *testing.T) {
 	if pr.err || len(pr.values) != 1 {
 		t.Fatalf("runParallelBranch(5) = %+v", pr)
 	}
+	// A plain fn VALUE element carrying no compiled ref (an fn stored in a
+	// def'd parallels list) is not a compiled-branch carrier: it passes
+	// through as-is, exactly like any other non-list element.
+	fnVal := Value{Parent: TFunction, Data: FnDefInfo{
+		Signatures: []Signature{{Impl: &AQLImpl{Body: []Value{NewInteger(1)}}}},
+	}}
+	pr = runParallelBranch(r, fnVal)
+	if pr.err || len(pr.values) != 1 || !pr.values[0].Parent.Equal(TFunction) {
+		t.Fatalf("runParallelBranch(plain fn) = %+v, want the fn value passed through", pr)
+	}
 }
 
 func TestAwaitFullMultiValueBranch(t *testing.T) {

@@ -71,3 +71,8 @@ for 2 [(1 add 2) (3 mul 4)]	3 12 3 12
 # Net drivers COMPLETE (2026-07-14): the inert-const multi-value loop body
 # graduates — captured operands re-push per iteration (frontier-for-multi).
 for 3 [1 2]	1 2 1 2 1 2
+# await branch bodies compile per element (CompileStoresBodyList, 2026-07-14):
+# each parallels element becomes its own 0-param unit run via RunUnit on its
+# branch fork; a raising branch surfaces as the mode's error value.
+import "aql:time-util" end TimeUtil.await [[1 add 2] [3 mul 4]]	[3 12]
+import "aql:time-util" end TimeUtil.await [[def x 5 x add 1] [3 mul 4]]	[6 12]

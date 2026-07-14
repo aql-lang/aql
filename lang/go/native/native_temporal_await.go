@@ -2,6 +2,8 @@ package native
 
 import (
 	"sync"
+
+	eng "github.com/aql-lang/aql/eng/go"
 )
 
 // The "await" word lives in miscNatives (native_misc.go). Below
@@ -35,27 +37,58 @@ func makeBranchForks(r *Registry, n int) []*Registry {
 }
 
 // runParallelBranch executes one element with do semantics on its own
-// isolated registry fork. If the element is a list, it runs as a
-// sub-program. Otherwise, it is returned as a single value.
+// isolated registry fork. A COMPILED branch body arrives as a synthetic
+// fn-value carrier with a CompiledFnRef (CompileStoresBodyList — the spawn
+// pattern) and runs via RunUnit on the fork; a raw list runs as an
+// interpreter sub-program; anything else is returned as a single value.
 func runParallelBranch(reg *Registry, elem Value) parallelResult {
+	if fd, ok := elem.Data.(eng.FnDefInfo); ok {
+		for i := range fd.Signatures {
+			ref := fd.Signatures[i].CompiledRef()
+			if ref == nil || ref.Prog == nil {
+				continue
+			}
+			effectsAt := reg.Effects.Count()
+			result, runErr := eng.RunUnit(ref, reg, nil)
+			if eng.IsInternalError(runErr) && reg.Effects.Count() == effectsAt {
+				// A VM soundness bail with NO observable effect: re-run the raw
+				// tokens on the interpreter, exactly as the branch would have run
+				// without the stamp (the C1 fence — see InvokeCallback).
+				if a, isAQL := fd.Signatures[i].Impl.(*eng.AQLImpl); isAQL {
+					return interpretBranchBody(reg, a.Body)
+				}
+			}
+			return branchOutcome(result, runErr)
+		}
+	}
 	if elem.Parent.ConformsTo(TList) && elem.Data != nil && !IsTypedList(elem) && !IsTableType(elem) {
-		sub := New(reg)
 		_lst, _ := AsList(elem)
-		body := _lst.Slice()
-		input := make([]Value, len(body))
-		copy(input, body)
-		result, runErr := sub.Run(input)
-		if runErr != nil {
-			return parallelResult{values: []Value{NewError(runErr)}, err: true}
-		}
-		// Check if the result is a single error value.
-		if len(result) == 1 && IsError(result[0]) {
-			return parallelResult{values: result, err: true}
-		}
-		return parallelResult{values: result}
+		return interpretBranchBody(reg, _lst.Slice())
 	}
 	// Non-list element: just return it as-is.
 	return parallelResult{values: []Value{elem}}
+}
+
+// interpretBranchBody runs a branch's raw token list on a fresh interpreter
+// sub-engine over the fork — the pre-stamping branch path, byte-identical.
+func interpretBranchBody(reg *Registry, body []Value) parallelResult {
+	sub := New(reg)
+	input := make([]Value, len(body))
+	copy(input, body)
+	result, runErr := sub.Run(input)
+	return branchOutcome(result, runErr)
+}
+
+// branchOutcome maps a branch run's (result, error) to a parallelResult —
+// one shared mapping so the compiled and interpreted paths agree exactly.
+func branchOutcome(result []Value, runErr error) parallelResult {
+	if runErr != nil {
+		return parallelResult{values: []Value{NewError(runErr)}, err: true}
+	}
+	if len(result) == 1 && IsError(result[0]) {
+		return parallelResult{values: result, err: true}
+	}
+	return parallelResult{values: result}
 }
 
 // awaitAll waits for all branches to succeed. Returns the first error if any reject.
