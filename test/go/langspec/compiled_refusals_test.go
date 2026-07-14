@@ -33,11 +33,19 @@ var knownRefusals = map[string]string{
 	// the live values at run time and raises the shared rich diagnostic
 	// byte-identical to the interpreter (or defers when it unexpectedly
 	// matches). The three rows below stay refused: their windows exceed the
-	// written-tuple bound (local add), take a different recovery path (each's
-	// variadic-if operand — the 0-arg courtesy screen), or hold a splice.
+	// written-tuple bound (local add), carry a variadic-if operand (each),
+	// or hold a splice.
 
-	// a variadic-if result feeding a higher-order word (`each`) over a recovered
-	// dispatch — the interpreter resolves it at runtime; a static guess diverges.
+	// a VARIADIC-IF result feeding `each`: the arms leave DIFFERENT counts
+	// (then [99] = one value, else [1 2] = two), so the merged position joins
+	// to a None|Integer disjunct and the Any/Disjunct-carrier recovery owns
+	// the dispatch — tryRecordPoly rightly declines each's code-body sigs,
+	// and a runtime rematch would need a FIXED window arity the variadic
+	// residual cannot give it (probe 2026-07-14: the trap is never reached;
+	// the old "0-arg courtesy screen" attribution was wrong — each has no
+	// 0-arg overload). Graduation rides the Phase 5 variadic-region lowering
+	// (OpStackMark/OpDropToMark over the branch merge), which seats the
+	// 1-vs-2 residual and lets a terminal rematch own the raise.
 	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "unmatched dispatch recovered at each (variadic-if operand)",
 
 	// open-words — a locally/module-redefined `add` overload anchored to a user

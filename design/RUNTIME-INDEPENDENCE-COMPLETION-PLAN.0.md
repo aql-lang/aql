@@ -1304,8 +1304,19 @@ facts: BOTH const-condition directions raise the SAME
 "cannot call `each`" signature_error on both engines (the then arm leaves a
 lone 99, the else arm's [1 2] splices to two loose Integers; neither is the
 collection each's sigs want), so the row is a terminal-raise candidate for
-the rematch/trap machinery. Next: trace WHERE the each dispatch failure
-recovers in check mode — a higher-order code-body word's failed dispatch may
-take a recovery path that never reaches tryRecordUnmatchedDispatchTrap, or
-the trap's window/written gates decline on the branch-event operand.
-Correct the knownRefusals comment when the real mechanism is pinned.
+the rematch/trap machinery.
+
+RESOLVED (same day, trace probe): the trap is NEVER REACHED. The if's arms
+leave DIFFERENT residual counts (then [99] = one value, else [1 2] = two),
+so the merged position joins to a strict `None tor Integer` DISJUNCT — the
+variadic-if merge — and each's dispatch over it fails into the Any/Disjunct
+CARRIER RECOVERY arm of checkModeAssumeSig, where tryRecordPoly rightly
+declines (each's sigs carry NoEvalArgs code bodies the VM re-match cannot
+dispatch) and the user-fn recovery declines (native). The refusal is
+CORRECT under current machinery: a runtime rematch needs a fixed window
+arity, and the variadic residual has none. Graduation therefore rides the
+Phase 5 variadic-region lowering (the OpStackMark/OpDropToMark catch-merge
+primitives extended to the branch merge): once the 1-vs-2 residual seats,
+the each dispatch becomes a fixed-window terminal rematch (both directions
+raise the identical signature_error, so the raise arm is already proven).
+knownRefusals comment corrected.
