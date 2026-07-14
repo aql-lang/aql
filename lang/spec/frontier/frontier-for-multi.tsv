@@ -1,3 +1,2 @@
 # Net-driver class (plan Phase 5): a for body netting multiple values per
 # iteration (emit.go 'for: body nets multiple values per iteration').
-for 3 [1 2]	1 2 1 2 1 2

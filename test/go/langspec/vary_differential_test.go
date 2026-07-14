@@ -128,6 +128,7 @@ const defaultVarySeeds = 32
 // census (2026-07-13, 32 seeds): pass=384 refused=42 islanded=0.
 var varyRefusalLedger = map[string]string{
 	"check diagnostics (wrapped-context false positive)": "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
+	"for: body nets multiple values per iteration":       "NARROWED (net drivers landed): only Function-bearing multi-value loop regions keep this refusal — the parked-fn cross-iteration auto-apply hazard; const/computed regions compile",
 	"code-body word (NoEvalArgs)":                        "the replay-hazard refusal (do-unit registry replay, bodyHasReplayHazard): a baked body with a capitalised def refuses soundly; graduates via the Phase 6 JIT detached-unit cache",
 	"operand provenance":                                 "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
 	"residual lowering (Stage 1 limit)":                  "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",

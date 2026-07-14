@@ -422,6 +422,11 @@ type EmitFragment struct {
 	// without this the extra slot would compile an unsound duplicate value. 0 ==
 	// unset (non-arm fragments: a loop body / condition expects one value).
 	residualN int
+	// residualOps carries a multi-out LOOP body's full residual operand list
+	// when every entry is INERT (const/local/type — no events): the
+	// reconciliation re-pushes them in order per iteration (`for 3 [1 2]`).
+	// Function-typed entries were screened at RecordLoop (parked-fn hazard).
+	residualOps []emitOperand
 	// applyArgs, when non-empty, marks a loop body that left a LEADING fn VALUE
 	// (a returned closure / Function carrier on the sim top after the body events)
 	// with these trailing STATIC arg operands above it — the per-iteration dynamic
@@ -3319,6 +3324,22 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			if !ok {
 				es.MarkUncompilable("for: body result of unknown provenance")
 				return
+			}
+			// ALL-INERT residual (`for 3 [1 2]`): no entry is event-produced,
+			// so the residualN reconciliation cannot seat them from the sim —
+			// capture the full operand list for a per-iteration re-push instead.
+			allInert := true
+			var inertOps []emitOperand
+			for i := range bodyStk {
+				op, okOp := es.resolveOperand(bodyStk[i])
+				if !okOp || op.kind == opEvent {
+					allInert = false
+					break
+				}
+				inertOps = append(inertOps, op)
+			}
+			if allInert {
+				body.residualOps = inertOps
 			}
 			body.residualN = len(bodyStk)
 			lp.bodyOut, lp.hasBodyOut, lp.multiOut = bodyOut, true, true

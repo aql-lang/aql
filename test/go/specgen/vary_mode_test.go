@@ -90,7 +90,10 @@ func TestVarySweepEndToEnd(t *testing.T) {
 		}
 	}
 	corpus := "1 add 2\t3\n" + // passing base: fans out into every transform
-		"for 3 [1 2]\t1 2 1 2 1 2\n" + // refused base: skipped, no variants
+		// refused base (the Any-typed do-catch region — the parked-fn guard):
+		// skipped, no variants. (`for 3 [1 2]` graduated to corpus-native when
+		// net drivers landed, so it can no longer serve as the refusing seed.)
+		"def zf fn [[x:Any] [Any] [raise bad_input 'no']]  do [(zf 5) 2] error [dot code]\tbad_input/q\n" +
 		// A passing base whose do-body variant REFUSES soundly (the
 		// replay-hazard refusal that fixed the do-unit registry-replay
 		// miscompile, lang/spec/frontier/frontier-do-registry-replay.tsv).

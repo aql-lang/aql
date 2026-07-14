@@ -68,3 +68,6 @@ def f fn [[x:Any] [Integer] [raise bad_input "nope"]]  do [(f 5) 2] error [dot c
 # via the residualN>1 fragment reconciliation — per-iteration values
 # accumulate exactly as the interpreter.
 for 2 [(1 add 2) (3 mul 4)]	3 12 3 12
+# Net drivers COMPLETE (2026-07-14): the inert-const multi-value loop body
+# graduates — captured operands re-push per iteration (frontier-for-multi).
+for 3 [1 2]	1 2 1 2 1 2

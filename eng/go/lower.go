@@ -1783,6 +1783,18 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		if !allowVariadic {
 			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
+		// ALL-INERT loop residual (`for 3 [1 2]`): nothing event-produced on
+		// the sim; re-push the captured operands in order per iteration. The
+		// parked-fn screen at RecordLoop already excluded Function entries.
+		if len(frag.residualOps) == frag.residualN && len(lw.vm) == 0 {
+			for _, op := range frag.residualOps {
+				lw.pushOperand(op, pos)
+			}
+			lw.vm = lw.vm[:0]
+			lw.fragMulti = true
+			lw.vm = parent
+			return ""
+		}
 		switch {
 		case len(lw.vm) == frag.residualN && slotIs(lw.vm[len(lw.vm)-1], *out):
 			// Every value EVENT-produced on the sim, the top matching out.
