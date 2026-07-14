@@ -1254,3 +1254,42 @@ evidence on the lJoinRepro family:
 Converge-then-record remains needed for the REFINEMENT half (non-armed
 rounds feeding stale IDs into memoised summaries), but it lands after the
 identity drift above is fixed — the drift owns the current refusal.
+
+### L-JOIN LANDED — the per-alternative recording leak (2026-07-14)
+
+The instrument round (AnalyseFnBody run tags + partition entry/site logs)
+closed the diagnosis in one step: the "join-ID identity drift" was the
+check-mode DISJUNCT DISTRIBUTION recording per-alternative. At a user-fn
+dispatch over a strict-disjunct arg, carrierResults' partition arm
+(disjunctPartitionReturns) enumerated per-alternative combos —
+alternativeCarriers mints a FRESH-ID carrier copy per alternative — and ran
+the fn's ReturnsFn per combo. Under an ARMED recording each combo run hit
+RecordUserCall with the fresh-ID copies ("fn call operand of unknown
+provenance") and would have compiled one unit per combo; the union-shape
+correlation (None arm / distant cousins) was simply WHICH joins produce a
+strict Disjunct that triggers distribution, and the recursion correlation
+was WHICH dispatches route through carrierResults.
+
+The fix (carrier.go): (1) disjunctPartitionReturns runs its combo transfer
+loop SUSPENDED — the combos are type probes; diagnostics (partial_dispatch)
+are not gated by suspension; (2) carrierResults' partition arm, for a USER
+FN under an armed recording, falls THROUGH to the ordinary dispatch — one
+recorded CALL_USER with the ORIGINAL (provenance-carrying) args — and
+re-IDs the partition-joined carriers onto the recorded results, keeping the
+per-alternative type precision; (3) the fall-through is gated by
+disjunctCombosTakeSig: every combo must first-match the committed sig BY
+Signature.Impl identity (Lookup mints fresh aggregates in check mode, so
+pointer identity never holds) — a combo taking a SIBLING overload (a narrow
+arm ahead of the committed wide one) keeps the refusal, because one baked
+CALL_USER would miscompile that alternative. Multi-overload straddles were
+probed to already route through the OpCallUserPoly machinery (sound by
+runtime re-match; TestLJoinSiblingOverloadStaysSound pins both directions).
+
+Graduations: p4/l-np-no-runtime-bail-after-join fired its stale arm and is
+DELETED from the frontier ledger — both stages at once: the repro compiles
+AND runs with ZERO runtime bails (the staged L-NP vm:dyn-scope-miss handoff
+never fired; L-NP has no known repro now and waits for one). The "separate
+top-level shape" from the pinpoint note was the SAME leak reached from the
+top-level dispatch — graduated with the family
+(TestLJoinTopLevelDisjunctCallCompiles). The earlier converge-then-record
+design is retired unless a refinement-round instability repro appears.

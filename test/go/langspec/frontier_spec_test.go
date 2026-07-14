@@ -189,9 +189,13 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// moved to lang/spec/bytecode-migrated.tsv; leak-semantics edges pinned
 	// in lang/go/bytecode_replayhazard_test.go).
 
-	// L-JOIN — plan Phase 4: converge-then-record over the recursive fixpoint;
-	// today the recursive branch-join leaves a fn-call operand unproven.
-	`def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)`: {why: "plan Phase 4 (L-JOIN): recursive branch-join operand of unknown provenance", failsWith: "fn call operand of unknown provenance"},
+	// GRADUATED 2026-07-14: the L-JOIN recursive branch-join row — the
+	// refusal was the disjunct-distribution recording per-alternative
+	// (disjunctPartitionReturns combos under the armed recording); the fix
+	// suspends the combo probes and records ONE CALL_USER with the original
+	// args (carrier.go, gated by disjunctCombosTakeSig). Row moved to
+	// lang/spec/bytecode-migrated.tsv; the family is pinned in
+	// lang/go/bytecode_ljoin_test.go.
 }
 
 type frontierEntryLS struct {

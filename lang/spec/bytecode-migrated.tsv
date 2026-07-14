@@ -81,3 +81,4 @@ import "aql:time-util" end TimeUtil.await [[def x 5 x add 1] [3 mul 4]]	[6 12]
 # runtime) lets the typed-def bodies compile as closure units.
 do [def Big Integer 15 is Big]	true
 do [def Big (Integer gt 10) 15 is Big]	true
+def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)	none

@@ -625,16 +625,29 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// Integer|String reaches add's [Scalar Scalar]→String catch-all
 	// although the Integer path takes [Number Number]. Resolve each
 	// alternative independently and join the per-alternative returns.
+	var partOut []Value
 	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
 		// A strict-disjunct straddle is a runtime-dispatch case, not an
 		// inherent refusal: if the word is a safe poly candidate (core builtin,
 		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
-		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
-			r.Check.Recorder().RecordPoly(word)
+		// run time — e.g. `5 is (tnot (Integer gt 0))`. A USER FN under an
+		// ARMED recording instead falls THROUGH to the ordinary dispatch
+		// below — one recorded CALL_USER with the ORIGINAL (provenance-
+		// carrying) args; the runtime value is one concrete alternative the
+		// unit's param contract admits — and the partition-joined carriers
+		// are re-IDed onto the recorded results at the tail, keeping the
+		// per-alternative type precision without orphaning the residual
+		// (the L-JOIN recursive-union refusal). Everything else refuses.
+		if r.Check.Recorder().active() && sig != nil && sig.fnFrame() != nil &&
+			disjunctCombosTakeSig(r, word, args, sig) {
+			partOut = out
+		} else {
+			if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
+				r.Check.Recorder().RecordPoly(word)
+			}
+			return out
 		}
-		return out
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
 	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
@@ -652,6 +665,20 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
+	// The partitioned user-fn dispatch (above): hand back the partition-
+	// joined carriers under the RECORDED results' identities, so downstream
+	// operand resolution reaches the recorded call while the checker keeps
+	// the per-alternative precision. A count mismatch keeps the recorded
+	// results verbatim — sound, just wider.
+	if partOut != nil {
+		if len(partOut) != len(out) {
+			return out
+		}
+		for i := range partOut {
+			partOut[i].ID = out[i].ID
+		}
+		return partOut
+	}
 	return out
 }
 
@@ -1940,7 +1967,18 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 	// combo whose overload is unannotated declines the whole partition
 	// (the whole-disjunct fallback — missing_returns + dynamic Any —
 	// beats a partial join). Surviving rows are joined position-wise.
+	//
+	// The combo runs are TYPE PROBES over per-alternative carrier COPIES
+	// (alternativeCarriers mints fresh IDs), so under an ARMED recording
+	// they must not record: a user fn's ReturnsFn would RecordUserCall the
+	// fresh-ID copies ("fn call operand of unknown provenance" — the
+	// L-JOIN recursive-union refusal) and compile one unit per combo.
+	// Suspend for the loop (a no-op on a plain check); the caller records
+	// the dispatch ONCE with the original args (carrierResults' partition
+	// arm). Diagnostics (partial_dispatch) are not gated by suspension.
 	rows := make([][]Value, 0, len(combos))
+	resume := r.Check.Recorder().Suspend()
+	defer resume()
 	for _, combo := range combos {
 		comboSig := firstMatchingSig(fn, combo)
 		if comboSig == nil {
@@ -1986,6 +2024,36 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		}
 	}
 	return joinReturnRows(rows)
+}
+
+// disjunctCombosTakeSig reports whether EVERY per-alternative combination of
+// the disjunct args first-matches exactly the caller's committed sig — the
+// condition under which ONE recorded CALL_USER of that sig's unit is faithful
+// for every runtime alternative (carrierResults' partitioned user-fn arm). A
+// combo that would first-match a SIBLING overload (a narrow arm ahead of the
+// committed wide one) makes the single baked call a miscompile — the
+// interpreter dispatches the sibling for that alternative — so the caller
+// keeps the refusal. Combo enumeration failure (over the cap) declines.
+func disjunctCombosTakeSig(r *Registry, word string, args []Value, sig *Signature) bool {
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	combos, ok := disjunctCombos(args, disjunctPartitionCap)
+	if !ok {
+		return false
+	}
+	for _, combo := range combos {
+		cs := firstMatchingSig(fn, combo)
+		// Lookup mints a FRESH aggregate per call in check mode (the
+		// pointer-identity contract), so compare by the stable
+		// run-implementation identity — Signature.Impl, the same primitive
+		// the user-poly drift guard keys on.
+		if cs == nil || cs.Impl != sig.Impl {
+			return false
+		}
+	}
+	return true
 }
 
 // alternativeCarriers expands a strict disjunct carrier into one carrier

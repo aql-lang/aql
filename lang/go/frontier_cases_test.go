@@ -171,11 +171,10 @@ const lJoinRepro = `def rec fn [
 // --- the inventory ------------------------------------------------------------
 
 var frontierCases = []frontierCase{
-	// Phase 4 — L-NP rides behind L-JOIN: today this fails at the compile
-	// refusal (stage 1); when L-JOIN lands, the failure is designed to DRIFT
-	// to the vm:dyn-scope-miss runtime bail (stage 2 — update failsWith),
-	// and it graduates only when L-NP resolves the read under the compiled
-	// dynamic scope.
+	// Phase 4 — GRADUATED 2026-07-14 (permanent pin): the L-JOIN repro
+	// compiles (the disjunct-distribution recording fix, carrier.go
+	// disjunctPartitionReturns/carrierResults) and runs compiled with ZERO
+	// runtime bails and full parity — the staged L-NP handoff never fired.
 	{"p4/l-np-no-runtime-bail-after-join", func() error {
 		return fcParityCompiledZeroBails(lJoinRepro)
 	}},
@@ -278,10 +277,16 @@ func zzShapedInstanceE() *AQL {
 }
 
 var frontierLedger = map[string]frontierEntry{
-	"p4/l-np-no-runtime-bail-after-join": {
-		why:       "plan Phase 4: L-JOIN's recursive-fixpoint operand provenance refuses the repro today; landing L-JOIN is designed to UNMASK the L-NP vm:dyn-scope-miss runtime bail (commit f219725) — on that drift, re-pin failsWith to 'dynamic-scope read miss' (stage 2) and graduate only when L-NP resolves the compiled dyn-scope read",
-		failsWith: "refused: fn call operand of unknown provenance",
-	},
+	// GRADUATED 2026-07-14: p4/l-np-no-runtime-bail-after-join — BOTH stages
+	// at once: the L-JOIN refusal was a per-alternative recording leak (the
+	// disjunct-distribution combos ran a user fn's ReturnsFn under the armed
+	// recording with fresh-ID alternative copies — RecordUserCall then refused
+	// "unknown provenance"); the fix suspends the combo probes and records ONE
+	// CALL_USER with the original args (partition-joined carriers re-IDed onto
+	// the recorded results, gated by disjunctCombosTakeSig). The anticipated
+	// L-NP vm:dyn-scope-miss bail never materialised — the repro runs compiled
+	// with ZERO runtime bails and full parity (bytecode_ljoin_test.go pins the
+	// family). The case above stays as a permanent pin.
 	// GRADUATED 2026-07-14: p6/predicate-stamps-and-runs-vm — predicates
 	// stamp at construction (InstallType stamps the body in place, naming
 	// the stamp event with the type name; RunPredicate's InvokeCallback then

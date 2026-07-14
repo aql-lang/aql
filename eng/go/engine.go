@@ -8106,8 +8106,10 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		}
 		// A single-overload user fn over a disjunct-typed operand recovers here
 		// (e.g. the aql:test framework's run-cases inside test-describe's body);
-		// record a guarded CALL_USER instead of refusing (it splices its own returns).
-		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+		// record a guarded CALL_USER instead of refusing (it splices its own
+		// returns). Reached from the eng harness since the partitioned-dispatch
+		// recording landed (carrier_ljoin_test.go drives the recovery arm).
+		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
