@@ -749,3 +749,20 @@ loop) is the model. THEN the checkpoint/rollback/suspend/re-record
 sequence from the flow above applies unchanged. Verify with the L-JOIN
 frontier row + the fnRecs-guard unit test (a rollback across a minted
 unit must fully unwind, not no-op).
+
+### L-JOIN converge-then-record — first attempt REVERTED (2026-07-14)
+
+The naive wiring (units-aware Rollback + suspend-refine-reseed-rerecord in
+AnalyseFnBody) did NOT clear the L-JOIN row (still refuses with the pinned
+provenance reason — the final recording pass still misses the operand
+home) and REGRESSED the aql-test recursion green pins ("fn
+test-describe$body: body leaves extra values (Stage 3 lowers in-order
+results)") — the re-record pass leaves different residuals for
+already-working recursive shapes whose first-pass recording was correct.
+Reverted on the spot (the frontier must-COMPILE arm caught it
+immediately). Learnings for the next attempt: (1) the flow must apply
+ONLY when the first pass's recording is actually provenance-broken (gate
+on the resolveOperand failure signal, not on every recursive bail); (2)
+the Rollback units-extension changes the loop-analysis caller's semantics
+too — land it separately with its own unit test; (3) the aql-test pins
+double as the regression canary for ANY recording-pass restructure.
