@@ -616,3 +616,19 @@ probe each row's residual shape at Finalize (which carriers, which flags),
 then extend the strip-input consumption per the L-DO map. Row 6-family may
 need the `error` handler result de-dynamified (dot code over a concrete
 Error field read) rather than region work.
+
+### L-DO part 2 — refined design after the row-8 probe (2026-07-14)
+
+Row-8 check-time shape: the body nets [Any-carrier(dynamic), 2] → latch →
+variadic do event; `error` strips the top and returns a dynamic result;
+the PROGRAM residual then holds a leading Dynamic that sigTypeMatches
+Function → the emit.go:5994 guard fires. The fix is VARIADIC PROPAGATION
+through strip-input dispatches: in RecordClosureCall, after resolving ops,
+if any operand's producedBy event carries variadicResult AND the sig is
+StripsUnconsumedInput (`error`), mark THIS event variadicResult too — the
+region stays a region (top consumed, handler result pushed; runtime pops
+are depth-agnostic). The program residual then absorbs it exactly as it
+absorbs `do [for 3 [1]]`. Fixed-arity consumers of the propagated region
+keep refusing. Verify each row against the interpreter before ledger
+graduation; expect the def-msg rows to need one further hop (def consuming
+the propagated region top).
