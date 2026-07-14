@@ -632,3 +632,17 @@ absorbs `do [for 3 [1]]`. Fixed-arity consumers of the propagated region
 keep refusing. Verify each row against the interpreter before ledger
 graduation; expect the def-msg rows to need one further hop (def consuming
 the propagated region top).
+
+### L-DO part 2b — absorption seams located (2026-07-14)
+
+Two absorption seams exist already: fn-unit finish (emit.go ~2991:
+variadic TAIL event → rec.variadic, with the dynBodyResult/declared-tuple
+exception) and the program-residual layout (the 5994 fn-boundary guard
+runs BEFORE seating; single-entry variadic residuals pass because the
+guard loop needs i+1<len). The 6 rows fail because their residuals hold
+REGION entries in non-tail positions ([region..., handler-result]) — the
+layout must treat a contiguous variadic-region prefix/tail as one
+absorbable unit (OpStackMark region or force-locals promotion like the
+out-of-order mirror at ~2996) instead of walking its entries into the
+Dynamic-matches-Function guard. Next: trace seatResults' handling of
+`do [for 3 [1]]` (the working single-entry case) and generalise.
