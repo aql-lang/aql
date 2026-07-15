@@ -1600,3 +1600,45 @@ TestDispatchRematchWideWindowRendersBounded (compiled + byte-identical) with
 a new stays-refused negative pinning the each row's exact reason. New guard
 arms pinned directly: RecordDispatchRematch declines bounds outside
 1..len(ops); the VM raises on a spec outside 1..NArgs.
+
+### Each variadic-if probe facts — the render bound needs OFFSET form (2026-07-15)
+
+Probed with the anydisjunct-arm gate attempt + gate logging. Three facts:
+
+1. The each row's refusal latches at the ANY/DISJUNCT-CARRIER recovery arm
+   (engine.go ~8171, checkModeAssumeSig) — NOT the disjunct-partition arm
+   and NOT the general fall-through — and that arm never attempts
+   tryRecordUnmatchedDispatchTrap today. Patching the attempt in reaches
+   the rematch gate cleanly (active=true, compiling=true).
+2. Gate state: maxN=2, window positions [0 2] (the stack value + the body
+   token after the pointer); vals=[None|Integer-disjunct, [dup mul]];
+   written=[[dup mul]]. The written tuple IS in the window but at OFFSET 1
+   — the leading-prefix-by-ID proof fails (vals[0] is the region carrier).
+   The 3a render bound must generalize from prefix length to a CONTIGUOUS
+   OFFSET+LENGTH slice: gate scans for the offset o with written[i].ID ==
+   vals[o+i].ID, DispatchSpec carries {WrittenOff, NWritten}, and
+   dispatchRematch renders window[off:off+n] while re-matching the full
+   window. Everything else (match-defers soundness, the reorder/void/
+   fn-shape screens) is unchanged.
+3. The diagnostic is ARM-INDEPENDENT: the interpreter renders the SAME
+   note set for both polarities (received note = the body list only;
+   candidate verdicts all say "1 was supplied" — the region values are
+   not suppliable operands to the match), confirmed by running both
+   n=0 and n=5 twins. So the bounded render is byte-identical regardless
+   of which arm ran — the remaining risk is downstream: whether the
+   BRANCH lowering seats the 1-vs-2 residual (resolveOperand on the
+   merged disjunct carrier + layoutOperands + the branch's fixed-slot
+   output model). If it refuses there, that refusal is the honest next
+   blocker and needs the OpStackMark variadic-region merge; if it lowers,
+   the row graduates with offset-form NWritten alone.
+
+Next concrete steps: (a) DispatchSpec gains WrittenOff (offset-form
+render bound), gate scans for the contiguous ID slice, VM renders the
+slice — with the anydisjunct-arm gate attempt patched in; (b) run the
+each row end-to-end; if the branch lowering refuses, pin that reason and
+design the variadic-region branch merge (OpStackMark before the if,
+arms push their own counts, mark-bounded rematch window); (c) fixture
+cascade only when the row actually graduates (zzRefusingRow needs a NEW
+refusing+raising fixture then — no corpus refusals would remain, so an
+off-corpus refusing shape must be constructed or the fixture retired
+with the tests re-pointed at forced-refusal seams).
