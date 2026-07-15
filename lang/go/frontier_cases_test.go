@@ -336,7 +336,7 @@ var frontierLedger = map[string]frontierEntry{
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 	"p11/public-run-is-compiled": {
-		why:       "plan Phase 11: two of the flip attempt's divergences CLOSED natively (fn-predicate binds f8a5bba, mini compile hooks fa9e844) and the model-watch ledger race fixed (construction-time capture); REMAINING: the model-handle class (an Extension-payload def crossing compiled requests — Model.stop mdl raises model_bad_handle under the flip: the check pass strips the handle to a carrier where the runtime needs the live Extension) and the cross-instance observability pollution; Run stays on the tree-walker until those close",
+		why:       "plan Phase 11: two of the flip attempt's divergences CLOSED natively (fn-predicate binds f8a5bba, mini compile hooks fa9e844), the model-watch ledger race fixed (construction-time capture), and the ISOLATED handle shape proven SOUND (def mdl handle + Model.stop mdl refuses 'operand of unknown provenance' and falls back correctly — probe 2026-07-15); REMAINING: the handle failure needs the CONCURRENT composite (a live watch goroutine + the flip's per-request churn — model_bad_handle at stop) plus the cross-instance observability pollution; Run stays on the tree-walker until those close",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 	"p11/no-unbounded-fallback": {

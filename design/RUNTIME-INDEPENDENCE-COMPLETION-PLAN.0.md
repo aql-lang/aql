@@ -1926,3 +1926,20 @@ flip because the check pass strips the handle to a carrier where the
 runtime needs the live Extension. That class (stateful host handles as
 cross-request operands) is now the named remaining divergence on the
 p11 ledger row, alongside the cross-instance observability pollution.
+
+### Handle-class narrowed — the isolated shape is SOUND (2026-07-15)
+
+Probe: `def mdl (Model.new …)` via the interpreter, then a compiled
+request running `Model.stop mdl` — the compile pass REFUSES cleanly
+("operand of unknown provenance or not statically materialisable at
+model-stop": an Extension-payload handle has no static
+materialisation) and the fallback returns the interpreter's correct
+result. The model_bad_handle failure therefore requires the CONCURRENT
+composite — a live watch goroutine rebuilding while the flipped
+foreground churns per-request state — not the handle-as-operand shape
+itself. The remaining flip blockers are exactly two: that concurrent
+composite, and the cross-instance observability pollution (one
+unattributed Engine.Run after p4/l-np in sequence; non-deterministic
+across processes, sticky within one — a timing-dependent global,
+possibly a pooled sub-engine or a detached goroutine from the L-JOIN
+case's print).
