@@ -5583,10 +5583,21 @@ func (es *EmitState) intern(v Value) int {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
-		// Compounds, structural type bodies, and codequote'd ParenExprs are never
-		// CanonValue-deduped: like the list/map identity rule, two source
-		// codequotes stay two distinct const values rather than merging into one.
+	identPayload := false
+	switch v.Data.(type) {
+	case ExtensionPayload, XmlElementPayload:
+		identPayload = true
+	}
+	if identPayload || v.Parent.Equal(TList) || v.Parent.Equal(TMap) ||
+		isTypeBodyPayload(v) || IsParenExpr(v) {
+		// Compounds, structural type bodies, codequote'd ParenExprs, and
+		// identity-bearing instance payloads (an Xml element literal, an
+		// Extension-backed host container) are never CanonValue-deduped:
+		// like the list/map identity rule, two source literals stay two
+		// distinct const values rather than merging into one (`(<a/>) eq
+		// (<a/>)` is false — eq is container identity — but a canon-pooled
+		// merge made the compiled run push ONE instance twice and answer
+		// true).
 		// The SAME materialised value (same non-empty ID) is one logical
 		// instance though — its payload pointer is already identity-aliased —
 		// so it pools by ID: semantics-preserving, and it keeps

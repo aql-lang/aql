@@ -2173,6 +2173,45 @@ func comboTypeNames(combo []Value) string {
 // committed overload may not be the one the RUNTIME value needs. Used to refuse a
 // higher-order word (each/fold/scan) over a gradual collection — its List-vs-Map
 // overloads can't be statically chosen and it has no poly re-match (code body).
+// fnPredicateOverloadHazard reports whether word's same-arity overload set
+// both (a) contains an fn-PREDICATE-typed param slot (*predicateUnifier —
+// the AQL fn-body membership path whose check-mode match is LENIENT:
+// RunPredicate short-circuits true, registry.go) and (b) leaves more than
+// one arm reachable for these args — the combination where a static arm
+// commit can diverge from the interpreter's runtime predicate fall-through.
+// DepScalar and Go-member types match self-contained in check mode (no
+// leniency), so they carry no hazard.
+func fnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
+	fn := r.Lookup(word)
+	if fn == nil || len(fn.Signatures) < 2 {
+		return false
+	}
+	hasPred, reachable := false, 0
+	for i := range fn.Signatures {
+		s := &fn.Signatures[i]
+		if s.TotalArgs() != len(args) {
+			continue
+		}
+		reach := true
+		for j := range args {
+			t := sigArgType(s, j)
+			if t != nil {
+				if _, ok := t.Behavior().(*predicateUnifier); ok {
+					hasPred = true
+				}
+			}
+			if !sigTypeMatches(args[j], t) {
+				reach = false
+				break
+			}
+		}
+		if reach {
+			reachable++
+		}
+	}
+	return hasPred && reachable >= 2
+}
+
 func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {

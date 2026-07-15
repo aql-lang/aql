@@ -2070,3 +2070,63 @@ gains its BIND_GLOBAL line).
 
 The p11/public-run-is-compiled ledger row's why-text now names the ONE
 remaining flip blocker: the cross-instance observability pollution.
+
+### Stage J step 4 LANDED — public Run flips to the compiled path; p11/public-run-is-compiled GRADUATES (2026-07-15)
+
+The second flip blocker evaporated on re-test: with the flip applied
+and the p11 case driving `a.Run`, twenty plain and five -race
+in-sequence frontier-ledger runs all reported the stale arm ("the
+target behavior now HOLDS") — the cross-instance observability
+pollution is no longer reproducible after the OpBindGlobal landing
+(the polluter was evidently the same class: state a compiled request
+left behind that a later instance's run touched). With both blockers
+closed, Run's body is now:
+
+    out, _, _, err := a.RunCompiledReason(src)
+    if err is compile_refused { armed explicit RunInterp fallback }
+
+— the same contract the CLI surfaces implement, with detached-stamp
+arming kept across the fallback. compile_refused is now a GUARANTEE:
+RunAutoValues fence-checks BEFORE returning it, so a refusal whose
+check pass already emitted output returns the blocked-fallback
+internal_error instead (a caller re-running on compile_refused can
+never duplicate an effect; TestRefusalAfterCheckEffectIsFenceBlocked
+pins both halves through RunCompiled and Run).
+
+The full-tree sweep under the flip surfaced exactly TWO live
+miscompiles — both fixed natively, both off-corpus (the fullcorpus
+differential is structurally blind to Go-test-only shapes):
+
+1. **fn-predicate overload dispatch** (the dispatch twin of the
+   f8a5bba bind finding): check-mode sigTypeMatches accepts
+   fn-predicate types LENIENTLY (RunPredicate short-circuits true in
+   check mode), so the static arm commit for `classify -3` over
+   [x:Pos]/[x:Any] arms baked the Pos arm and raised signature_error
+   where the interpreter's runtime predicate run falls through to the
+   Any arm. Fix: fnPredicateOverloadHazard (≥2 reachable same-arity
+   arms + a *predicateUnifier param slot) routes the site through the
+   EXISTING user-poly runtime re-match (MatchFnSig at VM entry runs
+   the real predicate), or refuses when the poly bake declines. A
+   single-overload predicate fn keeps the static unit — its CALL_USER
+   param guard re-validates at entry and raises the interpreter's
+   exact error.
+2. **Xml literal identity collapse**: the const pool canon-deduped two
+   `<a/>` literals into ONE slot, so the compiled `(<a/>) eq (<a/>)`
+   pushed one instance twice and answered true where eq (container
+   identity) answers false. Fix: identity-bearing instance payloads
+   (XmlElementPayload, ExtensionPayload) join the compound
+   no-canon-dedup rule in intern. The companion `def x <a/>` shape
+   also exposed a gap in the OpBindGlobal write-back: a
+   stripped-literal binding has no producing event, so lowerDynBind's
+   opNone arm now recovers the remembered original via resolveOperand
+   (const/local only) before refusing.
+
+Gates: the ENTIRE lang tree + eng green under the flip; fullcorpus
+6324 rows / 5966 compiled / 0 divergences (byte-equal to baseline);
+census 6000/6000, refusals 0, status file unchanged. The frontier is
+now **3 expected-red** — exactly the Phase-6 trio
+(capturing-handler-stamps, check-prop-body-on-vm, vm-run-on-vm).
+Pinned: TestPredicateOverloadDispatchCompiledParity (poly routing +
+static negatives), TestXmlLiteralIdentityCompiledParity (identity /
+self-eq via the stripped-literal rescue / structural deq), the
+fence-guarantee pair, and the graduated p11 case as a permanent pin.

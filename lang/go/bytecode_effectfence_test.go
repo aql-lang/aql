@@ -93,24 +93,59 @@ func zzCheckEmit(a *AQL) {
 // class graduates too.
 const zzRefusingRow = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 
-// A genuine REFUSAL returns the compile_refused error (Stage J): no re-run
-// happens at all — with or without a prior check-pass effect — so the
-// effect is emitted exactly once and the refusal reason rides the error.
+// A genuine REFUSAL returns the compile_refused error (Stage J). The code is
+// a GUARANTEE: no observable effect escaped the check pass, so a caller's
+// explicit whole-source re-run (Run's own fallback, the CLI surfaces') is
+// sound.
 func TestRefusalReturnsCompileRefused(t *testing.T) {
 	a := mustNew(t)
-	zzCheckEmit(a)
 	var out bytes.Buffer
 	a.SetOutput(&out)
 
-	got, compiled, err := a.RunCompiled(`zz-emit ; ` + zzRefusingRow)
+	got, compiled, err := a.RunCompiled(zzRefusingRow)
 	if codeOf(err) != "compile_refused" {
 		t.Fatalf("refusal: err=[%s] %v (got=%v compiled=%v); want compile_refused (Stage J: no silent re-run)", codeOf(err), err, got, compiled)
 	}
 	if !strings.Contains(err.Error(), "unmatched dispatch recovered at f") {
 		t.Errorf("refusal error should carry the reason, got: %v", err)
 	}
+	if out.String() != "" {
+		t.Errorf("refusal: output = %q, want none (no re-run)", out.String())
+	}
+}
+
+// A refusal whose CHECK PASS already emitted an observable effect must NOT
+// return compile_refused — the code's re-run guarantee would be a lie (the
+// caller's fallback would duplicate the effect). It returns the fence's
+// blocked-fallback internal_error, and the effect is emitted exactly once.
+func TestRefusalAfterCheckEffectIsFenceBlocked(t *testing.T) {
+	a := mustNew(t)
+	zzCheckEmit(a)
+	var out bytes.Buffer
+	a.SetOutput(&out)
+
+	got, compiled, err := a.RunCompiled(`zz-emit ; ` + zzRefusingRow)
+	if codeOf(err) != "internal_error" || !strings.Contains(err.Error(), "emitted observable output") {
+		t.Fatalf("effect-escaped refusal: err=[%s] %v (got=%v compiled=%v); want the fence-blocked internal_error", codeOf(err), err, got, compiled)
+	}
+	if codeOf(err) == "compile_refused" {
+		t.Fatalf("effect-escaped refusal must never claim the re-run-is-sound code")
+	}
 	if out.String() != "E" {
-		t.Errorf("refusal: output = %q, want exactly one %q (no re-run)", out.String(), "E")
+		t.Errorf("effect-escaped refusal: output = %q, want exactly one %q", out.String(), "E")
+	}
+	// The public Run's explicit fallback honours the guarantee: it re-runs
+	// only on compile_refused, so the fence-blocked error propagates and
+	// the effect still fires exactly once.
+	b := mustNew(t)
+	zzCheckEmit(b)
+	var outB bytes.Buffer
+	b.SetOutput(&outB)
+	if _, rerr := b.Run(`zz-emit ; ` + zzRefusingRow); codeOf(rerr) != "internal_error" {
+		t.Fatalf("Run over an effect-escaped refusal: err=[%s] %v, want internal_error", codeOf(rerr), rerr)
+	}
+	if outB.String() != "E" {
+		t.Errorf("Run over an effect-escaped refusal: output = %q, want exactly one %q", outB.String(), "E")
 	}
 }
 

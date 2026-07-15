@@ -198,11 +198,20 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 		case src.kind == opNone:
 			// A literal binding: bake the recorded value verbatim, UNPOOLED (it
 			// may carry a reparented tag a same-canon source literal must not
-			// inherit). Only inert data bakes; anything tape-coupled refuses.
-			if !isInertConst(d.val) {
+			// inherit). Only inert data bakes; a non-inert value gets one
+			// rescue — a STRIPPED-LITERAL carrier whose original the recorder
+			// remembered (`def x <a/>`: the checker binds the Xml literal's
+			// carrier; RememberOriginal holds the materialised instance, and
+			// resolveOperand recovers it as a const/local — the same slot the
+			// binding's reads resolve to, so the written-back value IS the
+			// instance the program uses). Anything else refuses.
+			if isInertConst(d.val) {
+				src = constOperand(lw.es.internUnpooled(d.val))
+			} else if op, ok := lw.es.resolveOperand(d.val); ok && (op.kind == opConst || op.kind == opLocal) {
+				src = op
+			} else {
 				return "dynamic-scope def `" + d.name + "` of unknown provenance"
 			}
-			src = constOperand(lw.es.internUnpooled(d.val))
 		}
 	}
 	if needDyn {

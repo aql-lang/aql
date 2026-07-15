@@ -664,17 +664,28 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 //
 // State from set/get persists across multiple Run calls on the same instance.
 //
-// Run currently executes on the tree-walking interpreter (RunInterp);
-// Stage J flips it to the compiled path once the flip's surfaced
-// behavioral divergences close (the 2026-07-15 flip attempt broke the
-// fn-predicate transform family, the model watch fork, and the mini
-// host-compile hook — real compiled-vs-interpreted divergences the
-// oracle discipline caught; each is a frontier item to pin and fix).
-// Callers that need the interpreter SPECIFICALLY — parity oracles,
-// canonical-error rendering — must call RunInterp so the flip cannot
-// silently change what they measure.
+// Run executes COMPILED-BY-DEFAULT (Stage J, plan Phase 11 — landed
+// 2026-07-15 once the flip attempt's surfaced divergences all closed
+// natively: the fn-predicate transform family, the mini host-compile
+// hook, the model-watch ledger race, and the cross-request def
+// persistence OpBindGlobal fixed). A genuine whole-program refusal
+// degrades gracefully: RunAutoValues returns compile_refused — a
+// guarantee that no observable effect escaped — and Run performs the
+// explicit interpreter fallback itself, with detached fn-unit stamping
+// kept armed so stored callbacks still earn the VM path (the same
+// contract the CLI surfaces implement). Callers that need the
+// interpreter SPECIFICALLY — parity oracles, canonical-error rendering
+// — must call RunInterp, which survives the flip as the explicitly-
+// named tree-walker entry point.
 func (a *AQL) Run(src string) ([]any, error) {
-	return a.RunInterp(src)
+	out, _, _, err := a.RunCompiledReason(src)
+	var refused *AqlError
+	if errors.As(err, &refused) && refused.Code == "compile_refused" {
+		disarm := a.ArmRuntimeStamping()
+		out, err = a.RunInterp(src)
+		disarm()
+	}
+	return out, err
 }
 
 // RunInterp parses and executes src on the TREE-WALKING INTERPRETER,
@@ -909,6 +920,18 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// the re-run only renders the canonical result.
 		if err == nil && reason != "" && reason != "check diagnostics" &&
 			os.Getenv("AQL_COMPILE_FALLBACK") != "1" {
+			// compile_refused is a GUARANTEE to the caller: no observable
+			// effect escaped, so an explicit whole-source re-run (Run's own
+			// fallback, the CLI surfaces') is sound. A refusal whose CHECK
+			// PASS already emitted output (an import-time module-body print)
+			// must therefore return the fence's internal_error instead —
+			// exactly what the in-library fallback arm below does — or the
+			// caller's re-run would duplicate the effect.
+			if a.registry.Effects.Count() != effectsAt {
+				return nil, false, "", fenceBlockedFallback(a.registry,
+					a.registry.AqlError("internal_error",
+						"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
+			}
 			return nil, false, reason, a.registry.AqlError("compile_refused",
 				"bytecode compilation refused: "+reason+
 					" (interpret explicitly with RunInterp, or set AQL_COMPILE_FALLBACK=1 for the one-release silent fallback)", "")

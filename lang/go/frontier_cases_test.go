@@ -257,9 +257,16 @@ var frontierCases = []frontierCase{
 	}},
 
 	// Phase 11 — Stage J.
+	// GRADUATED 2026-07-15 (permanent pin): Stage J's Run flip landed —
+	// the public Run executes compiled-by-default with zero unattributed
+	// interpreter entries. The last two blockers closed the same day: the
+	// "concurrent-watch composite" (actually the cross-request def
+	// persistence bug — OpBindGlobal) and the cross-instance observability
+	// pollution (no longer reproducible after it: 20 plain + 5 -race
+	// in-sequence ledger runs clean).
 	{"p11/public-run-is-compiled", func() error {
 		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, err := a.RunInterp(`1 add 2`)
+			_, err := a.Run(`1 add 2`)
 			return err
 		})
 	}},
@@ -340,10 +347,6 @@ var frontierLedger = map[string]frontierEntry{
 	// The case above stays as a permanent pin.
 	"p6/vm-run-on-vm": {
 		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p11/public-run-is-compiled": {
-		why:       "plan Phase 11: three of the flip attempt's divergences CLOSED natively (fn-predicate binds f8a5bba, mini compile hooks fa9e844, and the 'concurrent-watch composite' — actually the CROSS-REQUEST DEF PERSISTENCE bug: a compiled request's kept check-pass binding stayed a CARRIER for every computed top-level def, so the next request read a type literal; OpBindGlobal writes the runtime value back into the kept slot — no concurrency involved, the watch was a red herring); REMAINING: only the cross-instance observability pollution (one unattributed Engine.Run after p4/l-np in sequence, timing-dependent); Run stays on the tree-walker until it closes",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 }
