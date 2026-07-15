@@ -1758,3 +1758,23 @@ the hook-forwarder pin moved to the vm:rematch-matched defer (a real
 designed bail that stays). Remaining expected-red: capturing-handler
 stamps, check-prop/vm-run module-load seams, the C4 attribution ratchet
 (p10), and the two Stage-J flips (p11).
+
+### C4 attribution LANDED — p10/no-unattributed-interp graduated (2026-07-15)
+
+Registry.interpAttribution is the C4 attribution context: noteInterp
+reports it on every entry, and the SANCTIONED interpreter re-runs bracket
+themselves with SetInterpAttribution — RunAutoValues' refusal arm tags
+"fallback:refusal", its runtime-bail arm "fallback:runtime-bail", and
+concreteEvalOnce (the const fold's concrete sub-run, which toggles check
+mode off for a real value — the source of the last unattributed entries)
+tags "check:const-fold". Every interpreter entry a refusing program's
+RunCompiled produces is now attributed, so
+p10/no-unattributed-interp-on-islanded-program holds and its ledger row
+graduated (expected-red 6→5). p11/no-unbounded-fallback's proxy
+assertion (no unattributed entries) graduated vacuously with it, so the
+case was STRENGTHENED to pin the actual Stage-J contract with a
+refusing-but-SUCCEEDING probe (the paren-bounded fn-value application,
+which runs to bad_input/q interpreted): pre-Stage-J the silent fallback
+returns the value (red); post-Stage-J the refusal returns an error
+(green). Remaining expected-red (5): p6 capturing-handler stamps,
+p6 check-prop/vm-run module seams, and the two p11 Stage-J flips.
