@@ -48,13 +48,14 @@ keeps the map default, unchanged.** Nothing below is mandatory.
 
 The parse half of this is ~80% built already. Four facts anchor the design.
 
-### 2.1 The `+m` micron minilang and per-leaf tabnas grammars
+### 2.1 The `+m` micron minilang and the merged tabnas grammar
 
-Each builtin leaf owns a **tabnas grammar** (`github.com/tabnas/parser/go`)
-that recognizes its literal shape and calls its constructor
-(`eng/go/micron_grammar.go`). The grammars **merge** into one grammar that
-`MicronFromString` parses with; the `+m:…` minilang literal (aql:minilang,
-kind `micron` / short form `m`) dispatches on literal *shape*:
+The shared `+m` grammar (`eng/go/micron_grammar.go`, `MicronGrammarWith`) merges
+**only three** builtin leaves' tabnas grammars (`github.com/tabnas/parser/go`) —
+**Emailon, Urlon, Pathon** — in that token order (`#EMAILON`, `#URLON`, extras…,
+`#PATHON`). Each recognizes its literal shape and calls its constructor;
+`MicronFromString` parses with the merge, and the `+m:…` minilang literal
+(aql:minilang, kind `micron` / short form `m`) dispatches on literal *shape*:
 
 ```
 +m:alice@example.com    => Emailon
@@ -65,23 +66,34 @@ kind `micron` / short form `m`) dispatches on literal *shape*:
 Precedence is Emailon → Urlon → extras → Pathon; a shape the gate accepts but
 the constructor refuses falls back to Pathon.
 
+**The *other* builtin leaves are NOT in this grammar.** Semveron, Cidron,
+Macon, … have their own Go string constructors (`semveronFromString`, …) reached
+by `make Semveron '…'`, but no tabnas leaf in the merge — so `+m:1.2.3` is a
+**Pathon**, not a Semveron. The reusable parse plumbing this proposal builds on
+is therefore the *three-leaf merge plus the `MicronLiteralSpec` extension hook*,
+not a per-leaf grammar for every builtin.
+
 ### 2.2 `MiniLang.micron` — the user-kind literal hook (parse only)
 
 `MiniLang.micron <Kind> <grammar> <fn>` (`lang/go/modules/minilang.go:287`)
 registers a literal shape for a **user** Micron kind. It is exactly the
 "grammar in a field + builder" idea, already working:
 
-- `<grammar>` is **a whole tabnas grammar** — either a declarative **GrammarSpec
-  map** (the same document `Parse.spec` accepts) or a `Parse.grammar` builder
-  value;
+- `<grammar>` is **a whole tabnas grammar as a declarative GrammarSpec map**
+  (the same document `Parse.spec` accepts) or a `Parse.grammar` builder value.
+  It is **not** a bare string: `MiniLang.micron` rejects a concrete `String`
+  (that was the retired regexp form, `minilang.go:855`), and the grammar must
+  declare at least one `options.match.token` gate;
 - `<fn>` turns the parse result into a `Kind` instance;
 - it builds an `eng.MicronLiteralSpec` and merges into the `+m` grammar via
   `eng.MicronGrammarWith`, between the builtin leaves and the Pathon catch-all.
 
-Joining `+m` is **best-effort, not mandatory**: `(*Tabnas).Merge` can reject a
-grammar (a match-token collision, an overlapping shape). When it does, the kind
-is not forced into `+m` — it is registered under its **own minilang name**
-instead (see §9). `+m` is a convenience shared namespace, not a requirement.
+**Today, a merge conflict is an error, not a fallback** (this is the *verified*
+behaviour): a token collision is rejected in `micronGrammarFinalize`
+(`minilang.go:963`), and any later `MicronGrammarWith` failure surfaces as
+`mini_parse_error` from `miniMicronHandlerFor` (`minilang.go:1158`). The
+"register the kind under its own minilang name instead" idea is a **proposal**
+(§9), not current behaviour — do not rely on it as existing.
 
 Verified end-to-end (runs today):
 
@@ -93,9 +105,11 @@ MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}}
 mini m 'T-123'          # typeof => Ticketon        ✓  parse works, joins +m
 ```
 
-tabnas itself supports **both** grammar surfaces the design will expose: an
-**ABNF text** form (`(*Tabnas).GrammarText`, with a `@tabnas/abnf` bridge) and
-a **declarative map** form (`GrammarSpec` / `mapToGrammarRules`).
+Note the grammar surfaces are distinct: `(*Tabnas).GrammarText` parses a tabnas
+**grammar-spec text** into an options/rules map; **ABNF** is a *separate* path —
+the `abnf` section of `Parse.spec` (or `Parse.abnf` builder steps,
+`lang/go/modules/parse.go:585`), not a `GrammarText` surface. This proposal uses
+the **GrammarSpec map** form that `MiniLang.micron` already accepts.
 
 ### 2.3 The parse / emit split; tabnas is decode-only
 
@@ -119,7 +133,7 @@ Each builtin leaf hand-codes render **separately** from its grammar:
 
 | direction | mechanism | example |
 |---|---|---|
-| parse | tabnas grammar → `xFromString` | `semveronFromString` (`micron.go:905`) |
+| parse | string constructor `xFromString` (reached by `make X '…'`; only Emailon/Urlon/Pathon *also* reach theirs through the `+m` tabnas merge) | `semveronFromString` (`micron.go:905`) |
 | render | a `case` in `micronRender` | `micronSemveronRender` (`micron.go:1042`) |
 
 So today, even for the builtins, parse and render are two artifacts that are
@@ -153,19 +167,30 @@ them from the field schema) is the first concrete gap (§8).
 `$parse` and `$emit` are each **polymorphic over one notion — a function**:
 
 ```
-$emit: 'T-${id}'                            # template  — sugar → a function
-$emit: ([id:String] => [concat 'T-' id])    # function  — the base case
+$emit: 'T-${id}'                            # template  — sugar → an emit function
+$emit: ([fields:Map] => [concat 'T-' (fields.id)])   # function — fields → String
 
-$parse: 'T-${id}'                           # template  — invertible → a parser function
-$parse: {options:{match:{token:{…}}}}       # grammar   — sugar → a parser function (§5, Tier 2)
-$parse: ([s:String] => [make Ticketon …])   # function  — the base case
+$parse: 'T-${id}'                           # template  — invertible → parse + a +m gate
+$parse: {options:{match:{token:{…}}}}       # grammar   — the tabnas GrammarSpec (§5, Tier 2)
+$parse: ([s:String] => [make Ticketon …])   # function  — string → value, for `make X '…'`
 ```
 
-This is not three mechanisms. The template and the grammar are **sugar that
-compile to functions**. `MiniLang.micron` already takes a builder **fn**, and
-`EmitLang.register` already takes an **fn** — so "also a function" simply
-exposes the layer that is already underneath. That is the base case the sugars
-desugar to, and the full-customizability escape hatch.
+The template and the grammar are **sugar that compile to functions** — but two
+**adapter constraints** (both real API facts, called out so this stays honest):
+
+- **`$emit` function shape.** `EmitLang.register` (`emitlang.go:344`) requires
+  every emitter signature to be `[value:Any opts:Map …] → String`, **not**
+  field-parameters. So a Micron `$emit` is *not* a raw `EmitLang.register` fn; it
+  is a **fields function** wrapped by a small adapter that projects the Micron
+  value to its field map and drops `opts`. The register layer is reused *through
+  that adapter*, not directly.
+- **`$parse` function needs a gate to join `+m`.** `MiniLang.micron` is
+  token-driven: the merged parser must know which literal spans a kind claims, so
+  the grammar must declare an `options.match.token` gate (`minilang.go:846`). A
+  bare `$parse` **function alone cannot join `+m`** — it serves only the
+  `make <Kind> 'string'` path (§8). To participate in `+m:…` dispatch a kind must
+  supply a template or grammar (which carry the gate); the function is then the
+  post-parse builder, not the gate.
 
 ### 3.3 Symmetry
 
@@ -211,15 +236,24 @@ Three properties fall out:
    (literals → match tokens, `${field}` → captures) fed through the existing
    `MiniLang.micron` path.
 
-**The roundtrip law** holds *by construction* for the invertible subset:
+**The roundtrip law** holds *by construction* for the invertible subset. Writing
+`render x` for the kind's **canonical string** (the `$emit` output / the value's
+`String`), and **not** bare `emit`:
 
 ```
-make Xon (emit x)  ==  x            for every x : Xon
+make Xon (render x)  ==  x            for every x : Xon
 ```
 
 because render is substitution and parse is the inverse split on the same
 literals. A generated roundtrip test per kind proves it (§8). This is the whole
 reason to keep Tier 1 to the invertible class: the law is free, not asserted.
+
+> **Why not bare `emit`.** `emit x` auto-selects the **JSON** encoder for a
+> Scalar (`lang/go/native/emit.go:198`), which quotes `v.String()` — so
+> `make Xon (emit x)` would feed a JSON string literal `"…"`, not the canonical
+> Micron text. The law is about the kind's own canonical render. Making bare
+> `emit x` pick a per-kind Micron renderer would need a natural-emitter hook for
+> the Micron family (listed in §9); it is not assumed here.
 
 **Invertibility conditions** (what keeps a template in Tier 1): a linear
 concatenation of literal chunks and holes; each field appears exactly once; the
@@ -442,13 +476,23 @@ the reserved-key surface and the template↔grammar compiler.
 2. **Template → `MicronLiteralSpec`** compiler (literals → match tokens,
    `${field}` → captures) routed through `MiniLang.micron` /
    `MicronGrammarWith`, so the kind joins `+m` / `MicronFromString`.
-3. **Render**: install the kind's canonical String/emit behavior to fill the
-   template; auto-derive the field-capture builder (hole names → schema fields),
-   removing the hand-written fn in the common case.
-4. **Roundtrip test generator**: assert `make Xon (emit x) == x` per kind.
-5. **Invertibility check**: reject a Tier-1 `$parse` template that is not
+3. **`make <Kind> 'string'` construction path.** Joining `+m` covers only
+   `+m:…` / `mini m '…'`. The headline `make Ticketon 'T-123'` is a *separate*
+   path: `makeMicronUser` (`eng/go/micron.go:2219`) currently rejects every
+   non-map source. Wire a registry-aware `make <Kind> String` that routes the
+   string through the kind's parser, or the advertised `make` form still fails.
+4. **Render**: install the kind's canonical String render to fill the template
+   (used by `print` / the value's `String`); auto-derive the field-capture
+   builder (hole names → schema fields), removing the hand-written fn in the
+   common case. Wrap it as an `EmitLang.register` emitter *via a value→fields
+   adapter* (§3.2) if `emit <kind>` is also wanted.
+5. **Roundtrip test generator**: assert `make Xon (render x) == x` per kind
+   (canonical render, not bare `emit` — §4).
+6. **Invertibility check**: reject a Tier-1 `$parse` template that is not
    invertible (repeated field, empty/ambiguous delimiter, alternation) with a
    clear error pointing at Tier 2.
+7. **(Optional) natural-emit hook** for the Micron family, so bare `emit x`
+   picks the per-kind render instead of the JSON default (§4 caveat).
 
 ---
 
