@@ -1823,3 +1823,21 @@ aql:test module-load seam, Vm.run's fork-isolated runtime compile) —
 stamping-coverage work, not Stage-J gates — and the external voxgig
 sweep (Phase 9), which needs a NEW session sourced from the voxgig-aql
 org (cross-tier add_repo is unsupported in this one).
+
+### Stage J step 3 MECHANISM LANDED — the refusal→error flip, opt-in (2026-07-15)
+
+Under AQL_COMPILE_FALLBACK=0, RunAutoValues returns a GENUINE refusal as
+a compile_refused error carrying the reason — BEFORE the fence check (no
+re-run happens, so there is nothing to fence) — while the STATIC classes
+(check error / "check diagnostics" sentinel) keep the bounded oracle
+re-run regardless. The CLI's CompileTry mode performs the fallback
+ITSELF now (warn once, then RunInterp explicitly) — the degradation
+moved from the library (hidden) to the caller (visible, attributed).
+Contracts pinned under the flip: the fence refusal test, the
+mustRefuseWithParity family, the RunCompiledReason offender row; the
+DEFAULT (fallback retained) is pinned by its own twin. The DEFAULT
+INVERSION (error unless =1) is the remaining step-3 tail: ~48 off-corpus
+refusal-parity tests exercise refusing shapes through RunCompiled and
+must migrate to the flip contract before the default flips —
+p11/no-unbounded-fallback stays honestly red on the default until then.
+Step 4 (the public Run flip to the compiled path) follows.
