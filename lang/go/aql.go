@@ -643,7 +643,23 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 //   - string for strings
 //
 // State from set/get persists across multiple Run calls on the same instance.
+//
+// Run currently executes on the tree-walking interpreter (RunInterp);
+// Stage J of the runtime-independence plan flips it to the compiled path,
+// with RunInterp retained as the differential oracle. Callers that need
+// the interpreter SPECIFICALLY — parity oracles, canonical-error
+// rendering — must call RunInterp so the flip cannot silently change what
+// they measure.
 func (a *AQL) Run(src string) ([]any, error) {
+	return a.RunInterp(src)
+}
+
+// RunInterp parses and executes src on the TREE-WALKING INTERPRETER,
+// unconditionally — never the bytecode VM. It is the differential oracle
+// the compiled path is measured against (byte-identical values, errors,
+// and output), and it survives Stage J's Run flip as the explicitly-named
+// interpreter entry point.
+func (a *AQL) RunInterp(src string) ([]any, error) {
 	result, err := a.runValues(src)
 	if err != nil {
 		return nil, err
