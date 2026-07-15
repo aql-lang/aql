@@ -113,6 +113,95 @@ func TestRefusalFallbackAfterCheckEffectPropagates(t *testing.T) {
 	}
 }
 
+// A refusal whose ONLY sentinel diagnostic is a CAUGHT one (a do-body failure
+// the error handler recovers — severity info, CaughtAtRuntime) must NOT
+// surface that diagnostic as the program's verdict when the fence blocks the
+// fallback: the interpreter CONTINUES with the handler's result (the twin
+// below pins [caught]), so the honest report is the blocked-fallback
+// internal_error, like any other refusal the fence cannot resolve.
+func TestCaughtDiagnosticRefusalReportsBlockedFallback(t *testing.T) {
+	a := mustNew(t)
+	zzCheckEmit(a)
+	var out bytes.Buffer
+	a.SetOutput(&out)
+
+	got, compiled, err := a.RunCompiled(`zz-emit ; do [zz-missing-word-xyz] error ['caught']`)
+	if codeOf(err) != "internal_error" {
+		t.Fatalf("caught-diag refusal: err=[%s] %v (got=%v compiled=%v); want the blocked-fallback internal_error — a caught diagnostic is not the program's verdict", codeOf(err), err, got, compiled)
+	}
+	if !strings.Contains(err.Error(), "--no-compile") {
+		t.Errorf("caught-diag refusal: error should carry the --no-compile note, got: %v", err)
+	}
+	if out.String() != "E" {
+		t.Errorf("caught-diag refusal: output = %q, want exactly one %q", out.String(), "E")
+	}
+}
+
+// The effect-free twin: the same caught-diagnostic refusal with no check-pass
+// effect falls back silently and the program's REAL verdict is the handler's
+// value — which is why the fenced arm above must not report the caught
+// diagnostic as an error.
+func TestCaughtDiagnosticRefusalWithoutEffectFallsBack(t *testing.T) {
+	a := mustNew(t)
+	got, compiled, err := a.RunCompiled(`do [zz-missing-word-xyz] error ['caught']`)
+	if err != nil || compiled {
+		t.Fatalf("caught-diag fallback: err=%v compiled=%v; want the silent interpreter fallback", err, compiled)
+	}
+	if fmt.Sprint(got) != "[caught]" {
+		t.Errorf("caught-diag fallback: got %v, want [caught] from the handler", got)
+	}
+}
+
+// A late effect from a PREVIOUS request's detached work (a ForkConcurrent
+// body still printing) must not poison the CURRENT request's fence baseline:
+// the ledger is per-request, and a stale worker holds the pointer it captured
+// at its own fork/arm time. zz-stale-note stands in for that worker — it
+// notes the ledger that was live BEFORE this request began, during the new
+// request's check pass.
+func TestStaleLedgerEffectDoesNotBlockFallback(t *testing.T) {
+	a := mustNew(t)
+	stale := a.registry.Effects
+	a.Register("zz-stale-note", native.Signature{
+		Args:       []*native.Type{},
+		Returns:    []*native.Type{},
+		BarrierPos: -1,
+		Impl: native.Go(func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			stale.Note()
+			return nil, nil
+		}, native.RunInCheck()),
+	})
+
+	_, compiled, err := a.RunCompiled(`zz-stale-note ; ` + zzRefusingRow)
+	if compiled {
+		t.Error("stale-note refusal: ran compiled; want the interpreter fallback")
+	}
+	if codeOf(err) != "signature_error" {
+		t.Errorf("stale-note refusal: err=[%s] %v; want the interpreter's canonical signature_error — a stale ledger note must not block the fallback", codeOf(err), err)
+	}
+	if a.registry.Effects != stale {
+		t.Error("the request must restore the prior ledger on return")
+	}
+}
+
+// The write word is a production NoteEffect caller: a filesystem write counts
+// on the ledger (here through the in-memory FS — it persists across a
+// fallback re-run just like a disk file, so it counts identically), while the
+// read-back does not.
+func TestFileWriteNotesEffectLedger(t *testing.T) {
+	a := mustNew(t)
+	before := a.registry.Effects.Count()
+	got, err := a.Run(`import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://a.txt" "hi"  IO.read "mem://a.txt"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || fmt.Sprint(got[len(got)-1]) != "hi" {
+		t.Fatalf("write/read round trip = %v, want trailing \"hi\"", got)
+	}
+	if delta := a.registry.Effects.Count() - before; delta != 1 {
+		t.Errorf("file write ledger delta = %d, want exactly 1 (the write counts, the read does not)", delta)
+	}
+}
+
 // A STATIC check error after a check-pass effect surfaces AS ITSELF (the
 // program is invalid in both engines; the interpreter re-run that would
 // normally render the canonical error is blocked, but the check error is the

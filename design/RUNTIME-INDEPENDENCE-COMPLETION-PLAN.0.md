@@ -1532,3 +1532,48 @@ verdicts + the word-resolved literals in the window) — verify with the
 render-parity probe before wiring. The each variadic-if row stays after
 this (mark-bounded rematch parts 2+3 — needs the branch-merge variadic
 region first).
+
+### C1 fence hardening — the five PR-review gaps (2026-07-15)
+
+The Codex review of PR #267 found five real gaps in the C1 fence as
+landed; all five closed in one hardening pass:
+
+1. **Callback writers were unfenced.** InvokeCallback's retry fence read
+   the ledger, but a DETACHED callback fires after RunAutoValues disarmed
+   the writer wrappers — a callback that printed and then bailed was
+   invisible to the ledger and the CallAQL retry duplicated the output.
+   The seam now arms ArmEffectFence around its own VM attempt (nested
+   invocations double-wrap harmlessly; the fence reads deltas).
+2. **NoteEffect had no production callers.** Wired the non-writer effect
+   seams: the write word (fileio.go doWrite, file arm only — the
+   stdout/stderr arm already counts via the writer fence), folder
+   (natives.go doFolder), HTTP fetch/direct (fetch.go doFetch, noted on
+   the attempt immediately before client.Do — everything earlier, policy
+   denial included, provably sent nothing), and the model build FS
+   (modules/model.go fileOpsFS, non-dry arms only — dryrun overlay writes
+   never leave the handle). File/dir writes note on the ATTEMPT because
+   an OS write can create/truncate before failing. The sqlite Exec sites
+   were reviewed and deliberately left out: they are drop-then-recreate
+   loaders whose replay is idempotent (no L-DUP exposure); a general
+   user-facing SQL-exec word would need the seam when one lands.
+3. **A caught diagnostic masqueraded as the verdict.** The fence-blocked
+   refusal arm surfaced any sentinel diagnostic as the program's error,
+   including CaughtAtRuntime ones — but those are downgraded precisely
+   because a surrounding do [...] catches the failure and the interpreter
+   CONTINUES with the handler's result (probe: `do [missing-word] error
+   ['caught']` runs to [caught]). The arm now surfaces only
+   ERROR-severity diagnostics; caught-only sentinels fall to the honest
+   fenceBlockedFallback internal_error.
+4. **The ledger baseline was registry-global.** A detached fork from an
+   EARLIER request noting the shared ledger during a later request's
+   check pass would spuriously block that request's safe fallback. The
+   ledger is now per-request (RunAutoValues installs a fresh one,
+   restores the prior on return): stale workers hold the pointer they
+   captured at fork/arm time, so their late effects land on the old
+   ledger, while forks the current request spawns copy the fresh pointer
+   and count — exactly the ownership the fence needs.
+5. **The writer fence counted rejected writes.** noteEffectWriter noted
+   before delegating, so a writer that refused the bytes outright (a
+   closed pipe: 0, err) counted as an escaped effect and blocked a
+   still-safe fallback. It now delegates first and notes only n > 0
+   (partial writes still count).

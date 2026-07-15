@@ -68,8 +68,19 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 		// catch it out here past the enclosing run — the seam itself falls back to
 		// CallAQL, exactly as RunCompiled does. Genuine AQL runtime errors are the
 		// interpreter's answer too and pass straight through.
+		//
+		// The writer fence is armed around the attempt because a DETACHED
+		// callback fires after the enclosing compiled run disarmed its own
+		// fence: without the wrap, a callback that PRINTS and then bails would
+		// leave the ledger untouched and the CallAQL retry below would emit
+		// the output a second time. Nested invocations (mid-compiled-run) are
+		// already armed; the second wrap only double-counts, and the fence
+		// reads deltas, not magnitudes.
+		disarm := r.ArmEffectFence()
 		effectsAt := r.Effects.Count()
-		if res, err, ran := invokeCompiledUnit(r, ref, args); ran {
+		res, err, ran := invokeCompiledUnit(r, ref, args)
+		disarm()
+		if ran {
 			if !isInternalErr(err) {
 				return res, err
 			}

@@ -797,6 +797,18 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// (the L-DUP class the pure-value differential is blind to). Armed BEFORE
 	// the check pass, which executes module imports: an import-time effect
 	// must count against the refusal arm too.
+	//
+	// The ledger is PER-REQUEST: a fresh one is installed for this run and
+	// the prior one restored on return. Detached work from an EARLIER request
+	// (a ForkConcurrent body still printing) captured the ledger pointer live
+	// at ITS fork/arm time, so its late effects land on the old ledger and
+	// cannot spuriously block THIS request's fallback — while a fork this
+	// request spawns (an import-time module body) copies the fresh pointer
+	// and counts, exactly the ownership the fence needs. Installed before
+	// arming so the writer wrappers capture the fresh ledger.
+	savedEffects := a.registry.Effects
+	a.registry.Effects = &eng.EffectLedger{}
+	defer func() { a.registry.Effects = savedEffects }()
 	disarmFence := a.registry.ArmEffectFence()
 	defer disarmFence()
 	effectsAt := a.registry.Effects.Count()
@@ -827,17 +839,22 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// (and any other RunInCheckMode word) for real — if one of them emitted
 		// an observable effect, re-running the whole source would emit it
 		// twice. A statically-invalid program still surfaces its own verdict —
-		// the check error, or the first model-undermining diagnostic behind
-		// the "check diagnostics" sentinel (CompileCheck returns that sentinel
-		// only when one exists, and a genuine refusal never carries one, so
-		// the loop and the fall-through partition exactly). A genuine refusal
-		// surfaces as a blocked-fallback internal_error carrying the reason.
+		// the check error, or the first ERROR-severity model-undermining
+		// diagnostic behind the "check diagnostics" sentinel: that program
+		// fails identically in both engines, so the diagnostic IS the truthful
+		// result. A CaughtAtRuntime diagnostic is deliberately NOT surfaced
+		// here even though it also raises the sentinel: it was downgraded
+		// because a surrounding `do [...]` catches the failure — the
+		// interpreter would CONTINUE with the handler's result — so reporting
+		// it as the program's own error would be wrong; it falls through to
+		// the honest blocked-fallback internal_error below, like any other
+		// refusal the fence cannot resolve.
 		if a.registry.Effects.Count() != effectsAt {
 			if err != nil {
 				return nil, false, "", err
 			}
 			for _, d := range res.Diagnostics {
-				if !d.RuntimeMirror && (d.Severity == SeverityError || d.CaughtAtRuntime) {
+				if !d.RuntimeMirror && d.Severity == SeverityError {
 					return nil, false, "", a.registry.AqlError(d.Code, d.Detail, d.Word)
 				}
 			}

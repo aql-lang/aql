@@ -50,27 +50,39 @@ func (l *EffectLedger) Count() uint64 {
 }
 
 // NoteEffect marks one observable effect on the registry's ledger — the seam
-// non-writer effects (file writes, network sends, process spawns) call so the
-// fallback fence sees them alongside output writes.
+// non-writer effects (file writes, network sends) call so the fallback fence
+// sees them alongside output writes. Production callers: the write word
+// (fileio.go doWrite), folder (natives.go doFolder), HTTP fetch/direct
+// (fetch.go doFetch), and the model build FS (modules/model.go fileOpsFS).
+// Nil-safe on both receiver and ledger: direct handler-call tests pass a nil
+// registry, and counting nothing there matches the nil-ledger contract.
 func (r *Registry) NoteEffect() {
+	if r == nil {
+		return
+	}
 	r.Effects.Note()
 }
 
-// noteEffectWriter marks the ledger on every non-empty write before
-// delegating. Wrapping the registry's writers once (ArmEffectFence) covers
-// the whole print/stdout/stderr effect class without instrumenting each
-// printing word: forks and module sub-registries copy the wrapped writer
-// VALUE, so their writes count too.
+// noteEffectWriter marks the ledger on every write the underlying writer
+// ACCEPTED (n > 0 — partial writes escaped too). Delegating first is what
+// keeps the fence honest in both directions: a writer that rejects the bytes
+// outright (a closed pipe returning 0, err) provably emitted nothing, so
+// counting it would block a still-safe interpreter fallback. Wrapping the
+// registry's writers once (ArmEffectFence) covers the whole
+// print/stdout/stderr effect class without instrumenting each printing word:
+// forks and module sub-registries copy the wrapped writer VALUE, so their
+// writes count too.
 type noteEffectWriter struct {
 	w io.Writer
 	l *EffectLedger
 }
 
 func (nw noteEffectWriter) Write(p []byte) (int, error) {
-	if len(p) > 0 {
+	n, err := nw.w.Write(p)
+	if n > 0 {
 		nw.l.Note()
 	}
-	return nw.w.Write(p)
+	return n, err
 }
 
 // ArmEffectFence wraps the registry's Output/ErrOutput writers so every write
