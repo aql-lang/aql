@@ -2188,3 +2188,28 @@ The frontier is ONE expected-red: p6/vm-run-on-vm, blocked behind the
 Phase-10 VM-side word-policy gate (Vm.run always composes the sandbox
 policy, so its sub-registry compile stays correctly barred by the
 CompileCheck security refusal).
+
+### The VM-side word-policy gate lands (Phase 10) — first half of the p6/vm-run-on-vm unblock (2026-07-15)
+
+Every NAMED compiled dispatch now consults the engine word policy —
+vmContext.gateWord, the VM twin of the interpreter's policyGateWord:
+the SAME WordChecker object raises the SAME error, internal markers
+exempt identically. Sites: the CALL_NATIVE and CALL_USER/TAIL_CALL_USER
+case arms, and inside callPolyIn (CALL_NATIVE_POLY), matchUserPoly
+(CALL_USER_POLY), and callDynMethod (CALL_DYN_METHOD). The checker is
+cached per registry by pointer-compare (LookupWordChecker's
+capability-store walk is too costly per dispatch); the unarmed fast
+path pays one pointer compare + nil check. Arms pinned with hand-built
+programs (vm_policy_gate_test.go — deny/allow/marker triads per op
+class; production compiles still refuse policy-gated registries, so
+the tests install the checker after construction).
+
+This is DELIBERATELY landed as a pure addition: the CompileCheck and
+StampDetachedFn security refusals still stand, so no production path
+reaches the VM with a policy installed yet. The SECOND half — lifting
+those refusals so policy-gated registries compile (graduating
+p6/vm-run-on-vm: Vm.run's sandbox-composed sub-registry runs its
+runtime compile on the VM), updating the exec-server and
+policy_compiled_gate pins, and a compiled-vs-interpreted policy parity
+sweep — is the next landing. Remaining after that: steps 7-9
+re-baselining and the voxgig sweep (a voxgig-aql-sourced session).
