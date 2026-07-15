@@ -1943,3 +1943,68 @@ unattributed Engine.Run after p4/l-np in sequence; non-deterministic
 across processes, sticky within one — a timing-dependent global,
 possibly a pooled sub-engine or a detached goroutine from the L-JOIN
 case's print).
+
+### Stage J step 3 COMPLETE — the default inverts to compile_refused (2026-07-15)
+
+The opt-in flag is gone: RunAutoValues now returns `compile_refused`
+for a GENUINE whole-program refusal by DEFAULT, and
+`AQL_COMPILE_FALLBACK=1` is the one-release hatch RESTORING the silent
+in-library re-run (the exact inverse of the opt-in landing). The static
+classes (a check error, the "check diagnostics" sentinel) keep the
+bounded oracle re-run unconditionally — those programs fail identically
+in both engines and the re-run only renders the canonical verdict. The
+51 tests pinning refusal+fallback-parity contracts are individually
+hatched with `t.Setenv("AQL_COMPILE_FALLBACK", "1")` and a
+legacy-contract comment (migrate or retire with the hatch); the new
+default is pinned by TestRefusalReturnsCompileRefused,
+mustRefuseWithParity (bytecode_edge_findings), and the
+run_compiled_reason offender row, with TestRefusalHatchRestoresFallback
+as the hatch's positive twin.
+
+**p11/no-unbounded-fallback GRADUATES** (frontier 5→4 expected-red):
+the refusing-but-succeeds probe now gets `compiled=false` +
+`compile_refused` — no silent re-run exists on the default path. The
+ledger row is deleted; the case stays as the permanent pin.
+
+**The CLI surfaces perform the fallback THEMSELVES** (the Stage-J
+contract: fallback moved from the library, hidden, to the caller,
+attributed):
+
+- `buildrt` CompileTry (aql run / build outputs): warn once naming the
+  refusal, then interpret — keyed on the `compile_refused` CODE, not
+  the reason (under the hatch the library already ran the source; a
+  reason-keyed re-run would double its effects).
+- `exec` (the HTTP server): silent explicit fallback; the policy-gated
+  registry is the canonical arm — a policy-bound server always refuses
+  (compiled dispatch consults no word rules) and every request runs on
+  the interpreter, where the gate lives.
+- `repl`: silent explicit fallback per refused line, matching the
+  historical UX (a genuinely-refusing line pin was added — the old
+  fixture, `for 3 [1 2]`, compiles natively since the census hit 0).
+- the langspec combination-parity harness (whose contract is
+  parity-VIA-FALLBACK by design) performs the same explicit fallback
+  on compile_refused, mirroring fcStampedRun's migration.
+
+**ArmRuntimeStamping / RunInterpValues** (lang): the caller-side half
+of the explicit fallback. The in-library armed fallback used to keep
+detached fn-unit stamping live across the interpreter re-run (stored
+callbacks earn the VM path — the compiled mode's contract); an explicit
+`RunInterp` is unarmed, so the compile-report fixture lost its
+store-site stamp. `ArmRuntimeStamping` hands CLIs/hosts that arming
+with prior-state restore; all three surfaces arm around their fallback
+run. `RunInterpValues` is the raw-Value RunInterp twin the REPL's
+renderer needs.
+
+**StampDetachedFn gains the word-policy SECURITY GATE** (eng): the
+CompileCheck whole-program refusal ("policy-gated registry — compiled
+dispatch does not consult word rules") now also guards detached units —
+previously an armed fallback on a policy-gated registry could stamp a
+runtime-constructed callback whose InvokeCallback VM run would BYPASS
+every word deny rule (latent since runtime stamping landed; reachable
+via the exec server's policy arm). The refusal is a recorded stamp
+event so -compile-report attributes it; the negative twin pins that a
+policy-free registry never records the policy reason.
+
+Remaining flip blockers (the p11/public-run-is-compiled row): the
+concurrent-watch composite and the cross-instance observability
+pollution, unchanged.

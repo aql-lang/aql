@@ -75,6 +75,24 @@ func TestStartRefusedLineFallsBackWithResult(t *testing.T) {
 	}
 }
 
+// Post-Stage-J the library returns compile_refused for a refusing line
+// (no silent re-run); the REPL performs the interpreter fallback ITSELF,
+// silently — the user sees the line's result, never the refusal error.
+// The fixture is a genuinely-refusing shape (the mid-expression fn-value
+// apply; `for 3 [1 2]` above compiles natively since the refusal census
+// hit zero, so it pins the compiled path, not this fallback).
+func TestStartRefusedLineFallbackIsSilent(t *testing.T) {
+	in := strings.NewReader(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)` + "\n")
+	out := &bytes.Buffer{}
+	Start(in, out, "")
+	if !strings.Contains(out.String(), "7") {
+		t.Fatalf("refused line must print the interpreter's result; got %q", out.String())
+	}
+	if strings.Contains(out.String(), "error:") || strings.Contains(out.String(), "compile_refused") {
+		t.Fatalf("refused line must fall back silently; got %q", out.String())
+	}
+}
+
 // The NewFromRegistry construction-error arm (seam-driven; the production
 // registry is never nil).
 func TestStartInstanceInitErrorReported(t *testing.T) {

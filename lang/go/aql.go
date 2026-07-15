@@ -329,6 +329,25 @@ func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 	return a.registry.ArmRuntimeBailHook(fn)
 }
 
+// ArmRuntimeStamping arms detached fn-unit stamping (eng.StampDetachedFn) on
+// this instance and returns the restoring disarm func. RunCompiled /
+// RunAutoValues arm it themselves for the duration of the call; this is the
+// caller-side half of the Stage-J explicit-fallback contract: a host or CLI
+// surface that receives compile_refused and chooses to run RunInterp itself
+// keeps the compiled mode's callback contract — runtime-constructed callbacks
+// (service handlers, codec fns) still compile to VM units at their store
+// sites — by arming around the fallback run. The returned func restores the
+// prior state (a no-op when the registry was already armed), so nesting is
+// safe. A policy-gated registry stays sound under arming: StampDetachedFn
+// itself refuses when a word policy is installed, exactly like CompileCheck.
+func (a *AQL) ArmRuntimeStamping() func() {
+	if a.registry.RuntimeStampingEnabled() {
+		return func() {}
+	}
+	a.registry.EnableRuntimeStamping()
+	return func() { a.registry.DisableRuntimeStamping() }
+}
+
 // CompileCheck runs the source through the checker with the bytecode
 // recording pass enabled (Stage 1: straight-line, monomorphic native
 // calls only) and linearises the trace into a Program. When the
@@ -671,6 +690,15 @@ func (a *AQL) RunInterp(src string) ([]any, error) {
 	return convertResults(result), nil
 }
 
+// RunInterpValues is RunInterp without the host-value projection — the raw
+// engine Values, for callers whose renderer needs the engine's own
+// Value.String() (the REPL's per-line echo and its compile_refused
+// fallback). Same contract as RunInterp: unconditionally the tree-walking
+// interpreter, never the VM.
+func (a *AQL) RunInterpValues(src string) ([]native.Value, error) {
+	return a.runValues(src)
+}
+
 // runValues is Run without the host-value projection: the raw engine stack.
 // The Value-returning entry points (RunAutoValues' fallback arms) need the
 // unprojected Values so a host renderer (the REPL's v.String()) stays
@@ -869,22 +897,21 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// it as the program's own error would be wrong; it falls through to
 		// the honest blocked-fallback internal_error below, like any other
 		// refusal the fence cannot resolve.
-		// STAGE J (plan Phase 11, C2): under AQL_COMPILE_FALLBACK=0 a
-		// GENUINE performance refusal no longer silently re-runs the whole
-		// source — it returns the refusal as an error, so the caller
-		// decides (RunInterp explicitly, or the CLI's visible
-		// warn-and-fall-back). The flip is OPT-IN while the off-corpus
-		// refusal-parity test surface migrates; the default inverts (error
-		// unless =1) as the migration completes, per the Stage-J execution
-		// plan. The STATIC classes keep the bounded oracle re-run below
-		// regardless: a program with a check error or the "check
-		// diagnostics" sentinel fails (or, caught, succeeds) identically in
-		// both engines, and the re-run only renders the canonical result.
+		// STAGE J (plan Phase 11, C2): a GENUINE performance refusal no
+		// longer silently re-runs the whole source — it returns the refusal
+		// as an error, so the caller decides (RunInterp explicitly, or the
+		// CLI's visible warn-and-fall-back). AQL_COMPILE_FALLBACK=1 is the
+		// one-release hatch restoring the silent re-run; the tests that pin
+		// refusal+fallback-parity semantics set it explicitly. The STATIC
+		// classes keep the bounded oracle re-run below regardless: a
+		// program with a check error or the "check diagnostics" sentinel
+		// fails (or, caught, succeeds) identically in both engines, and
+		// the re-run only renders the canonical result.
 		if err == nil && reason != "" && reason != "check diagnostics" &&
-			os.Getenv("AQL_COMPILE_FALLBACK") == "0" {
+			os.Getenv("AQL_COMPILE_FALLBACK") != "1" {
 			return nil, false, reason, a.registry.AqlError("compile_refused",
 				"bytecode compilation refused: "+reason+
-					" (interpret explicitly with RunInterp, or unset AQL_COMPILE_FALLBACK for the silent fallback)", "")
+					" (interpret explicitly with RunInterp, or set AQL_COMPILE_FALLBACK=1 for the one-release silent fallback)", "")
 		}
 		if a.registry.Effects.Count() != effectsAt {
 			if err != nil {

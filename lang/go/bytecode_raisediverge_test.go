@@ -21,6 +21,10 @@ import (
 // merge with mismatched counts (`if c [n] []`) — still refuses fixed-arity
 // consumption and falls back, so the relaxation is scoped to diverging arms.
 func TestEmitRaiseArmDivergence(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Positive: raise-terminated if-chain, result consumed as a fixed arg.
 	compiles := []struct{ src, want string }{
 		// Two String results (the non-raising arms) concatenated by `add`.

@@ -18,7 +18,6 @@ import (
 // and that RunCompiled falls back to the interpreter's result.
 func mustRefuseWithParity(t *testing.T, src, want string) {
 	t.Helper()
-	t.Setenv("AQL_COMPILE_FALLBACK", "0")
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)

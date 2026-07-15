@@ -75,6 +75,10 @@ func TestForZeroNetBodyChecksClean(t *testing.T) {
 // COMPILED (byte-identical to the interpreter). The computed-start/step forms
 // correctly decline and fall back. This pins the compile/interpret parity.
 func TestComputedRangeLoopCompilesAndMatches(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	type wc struct {
 		src         string
 		wantCompile bool

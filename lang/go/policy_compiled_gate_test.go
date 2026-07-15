@@ -30,6 +30,10 @@ func denyAddPolicy(t *testing.T) Policy {
 }
 
 func TestPolicyGatedRegistryRefusesCompilationWithParity(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	pol := denyAddPolicy(t)
 	a, _ := New(Options{Policy: pol})
 	gotI, errI := a.RunInterp("1 add 2")
@@ -60,6 +64,10 @@ func TestPolicyGatedRegistryRefusesCompilationWithParity(t *testing.T) {
 // An ALLOWED word under the same policy still runs (via the interpreter
 // fallback) — the gate refuses compilation, never execution.
 func TestPolicyGatedRegistryAllowedWordStillRuns(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	pol := denyAddPolicy(t)
 	a, _ := New(Options{Policy: pol})
 	got, ran, _, err := a.RunCompiledReason("10 sub 3")

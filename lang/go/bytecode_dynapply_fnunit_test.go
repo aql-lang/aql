@@ -174,6 +174,10 @@ func TestFnUnitDynFrameBreakWithoutLoopDefers(t *testing.T) {
 //     it would run the print before the callee's output — the observed
 //     inversion this gate closes), falling back with identical output.
 func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	runOut := func(src string, compiled bool) (out []any, printed string, took bool, err error) {
 		a, e := New()
 		if e != nil {
@@ -224,6 +228,10 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 // resolve it (tryCompileUserPolyArms' baseline-depth guard). The refusal is
 // sound; the interpreter owns body-local multi-overload fns.
 func TestBodyLocalMultiOverloadPolyRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	src := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:3}`
 	a, err := New()
 	if err != nil {

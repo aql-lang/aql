@@ -163,6 +163,10 @@ func TestShapedMethodCapturingMemberStaysRefused(t *testing.T) {
 // result AND the next statement's size result — probe-confirmed divergence
 // on the committed tree). It must now refuse, with faithful fallback.
 func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	fnValueM2Refusal(t, "computed arg in the statement window",
 		`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add (1 add 2) ; Log.measurements size`,
 		"dynamic value precedes residual args")

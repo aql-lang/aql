@@ -50,6 +50,47 @@ func TestStampDetachedFnPolicyGate(t *testing.T) {
 	}
 }
 
+// allowAllChecker is a WordChecker that denies nothing — installing ANY
+// checker marks the registry policy-gated, which is what the stamp gate
+// keys on (compiled dispatch consults no word rules, so even a permissive
+// policy must keep dispatch on the interpreter where the gate runs).
+type allowAllChecker struct{}
+
+func (allowAllChecker) CheckWord(string) error { return nil }
+
+// Word-policy gate: a policy-gated registry must never stamp a detached
+// unit — a compiled body invoked via InvokeCallback would bypass the
+// per-dispatch word gate (the same security refusal CompileCheck applies
+// to whole programs). The refusal is a recorded attempt so -compile-report
+// attributes it; an identical registry without the checker never records
+// the policy reason (the negative twin).
+func TestStampDetachedFnWordPolicyGate(t *testing.T) {
+	const policyReason = "policy-gated registry (compiled dispatch does not consult word rules)"
+	fd := aqlBodyFd(NewInteger(1))
+
+	gated := stampReg(t)
+	gated.EnableRuntimeStamping()
+	if err := gated.Capabilities.Set(CapPolicy, allowAllChecker{}); err != nil {
+		t.Fatalf("install checker: %v", err)
+	}
+	if _, ok := StampDetachedFn(gated, fd, SrcPos{}); ok {
+		t.Fatalf("policy-gated registry: stamp must decline")
+	}
+	events := gated.StampEvents()
+	if len(events) != 1 || events[0].Stamped || events[0].Reason != policyReason {
+		t.Fatalf("want one refusal event with the policy reason, got %+v", events)
+	}
+
+	open := stampReg(t)
+	open.EnableRuntimeStamping()
+	_, _ = StampDetachedFn(open, fd, SrcPos{})
+	for _, ev := range open.StampEvents() {
+		if ev.Reason == policyReason {
+			t.Fatalf("policy-free registry recorded the policy refusal: %+v", ev)
+		}
+	}
+}
+
 // Shape gates: captured fns, multi-own-sig fns, empty bodies, sentinel bodies,
 // and non-fn values all decline, returning the input unchanged.
 func TestStampDetachedFnShapeGates(t *testing.T) {

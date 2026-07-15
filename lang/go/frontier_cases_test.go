@@ -77,7 +77,16 @@ func fcStampedRun(src, name string) error {
 	}
 	a.SetOutput(&bytes.Buffer{})
 	if _, _, err := a.RunCompiled(src); err != nil {
-		return fmt.Errorf("run failed before the stamp assertion: %w", err)
+		// A refusing fixture returns compile_refused under the Stage-J
+		// default; this case's contract is the STAMP REPORT, not the
+		// refusal policy, so fall back explicitly (the CLI's own pattern)
+		// and assert stamps over the interpreter run.
+		if !strings.Contains(fmt.Sprint(err), "compile_refused") {
+			return fmt.Errorf("run failed before the stamp assertion: %w", err)
+		}
+		if _, ierr := a.RunInterp(src); ierr != nil {
+			return fmt.Errorf("interp run failed before the stamp assertion: %w", ierr)
+		}
 	}
 	var attempted *StampEvent
 	for i, ev := range a.StampReport() {
@@ -255,13 +264,11 @@ var frontierCases = []frontierCase{
 		})
 	}},
 	{"p11/no-unbounded-fallback", func() error {
-		// Post-Stage-J a refusal returns an error instead of silently
-		// re-running the whole source on the interpreter; graduation is
-		// coupled with rewriting the mustRefuseWithParity-family contracts.
-		// (The former no-unattributed-entries assertion graduated early —
-		// the pre-Stage-J bounded fallback is now ATTRIBUTED
-		// (fallback:refusal), which is C4's target, so this case pins the
-		// REMAINING contract: the fallback's absence itself.)
+		// GRADUATED 2026-07-15 (permanent pin): the Stage-J DEFAULT is
+		// compile_refused — a genuine refusal returns the reason as an
+		// error and never silently re-runs the source (the one-release
+		// AQL_COMPILE_FALLBACK=1 hatch restores the old behavior for the
+		// legacy contracts that pin it explicitly).
 		// The probe must be a refusing program that SUCCEEDS interpreted (a
 		// raising one cannot distinguish the fallback's error from a
 		// returned refusal): the paren-bounded fn-value application refuses
@@ -338,9 +345,5 @@ var frontierLedger = map[string]frontierEntry{
 	"p11/public-run-is-compiled": {
 		why:       "plan Phase 11: two of the flip attempt's divergences CLOSED natively (fn-predicate binds f8a5bba, mini compile hooks fa9e844), the model-watch ledger race fixed (construction-time capture), and the ISOLATED handle shape proven SOUND (def mdl handle + Model.stop mdl refuses 'operand of unknown provenance' and falls back correctly — probe 2026-07-15); REMAINING: the handle failure needs the CONCURRENT composite (a live watch goroutine + the flip's per-request churn — model_bad_handle at stop) plus the cross-instance observability pollution; Run stays on the tree-walker until those close",
 		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p11/no-unbounded-fallback": {
-		why:       "plan Phase 11 (C2): the flip MECHANISM landed opt-in (AQL_COMPILE_FALLBACK=0 pins it); the DEFAULT still silently re-runs until the off-corpus refusal-parity test surface migrates, then the default inverts",
-		failsWith: "refusal resolved by the silent interpreter fallback",
 	},
 }

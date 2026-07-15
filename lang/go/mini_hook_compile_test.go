@@ -54,6 +54,10 @@ func TestMiniGoHookCompilesIdentically(t *testing.T) {
 // A hook whose expansion the compile pass cannot mirror REFUSES — never the
 // transducer bake. Non-concrete opts (a fn param) is the exercised shape.
 func TestMiniGoHookNonConcreteOptsRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const src = `import "aql:minilang" end def f fn [[m:Map][String][mini up 'hi' m]] f {x:1}`
 	a := zzUpMini(t)
 	prog, reason, _, cerr := a.CompileCheck(src)
@@ -74,6 +78,10 @@ func TestMiniGoHookNonConcreteOptsRefuses(t *testing.T) {
 // An AQL compile hook (a macro) is interpreter-only: its check-mode
 // expansion is not the runtime expansion, so a compile pass refuses.
 func TestMiniAQLHookRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// register-compiled is not a RunInCheckMode word, so an in-source AQL
 	// hook cannot exist during its own compile pass; pre-register it on the
 	// instance via the interpreter, then compile a program using it.

@@ -97,7 +97,6 @@ const zzRefusingRow = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 // happens at all — with or without a prior check-pass effect — so the
 // effect is emitted exactly once and the refusal reason rides the error.
 func TestRefusalReturnsCompileRefused(t *testing.T) {
-	t.Setenv("AQL_COMPILE_FALLBACK", "0")
 	a := mustNew(t)
 	zzCheckEmit(a)
 	var out bytes.Buffer
@@ -319,11 +318,11 @@ func TestForeignErrorBailWithoutEffectFallsBack(t *testing.T) {
 	}
 }
 
-// The default twin: until the contract migration completes, the DEFAULT
-// retains the silent interpreter fallback — the refused row runs
-// interpreted and raises its canonical runtime error. (The Stage-J default
-// inversion turns this into the =1 hatch test.)
-func TestRefusalDefaultKeepsFallback(t *testing.T) {
+// The hatch twin: AQL_COMPILE_FALLBACK=1 restores the pre-Stage-J silent
+// interpreter fallback for one release — the refused row then runs
+// interpreted and raises its canonical runtime error.
+func TestRefusalHatchRestoresFallback(t *testing.T) {
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	a := mustNew(t)
 	var out bytes.Buffer
 	a.SetOutput(&out)

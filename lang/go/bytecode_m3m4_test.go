@@ -126,6 +126,10 @@ func TestDeferredParseCheckObservationFree(t *testing.T) {
 // PROVABLY-stable missing-key reads fold to None and compile natively, while
 // every key a register call may install keeps the sound fold decline.
 func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	positives := []struct{ name, src string }{
 		// module-minilang.tsv:320 — a non-filter kind (2-param sig) never
 		// mints a member type, so MiniLang.Gen is None on every run.
@@ -200,6 +204,10 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 // to a terminal OpTrap with the interpreter's byte-identical taxonomy —
 // code, detail, and a position wherever the interpreter carries one.
 func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	cases := []struct{ name, src string }{
 		// apply.tsv:37 — the former "carrier operand declines" negative:
 		// inc's Integer result is disjoint from apply's Function slot, and

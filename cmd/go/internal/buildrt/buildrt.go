@@ -137,12 +137,22 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 		// contract is graceful degradation, so the CLI performs the
 		// fallback ITSELF — explicitly and visibly: warn once, naming the
 		// first offending construct, then interpret. The fallback moved
-		// from the library (hidden) to this caller (attributed).
-		if reason != "" {
-			if warn != nil {
-				fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
-			}
+		// from the library (hidden) to this caller (attributed). It is
+		// keyed on the compile_refused CODE, not the reason: under the
+		// one-release AQL_COMPILE_FALLBACK=1 hatch the library already ran
+		// the source (the reason is still reported for the warning), and a
+		// second run would double its effects. Detached fn-unit stamping
+		// stays armed across the fallback run (ArmRuntimeStamping) so
+		// stored callbacks still earn the VM path — the compiled mode's
+		// contract, exactly as the in-library armed fallback behaved.
+		if reason != "" && warn != nil {
+			fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
+		}
+		var refused *lang.AqlError
+		if errors.As(err, &refused) && refused.Code == "compile_refused" {
+			disarm := a.ArmRuntimeStamping()
 			result, err = a.RunInterp(source)
+			disarm()
 		}
 	default:
 		// -no-compile: the interpreter EXPLICITLY (Stage J flips the public

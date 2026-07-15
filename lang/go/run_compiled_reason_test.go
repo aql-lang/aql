@@ -28,7 +28,6 @@ func TestRunCompiledReason(t *testing.T) {
 	// refuses "unmatched dispatch recovered at f" and falls back to the
 	// interpreter, which raises.
 	t.Run("refusal names the offender", func(t *testing.T) {
-		t.Setenv("AQL_COMPILE_FALLBACK", "0")
 		const src = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 		a, _ := New()
 		_, ran, reason, err := a.RunCompiledReason(src)

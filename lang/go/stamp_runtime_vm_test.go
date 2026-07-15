@@ -327,6 +327,10 @@ func TestRunCompiledDoesNotLeakStampingIntoLaterRun(t *testing.T) {
 // module-load stamps: RestoreForCompile rolls them back, so ResetStampLog drops
 // them and only the fallback re-run's authoritative stamps reach the report.
 func TestRunCompiledFallbackNoDuplicateStampReport(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// A stampable module import followed by an uncompilable tail (fn-value
 	// applied inside a paren — "fn-value application bounded by a paren") so the
 	// whole program falls back to the interpreter after the check pass stamped

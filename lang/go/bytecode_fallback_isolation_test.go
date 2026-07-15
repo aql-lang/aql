@@ -57,6 +57,10 @@ func TestCompiledReturnCheck(t *testing.T) {
 // from a clean interpreter run. These pin that isolation
 // (SnapshotForCompile / RestoreForCompile).
 func TestRunCompiledFallbackIsolation(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Each row is UNCOMPILABLE (so it takes the fallback path) and
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
@@ -224,6 +228,10 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 // spec row currently triggers (a future change that let `args` compile
 // would silently break it).
 func TestCompiledArgsWordFallsBack(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Bare `args` (the WHOLE per-call list) still falls back: the args
 	// projection has no foldable consumer, so it refuses at its use site and
 	// the interpreter owns it. (Compiling it would need a build-list-from-locals

@@ -1659,6 +1659,10 @@ func TestEmitF4DynamicDispatch(t *testing.T) {
 // Such a body refuses to island; the whole program falls back and the
 // interpreter unwinds the sentinel correctly.
 func TestEmitIslandSentinelRefusal(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// `each [break]` inside a compiled `for`: the break targets the for,
 	// not each — it must NOT be islanded.
 	src := `for 3 [each [break] [1 2]]`

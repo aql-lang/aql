@@ -113,6 +113,10 @@ def edge-cols fn [[nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 
 // concrete non-Any declared returns strict, so a dynamic Any element carrier
 // stays dynamic and `each` soundly falls back to the interpreter.
 func TestEachOverDynamicAnyStillRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	crossmodRefuses(t, `def f fn [[m:Map] [List] [ (m "xs" get) each $.0 ]]
 (f {xs: [[1 2] [3 4]]})`)
 }

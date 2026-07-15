@@ -15,6 +15,7 @@ package exec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -180,8 +181,22 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 
 	// Compiled-by-default (the same CompileTry semantics as `aql run`),
 	// with the interpreter as the sound fallback for refused programs
-	// (plan Phase 2 — entry-point routing).
+	// (plan Phase 2 — entry-point routing). Post-Stage-J a refusal
+	// returns compile_refused instead of the library silently re-running,
+	// so this surface performs the fallback itself. The policy-gated
+	// registry is the canonical arm: compiled dispatch does not consult
+	// word rules, so a policy-bound server ALWAYS refuses and every
+	// request runs on the interpreter, where the gate lives. Stamping is
+	// armed across the fallback so stored callbacks keep the VM path on
+	// policy-free servers (StampDetachedFn itself refuses under a word
+	// policy, so arming never re-opens the gate).
 	stack, _, _, runErr := a.RunCompiledReason(req.Code)
+	var refused *lang.AqlError
+	if errors.As(runErr, &refused) && refused.Code == "compile_refused" {
+		disarm := a.ArmRuntimeStamping()
+		stack, runErr = a.RunInterp(req.Code)
+		disarm()
+	}
 	resp := execResponse{Output: outBuf.String()}
 	if runErr != nil {
 		resp.Error = runErr.Error()

@@ -375,6 +375,10 @@ func TestComputedArmConditions(t *testing.T) {
 // non-event (list-form / const) condition with both arms computed — stays
 // refused (the negative half).
 func TestBothComputedIfLowers(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const src = `add 10 (if (1 eq 1) (add 1 2) (sub 9 4))`
 	a, err := New()
 	if err != nil {
@@ -704,6 +708,10 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 // occurrence declines the trap and falls back. Proof that macroexpand is
 // reducible compiler work, not irreducible reflection.
 func TestMacroexpandCompilesNative(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	for _, c := range []struct {
 		src  string
 		want string
@@ -1425,6 +1433,10 @@ func TestOpMakeListCompiles(t *testing.T) {
 // faithfully. Pairs the negative (hazard refuses + correct fallback) with the
 // positive (a simple method dispatch and a bare-word call still compile).
 func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const def = `def m {g: (fn [[x:Integer][Integer][x mul 2]])} `
 
 	// NEGATIVE: the paren-bounded apply must NOT compile native (it would
@@ -1630,6 +1642,10 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 // [Function]-typed CARRIER leading the residual is applied to its trailing args
 // by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
 func TestFactoryApplyCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
 
 	// POSITIVE — the factory result applied to an arg compiles natively to 11,
@@ -2004,6 +2020,10 @@ func TestTopTakingClosureTrim(t *testing.T) {
 // the interpreter and builds the real value. Found via voxgig-aql/decision
 // prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
 func TestInterpStringRuntimePartCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// nm is a field read over the each-element carrier → a runtime hole. It now
 	// lowers to OpInterp (the VM rebuilds the string from the popped hole at run
 	// time) rather than refusing the program. Compiled == interp, no carrier leak,
@@ -2219,6 +2239,10 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 // set, so the getr's own unmaterialisable residual (which refuses even valid
 // keys) does not refuse the program — the trap truncates it.
 func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const src = `import "aql:math-util"  MathUtil!.nope`
 	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
 	if cerr != nil {
@@ -3046,6 +3070,10 @@ func TestStageAVariadicBranchResult(t *testing.T) {
 // compile an unsound program: before the gate, `f 3 add 1` diverged
 // (internal_error vs the interpreter's signature_error for f 0).
 func TestStageAVariadicSoundnessGate(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	mustRefuse := []string{
 		// A 0-or-1 variadic fn result consumed by add.
 		`def f fn [[n:Integer] [] [if (n lte 0) [] [n mul 2]]]  f 3 add 1`,
@@ -3092,6 +3120,10 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 // closure is a ClosurePayload OpCallDynamic invokes VM-natively) and match the
 // interpreter.
 func TestReturnedCapturingClosureApply(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	positive := []struct {
 		src  string
 		want string
@@ -3570,6 +3602,10 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 // REFUSE (sound fallback): the interpreter auto-applies at the paren
 // collapse / per closure arity, which one OpCallDynamic cannot model.
 func TestFnValueAutoApplyRefusals(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	refusals := []struct{ name, src, want string }{
 		{"deferred-field dot auto-invoke", `def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`, "auto-dispatches"},
 		{"paren get auto-invoke", `def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`, "auto-dispatches"},
@@ -3636,6 +3672,10 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 // classify-time token snapshot is a zero-length list forever — every other
 // ascend shape keeps its refusal (sound interpreter fallback).
 func TestWalkHookClosureCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	parity := []struct{ name, src, want string }{
 		{"tier-2 corpus row (empty-flex ascend consumed as 4th arg)",
 			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc`,
@@ -3837,6 +3877,10 @@ func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
 // refusal and falls back to the interpreter — the trap must never claim a
 // dispatch whose runtime outcome can differ from the static one.
 func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// (The former "carrier operand declines" negative — `5 inc apply` —
 	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension,
 	// and since OpDispatchRematch landed the whole single-carrier-window
@@ -4074,6 +4118,10 @@ func TestTypedDefBindCompiles(t *testing.T) {
 // PR #225 P1 review findings — two auto-dispatch/identity escapes, both
 // probe-confirmed divergences before the fix, both now sound refusals.
 func TestPR225P1Refusals(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// (1) A fn-body literal EMBEDDING an enclosing binding's container:
 	// interp = fresh spine + SHARED member, which neither a deep-clone
 	// freshen nor a shared const models — must refuse; fallback restores
@@ -4129,6 +4177,10 @@ func TestPR225P1Refusals(t *testing.T) {
 // compile natively (no island) with compiled == interpreted parity; the
 // negative twins pin what must KEEP refusing.
 func TestFilterLambdaCaptureCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	parity := []struct{ name, src, want string }{
 		{"enclosing-fn param capture (list pair shape)",
 			`def f (fn [[y:Integer] [List] [ filter ([e:Any] => [ e.value gte y ]) [3 7 9] ]]) f 5`,

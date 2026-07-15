@@ -88,6 +88,10 @@ func fnValueM2Refusal(t *testing.T, name, src, wantReason string) {
 // --- M2a — `apply` over a param fn ---------------------------------------
 
 func TestApplyOverParamFnCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"recursion.tsv:91 — apply over a Function param",
 			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
@@ -123,6 +127,10 @@ func TestApplyOverParamFnCompiles(t *testing.T) {
 // --- M2b — path-modifier map-stored fns -----------------------------------
 
 func TestPathModifierMapFnCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"path-modifier.tsv:17 — /u leading apply",
 			`def m {a:add/r} end m.a/u 1 2`, "[3]"},
@@ -164,6 +172,10 @@ func TestPathModifierMapFnCompiles(t *testing.T) {
 // --- M2c (partial) — Log.register stores its sink fn ----------------------
 
 func TestLogRegisterSinkCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// module-log.tsv:62 — a pure fn literal bakes as a const operand
 	// (CompileStoresFn); the sink registry mutates at RUN time only.
 	fnValueM2Native(t, "module-log.tsv:62 — register a pure fn sink",
@@ -195,6 +207,10 @@ func TestLogRegisterSinkCompiles(t *testing.T) {
 // --- M2d — fn value as an INERT operand of `is` ---------------------------
 
 func TestIsFnValueOperandCompiles(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"module-minilang.tsv:306 — matcher fn is its minted kind",
 			`import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)`, "[true]"},
