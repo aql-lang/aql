@@ -646,11 +646,14 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 // State from set/get persists across multiple Run calls on the same instance.
 //
 // Run currently executes on the tree-walking interpreter (RunInterp);
-// Stage J of the runtime-independence plan flips it to the compiled path,
-// with RunInterp retained as the differential oracle. Callers that need
-// the interpreter SPECIFICALLY — parity oracles, canonical-error
-// rendering — must call RunInterp so the flip cannot silently change what
-// they measure.
+// Stage J flips it to the compiled path once the flip's surfaced
+// behavioral divergences close (the 2026-07-15 flip attempt broke the
+// fn-predicate transform family, the model watch fork, and the mini
+// host-compile hook — real compiled-vs-interpreted divergences the
+// oracle discipline caught; each is a frontier item to pin and fix).
+// Callers that need the interpreter SPECIFICALLY — parity oracles,
+// canonical-error rendering — must call RunInterp so the flip cannot
+// silently change what they measure.
 func (a *AQL) Run(src string) ([]any, error) {
 	return a.RunInterp(src)
 }

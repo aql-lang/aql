@@ -145,7 +145,9 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 			result, err = a.RunInterp(source)
 		}
 	default:
-		result, err = a.Run(source)
+		// -no-compile: the interpreter EXPLICITLY (Stage J flips the public
+		// Run to the compiled path; this mode's contract is the tree-walker).
+		result, err = a.RunInterp(source)
 	}
 	if err != nil {
 		// A structured diagnostic re-renders with the ANSI palette when

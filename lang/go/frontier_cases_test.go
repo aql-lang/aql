@@ -335,12 +335,12 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
+	"p11/public-run-is-compiled": {
+		why:       "plan Phase 11: the 2026-07-15 flip attempt surfaced REAL compiled-path divergences (the fn-predicate transform family, the model watch fork race, the mini host-compile hook) plus a cross-instance observability pollution (one unattributed Engine.Run after p4/l-np in sequence); Run stays on the tree-walker until those close — the flip mechanics themselves are proven (-no-compile and wasm are already pinned to RunInterp)",
+		failsWith: "unattributed interpreter entries: Engine.Run",
+	},
 	"p11/no-unbounded-fallback": {
 		why:       "plan Phase 11 (C2): the flip MECHANISM landed opt-in (AQL_COMPILE_FALLBACK=0 pins it); the DEFAULT still silently re-runs until the off-corpus refusal-parity test surface migrates, then the default inverts",
 		failsWith: "refusal resolved by the silent interpreter fallback",
-	},
-	"p11/public-run-is-compiled": {
-		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 }

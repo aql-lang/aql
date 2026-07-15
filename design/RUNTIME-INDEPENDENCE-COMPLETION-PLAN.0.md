@@ -1841,3 +1841,22 @@ refusal-parity tests exercise refusing shapes through RunCompiled and
 must migrate to the flip contract before the default flips —
 p11/no-unbounded-fallback stays honestly red on the default until then.
 Step 4 (the public Run flip to the compiled path) follows.
+
+### Stage J step 4 ATTEMPTED — the flip surfaced real divergences (2026-07-15)
+
+The public Run flip (Run → RunCompiledReason) was landed, battery-tested,
+and REVERTED the same day: the oracle discipline caught REAL
+compiled-vs-interpreted divergences the corpus does not cover — the
+fn-predicate transform family (TypeFnPredicate_*, Guard_*,
+ErrorMessage_PredicateNamesType), the model watch fork (-race), and the
+mini host-compile hook (TestMiniCompileGoHostHook). Each is a new
+frontier item: pin as expected-red repros, fix, then re-flip. What DID
+land from the attempt: the -no-compile CLI arm and the wasm playground
+are pinned to RunInterp explicitly (behavior-preserving today,
+flip-proof forever), and a second finding — a cross-instance
+observability pollution (one unattributed Engine.Run after p4/l-np runs
+in sequence; sticky per-process, order-dependent, not reproducible with
+an inline drive) — is recorded on the p11 ledger row. Both p11 rows
+stay honestly red: the flip mechanics are proven, the remaining work is
+divergence-closing, which is exactly the runtime-independence program's
+core loop.
