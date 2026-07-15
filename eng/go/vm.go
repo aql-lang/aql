@@ -1105,6 +1105,43 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 	return append(stack, results...), nil
 }
 
+// bindDynScope executes one OpBindDynScope: install the top value under the
+// name for dynamic-scope readers (OpLookupDynScope), through the same
+// installer the interpreter's `def` runs; record the prior depth so the
+// frame's RET (or the error unwind) truncates the binding stack back.
+func (vc *vmContext) bindDynScope(curReg *Registry, p *Program, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
+	}
+	name, nerr := p.Consts[arg].AsConcreteString()
+	if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
+	}
+	v := stack[len(stack)-1]
+	vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
+	InstallDef(curReg, name, v)
+	return stack[:len(stack)-1], nil
+}
+
+// bindGlobal executes one OpBindGlobal — the cross-request persistence twin
+// of a top-level computed `def`: PEEK the runtime value (the stack is
+// untouched, so the lowering's fast path binds a value in place without
+// disturbing its downstream consumers; the copy path emits its own OpDrop)
+// and write it into the KEPT check-pass binding slot (SetAt replaces in
+// place — never a push — so shadow depth and undef behaviour match the
+// interpreter). A slot a later check-time undef popped skips the write: the
+// interpreter would have discarded the binding too.
+func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL underflow")
+	}
+	curReg.Defs.SetAt(gb.Name, gb.Depth, stack[len(stack)-1])
+	if gb.Pop {
+		return stack[:len(stack)-1], nil
+	}
+	return stack, nil
+}
+
 // unwindDynBinds truncates every dynamic-scope binding installed above the
 // given trail depth back to its recorded pre-install def-stack depth,
 // innermost-first — the compiled twin of the interpreter's per-frame
@@ -1593,21 +1630,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			enterUnit(int(in.Arg))
 			pc = -1
 		case OpBindDynScope:
-			// Install the top value under the name for dynamic-scope readers
-			// (OpLookupDynScope), through the same installer the interpreter's
-			// `def` runs; record the prior depth so the frame's RET (or the
-			// error unwind) truncates the binding stack back.
-			if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
+			ns, err := vc.bindDynScope(curReg, p, int(in.Arg), stack, curDebug, pc)
+			if err != nil { //covergate:allow bindDynScope's only error paths are its own allow-listed defensive guards (underflow / bad name const), unreachable without a bytecode-level fault (§compiler)
+				return nil, err
 			}
-			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
+			stack = ns
+		case OpBindGlobal:
+			ns, err := bindGlobal(curReg, &p.GlobalBinds[in.Arg], stack, curDebug, pc)
+			if err != nil { //covergate:allow bindGlobal's only error path is its own allow-listed defensive underflow guard, unreachable without a bytecode-level fault (§compiler)
+				return nil, err
 			}
-			v := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
-			InstallDef(curReg, name, v)
+			stack = ns
 		case OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the

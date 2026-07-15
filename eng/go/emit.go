@@ -417,6 +417,14 @@ type emitDynBind struct {
 	srcSeq int // producing event seq for an event-sourced value; -1 otherwise
 	val    Value
 	pos    SrcPos
+	// root marks a def recorded at the PROGRAM's top level (the root unit,
+	// outside any fn body): its binding persists past the run via the
+	// keep-on-compile contract, so a NON-concrete bound value must emit an
+	// OpBindGlobal write-back replacing the kept check-pass carrier with the
+	// runtime value (lowerDynBind). depth is Defs.Depth(name) right after the
+	// check-pass install — the exact slot the write-back targets.
+	root  bool
+	depth int
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -4612,8 +4620,17 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	} else if slot, ok := cur.localByID[v.ID]; ok {
 		src = localOperand(slot)
 	}
+	// A def recorded in the ROOT unit outside any fn body persists past the
+	// run (keep-on-compile): stamp the slot its install just created so the
+	// lowering can emit the OpBindGlobal write-back. Fn-body and nested-unit
+	// defs are frame-scoped (DefCleanup tears them down) — never stamped.
+	root, depth := false, 0
+	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
+		root, depth = true, es.reg.Defs.Depth(name)
+	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
+		root: root, depth: depth,
 	}})
 }
 
@@ -6730,6 +6747,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
+	lw.bindConsumes = collectRootBindConsumes(es.frames[0], lw.dead)
 	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
 	// Mark-window plan (L-DO part 2b): see planMarkWindow.
 	es.planMarkWindow(lw, residual)

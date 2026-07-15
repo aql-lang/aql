@@ -95,8 +95,9 @@ func TestEmitGoldens(t *testing.T) {
 0006 CALL_NATIVE s1   ; add (Number, Number)
 0007 JMP         -> 0009
 0008 PUSH_CONST  k2   ; 9 (Integer)
-0009 PUSH_CONST  k1   ; 2 (Integer)
-0010 CALL_NATIVE s2   ; mul (Number, Number)
+0009 BIND_GLOBAL g0   ; global bind y @depth 1
+0010 PUSH_CONST  k1   ; 2 (Integer)
+0011 CALL_NATIVE s2   ; mul (Number, Number)
 ; consts=3 types=0 sigs=3 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
@@ -565,8 +566,10 @@ func TestEmitTypedDefInstance(t *testing.T) {
 // TestEmitDeadValueDef: a single-result value-def referenced zero times — a
 // dead binding (`def b (make C {…})` / `def x (1 add 2)` with the name never
 // used) — used to refuse as an "unconsumed call result" on the simulated
-// stack. The call still runs (side effects preserved), but its result is now
-// dropped, so the program compiles. A USED def is unaffected.
+// stack. The call still runs (side effects preserved) and its result is
+// CONSUMED by the def's OpBindGlobal write-back (Pop mode — the binding
+// persists cross-request; pre-OpBindGlobal it was a plain DROP), so the
+// program compiles with nothing lingering. A USED def is unaffected.
 func TestEmitDeadValueDef(t *testing.T) {
 	for _, c := range []struct{ src, want string }{
 		{`def C class {a:1} def b (make C {a:5})`, "[]"},
@@ -580,14 +583,18 @@ func TestEmitDeadValueDef(t *testing.T) {
 			t.Errorf("%s: dead value-def must compile, refused: %s", c.src, r)
 			continue
 		}
-		if !strings.Contains(dis, "DROP") {
-			t.Errorf("%s: expected a DROP for the dead result, got:\n%s", c.src, dis)
+		if !strings.Contains(dis, "BIND_GLOBAL") {
+			t.Errorf("%s: expected the dead result consumed by BIND_GLOBAL, got:\n%s", c.src, dis)
+		}
+		if strings.Contains(dis, "DROP") {
+			t.Errorf("%s: the write-back consumes the dead result; no DROP expected, got:\n%s", c.src, dis)
 		}
 		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
 			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
 		}
 	}
-	// A USED value-def must NOT drop — its result feeds a consumer.
+	// A USED value-def must NOT drop — its result feeds a consumer (the
+	// write-back re-pushes from the promoted local and consumes the COPY).
 	dis, r := compile(t, `def x (1 add 2) (x add x)`)
 	if r != "" {
 		t.Fatalf("used value-def refused: %s", r)

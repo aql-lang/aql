@@ -2008,3 +2008,65 @@ policy-free registry never records the policy reason.
 Remaining flip blockers (the p11/public-run-is-compiled row): the
 concurrent-watch composite and the cross-instance observability
 pollution, unchanged.
+
+### Flip blocker "concurrent-watch composite" CLOSED — it was the cross-request def-persistence bug (OpBindGlobal) (2026-07-15)
+
+The bisect killed the composite theory in one move: with the Run flip
+applied, `TestModelWatchForkNoRace` failed with model_bad_handle at
+`Model.stop mdl` with ZERO foreground churn, ZERO source rewrites, and
+the watch idle — and the stop failed via PURE RunInterp too. The watch
+goroutine was a red herring. The real mechanism: a compiled request's
+check pass installs every top-level `def` binding (RunInCheckMode) and
+keep-on-compile PERSISTS it — but for a COMPUTED value the check pass
+binds a CARRIER, and nothing ever wrote the runtime value back. Within
+the request the VM's dataflow works (reads resolve by operand
+provenance, not the registry), so single-run differentials are
+structurally blind to the class; the NEXT request — either engine —
+reads a type literal where the interpreter had bound the real value.
+
+The blast radius was every computed top-level def on the Phase-2
+compiled-by-default surfaces (REPL/exec), live TODAY without the flip:
+`def h (Model.new …)` → model_bad_handle; `def svc (service {})` →
+"expected a Service, got Service"; `def fx (flex …)` → "cannot access
+property on type literal"; and — silently WRONG, not even an error —
+`def n (add 1 2)` then `n add 1` returned 1 instead of 4.
+
+The fix rides the existing def machinery end to end. RecordDynBind (the
+evDynBind event every def already records) stamps `root` (recorded in
+the root unit outside any fn body — exactly the bindings
+keep-on-compile persists) and `depth` (Defs.Depth right after the
+install — the exact slot). lowerDynBind emits the new **OpBindGlobal**
+twin for a root def of a non-concrete, non-bare-type-node value; the VM
+writes the runtime value via `Defs.SetAt(name, depth, v)` — REPLACE at
+the recorded depth, never a push — so shadow depth and undef behaviour
+match the interpreter exactly (`def x (f) def x (g)` writes each
+install's own level; a slot a check-time undef popped skips the write).
+
+The lowering preserves every existing program shape (fullcorpus is
+byte-count-identical): a def binds IMMEDIATELY after its producing
+event, so the FAST PATH peeks the live sim top in place (this seats
+branch merges the promotion machinery cannot) — Pop=false, downstream
+consumers untouched; a source promoted by the ordinary triggers
+(multi-read defs) re-pushes from its frame local and the bind consumes
+the copy (Pop=true — one op, no DROP, the used-def golden unchanged); a
+DEAD computed def's producer-site dead-drop is suppressed
+(collectRootBindConsumes) and the bind consumes the dead result
+directly. No promotion is forced. Bare type nodes (`def x None`) and
+concrete values are self-representing/faithful — no op. The residual
+refusal: a def of a VARIADIC loop collect (`def xs (for 3 [1])`) joins
+the established Stage-2 taxonomy ("consumes loop results").
+
+Gates: fullcorpus 6324 rows, 5966 compiled, 0 divergences — byte-equal
+to the pre-change baseline (stash-measured); census 6000/6000, refusals
+0, COMPILED_STATUS.md unchanged; the watch composite passes under the
+flip with -race (3 counts). vm.run's gocognit ceiling forced extracting
+bindDynScope/bindGlobal helpers. Pinned: the four persistence classes +
+compiled next-request read, shadow/undef depths, check-time-undef skip,
+the no-op envelope (type nodes, literals, fn-body locals don't leak),
+the variadic refusal with interp parity, the module-level model/service
+handle shapes, DefTable.SetAt's arms, and the dead-def
+consumed-by-bind shape (TestEmitDeadValueDef re-pinned; one emit golden
+gains its BIND_GLOBAL line).
+
+The p11/public-run-is-compiled ledger row's why-text now names the ONE
+remaining flip blocker: the cross-instance observability pollution.

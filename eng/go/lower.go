@@ -149,37 +149,84 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // nothing here — its value flows by provenance exactly as before.
 func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	d := ev.dyn
-	if lw.es == nil || (!lw.es.dynEnv && (lw.es.dynScopeNames == nil || !lw.es.dynScopeNames[d.name])) {
+	needDyn := lw.es != nil && (lw.es.dynEnv || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
+	// A ROOT-unit def of a NON-concrete value additionally needs the
+	// cross-request write-back (OpBindGlobal): its binding persists past the
+	// run via keep-on-compile, and the kept check-pass value is a CARRIER —
+	// the next request (or any interpreter read) would resolve a type
+	// literal where the interpreter binds the runtime value (`def h
+	// (Model.new …)` then `Model.stop h` raised model_bad_handle). A
+	// concrete bound value IS the runtime value (const-fold parity), and a
+	// bare type node (`def x None`) is self-representing in both engines —
+	// each keeps today's faithful binding with no op emitted.
+	needGlobal := lw.es != nil && d.root && !IsConcrete(d.val) && !IsBareTypeNode(d.val)
+	if !needDyn && !needGlobal {
 		// DynEnv mode (a dynamic code body compiled — tryRecordDynBody)
 		// widens to EVERY def: the body's runtime sub-run may read any name,
 		// so all bindings must be registry-visible, as under the interpreter.
 		return ""
 	}
+	// The write-back's fast path: a `def` binds IMMEDIATELY after its value
+	// event, so the value is (almost always) live on top of the sim — peek it
+	// in place (OpBindGlobal never pops) and every downstream consumer, the
+	// residual accounting included, is untouched. This covers producers the
+	// promotion machinery cannot seat (a branch merge, `def r (if …)`), and
+	// costs one instruction. A variadic top (a loop collect) has no single
+	// value to peek — it falls through to the resolved-source path below.
+	fastGlobal := needGlobal && d.srcSeq >= 0 && len(lw.vm) > 0 &&
+		lw.vm[len(lw.vm)-1].seq == d.srcSeq && lw.vm[len(lw.vm)-1].idx == 0 &&
+		!lw.variadic[d.srcSeq]
 	src := d.src
-	switch {
-	case d.srcSeq >= 0:
-		// A COMPUTED def value lives on the simulated stack at its producing
-		// event, not here — it is re-pushable only through a promoted frame
-		// local (planValueDefLocals / the unit's promoted map). Without the
-		// promotion there is no way to duplicate it for the registry install;
-		// refuse (sound interpreter fallback).
-		slot, ok := lw.promoted[d.srcSeq]
-		if !ok {
-			return "dynamic-scope def `" + d.name + "` of unpromoted computed value"
+	if needDyn || !fastGlobal {
+		switch {
+		case d.srcSeq >= 0 && lw.variadic[d.srcSeq]:
+			// A def of a VARIADIC producer (a loop collect) has no single
+			// value to bind — the same Stage-2 boundary every other consumer
+			// of a loop result hits, under the same reason.
+			return "def `" + d.name + "` consumes loop results (Stage 2 loops only feed the program residual)"
+		case d.srcSeq >= 0:
+			// A COMPUTED def value lives on the simulated stack at its producing
+			// event, not here — it is re-pushable only through a promoted frame
+			// local (planValueDefLocals / the unit's promoted map). Without the
+			// promotion there is no way to duplicate it for the registry install;
+			// refuse (sound interpreter fallback).
+			slot, ok := lw.promoted[d.srcSeq]
+			if !ok {
+				return "dynamic-scope def `" + d.name + "` of unpromoted computed value"
+			}
+			src = localOperand(slot)
+		case src.kind == opNone:
+			// A literal binding: bake the recorded value verbatim, UNPOOLED (it
+			// may carry a reparented tag a same-canon source literal must not
+			// inherit). Only inert data bakes; anything tape-coupled refuses.
+			if !isInertConst(d.val) {
+				return "dynamic-scope def `" + d.name + "` of unknown provenance"
+			}
+			src = constOperand(lw.es.internUnpooled(d.val))
 		}
-		src = localOperand(slot)
-	case src.kind == opNone:
-		// A literal binding: bake the recorded value verbatim, UNPOOLED (it
-		// may carry a reparented tag a same-canon source literal must not
-		// inherit). Only inert data bakes; anything tape-coupled refuses.
-		if !isInertConst(d.val) {
-			return "dynamic-scope def `" + d.name + "` of unknown provenance"
-		}
-		src = constOperand(lw.es.internUnpooled(d.val))
 	}
-	lw.pushOperand(src, d.pos)
-	lw.emit(OpBindDynScope, lw.es.internUnpooled(NewString(d.name)), d.pos)
-	lw.vm = lw.vm[:len(lw.vm)-1]
+	if needDyn {
+		lw.pushOperand(src, d.pos)
+		lw.emit(OpBindDynScope, lw.es.internUnpooled(NewString(d.name)), d.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	}
+	if needGlobal {
+		// A DEAD source (bindConsumes suppressed its producer-site drop) is
+		// consumed BY the bind: fast path in Pop mode. A live fast-path value
+		// is peeked in place for its downstream consumers.
+		pop := !fastGlobal || lw.dead[d.srcSeq]
+		gi := len(lw.p.GlobalBinds)
+		lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{Name: d.name, Depth: d.depth, Pop: pop})
+		if !fastGlobal {
+			// Re-push a copy from its resolved home; the bind consumes it
+			// (Pop mode — one op, no separate DROP in the stream).
+			lw.pushOperand(src, d.pos)
+		}
+		lw.emit(OpBindGlobal, gi, d.pos)
+		if pop {
+			lw.vm = lw.vm[:len(lw.vm)-1]
+		}
+	}
 	return ""
 }
 
@@ -224,6 +271,12 @@ type lowerer struct {
 	variadic map[int]bool // loop seqs: N runtime values, not one
 	promoted map[int]int  // value-def locals: producing event seq → frame local slot
 	dead     map[int]bool // single-result value-defs referenced zero times: drop the result
+	// bindConsumes marks DEAD producers whose result a root OpBindGlobal
+	// write-back consumes (Pop mode) instead of the producer-site dead-drop:
+	// the value stays live through the immediately-following evDynBind, which
+	// pops it into the kept binding slot — one op, nothing lingers. Computed
+	// at plan time (collectRootBindConsumes); nil for fn units (no root defs).
+	bindConsumes map[int]bool
 	// markBefore / variadicElse drive the chained variadic-statement-if (a 2-arg
 	// `if`'s 0-or-1 result claimed as the else of a following `if`). markBefore[seq]
 	// emits an OpStackMark before that event opens a variadic region; variadicElse[seq]
@@ -512,10 +565,11 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 				}
 				lw.emit(OpStoreLocal, slot, ev.br.pos)
 				lw.vm = lw.vm[:len(lw.vm)-1]
-			} else if lw.dead[ev.seq] &&
+			} else if lw.dead[ev.seq] && !lw.bindConsumes[ev.seq] &&
 				// A DEAD branch value-def: its merge result sits on the sim unconsumed —
-				// drop it (the binding is never read). lowerBranch left exactly one slot
-				// for this branch's merge on top; pop+DROP it.
+				// drop it (the binding is never read; a bindConsumes merge instead
+				// stays live for its root OpBindGlobal write-back to pop). lowerBranch
+				// left exactly one slot for this branch's merge on top; pop+DROP it.
 				len(lw.vm) > 0 && lw.vm[len(lw.vm)-1].seq == ev.seq {
 				lw.emit(OpDrop, 0, ev.br.pos)
 				lw.vm = lw.vm[:len(lw.vm)-1]
@@ -1462,10 +1516,34 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 	return promoted, dead
 }
 
+// collectRootBindConsumes returns the DEAD producer seqs whose single result
+// a root OpBindGlobal write-back consumes in Pop mode — the producer's
+// dead-drop is suppressed (lowerCall / lowerUserCall / lowerUserPoly / the
+// dead-branch arm) so the value stays on the stack for the immediately-
+// following evDynBind to pop into the kept binding slot. The gate mirrors
+// lowerDynBind's needGlobal exactly.
+func collectRootBindConsumes(events []emitEvent, dead map[int]bool) map[int]bool {
+	all, _, _ := collectPromotableEvents(events)
+	out := map[int]bool{}
+	for _, ev := range all {
+		if ev.kind != evDynBind || ev.dyn == nil {
+			continue
+		}
+		d := ev.dyn
+		if d.root && d.srcSeq >= 0 && dead[d.srcSeq] &&
+			!IsConcrete(d.val) && !IsBareTypeNode(d.val) {
+			out[d.srcSeq] = true
+		}
+	}
+	return out
+}
+
 // collectDynBindSources returns the COMPUTED source-event seqs of every
-// dyn-bound def under DynEnv (empty otherwise) — the promotion set
-// planValueDefLocals feeds into its triggers so lowerDynBind can re-push
-// each value from a frame slot for its OpBindDynScope install.
+// def bind that will lower to a registry-visible twin — dyn-bound defs under
+// DynEnv / dynScopeNames (OpBindDynScope) and root-unit non-concrete defs
+// (OpBindGlobal) — the promotion set planValueDefLocals feeds into its
+// triggers so lowerDynBind can re-push each value from a frame slot for its
+// install.
 func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
 	dynBindSrc := map[int]bool{}
 	for i := range events {
@@ -1477,7 +1555,11 @@ func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
 		// visible) OR when this specific name is dynamically read
 		// (dynScopeNames — e.g. a module-scope `flex` read from a fn body). The
 		// gate mirrors lowerDynBind's, so a source is promoted exactly when the
-		// bind re-pushes it.
+		// bind re-pushes it. (Root-unit OpBindGlobal write-backs deliberately do
+		// NOT force promotion: a def binds immediately after its producing
+		// event, so the peek fast path reads the live top and every lowering
+		// shape stays byte-identical; a source promoted by the ordinary
+		// triggers re-pushes in Pop mode instead.)
 		if es.dynEnv || (es.dynScopeNames != nil && es.dynScopeNames[events[i].dyn.name]) {
 			dynBindSrc[events[i].dyn.srcSeq] = true
 		}
@@ -1683,6 +1765,13 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		return ""
 	}
 	if lw.dead[ev.seq] {
+		if lw.bindConsumes[ev.seq] {
+			// The root OpBindGlobal write-back consumes this dead result (Pop
+			// mode) — leave it live for the immediately-following evDynBind.
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: 0})
+			lw.note()
+			return ""
+		}
 		// A single-result value-def referenced zero times: the call ran for its
 		// side effects, but the result is discarded — drop it so it is not left
 		// unconsumed on the stack (planValueDefLocals marks only nout==1 events).
@@ -2007,6 +2096,12 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 		return ""
 	}
 	if lw.dead[ev.seq] {
+		if lw.bindConsumes[ev.seq] {
+			// Consumed by the root OpBindGlobal write-back (Pop mode).
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: 0})
+			lw.note()
+			return ""
+		}
 		// Result referenced zero times: the call ran for effects, drop the result.
 		lw.emit(OpDrop, 0, uc.pos)
 		lw.note()
@@ -2069,6 +2164,12 @@ func (lw *lowerer) lowerUserPolyCall(ev *emitEvent) string {
 		return ""
 	}
 	if lw.dead[ev.seq] {
+		if lw.bindConsumes[ev.seq] {
+			// Consumed by the root OpBindGlobal write-back (Pop mode).
+			lw.vm = append(lw.vm, vmSlot{seq: ev.seq, idx: 0})
+			lw.note()
+			return ""
+		}
 		lw.emit(OpDrop, 0, uc.pos)
 		lw.note()
 		return ""
