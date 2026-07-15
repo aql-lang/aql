@@ -45,7 +45,7 @@ def x (m get "k")
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, errI := b.Run(src)
+			_, errI := b.RunInterp(src)
 			if errI == nil {
 				t.Fatal("the interpreter must raise")
 			}
@@ -76,7 +76,7 @@ def x (m get "k")
 	}
 	b := mustNew(t)
 	b.SetOutput(&outI)
-	_, errI := b.Run(src)
+	_, errI := b.RunInterp(src)
 	if errC == nil || errI == nil || errC.Error() != errI.Error() {
 		t.Errorf("effectful poly no-match parity:\n=== COMPILED ===\n%v\n=== INTERP ===\n%v", errC, errI)
 	}
@@ -101,7 +101,7 @@ def x (m get "k")
 		t.Fatal("the deeper-stack shape must defer (the written tuple is wider than the window)")
 	}
 	b := mustNew(t)
-	_, errI := b.Run(src)
+	_, errI := b.RunInterp(src)
 	if errC == nil || errI == nil || errC.Error() != errI.Error() {
 		t.Errorf("fallback parity: compiled-path err %v != interp err %v", errC, errI)
 	}

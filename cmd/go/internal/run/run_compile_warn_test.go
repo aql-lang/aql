@@ -11,15 +11,14 @@ import (
 // construct, so the performance cost is not a surprise. A compiled program, and
 // the interpreter (-no-compile) mode, print no warning.
 func TestExecuteCompileRefusalWarning(t *testing.T) {
-	// A program the compiler refuses to lower ("unmatched dispatch recovered
-	// at each" — the variadic-if operand shape; the wide-window local-add
-	// row that used to sit here compiles to a render-bounded runtime rematch
-	// since DispatchSpec.NWritten landed). It also errors at runtime, but
-	// the warning fires on the REFUSAL, before the error — so -no-check
-	// (skip the pre-flight that would reject it) lets the run reach the
-	// compile-try fallback. Exit is non-zero (the runtime error), which is
-	// expected here.
-	refuses := `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
+	// A program the compiler refuses to lower (an off-corpus shape — a raw
+	// flex-cell Reach in the failed dispatch window, the definiteness
+	// screen's deferred-token decline; every corpus refusal has graduated).
+	// It also errors at runtime, but the warning fires on the REFUSAL,
+	// before the error — so -no-check (skip the pre-flight that would
+	// reject it) lets the run reach the compile-try fallback. Exit is
+	// non-zero (the runtime error), which is expected here.
+	refuses := "def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a"
 	const wantWarn = "warning: bytecode compilation refused"
 
 	var stdout, stderr strings.Builder
@@ -27,7 +26,7 @@ func TestExecuteCompileRefusalWarning(t *testing.T) {
 	if !strings.Contains(stderr.String(), wantWarn) {
 		t.Fatalf("expected a refusal warning, got stderr: %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "each") {
+	if !strings.Contains(stderr.String(), "unmatched dispatch") {
 		t.Fatalf("refusal warning should name the offending construct, got: %q", stderr.String())
 	}
 

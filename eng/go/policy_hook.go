@@ -38,6 +38,21 @@ func LookupWordChecker(r *Registry) WordChecker {
 	return wc
 }
 
+// PolicyDenied wraps a WordChecker denial raised at a VM dispatch gate
+// (vmContext.gateWord), so the compiled entry points can recognise the
+// error as the PROGRAM's verdict — the interpreter's policyGateWord raises
+// the same checker error for the same word — rather than a foreign error
+// eligible for the runtime-bail re-run (which would evaluate the program
+// twice and, after an escaped effect, fence-block into a DIVERGENT
+// internal_error). Error() returns the checker's text verbatim, so the two
+// engines' denials render identically.
+type PolicyDenied struct{ Err error }
+
+func (p PolicyDenied) Error() string { return p.Err.Error() }
+
+// Unwrap exposes the checker's error for errors.Is/As chains.
+func (p PolicyDenied) Unwrap() error { return p.Err }
+
 // isInternalMarker reports whether name is a parser/engine-internal
 // marker that should bypass policy checks (the `__`-prefixed names
 // used for forward-collection cleanup, def-snapshot pop, etc.).

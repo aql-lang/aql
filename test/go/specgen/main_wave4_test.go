@@ -47,7 +47,7 @@ func TestW4ErrorClassBareMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, runErr := a.Run("[1 2] 5 getr"); runErr == nil {
+	if _, runErr := a.RunInterp("[1 2] 5 getr"); runErr == nil {
 		t.Fatal("[1 2] 5 getr ran clean, want a runtime error")
 	} else if got := errorClass(runErr); got != "ERROR:" {
 		t.Errorf("errorClass = %q, want the bare ERROR: sentinel", got)

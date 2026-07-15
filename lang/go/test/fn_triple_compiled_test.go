@@ -24,6 +24,10 @@ import (
 // are deliberately interpreter-only and the spec corpus enforces
 // refusalCeiling = 0 (every spec value row must compile).
 func TestFnConstructionCompiledParity(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	cases := []struct {
 		src  string
 		want string // the (shared) result both engines must produce

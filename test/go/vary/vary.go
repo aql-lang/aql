@@ -229,7 +229,7 @@ func Classify(src string) Result {
 	}
 	ai.SetClock(SpecClock)
 	ai.SetOutput(discard{})
-	gotI, errI := ai.Run(src)
+	gotI, errI := ai.RunInterp(src)
 	if errI != nil {
 		return Result{InterpReject, errI.Error()}
 	}

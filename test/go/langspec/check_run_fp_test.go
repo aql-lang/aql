@@ -56,7 +56,7 @@ func TestCheckRunFalsePositive(t *testing.T) {
 			}
 			rejected++
 			ai := newDifferentialInstance(t)
-			if _, err := ai.Run(src); err == nil {
+			if _, err := ai.RunInterp(src); err == nil {
 				divergent++
 				if os.Getenv("AQL_LOG_DIVERGENT") != "" {
 					t.Logf("DIVERGENT s%d i%d: %s", seed, i, src)

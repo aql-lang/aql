@@ -438,9 +438,10 @@ func TestClassifyFrontierKnownInputs(t *testing.T) {
 		// A function word that strands a parked forward under the strict
 		// forward barrier → check stage (`not` cannot feed off `dup`).
 		{"0 not dup", classCheck, "check", false},
-		// Checks clean but Stage-1 will not lower it (an unmatched dispatch
-		// the checker recovers but the compiler refuses).
-		{"def n 0 if (n eq 0) [99] [1 2] each [dup mul]", classCompile, "unmatched dispatch", false},
+		// Checks clean but the compiler refuses it (an off-corpus shape — a
+		// raw flex-cell Reach in the failed dispatch window; every corpus
+		// refusal has graduated, the each variadic-if row last, 2026-07-15).
+		{"def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a", classCompile, "unmatched dispatch", false},
 		// Checks clean AND compiles, yet errors at run.
 		{"0 true not lt", classRuntime, "incomparable", true},
 		// A genuinely passing program reaches the runtime stage and is

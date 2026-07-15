@@ -48,7 +48,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 
 	// All three are bound and referenceable from AQL source on this
 	// instance — just like `def`-installed types.
-	out, err := a.Run(`[(4 is Even) (5 is Even) (3 is NumOrStr) ('x' is NumOrStr) (true is NumOrStr)]`)
+	out, err := a.RunInterp(`[(4 is Even) (5 is Even) (3 is NumOrStr) ('x' is NumOrStr) (true is NumOrStr)]`)
 	if err != nil {
 		t.Fatalf("Run membership: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 	}
 
 	// The source-defined Point is usable from source too.
-	if _, err := a.Run(`make Point {x:1 y:2}`); err != nil {
+	if _, err := a.RunInterp(`make Point {x:1 y:2}`); err != nil {
 		t.Errorf("make Point: %v", err)
 	}
 
@@ -69,14 +69,14 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 			return []lang.Value{args[0]}, nil
 		}), BarrierPos: -1,
 	})
-	if out, err := a.Run(`only-even 8`); err != nil {
+	if out, err := a.RunInterp(`only-even 8`); err != nil {
 		t.Errorf("only-even 8: %v", err)
 	} else if got := fmt.Sprint(out); got != "[8]" {
 		t.Errorf("only-even 8 = %s, want [8]", got)
 	}
 	// Negative: an odd number does not satisfy the Even parameter, so the
 	// call does not dispatch — the type is a real constraint.
-	if _, err := a.Run(`only-even 7`); err == nil {
+	if _, err := a.RunInterp(`only-even 7`); err == nil {
 		t.Error("only-even 7 should fail: 7 is not Even")
 	}
 }

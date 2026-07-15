@@ -95,8 +95,9 @@ func TestEmitGoldens(t *testing.T) {
 0006 CALL_NATIVE s1   ; add (Number, Number)
 0007 JMP         -> 0009
 0008 PUSH_CONST  k2   ; 9 (Integer)
-0009 PUSH_CONST  k1   ; 2 (Integer)
-0010 CALL_NATIVE s2   ; mul (Number, Number)
+0009 BIND_GLOBAL g0   ; global bind y @depth 1
+0010 PUSH_CONST  k1   ; 2 (Integer)
+0011 CALL_NATIVE s2   ; mul (Number, Number)
 ; consts=3 types=0 sigs=3 fallbacks=0 fns=0 max-stack=2 locals=0
 `},
 		// Literal-substitution def: x resolves to the interned literal
@@ -254,7 +255,7 @@ func TestEmitP5MultiResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := b.Run(`5 7 swap sub`)
+	want, err := b.RunInterp(`5 7 swap sub`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +393,7 @@ func TestEmitDynOutNative(t *testing.T) {
 	}
 	gotP, _, errP := mustRun(t, `def l [1 2] push 3 l unify l`)
 	ai, _ := New()
-	gotI, errI := ai.Run(`def l [1 2] push 3 l unify l`)
+	gotI, errI := ai.RunInterp(`def l [1 2] push 3 l unify l`)
 	if errP != nil || errI != nil || fmt.Sprint(gotP) != fmt.Sprint(gotI) {
 		t.Errorf("push-typed unify parity: compiled=%v(%v) interp=%v(%v)", gotP, errP, gotI, errI)
 	}
@@ -565,8 +566,10 @@ func TestEmitTypedDefInstance(t *testing.T) {
 // TestEmitDeadValueDef: a single-result value-def referenced zero times — a
 // dead binding (`def b (make C {…})` / `def x (1 add 2)` with the name never
 // used) — used to refuse as an "unconsumed call result" on the simulated
-// stack. The call still runs (side effects preserved), but its result is now
-// dropped, so the program compiles. A USED def is unaffected.
+// stack. The call still runs (side effects preserved) and its result is
+// CONSUMED by the def's OpBindGlobal write-back (Pop mode — the binding
+// persists cross-request; pre-OpBindGlobal it was a plain DROP), so the
+// program compiles with nothing lingering. A USED def is unaffected.
 func TestEmitDeadValueDef(t *testing.T) {
 	for _, c := range []struct{ src, want string }{
 		{`def C class {a:1} def b (make C {a:5})`, "[]"},
@@ -580,14 +583,18 @@ func TestEmitDeadValueDef(t *testing.T) {
 			t.Errorf("%s: dead value-def must compile, refused: %s", c.src, r)
 			continue
 		}
-		if !strings.Contains(dis, "DROP") {
-			t.Errorf("%s: expected a DROP for the dead result, got:\n%s", c.src, dis)
+		if !strings.Contains(dis, "BIND_GLOBAL") {
+			t.Errorf("%s: expected the dead result consumed by BIND_GLOBAL, got:\n%s", c.src, dis)
+		}
+		if strings.Contains(dis, "DROP") {
+			t.Errorf("%s: the write-back consumes the dead result; no DROP expected, got:\n%s", c.src, dis)
 		}
 		if got, _, err := mustRun(t, c.src); err != nil || fmt.Sprint(got) != c.want {
 			t.Errorf("%s: got %v err=%v, want %s", c.src, got, err, c.want)
 		}
 	}
-	// A USED value-def must NOT drop — its result feeds a consumer.
+	// A USED value-def must NOT drop — its result feeds a consumer (the
+	// write-back re-pushes from the promoted local and consumes the COPY).
 	dis, r := compile(t, `def x (1 add 2) (x add x)`)
 	if r != "" {
 		t.Fatalf("used value-def refused: %s", r)
@@ -901,7 +908,7 @@ func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
 		t.Fatalf("compiled run: compiled=%v err=%v", compiled, errC)
 	}
 	b, _ := New()
-	gotI, _ := b.Run(src)
+	gotI, _ := b.RunInterp(src)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[true]" {
 		t.Errorf("poly is: compiled=%v interp=%v (want [true])", gotC, gotI)
 	}
@@ -1129,7 +1136,7 @@ func TestEmitClosureCaptureSlots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := b.Run(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
+	want, err := b.RunInterp(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1443,7 +1450,7 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 	gc, _, ec := a.RunCompiled(src)
 	b, _ := New()
-	gi, ei := b.Run(src)
+	gi, ei := b.RunInterp(src)
 	if (ec == nil) != (ei == nil) {
 		t.Fatalf("mini accessor error divergence: compiled=%v interp=%v", ec, ei)
 	}
@@ -1559,7 +1566,7 @@ func TestEmitFallbackIsland(t *testing.T) {
 		t.Fatalf("module group: %v", merr)
 	}
 	d, _ := New()
-	iout, _ := d.Run(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	iout, _ := d.RunInterp(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}
@@ -1659,6 +1666,10 @@ func TestEmitF4DynamicDispatch(t *testing.T) {
 // Such a body refuses to island; the whole program falls back and the
 // interpreter unwinds the sentinel correctly.
 func TestEmitIslandSentinelRefusal(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// `each [break]` inside a compiled `for`: the break targets the for,
 	// not each — it must NOT be islanded.
 	src := `for 3 [each [break] [1 2]]`
@@ -1677,7 +1688,7 @@ func TestEmitIslandSentinelRefusal(t *testing.T) {
 		t.Errorf("%q took the compiled path but a sentinel island must fall back", src)
 	}
 	b, _ := New()
-	iout, _ := b.Run(src)
+	iout, _ := b.RunInterp(src)
 	if len(out) != len(iout) {
 		t.Fatalf("%q: compiled-fallback %v != interpreter %v", src, out, iout)
 	}

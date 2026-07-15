@@ -41,7 +41,7 @@ func TestIsNarrowOperandProvenance(t *testing.T) {
 				t.Fatalf("RunCompiledStrict refused (want native compile): %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}

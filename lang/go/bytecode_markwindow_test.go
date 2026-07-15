@@ -29,7 +29,7 @@ func mwParityCompiled(t *testing.T, src string) {
 		t.Fatalf("the shape must run COMPILED, fell back (err %v)", errC)
 	}
 	c := mustNew(t)
-	outI, errI := c.Run(src)
+	outI, errI := c.RunInterp(src)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(outC) != fmt.Sprint(outI) {
 		t.Errorf("parity: compiled %v/%v != interp %v/%v\n  src: %s", outC, errC, outI, errI, src)
 	}
@@ -56,7 +56,7 @@ func mwRefusedWithParity(t *testing.T, src, wantReason string) {
 		t.Fatal("refused program must fall back")
 	}
 	c := mustNew(t)
-	outI, errI := c.Run(src)
+	outI, errI := c.RunInterp(src)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(outC) != fmt.Sprint(outI) {
 		t.Errorf("fallback parity: compiled %v/%v != interp %v/%v", outC, errC, outI, errI)
 	}
@@ -88,6 +88,10 @@ func TestMarkWindowDoCatchCompiles(t *testing.T) {
 // Their ledger rows stay in frontier-do-catch.tsv; this pin fires when a
 // later widening graduates them.
 func TestMarkWindowDeclinesKeepParity(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	mwRefusedWithParity(t,
 		mwDocMod+`def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
 		"residual shape beyond Stage 1 (call result above a literal)")

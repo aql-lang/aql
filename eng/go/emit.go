@@ -366,12 +366,14 @@ type emitTrap struct {
 	// (OpDispatchRematch): the statically-failed dispatch's window operands
 	// ride in rematchOps (sig-position order — index 0 is what the failed
 	// match examined first), re-matched over the live values at run time.
-	// rematchNWritten is the render bound (DispatchSpec.NWritten): the
-	// leading rematchOps slice the runtime diagnostic renders as the
-	// written tuple. Always 1..len(rematchOps).
-	rematchWord     string
-	rematchOps      []emitOperand
-	rematchNWritten int
+	// rematchWrittenOff/rematchNWritten are the render bound
+	// (DispatchSpec.{WrittenOff,NWritten}): the contiguous rematchOps slice
+	// the runtime diagnostic renders as the written tuple. NWritten is
+	// always 1..len(rematchOps); the slice fits inside the window.
+	rematchWord       string
+	rematchOps        []emitOperand
+	rematchWrittenOff int
+	rematchNWritten   int
 }
 
 // emitEvent is one node of the recorded trace, tagged by kind. The two largest
@@ -415,6 +417,14 @@ type emitDynBind struct {
 	srcSeq int // producing event seq for an event-sourced value; -1 otherwise
 	val    Value
 	pos    SrcPos
+	// root marks a def recorded at the PROGRAM's top level (the root unit,
+	// outside any fn body): its binding persists past the run via the
+	// keep-on-compile contract, so a NON-concrete bound value must emit an
+	// OpBindGlobal write-back replacing the kept check-pass carrier with the
+	// runtime value (lowerDynBind). depth is Defs.Depth(name) right after the
+	// check-pass install — the exact slot the write-back targets.
+	root  bool
+	depth int
 }
 
 // EmitFragment is a captured sub-trace: the events a branch body
@@ -1717,7 +1727,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	probe.storedGradualDepth = es.storedGradualDepth
 	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		// Surface the probe's refusal for the -compile-report attribution
@@ -1732,7 +1742,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	if probe.dynEnv {
 		es.dynEnv = true
 	}
-	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, nil, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		// Reachable: a body the probe pass accepted can still refuse in the
 		// real pass (the variation sweep produces such shapes — a splice-
@@ -2457,9 +2467,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// lowering leaves an extra sim artifact (see EmitFragment.residualN).
 	if ev.br.then != nil {
 		ev.br.then.residualN = len(b.ThenStk)
+		es.captureInertArmResidual(ev.br.then, b.ThenStk)
 	}
 	if ev.br.els != nil {
 		ev.br.els.residualN = len(b.ElsStk)
+		es.captureInertArmResidual(ev.br.els, b.ElsStk)
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
@@ -3353,6 +3365,34 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	return true
 }
 
+// captureInertArmResidual mirrors the loop side's all-inert residual capture
+// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm whose
+// residual is entirely inert (consts/locals — nothing event-produced) leaves
+// nothing on the lowering sim, so lowerFragment's all-inert re-push arm needs
+// the resolved operand list to reconstruct it per taken path (`if c [99]
+// [1 2]` — the 1-vs-2 variadic merge). The parked-fn screen matches the
+// loop's: a Function value in the region auto-applies in the interpreter when
+// a later value lands above it, so a verbatim re-push would diverge — leave
+// those uncaptured (the arm then keeps its refusal). Single-value arms
+// (residualN < 2) never need the capture.
+func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
+	if frag == nil || len(stk) < 2 {
+		return
+	}
+	ops := make([]emitOperand, 0, len(stk))
+	for i := range stk {
+		if sigTypeMatches(stk[i], TFunction) || sigTypeMatches(stk[i], TFnDef) {
+			return
+		}
+		op, ok := es.resolveOperand(stk[i])
+		if !ok || op.kind == opEvent {
+			return
+		}
+		ops = append(ops, op)
+	}
+	frag.residualOps = ops
+}
+
 // RecordLoop records a counted/range `for`: start/end/step operand
 // values (start and step must resolve to constants in Stage 2; the
 // end may be computed), the body fragment (final fixed-point round),
@@ -3674,10 +3714,10 @@ func (es *EmitState) RecordTrapErr(ae *AqlError, pos SrcPos) bool {
 // RecordDispatchRematch: it resolves each window VALUE to its operand
 // (a make-result carrier resolves to its producing event; a concrete
 // forward token to a const) and declines — leaving the caller's refusal to
-// stand — when any value has no resolvable provenance. nWritten is the
-// render bound (DispatchSpec.NWritten): how many leading vals form the
-// written tuple the interpreter's error renders.
-func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, nWritten int, pos SrcPos) bool {
+// stand — when any value has no resolvable provenance. writtenOff/nWritten
+// are the render bound (DispatchSpec.{WrittenOff,NWritten}): the contiguous
+// vals slice forming the written tuple the interpreter's error renders.
+func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, writtenOff, nWritten int, pos SrcPos) bool {
 	if !es.active() || len(vals) == 0 {
 		return false
 	}
@@ -3689,7 +3729,7 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, nWri
 		}
 		ops[i] = op
 	}
-	return es.RecordDispatchRematch(word, ops, nWritten, pos)
+	return es.RecordDispatchRematch(word, ops, writtenOff, nWritten, pos)
 }
 
 // RecordDispatchRematch records a TERMINAL runtime-rematch trap
@@ -3699,15 +3739,16 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, nWri
 // error now (RecordTrapErr) the compiled program re-runs the match over the
 // live values and raises the shared rich diagnostic built over them — or
 // defers to the interpreter when the match unexpectedly succeeds. ops are
-// the window operands in the order the failed match examined them; nWritten
-// is the render bound over their leading slice (1..len(ops) — anything else
-// declines, the producer's proof did not hold). Same top-level-only guard
-// and first-trap-wins latch as RecordTrap.
-func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, nWritten int, pos SrcPos) bool {
+// the window operands in the order the failed match examined them;
+// writtenOff/nWritten are the render bound over their contiguous slice
+// (nWritten 1.., the slice inside the window — anything else declines, the
+// producer's proof did not hold). Same top-level-only guard and
+// first-trap-wins latch as RecordTrap.
+func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writtenOff, nWritten int, pos SrcPos) bool {
 	if word == "" || len(ops) == 0 {
 		return false
 	}
-	if nWritten < 1 || nWritten > len(ops) {
+	if nWritten < 1 || writtenOff < 0 || writtenOff+nWritten > len(ops) {
 		return false
 	}
 	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
@@ -3717,10 +3758,11 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, nWrit
 		return true
 	}
 	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
-		rematchWord:     word,
-		rematchOps:      append([]emitOperand(nil), ops...),
-		rematchNWritten: nWritten,
-		pos:             pos,
+		rematchWord:       word,
+		rematchOps:        append([]emitOperand(nil), ops...),
+		rematchWrittenOff: writtenOff,
+		rematchNWritten:   nWritten,
+		pos:               pos,
 	}})
 	return true
 }
@@ -3745,7 +3787,16 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, nWrit
 // no resolvable provenance; the caller then falls back to the refusal mark,
 // which itself no-ops for the concrete/inactive cases.
 func (es *EmitState) RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool) {
-	if !es.active() || IsConcrete(in) {
+	if !es.active() {
+		return out, false
+	}
+	// A CONCRETE operand declines for the refine/DepScalar kinds (their
+	// const-pool bake is proven), but a fn-PREDICATE bind is a runtime
+	// evaluation for every body shape — the predicate can transform, raise,
+	// or read live state — so concrete operands record too (the 2026-07-15
+	// flip finding: a check-lenient bake bound the raw value where the
+	// interpreter runs the transform).
+	if IsConcrete(in) && spec.Kind != TypedBindPredicate {
 		return out, false
 	}
 	op, ok := es.resolveOperand(in)
@@ -4569,8 +4620,17 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	} else if slot, ok := cur.localByID[v.ID]; ok {
 		src = localOperand(slot)
 	}
+	// A def recorded in the ROOT unit outside any fn body persists past the
+	// run (keep-on-compile): stamp the slot its install just created so the
+	// lowering can emit the OpBindGlobal write-back. Fn-body and nested-unit
+	// defs are frame-scoped (DefCleanup tears them down) — never stamped.
+	root, depth := false, 0
+	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
+		root, depth = true, es.reg.Defs.Depth(name)
+	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
+		root: root, depth: depth,
 	}})
 }
 
@@ -5523,10 +5583,21 @@ func (es *EmitState) intern(v Value) int {
 		es.consts = append(es.consts, v)
 		return len(es.consts) - 1
 	}
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) || isTypeBodyPayload(v) || IsParenExpr(v) {
-		// Compounds, structural type bodies, and codequote'd ParenExprs are never
-		// CanonValue-deduped: like the list/map identity rule, two source
-		// codequotes stay two distinct const values rather than merging into one.
+	identPayload := false
+	switch v.Data.(type) {
+	case ExtensionPayload, XmlElementPayload:
+		identPayload = true
+	}
+	if identPayload || v.Parent.Equal(TList) || v.Parent.Equal(TMap) ||
+		isTypeBodyPayload(v) || IsParenExpr(v) {
+		// Compounds, structural type bodies, codequote'd ParenExprs, and
+		// identity-bearing instance payloads (an Xml element literal, an
+		// Extension-backed host container) are never CanonValue-deduped:
+		// like the list/map identity rule, two source literals stay two
+		// distinct const values rather than merging into one (`(<a/>) eq
+		// (<a/>)` is false — eq is container identity — but a canon-pooled
+		// merge made the compiled run push ONE instance twice and answer
+		// true).
 		// The SAME materialised value (same non-empty ID) is one logical
 		// instance though — its payload pointer is already identity-aliased —
 		// so it pools by ID: semantics-preserving, and it keeps
@@ -6687,6 +6758,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		}
 	}
 	lw.promoted, lw.dead = es.planValueDefLocals(es.units[0], es.frames[0], residualSeqs, forceOrder)
+	lw.bindConsumes = collectRootBindConsumes(es.frames[0], lw.dead)
 	lw.markBefore, lw.variadicElse = planVariadicClaims(es.frames[0])
 	// Mark-window plan (L-DO part 2b): see planMarkWindow.
 	es.planMarkWindow(lw, residual)

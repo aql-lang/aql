@@ -20,6 +20,10 @@ import (
 // above the baseline. Both must compile now, and a body that captures a GENUINE
 // enclosing binding (`cur`) alongside its own local (`j`) must capture only cur.
 func TestEachBodyLocalValueDef(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Cases that MUST compile natively (RunCompiledStrict) — no island fallback.
 	strict := []struct{ name, src, want string }{
 		{"computed body-local in each", `def g fn [[][Integer][def _ ([1] each [def j (5 add 1) j]) 5]] (g)`, "[5]"},
@@ -45,7 +49,7 @@ func TestEachBodyLocalValueDef(t *testing.T) {
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v", got, want)
 			}
@@ -74,7 +78,7 @@ func TestEachBodyLocalValueDef(t *testing.T) {
 				t.Fatalf("RunCompiled error: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}

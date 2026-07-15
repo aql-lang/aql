@@ -48,15 +48,16 @@ func TestExecuteCompileReport(t *testing.T) {
 		t.Fatalf("expected the empty-report header, got: %q", stderr.String())
 	}
 
-	// A refusal (capturing handler) prints its reason.
+	// A CAPTURING handler now STAMPS (plan Phase 6.3 — capture-slot
+	// detached units; the pre-landing behaviour was a "lexical captures"
+	// refusal line) and reports under the anonymous display name.
 	stdout.Reset()
 	stderr.Reset()
 	capSrc := `def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`
 	if code := Execute([]string{"-compile-report", "-e", capSrc}, strings.NewReader(""), &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "compile-report: refused") ||
-		!strings.Contains(stderr.String(), "lexical captures") {
-		t.Fatalf("expected a capture-refusal line, got: %q", stderr.String())
+	if !strings.Contains(stderr.String(), "compile-report: stamped (anonymous fn)") {
+		t.Fatalf("expected the capturing handler's stamped line, got: %q", stderr.String())
 	}
 }

@@ -78,7 +78,7 @@ func TestCompiledAllocCeilings(t *testing.T) {
 			t.Fatal(err)
 		}
 		if g.setup != "" {
-			if _, err := a.Run(g.setup); err != nil {
+			if _, err := a.RunInterp(g.setup); err != nil {
 				t.Fatalf("%s setup: %v", g.name, err)
 			}
 		}

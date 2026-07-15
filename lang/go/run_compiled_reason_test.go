@@ -22,20 +22,23 @@ func TestRunCompiledReason(t *testing.T) {
 	})
 
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
-	// the first offending construct. The each variadic-if shape refuses
-	// ("unmatched dispatch recovered at each") and falls back to the
-	// interpreter, which raises. (The wide-window local-add row — the former
-	// fixture — compiles to a render-bounded runtime rematch since the
-	// DispatchSpec.NWritten bound landed.)
+	// the first offending construct. Every CORPUS refusal has graduated, so
+	// the pin rides an off-corpus shape: a raw flex-cell Reach in the failed
+	// dispatch window (the definiteness screen's deferred-token decline)
+	// refuses "unmatched dispatch recovered at f" and falls back to the
+	// interpreter, which raises.
 	t.Run("refusal names the offender", func(t *testing.T) {
-		const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
+		const src = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 		a, _ := New()
-		_, ran, reason, _ := a.RunCompiledReason(src)
+		_, ran, reason, err := a.RunCompiledReason(src)
 		if ran {
-			t.Fatalf("expected the interpreter fallback (ran=false), got ran=true")
+			t.Fatalf("expected no compiled run (ran=false), got ran=true")
 		}
-		if !strings.Contains(reason, "each") {
-			t.Fatalf("refusal reason %q does not name the offending word `each`", reason)
+		if !strings.Contains(reason, "unmatched dispatch recovered at f") {
+			t.Fatalf("refusal reason %q does not name the offending dispatch", reason)
+		}
+		if codeOf(err) != "compile_refused" {
+			t.Fatalf("Stage J: refusal must return compile_refused, got [%s] %v", codeOf(err), err)
 		}
 	})
 

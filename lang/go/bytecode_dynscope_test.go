@@ -48,7 +48,7 @@ func TestDynScopeRowsCompileWithParity(t *testing.T) {
 			t.Fatalf("%q: compiled run: compiled=%v err=%v", c.src, compiled, errC)
 		}
 		d, _ := New()
-		gotI, errI := d.Run(c.src)
+		gotI, errI := d.RunInterp(c.src)
 		if errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: parity: compiled=%v interp=%v (errI=%v), want %s", c.src, gotC, gotI, errI, c.want)
 		}
@@ -75,7 +75,7 @@ func TestDynScopeUnreachableNameStaysRefused(t *testing.T) {
 	b, _ := New()
 	gotC, _, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}
@@ -99,7 +99,7 @@ func TestDynScopeUnreachableBranchArmStaysRefused(t *testing.T) {
 	b, _ := New()
 	gotC, _, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}
@@ -109,6 +109,10 @@ func TestDynScopeUnreachableBranchArmStaysRefused(t *testing.T) {
 // promote refuses at lowering (no way to duplicate the value for the
 // registry install) — sound interpreter fallback.
 func TestDynScopeUnpromotedComputedDefRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	src := `def f fn [[n:Integer] [Integer] [if (n lte 0) [acc3] [def acc3 (n add 1) f (n sub 1)]]] f 2`
 	a, err := New()
 	if err != nil {
@@ -123,7 +127,7 @@ func TestDynScopeUnpromotedComputedDefRefuses(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(src)
 		c, _ := New()
-		gotI, errI := c.Run(src)
+		gotI, errI := c.RunInterp(src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("computed dyn-def compiled without parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 		}
@@ -135,7 +139,7 @@ func TestDynScopeUnpromotedComputedDefRefuses(t *testing.T) {
 	b, _ := New()
 	gotC, compiled, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if compiled || fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}

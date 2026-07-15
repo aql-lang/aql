@@ -41,13 +41,6 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	if r == nil || !r.RuntimeStampingEnabled() {
 		return nil, false
 	}
-	if len(fd.Captured) > 0 {
-		// A capturing fn needs its captures resolved to compiled homes in the
-		// constructing scope — the OpPushClosure path's territory, not a
-		// detached unit's. Deferred; the interpreter handles it unchanged.
-		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "lexical captures (interpreter keeps the body)"})
-		return nil, false
-	}
 	if _, ok := storedFnUnitEligible(fd); !ok {
 		// Not recorded: multi-overload fns and native-word bindings swept by
 		// the module-load loop land here — a shape that was never a compile
@@ -91,6 +84,16 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 		return nil, false
 	}
 	ref := &CompiledFnRef{Unit: unit, depNames: deps}
+	// A capturing body compiled with its captures as trailing param slots
+	// (compileStoredFnUnit passes fd.Captured to the closure compile — the
+	// same slot layout OpPushClosure uses); the ref carries the captured
+	// VALUES so RunUnit / runUnitNested bind them at every invoke. The
+	// values are the construction-time snapshots the interpreter's dispatch
+	// installs — frozen in fd.Captured, name-sorted, so slot order is
+	// deterministic.
+	for _, cb := range fd.Captured {
+		ref.Captures = append(ref.Captures, cb.Value)
+	}
 	es.storedFnRefs = append(es.storedFnRefs, ref)
 	prog, _, ok := es.Finalize(nil)
 	if !ok || prog == nil || ref.Prog == nil { //covergate:allow detached-stamp Finalize belt: after a successful probe-then-real compileStoredFnUnit es.Compilable is true, Finalize of an empty top-level frame with nil residual cannot refuse, and the just-appended ref cannot be poisoned (no def/undef runs between append and Finalize) — unreachable without a bytecode-level fault (§compiler)

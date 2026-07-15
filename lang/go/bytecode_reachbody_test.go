@@ -44,7 +44,7 @@ func TestReachBodyInertCompiles(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s",
 				c.src, compiled, gotC, errC, gotI, c.want)
@@ -59,7 +59,7 @@ func TestReachBodyInertCompiles(t *testing.T) {
 	d, _ := New()
 	gotC, compiled, errC := d.RunCompiled(standalone)
 	e, _ := New()
-	gotI, errI := e.Run(standalone)
+	gotI, errI := e.RunInterp(standalone)
 	if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[5]" {
 		t.Errorf("%q: standalone dot-access parity broke (compiled=%v): gotC=%v errC=%v gotI=%v errI=%v",
 			standalone, compiled, gotC, errC, gotI, errI)

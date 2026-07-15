@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
@@ -289,5 +290,23 @@ func mustScalar(t *testing.T, a *lang.AQL, src string, want any) {
 	t.Helper()
 	if got := runScalar(t, a, src); got != want {
 		t.Errorf("run %q: got %v (%T), want %v (%T)", src, got, got, want, want)
+	}
+}
+
+// The nil-CompiledSubRun arm: a host embedding modules WITHOUT the lang
+// package (whose init installs the seam) keeps the tree-walker — the
+// sub-engine result is identical.
+func TestVMRunWithoutCompiledSeamKeepsTreeWalker(t *testing.T) {
+	saved := modules.CompiledSubRun
+	modules.CompiledSubRun = nil
+	defer func() { modules.CompiledSubRun = saved }()
+
+	a := newAQL(t, nil)
+	out, err := a.Run(`(import "aql:vm") "1 add 2" Vm.run`)
+	if err != nil {
+		t.Fatalf("Vm.run without the seam: %s", err)
+	}
+	if len(out) == 0 || out[len(out)-1] != int64(3) {
+		t.Errorf("tree-walker sub-run = %v, want 3", out)
 	}
 }

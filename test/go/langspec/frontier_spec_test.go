@@ -274,7 +274,7 @@ func frontierRowCompiles(input string) error {
 		return err
 	}
 	c.SetClock(specClock)
-	gotI, errI := c.Run(input)
+	gotI, errI := c.RunInterp(input)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) {
 		return fmt.Errorf("error parity: compiled %v vs interp %v", errC, errI)
 	}
@@ -284,21 +284,28 @@ func frontierRowCompiles(input string) error {
 	return nil
 }
 
-// refusalRowLedger pins the 9 knownRefusals rows' TARGET failure modes: each
+// refusalRowLedger pins the knownRefusals rows' TARGET failure modes: each
 // must eventually compile via the sound runtime re-dispatch mechanism (plan
 // Phase 3, OpDispatchRematch) and raise the interpreter-identical error.
 // DERIVED from knownRefusals — the single source of truth for the row
 // sources — so graduation is auto-coupled: deleting a knownRefusals entry
 // drops its ledger row here, flipping this test's assertion for that row to
-// the target (compile + byte-identical parity). Every row today refuses with
-// the one dispatch-soundness signature; a row developing a different failure
-// mode trips the drift arm.
+// the target (compile + byte-identical parity). The failure mode is the
+// LEADING CLAUSE of the knownRefusals reason text ("branch leaves extra
+// values (…)" pins "branch leaves extra values"): the remaining row's
+// dispatch half already records an offset-form rematch, so its refusal
+// signature is the branch-residual seat, not the dispatch recovery — a row
+// developing a different failure mode trips the drift arm.
 var refusalRowLedger = func() map[string]frontierEntryLS {
 	m := make(map[string]frontierEntryLS, len(knownRefusals))
 	for input, why := range knownRefusals {
+		mode := why
+		if i := strings.Index(mode, " ("); i > 0 {
+			mode = mode[:i]
+		}
 		m[input] = frontierEntryLS{
-			why:       "plan Phase 3 (OpDispatchRematch): " + why,
-			failsWith: "unmatched dispatch recovered",
+			why:       "plan Phase 3/5 (OpDispatchRematch + variadic-region merge): " + why,
+			failsWith: mode,
 		}
 	}
 	return m

@@ -80,9 +80,12 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 	r, _ := mw4Reg(t)
 	r.EnableRuntimeStamping()
 	// act is constructed in WORD context inside mk's body, so it CAPTURES the
-	// enclosing param flag: StampDetachedFn declines and the interpreter runs
-	// the body with the capture intact — the captured false must flip the
-	// build's ok flag with NO action error.
+	// enclosing param flag. Post the capture-slot landing (plan Phase 6.3)
+	// captures per se stamp; THIS capture is a runtime-minted param value
+	// with no compile identity, so the closure compile declines on that
+	// narrower gate and the interpreter runs the body with the capture
+	// intact — the captured false must flip the build's ok flag with NO
+	// action error.
 	out := mcovRun(t, r, mw4Imp+
 		`def mk fn [[flag:Boolean] [Map] [ def act ([mod:Any] => [flag]) {src:'a: 1', actions:{gen: act/r}} ]]
 		 def m (Model.new (mk false)) def res (Model.run m) (res get 'ok') ((res get 'errs') size)`)
@@ -96,8 +99,8 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 	if ev.Stamped {
 		t.Error("a capturing action must decline the stamp")
 	}
-	if !strings.Contains(ev.Reason, "lexical captures") {
-		t.Errorf("decline reason = %q, want the lexical-captures decline", ev.Reason)
+	if !strings.Contains(ev.Reason, "closure captures a runtime-minted value") {
+		t.Errorf("decline reason = %q, want the runtime-minted-capture decline", ev.Reason)
 	}
 }
 

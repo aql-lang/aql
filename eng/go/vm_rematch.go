@@ -26,14 +26,14 @@ func (vc *vmContext) dispatchRematch(ds *DispatchSpec, stack []Value, curDebug [
 		return vmDefer(r, curDebug, pc, "vm:rematch-matched",
 			"DISPATCH_REMATCH at "+ds.Word+" matched at run time where the static model failed; deferring to the interpreter")
 	}
-	// The diagnostic renders over the RENDER BOUND (window[:NWritten]) — the
+	// The diagnostic renders over the RENDER BOUND (window[off:off+n]) — the
 	// written tuple sigError's forward-else-stack derivation yields, proven a
-	// leading prefix of the window by ID at record time. The match above ran
-	// over the FULL window (the view the failed static match examined).
-	if ds.NWritten < 1 || ds.NWritten > len(window) {
+	// contiguous slice of the window by ID at record time. The match above
+	// ran over the FULL window (the view the failed static match examined).
+	if ds.NWritten < 1 || ds.WrittenOff < 0 || ds.WrittenOff+ds.NWritten > len(window) {
 		return vmErrAt(curDebug, pc, "DISPATCH_REMATCH written bound out of range at "+ds.Word)
 	}
-	ae := runtimeNoMatch(r, ds.Word, window[:ds.NWritten])
+	ae := runtimeNoMatch(r, ds.Word, window[ds.WrittenOff:ds.WrittenOff+ds.NWritten])
 	ae.Row, ae.Col = ds.Pos.Row, ds.Pos.Col
 	return stampAt(ae, curDebug, pc, r)
 }

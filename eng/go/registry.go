@@ -65,6 +65,14 @@ type Registry struct {
 	// InheritObserveHooks. Inert (one atomic load) unless a test arms them.
 	interpHook *interpEntryHook
 	bailHook   *bailHook
+	// interpAttribution is the C4 attribution context: a SANCTIONED
+	// interpreter re-run (the compiled-mode fallback arms) stamps its tag
+	// here for the duration, so every interpreter entry the re-run produces
+	// reports as attributed instead of unattributed (plan Phase 10; the
+	// end-state invariant permits interpreter execution only under a named
+	// seam). Set/restored by the entry points around the re-run; forks copy
+	// the value at fork time (ForkConcurrent's shallow copy).
+	interpAttribution string
 	// TapeConfig bounds the execution tape's growth (initial size, max
 	// grows, growth factor). The zero value uses the defaults; hosts set
 	// it via lang.Options. See eng/go/tape.go.

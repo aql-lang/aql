@@ -189,7 +189,11 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	input := make([]Value, len(elems))
 	copy(input, elems)
 	sub := New(modReg)
+	// C4 attribution (plan Phase 10): the body run IS the module load — a
+	// sanctioned interpreter entry reported under its named seam.
+	restoreAtt := modReg.SetInterpAttribution("module-load")
 	_, err = sub.Run(input)
+	restoreAtt()
 	if err != nil {
 		return ModuleDesc{}, err
 	}

@@ -1,6 +1,9 @@
 package eng
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // StampDetachedFn / StampFnValue gate tests. The full end-to-end compile of a
 // REAL body (a lang `fn` with `add`/`convert` words) lives in lang/go — eng
@@ -50,16 +53,65 @@ func TestStampDetachedFnPolicyGate(t *testing.T) {
 	}
 }
 
+// allowAllChecker is a WordChecker that denies nothing — installing ANY
+// checker marks the registry policy-gated, which is what the stamp gate
+// keys on (compiled dispatch consults no word rules, so even a permissive
+// policy must keep dispatch on the interpreter where the gate runs).
+type allowAllChecker struct{}
+
+func (allowAllChecker) CheckWord(string) error { return nil }
+
+// Word-policy contract (the 2026-07-15 LIFT, user-authorized): a
+// policy-gated registry STAMPS exactly like a policy-free one — the VM's
+// per-dispatch gate (vmContext.gateWord) now enforces the word rules when
+// the unit runs, raising the interpreter's identical denial — so the
+// pre-lift stamp refusal is retired. The pin: gated and open registries
+// produce the SAME stamp outcome for the same fd, and no policy-flavoured
+// reason is ever recorded.
+func TestStampDetachedFnWordPolicyGate(t *testing.T) {
+	fd := aqlBodyFd(NewInteger(1))
+
+	gated := stampReg(t)
+	gated.EnableRuntimeStamping()
+	if err := gated.Capabilities.Set(CapPolicy, allowAllChecker{}); err != nil {
+		t.Fatalf("install checker: %v", err)
+	}
+	_, gatedOK := StampDetachedFn(gated, fd, SrcPos{})
+
+	open := stampReg(t)
+	open.EnableRuntimeStamping()
+	_, openOK := StampDetachedFn(open, fd, SrcPos{})
+
+	if gatedOK != openOK {
+		t.Fatalf("policy-gated stamp outcome %v must equal the policy-free outcome %v (the lift)", gatedOK, openOK)
+	}
+	for _, ev := range gated.StampEvents() {
+		if strings.Contains(ev.Reason, "policy") {
+			t.Fatalf("no policy-flavoured stamp refusal may remain post-lift: %+v", ev)
+		}
+	}
+}
+
 // Shape gates: captured fns, multi-own-sig fns, empty bodies, sentinel bodies,
 // and non-fn values all decline, returning the input unchanged.
 func TestStampDetachedFnShapeGates(t *testing.T) {
 	r := stampReg(t)
 	r.EnableRuntimeStamping()
 
+	// Capturing bodies COMPILE post the capture-slot landing (plan Phase
+	// 6.3 — fd.Captured rides the closure compile; the ref carries the
+	// values; see lang/go/stamp_capture_test.go for the end-to-end pin).
+	// This eng-level fixture still declines on the NARROWER gate: its
+	// capture value is runtime-minted with no compile identity, so the
+	// closure compile refuses it — recorded, so -compile-report attributes.
 	captured := aqlBodyFd(NewInteger(1))
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
 	if _, ok := StampDetachedFn(r, captured, SrcPos{}); ok {
-		t.Fatalf("capturing fn must decline (OpPushClosure territory)")
+		t.Fatalf("identity-less capture must decline")
+	}
+	events := r.StampEvents()
+	if len(events) == 0 || !strings.Contains(events[len(events)-1].Reason, "closure captures a runtime-minted value") {
+		t.Fatalf("want the runtime-minted-capture reason recorded, got %+v", events)
 	}
 
 	multi := FnDefInfo{Signatures: []Signature{

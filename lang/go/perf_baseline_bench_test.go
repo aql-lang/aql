@@ -70,7 +70,7 @@ func BenchmarkPerfCheck(b *testing.B) {
 				b.Fatal(err)
 			}
 			if bb.setup != "" {
-				if _, err := a.Run(bb.setup); err != nil {
+				if _, err := a.RunInterp(bb.setup); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -96,7 +96,7 @@ func BenchmarkPerfCompile(b *testing.B) {
 				b.Fatal(err)
 			}
 			if bb.setup != "" {
-				if _, err := a.Run(bb.setup); err != nil {
+				if _, err := a.RunInterp(bb.setup); err != nil {
 					b.Fatal(err)
 				}
 			}

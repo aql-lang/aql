@@ -94,7 +94,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 	})
 	outI := capture(func(a *AQL) {
 		var err error
-		gotI, err = a.Run(src)
+		gotI, err = a.RunInterp(src)
 		if err != nil {
 			t.Errorf("effect ordering: interp err=%v", err)
 		}
@@ -163,6 +163,10 @@ func TestShapedMethodCapturingMemberStaysRefused(t *testing.T) {
 // result AND the next statement's size result — probe-confirmed divergence
 // on the committed tree). It must now refuse, with faithful fallback.
 func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	fnValueM2Refusal(t, "computed arg in the statement window",
 		`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add (1 add 2) ; Log.measurements size`,
 		"dynamic value precedes residual args")
@@ -251,7 +255,7 @@ func TestShapedMethodClaimViolationDefers(t *testing.T) {
 	a2 := zzShapedInstance(t)
 	gotC, compiled, errC := a2.RunCompiled(src)
 	a3 := zzShapedInstance(t)
-	gotI, errI := a3.Run(src)
+	gotI, errI := a3.RunInterp(src)
 	if compiled {
 		t.Errorf("claim violation: ran compiled; want the interpreter fallback")
 	}
@@ -280,7 +284,7 @@ func TestShapedMethodCompilePassObservationFree(t *testing.T) {
 	if cerr != nil || prog == nil {
 		t.Fatalf("observation-free: prog=%v reason=%q cerr=%v", prog != nil, reason, cerr)
 	}
-	got, err := a.Run(`import "aql:log" ; Log.measurements size`)
+	got, err := a.RunInterp(`import "aql:log" ; Log.measurements size`)
 	if err != nil || fmt.Sprint(got) != "[0]" {
 		t.Errorf("compile pass leaked into the sink registry: got %v err %v", got, err)
 	}

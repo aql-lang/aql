@@ -45,7 +45,7 @@ func TestModeratelyNestedProgramStillRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := a.Run(src)
+	got, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatalf("interpreter rejected a 40-deep nested program: %v", err)
 	}

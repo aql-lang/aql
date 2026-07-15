@@ -50,7 +50,7 @@ func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ia, _ := New()
-			want, werr := ia.Run(c.src)
+			want, werr := ia.RunInterp(c.src)
 
 			ca, _ := New()
 			got, _, gerr := ca.RunCompiled(c.src)
@@ -76,7 +76,7 @@ func TestNonRegisterModuleWordStillCompiles(t *testing.T) {
 		t.Fatalf("ParseLang.kinds should compile, got refusal: %v", err)
 	}
 	b, _ := New()
-	want, _ := b.Run(src)
+	want, _ := b.RunInterp(src)
 	if fmt.Sprint(want) != fmt.Sprint(got) {
 		t.Fatalf("kinds compiled result %v != interpreter %v", got, want)
 	}

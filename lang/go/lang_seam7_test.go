@@ -25,10 +25,10 @@ func TestS7Lang_NewSeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run("1 add 2"); err != nil {
+	if _, err := a.RunInterp("1 add 2"); err != nil {
 		t.Fatalf("seeded instance run: %v", err)
 	}
-	if _, err := b.Run("1 add 2"); err != nil {
+	if _, err := b.RunInterp("1 add 2"); err != nil {
 		t.Fatalf("seeded instance run: %v", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestS7Lang_DefineType(t *testing.T) {
 	}
 	// The installed type is usable from source (a.Run renders results as
 	// strings, so 5 is S7Alias comes back as "true").
-	out, err := a.Run("5 is S7Alias")
+	out, err := a.RunInterp("5 is S7Alias")
 	if err != nil {
 		t.Fatalf("run is S7Alias: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestS7Lang_DefineType(t *testing.T) {
 		t.Errorf("5 is S7Alias = %v, want [true]", out)
 	}
 	// Negative: a non-Integer is not an S7Alias.
-	out, err = a.Run("'x' is S7Alias")
+	out, err = a.RunInterp("'x' is S7Alias")
 	if err != nil {
 		t.Fatalf("run is S7Alias (negative): %v", err)
 	}

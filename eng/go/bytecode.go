@@ -409,6 +409,19 @@ const (
 	// included. The mark is consumed. An empty window is a no-op (the mark
 	// still pops).
 	OpCallDynMixedFromMark
+	// OpBindGlobal is the CROSS-REQUEST persistence twin of a top-level `def`
+	// of a computed value: it pops the runtime value and writes it into the
+	// KEPT check-pass binding slot (Program.GlobalBinds[Arg] names the def and
+	// the depth its install recorded), so the registry binding a later request
+	// (or an interpreter read) resolves is the value the program actually
+	// computed — not the check pass's carrier. Without it, `def h (Model.new
+	// …)` under a compiled run left `h` bound to a Model CARRIER and the next
+	// request raised model_bad_handle (the 2026-07-15 flip composite's root
+	// cause). SetAt replaces IN PLACE at the recorded depth — never a push —
+	// so shadowing depth and undef behaviour match the interpreter exactly; a
+	// slot popped by a later check-time undef skips the write (the interpreter
+	// would have discarded the binding too).
+	OpBindGlobal
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -459,6 +472,7 @@ var opcodeNames = [...]string{
 	OpLookupDynScope:       "LOOKUP_DYN_SCOPE",
 	OpBindDynScope:         "BIND_DYN_SCOPE",
 	OpCallDynMixedFromMark: "CALL_DYN_MIXED_FROM_MARK",
+	OpBindGlobal:           "BIND_GLOBAL",
 }
 
 func (o Opcode) String() string {
@@ -798,6 +812,23 @@ type TypedBindSpec struct {
 	Cons     *Value // constraint value: TypedBindPredicate (the fn) and TypedBindDepScalar (the DepScalar); nil for TypedBindRefine
 }
 
+// GlobalBindSpec describes one OpBindGlobal: the top-level def's name and the
+// binding DEPTH its check-pass install recorded (RecordDynBind stamps
+// Defs.Depth(name) right after InstallDef), so the runtime value lands in the
+// exact kept slot even under same-name shadowing (`def x (f) def x (g)`
+// records depths 1 and 2; each write-back hits its own level). A slot popped
+// by a later check-time undef makes the write a no-op — the interpreter would
+// have discarded the binding the same way.
+type GlobalBindSpec struct {
+	Name  string
+	Depth int
+	// Pop selects the copy-path mode: the lowering re-pushed the value from
+	// its promoted frame local, so the bind consumes the copy (one op, no
+	// separate DROP). The fast path peeks the live value in place (Pop=false)
+	// and leaves it for its downstream consumers.
+	Pop bool
+}
+
 // ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names
 // the pooled Program.Consts entry to deep-clone once per call, Slot the fn-unit
 // frame-local it is seated in and re-read from.
@@ -846,7 +877,12 @@ type DispatchSpec struct {
 	Word     string
 	NArgs    int
 	NWritten int
-	Pos      SrcPos
+	// WrittenOff is the 0-based window index where the written slice starts
+	// (the each shape's written tuple is the body operand at offset 1, after
+	// the region carrier). Valid domain 0..NArgs-NWritten; NWritten >= 1 is
+	// what makes the pair explicit — a spec with NWritten 0 is malformed.
+	WrittenOff int
+	Pos        SrcPos
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
@@ -875,7 +911,11 @@ type Program struct {
 	Traps      []TrapSpec
 	Dispatches []DispatchSpec
 	TypedBinds []TypedBindSpec
-	DynMethods []DynMethodSpec
+	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
+	// naming the binding and the DEPTH its check-pass install recorded, so the
+	// runtime value replaces the kept carrier binding in place (never a push).
+	GlobalBinds []GlobalBindSpec
+	DynMethods  []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the
 	// pooled const to deep-clone and the frame-local slot to seat it in, for a
 	// multi-read compound body literal that needs one per-call construction shared
@@ -1120,6 +1160,9 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		case OpBindTyped:
 			tb := p.TypedBinds[in.Arg]
 			fmt.Fprintf(sb, " y%-3d ; typed bind %s:%s", in.Arg, tb.Name, tb.Describe)
+		case OpBindGlobal:
+			gb := p.GlobalBinds[in.Arg]
+			fmt.Fprintf(sb, " g%-3d ; global bind %s @depth %d", in.Arg, gb.Name, gb.Depth)
 		case OpCallDynMethod:
 			dm := p.DynMethods[in.Arg]
 			fmt.Fprintf(sb, " d%-3d ; %s/%d -> %d (shaped method)", in.Arg, dm.Word, dm.NArgs, dm.NOut)

@@ -1600,3 +1600,655 @@ TestDispatchRematchWideWindowRendersBounded (compiled + byte-identical) with
 a new stays-refused negative pinning the each row's exact reason. New guard
 arms pinned directly: RecordDispatchRematch declines bounds outside
 1..len(ops); the VM raises on a spec outside 1..NArgs.
+
+### Each variadic-if probe facts — the render bound needs OFFSET form (2026-07-15)
+
+Probed with the anydisjunct-arm gate attempt + gate logging. Three facts:
+
+1. The each row's refusal latches at the ANY/DISJUNCT-CARRIER recovery arm
+   (engine.go ~8171, checkModeAssumeSig) — NOT the disjunct-partition arm
+   and NOT the general fall-through — and that arm never attempts
+   tryRecordUnmatchedDispatchTrap today. Patching the attempt in reaches
+   the rematch gate cleanly (active=true, compiling=true).
+2. Gate state: maxN=2, window positions [0 2] (the stack value + the body
+   token after the pointer); vals=[None|Integer-disjunct, [dup mul]];
+   written=[[dup mul]]. The written tuple IS in the window but at OFFSET 1
+   — the leading-prefix-by-ID proof fails (vals[0] is the region carrier).
+   The 3a render bound must generalize from prefix length to a CONTIGUOUS
+   OFFSET+LENGTH slice: gate scans for the offset o with written[i].ID ==
+   vals[o+i].ID, DispatchSpec carries {WrittenOff, NWritten}, and
+   dispatchRematch renders window[off:off+n] while re-matching the full
+   window. Everything else (match-defers soundness, the reorder/void/
+   fn-shape screens) is unchanged.
+3. The diagnostic is ARM-INDEPENDENT: the interpreter renders the SAME
+   note set for both polarities (received note = the body list only;
+   candidate verdicts all say "1 was supplied" — the region values are
+   not suppliable operands to the match), confirmed by running both
+   n=0 and n=5 twins. So the bounded render is byte-identical regardless
+   of which arm ran — the remaining risk is downstream: whether the
+   BRANCH lowering seats the 1-vs-2 residual (resolveOperand on the
+   merged disjunct carrier + layoutOperands + the branch's fixed-slot
+   output model). If it refuses there, that refusal is the honest next
+   blocker and needs the OpStackMark variadic-region merge; if it lowers,
+   the row graduates with offset-form NWritten alone.
+
+Next concrete steps: (a) DispatchSpec gains WrittenOff (offset-form
+render bound), gate scans for the contiguous ID slice, VM renders the
+slice — with the anydisjunct-arm gate attempt patched in; (b) run the
+each row end-to-end; if the branch lowering refuses, pin that reason and
+design the variadic-region branch merge (OpStackMark before the if,
+arms push their own counts, mark-bounded rematch window); (c) fixture
+cascade only when the row actually graduates (zzRefusingRow needs a NEW
+refusing+raising fixture then — no corpus refusals would remain, so an
+off-corpus refusing shape must be constructed or the fixture retired
+with the tests re-pointed at forced-refusal seams).
+
+### Offset-form render bound LANDED; the each refusal moved to the branch merge (2026-07-15)
+
+DispatchSpec gained WrittenOff: the record gate scans for the contiguous
+offset where the written tuple sits in the window by ID (generalizing the
+3a leading-prefix), the recorder validates 1 <= n and 0 <= off with
+off+n <= len(ops), and dispatchRematch renders window[off:off+n] while
+re-matching the full window. The Any/Disjunct-carrier recovery arm now
+attempts the trap/rematch record before refusing. Result: the each row's
+DISPATCH half records cleanly (the body list at offset 1, after the
+None|Integer region carrier) — the "unmatched dispatch recovered at each"
+refusal is GONE — and the refusal moved DOWN to the honest remaining
+blocker: "branch leaves extra values (Stage 2 lowers single-result
+branches)" — the fixed-slot branch merge cannot seat the 1-vs-2
+arm-dependent residual. Fallback parity holds byte-identically on both
+polarities. The reason cascade moved: knownRefusals entry text, the
+stays-refused negative, the RunCompiledReason offender subtest and the
+CLI warning fixture now pin "branch leaves extra values".
+
+The LAST corpus refusal is therefore precisely the variadic-region
+branch merge (Step 3's remaining primitive): OpStackMark before the
+branch, arms push their own counts, no fixed-slot merge model — and the
+already-recorded rematch then owns the raise. Its window layout must
+also handle the region: the recorded window operand for the region
+carrier is the branch's merged result, which layoutOperands must seat
+against a runtime region of varying depth — the mark-window machinery
+(OpCallDynMixedFromMark's stack[mark:] discipline) is the model.
+
+### Branch-merge probe facts — the exact seat (2026-07-15, post e3d6c69)
+
+Instrumented lowerFragment's three "branch leaves extra values" arms on
+the each row. The refusal fires in the MULTI-VALUE arm switch's default
+case with residualN=2, len(residualOps)=0, len(lw.vm)=0, out.kind=const:
+the else arm [1 2] is ALL-INERT (nothing event-produced on the sim), and
+the existing all-inert re-push path (which sets fragMulti and would let
+lowerArms mark the merge variadic — that machinery all EXISTS and handles
+`if c [1 2] [3]` per its own comment) requires frag.residualOps to carry
+the captured operands — but the recorder captures residualOps only for
+LOOP bodies (RecordLoop), never for branch-arm fragments. Two remaining
+pieces, in order:
+
+1. Capture residualOps for branch-arm fragments (RecordBranch /
+   TakeFragment side): when an arm's residual values are inert and
+   resolvable (resolveOperand), record them so the all-inert re-push arm
+   fires and the merge goes variadic (fragMulti → lw.variadic[seq]).
+2. The terminal rematch's operand layout must then absorb a VARIADIC
+   merge slot: lowerTrap's layoutOperands refuses variadic loop results
+   today ("rematch operands include a variadic loop result"). The
+   mark-bounded variant is the model (vm_markwindow.go's stack[mark:]
+   discipline): plan an OpStackMark before the branch event
+   (markBefore/planVariadicClaims machinery exists), and lower the trap
+   as a FromMark rematch whose runtime window = the baked const operands
+   (the body list) + stack[mark:], with the offset-form render bound
+   over the written slice (here the const body — arm-independent, the
+   probe showed both polarities render the identical note set).
+   Alternatively investigate whether the existing variadic-residual
+   absorption (program residual absorbs variadic merges) suffices when
+   the trap is TERMINAL — the raise consumes nothing; the window could
+   be rebuilt from the live stack without layout at all (the rematch is
+   the LAST op; stack[mark:] IS the region regardless of seat order).
+
+### REFUSALS REACHED ZERO — the each row graduated (2026-07-15)
+
+The two pieces from the branch-merge probe landed:
+
+1. **captureInertArmResidual** (emit.go, called from RecordBranch beside
+   the residualN stamps): the loop side's all-inert residual capture
+   mirrored to branch arms — a multi-value arm whose residual is entirely
+   inert (consts/locals, nothing event-produced) records its resolved
+   operand list so lowerFragment's re-push arm reconstructs it per taken
+   path and the existing lowerArms variadic-merge machinery absorbs the
+   1-vs-2 counts. Parked-fn and unresolvable entries decline (the arm
+   keeps its refusal) — the loop side's auto-apply screen, mirrored.
+2. **The terminal-rematch region seat** (lower.go lowerTrap): a trap whose
+   leading operand is a VARIADIC branch merge cannot be seated by layout
+   (arm-dependent region depth), but the rematch is terminal and only
+   READS the top NArgs values — so the single remaining const operand is
+   pushed and SWAPPED under the live region top. The window then reads
+   [region-top, const] for either arm depth; deeper region values sit
+   below the window and the raise consumes nothing. The offset-form
+   render bound keeps the raise byte-identical (verified on both
+   polarities end-to-end).
+
+Census: 5999 -> 6000/6000 natively compiled; corpus refusals 1 -> 0 —
+the refusal ratchet reached its finish line. knownRefusals is EMPTY.
+Bonus graduation: `if true [1 2 3] [4]` (the StageA soundness gate's
+inert-arm row) now compiles faithfully on both polarities — moved from
+the mustRefuse list to a graduated positive; the variadic->fixed-arity
+consumers stay refused (the gate's soundness contract is unchanged).
+The fixture cascade moved every refusal pin to an off-corpus shape (the
+flex-reach deferred-token decline): zzRefusingRow, the RunCompiledReason
+offender subtest, the CLI warning fixture, and the specgen classify pin.
+The irreconstructible-arm default (not inert-captured, not event-seated)
+is pinned directly (TestLowerFragmentIrreconstructibleMultiArm).
+
+Stage J's first gate (refusals=0) is now satisfied; the remaining gate
+is the runtime-bail census (Phase 10) before the public Run flip.
+
+### Phase 10: the executed bail census canary GRADUATED (2026-07-15)
+
+The shaped-method COUNT-VIOLATION defer was reclassified: an AQL-source
+method's result count is the checker's own body model (return contracts
+are engine-enforced), so a count differing from the shape claim indicts
+a HOST registration whose handler returned a count its own signature
+denies — the recovered-panic class (host-contract violation), not
+compiler model debt. The guard now raises the plain internal_error
+(runtimeShouldFallback resolves it identically — silent tolerant
+fallback, fenced as ever; the zz-inst effect-fence pins pass unchanged)
+without feeding the runtime-bail census, which counts DESIGNED
+model-miss defers only. The not-appliable defer (the shape claim itself
+failing — a genuine static-model miss) remains a designed bail.
+p10/runtime-bail-census-canary is GREEN (frontier expected-red 7→6);
+the hook-forwarder pin moved to the vm:rematch-matched defer (a real
+designed bail that stays). Remaining expected-red: capturing-handler
+stamps, check-prop/vm-run module-load seams, the C4 attribution ratchet
+(p10), and the two Stage-J flips (p11).
+
+### C4 attribution LANDED — p10/no-unattributed-interp graduated (2026-07-15)
+
+Registry.interpAttribution is the C4 attribution context: noteInterp
+reports it on every entry, and the SANCTIONED interpreter re-runs bracket
+themselves with SetInterpAttribution — RunAutoValues' refusal arm tags
+"fallback:refusal", its runtime-bail arm "fallback:runtime-bail", and
+concreteEvalOnce (the const fold's concrete sub-run, which toggles check
+mode off for a real value — the source of the last unattributed entries)
+tags "check:const-fold". Every interpreter entry a refusing program's
+RunCompiled produces is now attributed, so
+p10/no-unattributed-interp-on-islanded-program holds and its ledger row
+graduated (expected-red 6→5). p11/no-unbounded-fallback's proxy
+assertion (no unattributed entries) graduated vacuously with it, so the
+case was STRENGTHENED to pin the actual Stage-J contract with a
+refusing-but-SUCCEEDING probe (the paren-bounded fn-value application,
+which runs to bad_input/q interpreted): pre-Stage-J the silent fallback
+returns the value (red); post-Stage-J the refusal returns an error
+(green). Remaining expected-red (5): p6 capturing-handler stamps,
+p6 check-prop/vm-run module seams, and the two p11 Stage-J flips.
+
+### Stage J execution design — scoped and sequenced (2026-07-15)
+
+Both Stage-J gates HOLD (refusals=0, executed census=0, C4 attribution
+complete). The flip's exact mechanics, from the code as it stands:
+
+1. **RunInterp lands first** (its own commit): the current (*AQL).Run
+   body (aql.go:646, the tree-walker via runValues) moves verbatim to
+   RunInterp; Run delegates to it unchanged. Zero behavior change; the
+   oracle name exists.
+2. **The oracle migration** (mechanical, its own commit): every test
+   call that uses Run AS THE INTERPRETER ORACLE moves to RunInterp —
+   447 `.Run(` sites in lang/go tests + 17 in test/go/langspec (the
+   central runners first: gatherCensus, the differential/OrFallback
+   harnesses, mustRefuseWithParity family, the vary sweep's interp arm).
+   Sites that mean "run the program however" (REPL/exec already route
+   compiled) stay on Run. This lands BEFORE the flip so the parity
+   gates never go vacuously compiled-vs-compiled.
+3. **The refusal→error flip** (p11/no-unbounded-fallback): in
+   RunAutoValues' refusal arm, a GENUINE performance refusal (prog==nil,
+   err==nil, reason != "" and != "check diagnostics") returns the
+   refusal as an error instead of re-running — unless
+   AQL_COMPILE_FALLBACK=1 (the one-release hatch) restores the re-run.
+   Statically-invalid programs KEEP the bounded static-error oracle
+   re-run (they fail identically in both engines; the re-run only
+   renders the canonical error). The RUNTIME-BAIL arm is RETAINED
+   deliberately: designed defers (vm:rematch-matched — the terminal
+   rematch's match case, inherent to the sound-re-dispatch doctrine
+   since the compiled tail is truncated) resolve by the attributed,
+   fenced re-run; deleting it would surface internal_error for valid
+   programs. The plan's "delete the runtimeShouldFallback re-run"
+   applies to the REFUSAL class; the designed-defer channel is the
+   doctrine's landing pad and stays (bounded, attributed, fenced).
+4. **The Run flip** (p11/public-run-is-compiled): Run's body becomes
+   the RunAutoValues path (compiled by default, host-value projection),
+   after 2+3 so the oracle and refusal contracts are already stable.
+5. Contract-test rewrites ride each step: the zzRefusingRow fence pins
+   (fallback arms still exist for the static-oracle and bail classes),
+   run_compiled_reason rows, and the two p11 ledger rows graduate.
+
+Remaining after Stage J: the p6 trio (capturing-closure stamps, the
+aql:test module-load seam, Vm.run's fork-isolated runtime compile) —
+stamping-coverage work, not Stage-J gates — and the external voxgig
+sweep (Phase 9), which needs a NEW session sourced from the voxgig-aql
+org (cross-tier add_repo is unsupported in this one).
+
+### Stage J step 3 MECHANISM LANDED — the refusal→error flip, opt-in (2026-07-15)
+
+Under AQL_COMPILE_FALLBACK=0, RunAutoValues returns a GENUINE refusal as
+a compile_refused error carrying the reason — BEFORE the fence check (no
+re-run happens, so there is nothing to fence) — while the STATIC classes
+(check error / "check diagnostics" sentinel) keep the bounded oracle
+re-run regardless. The CLI's CompileTry mode performs the fallback
+ITSELF now (warn once, then RunInterp explicitly) — the degradation
+moved from the library (hidden) to the caller (visible, attributed).
+Contracts pinned under the flip: the fence refusal test, the
+mustRefuseWithParity family, the RunCompiledReason offender row; the
+DEFAULT (fallback retained) is pinned by its own twin. The DEFAULT
+INVERSION (error unless =1) is the remaining step-3 tail: ~48 off-corpus
+refusal-parity tests exercise refusing shapes through RunCompiled and
+must migrate to the flip contract before the default flips —
+p11/no-unbounded-fallback stays honestly red on the default until then.
+Step 4 (the public Run flip to the compiled path) follows.
+
+### Stage J step 4 ATTEMPTED — the flip surfaced real divergences (2026-07-15)
+
+The public Run flip (Run → RunCompiledReason) was landed, battery-tested,
+and REVERTED the same day: the oracle discipline caught REAL
+compiled-vs-interpreted divergences the corpus does not cover — the
+fn-predicate transform family (TypeFnPredicate_*, Guard_*,
+ErrorMessage_PredicateNamesType), the model watch fork (-race), and the
+mini host-compile hook (TestMiniCompileGoHostHook). Each is a new
+frontier item: pin as expected-red repros, fix, then re-flip. What DID
+land from the attempt: the -no-compile CLI arm and the wasm playground
+are pinned to RunInterp explicitly (behavior-preserving today,
+flip-proof forever), and a second finding — a cross-instance
+observability pollution (one unattributed Engine.Run after p4/l-np runs
+in sequence; sticky per-process, order-dependent, not reproducible with
+an inline drive) — is recorded on the p11 ledger row. Both p11 rows
+stay honestly red: the flip mechanics are proven, the remaining work is
+divergence-closing, which is exactly the runtime-independence program's
+core loop.
+
+### Flip blocker 1 CLOSED — the fn-predicate bind miscompile (2026-07-15)
+
+The fn-predicate typed-def (`def shout:Up "hello"` where Up is a fn) is a
+RUNTIME EVALUATION for every body shape — the predicate can transform,
+raise, or read live state — so the concrete-body const-pool bake that is
+proven for refine/DepScalar was UNSOUND here: the check-lenient run bound
+the raw value where the interpreter runs the transform (probe: compiled
+[hello] with no error vs interp undefined_word — a live miscompile the
+corpus missed, caught by the flip attempt). The fix: RecordTypedBind
+admits CONCRETE operands for the PREDICATE kind (refine/DepScalar keep
+their proven const path); defTypedHandler's predicate branch (extracted
+to defFnPredicateBind for gocyclo) suspends recording around the
+check-mode analysis run and records the bind unconditionally, with a
+declined record REFUSING regardless of concreteness
+(markFnPredicateBindUncompilable — shared with its direct decline pin).
+Verified end-to-end: the transform shape, the range pass, and the raise
+shape all run COMPILED byte-identical (the raise row's OpBindTyped
+raises the interpreter's exact predicate error at bind time).
+
+Remaining flip blockers: the model watch fork (-race), the mini
+host-compile hook, and the cross-instance observability pollution.
+
+### Flip blocker 2 CLOSED — the mini compile-hook miscompile (2026-07-15)
+
+The mini-lang Go COMPILE HOOK (`RegisterMiniLang{Compile:…}`) was gated
+out of check mode entirely, so a compile pass recorded the standard
+transducer call where the interpreter runs the hook at the call site —
+`mini up 'hi'` compiled [hi] vs interpreted [HI], the second live
+miscompile the flip attempt surfaced. The fix: a COMPILE pass runs the
+Go hook over a concrete src exactly as the interpreter will, splicing
+the hook's expansion for recording — gated by miniHookToksMaterialisable
+(a hook splicing a KNOWN-unpoolable runtime carrier, re's precompiled
+pattern Extension, diverts to the standard transducer call instead,
+sound per the §13 contract: the transducer is the semantic reference).
+Shapes a compile pass cannot mirror REFUSE rather than bake: a
+non-concrete src or opts (the runtime expansion would run the hook over
+values the record cannot see), and an AQL compile hook (a macro whose
+check-mode expansion is not the runtime expansion — and which cannot
+even be registered during its own compile pass, register-compiled not
+being a RunInCheckMode word; the refusal covers the pre-registered
+case). Pinned: hook-parity compiled [HI], the non-concrete-opts and
+AQL-hook refusals with fallback parity, and the materialisable-screen
+arms. A PLAIN check pass keeps the standard-call validation unchanged.
+
+Remaining flip blockers: the model watch fork (-race), and the
+cross-instance observability pollution.
+
+### Flip blocker 3, first layer CLOSED — the model-watch ledger race (2026-07-15)
+
+The traced race: RunAutoValues' per-request ledger swap (the C4
+ownership design) writes a.registry.Effects while a model WATCH
+goroutine's rebuild — whose fileOpsFS captured `note: r.NoteEffect`,
+a closure over the LIVE registry field — reads it (effects.go Note via
+model.go's fs write). The fix is the writer-fence discipline applied to
+the capture: modelNewHandlerFor snapshots the LEDGER POINTER at
+construction (`led := r.Effects; note: led.Note`), so a background
+rebuild marks the ledger of the request that BUILT the model and never
+reads the mutable field. -race is clean under the flip for the race
+itself; the SECOND layer the re-run surfaced is a distinct class: an
+Extension-payload HANDLE def (`def mdl (Model.new …)`) crossing
+compiled requests — `Model.stop mdl` raises model_bad_handle under the
+flip because the check pass strips the handle to a carrier where the
+runtime needs the live Extension. That class (stateful host handles as
+cross-request operands) is now the named remaining divergence on the
+p11 ledger row, alongside the cross-instance observability pollution.
+
+### Handle-class narrowed — the isolated shape is SOUND (2026-07-15)
+
+Probe: `def mdl (Model.new …)` via the interpreter, then a compiled
+request running `Model.stop mdl` — the compile pass REFUSES cleanly
+("operand of unknown provenance or not statically materialisable at
+model-stop": an Extension-payload handle has no static
+materialisation) and the fallback returns the interpreter's correct
+result. The model_bad_handle failure therefore requires the CONCURRENT
+composite — a live watch goroutine rebuilding while the flipped
+foreground churns per-request state — not the handle-as-operand shape
+itself. The remaining flip blockers are exactly two: that concurrent
+composite, and the cross-instance observability pollution (one
+unattributed Engine.Run after p4/l-np in sequence; non-deterministic
+across processes, sticky within one — a timing-dependent global,
+possibly a pooled sub-engine or a detached goroutine from the L-JOIN
+case's print).
+
+### Stage J step 3 COMPLETE — the default inverts to compile_refused (2026-07-15)
+
+The opt-in flag is gone: RunAutoValues now returns `compile_refused`
+for a GENUINE whole-program refusal by DEFAULT, and
+`AQL_COMPILE_FALLBACK=1` is the one-release hatch RESTORING the silent
+in-library re-run (the exact inverse of the opt-in landing). The static
+classes (a check error, the "check diagnostics" sentinel) keep the
+bounded oracle re-run unconditionally — those programs fail identically
+in both engines and the re-run only renders the canonical verdict. The
+51 tests pinning refusal+fallback-parity contracts are individually
+hatched with `t.Setenv("AQL_COMPILE_FALLBACK", "1")` and a
+legacy-contract comment (migrate or retire with the hatch); the new
+default is pinned by TestRefusalReturnsCompileRefused,
+mustRefuseWithParity (bytecode_edge_findings), and the
+run_compiled_reason offender row, with TestRefusalHatchRestoresFallback
+as the hatch's positive twin.
+
+**p11/no-unbounded-fallback GRADUATES** (frontier 5→4 expected-red):
+the refusing-but-succeeds probe now gets `compiled=false` +
+`compile_refused` — no silent re-run exists on the default path. The
+ledger row is deleted; the case stays as the permanent pin.
+
+**The CLI surfaces perform the fallback THEMSELVES** (the Stage-J
+contract: fallback moved from the library, hidden, to the caller,
+attributed):
+
+- `buildrt` CompileTry (aql run / build outputs): warn once naming the
+  refusal, then interpret — keyed on the `compile_refused` CODE, not
+  the reason (under the hatch the library already ran the source; a
+  reason-keyed re-run would double its effects).
+- `exec` (the HTTP server): silent explicit fallback; the policy-gated
+  registry is the canonical arm — a policy-bound server always refuses
+  (compiled dispatch consults no word rules) and every request runs on
+  the interpreter, where the gate lives.
+- `repl`: silent explicit fallback per refused line, matching the
+  historical UX (a genuinely-refusing line pin was added — the old
+  fixture, `for 3 [1 2]`, compiles natively since the census hit 0).
+- the langspec combination-parity harness (whose contract is
+  parity-VIA-FALLBACK by design) performs the same explicit fallback
+  on compile_refused, mirroring fcStampedRun's migration.
+
+**ArmRuntimeStamping / RunInterpValues** (lang): the caller-side half
+of the explicit fallback. The in-library armed fallback used to keep
+detached fn-unit stamping live across the interpreter re-run (stored
+callbacks earn the VM path — the compiled mode's contract); an explicit
+`RunInterp` is unarmed, so the compile-report fixture lost its
+store-site stamp. `ArmRuntimeStamping` hands CLIs/hosts that arming
+with prior-state restore; all three surfaces arm around their fallback
+run. `RunInterpValues` is the raw-Value RunInterp twin the REPL's
+renderer needs.
+
+**StampDetachedFn gains the word-policy SECURITY GATE** (eng): the
+CompileCheck whole-program refusal ("policy-gated registry — compiled
+dispatch does not consult word rules") now also guards detached units —
+previously an armed fallback on a policy-gated registry could stamp a
+runtime-constructed callback whose InvokeCallback VM run would BYPASS
+every word deny rule (latent since runtime stamping landed; reachable
+via the exec server's policy arm). The refusal is a recorded stamp
+event so -compile-report attributes it; the negative twin pins that a
+policy-free registry never records the policy reason.
+
+Remaining flip blockers (the p11/public-run-is-compiled row): the
+concurrent-watch composite and the cross-instance observability
+pollution, unchanged.
+
+### Flip blocker "concurrent-watch composite" CLOSED — it was the cross-request def-persistence bug (OpBindGlobal) (2026-07-15)
+
+The bisect killed the composite theory in one move: with the Run flip
+applied, `TestModelWatchForkNoRace` failed with model_bad_handle at
+`Model.stop mdl` with ZERO foreground churn, ZERO source rewrites, and
+the watch idle — and the stop failed via PURE RunInterp too. The watch
+goroutine was a red herring. The real mechanism: a compiled request's
+check pass installs every top-level `def` binding (RunInCheckMode) and
+keep-on-compile PERSISTS it — but for a COMPUTED value the check pass
+binds a CARRIER, and nothing ever wrote the runtime value back. Within
+the request the VM's dataflow works (reads resolve by operand
+provenance, not the registry), so single-run differentials are
+structurally blind to the class; the NEXT request — either engine —
+reads a type literal where the interpreter had bound the real value.
+
+The blast radius was every computed top-level def on the Phase-2
+compiled-by-default surfaces (REPL/exec), live TODAY without the flip:
+`def h (Model.new …)` → model_bad_handle; `def svc (service {})` →
+"expected a Service, got Service"; `def fx (flex …)` → "cannot access
+property on type literal"; and — silently WRONG, not even an error —
+`def n (add 1 2)` then `n add 1` returned 1 instead of 4.
+
+The fix rides the existing def machinery end to end. RecordDynBind (the
+evDynBind event every def already records) stamps `root` (recorded in
+the root unit outside any fn body — exactly the bindings
+keep-on-compile persists) and `depth` (Defs.Depth right after the
+install — the exact slot). lowerDynBind emits the new **OpBindGlobal**
+twin for a root def of a non-concrete, non-bare-type-node value; the VM
+writes the runtime value via `Defs.SetAt(name, depth, v)` — REPLACE at
+the recorded depth, never a push — so shadow depth and undef behaviour
+match the interpreter exactly (`def x (f) def x (g)` writes each
+install's own level; a slot a check-time undef popped skips the write).
+
+The lowering preserves every existing program shape (fullcorpus is
+byte-count-identical): a def binds IMMEDIATELY after its producing
+event, so the FAST PATH peeks the live sim top in place (this seats
+branch merges the promotion machinery cannot) — Pop=false, downstream
+consumers untouched; a source promoted by the ordinary triggers
+(multi-read defs) re-pushes from its frame local and the bind consumes
+the copy (Pop=true — one op, no DROP, the used-def golden unchanged); a
+DEAD computed def's producer-site dead-drop is suppressed
+(collectRootBindConsumes) and the bind consumes the dead result
+directly. No promotion is forced. Bare type nodes (`def x None`) and
+concrete values are self-representing/faithful — no op. The residual
+refusal: a def of a VARIADIC loop collect (`def xs (for 3 [1])`) joins
+the established Stage-2 taxonomy ("consumes loop results").
+
+Gates: fullcorpus 6324 rows, 5966 compiled, 0 divergences — byte-equal
+to the pre-change baseline (stash-measured); census 6000/6000, refusals
+0, COMPILED_STATUS.md unchanged; the watch composite passes under the
+flip with -race (3 counts). vm.run's gocognit ceiling forced extracting
+bindDynScope/bindGlobal helpers. Pinned: the four persistence classes +
+compiled next-request read, shadow/undef depths, check-time-undef skip,
+the no-op envelope (type nodes, literals, fn-body locals don't leak),
+the variadic refusal with interp parity, the module-level model/service
+handle shapes, DefTable.SetAt's arms, and the dead-def
+consumed-by-bind shape (TestEmitDeadValueDef re-pinned; one emit golden
+gains its BIND_GLOBAL line).
+
+The p11/public-run-is-compiled ledger row's why-text now names the ONE
+remaining flip blocker: the cross-instance observability pollution.
+
+### Stage J step 4 LANDED — public Run flips to the compiled path; p11/public-run-is-compiled GRADUATES (2026-07-15)
+
+The second flip blocker evaporated on re-test: with the flip applied
+and the p11 case driving `a.Run`, twenty plain and five -race
+in-sequence frontier-ledger runs all reported the stale arm ("the
+target behavior now HOLDS") — the cross-instance observability
+pollution is no longer reproducible after the OpBindGlobal landing
+(the polluter was evidently the same class: state a compiled request
+left behind that a later instance's run touched). With both blockers
+closed, Run's body is now:
+
+    out, _, _, err := a.RunCompiledReason(src)
+    if err is compile_refused { armed explicit RunInterp fallback }
+
+— the same contract the CLI surfaces implement, with detached-stamp
+arming kept across the fallback. compile_refused is now a GUARANTEE:
+RunAutoValues fence-checks BEFORE returning it, so a refusal whose
+check pass already emitted output returns the blocked-fallback
+internal_error instead (a caller re-running on compile_refused can
+never duplicate an effect; TestRefusalAfterCheckEffectIsFenceBlocked
+pins both halves through RunCompiled and Run).
+
+The full-tree sweep under the flip surfaced exactly TWO live
+miscompiles — both fixed natively, both off-corpus (the fullcorpus
+differential is structurally blind to Go-test-only shapes):
+
+1. **fn-predicate overload dispatch** (the dispatch twin of the
+   f8a5bba bind finding): check-mode sigTypeMatches accepts
+   fn-predicate types LENIENTLY (RunPredicate short-circuits true in
+   check mode), so the static arm commit for `classify -3` over
+   [x:Pos]/[x:Any] arms baked the Pos arm and raised signature_error
+   where the interpreter's runtime predicate run falls through to the
+   Any arm. Fix: fnPredicateOverloadHazard (≥2 reachable same-arity
+   arms + a *predicateUnifier param slot) routes the site through the
+   EXISTING user-poly runtime re-match (MatchFnSig at VM entry runs
+   the real predicate), or refuses when the poly bake declines. A
+   single-overload predicate fn keeps the static unit — its CALL_USER
+   param guard re-validates at entry and raises the interpreter's
+   exact error.
+2. **Xml literal identity collapse**: the const pool canon-deduped two
+   `<a/>` literals into ONE slot, so the compiled `(<a/>) eq (<a/>)`
+   pushed one instance twice and answered true where eq (container
+   identity) answers false. Fix: identity-bearing instance payloads
+   (XmlElementPayload, ExtensionPayload) join the compound
+   no-canon-dedup rule in intern. The companion `def x <a/>` shape
+   also exposed a gap in the OpBindGlobal write-back: a
+   stripped-literal binding has no producing event, so lowerDynBind's
+   opNone arm now recovers the remembered original via resolveOperand
+   (const/local only) before refusing.
+
+Gates: the ENTIRE lang tree + eng green under the flip; fullcorpus
+6324 rows / 5966 compiled / 0 divergences (byte-equal to baseline);
+census 6000/6000, refusals 0, status file unchanged. The frontier is
+now **3 expected-red** — exactly the Phase-6 trio
+(capturing-handler-stamps, check-prop-body-on-vm, vm-run-on-vm).
+Pinned: TestPredicateOverloadDispatchCompiledParity (poly routing +
+static negatives), TestXmlLiteralIdentityCompiledParity (identity /
+self-eq via the stripped-literal rescue / structural deq), the
+fence-guarantee pair, and the graduated p11 case as a permanent pin.
+
+### The module-load C4 seam — p6/check-prop-body-on-vm GRADUATES (frontier 3→2) (2026-07-15)
+
+A module import's preamble/body run is a SANCTIONED interpreter entry
+— registration code executed once at load — so it now reports under
+the named "module-load" attribution: the three load sites
+(BuildTestModule's preamble, RunModuleBody's inline body,
+BuildReplModule's preamble) bracket their sub-engine run with
+SetInterpAttribution("module-load"), restore on return (the seam never
+leaks into post-import execution — pinned both ways by
+TestModuleLoadEntriesAttributed). With the gen/property bodies already
+running as stored-param-body units (landed 2026-07-14), the check-prop
+case's residual unattributed entries were exactly this class, and the
+stale arm fired on the first run after the bracket — graduated; the
+case stays as a permanent pin.
+
+The frontier is TWO expected-red:
+
+- p6/capturing-handler-stamps — StampDetachedFn declines lexical
+  captures; capturing bodies need capture-aware detached units.
+- p6/vm-run-on-vm — BLOCKED BEHIND THE VM-SIDE WORD-POLICY GATE:
+  Vm.run always composes the sandbox policy, so its sub-registry is
+  policy-gated and the CompileCheck security refusal (compiled
+  dispatch consults no word rules) correctly bars the fork-isolated
+  runtime compile. Graduating it means building the Phase-10 VM
+  dispatch gate (CALL_NATIVE / CALL_USER / poly / dyn consult the
+  WordChecker exactly as stepWord's policyGateWord does), then
+  re-scoping the CompileCheck and StampDetachedFn refusals.
+
+### Capture-bearing detached stamps — p6/capturing-handler-stamps GRADUATES (frontier 2→1) (2026-07-15)
+
+StampDetachedFn no longer declines lexical captures: fd.Captured rides
+compileClosureBody's existing capture-slot machinery (the OpPushClosure
+layout — captures fill the unit's trailing param slots), and the
+CompiledFnRef carries the captured VALUES so bindUnitLocals seats them
+at every RunUnit / runUnitNested invoke. The captures are the
+construction-time snapshots the interpreter's dispatch installs —
+frozen in fd.Captured, name-sorted, per fn VALUE (StampFnValue clones
+per value), so two services built by the same factory each run their
+OWN capture on the VM (`(mk 7)` → 7, `(mk 9)` → 9 — pinned end-to-end
+with an unarmed-parity negative in stamp_capture_test.go).
+
+Two adjacent gaps closed with it: anonymous handlers now RECORD under
+the canonical "(anonymous fn)" display name (recordStampEvent
+normalises, matching PrintStampReport's rendering — the frontier case
+matches events by name), and fcStampedRun's Stage-J explicit fallback
+arms detached stamping around its RunInterp re-run (an unarmed
+fallback recorded zero attempts for any refusing fixture). The
+remaining eng-level decline is the NARROWER gate the shape test now
+pins: a capture value with no compile identity (runtime-minted)
+refuses with its recorded reason. The cmd -compile-report contract
+updated: the capturing handler prints a stamped line where it printed
+the "lexical captures" refusal.
+
+The frontier is ONE expected-red: p6/vm-run-on-vm, blocked behind the
+Phase-10 VM-side word-policy gate (Vm.run always composes the sandbox
+policy, so its sub-registry compile stays correctly barred by the
+CompileCheck security refusal).
+
+### The VM-side word-policy gate lands (Phase 10) — first half of the p6/vm-run-on-vm unblock (2026-07-15)
+
+Every NAMED compiled dispatch now consults the engine word policy —
+vmContext.gateWord, the VM twin of the interpreter's policyGateWord:
+the SAME WordChecker object raises the SAME error, internal markers
+exempt identically. Sites: the CALL_NATIVE and CALL_USER/TAIL_CALL_USER
+case arms, and inside callPolyIn (CALL_NATIVE_POLY), matchUserPoly
+(CALL_USER_POLY), and callDynMethod (CALL_DYN_METHOD). The checker is
+cached per registry by pointer-compare (LookupWordChecker's
+capability-store walk is too costly per dispatch); the unarmed fast
+path pays one pointer compare + nil check. Arms pinned with hand-built
+programs (vm_policy_gate_test.go — deny/allow/marker triads per op
+class; production compiles still refuse policy-gated registries, so
+the tests install the checker after construction).
+
+This is DELIBERATELY landed as a pure addition: the CompileCheck and
+StampDetachedFn security refusals still stand, so no production path
+reaches the VM with a policy installed yet. The SECOND half — lifting
+those refusals so policy-gated registries compile (graduating
+p6/vm-run-on-vm: Vm.run's sandbox-composed sub-registry runs its
+runtime compile on the VM), updating the exec-server and
+policy_compiled_gate pins, and a compiled-vs-interpreted policy parity
+sweep — is the next landing. Remaining after that: steps 7-9
+re-baselining and the voxgig sweep (a voxgig-aql-sourced session).
+
+### The policy-gate lift (USER-AUTHORIZED) — p6/vm-run-on-vm graduates; THE FRONTIER REACHES 0 EXPECTED-RED (2026-07-15)
+
+With the VM-side word-policy gate landed (0880fe8) and the maintainer's
+explicit authorization, the two compile-path security refusals are
+retired: CompileCheck's policy-gated-registry refusal and
+StampDetachedFn's twin. Policy-gated registries now COMPILE; the word
+rules are enforced per named VM dispatch by vmContext.gateWord — the
+SAME WordChecker object the interpreter's policyGateWord consults, so a
+denied word raises the identical error on either engine.
+
+One parity subtlety surfaced and closed in the same landing: the
+checker's denial is a plain Go error, which runtimeShouldFallback
+classified as FOREIGN — the deny bailed to the interpreter re-run
+(double evaluation, ran=false) and, after an escaped effect,
+fence-blocked into a DIVERGENT internal_error. The VM gate now wraps
+denials in eng.PolicyDenied (Error() returns the checker's text
+verbatim; Unwrap exposes it), and runtimeShouldFallback recognises it
+as the PROGRAM'S VERDICT — never a bail. Pinned:
+TestPolicyParityCompiledVsInterpreted (deny-native, deny-user-fn,
+allowed-word result parity, strict-mode runtime denial, and the
+effect-before-deny shape printing exactly once with the identical
+error). The eng stamp pin flips to symmetry (gated stamps == open
+stamps; no policy-flavoured refusal may remain).
+
+**p6/vm-run-on-vm GRADUATES — the frontier ledger reads 11 cases,
+0 expected-red.** Vm.run's sub-engine source now runs
+compiled-by-default through modules.CompiledSubRun, injected by lang's
+init (modules cannot import lang): RunAutoValues over the composed
+sandbox-policy sub-registry, with the public Run's explicit armed
+interpreter fallback on compile_refused. A host embedding modules
+without lang keeps the tree-walker (nil seam).
+
+Every runtime-independence ratchet now sits at its finish line: census
+6000/6000 native, refusals 0, islands 0, runtime bails 0, fullcorpus
+0 divergences, frontier 0 expected-red, and the public Run compiled by
+default. What remains outside this repo: the steps 7–9 external
+re-baseline sweep against the voxgig-aql libraries, which needs a
+session sourced from that org.

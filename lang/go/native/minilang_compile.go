@@ -24,6 +24,34 @@ import (
 //   - AQL hooks live as the `compile_<kind>` export of the MiniLang namespace
 //     (installed by MiniLang.register-compiled), expanded as a macro.
 
+// miniHookToksMaterialisable reports whether a Go compile hook's expansion
+// can be RECORDED by a compile pass: every token is either inert data
+// (concrete / a bare type node) or plain code (words, markers). A runtime
+// carrier in the splice (re's precompiled pattern, a partial over it) has no
+// static materialisation; the caller then compiles the standard transducer
+// call instead — sound per the §13 contract (the transducer is the semantic
+// reference).
+func miniHookToksMaterialisable(toks []Value) bool {
+	for _, v := range toks {
+		if v.Carrier || v.Dynamic {
+			return false
+		}
+		// An Extension payload (re's precompiled *regexp behind a mini
+		// carrier type) is CONCRETE by the payload predicate yet has no
+		// const-pool materialisation — the exact shape this screen exists
+		// to divert onto the standard call.
+		if _, ext := v.Data.(eng.ExtensionPayload); ext {
+			return false
+		}
+		// Everything else is either concrete data, a bare type node, or a
+		// code token (word/marker) — recordable shapes (a shape the
+		// recorder still cannot seat refuses downstream, which is the
+		// sound fallback; this screen only diverts the KNOWN-unpoolable
+		// runtime carriers).
+	}
+	return true
+}
+
 // MiniCompileHook is a Go expansion-time compiler: given the src and the
 // (possibly deferred) opts value, it returns the tokens to splice.
 type MiniCompileHook func(src string, opts Value, r *Registry) ([]Value, error)

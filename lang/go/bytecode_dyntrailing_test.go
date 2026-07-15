@@ -29,7 +29,7 @@ func TestEmitTrailingFnValueApply(t *testing.T) {
 	ar, _ := New()
 	gotC, compiled, errC := ar.RunCompiled(src)
 	b, _ := New()
-	gotI, _ := b.Run(src)
+	gotI, _ := b.RunInterp(src)
 	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[6]" {
 		t.Errorf("%q: trailing-apply parity broke: compiled=%v gotC=%v interp=%v err=%v", src, compiled, gotC, gotI, errC)
 	}

@@ -81,6 +81,10 @@ Test.fail-count end`)
 // blocker) must still refuse and fall back soundly — identical results,
 // fail-count included.
 func TestTestBodyDotMethodStaysSound(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	stage1aSound(t, `import "aql:test" end
 def mkrig fn [[] [Map] [ {int: ([a:Integer b:Integer] => [a b add])} ]]
 def rig (mkrig)

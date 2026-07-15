@@ -177,8 +177,14 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	tokens := append([]native.Value(nil), parsed...)
 	sub := native.New(modReg)
-	if _, err := sub.Run(tokens); err != nil {
-		return native.ModuleDesc{}, fmt.Errorf("test: run preamble: %w", err)
+	// C4 attribution (plan Phase 10): the preamble run IS the module load —
+	// a sanctioned interpreter entry reported under its named seam, so a
+	// compiled program's `import "aql:test"` adds zero UNattributed entries.
+	restoreAtt := modReg.SetInterpAttribution("module-load")
+	_, runErr := sub.Run(tokens)
+	restoreAtt()
+	if runErr != nil {
+		return native.ModuleDesc{}, fmt.Errorf("test: run preamble: %w", runErr)
 	}
 
 	return native.ModuleDesc{

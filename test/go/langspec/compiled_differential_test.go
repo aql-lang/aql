@@ -85,7 +85,7 @@ func TestSpecCompiledDifferential(t *testing.T) {
 
 			// Interpreter path on another fresh instance.
 			ai := newDifferentialInstance(t)
-			gotI, errI := ai.Run(input)
+			gotI, errI := ai.RunInterp(input)
 
 			if (errC != nil) != (errI != nil) {
 				mismatches++

@@ -32,21 +32,19 @@ var knownRefusals = map[string]string{
 	// the failed window (a single event-carrier in every one) re-matches over
 	// the live values at run time and raises the shared rich diagnostic
 	// byte-identical to the interpreter (or defers when it unexpectedly
-	// matches). The one row below stays refused: its window carries a
-	// variadic-if operand (each). The former local-add and word-splice
-	// entries graduated (see the dated notes below).
+	// matches). The map is EMPTY: every corpus refusal graduated (the last —
+	// the each variadic-if row — on 2026-07-15; see the dated notes below).
+	// An entry added here must carry a soundness proof, and the goal is for
+	// the map to stay empty.
 
-	// a VARIADIC-IF result feeding `each`: the arms leave DIFFERENT counts
-	// (then [99] = one value, else [1 2] = two), so the merged position joins
-	// to a None|Integer disjunct and the Any/Disjunct-carrier recovery owns
-	// the dispatch — tryRecordPoly rightly declines each's code-body sigs,
-	// and a runtime rematch would need a FIXED window arity the variadic
-	// residual cannot give it (probe 2026-07-14: the trap is never reached;
-	// the old "0-arg courtesy screen" attribution was wrong — each has no
-	// 0-arg overload). Graduation rides the Phase 5 variadic-region lowering
-	// (OpStackMark/OpDropToMark over the branch merge), which seats the
-	// 1-vs-2 residual and lets a terminal rematch own the raise.
-	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "unmatched dispatch recovered at each (variadic-if operand)",
+	// GRADUATED 2026-07-15 (the LAST corpus refusal — refusals reached 0):
+	// the each variadic-if row. Its dispatch half records an offset-form
+	// rematch (DispatchSpec.WrittenOff); the branch merge seats the 1-vs-2
+	// arm residual via the all-inert re-push (captureInertArmResidual — the
+	// loop-side capture mirrored to branch arms) and the variadic merge; the
+	// terminal rematch seats its const operand UNDER the live region top
+	// (push + swap — the raise only reads the window), so both polarities
+	// compile and raise byte-identical to the interpreter.
 
 	// GRADUATED 2026-07-15 (render bound, plan 3a): the local-add row — a
 	// locally-redefined `add` overload whose merge is invisible after fn

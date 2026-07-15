@@ -149,8 +149,16 @@ func TestCompiledCombinationParity(t *testing.T) {
 	for _, src := range comboParity {
 		ac := newDifferentialInstance(t)
 		gotC, _, errC := ac.RunCompiled(src)
+		// Stage J: a whole-program refusal returns compile_refused instead
+		// of the library silently re-running. This harness's contract is
+		// parity-VIA-FALLBACK (the fixture comments name it), so it performs
+		// the explicit fallback itself — same instance, exactly the caller
+		// side of the new contract.
+		if errCode(errC) == "compile_refused" {
+			gotC, errC = ac.RunInterp(src)
+		}
 		ai := newDifferentialInstance(t)
-		gotI, errI := ai.Run(src)
+		gotI, errI := ai.RunInterp(src)
 
 		if cdC, cdI := errCode(errC), errCode(errI); cdC != cdI {
 			diverge++

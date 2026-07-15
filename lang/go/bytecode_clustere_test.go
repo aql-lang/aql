@@ -34,7 +34,7 @@ func TestFnValueApplyInBody(t *testing.T) {
 				t.Fatalf("RunCompiled error: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}

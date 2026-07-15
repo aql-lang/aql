@@ -55,7 +55,7 @@ func fcParityCompiledZeroBails(src string) error {
 	}
 	var outI bytes.Buffer
 	b.SetOutput(&outI)
-	gotI, errI := b.Run(src)
+	gotI, errI := b.RunInterp(src)
 	if codeOf(errC) != codeOf(errI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
 		return fmt.Errorf("error parity: compiled [%s] %v vs interp [%s] %v", codeOf(errC), errC, codeOf(errI), errI)
 	}
@@ -77,7 +77,19 @@ func fcStampedRun(src, name string) error {
 	}
 	a.SetOutput(&bytes.Buffer{})
 	if _, _, err := a.RunCompiled(src); err != nil {
-		return fmt.Errorf("run failed before the stamp assertion: %w", err)
+		// A refusing fixture returns compile_refused under the Stage-J
+		// default; this case's contract is the STAMP REPORT, not the
+		// refusal policy, so fall back explicitly (the CLI's own pattern)
+		// and assert stamps over the interpreter run.
+		if !strings.Contains(fmt.Sprint(err), "compile_refused") {
+			return fmt.Errorf("run failed before the stamp assertion: %w", err)
+		}
+		disarm := a.ArmRuntimeStamping()
+		_, ierr := a.RunInterp(src)
+		disarm()
+		if ierr != nil {
+			return fmt.Errorf("interp run failed before the stamp assertion: %w", ierr)
+		}
 	}
 	var attempted *StampEvent
 	for i, ev := range a.StampReport() {
@@ -186,12 +198,22 @@ var frontierCases = []frontierCase{
 	{"p6/model-action-stamps", func() error {
 		return fcStampedRun(`import "aql:model" def m (Model.new {src:'a: 1 b: 2', actions:{gen:([mod:Any] => [true])}}) (Model.run m) get 'ok'`, "gen")
 	}},
+	// GRADUATED 2026-07-15: StampDetachedFn compiles capturing bodies —
+	// fd.Captured rides compileClosureBody's capture slots (the OpPushClosure
+	// layout) and the ref carries the captured VALUES for bindUnitLocals at
+	// every invoke; anonymous handlers record under "(anonymous fn)". The
+	// case stays as a permanent pin.
 	{"p6/capturing-handler-stamps", func() error {
-		// The capture-decline shape from run_compile_report_test.go (verbatim
+		// The capture shape from run_compile_report_test.go (verbatim
 		// — the leading map-lambda statement is load-bearing for the parse):
-		// the service handler closes over n, so StampDetachedFn declines.
+		// the service handler closes over n.
 		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
 	}},
+	// GRADUATED 2026-07-15: the gen/property bodies landed 2026-07-14
+	// (stored-param-body units run nested on the VM), and the residual
+	// module-load entries are now attributed under the "module-load" C4
+	// seam (the preamble bracket in BuildTestModule / RunModuleBody /
+	// BuildReplModule). The case stays as a permanent pin.
 	{"p6/check-prop-body-on-vm", func() error {
 		// Module-scope check-prop (the compiling half of
 		// bytecode_checkprop_interp_test.go). Target: the per-iteration
@@ -211,6 +233,11 @@ var frontierCases = []frontierCase{
 			return err
 		})
 	}},
+	// GRADUATED 2026-07-15 (the FINAL frontier row — 0 expected-red): the
+	// policy-gate lift (user-authorized) let Vm.run's sub-engine run
+	// compiled-by-default (modules.CompiledSubRun, injected by lang; the
+	// composed sandbox policy is enforced per VM dispatch by gateWord).
+	// The case stays as a permanent pin.
 	{"p6/vm-run-on-vm", func() error {
 		return fcNoUnattributedInterp(func(a *AQL) error {
 			_, _, err := a.RunCompiled(`import "aql:vm" Vm.run "1 add 2"`)
@@ -248,6 +275,13 @@ var frontierCases = []frontierCase{
 	}},
 
 	// Phase 11 — Stage J.
+	// GRADUATED 2026-07-15 (permanent pin): Stage J's Run flip landed —
+	// the public Run executes compiled-by-default with zero unattributed
+	// interpreter entries. The last two blockers closed the same day: the
+	// "concurrent-watch composite" (actually the cross-request def
+	// persistence bug — OpBindGlobal) and the cross-instance observability
+	// pollution (no longer reproducible after it: 20 plain + 5 -race
+	// in-sequence ledger runs clean).
 	{"p11/public-run-is-compiled", func() error {
 		return fcNoUnattributedInterp(func(a *AQL) error {
 			_, err := a.Run(`1 add 2`)
@@ -255,13 +289,26 @@ var frontierCases = []frontierCase{
 		})
 	}},
 	{"p11/no-unbounded-fallback", func() error {
-		// Post-Stage-J a refusal returns an error instead of silently
-		// re-running the whole source on the interpreter; graduation is
-		// coupled with rewriting the mustRefuseWithParity-family contracts.
-		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, _, _ = a.RunCompiled(zzRefusingRow)
-			return nil
-		})
+		// GRADUATED 2026-07-15 (permanent pin): the Stage-J DEFAULT is
+		// compile_refused — a genuine refusal returns the reason as an
+		// error and never silently re-runs the source (the one-release
+		// AQL_COMPILE_FALLBACK=1 hatch restores the old behavior for the
+		// legacy contracts that pin it explicitly).
+		// The probe must be a refusing program that SUCCEEDS interpreted (a
+		// raising one cannot distinguish the fallback's error from a
+		// returned refusal): the paren-bounded fn-value application refuses
+		// and runs to bad_input/q on the interpreter.
+		const refusingButSucceeds = `def zf fn [[x:Any] [Any] [raise bad_input 'no']]  def msg (do [(zf 5) 2] error [dot code])  msg`
+		a, err := fcNew()
+		if err != nil {
+			return err
+		}
+		a.SetOutput(&bytes.Buffer{})
+		out, compiled, rerr := a.RunCompiled(refusingButSucceeds)
+		if !compiled && rerr == nil && len(out) > 0 {
+			return fmt.Errorf("refusal resolved by the silent interpreter fallback (post-Stage-J it returns the refusal error)")
+		}
+		return nil
 	}},
 }
 
@@ -295,45 +342,8 @@ var frontierLedger = map[string]frontierEntry{
 	// action at model build (stampActionFn: the model's private copy takes the
 	// action name and a detached unit; InvokeCallback runs it on the VM). The
 	// case above stays as a permanent pin.
-	"p6/capturing-handler-stamps": {
-		why:       "plan Phase 6.3: StampDetachedFn declines lexical captures (eng stamp_runtime.go); capturing bodies need closure units with capture slots",
-		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
-	},
-	"p6/check-prop-body-on-vm": {
-		// DRIFTED 2026-07-14 (the body half LANDED): the gen/property bodies
-		// compile as same-program stored-param-body units
-		// (Signature.StoredBodies → compileStoredParamBody) and run nested on
-		// the VM via InvokeCallback — the per-iteration CallAQL entries are
-		// GONE, and iteration count adds ZERO entries (pinned by
-		// TestCheckPropIterationsAddNoInterpEntries). The residual entries
-		// are `import "aql:test"` MODULE-LOAD AQL (BuildTestModule preamble
-		// runs — identical counts for an import-only program), which needs
-		// the Phase 10 module-load attribution seam, not body compilation.
-		why:       "plan Phase 10: aql:test module-load AQL runs unattributed (Engine.Run/runPooledSub at BuildTestModule) — the module-load C4 seam is unbuilt",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
 	// GRADUATED 2026-07-14: p6/concurrent-fork-bodies-on-vm — await's
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody
 	// carriers) and runParallelBranch runs each via RunUnit on its fork.
 	// The case above stays as a permanent pin.
-	"p6/vm-run-on-vm": {
-		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p10/no-unattributed-interp-on-islanded-program": {
-		why:       "plan Phase 10: the whole-program refusal fallback re-runs the source with no seam attribution; attribution + per-seam ratchets are unbuilt",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p10/runtime-bail-census-canary": {
-		why:       "plan Phase 10: the shaped-method claim-violation defer is a live designed bail; the executed census must be driven to zero before Stage J",
-		failsWith: "runtime bails: vm:shaped-method",
-	},
-	"p11/public-run-is-compiled": {
-		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p11/no-unbounded-fallback": {
-		why:       "plan Phase 11 (C2): the nil-Program branch silently re-runs the whole source; post-Stage-J a refusal returns an error and only the bounded static-error oracle touches the interpreter",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
 }

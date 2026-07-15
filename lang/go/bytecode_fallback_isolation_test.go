@@ -37,7 +37,7 @@ func TestCompiledReturnCheck(t *testing.T) {
 		ac, _ := New()
 		_, _, errC := ac.RunCompiled(src)
 		ai, _ := New()
-		_, errI := ai.Run(src)
+		_, errI := ai.RunInterp(src)
 		if errC == nil || errI == nil {
 			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
 			continue
@@ -57,6 +57,10 @@ func TestCompiledReturnCheck(t *testing.T) {
 // from a clean interpreter run. These pin that isolation
 // (SnapshotForCompile / RestoreForCompile).
 func TestRunCompiledFallbackIsolation(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Each row is UNCOMPILABLE (so it takes the fallback path) and
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
@@ -103,7 +107,7 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		gotI, errI := ai.Run(src)
+		gotI, errI := ai.RunInterp(src)
 
 		if (errC != nil) != (errI != nil) {
 			t.Errorf("%q: error divergence: compiled-fallback=%v interpreter=%v", src, errC, errI)
@@ -173,7 +177,7 @@ func TestCompiledTraceRenders(t *testing.T) {
 	b, _ := New()
 	var bufI bytes.Buffer
 	b.SetOutput(&bufI)
-	if _, errI := b.Run(src); errI != nil {
+	if _, errI := b.RunInterp(src); errI != nil {
 		t.Fatalf("interpreter trace: %v", errI)
 	}
 	if !strings.Contains(bufC.String(), "trace") {
@@ -205,7 +209,7 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 		}
 		_, _, errC := ac.RunCompiled(src)
 		ai, _ := New()
-		_, errI := ai.Run(src)
+		_, errI := ai.RunInterp(src)
 		if errC == nil || errI == nil {
 			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
 			continue
@@ -224,6 +228,10 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 // spec row currently triggers (a future change that let `args` compile
 // would silently break it).
 func TestCompiledArgsWordFallsBack(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	// Bare `args` (the WHOLE per-call list) still falls back: the args
 	// projection has no foldable consumer, so it refuses at its use site and
 	// the interpreter owns it. (Compiling it would need a build-list-from-locals

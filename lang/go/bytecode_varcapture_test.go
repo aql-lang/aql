@@ -45,7 +45,7 @@ func TestVarBodyCaptureCompiles(t *testing.T) {
 				t.Fatalf("expected the var-body to compile, got refusal: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter errored on a positive case: %v", werr)
 			}
@@ -61,7 +61,7 @@ func TestVarBodyCaptureCompiles(t *testing.T) {
 	// behaviour that, when it silently failed, leaked `i` into the capture set.
 	t.Run("loop var is unbound after the body (no leak)", func(t *testing.T) {
 		a, _ := New()
-		if _, err := a.Run(`([0 1 2] each [var [[i] i end]]) i print`); err == nil {
+		if _, err := a.RunInterp(`([0 1 2] each [var [[i] i end]]) i print`); err == nil {
 			t.Fatal("expected `i` to be undefined after the var body (cleanup must unbind)")
 		} else if !strings.Contains(fmt.Sprint(err), "undefined") {
 			t.Errorf("expected an undefined-word error for the unbound loop var, got %v", err)

@@ -43,7 +43,7 @@ func TestReplayHazardTypedDefRefusesWithParity(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(src)
 		c, _ := New()
-		gotI, errI := c.Run(src)
+		gotI, errI := c.RunInterp(src)
 		if !compiled {
 			t.Errorf("%q: fell back; want the compiled run", src)
 		}
@@ -63,7 +63,7 @@ func TestReplayHazardTypedDefRefusesWithParity(t *testing.T) {
 		b, _ := New()
 		gotC, _, errC := b.RunCompiled(src)
 		c, _ := New()
-		gotI, errI := c.Run(src)
+		gotI, errI := c.RunInterp(src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
 			t.Errorf("%q: parity: compiled=%v/%v interp=%v/%v", src, gotC, errC, gotI, errI)
 		}
@@ -89,7 +89,7 @@ func TestReplayHazardImportBodyCompilesNative(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, errI := d.Run(c.src)
+		gotI, errI := d.RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil {
 			t.Fatalf("%q: compiled=%v errC=%v errI=%v", c.src, compiled, errC, errI)
 		}
@@ -123,7 +123,7 @@ func TestReplayHazardValueDefStillCompiles(t *testing.T) {
 func TestEnsureExportsBoundRebindsModuleExport(t *testing.T) {
 	src := `def f fn [[] [Integer] [import "aql:minilang" 0]]  (f)  import "aql:minilang"  MiniLang get "$name"`
 	a, _ := New()
-	got, err := a.Run(src)
+	got, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestEnsureExportsBoundRebindsModuleExport(t *testing.T) {
 	// dispatches through asModuleExportInfo — the exact read that broke).
 	src2 := `def f fn [[] [Integer] [import "aql:minilang" 0]]  (f)  import "aql:minilang"  +re/[a-z]+/ typeof`
 	b, _ := New()
-	got2, err2 := b.Run(src2)
+	got2, err2 := b.RunInterp(src2)
 	if err2 != nil {
 		t.Fatalf("mini after re-import: %v", err2)
 	}

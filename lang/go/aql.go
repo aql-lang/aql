@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -167,6 +168,24 @@ func New(opts ...Options) (*AQL, error) {
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
+func init() {
+	// Vm.run's sub-engine runner (modules/vm.go CompiledSubRun): the module
+	// package cannot import lang, so the compiled-by-default entry point is
+	// injected here — the same contract as the public Run (explicit armed
+	// interpreter fallback on compile_refused).
+	modules.CompiledSubRun = func(reg *native.Registry, src string) ([]native.Value, error) {
+		a := &AQL{registry: reg}
+		vals, _, _, err := a.RunAutoValues(src)
+		var refused *AqlError
+		if errors.As(err, &refused) && refused.Code == "compile_refused" {
+			disarm := a.ArmRuntimeStamping()
+			vals, err = a.RunInterpValues(src)
+			disarm()
+		}
+		return vals, err
+	}
+}
+
 // NewFromRegistry wraps an ALREADY-WIRED registry in an *AQL instance so a
 // host with a long-lived registry of its own — the REPL, a service — can use
 // the compiled-by-default entry points (RunAutoValues / RunCompiledReason)
@@ -328,6 +347,25 @@ func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 	return a.registry.ArmRuntimeBailHook(fn)
 }
 
+// ArmRuntimeStamping arms detached fn-unit stamping (eng.StampDetachedFn) on
+// this instance and returns the restoring disarm func. RunCompiled /
+// RunAutoValues arm it themselves for the duration of the call; this is the
+// caller-side half of the Stage-J explicit-fallback contract: a host or CLI
+// surface that receives compile_refused and chooses to run RunInterp itself
+// keeps the compiled mode's callback contract — runtime-constructed callbacks
+// (service handlers, codec fns) still compile to VM units at their store
+// sites — by arming around the fallback run. The returned func restores the
+// prior state (a no-op when the registry was already armed), so nesting is
+// safe. A policy-gated registry stays sound under arming: StampDetachedFn
+// itself refuses when a word policy is installed, exactly like CompileCheck.
+func (a *AQL) ArmRuntimeStamping() func() {
+	if a.registry.RuntimeStampingEnabled() {
+		return func() {}
+	}
+	a.registry.EnableRuntimeStamping()
+	return func() { a.registry.DisableRuntimeStamping() }
+}
+
 // CompileCheck runs the source through the checker with the bytecode
 // recording pass enabled (Stage 1: straight-line, monomorphic native
 // calls only) and linearises the trace into a Program. When the
@@ -336,18 +374,16 @@ func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 // the Program is nil and reason names the first offender; the
 // CheckResult is valid either way.
 func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
-	// SECURITY GATE: compiled dispatch does not consult the engine word
-	// policy — the interpreter's policyGateWord runs per stepWord dispatch
-	// (and deliberately not in check mode), so a compiled program would
-	// BYPASS every word deny rule (found 2026-07-13: a "deny add" policy
-	// interpreted `1 add 2` to permission-denied but ran it compiled to 3).
-	// A policy-gated registry therefore refuses compilation outright and the
-	// interpreter, where the gate lives, owns every dispatch. Lifting this
-	// requires a VM-side policy gate at CALL_NATIVE/CALL_USER/poly dispatch
-	// (recorded as a Phase 10 item in the completion plan).
-	if eng.LookupWordChecker(a.registry) != nil {
-		return nil, "policy-gated registry (compiled dispatch does not consult word rules)", CheckResult{}, nil
-	}
+	// Policy-gated registries COMPILE (the 2026-07-15 lift, user-authorized):
+	// every named VM dispatch consults the SAME WordChecker the
+	// interpreter's policyGateWord runs (vmContext.gateWord — CALL_NATIVE,
+	// CALL_USER/TAIL_CALL_USER, both poly re-matchers, CALL_DYN_METHOD),
+	// raising the identical permission error, so the 2026-07-13 bypass (a
+	// "deny add" policy interpreted `1 add 2` to permission-denied but ran
+	// it compiled to 3) is closed at the dispatch layer instead of by
+	// refusing compilation. The check pass stays ungated, mirroring
+	// policyGateWord's check-mode skip. Pinned by
+	// policy_compiled_gate_test.go's compiled-vs-interpreted parity sweep.
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, "parse error", CheckResult{}, err
@@ -643,12 +679,51 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 //   - string for strings
 //
 // State from set/get persists across multiple Run calls on the same instance.
+//
+// Run executes COMPILED-BY-DEFAULT (Stage J, plan Phase 11 — landed
+// 2026-07-15 once the flip attempt's surfaced divergences all closed
+// natively: the fn-predicate transform family, the mini host-compile
+// hook, the model-watch ledger race, and the cross-request def
+// persistence OpBindGlobal fixed). A genuine whole-program refusal
+// degrades gracefully: RunAutoValues returns compile_refused — a
+// guarantee that no observable effect escaped — and Run performs the
+// explicit interpreter fallback itself, with detached fn-unit stamping
+// kept armed so stored callbacks still earn the VM path (the same
+// contract the CLI surfaces implement). Callers that need the
+// interpreter SPECIFICALLY — parity oracles, canonical-error rendering
+// — must call RunInterp, which survives the flip as the explicitly-
+// named tree-walker entry point.
 func (a *AQL) Run(src string) ([]any, error) {
+	out, _, _, err := a.RunCompiledReason(src)
+	var refused *AqlError
+	if errors.As(err, &refused) && refused.Code == "compile_refused" {
+		disarm := a.ArmRuntimeStamping()
+		out, err = a.RunInterp(src)
+		disarm()
+	}
+	return out, err
+}
+
+// RunInterp parses and executes src on the TREE-WALKING INTERPRETER,
+// unconditionally — never the bytecode VM. It is the differential oracle
+// the compiled path is measured against (byte-identical values, errors,
+// and output), and it survives Stage J's Run flip as the explicitly-named
+// interpreter entry point.
+func (a *AQL) RunInterp(src string) ([]any, error) {
 	result, err := a.runValues(src)
 	if err != nil {
 		return nil, err
 	}
 	return convertResults(result), nil
+}
+
+// RunInterpValues is RunInterp without the host-value projection — the raw
+// engine Values, for callers whose renderer needs the engine's own
+// Value.String() (the REPL's per-line echo and its compile_refused
+// fallback). Same contract as RunInterp: unconditionally the tree-walking
+// interpreter, never the VM.
+func (a *AQL) RunInterpValues(src string) ([]native.Value, error) {
+	return a.runValues(src)
 }
 
 // runValues is Run without the host-value projection: the raw engine stack.
@@ -849,6 +924,34 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// it as the program's own error would be wrong; it falls through to
 		// the honest blocked-fallback internal_error below, like any other
 		// refusal the fence cannot resolve.
+		// STAGE J (plan Phase 11, C2): a GENUINE performance refusal no
+		// longer silently re-runs the whole source — it returns the refusal
+		// as an error, so the caller decides (RunInterp explicitly, or the
+		// CLI's visible warn-and-fall-back). AQL_COMPILE_FALLBACK=1 is the
+		// one-release hatch restoring the silent re-run; the tests that pin
+		// refusal+fallback-parity semantics set it explicitly. The STATIC
+		// classes keep the bounded oracle re-run below regardless: a
+		// program with a check error or the "check diagnostics" sentinel
+		// fails (or, caught, succeeds) identically in both engines, and
+		// the re-run only renders the canonical result.
+		if err == nil && reason != "" && reason != "check diagnostics" &&
+			os.Getenv("AQL_COMPILE_FALLBACK") != "1" {
+			// compile_refused is a GUARANTEE to the caller: no observable
+			// effect escaped, so an explicit whole-source re-run (Run's own
+			// fallback, the CLI surfaces') is sound. A refusal whose CHECK
+			// PASS already emitted output (an import-time module-body print)
+			// must therefore return the fence's internal_error instead —
+			// exactly what the in-library fallback arm below does — or the
+			// caller's re-run would duplicate the effect.
+			if a.registry.Effects.Count() != effectsAt {
+				return nil, false, "", fenceBlockedFallback(a.registry,
+					a.registry.AqlError("internal_error",
+						"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
+			}
+			return nil, false, reason, a.registry.AqlError("compile_refused",
+				"bytecode compilation refused: "+reason+
+					" (interpret explicitly with RunInterp, or set AQL_COMPILE_FALLBACK=1 for the one-release silent fallback)", "")
+		}
 		if a.registry.Effects.Count() != effectsAt {
 			if err != nil {
 				return nil, false, "", err
@@ -862,7 +965,12 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 				a.registry.AqlError("internal_error",
 					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
 		}
+		// C4 attribution: the remaining re-runs are SANCTIONED interpreter
+		// entries — the bounded static-error oracle, and the hatch-restored
+		// refusal fallback — reporting under this named seam (plan Phase 10).
+		restoreAtt := a.registry.SetInterpAttribution("fallback:refusal")
 		out, rerr := a.runValues(src)
+		restoreAtt()
 		// Report the reason ONLY for a genuine performance refusal. A
 		// statically-invalid program (err != nil, or the "check diagnostics"
 		// sentinel) fails in both engines — the interpreter fallback raises the
@@ -900,7 +1008,12 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 			}
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
+			// C4 attribution: the runtime-bail re-run is the second
+			// sanctioned interpreter entry (a designed VM defer resolved by
+			// re-running) — named so the census distinguishes it.
+			restoreAtt := a.registry.SetInterpAttribution("fallback:runtime-bail")
 			out, rerr := a.runValues(src)
+			restoreAtt()
 			if rerr != nil {
 				return nil, false, "", rerr
 			}
@@ -1000,6 +1113,14 @@ func fenceBlockedFallback(r *native.Registry, err error) error {
 // match the interpreter, and which the VM deliberately surfaces fast rather
 // than hanging or double-running.
 func runtimeShouldFallback(err error) bool {
+	// A word-policy denial from the VM dispatch gate IS the program's
+	// verdict — the interpreter raises the same checker error — never a
+	// bail (a re-run would evaluate the program twice and diverge behind
+	// the effect fence).
+	var pd eng.PolicyDenied
+	if errors.As(err, &pd) {
+		return false
+	}
 	var ae *eng.AqlError
 	if !errors.As(err, &ae) {
 		return true

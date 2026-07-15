@@ -35,7 +35,7 @@ func ljoinParityCompiled(t *testing.T, src string) {
 		t.Errorf("zero runtime bails required, got %d (%s …)", len(bails), bails[0].Site)
 	}
 	c := mustNew(t)
-	outI, errI := c.Run(src)
+	outI, errI := c.RunInterp(src)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(outC) != fmt.Sprint(outI) {
 		t.Errorf("parity: compiled %v/%v != interp %v/%v", outC, errC, outI, errI)
 	}
@@ -105,7 +105,7 @@ def f fn [[n:Any] [Any] [
 		a := mustNew(t)
 		outC, _, errC := a.RunCompiled(src)
 		b := mustNew(t)
-		outI, errI := b.Run(src)
+		outI, errI := b.RunInterp(src)
 		if (errC == nil) != (errI == nil) || fmt.Sprint(outC) != fmt.Sprint(outI) {
 			t.Errorf("sibling-overload parity:\n  src: %s\n  compiled %v/%v != interp %v/%v", src, outC, errC, outI, errI)
 		}

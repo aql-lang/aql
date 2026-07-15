@@ -63,7 +63,7 @@ func TestPredicateGuardNarrowing(t *testing.T) {
 		want string
 	}{{"50", "[50]"}, {"5", "[0]"}} {
 		a, _ := New()
-		got, err := a.Run(`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [n]] def f fn [[x:Integer] [Integer] [if (x is Big) [g x] [0]]] f ` + c.arg)
+		got, err := a.RunInterp(`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [n]] def f fn [[x:Integer] [Integer] [if (x is Big) [g x] [0]]] f ` + c.arg)
 		if err != nil {
 			t.Fatalf("run f %s: %v", c.arg, err)
 		}

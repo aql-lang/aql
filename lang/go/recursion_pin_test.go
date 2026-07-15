@@ -37,7 +37,7 @@ func runWithTape(t *testing.T, tape lang.TapeOptions, src string) ([]any, error)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return a.Run(src)
+	return a.RunInterp(src)
 }
 
 func TestTailRecursionRunsInConstantTapeSpace(t *testing.T) {

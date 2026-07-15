@@ -13,6 +13,10 @@ import (
 // single-value branch. Each pairs the reason pin with interpreter-fallback
 // parity, per the "slow, not wrong" doctrine.
 func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	cases := []struct{ name, src string }{
 		{"multi-value residual", `def m (module [export "X" {a: 1}]) for 2 [9 m]`},
 		{"single-value", `def m (module [export "X" {a: 1}]) for 2 [m]`},
@@ -46,7 +50,7 @@ func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotI, err := i.Run(c.src)
+			gotI, err := i.RunInterp(c.src)
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}

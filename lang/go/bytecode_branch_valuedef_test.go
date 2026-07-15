@@ -63,7 +63,7 @@ def _ (bcount set bi ((bcount get bi) add 1)) end
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
 			}
@@ -119,7 +119,7 @@ out`, "[[10 20 30]]"},
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
 			}
@@ -172,7 +172,7 @@ out`, "[15]"},
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
 			}
@@ -197,12 +197,12 @@ func TestBranchArmEnclosingLoopStillRefuses(t *testing.T) {
 	if !refused {
 		t.Errorf("expected the enclosing loop-variadic read to refuse native compile; reason=%q", reason)
 	}
-	got, err := a.Run(src)
+	got, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatalf("run (fallback): %v", err)
 	}
 	b, _ := New()
-	want, _ := b.Run(src)
+	want, _ := b.RunInterp(src)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("fallback %v != interpreter %v", got, want)
 	}

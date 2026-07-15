@@ -113,6 +113,13 @@ type vmContext struct {
 	// and runVMEntry's exit restore truncates to it on EVERY path (error
 	// unwind included), so a failed run never leaks args entries.
 	argsFloor int
+	// gateReg/gateWC cache the engine word policy's checker per registry —
+	// the VM twin of the interpreter's policyGateWord consults it at every
+	// named dispatch, and LookupWordChecker's capability-store walk is too
+	// costly per call on the hot path. A pointer-compare refresh keeps the
+	// cache correct across foreign-unit registry switches.
+	gateReg *Registry
+	gateWC  WordChecker
 	// dynBinds is the live dynamic-scope binding trail (OpBindDynScope),
 	// shared across re-entrant closure runs (they nest strictly): frames
 	// record their entry depth (vmFrame.dynBase), RET truncates back, and
@@ -451,6 +458,11 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 // unit's (a module fn's natives run in module scope, like the interpreter's
 // CallAQL body run).
 func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	// The word-policy gate mirrors the interpreter's per-dispatch check
+	// (see gateWord); poly re-match is still one dispatch of pr.Word.
+	if err := vc.gateWord(dispReg, pr.Word); err != nil {
+		return nil, err
+	}
 	vc.ensureInvoker(dispReg)
 	r := dispReg
 	n := pr.Arity
@@ -541,6 +553,9 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 // signature_error — sound because the interpreter takes the same first-match
 // and so reaches the same no-match (mirroring callPoly's no-match path).
 func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []SrcPos, pc int) (int, []Value, error) {
+	if err := vc.gateWord(vc.r, pr.Word); err != nil {
+		return 0, nil, err
+	}
 	n := pr.Arity
 	if len(stack) < n {
 		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY underflow at "+pr.Word)
@@ -846,6 +861,9 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 // error from the method surfaces as-is (the interpreter raises the same,
 // prior side effects included).
 func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if err := vc.gateWord(reg, spec.Word); err != nil {
+		return nil, err
+	}
 	r := vc.r
 	n := spec.NArgs
 	if len(stack) < n+1 {
@@ -860,8 +878,17 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	}
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
-			return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method", fmt.Sprintf(
-				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
+			// A count differing from the shape claim indicts a HOST-CONTRACT
+			// violation, not compiler model debt: an AQL-source method's
+			// count is the checker's own body model (return contracts are
+			// engine-enforced), so the only way here is a host registration
+			// whose handler returned a count its own signature denies — the
+			// recovered-panic class. Raise the plain internal_error
+			// (runtimeShouldFallback still resolves it by re-running on the
+			// tolerant interpreter, fenced as ever); the runtime-bail census
+			// counts DESIGNED model-miss defers only, and this is not one.
+			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+				"shaped method apply %s: result count %d violates the host-registered shape claim %d",
 				spec.Word, len(results), spec.NOut))
 		}
 		if err := vc.screenResults(results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {
@@ -1094,6 +1121,72 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 		return nil, err
 	}
 	return append(stack, results...), nil
+}
+
+// gateWord consults the engine word policy before a compiled NAMED dispatch
+// — the VM twin of the interpreter's policyGateWord (engine.go): the same
+// checker object raises the same error, so a denied word fails identically
+// on either engine. Internal markers are exempt exactly as there; check mode
+// never runs on the VM, so that skip has no twin here.
+func (vc *vmContext) gateWord(curReg *Registry, name string) error {
+	if vc.gateReg != curReg {
+		vc.gateReg, vc.gateWC = curReg, LookupWordChecker(curReg)
+	}
+	if vc.gateWC == nil || isInternalMarker(name) {
+		return nil
+	}
+	if err := vc.gateWC.CheckWord(name); err != nil {
+		return PolicyDenied{Err: err}
+	}
+	return nil
+}
+
+// gateNamedCall is the shared prologue of the two INLINE named-dispatch case
+// arms (CALL_NATIVE, CALL_USER): the underflow check and the word-policy
+// gate in one branch, so the gate adds no cognitive weight to vm.run (the
+// helper-based dispatches gate inside their helpers instead).
+func (vc *vmContext) gateNamedCall(curReg *Registry, word string, have, need int, ufMsg string, curDebug []SrcPos, pc int) error {
+	if have < need {
+		return vmErrAt(curDebug, pc, ufMsg+word)
+	}
+	return vc.gateWord(curReg, word)
+}
+
+// bindDynScope executes one OpBindDynScope: install the top value under the
+// name for dynamic-scope readers (OpLookupDynScope), through the same
+// installer the interpreter's `def` runs; record the prior depth so the
+// frame's RET (or the error unwind) truncates the binding stack back.
+func (vc *vmContext) bindDynScope(curReg *Registry, p *Program, arg int, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
+	}
+	name, nerr := p.Consts[arg].AsConcreteString()
+	if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
+	}
+	v := stack[len(stack)-1]
+	vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
+	InstallDef(curReg, name, v)
+	return stack[:len(stack)-1], nil
+}
+
+// bindGlobal executes one OpBindGlobal — the cross-request persistence twin
+// of a top-level computed `def`: PEEK the runtime value (the stack is
+// untouched, so the lowering's fast path binds a value in place without
+// disturbing its downstream consumers; the copy path emits its own OpDrop)
+// and write it into the KEPT check-pass binding slot (SetAt replaces in
+// place — never a push — so shadow depth and undef behaviour match the
+// interpreter). A slot a later check-time undef popped skips the write: the
+// interpreter would have discarded the binding too.
+func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL underflow")
+	}
+	curReg.Defs.SetAt(gb.Name, gb.Depth, stack[len(stack)-1])
+	if gb.Pop {
+		return stack[:len(stack)-1], nil
+	}
+	return stack, nil
 }
 
 // unwindDynBinds truncates every dynamic-scope binding installed above the
@@ -1387,8 +1480,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
 			n := s.Sig.TotalArgs()
-			if len(stack) < n {
-				return nil, vmErrAt(curDebug, pc, "CALL_NATIVE underflow at "+s.Word)
+			if err := vc.gateNamedCall(curReg, s.Word, len(stack), n, "CALL_NATIVE underflow at ", curDebug, pc); err != nil {
+				return nil, err
 			}
 			// One argument convention: position 0 is the top of stack.
 			// Reuse a per-RunProgram scratch buffer instead of allocating
@@ -1540,8 +1633,8 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			pc = -1
 		case OpCallUser, OpTailCallUser:
 			fn := &p.Fns[in.Arg]
-			if len(stack) < fn.NParams {
-				return nil, vmErrAt(curDebug, pc, "CALL_USER underflow at "+fn.Name)
+			if err := vc.gateNamedCall(curReg, fn.Name, len(stack), fn.NParams, "CALL_USER underflow at ", curDebug, pc); err != nil {
+				return nil, err
 			}
 			nl := make([]Value, fn.NLocals)
 			for i := 0; i < fn.NParams; i++ {
@@ -1584,21 +1677,17 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			enterUnit(int(in.Arg))
 			pc = -1
 		case OpBindDynScope:
-			// Install the top value under the name for dynamic-scope readers
-			// (OpLookupDynScope), through the same installer the interpreter's
-			// `def` runs; record the prior depth so the frame's RET (or the
-			// error unwind) truncates the binding stack back.
-			if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE underflow")
+			ns, err := vc.bindDynScope(curReg, p, int(in.Arg), stack, curDebug, pc)
+			if err != nil { //covergate:allow bindDynScope's only error paths are its own allow-listed defensive guards (underflow / bad name const), unreachable without a bytecode-level fault (§compiler)
+				return nil, err
 			}
-			name, nerr := p.Consts[in.Arg].AsConcreteString()
-			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-				return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
+			stack = ns
+		case OpBindGlobal:
+			ns, err := bindGlobal(curReg, &p.GlobalBinds[in.Arg], stack, curDebug, pc)
+			if err != nil { //covergate:allow bindGlobal's only error path is its own allow-listed defensive underflow guard, unreachable without a bytecode-level fault (§compiler)
+				return nil, err
 			}
-			v := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
-			InstallDef(curReg, name, v)
+			stack = ns
 		case OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the

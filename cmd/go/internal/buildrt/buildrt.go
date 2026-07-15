@@ -132,17 +132,32 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 	case CompileTry:
 		var reason string
 		result, _, reason, err = a.RunCompiledReason(source)
-		// A whole-program compilation refusal silently fell back to the slower
-		// interpreter (design/COMPILABLE-SUBSET.md §1: "slow, not wrong"). That
-		// is surprising performance debt, so surface it — once per run, naming
-		// the first offending construct. Only genuine refusals carry a reason;
-		// a compiled run, a statically-invalid program, and a runtime bailout
-		// all report "" (see lang.AQL.RunCompiledReason).
-		if warn != nil && reason != "" {
+		// Post-Stage-J a genuine refusal RETURNS an error instead of the
+		// library silently re-running (plan Phase 11, C2). Try-mode's
+		// contract is graceful degradation, so the CLI performs the
+		// fallback ITSELF — explicitly and visibly: warn once, naming the
+		// first offending construct, then interpret. The fallback moved
+		// from the library (hidden) to this caller (attributed). It is
+		// keyed on the compile_refused CODE, not the reason: under the
+		// one-release AQL_COMPILE_FALLBACK=1 hatch the library already ran
+		// the source (the reason is still reported for the warning), and a
+		// second run would double its effects. Detached fn-unit stamping
+		// stays armed across the fallback run (ArmRuntimeStamping) so
+		// stored callbacks still earn the VM path — the compiled mode's
+		// contract, exactly as the in-library armed fallback behaved.
+		if reason != "" && warn != nil {
 			fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
 		}
+		var refused *lang.AqlError
+		if errors.As(err, &refused) && refused.Code == "compile_refused" {
+			disarm := a.ArmRuntimeStamping()
+			result, err = a.RunInterp(source)
+			disarm()
+		}
 	default:
-		result, err = a.Run(source)
+		// -no-compile: the interpreter EXPLICITLY (Stage J flips the public
+		// Run to the compiled path; this mode's contract is the tree-walker).
+		result, err = a.RunInterp(source)
 	}
 	if err != nil {
 		// A structured diagnostic re-renders with the ANSI palette when

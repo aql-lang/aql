@@ -978,6 +978,49 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 	}
 }
 
+// planUserPolyDispatch decides whether a multi-overload user-fn call site
+// must ride the user-poly RUNTIME re-match instead of a static arm commit,
+// and returns the plan plus whether the static unit path is barred. Two
+// hazard classes:
+//
+//   - Cluster C (broad miscompile hunt): a gradual-Any arg makes the
+//     dispatch AMBIGUOUS — the checker's committed overload's CALL_USER
+//     param guard raises at runtime when the value matches a SIBLING arm the
+//     interpreter re-matches to (`def g fn [[a:Integer]['i'] [a:String]['s']]
+//     (g (id 5))` returned 'i' interpreted but signature_error compiled).
+//   - An fn-PREDICATE-typed param slot with more than one reachable arm
+//     (fnPredicateOverloadHazard): check-mode sigTypeMatches accepts
+//     predicate types LENIENTLY (RunPredicate short-circuits true —
+//     registry.go), so the static commit may be an arm the interpreter's
+//     runtime predicate run rejects before falling through to a sibling —
+//     `classify -3` over [x:Pos]/[x:Any] arms baked the Pos arm and raised
+//     where the interpreter returns the Any arm's value (the 2026-07-15
+//     flip's dispatch twin of the fn-predicate BIND finding, f8a5bba).
+//
+// Either way the sound lowering is OpCallUserPoly — bake EVERY same-arity
+// overload's body unit and let the VM re-run MatchSignature at entry (the
+// real predicate runs there) — or, when the poly bake declines any arm, the
+// hazard's refusal, byte-identical to the pre-poly taxonomy. A
+// single-overload predicate fn is NOT barred: its CALL_USER param guard
+// re-validates at entry and raises exactly the interpreter's no-match error.
+func planUserPolyDispatch(r *Registry, es EmitRecorder, word string, args []Value, declaredReturns []*Type) (*userPolyPlan, bool) {
+	clusterC := es.active() && anyDynamicCarrier(args) &&
+		dynamicReachableOverloadCount(r, word, args) >= 2
+	predHazard := !clusterC && es.active() && fnPredicateOverloadHazard(r, word, args)
+	if !clusterC && !predHazard {
+		return nil, false
+	}
+	plan := tryCompileUserPolyArms(r, es, word, args, declaredReturns)
+	if plan == nil {
+		if clusterC {
+			es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + word + "`: ambiguous dispatch, no poly re-match")
+		} else {
+			es.MarkUncompilable("fn-predicate-typed overload dispatch at `" + word + "` is runtime-evaluated (no poly re-match)")
+		}
+	}
+	return plan, true
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -1066,29 +1109,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		es := r.Check.Recorder()
 		fnUnit := -1
 		var finishFn func([]Value)
-		// Cluster C (broad miscompile hunt): a gradual-Any arg to a MULTI-overload
-		// user fn is an AMBIGUOUS dispatch. The checker commits to one overload
-		// (whose CALL_USER param guard then RAISES at runtime when the value matches
-		// a SIBLING overload), but the interpreter runtime-re-matches and dispatches
-		// the sibling — `def g fn [[a:Integer]['i'] [a:String]['s']] (g (id 5))`
-		// returned 'i' interpreted but signature_error compiled. Natives re-match via
-		// OpCallNativePoly; user-fn overloads have NO poly path. Refuse → fall back.
-		clusterCRefuse := es.active() && anyDynamicCarrier(args) &&
-			dynamicReachableOverloadCount(r, nameCopy, args) >= 2
-		var polyPlan *userPolyPlan
-		if clusterCRefuse {
-			// OpCallUserPoly (zero-refusals Stage 2): instead of refusing, try to
-			// bake EVERY same-arity overload's body unit and let the VM re-run
-			// MatchSignature at entry — the sound user-fn mirror of callPoly.
-			// declaredReturns is the committed sig's contract (nil for an
-			// anonymous fn, which the poly gate then refuses).
-			polyPlan = tryCompileUserPolyArms(r, es, nameCopy, args, declaredReturns)
-			if polyPlan == nil {
-				// All-or-nothing: any arm the poly compile cannot own keeps the
-				// original refusal, byte-identical.
-				es.MarkUncompilable("gradual-Any arg to multi-overload user fn `" + nameCopy + "`: ambiguous dispatch, no poly re-match")
-			}
-		}
+		polyPlan, polyBarred := planUserPolyDispatch(r, es, nameCopy, args, declaredReturns)
 		// A FOREIGN-registry fn whose body constructs a fn value USED to
 		// refuse wholesale (the compiled unit executed against the
 		// dispatching registry, losing module scope for the constructed
@@ -1100,7 +1121,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// engines, and the refusal is retired (aql:repl rows 12/16/18
 		// compile; the remaining statement-position recovery strand refuses
 		// through the ordinary provenance paths).
-		if es.Armed() && !clusterCRefuse {
+		if es.Armed() && !polyBarred {
 			// The body unit must be compiled against GENERALISED args
 			// — pure carriers of the call's arg types. The call's
 			// kept-concrete values would constant-fold inside the body

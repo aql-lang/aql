@@ -159,6 +159,19 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 		}
 
 		result, _, _, err := aqlInst.RunAutoValues(line)
+		// Post-Stage-J a whole-line refusal returns compile_refused instead
+		// of the library silently re-running; this surface performs the
+		// fallback itself (the same CompileTry semantics as `aql run`) —
+		// silently, matching the REPL's historical UX: an interactive line's
+		// performance debt is not worth a per-line warning. Stamping stays
+		// armed across the fallback so callbacks stored by a refused line
+		// keep the VM path for later lines (the compiled mode's contract).
+		var refused *lang.AqlError
+		if errors.As(err, &refused) && refused.Code == "compile_refused" {
+			disarm := aqlInst.ArmRuntimeStamping()
+			result, err = aqlInst.RunInterpValues(line)
+			disarm()
+		}
 		if err != nil {
 			fmt.Fprintf(out, "  error: %s\n", renderErr(err))
 			continue

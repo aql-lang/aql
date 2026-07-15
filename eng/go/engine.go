@@ -4824,7 +4824,12 @@ func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
+	// C4 attribution: this concrete sub-run IS the check pass (the const
+	// fold needs a real value, so Mode is off for its duration) — without
+	// the explicit tag its interpreter entries would report unattributed.
+	restoreAtt := r.SetInterpAttribution("check:const-fold")
 	res, err := runPooledSub(r, append([]Value(nil), items...), false)
+	restoreAtt()
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 || !IsConcrete(res[0]) {
@@ -8161,6 +8166,17 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
+		// A statically-failed dispatch that no recovery owns can still
+		// compile to a terminal trap / runtime rematch — the same attempt
+		// the no-partition fall-through below makes. The disjunct-carrier
+		// window routes to the rematch gate, whose offset-form render
+		// bound and match-defers arm keep it sound (a runtime match
+		// defers to the interpreter; a no-match raises the shared rich
+		// diagnostic over the bounded slice).
+		if e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+			e.spliceCheckResults(positions, results)
+			return nil
+		}
 		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
 		// and Finalize surfaces THIS reason, so an error-severity no_signature
 		// diagnostic here would only mask it as the generic "check diagnostics"
@@ -8467,14 +8483,16 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// value or a provenance-carrying carrier: record the runtime
 		// rematch (OpDispatchRematch), under three byte-identity guards.
 		// (1) The written tuple sigError renders (the carrier-aware twin
-		// of its forward-else-stack derivation) must be a LEADING PREFIX
-		// of the window, proven by ID identity — its length rides as the
-		// spec's render bound (NWritten), so a wider match view than the
-		// raise view (the local-add shape, where the match probed 3
-		// positions but the error renders the single stack value) re-runs
-		// the match over the full window while rendering over the bounded
-		// slice. An empty tuple, or one that is not the window's leading
-		// slice, cannot be rebuilt faithfully and declines. (2)+(3) The
+		// of its forward-else-stack derivation) must be a CONTIGUOUS
+		// SLICE of the window, proven by ID identity — its offset+length
+		// ride as the spec's render bound (WrittenOff/NWritten), so a
+		// wider match view than the raise view (the local-add shape's
+		// match probed 3 positions where the error renders the single
+		// stack value at offset 0; the each shape's body operand sits at
+		// offset 1 after the region carrier) re-runs the match over the
+		// full window while rendering over the bounded slice. An empty
+		// tuple, or one absent from the window, cannot be rebuilt
+		// faithfully and declines. (2)+(3) The
 		// two TAPE-state diagnostic layers the runtime rebuild has no
 		// access to — the tape reorder probe and the fn-shape
 		// typed-binding hint — must not apply; runtimeNoMatch rebuilds
@@ -8484,10 +8502,21 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		if len(written) == 0 || len(written) > len(vals) {
 			return false
 		}
-		for i := range written {
-			if written[i].ID != vals[i].ID {
-				return false
+		off := -1
+		for o := 0; o+len(written) <= len(vals) && off < 0; o++ {
+			match := true
+			for i := range written {
+				if written[i].ID != vals[o+i].ID {
+					match = false
+					break
+				}
 			}
+			if match {
+				off = o
+			}
+		}
+		if off < 0 {
+			return false
 		}
 		if e.voidArgErrorFor(w.Name, pos) != nil {
 			return false
@@ -8495,7 +8524,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		if e.reorderHint(w.Name, fn) != "" || e.isFnShapeTypedBindingContext() {
 			return false
 		}
-		return es.RecordDispatchRematchValues(w.Name, vals, len(written), pos)
+		return es.RecordDispatchRematchValues(w.Name, vals, off, len(written), pos)
 	}
 	// Serialise the FULL interpreter error into the trap so the compiled
 	// OpTrap raises byte-identical to the interpreter (Detail + spans +

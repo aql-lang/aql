@@ -192,7 +192,13 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 
 		// Every file operation goes through the active aql:io FileOps so a test
 		// can run the model on an in-memory FS (capabilities.NewMem).
-		fs := &fileOpsFS{ops: native.EffectiveFileOps(r), dry: ps.dryrun, mem: map[string][]byte{}, note: r.NoteEffect}
+		// The note captures the LEDGER POINTER at construction (the writer-
+		// fence discipline): a watch-goroutine rebuild then marks the ledger
+		// of the request that BUILT the model, never the live registry field
+		// — which a later request's per-request swap (RunAutoValues) mutates
+		// concurrently (the TestModelWatchForkNoRace data race).
+		led := r.Effects
+		fs := &fileOpsFS{ops: native.EffectiveFileOps(r), dry: ps.dryrun, mem: map[string][]byte{}, note: led.Note}
 
 		path, base := ps.path, ps.base
 		if ps.hasInline {

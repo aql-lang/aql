@@ -32,7 +32,7 @@ func main() {
 		code := args[0].String()
 
 		outBuf.Reset()
-		result, err := instance.Run(code)
+		result, err := instance.RunInterp(code) // recorded Stage-J opt-out (plan Phase 2): the playground stays on the tree-walker
 
 		printed := outBuf.String()
 

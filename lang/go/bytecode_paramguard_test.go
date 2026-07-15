@@ -45,7 +45,7 @@ func TestGradualArgParamGuard(t *testing.T) {
 			}
 			// And the interpreter raises the SAME thing.
 			b, _ := New()
-			_, errI := b.Run(c.src)
+			_, errI := b.RunInterp(c.src)
 			if errI == nil || !strings.Contains(fmt.Sprint(errI), "no signature matches") {
 				t.Errorf("interpreter error = %v, want a signature_error", errI)
 			}
@@ -79,7 +79,7 @@ func TestGradualArgParamGuard(t *testing.T) {
 				t.Fatalf("must compile and run, error: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v", got, want)
 			}

@@ -27,7 +27,7 @@ func TestTypedDefRefinement(t *testing.T) {
 			a, _ := New()
 			got, _, errC := a.RunCompiled(c.src) // allows fallback
 			b, _ := New()
-			want, errI := b.Run(c.src)
+			want, errI := b.RunInterp(c.src)
 			// Same outcome (both a value, or both the same error).
 			if (errC == nil) != (errI == nil) {
 				t.Fatalf("error mismatch: compiled err=%v, interp err=%v", errC, errI)

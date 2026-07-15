@@ -27,7 +27,7 @@ func runLazy(t *testing.T, src string) []interface{} {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(src)
+	res, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run(%q) errored: %v", src, err)
 	}
@@ -66,7 +66,7 @@ func TestLazyArg_GenuineErrorStaysLoud(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run("import \"aql:string-util\" end\n(NoSuchThing.nope 1) end")
+	_, err = a.RunInterp("import \"aql:string-util\" end\n(NoSuchThing.nope 1) end")
 	if err == nil {
 		t.Fatal("expected an error for undefined NoSuchThing, got nil")
 	}

@@ -151,7 +151,7 @@ func TestCodeEffectInterpreterUnchanged(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		got, rerr := a.Run(c.src)
+		got, rerr := a.RunInterp(c.src)
 		if rerr != nil {
 			t.Errorf("%q: run error %v", c.src, rerr)
 			continue
@@ -166,7 +166,7 @@ func TestCodeEffectInterpreterUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	got, rerr := a.Run(`def ops [quote [1 add]] do (ops get 0)`)
+	got, rerr := a.RunInterp(`def ops [quote [1 add]] do (ops get 0)`)
 	if rerr != nil || len(got) != 1 || !strings.Contains(fmt.Sprint(got), "error(") {
 		t.Errorf("failing stored body: got %v err=%v, want a single caught Error value", got, rerr)
 	}
@@ -200,7 +200,7 @@ func TestCodeEffectCompileDiscipline(t *testing.T) {
 	b, _ := New()
 	gotC, compiled, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("%q: compiled/interpreted parity broke: compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
 			src, compiled, gotC, errC, gotI, errI)

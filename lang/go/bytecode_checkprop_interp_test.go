@@ -26,7 +26,7 @@ res get "ok"`
 		t.Fatalf("module-scope check-prop with interp string must compile, refused: %v", err)
 	}
 	b, _ := New()
-	want, werr := b.Run(src)
+	want, werr := b.RunInterp(src)
 	if werr != nil {
 		t.Fatalf("interpreter error: %v", werr)
 	}
@@ -47,6 +47,10 @@ res get "ok"`
 // answer. This is the exact off-corpus shape the langspec differential is blind
 // to (the leaf's central soundness boundary).
 func TestCheckPropInterpStringFnScopeRefuses(t *testing.T) {
+	// Legacy refusal+fallback-parity contract: pins the one-release
+	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// to compile_refused; migrate this contract or retire it with the hatch).
+	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	src := `import "aql:test" end
 def run-props fn [[pfx:Integer] [Boolean] [
   def res (Test.check-prop "x" [r.int 1 9] [ var [[k] (` + bt("${pfx}-${k}") + `) eq ` + bt("${pfx}-${k}") + ` ] ] 5 1 0)
@@ -68,7 +72,7 @@ def run-props fn [[pfx:Integer] [Boolean] [
 		t.Error("fn-nested check-prop must fall back, not compile (frame-local bake hazard)")
 	}
 	c, _ := New()
-	want, _ := c.Run(src)
+	want, _ := c.RunInterp(src)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("fallback result %v != interpreter %v", got, want)
 	}

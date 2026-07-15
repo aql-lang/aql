@@ -316,7 +316,7 @@ func TestSyntaxMatrixCompilerParity(t *testing.T) {
 			return
 		}
 		ai.SetClock(specClock)
-		gotI, errI := ai.Run(r.input)
+		gotI, errI := ai.RunInterp(r.input)
 
 		if (errC != nil) != (errI != nil) {
 			sink.fail("L%d %q: error divergence compiled=%v interpreted=%v", r.line, r.input, errC, errI)
@@ -554,7 +554,7 @@ func verifyFailFrontier(t *testing.T, set frontierSet) {
 			rsink.fail("L%d %q: in fail-runtime but it did NOT compile (belongs in fail-compile)", r.line, r.input)
 			return
 		}
-		if _, errRun := a.Run(r.input); errRun == nil {
+		if _, errRun := a.RunInterp(r.input); errRun == nil {
 			rsink.fail("L%d %q: in fail-runtime but it ran without error", r.line, r.input)
 			return
 		}
@@ -757,7 +757,7 @@ func verifyPassing(t *testing.T, set frontierSet) {
 			sink.fail("L%d %q: passing row did not compile", r.line, r.input)
 			return
 		}
-		gotI, errI := a.Run(r.input)
+		gotI, errI := a.RunInterp(r.input)
 		if errC != nil || errI != nil {
 			sink.fail("L%d %q: run error compiled=%v interpreted=%v", r.line, r.input, errC, errI)
 			return

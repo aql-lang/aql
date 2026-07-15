@@ -16,7 +16,7 @@ func TestRuntimeMintedCaptureCompileDifferential(t *testing.T) {
 	}
 	// Runtime phase: the factory runs OUTSIDE any pass, so the captured
 	// x/y snapshots are identity-less runtime mints.
-	if _, err := a.Run(`def mk fn [[x:Integer y:Integer] [Function] [fn [[n:Integer] [Integer] [n add (x add y)]]]]
+	if _, err := a.RunInterp(`def mk fn [[x:Integer y:Integer] [Function] [fn [[n:Integer] [Integer] [n add (x add y)]]]]
 def addboth (mk 3 4)`); err != nil {
 		t.Fatalf("runtime factory: %v", err)
 	}
@@ -42,7 +42,7 @@ def addboth (mk 3 4)`); err != nil {
 	}
 
 	// The interpreter fallback path must produce the right answer.
-	out, err := a.Run(`addboth 10`)
+	out, err := a.RunInterp(`addboth 10`)
 	if err != nil {
 		t.Fatalf("interpreted call: %v", err)
 	}

@@ -67,9 +67,17 @@ func (r *Registry) StampEvents() []StampEvent {
 
 // recordStampEvent appends to the shared log; inert when unarmed.
 func (r *Registry) recordStampEvent(ev StampEvent) {
-	if r != nil {
-		r.stampLog.record(ev)
+	if r == nil {
+		return
 	}
+	// An anonymous fn (an afn lambda handler) has no Name; record the
+	// canonical display name so report consumers match events by name the
+	// same way PrintStampReport renders them — capturing lambdas are the
+	// COMMON detached-stamp shape post the capture-slot landing.
+	if ev.Name == "" {
+		ev.Name = "(anonymous fn)"
+	}
+	r.stampLog.record(ev)
 }
 
 // ResetStampLog drops the recorded stamp attempts while leaving stamping armed
