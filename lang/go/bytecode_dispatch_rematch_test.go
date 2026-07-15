@@ -129,11 +129,12 @@ func TestDispatchRematchWideWindowRendersBounded(t *testing.T) {
 }
 
 // TestDispatchRematchVariadicIfOperandStaysRefused — the remaining negative:
-// a variadic-if result feeding `each` leaves arm-dependent residual counts
-// (then [99] = one value, else [1 2] = two), so no fixed-arity rematch window
-// exists and the whole-program refusal stands (fallback parity via the
-// interpreter's canonical raise) until the Phase 5 variadic-region lowering
-// seats the merged residual.
+// a variadic-if result feeding `each` RECORDS an offset-form rematch (the
+// written tuple — the body list — sits at window offset 1, after the region
+// carrier), but the BRANCH merge cannot seat the arm-dependent 1-vs-2
+// residual yet, so the whole-program refusal stands there (fallback parity
+// via the interpreter's canonical raise) until the Phase 5 variadic-region
+// lowering seats the merged residual.
 func TestDispatchRematchVariadicIfOperandStaysRefused(t *testing.T) {
 	const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
 	a, err := New()
@@ -144,8 +145,8 @@ func TestDispatchRematchVariadicIfOperandStaysRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileCheck: %v", err)
 	}
-	if prog != nil || !strings.Contains(reason, "unmatched dispatch recovered at each") {
-		t.Fatalf("prog=%v reason=%q — the variadic-if operand shape must stay refused until the variadic-region lowering lands", prog, reason)
+	if prog != nil || !strings.Contains(reason, "branch leaves extra values") {
+		t.Fatalf("prog=%v reason=%q — the variadic-if residual must stay refused at the branch merge until the variadic-region lowering lands", prog, reason)
 	}
 	b, err := New()
 	if err != nil {

@@ -1642,3 +1642,30 @@ cascade only when the row actually graduates (zzRefusingRow needs a NEW
 refusing+raising fixture then — no corpus refusals would remain, so an
 off-corpus refusing shape must be constructed or the fixture retired
 with the tests re-pointed at forced-refusal seams).
+
+### Offset-form render bound LANDED; the each refusal moved to the branch merge (2026-07-15)
+
+DispatchSpec gained WrittenOff: the record gate scans for the contiguous
+offset where the written tuple sits in the window by ID (generalizing the
+3a leading-prefix), the recorder validates 1 <= n and 0 <= off with
+off+n <= len(ops), and dispatchRematch renders window[off:off+n] while
+re-matching the full window. The Any/Disjunct-carrier recovery arm now
+attempts the trap/rematch record before refusing. Result: the each row's
+DISPATCH half records cleanly (the body list at offset 1, after the
+None|Integer region carrier) — the "unmatched dispatch recovered at each"
+refusal is GONE — and the refusal moved DOWN to the honest remaining
+blocker: "branch leaves extra values (Stage 2 lowers single-result
+branches)" — the fixed-slot branch merge cannot seat the 1-vs-2
+arm-dependent residual. Fallback parity holds byte-identically on both
+polarities. The reason cascade moved: knownRefusals entry text, the
+stays-refused negative, the RunCompiledReason offender subtest and the
+CLI warning fixture now pin "branch leaves extra values".
+
+The LAST corpus refusal is therefore precisely the variadic-region
+branch merge (Step 3's remaining primitive): OpStackMark before the
+branch, arms push their own counts, no fixed-slot merge model — and the
+already-recorded rematch then owns the raise. Its window layout must
+also handle the region: the recorded window operand for the region
+carrier is the branch's merged result, which layoutOperands must seat
+against a runtime region of varying depth — the mark-window machinery
+(OpCallDynMixedFromMark's stack[mark:] discipline) is the model.

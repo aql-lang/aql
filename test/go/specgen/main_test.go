@@ -438,9 +438,10 @@ func TestClassifyFrontierKnownInputs(t *testing.T) {
 		// A function word that strands a parked forward under the strict
 		// forward barrier → check stage (`not` cannot feed off `dup`).
 		{"0 not dup", classCheck, "check", false},
-		// Checks clean but Stage-1 will not lower it (an unmatched dispatch
-		// the checker recovers but the compiler refuses).
-		{"def n 0 if (n eq 0) [99] [1 2] each [dup mul]", classCompile, "unmatched dispatch", false},
+		// Checks clean but the lowering refuses it (the variadic-if 1-vs-2
+		// residual has no fixed-slot branch merge; its dispatch half records
+		// an offset-form rematch since DispatchSpec.WrittenOff landed).
+		{"def n 0 if (n eq 0) [99] [1 2] each [dup mul]", classCompile, "branch leaves extra values", false},
 		// Checks clean AND compiles, yet errors at run.
 		{"0 true not lt", classRuntime, "incomparable", true},
 		// A genuinely passing program reaches the runtime stage and is

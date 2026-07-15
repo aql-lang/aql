@@ -846,7 +846,12 @@ type DispatchSpec struct {
 	Word     string
 	NArgs    int
 	NWritten int
-	Pos      SrcPos
+	// WrittenOff is the 0-based window index where the written slice starts
+	// (the each shape's written tuple is the body operand at offset 1, after
+	// the region carrier). Valid domain 0..NArgs-NWritten; NWritten >= 1 is
+	// what makes the pair explicit — a spec with NWritten 0 is malformed.
+	WrittenOff int
+	Pos        SrcPos
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member

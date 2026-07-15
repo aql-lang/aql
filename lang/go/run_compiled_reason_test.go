@@ -22,11 +22,11 @@ func TestRunCompiledReason(t *testing.T) {
 	})
 
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
-	// the first offending construct. The each variadic-if shape refuses
-	// ("unmatched dispatch recovered at each") and falls back to the
-	// interpreter, which raises. (The wide-window local-add row — the former
-	// fixture — compiles to a render-bounded runtime rematch since the
-	// DispatchSpec.NWritten bound landed.)
+	// the first offending construct. The each variadic-if shape refuses at
+	// the BRANCH merge ("branch leaves extra values" — the 1-vs-2 residual;
+	// its dispatch half records an offset-form rematch since
+	// DispatchSpec.WrittenOff landed) and falls back to the interpreter,
+	// which raises.
 	t.Run("refusal names the offender", func(t *testing.T) {
 		const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
 		a, _ := New()
@@ -34,8 +34,8 @@ func TestRunCompiledReason(t *testing.T) {
 		if ran {
 			t.Fatalf("expected the interpreter fallback (ran=false), got ran=true")
 		}
-		if !strings.Contains(reason, "each") {
-			t.Fatalf("refusal reason %q does not name the offending word `each`", reason)
+		if !strings.Contains(reason, "branch") {
+			t.Fatalf("refusal reason %q does not name the offending construct (the branch residual)", reason)
 		}
 	})
 

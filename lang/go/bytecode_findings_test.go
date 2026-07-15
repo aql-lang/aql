@@ -3865,14 +3865,13 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		}
 	}
 	refusals := []struct{ name, src, want string }{
-		// A disjunct carrier with a MATCHING alternative (forward-barrier:80's
-		// shape): the if result is Integer|List and each's List overload could
-		// take the List arm, so the failure is not definite (this run's 99
-		// arm does raise — via the fallback, faithfully). The each dispatch
-		// takes the courtesy-dispatch screen, not the rematch.
-		{"disjunct matching-alternative declines",
+		// The variadic-if shape (forward-barrier:80): the each dispatch now
+		// RECORDS an offset-form rematch (the body list at window offset 1),
+		// so the refusal moved down to the branch merge — the 1-vs-2
+		// residual has no fixed-slot lowering yet. Fallback stays faithful.
+		{"variadic-if residual refuses at the branch merge",
 			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
-			"unmatched dispatch recovered at each"},
+			"branch leaves extra values"},
 		// A RAW deferred-expression token in the failed window — a flex-cell
 		// Reach the static match sees unresolved but the runtime EVALUATES
 		// (to 1 here) before dispatching: neither a serialized trap nor a

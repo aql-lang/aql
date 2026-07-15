@@ -83,10 +83,11 @@ func zzCheckEmit(a *AQL) {
 	})
 }
 
-// zzRefusingRow is a knownRefusals dispatch-recovery row (the each
-// variadic-if row — the branch arms leave DIFFERENT residual counts, so no
-// fixed-arity rematch window exists until the Phase 5 variadic-region
-// lowering): it compiles to a nil Program with no check error, driving the
+// zzRefusingRow is the each variadic-if knownRefusals row (the branch arms
+// leave DIFFERENT residual counts — 1 vs 2 — which the fixed-slot branch
+// merge cannot seat until the Phase 5 variadic-region lowering; its dispatch
+// half already records an offset-form rematch): it compiles to a nil
+// Program with no check error, driving the
 // refusal arm, and the interpreter raises its canonical signature_error at
 // run time. (The word-splice row that used to sit here graduated 2026-07-14
 // to a serialized terminal trap; the local-add row graduated 2026-07-15 to

@@ -1925,10 +1925,11 @@ func (lw *lowerer) lowerTrap(ev *emitEvent) string {
 		}
 		idx := len(lw.p.Dispatches)
 		lw.p.Dispatches = append(lw.p.Dispatches, DispatchSpec{
-			Word:     ev.trap.rematchWord,
-			NArgs:    len(ev.trap.rematchOps),
-			NWritten: ev.trap.rematchNWritten,
-			Pos:      ev.trap.pos,
+			Word:       ev.trap.rematchWord,
+			NArgs:      len(ev.trap.rematchOps),
+			NWritten:   ev.trap.rematchNWritten,
+			WrittenOff: ev.trap.rematchWrittenOff,
+			Pos:        ev.trap.pos,
 		})
 		lw.emit(OpDispatchRematch, idx, ev.trap.pos)
 		return ""

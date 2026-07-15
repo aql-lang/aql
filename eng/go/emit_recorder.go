@@ -66,7 +66,7 @@ type EmitRecorder interface {
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
 	RecordTrap(code, detail, word, hint string, pos SrcPos) bool
 	RecordTrapErr(ae *AqlError, pos SrcPos) bool
-	RecordDispatchRematchValues(word string, vals []Value, nWritten int, pos SrcPos) bool
+	RecordDispatchRematchValues(word string, vals []Value, writtenOff, nWritten int, pos SrcPos) bool
 	RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool)
 	RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool
 	recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool
@@ -168,10 +168,12 @@ func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return 
 func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {
 	return false
 }
-func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool      { return false }
-func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool        { return false }
-func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                          { return false }
-func (inactiveEmit) RecordDispatchRematchValues(string, []Value, int, SrcPos) bool { return false }
+func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool { return false }
+func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool   { return false }
+func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                     { return false }
+func (inactiveEmit) RecordDispatchRematchValues(string, []Value, int, int, SrcPos) bool {
+	return false
+}
 func (inactiveEmit) RecordTypedBind(_ TypedBindSpec, _, out Value, _ SrcPos) (Value, bool) {
 	return out, false
 }

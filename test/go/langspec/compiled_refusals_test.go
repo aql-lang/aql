@@ -37,16 +37,17 @@ var knownRefusals = map[string]string{
 	// entries graduated (see the dated notes below).
 
 	// a VARIADIC-IF result feeding `each`: the arms leave DIFFERENT counts
-	// (then [99] = one value, else [1 2] = two), so the merged position joins
-	// to a None|Integer disjunct and the Any/Disjunct-carrier recovery owns
-	// the dispatch — tryRecordPoly rightly declines each's code-body sigs,
-	// and a runtime rematch would need a FIXED window arity the variadic
-	// residual cannot give it (probe 2026-07-14: the trap is never reached;
-	// the old "0-arg courtesy screen" attribution was wrong — each has no
-	// 0-arg overload). Graduation rides the Phase 5 variadic-region lowering
-	// (OpStackMark/OpDropToMark over the branch merge), which seats the
-	// 1-vs-2 residual and lets a terminal rematch own the raise.
-	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "unmatched dispatch recovered at each (variadic-if operand)",
+	// (then [99] = one value, else [1 2] = two). The DISPATCH half graduated
+	// 2026-07-15: the offset-form render bound (DispatchSpec.WrittenOff)
+	// records the terminal rematch at the Any/Disjunct-carrier recovery arm
+	// (the written tuple — the body list — sits at window offset 1, after
+	// the region carrier), so the refusal moved DOWN to the honest remaining
+	// blocker: the BRANCH lowering cannot seat the 1-vs-2 residual (a
+	// fixed-slot merge model). Graduation rides the Phase 5 variadic-region
+	// lowering (OpStackMark/OpDropToMark over the branch merge), which seats
+	// the arm-dependent residual and lets the already-recorded rematch own
+	// the raise.
+	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "branch leaves extra values (the 1-vs-2 variadic-if residual)",
 
 	// GRADUATED 2026-07-15 (render bound, plan 3a): the local-add row — a
 	// locally-redefined `add` overload whose merge is invisible after fn

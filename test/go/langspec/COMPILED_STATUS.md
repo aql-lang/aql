@@ -32,15 +32,15 @@ The compiler is interpreter-independent once refusals and islands both reach 0 a
 
 | count | bucket | root cause |
 | ---: | --- | --- |
-| 1 | dispatch recovery (best guess) | soundness |
+| 1 | other: branch leaves extra values (Stage 2 lowers single-result branches) | coverage |
 
 | root cause | refusals |
 | --- | ---: |
 | correct-error | 0 |
-| soundness | 1 |
+| soundness | 0 |
 | scheduling | 0 |
 | opcode | 0 |
-| coverage | 0 |
+| coverage | 1 |
 
 ## Re-scoped P7 partition
 
