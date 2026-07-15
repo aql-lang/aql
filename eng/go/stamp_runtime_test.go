@@ -1,6 +1,9 @@
 package eng
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // StampDetachedFn / StampFnValue gate tests. The full end-to-end compile of a
 // REAL body (a lang `fn` with `add`/`convert` words) lives in lang/go — eng
@@ -97,10 +100,20 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	r := stampReg(t)
 	r.EnableRuntimeStamping()
 
+	// Capturing bodies COMPILE post the capture-slot landing (plan Phase
+	// 6.3 — fd.Captured rides the closure compile; the ref carries the
+	// values; see lang/go/stamp_capture_test.go for the end-to-end pin).
+	// This eng-level fixture still declines on the NARROWER gate: its
+	// capture value is runtime-minted with no compile identity, so the
+	// closure compile refuses it — recorded, so -compile-report attributes.
 	captured := aqlBodyFd(NewInteger(1))
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
 	if _, ok := StampDetachedFn(r, captured, SrcPos{}); ok {
-		t.Fatalf("capturing fn must decline (OpPushClosure territory)")
+		t.Fatalf("identity-less capture must decline")
+	}
+	events := r.StampEvents()
+	if len(events) == 0 || !strings.Contains(events[len(events)-1].Reason, "closure captures a runtime-minted value") {
+		t.Fatalf("want the runtime-minted-capture reason recorded, got %+v", events)
 	}
 
 	multi := FnDefInfo{Signatures: []Signature{

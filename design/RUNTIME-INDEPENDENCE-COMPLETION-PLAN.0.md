@@ -2158,3 +2158,33 @@ The frontier is TWO expected-red:
   dispatch gate (CALL_NATIVE / CALL_USER / poly / dyn consult the
   WordChecker exactly as stepWord's policyGateWord does), then
   re-scoping the CompileCheck and StampDetachedFn refusals.
+
+### Capture-bearing detached stamps — p6/capturing-handler-stamps GRADUATES (frontier 2→1) (2026-07-15)
+
+StampDetachedFn no longer declines lexical captures: fd.Captured rides
+compileClosureBody's existing capture-slot machinery (the OpPushClosure
+layout — captures fill the unit's trailing param slots), and the
+CompiledFnRef carries the captured VALUES so bindUnitLocals seats them
+at every RunUnit / runUnitNested invoke. The captures are the
+construction-time snapshots the interpreter's dispatch installs —
+frozen in fd.Captured, name-sorted, per fn VALUE (StampFnValue clones
+per value), so two services built by the same factory each run their
+OWN capture on the VM (`(mk 7)` → 7, `(mk 9)` → 9 — pinned end-to-end
+with an unarmed-parity negative in stamp_capture_test.go).
+
+Two adjacent gaps closed with it: anonymous handlers now RECORD under
+the canonical "(anonymous fn)" display name (recordStampEvent
+normalises, matching PrintStampReport's rendering — the frontier case
+matches events by name), and fcStampedRun's Stage-J explicit fallback
+arms detached stamping around its RunInterp re-run (an unarmed
+fallback recorded zero attempts for any refusing fixture). The
+remaining eng-level decline is the NARROWER gate the shape test now
+pins: a capture value with no compile identity (runtime-minted)
+refuses with its recorded reason. The cmd -compile-report contract
+updated: the capturing handler prints a stamped line where it printed
+the "lexical captures" refusal.
+
+The frontier is ONE expected-red: p6/vm-run-on-vm, blocked behind the
+Phase-10 VM-side word-policy gate (Vm.run always composes the sandbox
+policy, so its sub-registry compile stays correctly barred by the
+CompileCheck security refusal).

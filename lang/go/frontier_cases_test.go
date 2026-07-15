@@ -84,7 +84,10 @@ func fcStampedRun(src, name string) error {
 		if !strings.Contains(fmt.Sprint(err), "compile_refused") {
 			return fmt.Errorf("run failed before the stamp assertion: %w", err)
 		}
-		if _, ierr := a.RunInterp(src); ierr != nil {
+		disarm := a.ArmRuntimeStamping()
+		_, ierr := a.RunInterp(src)
+		disarm()
+		if ierr != nil {
 			return fmt.Errorf("interp run failed before the stamp assertion: %w", ierr)
 		}
 	}
@@ -195,10 +198,15 @@ var frontierCases = []frontierCase{
 	{"p6/model-action-stamps", func() error {
 		return fcStampedRun(`import "aql:model" def m (Model.new {src:'a: 1 b: 2', actions:{gen:([mod:Any] => [true])}}) (Model.run m) get 'ok'`, "gen")
 	}},
+	// GRADUATED 2026-07-15: StampDetachedFn compiles capturing bodies —
+	// fd.Captured rides compileClosureBody's capture slots (the OpPushClosure
+	// layout) and the ref carries the captured VALUES for bindUnitLocals at
+	// every invoke; anonymous handlers record under "(anonymous fn)". The
+	// case stays as a permanent pin.
 	{"p6/capturing-handler-stamps", func() error {
-		// The capture-decline shape from run_compile_report_test.go (verbatim
+		// The capture shape from run_compile_report_test.go (verbatim
 		// — the leading map-lambda statement is load-bearing for the parse):
-		// the service handler closes over n, so StampDetachedFn declines.
+		// the service handler closes over n.
 		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
 	}},
 	// GRADUATED 2026-07-15: the gen/property bodies landed 2026-07-14
@@ -329,10 +337,6 @@ var frontierLedger = map[string]frontierEntry{
 	// action at model build (stampActionFn: the model's private copy takes the
 	// action name and a detached unit; InvokeCallback runs it on the VM). The
 	// case above stays as a permanent pin.
-	"p6/capturing-handler-stamps": {
-		why:       "plan Phase 6.3: StampDetachedFn declines lexical captures (eng stamp_runtime.go); capturing bodies need closure units with capture slots",
-		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
-	},
 	// GRADUATED 2026-07-14: p6/concurrent-fork-bodies-on-vm — await's
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody
 	// carriers) and runParallelBranch runs each via RunUnit on its fork.

@@ -101,9 +101,10 @@ add {cmd:"GET"} ([req:Map state:Any] => [ def kv2 state.kv  kv2 get "a" ]) svc
 	}
 }
 
-// A CAPTURING handler (a lambda closing over an enclosing-fn local) skips
-// the stamp — OpPushClosure territory — and dispatches identically.
-func TestServiceAddSkipsCapturingHandler(t *testing.T) {
+// A CAPTURING handler (a lambda closing over an enclosing-fn local) STAMPS
+// post the capture-slot landing (plan Phase 6.3): the ref carries the
+// captured value and the VM run answers with it — dispatch identical.
+func TestServiceAddStampsCapturingHandler(t *testing.T) {
 	const src = `
 def mk (fn [[n:Integer] [Any] [
   def svc (service {})
@@ -117,8 +118,8 @@ def svc (mk 7)
 		t.Fatalf("setup: %v", err)
 	}
 	refs := storedHandlerRefs(t, r, "svc")
-	if len(refs) != 1 || refs[0] != nil {
-		t.Fatalf("capturing handler must stay unstamped, got %v", refs)
+	if len(refs) != 1 || refs[0] == nil {
+		t.Fatalf("capturing handler must stamp (capture-slot unit), got %v", refs)
 	}
 	out, err := seam5Run(r, `(call {cmd:"N"} svc)`)
 	if err != nil {
