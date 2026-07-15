@@ -4824,7 +4824,12 @@ func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
+	// C4 attribution: this concrete sub-run IS the check pass (the const
+	// fold needs a real value, so Mode is off for its duration) — without
+	// the explicit tag its interpreter entries would report unattributed.
+	restoreAtt := r.SetInterpAttribution("check:const-fold")
 	res, err := runPooledSub(r, append([]Value(nil), items...), false)
+	restoreAtt()
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 || !IsConcrete(res[0]) {

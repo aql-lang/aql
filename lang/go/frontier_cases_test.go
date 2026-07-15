@@ -258,10 +258,25 @@ var frontierCases = []frontierCase{
 		// Post-Stage-J a refusal returns an error instead of silently
 		// re-running the whole source on the interpreter; graduation is
 		// coupled with rewriting the mustRefuseWithParity-family contracts.
-		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, _, _ = a.RunCompiled(zzRefusingRow)
-			return nil
-		})
+		// (The former no-unattributed-entries assertion graduated early —
+		// the pre-Stage-J bounded fallback is now ATTRIBUTED
+		// (fallback:refusal), which is C4's target, so this case pins the
+		// REMAINING contract: the fallback's absence itself.)
+		// The probe must be a refusing program that SUCCEEDS interpreted (a
+		// raising one cannot distinguish the fallback's error from a
+		// returned refusal): the paren-bounded fn-value application refuses
+		// and runs to bad_input/q on the interpreter.
+		const refusingButSucceeds = `def zf fn [[x:Any] [Any] [raise bad_input 'no']]  def msg (do [(zf 5) 2] error [dot code])  msg`
+		a, err := fcNew()
+		if err != nil {
+			return err
+		}
+		a.SetOutput(&bytes.Buffer{})
+		out, compiled, rerr := a.RunCompiled(refusingButSucceeds)
+		if !compiled && rerr == nil && len(out) > 0 {
+			return fmt.Errorf("refusal resolved by the silent interpreter fallback (post-Stage-J it returns the refusal error)")
+		}
+		return nil
 	}},
 }
 
@@ -320,16 +335,12 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
-	"p10/no-unattributed-interp-on-islanded-program": {
-		why:       "plan Phase 10: the whole-program refusal fallback re-runs the source with no seam attribution; attribution + per-seam ratchets are unbuilt",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
 	"p11/public-run-is-compiled": {
 		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 	"p11/no-unbounded-fallback": {
 		why:       "plan Phase 11 (C2): the nil-Program branch silently re-runs the whole source; post-Stage-J a refusal returns an error and only the bounded static-error oracle touches the interpreter",
-		failsWith: "unattributed interpreter entries: Engine.Run",
+		failsWith: "refusal resolved by the silent interpreter fallback",
 	},
 }

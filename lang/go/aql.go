@@ -862,7 +862,12 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 				a.registry.AqlError("internal_error",
 					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
 		}
+		// C4 attribution: the refusal re-run is a SANCTIONED interpreter
+		// entry — every entry it produces reports under this named seam
+		// (plan Phase 10; the pre-Stage-J bounded fallback).
+		restoreAtt := a.registry.SetInterpAttribution("fallback:refusal")
 		out, rerr := a.runValues(src)
+		restoreAtt()
 		// Report the reason ONLY for a genuine performance refusal. A
 		// statically-invalid program (err != nil, or the "check diagnostics"
 		// sentinel) fails in both engines — the interpreter fallback raises the
@@ -900,7 +905,12 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 			}
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
+			// C4 attribution: the runtime-bail re-run is the second
+			// sanctioned interpreter entry (a designed VM defer resolved by
+			// re-running) — named so the census distinguishes it.
+			restoreAtt := a.registry.SetInterpAttribution("fallback:runtime-bail")
 			out, rerr := a.runValues(src)
+			restoreAtt()
 			if rerr != nil {
 				return nil, false, "", rerr
 			}

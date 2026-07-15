@@ -114,12 +114,23 @@ func (r *Registry) noteInterp(seam string) {
 	if fp == nil {
 		return
 	}
-	att := ""
+	att := r.interpAttribution
 	check := r.Check != nil && r.Check.Mode
 	if check {
 		att = "check-mode"
 	}
 	(*fp)(InterpEntry{Seam: seam, Attribution: att, CheckMode: check})
+}
+
+// SetInterpAttribution installs tag as the C4 attribution context for
+// interpreter entries on this registry and returns the restore func — the
+// compiled-mode entry points bracket their SANCTIONED fallback re-runs with
+// it ("fallback:refusal", "fallback:runtime-bail") so the interp-entry hook
+// reports the re-run's entries as attributed. Pair with defer.
+func (r *Registry) SetInterpAttribution(tag string) func() {
+	prev := r.interpAttribution
+	r.interpAttribution = tag
+	return func() { r.interpAttribution = prev }
 }
 
 // noteBail emits one runtime-bail observation when the hook is armed.
