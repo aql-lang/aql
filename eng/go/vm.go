@@ -1135,7 +1135,10 @@ func (vc *vmContext) gateWord(curReg *Registry, name string) error {
 	if vc.gateWC == nil || isInternalMarker(name) {
 		return nil
 	}
-	return vc.gateWC.CheckWord(name)
+	if err := vc.gateWC.CheckWord(name); err != nil {
+		return PolicyDenied{Err: err}
+	}
+	return nil
 }
 
 // gateNamedCall is the shared prologue of the two INLINE named-dispatch case

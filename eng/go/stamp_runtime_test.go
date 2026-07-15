@@ -61,14 +61,14 @@ type allowAllChecker struct{}
 
 func (allowAllChecker) CheckWord(string) error { return nil }
 
-// Word-policy gate: a policy-gated registry must never stamp a detached
-// unit — a compiled body invoked via InvokeCallback would bypass the
-// per-dispatch word gate (the same security refusal CompileCheck applies
-// to whole programs). The refusal is a recorded attempt so -compile-report
-// attributes it; an identical registry without the checker never records
-// the policy reason (the negative twin).
+// Word-policy contract (the 2026-07-15 LIFT, user-authorized): a
+// policy-gated registry STAMPS exactly like a policy-free one — the VM's
+// per-dispatch gate (vmContext.gateWord) now enforces the word rules when
+// the unit runs, raising the interpreter's identical denial — so the
+// pre-lift stamp refusal is retired. The pin: gated and open registries
+// produce the SAME stamp outcome for the same fd, and no policy-flavoured
+// reason is ever recorded.
 func TestStampDetachedFnWordPolicyGate(t *testing.T) {
-	const policyReason = "policy-gated registry (compiled dispatch does not consult word rules)"
 	fd := aqlBodyFd(NewInteger(1))
 
 	gated := stampReg(t)
@@ -76,20 +76,18 @@ func TestStampDetachedFnWordPolicyGate(t *testing.T) {
 	if err := gated.Capabilities.Set(CapPolicy, allowAllChecker{}); err != nil {
 		t.Fatalf("install checker: %v", err)
 	}
-	if _, ok := StampDetachedFn(gated, fd, SrcPos{}); ok {
-		t.Fatalf("policy-gated registry: stamp must decline")
-	}
-	events := gated.StampEvents()
-	if len(events) != 1 || events[0].Stamped || events[0].Reason != policyReason {
-		t.Fatalf("want one refusal event with the policy reason, got %+v", events)
-	}
+	_, gatedOK := StampDetachedFn(gated, fd, SrcPos{})
 
 	open := stampReg(t)
 	open.EnableRuntimeStamping()
-	_, _ = StampDetachedFn(open, fd, SrcPos{})
-	for _, ev := range open.StampEvents() {
-		if ev.Reason == policyReason {
-			t.Fatalf("policy-free registry recorded the policy refusal: %+v", ev)
+	_, openOK := StampDetachedFn(open, fd, SrcPos{})
+
+	if gatedOK != openOK {
+		t.Fatalf("policy-gated stamp outcome %v must equal the policy-free outcome %v (the lift)", gatedOK, openOK)
+	}
+	for _, ev := range gated.StampEvents() {
+		if strings.Contains(ev.Reason, "policy") {
+			t.Fatalf("no policy-flavoured stamp refusal may remain post-lift: %+v", ev)
 		}
 	}
 }

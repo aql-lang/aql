@@ -2213,3 +2213,42 @@ runtime compile on the VM), updating the exec-server and
 policy_compiled_gate pins, and a compiled-vs-interpreted policy parity
 sweep — is the next landing. Remaining after that: steps 7-9
 re-baselining and the voxgig sweep (a voxgig-aql-sourced session).
+
+### The policy-gate lift (USER-AUTHORIZED) — p6/vm-run-on-vm graduates; THE FRONTIER REACHES 0 EXPECTED-RED (2026-07-15)
+
+With the VM-side word-policy gate landed (0880fe8) and the maintainer's
+explicit authorization, the two compile-path security refusals are
+retired: CompileCheck's policy-gated-registry refusal and
+StampDetachedFn's twin. Policy-gated registries now COMPILE; the word
+rules are enforced per named VM dispatch by vmContext.gateWord — the
+SAME WordChecker object the interpreter's policyGateWord consults, so a
+denied word raises the identical error on either engine.
+
+One parity subtlety surfaced and closed in the same landing: the
+checker's denial is a plain Go error, which runtimeShouldFallback
+classified as FOREIGN — the deny bailed to the interpreter re-run
+(double evaluation, ran=false) and, after an escaped effect,
+fence-blocked into a DIVERGENT internal_error. The VM gate now wraps
+denials in eng.PolicyDenied (Error() returns the checker's text
+verbatim; Unwrap exposes it), and runtimeShouldFallback recognises it
+as the PROGRAM'S VERDICT — never a bail. Pinned:
+TestPolicyParityCompiledVsInterpreted (deny-native, deny-user-fn,
+allowed-word result parity, strict-mode runtime denial, and the
+effect-before-deny shape printing exactly once with the identical
+error). The eng stamp pin flips to symmetry (gated stamps == open
+stamps; no policy-flavoured refusal may remain).
+
+**p6/vm-run-on-vm GRADUATES — the frontier ledger reads 11 cases,
+0 expected-red.** Vm.run's sub-engine source now runs
+compiled-by-default through modules.CompiledSubRun, injected by lang's
+init (modules cannot import lang): RunAutoValues over the composed
+sandbox-policy sub-registry, with the public Run's explicit armed
+interpreter fallback on compile_refused. A host embedding modules
+without lang keeps the tree-walker (nil seam).
+
+Every runtime-independence ratchet now sits at its finish line: census
+6000/6000 native, refusals 0, islands 0, runtime bails 0, fullcorpus
+0 divergences, frontier 0 expected-red, and the public Run compiled by
+default. What remains outside this repo: the steps 7–9 external
+re-baseline sweep against the voxgig-aql libraries, which needs a
+session sourced from that org.

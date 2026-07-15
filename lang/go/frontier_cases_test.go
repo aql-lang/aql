@@ -233,6 +233,11 @@ var frontierCases = []frontierCase{
 			return err
 		})
 	}},
+	// GRADUATED 2026-07-15 (the FINAL frontier row — 0 expected-red): the
+	// policy-gate lift (user-authorized) let Vm.run's sub-engine run
+	// compiled-by-default (modules.CompiledSubRun, injected by lang; the
+	// composed sandbox policy is enforced per VM dispatch by gateWord).
+	// The case stays as a permanent pin.
 	{"p6/vm-run-on-vm", func() error {
 		return fcNoUnattributedInterp(func(a *AQL) error {
 			_, _, err := a.RunCompiled(`import "aql:vm" Vm.run "1 add 2"`)
@@ -341,8 +346,4 @@ var frontierLedger = map[string]frontierEntry{
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody
 	// carriers) and runParallelBranch runs each via RunUnit on its fork.
 	// The case above stays as a permanent pin.
-	"p6/vm-run-on-vm": {
-		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
-		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
 }

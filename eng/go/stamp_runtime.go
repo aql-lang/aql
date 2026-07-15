@@ -41,17 +41,6 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	if r == nil || !r.RuntimeStampingEnabled() {
 		return nil, false
 	}
-	if LookupWordChecker(r) != nil {
-		// The SECURITY GATE CompileCheck applies to whole programs, applied
-		// to detached units: compiled dispatch does not consult the engine
-		// word policy (policyGateWord runs per stepWord dispatch), so a
-		// stamped unit invoked through InvokeCallback would BYPASS every
-		// word deny rule. The interpreter, where the gate lives, keeps the
-		// body until the VM grows its own dispatch gate (plan Phase 10).
-		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos,
-			Reason: "policy-gated registry (compiled dispatch does not consult word rules)"})
-		return nil, false
-	}
 	if _, ok := storedFnUnitEligible(fd); !ok {
 		// Not recorded: multi-overload fns and native-word bindings swept by
 		// the module-load loop land here — a shape that was never a compile

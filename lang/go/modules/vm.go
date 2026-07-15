@@ -268,6 +268,13 @@ func vmCompileReportReturns(_ []native.Value, _ *native.Registry) []native.Value
 	return []native.Value{native.NewDynamicCarrierValue(native.NewRecordType(fields))}
 }
 
+// CompiledSubRun is installed by the lang package (which owns the
+// compiled-by-default entry points; modules cannot import lang without a
+// cycle), so Vm.run executes its sub-engine source on the VM with lang's
+// explicit interpreter fallback on compile_refused. Nil keeps the
+// tree-walker.
+var CompiledSubRun func(subReg *native.Registry, src string) ([]native.Value, error)
+
 // runInSubEngine builds a fresh registry under pol, parses src via
 // the parent's parse func, runs it, and returns the last residual
 // stack value to the parent. The parent's policy is composed with
@@ -296,9 +303,20 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 		return nil, fmt.Errorf("vm: parse: %w", err)
 	}
 	subReg.Source = src
-	eng := native.NewTop(subReg)
-	eng.SetSource(src)
-	stack, err := eng.Run(tokens)
+	// COMPILED-BY-DEFAULT (plan Phase 6.6, unblocked by the policy-gate
+	// lift): the lang package installs CompiledSubRun so the sub-engine
+	// source runs on the VM — the composed policy is enforced per dispatch
+	// by vmContext.gateWord exactly as the tree-walker's policyGateWord
+	// enforces it. Nil (a host embedding modules without lang) keeps the
+	// tree-walker.
+	var stack []native.Value
+	if CompiledSubRun != nil {
+		stack, err = CompiledSubRun(subReg, src)
+	} else {
+		eng := native.NewTop(subReg)
+		eng.SetSource(src)
+		stack, err = eng.Run(tokens)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -256,6 +257,25 @@ func TestExecHonoursPolicy(t *testing.T) {
 	post(t, srv, "/v1/exec", execRequest{Code: "1 add 2"}, &got)
 	if got.Error != "" {
 		t.Errorf("add should be allowed under sandbox: %s", got.Error)
+	}
+}
+
+// A genuinely-REFUSING program (the mid-expression fn-value apply) rides
+// the server's explicit interpreter fallback on compile_refused and still
+// answers — the exec surface's graceful-degradation contract post-lift
+// (policy-gated servers now compile, so the fallback arm is exercised by
+// refusal shapes, not by policies).
+func TestExecRefusingProgramFallsBack(t *testing.T) {
+	srv := httptest.NewServer(Handler("", nil))
+	defer srv.Close()
+
+	var got execResponse
+	post(t, srv, "/v1/exec", execRequest{Code: `def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)`}, &got)
+	if got.Error != "" {
+		t.Fatalf("refusing program must fall back to the interpreter: %s", got.Error)
+	}
+	if fmt.Sprintf("%v", got.Result) != "7" {
+		t.Errorf("fallback result = %v, want 7", got.Result)
 	}
 }
 

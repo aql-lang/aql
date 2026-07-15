@@ -168,6 +168,24 @@ func New(opts ...Options) (*AQL, error) {
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
+func init() {
+	// Vm.run's sub-engine runner (modules/vm.go CompiledSubRun): the module
+	// package cannot import lang, so the compiled-by-default entry point is
+	// injected here — the same contract as the public Run (explicit armed
+	// interpreter fallback on compile_refused).
+	modules.CompiledSubRun = func(reg *native.Registry, src string) ([]native.Value, error) {
+		a := &AQL{registry: reg}
+		vals, _, _, err := a.RunAutoValues(src)
+		var refused *AqlError
+		if errors.As(err, &refused) && refused.Code == "compile_refused" {
+			disarm := a.ArmRuntimeStamping()
+			vals, err = a.RunInterpValues(src)
+			disarm()
+		}
+		return vals, err
+	}
+}
+
 // NewFromRegistry wraps an ALREADY-WIRED registry in an *AQL instance so a
 // host with a long-lived registry of its own — the REPL, a service — can use
 // the compiled-by-default entry points (RunAutoValues / RunCompiledReason)
@@ -356,18 +374,16 @@ func (a *AQL) ArmRuntimeStamping() func() {
 // the Program is nil and reason names the first offender; the
 // CheckResult is valid either way.
 func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
-	// SECURITY GATE: compiled dispatch does not consult the engine word
-	// policy — the interpreter's policyGateWord runs per stepWord dispatch
-	// (and deliberately not in check mode), so a compiled program would
-	// BYPASS every word deny rule (found 2026-07-13: a "deny add" policy
-	// interpreted `1 add 2` to permission-denied but ran it compiled to 3).
-	// A policy-gated registry therefore refuses compilation outright and the
-	// interpreter, where the gate lives, owns every dispatch. Lifting this
-	// requires a VM-side policy gate at CALL_NATIVE/CALL_USER/poly dispatch
-	// (recorded as a Phase 10 item in the completion plan).
-	if eng.LookupWordChecker(a.registry) != nil {
-		return nil, "policy-gated registry (compiled dispatch does not consult word rules)", CheckResult{}, nil
-	}
+	// Policy-gated registries COMPILE (the 2026-07-15 lift, user-authorized):
+	// every named VM dispatch consults the SAME WordChecker the
+	// interpreter's policyGateWord runs (vmContext.gateWord — CALL_NATIVE,
+	// CALL_USER/TAIL_CALL_USER, both poly re-matchers, CALL_DYN_METHOD),
+	// raising the identical permission error, so the 2026-07-13 bypass (a
+	// "deny add" policy interpreted `1 add 2` to permission-denied but ran
+	// it compiled to 3) is closed at the dispatch layer instead of by
+	// refusing compilation. The check pass stays ungated, mirroring
+	// policyGateWord's check-mode skip. Pinned by
+	// policy_compiled_gate_test.go's compiled-vs-interpreted parity sweep.
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, "parse error", CheckResult{}, err
@@ -1097,6 +1113,14 @@ func fenceBlockedFallback(r *native.Registry, err error) error {
 // match the interpreter, and which the VM deliberately surfaces fast rather
 // than hanging or double-running.
 func runtimeShouldFallback(err error) bool {
+	// A word-policy denial from the VM dispatch gate IS the program's
+	// verdict — the interpreter raises the same checker error — never a
+	// bail (a re-run would evaluate the program twice and diverge behind
+	// the effect fence).
+	var pd eng.PolicyDenied
+	if errors.As(err, &pd) {
+		return false
+	}
 	var ae *eng.AqlError
 	if !errors.As(err, &ae) {
 		return true
