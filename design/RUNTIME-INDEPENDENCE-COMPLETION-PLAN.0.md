@@ -1907,3 +1907,22 @@ arms. A PLAIN check pass keeps the standard-call validation unchanged.
 
 Remaining flip blockers: the model watch fork (-race), and the
 cross-instance observability pollution.
+
+### Flip blocker 3, first layer CLOSED — the model-watch ledger race (2026-07-15)
+
+The traced race: RunAutoValues' per-request ledger swap (the C4
+ownership design) writes a.registry.Effects while a model WATCH
+goroutine's rebuild — whose fileOpsFS captured `note: r.NoteEffect`,
+a closure over the LIVE registry field — reads it (effects.go Note via
+model.go's fs write). The fix is the writer-fence discipline applied to
+the capture: modelNewHandlerFor snapshots the LEDGER POINTER at
+construction (`led := r.Effects; note: led.Note`), so a background
+rebuild marks the ledger of the request that BUILT the model and never
+reads the mutable field. -race is clean under the flip for the race
+itself; the SECOND layer the re-run surfaced is a distinct class: an
+Extension-payload HANDLE def (`def mdl (Model.new …)`) crossing
+compiled requests — `Model.stop mdl` raises model_bad_handle under the
+flip because the check pass strips the handle to a carrier where the
+runtime needs the live Extension. That class (stateful host handles as
+cross-request operands) is now the named remaining divergence on the
+p11 ledger row, alongside the cross-instance observability pollution.
