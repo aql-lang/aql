@@ -132,14 +132,17 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 	case CompileTry:
 		var reason string
 		result, _, reason, err = a.RunCompiledReason(source)
-		// A whole-program compilation refusal silently fell back to the slower
-		// interpreter (design/COMPILABLE-SUBSET.md §1: "slow, not wrong"). That
-		// is surprising performance debt, so surface it — once per run, naming
-		// the first offending construct. Only genuine refusals carry a reason;
-		// a compiled run, a statically-invalid program, and a runtime bailout
-		// all report "" (see lang.AQL.RunCompiledReason).
-		if warn != nil && reason != "" {
-			fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
+		// Post-Stage-J a genuine refusal RETURNS an error instead of the
+		// library silently re-running (plan Phase 11, C2). Try-mode's
+		// contract is graceful degradation, so the CLI performs the
+		// fallback ITSELF — explicitly and visibly: warn once, naming the
+		// first offending construct, then interpret. The fallback moved
+		// from the library (hidden) to this caller (attributed).
+		if reason != "" {
+			if warn != nil {
+				fmt.Fprintf(warn, "warning: bytecode compilation refused, ran on the interpreter (slower): %s\n", reason)
+			}
+			result, err = a.RunInterp(source)
 		}
 	default:
 		result, err = a.Run(source)

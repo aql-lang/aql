@@ -93,25 +93,25 @@ func zzCheckEmit(a *AQL) {
 // class graduates too.
 const zzRefusingRow = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 
-// A REFUSAL after the check pass emitted an effect must not re-run the
-// source (the re-run would execute zz-emit a second time): it surfaces a
-// blocked-fallback internal_error carrying the refusal reason, with the
-// effect emitted exactly once.
-func TestRefusalFallbackAfterCheckEffectPropagates(t *testing.T) {
+// A genuine REFUSAL returns the compile_refused error (Stage J): no re-run
+// happens at all — with or without a prior check-pass effect — so the
+// effect is emitted exactly once and the refusal reason rides the error.
+func TestRefusalReturnsCompileRefused(t *testing.T) {
+	t.Setenv("AQL_COMPILE_FALLBACK", "0")
 	a := mustNew(t)
 	zzCheckEmit(a)
 	var out bytes.Buffer
 	a.SetOutput(&out)
 
 	got, compiled, err := a.RunCompiled(`zz-emit ; ` + zzRefusingRow)
-	if codeOf(err) != "internal_error" {
-		t.Fatalf("fenced refusal: err=[%s] %v (got=%v compiled=%v); want the blocked-fallback internal_error", codeOf(err), err, got, compiled)
+	if codeOf(err) != "compile_refused" {
+		t.Fatalf("refusal: err=[%s] %v (got=%v compiled=%v); want compile_refused (Stage J: no silent re-run)", codeOf(err), err, got, compiled)
 	}
-	if !strings.Contains(err.Error(), "--no-compile") {
-		t.Errorf("fenced refusal: error should carry the --no-compile note, got: %v", err)
+	if !strings.Contains(err.Error(), "unmatched dispatch recovered at f") {
+		t.Errorf("refusal error should carry the reason, got: %v", err)
 	}
 	if out.String() != "E" {
-		t.Errorf("fenced refusal: output = %q, want exactly one %q", out.String(), "E")
+		t.Errorf("refusal: output = %q, want exactly one %q (no re-run)", out.String(), "E")
 	}
 }
 
@@ -173,12 +173,15 @@ func TestStaleLedgerEffectDoesNotBlockFallback(t *testing.T) {
 		}, native.RunInCheck()),
 	})
 
-	_, compiled, err := a.RunCompiled(`zz-stale-note ; ` + zzRefusingRow)
-	if compiled {
-		t.Error("stale-note refusal: ran compiled; want the interpreter fallback")
+	// The probe rides the STATIC-ORACLE class (the caught-diag sentinel row
+	// succeeds interpreted) — the class that KEEPS the bounded re-run post
+	// Stage J, which is exactly the arm a poisoned baseline would block.
+	got, compiled, err := a.RunCompiled(`zz-stale-note ; do [zz-missing-word-xyz] error ['caught']`)
+	if compiled || err != nil {
+		t.Fatalf("stale-note oracle re-run: compiled=%v err=%v; want the silent bounded fallback", compiled, err)
 	}
-	if codeOf(err) != "signature_error" {
-		t.Errorf("stale-note refusal: err=[%s] %v; want the interpreter's canonical signature_error — a stale ledger note must not block the fallback", codeOf(err), err)
+	if fmt.Sprint(got) != "[caught]" {
+		t.Errorf("stale-note oracle re-run: got %v, want [caught] — a stale ledger note must not block the bounded fallback", got)
 	}
 	if a.registry.Effects != stale {
 		t.Error("the request must restore the prior ledger on return")
@@ -316,24 +319,24 @@ func TestForeignErrorBailWithoutEffectFallsBack(t *testing.T) {
 	}
 }
 
-// The positive twin for the refusal arm: a refusal with NO check-pass effect
-// keeps the silent interpreter fallback (this row is an ERROR row — the
-// interpreter raises its canonical runtime error, which is the contract the
-// fullcorpus gate pins).
-func TestRefusalWithoutEffectStillFallsBack(t *testing.T) {
+// The default twin: until the contract migration completes, the DEFAULT
+// retains the silent interpreter fallback — the refused row runs
+// interpreted and raises its canonical runtime error. (The Stage-J default
+// inversion turns this into the =1 hatch test.)
+func TestRefusalDefaultKeepsFallback(t *testing.T) {
 	a := mustNew(t)
 	var out bytes.Buffer
 	a.SetOutput(&out)
 
 	_, compiled, err := a.RunCompiled(zzRefusingRow)
 	if compiled {
-		t.Error("effect-free refusal: ran compiled; want the interpreter fallback")
+		t.Error("hatched refusal: ran compiled; want the interpreter fallback")
 	}
-	if err == nil || codeOf(err) == "internal_error" {
-		t.Errorf("effect-free refusal: err=[%s] %v; want the interpreter's canonical runtime error", codeOf(err), err)
+	if err == nil || codeOf(err) != "signature_error" {
+		t.Errorf("hatched refusal: err=[%s] %v; want the interpreter's canonical signature_error", codeOf(err), err)
 	}
 	if out.String() != "" {
-		t.Errorf("effect-free refusal: unexpected output %q", out.String())
+		t.Errorf("hatched refusal: unexpected output %q", out.String())
 	}
 }
 

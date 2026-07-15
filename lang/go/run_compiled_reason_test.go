@@ -28,14 +28,18 @@ func TestRunCompiledReason(t *testing.T) {
 	// refuses "unmatched dispatch recovered at f" and falls back to the
 	// interpreter, which raises.
 	t.Run("refusal names the offender", func(t *testing.T) {
+		t.Setenv("AQL_COMPILE_FALLBACK", "0")
 		const src = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 		a, _ := New()
-		_, ran, reason, _ := a.RunCompiledReason(src)
+		_, ran, reason, err := a.RunCompiledReason(src)
 		if ran {
-			t.Fatalf("expected the interpreter fallback (ran=false), got ran=true")
+			t.Fatalf("expected no compiled run (ran=false), got ran=true")
 		}
 		if !strings.Contains(reason, "unmatched dispatch recovered at f") {
 			t.Fatalf("refusal reason %q does not name the offending dispatch", reason)
+		}
+		if codeOf(err) != "compile_refused" {
+			t.Fatalf("Stage J: refusal must return compile_refused, got [%s] %v", codeOf(err), err)
 		}
 	})
 

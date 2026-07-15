@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -865,6 +866,23 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 		// it as the program's own error would be wrong; it falls through to
 		// the honest blocked-fallback internal_error below, like any other
 		// refusal the fence cannot resolve.
+		// STAGE J (plan Phase 11, C2): under AQL_COMPILE_FALLBACK=0 a
+		// GENUINE performance refusal no longer silently re-runs the whole
+		// source — it returns the refusal as an error, so the caller
+		// decides (RunInterp explicitly, or the CLI's visible
+		// warn-and-fall-back). The flip is OPT-IN while the off-corpus
+		// refusal-parity test surface migrates; the default inverts (error
+		// unless =1) as the migration completes, per the Stage-J execution
+		// plan. The STATIC classes keep the bounded oracle re-run below
+		// regardless: a program with a check error or the "check
+		// diagnostics" sentinel fails (or, caught, succeeds) identically in
+		// both engines, and the re-run only renders the canonical result.
+		if err == nil && reason != "" && reason != "check diagnostics" &&
+			os.Getenv("AQL_COMPILE_FALLBACK") == "0" {
+			return nil, false, reason, a.registry.AqlError("compile_refused",
+				"bytecode compilation refused: "+reason+
+					" (interpret explicitly with RunInterp, or unset AQL_COMPILE_FALLBACK for the silent fallback)", "")
+		}
 		if a.registry.Effects.Count() != effectsAt {
 			if err != nil {
 				return nil, false, "", err
@@ -878,9 +896,9 @@ func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 				a.registry.AqlError("internal_error",
 					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
 		}
-		// C4 attribution: the refusal re-run is a SANCTIONED interpreter
-		// entry — every entry it produces reports under this named seam
-		// (plan Phase 10; the pre-Stage-J bounded fallback).
+		// C4 attribution: the remaining re-runs are SANCTIONED interpreter
+		// entries — the bounded static-error oracle, and the hatch-restored
+		// refusal fallback — reporting under this named seam (plan Phase 10).
 		restoreAtt := a.registry.SetInterpAttribution("fallback:refusal")
 		out, rerr := a.runValues(src)
 		restoreAtt()

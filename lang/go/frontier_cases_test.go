@@ -335,12 +335,12 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 6.6: Vm.run executes runtime-constructed source in a sub-engine; the fork-isolated runtime compile is unbuilt (tier-1 island)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
+	"p11/no-unbounded-fallback": {
+		why:       "plan Phase 11 (C2): the flip MECHANISM landed opt-in (AQL_COMPILE_FALLBACK=0 pins it); the DEFAULT still silently re-runs until the off-corpus refusal-parity test surface migrates, then the default inverts",
+		failsWith: "refusal resolved by the silent interpreter fallback",
+	},
 	"p11/public-run-is-compiled": {
 		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
-	},
-	"p11/no-unbounded-fallback": {
-		why:       "plan Phase 11 (C2): the nil-Program branch silently re-runs the whole source; post-Stage-J a refusal returns an error and only the bounded static-error oracle touches the interpreter",
-		failsWith: "refusal resolved by the silent interpreter fallback",
 	},
 }

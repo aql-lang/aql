@@ -18,6 +18,7 @@ import (
 // and that RunCompiled falls back to the interpreter's result.
 func mustRefuseWithParity(t *testing.T, src, want string) {
 	t.Helper()
+	t.Setenv("AQL_COMPILE_FALLBACK", "0")
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -32,19 +33,19 @@ func mustRefuseWithParity(t *testing.T, src, want string) {
 	if !strings.Contains(reason, want) {
 		t.Errorf("%q: refusal reason = %q, want it to contain %q", src, reason, want)
 	}
-	// RunCompiled falls back (compiled=false) to the interpreter's value.
+	// Stage J: RunCompiled returns the refusal as compile_refused (no
+	// silent re-run); the program stays fully serviceable via RunInterp.
 	b, _ := New()
-	gotC, compiled, errC := b.RunCompiled(src)
+	_, compiled, errC := b.RunCompiled(src)
 	if compiled {
-		t.Errorf("%q: RunCompiled reported a compiled run; a refused program must fall back", src)
+		t.Errorf("%q: RunCompiled reported a compiled run; a refused program must not compile", src)
+	}
+	if codeOf(errC) != "compile_refused" {
+		t.Errorf("%q: RunCompiled err=[%s] %v, want compile_refused (Stage J)", src, codeOf(errC), errC)
 	}
 	c, _ := New()
-	gotI, errI := c.RunInterp(src)
-	if fmt.Sprint(errC) != fmt.Sprint(errI) {
-		t.Errorf("%q: fallback error mismatch compiled=%v interp=%v", src, errC, errI)
-	}
-	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity: compiled=%v interp=%v", src, gotC, gotI)
+	if _, errI := c.RunInterp(src); errI != nil && codeOf(errI) == "compile_refused" {
+		t.Errorf("%q: RunInterp must never report compile_refused", src)
 	}
 }
 
