@@ -35,6 +35,7 @@ var (
 	kRevoke      = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "revoke"))
 	kPwAdd       = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add"))
 	kPwRemove    = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "remove"))
+	kPwRevokeTmp = key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "revoke all temp"))
 	kNewVault    = key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new"))
 	kSetDef      = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "default"))
 	kPrune       = key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "prune"))
@@ -659,13 +660,16 @@ func grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost st
 	return strings.Join(append(parts, orPlaceholder(alias, "<alias>")), " ")
 }
 
-func passwordAddCommandPreview(name, scope, namespaces string) string {
+func passwordAddCommandPreview(name, scope, namespaces, ttl string) string {
 	parts := []string{"aql", "vault", "password", "add"}
 	if scope != "" {
 		parts = append(parts, "--scope="+scope)
 	}
 	if namespaces != "" {
 		parts = append(parts, "--namespaces="+namespaces)
+	}
+	if ttl != "" {
+		parts = append(parts, "--ttl="+ttl)
 	}
 	return strings.Join(append(parts, orPlaceholder(name, "<name>")), " ")
 }
@@ -898,11 +902,12 @@ func (m *rootModel) passwordsTable() ([]table.Column, []table.Row) {
 		{Title: "SCOPE", Width: 8},
 		{Title: "NAMESPACES", Width: 22},
 		{Title: "CREATED", Width: 20},
+		{Title: "EXPIRES", Width: 32},
 	}
 	slots, _ := m.ctl.listPasswordSlots()
 	rows := make([]table.Row, 0, len(slots))
 	for _, p := range slots {
-		rows = append(rows, table.Row{p.Name, p.Scope, namespacesLabel(p.Namespaces), p.CreatedAt})
+		rows = append(rows, table.Row{p.Name, p.Scope, namespacesLabel(p.Namespaces), p.CreatedAt, expiryLabel(p.ExpiresAt)})
 	}
 	return cols, rows
 }
@@ -923,6 +928,12 @@ func (m *rootModel) buildPasswords() screen {
 			}
 			return nil
 		}},
+		{binding: kPwRevokeTmp, run: func(_ int) tea.Cmd {
+			if m.ctl.temporaryPasswordCount() == 0 {
+				return status("no temporary passwords to revoke")
+			}
+			return pushScreen(m.buildPasswordRevokeTempForm())
+		}},
 	}
 	cols, rows := m.passwordsTable()
 	return newTableScreen("passwords", cols, rows, acts, "no scoped passwords (legacy single-passphrase vault) — press a to add one", m.passwordsTable).
@@ -931,12 +942,14 @@ namespaces, so different holders can be given different access.
 
   a   Add: create a named password with a scope (read / write / move / admin)
       and namespaces. You first authenticate with an existing admin password.
-  D   Remove: delete a password slot; the other slots keep working.`).
+      Set a TTL to make it a temporary, time-boxed password.
+  D   Remove: delete a password slot; the other slots keep working.
+  T   Revoke all temp: pull EVERY temporary (expiring) password at once.`).
 		withCmd("aql vault password list")
 }
 
 func (m *rootModel) buildPasswordAddForm() screen {
-	var name, scope, namespaces, newPass string
+	var name, scope, namespaces, newPass, ttl string
 	scope = ScopeRead
 	namespaces = "*"
 	form := huh.NewForm(huh.NewGroup(
@@ -948,16 +961,17 @@ func (m *rootModel) buildPasswordAddForm() screen {
 			huh.NewOption("admin", ScopeAdmin),
 		).Value(&scope),
 		huh.NewInput().Title("Namespaces").Description("comma-separated; * = all, : = root").Value(&namespaces),
+		huh.NewInput().Title("TTL").Description("optional: make it temporary, e.g. 30m, 2h (blank = permanent; not for admin)").Value(&ttl),
 		huh.NewInput().Title("New password").EchoMode(huh.EchoModePassword).Value(&newPass).Validate(nonEmpty("password")),
 	))
 	fs := newFormScreen("password add", form, func() tea.Cmd {
 		return m.requireAuth(func() tea.Cmd {
 			return submitOp("added password "+name, func() error {
-				return m.ctl.passwordAdd(name, scope, namespaces, newPass)
+				return m.ctl.passwordAdd(name, scope, namespaces, newPass, ttl)
 			})
 		})
 	})
-	fs.cmdFn = func() string { return passwordAddCommandPreview(name, scope, namespaces) }
+	fs.cmdFn = func() string { return passwordAddCommandPreview(name, scope, namespaces, ttl) }
 	return fs
 }
 
@@ -975,6 +989,27 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 		})
 	})
 	fs.cmdFn = func() string { return "aql vault password rm " + name }
+	return fs
+}
+
+func (m *rootModel) buildPasswordRevokeTempForm() screen {
+	n := m.ctl.temporaryPasswordCount()
+	var ok bool
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title(fmt.Sprintf("Revoke ALL %d temporary password(s)?", n)).
+			Description("Every time-boxed password stops working at once.").
+			Affirmative("Revoke all").Negative("Cancel").Value(&ok),
+	))
+	fs := newFormScreen("password rm --temp", form, func() tea.Cmd {
+		if !ok {
+			return tea.Batch(popScreen(), status("cancelled"))
+		}
+		return m.requireAuth(func() tea.Cmd {
+			return submitOp("revoked all temporary passwords", func() error { return m.ctl.passwordRevokeTemp() })
+		})
+	})
+	fs.cmdFn = func() string { return "aql vault password rm --temp" }
 	return fs
 }
 

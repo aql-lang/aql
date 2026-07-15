@@ -94,25 +94,25 @@ func TestNDKBox(t *testing.T) {
 func TestPrivKeyBindsScope(t *testing.T) {
 	kek := mustRandom(t, kekLen)
 	_, priv, _ := newSlotKeypair()
-	enc, err := sealPrivKey(kek, priv[:], privAAD("reader", ScopeRead))
+	enc, err := sealPrivKey(kek, priv[:], privAAD("reader", ScopeRead, ""))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Correct binding opens.
-	if _, err := openPrivKey(kek, enc, privAAD("reader", ScopeRead)); err != nil {
+	if _, err := openPrivKey(kek, enc, privAAD("reader", ScopeRead, "")); err != nil {
 		t.Fatalf("openPrivKey with correct AAD: %v", err)
 	}
 	// Scope flip read->write fails.
-	if _, err := openPrivKey(kek, enc, privAAD("reader", ScopeWrite)); err != errSlotAuth {
+	if _, err := openPrivKey(kek, enc, privAAD("reader", ScopeWrite, "")); err != errSlotAuth {
 		t.Errorf("scope flip error = %v, want errSlotAuth", err)
 	}
 	// Name change fails.
-	if _, err := openPrivKey(kek, enc, privAAD("writer", ScopeRead)); err != errSlotAuth {
+	if _, err := openPrivKey(kek, enc, privAAD("writer", ScopeRead, "")); err != errSlotAuth {
 		t.Errorf("name change error = %v, want errSlotAuth", err)
 	}
 	// Wrong KEK (wrong passphrase) fails with the same error.
-	if _, err := openPrivKey(mustRandom(t, kekLen), enc, privAAD("reader", ScopeRead)); err != errSlotAuth {
+	if _, err := openPrivKey(mustRandom(t, kekLen), enc, privAAD("reader", ScopeRead, "")); err != errSlotAuth {
 		t.Errorf("wrong-KEK error = %v, want errSlotAuth", err)
 	}
 }

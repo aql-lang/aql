@@ -93,8 +93,16 @@ func runMCP(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 	// Open the session once (one scrypt) and reuse it across tool calls;
 	// nil falls back to a per-call authenticate.
 	if sess, serr := authenticate(s, homeDir, nil, io.Discard, ""); serr == nil {
-		srv.sess = sess
-		defer sess.Close()
+		if sess.Slot != nil && sess.Slot.ExpiresAt != "" {
+			// A TEMPORARY password must NOT be cached (see runProxy): leave
+			// srv.sess nil so each tool call re-authenticates and openSession
+			// re-checks slotExpired, stopping service once it expires.
+			fmt.Fprintf(stderr, "warning: MCP server is running under a TEMPORARY password (expires %s); it re-authenticates per call and stops serving once it expires\n", sess.Slot.ExpiresAt)
+			sess.Close()
+		} else {
+			srv.sess = sess
+			defer sess.Close()
+		}
 	}
 	srv.serve(stdin, stdout)
 	return 0

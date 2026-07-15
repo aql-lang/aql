@@ -462,7 +462,7 @@ func (c *tuiController) revoke(id string) error {
 
 // --- password slot mutations ----------------------------------------------
 
-func (c *tuiController) passwordAdd(name, scope, namespaces, newPass string) error {
+func (c *tuiController) passwordAdd(name, scope, namespaces, newPass, ttl string) error {
 	_ = os.Setenv(EnvNewPassphrase, newPass)
 	defer func() { _ = os.Unsetenv(EnvNewPassphrase) }()
 	args := []string{"password", "add"}
@@ -471,6 +471,9 @@ func (c *tuiController) passwordAdd(name, scope, namespaces, newPass string) err
 	}
 	if namespaces != "" {
 		args = append(args, "--namespaces="+namespaces)
+	}
+	if ttl != "" {
+		args = append(args, "--ttl="+ttl)
 	}
 	args = append(args, name)
 	out, errb, code := c.run("", args...)
@@ -490,6 +493,32 @@ func (c *tuiController) passwordRemove(name string) error {
 		return cmdErr(errb, out)
 	}
 	return nil
+}
+
+// passwordRevokeTemp revokes every temporary (expiring) password at once,
+// mirroring `password rm --temp`. --yes: the TUI form already confirmed.
+func (c *tuiController) passwordRevokeTemp() error {
+	out, errb, code := c.run("", "password", "rm", "--temp", "--yes")
+	if code != 0 {
+		return cmdErr(errb, out)
+	}
+	return nil
+}
+
+// temporaryPasswordCount reports how many scoped passwords carry an
+// expiry, so the TUI can label and gate the bulk-revoke action.
+func (c *tuiController) temporaryPasswordCount() int {
+	slots, err := c.listPasswordSlots()
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, p := range slots {
+		if p.ExpiresAt != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // --- maintenance / settings mutations -------------------------------------

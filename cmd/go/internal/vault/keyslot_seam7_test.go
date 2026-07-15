@@ -136,7 +136,7 @@ func TestP7_NewGCMBadKeyLength(t *testing.T) {
 }
 
 func TestP7_SealPrivKeyArms(t *testing.T) {
-	aad := privAAD("n", ScopeRead)
+	aad := privAAD("n", ScopeRead, "")
 	// bad KEK length -> newGCM error arm.
 	if _, err := sealPrivKey([]byte{1, 2, 3}, make([]byte, 32), aad); err == nil {
 		t.Fatal("sealPrivKey with a bad KEK should fail")
@@ -150,7 +150,7 @@ func TestP7_SealPrivKeyArms(t *testing.T) {
 
 func TestP7_OpenPrivKeyArms(t *testing.T) {
 	kek := p7validKEK()
-	aad := privAAD("n", ScopeRead)
+	aad := privAAD("n", ScopeRead, "")
 	// invalid base64.
 	if _, err := openPrivKey(kek, "!!! not base64 !!!", aad); err == nil {
 		t.Fatal("openPrivKey should reject invalid base64")

@@ -21,6 +21,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 )
@@ -71,11 +72,24 @@ func runPasswordList(args []string, homeDir string, stdout, stderr io.Writer) in
 		fmt.Fprintln(stdout, "no password slots (legacy single-passphrase vault)")
 		return 0
 	}
-	fmt.Fprintf(stdout, "%-16s %-7s %-24s %s\n", "NAME", "SCOPE", "NAMESPACES", "CREATED")
+	fmt.Fprintf(stdout, "%-16s %-7s %-24s %-20s %s\n", "NAME", "SCOPE", "NAMESPACES", "CREATED", "EXPIRES")
 	for _, p := range s.SortedPasswordSlots() {
-		fmt.Fprintf(stdout, "%-16s %-7s %-24s %s\n", p.Name, p.Scope, namespacesLabel(p.Namespaces), p.CreatedAt)
+		fmt.Fprintf(stdout, "%-16s %-7s %-24s %-20s %s\n", p.Name, p.Scope, namespacesLabel(p.Namespaces), p.CreatedAt, expiryLabel(p.ExpiresAt))
 	}
 	return 0
+}
+
+// expiryLabel renders a slot's optional expiry for `password list`: "-"
+// when the password never expires, the timestamp otherwise, marked
+// "(expired)" once it has passed.
+func expiryLabel(expiresAt string) string {
+	if expiresAt == "" {
+		return "-"
+	}
+	if slotExpired(&PasswordSlot{ExpiresAt: expiresAt}, time.Now()) {
+		return expiresAt + " (expired)"
+	}
+	return expiresAt
 }
 
 // namespacesLabel renders a slot's namespace allow-list for display.
@@ -98,11 +112,13 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 	fs.SetOutput(stderr)
 	scope := fs.String("scope", ScopeRead, "scope: read, write, move, or admin")
 	nsFlag := fs.String("namespaces", "*", "comma-separated namespaces this password may access ('*' = all, ':' = root)")
+	ttl := fs.Duration("ttl", 0, "make this a TEMPORARY password that stops working after this duration (e.g. 30m, 2h); 0 = never expires")
+	generate := fs.Bool("generate", false, "generate a strong random password and print it once instead of prompting (hand it to an agent for time-boxed access)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password add [--scope=...] [--namespaces=...] <name>")
+		fmt.Fprintln(stderr, "error: usage: aql vault password add [--scope=...] [--namespaces=...] [--ttl=DUR] [--generate] <name>")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -116,6 +132,14 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 	}
 	if !validScope(*scope) {
 		fmt.Fprintf(stderr, "error: invalid scope %q (read, write, move, admin)\n", *scope)
+		return 1
+	}
+	if *ttl < 0 {
+		fmt.Fprintln(stderr, "error: --ttl must be positive (e.g. 30m, 2h)")
+		return 1
+	}
+	if *ttl > 0 && *scope == ScopeAdmin {
+		fmt.Fprintln(stderr, "error: a temporary password cannot be admin-scoped (a time-boxed admin is a footgun); use --scope=read, write, or move")
 		return 1
 	}
 	namespaces, err := parseNamespaceList(*nsFlag)
@@ -173,10 +197,26 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		}
 	}
 
-	newPass, err := readNewPassphrase(stdin, stdout)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %s\n", err)
-		return 1
+	var newPass string
+	if *generate {
+		gp, gerr := generatePassword()
+		if gerr != nil {
+			fmt.Fprintf(stderr, "error: %s\n", gerr)
+			return 1
+		}
+		newPass = gp
+	} else {
+		np, perr := readNewPassphrase(stdin, stdout)
+		if perr != nil {
+			fmt.Fprintf(stderr, "error: %s\n", perr)
+			return 1
+		}
+		newPass = np
+	}
+
+	var expiresAt string
+	if *ttl > 0 {
+		expiresAt = time.Now().UTC().Add(*ttl).Format(time.RFC3339)
 	}
 
 	migrated := false
@@ -190,22 +230,63 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		}
 		if !st.HasPasswordSlots() {
 			migrated = true
-			return migrateLegacyAndAdd(st, homeDir, currentPass, name, *scope, namespaces, newPass)
+			return migrateLegacyAndAdd(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
 		}
-		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass)
+		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
 	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
 	}
 
 	reason := "scope=" + *scope + " ns=" + namespacesLabel(namespaces)
+	kind := "password"
+	if expiresAt != "" {
+		reason += " ttl=" + ttl.String()
+		kind = "temporary password"
+	}
+	if *generate {
+		reason += " generated"
+	}
 	if migrated {
 		_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.migrate", Outcome: "ok"})
 		fmt.Fprintln(stdout, "migrated vault to envelope format; your current passphrase is now the \"admin\" password")
 	}
 	_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.add", Alias: name, Outcome: "ok", Reason: reason})
-	fmt.Fprintf(stdout, "added password %q (scope=%s, namespaces=%s)\n", name, *scope, namespacesLabel(namespaces))
+	fmt.Fprintf(stdout, "added %s %q (scope=%s, namespaces=%s", kind, name, *scope, namespacesLabel(namespaces))
+	if expiresAt != "" {
+		fmt.Fprintf(stdout, ", expires %s", expiresAt)
+	}
+	fmt.Fprintln(stdout, ")")
+	if *generate {
+		printGeneratedPassword(stdout, name, newPass, expiresAt)
+	}
 	return 0
+}
+
+// generatePassword returns a strong, URL-safe random password (192 bits
+// of entropy) for `password add --generate`. It is printed once and never
+// stored in the clear — only the slot's verifier/keys land in the store.
+func generatePassword() (string, error) {
+	b, err := newRandom(24)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// printGeneratedPassword shows a generated password once, with guidance on
+// using it non-interactively and revoking it early.
+func printGeneratedPassword(stdout io.Writer, name, pass, expiresAt string) {
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "  generated password (shown once — copy it now):")
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "      %s\n", pass)
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "  use it non-interactively:  AQL_VAULT_PASSPHRASE='<password>' aql vault get <alias>")
+	if expiresAt != "" {
+		fmt.Fprintf(stdout, "  it stops working at %s\n", expiresAt)
+	}
+	fmt.Fprintf(stdout, "  revoke it early with:      aql vault password rm %s\n", name)
 }
 
 // --- rm --------------------------------------------------------------------
@@ -214,13 +295,21 @@ func runPasswordRm(args []string, homeDir string, stdin io.Reader, stdout, stder
 	fs := flag.NewFlagSet("vault password rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	rekey := fs.Bool("rekey", false, "rotate the data keys this password could reach (re-encrypts those namespaces)")
+	temp := fs.Bool("temp", false, "revoke ALL temporary (expiring) passwords at once, instead of naming one")
 	yes := fs.Bool("yes", false, "confirm the removal non-interactively")
 	fs.BoolVar(yes, "y", false, "confirm the removal non-interactively (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
+	if *temp {
+		if fs.NArg() != 0 {
+			fmt.Fprintln(stderr, "error: `password rm --temp` revokes every temporary password; do not also name one")
+			return 1
+		}
+		return runPasswordRmTemp(homeDir, *yes, stdin, stdout, stderr)
+	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password rm [--rekey] [--yes] <name>")
+		fmt.Fprintln(stderr, "error: usage: aql vault password rm [--rekey] [--yes] <name>   (or --temp to revoke all temporary passwords)")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -276,6 +365,53 @@ func runPasswordRm(args []string, homeDir string, stdin io.Reader, stdout, stder
 	}
 	_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.rm", Alias: name, Outcome: "ok", Reason: "rekey=false"})
 	fmt.Fprintf(stdout, "removed password %q\n", name)
+	fmt.Fprintln(stderr, "note: without --rekey, a holder who kept a copy of an old keyring can still decrypt previously-stored secrets")
+	return 0
+}
+
+// runPasswordRmTemp revokes every temporary (expiring) password in one
+// step — the bulk companion to `password rm <name>`, for pulling all
+// agent-held time-boxed passwords at once. It is admin-authenticated and
+// guarded by a tier-1 confirmation.
+func runPasswordRmTemp(homeDir string, yes bool, stdin io.Reader, stdout, stderr io.Writer) int {
+	s, err := requireStore(homeDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	if !s.HasPasswordSlots() {
+		fmt.Fprintln(stderr, "error: vault has no password slots")
+		return 1
+	}
+	if len(s.TemporaryPasswordSlots()) == 0 {
+		fmt.Fprintln(stdout, "no temporary passwords to revoke")
+		return 0
+	}
+	sess, err := authenticate(s, homeDir, stdin, stdout, "Vault passphrase: ")
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpAdmin); err != nil {
+		fmt.Fprintln(stderr, "error: only an admin password can revoke passwords")
+		return 1
+	}
+	if err := confirmDestructive(confirmTier1, "", "revoke every temporary password", yes, false, stdin, stdout); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+
+	var removed []string
+	if err := w8mutateStore(homeDir, func(st *Store) error {
+		removed = st.RemoveTemporaryPasswordSlots()
+		return nil
+	}); err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.rm", Outcome: "ok", Reason: fmt.Sprintf("temp-all count=%d [%s]", len(removed), strings.Join(removed, ","))})
+	fmt.Fprintf(stdout, "revoked %d temporary password(s): %s\n", len(removed), strings.Join(removed, ", "))
 	fmt.Fprintln(stderr, "note: without --rekey, a holder who kept a copy of an old keyring can still decrypt previously-stored secrets")
 	return 0
 }
@@ -494,7 +630,7 @@ func containsStar(ns []string) bool {
 // buildSlot constructs a PasswordSlot for pass, sealing the supplied
 // NDKs (keyed by namespace) to a fresh keypair. currentNDK supplies the
 // id for each namespace's WrappedKeys entry; integrityKey signs PubMAC.
-func buildSlot(name, scope string, namespaces []string, pass string, vaultSalt []byte, grant map[string][]byte, currentNDK map[string]string, integrityKey []byte) (PasswordSlot, error) {
+func buildSlot(name, scope string, namespaces []string, pass string, vaultSalt []byte, grant map[string][]byte, currentNDK map[string]string, integrityKey []byte, expiresAt string) (PasswordSlot, error) {
 	var zero PasswordSlot
 	master, err := vaultMasterKEK(pass, vaultSalt)
 	if err != nil {
@@ -514,7 +650,7 @@ func buildSlot(name, scope string, namespaces []string, pass string, vaultSalt [
 	if err != nil {
 		return zero, err
 	}
-	enc, err := sealPrivKey(kek, priv[:], privAAD(name, scope))
+	enc, err := sealPrivKey(kek, priv[:], privAAD(name, scope, expiresAt))
 	if err != nil {
 		return zero, err
 	}
@@ -541,6 +677,13 @@ func buildSlot(name, scope string, namespaces []string, pass string, vaultSalt [
 		PubMAC:      derivePubMAC(integrityKey, name, pubB64, scope, namespaces),
 		EncPrivKey:  enc,
 		WrappedKeys: wrapped,
+		ExpiresAt:   expiresAt,
+		// Stamp CreatedAt here so a slot is self-consistent regardless of the
+		// insertion path: the migration path assigns s.Passwords directly
+		// (no UpsertPasswordSlot to stamp it), which otherwise left the seed
+		// admin and first slot with a blank CREATED. UpsertPasswordSlot
+		// preserves a pre-set CreatedAt, so envelope adds are unaffected.
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }
 
@@ -565,7 +708,7 @@ func grantNDKsFor(all map[string][]byte, scope string, namespaces []string) map[
 // migrateLegacyAndAdd converts a legacy single-passphrase vault to the
 // envelope format and adds the requested slot, committing the store
 // (with the recoverable admin slot) before re-sealing the keyring.
-func migrateLegacyAndAdd(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass string) error {
+func migrateLegacyAndAdd(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass, expiresAt string) error {
 	folder := vaultFolder(homeDir)
 	legacy := &fileKeyring{folder: folder, pass: currentPass}
 
@@ -628,11 +771,11 @@ func migrateLegacyAndAdd(s *Store, homeDir, currentPass, newName, newScope strin
 	integrityKey := ndks[integrityNamespace]
 
 	// 3. Seed admin slot (from the current passphrase) + the requested slot.
-	adminSlot, err := buildSlot("admin", ScopeAdmin, []string{"*"}, currentPass, vsalt, ndks, s.CurrentNDK, integrityKey)
+	adminSlot, err := buildSlot("admin", ScopeAdmin, []string{"*"}, currentPass, vsalt, ndks, s.CurrentNDK, integrityKey, "")
 	if err != nil {
 		return err
 	}
-	reqSlot, err := buildSlot(newName, newScope, newNS, newPass, vsalt, grantNDKsFor(ndks, newScope, newNS), s.CurrentNDK, integrityKey)
+	reqSlot, err := buildSlot(newName, newScope, newNS, newPass, vsalt, grantNDKsFor(ndks, newScope, newNS), s.CurrentNDK, integrityKey, expiresAt)
 	if err != nil {
 		return err
 	}
@@ -666,7 +809,7 @@ func migrateLegacyAndAdd(s *Store, homeDir, currentPass, newName, newScope strin
 // authenticates, unseals the relevant NDKs, and re-seals them to the new
 // slot's public key. Granting a namespace that has no NDK yet generates
 // one and seals it to every admin slot too.
-func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass string) error {
+func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass, expiresAt string) error {
 	sess, err := openSession(s, homeDir, currentPass)
 	if err != nil {
 		return err
@@ -729,7 +872,7 @@ func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string,
 		}
 	}
 
-	slot, err := buildSlot(newName, newScope, newNS, newPass, vsalt, grant, s.CurrentNDK, integrityKey)
+	slot, err := buildSlot(newName, newScope, newNS, newPass, vsalt, grant, s.CurrentNDK, integrityKey, expiresAt)
 	if err != nil {
 		return err
 	}
@@ -985,7 +1128,7 @@ func runPasswordSet(args []string, homeDir string, stdin io.Reader, stdout, stde
 			return err
 		}
 		defer zeroize(kek)
-		enc, err := sealPrivKey(kek, sess.privKey, privAAD(slot.Name, slot.Scope))
+		enc, err := sealPrivKey(kek, sess.privKey, privAAD(slot.Name, slot.Scope, slot.ExpiresAt))
 		if err != nil {
 			return err
 		}

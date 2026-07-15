@@ -17,9 +17,31 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
 )
+
+// errSlotExpired is returned when a supplied passphrase matches a
+// temporary password slot whose ExpiresAt has passed. It is distinct from
+// errSlotAuth so the holder (who presented the right password) gets a
+// clear "expired" message rather than a misleading "wrong passphrase".
+var errSlotExpired = errors.New("vault: this temporary password has expired")
+
+// slotExpired reports whether slot's optional ExpiresAt has passed as of
+// now. An empty ExpiresAt means the slot never expires. An unparseable
+// timestamp fails closed (treated as expired) so a corrupt or tampered
+// expiry can never extend a temporary password past its intended life.
+func slotExpired(slot *PasswordSlot, now time.Time) bool {
+	if slot.ExpiresAt == "" {
+		return false
+	}
+	exp, err := time.Parse(time.RFC3339, slot.ExpiresAt)
+	if err != nil {
+		return true
+	}
+	return !now.Before(exp)
+}
 
 // Session carries one command's authenticated state.
 type Session struct {
@@ -221,7 +243,13 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 			zeroize(kek)
 			continue
 		}
-		priv, err := openPrivKey(kek, slot.EncPrivKey, privAAD(slot.Name, slot.Scope))
+		if slotExpired(slot, time.Now()) {
+			// The passphrase matched a temporary slot whose max duration
+			// has elapsed: refuse before unsealing any key material.
+			zeroize(kek)
+			return nil, errSlotExpired
+		}
+		priv, err := openPrivKey(kek, slot.EncPrivKey, privAAD(slot.Name, slot.Scope, slot.ExpiresAt))
 		zeroize(kek)
 		if err != nil {
 			return nil, err // tampered scope/namespace binding, or corrupt slot
