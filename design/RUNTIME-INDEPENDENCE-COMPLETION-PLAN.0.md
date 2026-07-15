@@ -1778,3 +1778,48 @@ which runs to bad_input/q interpreted): pre-Stage-J the silent fallback
 returns the value (red); post-Stage-J the refusal returns an error
 (green). Remaining expected-red (5): p6 capturing-handler stamps,
 p6 check-prop/vm-run module seams, and the two p11 Stage-J flips.
+
+### Stage J execution design — scoped and sequenced (2026-07-15)
+
+Both Stage-J gates HOLD (refusals=0, executed census=0, C4 attribution
+complete). The flip's exact mechanics, from the code as it stands:
+
+1. **RunInterp lands first** (its own commit): the current (*AQL).Run
+   body (aql.go:646, the tree-walker via runValues) moves verbatim to
+   RunInterp; Run delegates to it unchanged. Zero behavior change; the
+   oracle name exists.
+2. **The oracle migration** (mechanical, its own commit): every test
+   call that uses Run AS THE INTERPRETER ORACLE moves to RunInterp —
+   447 `.Run(` sites in lang/go tests + 17 in test/go/langspec (the
+   central runners first: gatherCensus, the differential/OrFallback
+   harnesses, mustRefuseWithParity family, the vary sweep's interp arm).
+   Sites that mean "run the program however" (REPL/exec already route
+   compiled) stay on Run. This lands BEFORE the flip so the parity
+   gates never go vacuously compiled-vs-compiled.
+3. **The refusal→error flip** (p11/no-unbounded-fallback): in
+   RunAutoValues' refusal arm, a GENUINE performance refusal (prog==nil,
+   err==nil, reason != "" and != "check diagnostics") returns the
+   refusal as an error instead of re-running — unless
+   AQL_COMPILE_FALLBACK=1 (the one-release hatch) restores the re-run.
+   Statically-invalid programs KEEP the bounded static-error oracle
+   re-run (they fail identically in both engines; the re-run only
+   renders the canonical error). The RUNTIME-BAIL arm is RETAINED
+   deliberately: designed defers (vm:rematch-matched — the terminal
+   rematch's match case, inherent to the sound-re-dispatch doctrine
+   since the compiled tail is truncated) resolve by the attributed,
+   fenced re-run; deleting it would surface internal_error for valid
+   programs. The plan's "delete the runtimeShouldFallback re-run"
+   applies to the REFUSAL class; the designed-defer channel is the
+   doctrine's landing pad and stays (bounded, attributed, fenced).
+4. **The Run flip** (p11/public-run-is-compiled): Run's body becomes
+   the RunAutoValues path (compiled by default, host-value projection),
+   after 2+3 so the oracle and refusal contracts are already stable.
+5. Contract-test rewrites ride each step: the zzRefusingRow fence pins
+   (fallback arms still exist for the static-oracle and bail classes),
+   run_compiled_reason rows, and the two p11 ledger rows graduate.
+
+Remaining after Stage J: the p6 trio (capturing-closure stamps, the
+aql:test module-load seam, Vm.run's fork-isolated runtime compile) —
+stamping-coverage work, not Stage-J gates — and the external voxgig
+sweep (Phase 9), which needs a NEW session sourced from the voxgig-aql
+org (cross-tier add_repo is unsupported in this one).
