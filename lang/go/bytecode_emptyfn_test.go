@@ -34,7 +34,7 @@ func TestEmptyBodyFnLowers(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
 		}
@@ -56,7 +56,7 @@ func TestEmptyBodyFnVoidConsumed(t *testing.T) {
 		b, _ := New()
 		_, _, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		_, errI := d.Run(c.src)
+		_, errI := d.RunInterp(c.src)
 		if errC == nil || errI == nil {
 			t.Errorf("%q: expected an error in both modes: compiled=%v interp=%v", c.src, errC, errI)
 			continue

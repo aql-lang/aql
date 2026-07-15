@@ -55,7 +55,7 @@ func fcParityCompiledZeroBails(src string) error {
 	}
 	var outI bytes.Buffer
 	b.SetOutput(&outI)
-	gotI, errI := b.Run(src)
+	gotI, errI := b.RunInterp(src)
 	if codeOf(errC) != codeOf(errI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
 		return fmt.Errorf("error parity: compiled [%s] %v vs interp [%s] %v", codeOf(errC), errC, codeOf(errI), errI)
 	}
@@ -250,7 +250,7 @@ var frontierCases = []frontierCase{
 	// Phase 11 — Stage J.
 	{"p11/public-run-is-compiled", func() error {
 		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, err := a.Run(`1 add 2`)
+			_, err := a.RunInterp(`1 add 2`)
 			return err
 		})
 	}},

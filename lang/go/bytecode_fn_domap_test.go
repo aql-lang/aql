@@ -50,7 +50,7 @@ func TestFnDoMapCountMismatchParity(t *testing.T) {
 		t.Fatal("expected a compiled run")
 	}
 	c, _ := New()
-	_, errI := c.Run(src)
+	_, errI := c.RunInterp(src)
 	if errC == nil || errI == nil {
 		t.Fatalf("both runs must raise: compiled=%v interp=%v", errC, errI)
 	}

@@ -26,7 +26,7 @@ res get "ok"`
 		t.Fatalf("module-scope check-prop with interp string must compile, refused: %v", err)
 	}
 	b, _ := New()
-	want, werr := b.Run(src)
+	want, werr := b.RunInterp(src)
 	if werr != nil {
 		t.Fatalf("interpreter error: %v", werr)
 	}
@@ -68,7 +68,7 @@ def run-props fn [[pfx:Integer] [Boolean] [
 		t.Error("fn-nested check-prop must fall back, not compile (frame-local bake hazard)")
 	}
 	c, _ := New()
-	want, _ := c.Run(src)
+	want, _ := c.RunInterp(src)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("fallback result %v != interpreter %v", got, want)
 	}

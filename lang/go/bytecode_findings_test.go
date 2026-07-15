@@ -55,7 +55,7 @@ func TestRunCompiledSurfacesGenuineError(t *testing.T) {
 		t.Fatal("overflow program did not run compiled — a genuine runtime error must not trigger fallback")
 	}
 	b, _ := New()
-	_, errI := b.Run(src)
+	_, errI := b.RunInterp(src)
 	if codeOf(errC) == "" || codeOf(errC) != codeOf(errI) {
 		t.Fatalf("integer_overflow: compiled=[%s] interp=[%s] (want equal, non-empty)", codeOf(errC), codeOf(errI))
 	}
@@ -98,7 +98,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 		t.Fatalf("rebinding loop run: compiled=%v err=%v", compiled, errC)
 	}
 	c, _ := New()
-	gotI, _ := c.Run(`for 3 [def x (add i 1) x]`)
+	gotI, _ := c.RunInterp(`for 3 [def x (add i 1) x]`)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("rebinding loop: compiled=%v interp=%v", gotC, gotI)
 	}
@@ -134,7 +134,7 @@ func TestThreeArgComputedReceiverLowers(t *testing.T) {
 		t.Fatalf("compiled run: compiled=%v err=%v", compiled, errC)
 	}
 	c, _ := New()
-	gotI, _ := c.Run(src)
+	gotI, _ := c.RunInterp(src)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("setpath parity: compiled=%v interp=%v", gotC, gotI)
 	}
@@ -179,7 +179,7 @@ func TestStrictDisjunctTypeAlgebraPoly(t *testing.T) {
 			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
 		}
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled=%v interp=%v", c.src, gotC, gotI)
 		}
@@ -214,7 +214,7 @@ func TestObjectClassSetLowers(t *testing.T) {
 		t.Fatalf("object set run: compiled=%v err=%v", compiled, errC)
 	}
 	b, _ := New()
-	gotI, _ := b.Run(ok)
+	gotI, _ := b.RunInterp(ok)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[7]" {
 		t.Errorf("object set: compiled=%v interp=%v (want [7])", gotC, gotI)
 	}
@@ -225,7 +225,7 @@ func TestObjectClassSetLowers(t *testing.T) {
 	c, _ := New()
 	_, _, errCbad := c.RunCompiled(bad)
 	d, _ := New()
-	_, errIbad := d.Run(bad)
+	_, errIbad := d.RunInterp(bad)
 	if codeOf(errCbad) != "sealed_field" || codeOf(errCbad) != codeOf(errIbad) {
 		t.Errorf("sealed-field set: compiled=[%s] interp=[%s] (want sealed_field both)",
 			codeOf(errCbad), codeOf(errIbad))
@@ -267,7 +267,7 @@ func TestComputedElseIfLowers(t *testing.T) {
 			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
 		}
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: compiled=%v interp=%v (want [%s])", c.src, gotC, gotI, c.want)
 		}
@@ -311,7 +311,7 @@ func TestComputedThenIfLowers(t *testing.T) {
 			t.Fatalf("%q: compiled=%v err=%v", c.src, compiled, errC)
 		}
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: compiled=%v interp=%v (want [%s])", c.src, gotC, gotI, c.want)
 		}
@@ -360,7 +360,7 @@ func TestComputedArmConditions(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
 		}
@@ -402,7 +402,7 @@ func TestBothComputedIfLowers(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
 		}
@@ -419,7 +419,7 @@ func TestBothComputedIfLowers(t *testing.T) {
 	nb, _ := New()
 	gotC, _, errC := nb.RunCompiled(listCond)
 	nbi, _ := New()
-	gotI, _ := nbi.Run(listCond)
+	gotI, _ := nbi.RunInterp(listCond)
 	if errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v", listCond, gotC, errC, gotI)
 	}
@@ -447,7 +447,7 @@ func TestVariadicElseIfLowers(t *testing.T) {
 		a, _ := New()
 		gotC, compiled, errC := a.RunCompiled(c.src)
 		b, _ := New()
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if (errC != nil) != (errI != nil) {
 			t.Errorf("%q: error parity compiled=%v interp=%v", c.src, errC, errI)
 			continue
@@ -494,7 +494,7 @@ func TestFnValueIntrospectionLowers(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -537,7 +537,7 @@ func TestMapIterationCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -580,7 +580,7 @@ func TestFilterLambdaCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -592,7 +592,7 @@ func TestFilterLambdaCompilesNative(t *testing.T) {
 	a, _ := New()
 	_, compiled, errC := a.RunCompiled(bad)
 	b, _ := New()
-	_, errI := b.Run(bad)
+	_, errI := b.RunInterp(bad)
 	if !compiled || errC == nil || errI == nil {
 		t.Errorf("%q: want both engines to error (compiled=%v errC=%v errI=%v)", bad, compiled, errC, errI)
 	}
@@ -629,7 +629,7 @@ func TestArgsAccessorCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -678,7 +678,7 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -689,7 +689,7 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 	a, _ := New()
 	_, _, errC := a.RunCompiled(`def x word [nope 2 3] x`)
 	b, _ := New()
-	_, errI := b.Run(`def x word [nope 2 3] x`)
+	_, errI := b.RunInterp(`def x word [nope 2 3] x`)
 	if (errC == nil) != (errI == nil) {
 		t.Errorf("word-splice undefined: error divergence compiled=%v interp=%v", errC, errI)
 	}
@@ -723,7 +723,7 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -752,7 +752,7 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 	ar, _ := New()
 	_, compiled, errC := ar.RunCompiled(deep)
 	b, _ := New()
-	_, errI := b.Run(deep)
+	_, errI := b.RunInterp(deep)
 	if !compiled {
 		t.Errorf("too-deep macroexpand: must run on the compiled path (the trap), not fall back")
 	}
@@ -797,7 +797,7 @@ func TestMacroexpandCompilesNative(t *testing.T) {
 	cn, _ := New()
 	_, _, nerrC := cn.RunCompiled(nested)
 	dn, _ := New()
-	_, nerrI := dn.Run(nested)
+	_, nerrI := dn.RunInterp(nested)
 	if nerrC == nil || nerrI == nil || nerrC.Error() != nerrI.Error() {
 		t.Errorf("nested too-deep macroexpand: error parity broken compiled=%v interp=%v", nerrC, nerrI)
 	}
@@ -860,7 +860,7 @@ func TestNestedVariadicCaseCompiles(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -872,7 +872,7 @@ func TestNestedVariadicCaseCompiles(t *testing.T) {
 	a, _ := New()
 	_, compiled, _ := a.RunCompiled(consumed)
 	b, _ := New()
-	gotI, _ := b.Run(consumed)
+	gotI, _ := b.RunInterp(consumed)
 	if compiled {
 		t.Errorf("%q: a consumed variadic case must fall back, not compile", consumed)
 	}
@@ -908,7 +908,7 @@ func TestUsurpCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -947,7 +947,7 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -959,7 +959,7 @@ func TestMakeComputedDefaultsCompile(t *testing.T) {
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(iso)
 	b, _ := New()
-	gotI, _ := b.Run(iso)
+	gotI, _ := b.RunInterp(iso)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("per-instance isolation: compiled=%v interp=%v (must match)", gotC, gotI)
 	}
@@ -992,7 +992,7 @@ func TestWithDecimalCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1032,7 +1032,7 @@ func TestMapLambdaCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1083,7 +1083,7 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(src)
 		b, _ := New()
-		gotI, _ := b.Run(src)
+		gotI, _ := b.RunInterp(src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled=%v errC=%v gotC=%v gotI=%v (compiled/interp must match)",
 				src, compiled, errC, gotC, gotI)
@@ -1110,7 +1110,7 @@ func TestQueryDSLCompilesNative(t *testing.T) {
 	ar, _ := New()
 	gotC, _, _ := ar.RunCompiled(core)
 	b, _ := New()
-	gotI, _ := b.Run(core)
+	gotI, _ := b.RunInterp(core)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("%q: compiled/interp parity broke: compiled=%v interp=%v", core, gotC, gotI)
 	}
@@ -1153,7 +1153,7 @@ func TestReachLensCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1180,7 +1180,7 @@ func TestReachLensCompilesNative(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1202,7 +1202,7 @@ func TestReachLensCompilesNative(t *testing.T) {
 		t.Errorf("%q: filter lens form should compile native now", filter)
 	}
 	b, _ := New()
-	gotI, _ := b.Run(filter)
+	gotI, _ := b.RunInterp(filter)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[{a:{on:true}}]" {
 		t.Errorf("%q: filter parity broke: compiled=%v interp=%v", filter, gotC, gotI)
 	}
@@ -1262,7 +1262,7 @@ func TestScalarKeepAndCarrierIdentity(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1276,7 +1276,7 @@ func TestScalarKeepAndCarrierIdentity(t *testing.T) {
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(cond)
 	b, _ := New()
-	gotI, _ := b.Run(cond)
+	gotI, _ := b.RunInterp(cond)
 	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[10]" {
 		t.Errorf("%q: if regressed: compiled=%v gotC=%v gotI=%v", cond, compiled, gotC, gotI)
 	}
@@ -1319,7 +1319,7 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1333,7 +1333,7 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 	a, _ := New()
 	gotC, compiled, _ := a.RunCompiled(arr)
 	b, _ := New()
-	gotI, _ := b.Run(arr)
+	gotI, _ := b.RunInterp(arr)
 	if !compiled || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[[1 2]]" {
 		t.Errorf("%q: array convert control failed: compiled=%v gotC=%v gotI=%v", arr, compiled, gotC, gotI)
 	}
@@ -1375,7 +1375,7 @@ func TestOpMakeListCompiles(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, _ := b.Run(c.src)
+		gotI, _ := b.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: compiled=%v gotC=%v gotI=%v (want %s)", c.src, compiled, gotC, gotI, c.want)
 		}
@@ -1409,7 +1409,7 @@ func TestOpMakeListCompiles(t *testing.T) {
 	ar, _ := New()
 	gotC, compiled, errC := ar.RunCompiled(inter)
 	b, _ := New()
-	gotI, _ := b.Run(inter)
+	gotI, _ := b.RunInterp(inter)
 	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[[1 5 4]]" {
 		t.Errorf("%q: spill parity broke: compiled=%v gotC=%v interp=%v", inter, compiled, gotC, gotI)
 	}
@@ -1441,7 +1441,7 @@ func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(neg.src)
 		c, _ := New()
-		gotI, _ := c.Run(neg.src)
+		gotI, _ := c.RunInterp(neg.src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != neg.want {
 			t.Errorf("%q: fallback parity: compiled=%v interp=%v want=%s (err %v)", neg.src, gotC, gotI, neg.want, errC)
 		}
@@ -1461,7 +1461,7 @@ func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
 			t.Errorf("%q: expected a native compile, got compiled=%v err=%v", pos.src, compiled, errC)
 		}
 		b, _ := New()
-		gotI, _ := b.Run(pos.src)
+		gotI, _ := b.RunInterp(pos.src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != pos.want {
 			t.Errorf("%q: parity: compiled=%v interp=%v want=%s", pos.src, gotC, gotI, pos.want)
 		}
@@ -1488,7 +1488,7 @@ func TestPRReviewFindings(t *testing.T) {
 		a, _ := New()
 		gotC, _, errC := a.RunCompiled(src)
 		b, _ := New()
-		gotI, errI := b.Run(src)
+		gotI, errI := b.RunInterp(src)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || (errC == nil) != (errI == nil) {
 			t.Errorf("%q: callback type mismatch diverged: compiled=%v(e %v) interp=%v(e %v)", src, gotC, errC, gotI, errI)
 		}
@@ -1611,7 +1611,7 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 		t.Skip("the counted-loop shape no longer compiles; nothing to compare")
 	}
 	ii, _ := New()
-	gotI, errI := ii.Run(src)
+	gotI, errI := ii.RunInterp(src)
 
 	// Neither engine may spuriously raise on a program the other completes.
 	if (errC != nil) != (errI != nil) {
@@ -3824,7 +3824,7 @@ func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
 	}
 	ai := mustNew(t)
 	ai.SetOutput(&outI)
-	_, errI := ai.Run(src)
+	_, errI := ai.RunInterp(src)
 	if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
 		t.Fatalf("compiled=[%s] interp=[%s], want both signature_error", codeOf(errC), codeOf(errI))
 	}

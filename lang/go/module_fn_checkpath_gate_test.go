@@ -103,7 +103,7 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ia, _ := New()
-			want, werr := ia.Run(c.src)
+			want, werr := ia.RunInterp(c.src)
 
 			ca, _ := New()
 			got, _, gerr := ca.RunCompiled(c.src)

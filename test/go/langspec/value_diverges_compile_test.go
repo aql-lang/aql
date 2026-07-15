@@ -52,7 +52,7 @@ func TestValueDivergesCompilesNative(t *testing.T) {
 		gotC, compiled, errC := a.RunCompiled(c.src)
 		b, _ := lang.New()
 		b.SetClock(specClock)
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if errC != nil || errI != nil {
 			t.Errorf("%q: run error compiled=%v interp=%v", c.src, errC, errI)
 			continue

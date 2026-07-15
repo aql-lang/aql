@@ -36,7 +36,7 @@ func TestComputedMapInFnBodyCompiles(t *testing.T) {
 		t.Run("deferred-residual refuses/"+c.name, func(t *testing.T) {
 			// The interpreter itself errors on this shape (undefined word a).
 			b, _ := New()
-			if _, werr := b.Run(c.src); werr == nil {
+			if _, werr := b.RunInterp(c.src); werr == nil {
 				t.Fatalf("expected the interpreter to error on the deferred-residual map")
 			}
 			a, _ := New()

@@ -48,7 +48,7 @@ func TestDynScopeRowsCompileWithParity(t *testing.T) {
 			t.Fatalf("%q: compiled run: compiled=%v err=%v", c.src, compiled, errC)
 		}
 		d, _ := New()
-		gotI, errI := d.Run(c.src)
+		gotI, errI := d.RunInterp(c.src)
 		if errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != c.want {
 			t.Errorf("%q: parity: compiled=%v interp=%v (errI=%v), want %s", c.src, gotC, gotI, errI, c.want)
 		}
@@ -75,7 +75,7 @@ func TestDynScopeUnreachableNameStaysRefused(t *testing.T) {
 	b, _ := New()
 	gotC, _, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}
@@ -99,7 +99,7 @@ func TestDynScopeUnreachableBranchArmStaysRefused(t *testing.T) {
 	b, _ := New()
 	gotC, _, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}
@@ -123,7 +123,7 @@ func TestDynScopeUnpromotedComputedDefRefuses(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(src)
 		c, _ := New()
-		gotI, errI := c.Run(src)
+		gotI, errI := c.RunInterp(src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("computed dyn-def compiled without parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 		}
@@ -135,7 +135,7 @@ func TestDynScopeUnpromotedComputedDefRefuses(t *testing.T) {
 	b, _ := New()
 	gotC, compiled, errC := b.RunCompiled(src)
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if compiled || fmt.Sprint(errC) != fmt.Sprint(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("fallback parity: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}

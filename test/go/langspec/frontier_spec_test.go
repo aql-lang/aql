@@ -274,7 +274,7 @@ func frontierRowCompiles(input string) error {
 		return err
 	}
 	c.SetClock(specClock)
-	gotI, errI := c.Run(input)
+	gotI, errI := c.RunInterp(input)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) {
 		return fmt.Errorf("error parity: compiled %v vs interp %v", errC, errI)
 	}

@@ -17,7 +17,7 @@ func TestRunCompiledStrict(t *testing.T) {
 		}
 		// Cross-check the result against the interpreter.
 		b, _ := New()
-		want, _ := b.Run("1 add 2")
+		want, _ := b.RunInterp("1 add 2")
 		if len(got) != len(want) || (len(got) == 1 && got[0] != want[0]) {
 			t.Fatalf("force result %v != interpreter %v", got, want)
 		}
@@ -55,7 +55,7 @@ func TestRunCompiledStrict(t *testing.T) {
 		}
 		// `leaked` must be gone: a follow-up interpreter run that references it
 		// errors as an undefined word rather than resolving to 42.
-		if out, err := a.Run("leaked"); err == nil {
+		if out, err := a.RunInterp("leaked"); err == nil {
 			t.Errorf("binding leaked across a force-compile refusal: got %v", out)
 		}
 	})

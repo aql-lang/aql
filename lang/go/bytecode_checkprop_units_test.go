@@ -89,7 +89,7 @@ def res (Test.check-prop "gen-raises" [raise bad_input "boom"] [ 0 gte ] 3 1 0)
 			t.Fatal(err)
 		}
 		b.SetOutput(&bytes.Buffer{})
-		gotI, err := b.Run(src)
+		gotI, err := b.RunInterp(src)
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -125,7 +125,7 @@ res get "ok"`
 		t.Fatal(err)
 	}
 	b.SetOutput(&bytes.Buffer{})
-	gotI, err := b.Run(src)
+	gotI, err := b.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

@@ -1037,7 +1037,7 @@ func diverges(t *testing.T, src string) (compiled, bad bool) {
 		return false, false
 	}
 	ai := newDifferentialInstance(t)
-	gotI, errI := ai.Run(src)
+	gotI, errI := ai.RunInterp(src)
 	if (errC == nil) != (errI == nil) {
 		return true, true
 	}

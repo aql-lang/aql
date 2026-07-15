@@ -39,7 +39,7 @@ func mustRefuseWithParity(t *testing.T, src, want string) {
 		t.Errorf("%q: RunCompiled reported a compiled run; a refused program must fall back", src)
 	}
 	c, _ := New()
-	gotI, errI := c.Run(src)
+	gotI, errI := c.RunInterp(src)
 	if fmt.Sprint(errC) != fmt.Sprint(errI) {
 		t.Errorf("%q: fallback error mismatch compiled=%v interp=%v", src, errC, errI)
 	}
@@ -66,7 +66,7 @@ func mustCompileWithParity(t *testing.T, src, want string) {
 		t.Fatalf("%q: compiled run: compiled=%v err=%v", src, compiled, errC)
 	}
 	c, _ := New()
-	gotI, _ := c.Run(src)
+	gotI, _ := c.RunInterp(src)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("%q: parity compiled=%v interp=%v", src, gotC, gotI)
 	}

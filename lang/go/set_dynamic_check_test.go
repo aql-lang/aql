@@ -46,7 +46,7 @@ def pk fn [[child:Map ch:String nd:Map] [Map] [
 
 	// And it RUNS correctly (the runtime receiver is a concrete Map).
 	a, _ := lang.New()
-	got, err := a.Run(clean + `  ({kids: {}, val: 1, end: false} "a" {x: 9} pk)`)
+	got, err := a.RunInterp(clean + `  ({kids: {}, val: 1, end: false} "a" {x: 9} pk)`)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -58,7 +58,7 @@ def pk fn [[child:Map ch:String nd:Map] [Map] [
 	// values; the relaxation must not fabricate a value there. Consuming the
 	// (absent) result is a real error in both check and run.
 	a2, _ := lang.New()
-	_, runErr := a2.Run(`def o (object {a: Integer}) end def mk1 fn [[x:Any] [Integer] [1]] end ((make o {a: 1}) "a" 5 set mk1)`)
+	_, runErr := a2.RunInterp(`def o (object {a: Integer}) end def mk1 fn [[x:Any] [Integer] [1]] end ((make o {a: 1}) "a" 5 set mk1)`)
 	if runErr == nil {
 		t.Errorf("consuming a 0-return Object set should error at runtime, got nil")
 	}

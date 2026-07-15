@@ -66,7 +66,7 @@ func TestCapturedUserCallValueDefPromote(t *testing.T) {
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
 			}

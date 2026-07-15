@@ -45,7 +45,7 @@ func TestEachBodyLocalValueDef(t *testing.T) {
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) {
 				t.Errorf("compiled %v != interpreter %v", got, want)
 			}
@@ -74,7 +74,7 @@ func TestEachBodyLocalValueDef(t *testing.T) {
 				t.Fatalf("RunCompiled error: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}

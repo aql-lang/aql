@@ -93,7 +93,7 @@ func TestComputedRangeLoopCompilesAndMatches(t *testing.T) {
 		}
 		gotC, compiled, eC := ac.RunCompiled(c.src)
 		ai, _ := New()
-		gotI, eI := ai.Run(c.src)
+		gotI, eI := ai.RunInterp(c.src)
 		if eC != nil || eI != nil {
 			t.Errorf("%q: run errs compiled=%v interp=%v", c.src, eC, eI)
 			continue

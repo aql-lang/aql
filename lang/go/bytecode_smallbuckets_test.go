@@ -35,7 +35,7 @@ func TestReachComputedSegmentLowers(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
 		}
@@ -55,7 +55,7 @@ func TestTimeUtilBodyNotEager(t *testing.T) {
 	} {
 		// Interpreter: the undefined word must NOT raise (body is inert code).
 		b, _ := New()
-		if _, err := b.Run(s); err != nil {
+		if _, err := b.RunInterp(s); err != nil {
 			t.Errorf("%q: body was eagerly evaluated (interp): %v", s, err)
 		}
 		// Compiled path: identical — no error, same handle.
@@ -65,7 +65,7 @@ func TestTimeUtilBodyNotEager(t *testing.T) {
 			t.Errorf("%q: body was eagerly evaluated (compiled): %v", s, errC)
 		}
 		d, _ := New()
-		gotI, _ := d.Run(s)
+		gotI, _ := d.RunInterp(s)
 		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: parity broke: compiled=%v interp=%v", s, gotC, gotI)
 		}
@@ -98,7 +98,7 @@ func TestTimeUtilQuotedBodyLowers(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, _ := d.Run(c.src)
+		gotI, _ := d.RunInterp(c.src)
 		if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "["+c.want+"]" {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=[%s]", c.src, compiled, gotC, errC, gotI, c.want)
 		}

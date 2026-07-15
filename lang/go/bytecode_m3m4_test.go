@@ -113,7 +113,7 @@ func TestDeferredParseCheckObservationFree(t *testing.T) {
 	if _, _, _, cerr := a.CompileCheck(parseRegRow); cerr != nil {
 		t.Fatalf("check error: %v", cerr)
 	}
-	got, err := a.Run(parseRegRow)
+	got, err := a.RunInterp(parseRegRow)
 	if err != nil {
 		t.Fatalf("interpreted run after a compile pass errored (check-pass state leaked into the export map): %v", err)
 	}
@@ -300,7 +300,7 @@ func TestTrapKeepsPriorCallEffects(t *testing.T) {
 	}
 	ai := mustNew(t)
 	ai.SetOutput(&outI)
-	_, errI := ai.Run(src)
+	_, errI := ai.RunInterp(src)
 	if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
 		t.Fatalf("compiled=[%s] interp=[%s], want both signature_error", codeOf(errC), codeOf(errI))
 	}

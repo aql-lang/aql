@@ -88,7 +88,7 @@ def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
 				t.Fatalf("RunCompiledStrict: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter errored: %v", werr)
 			}
@@ -126,7 +126,7 @@ def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
 				t.Errorf("%s: expected a force-compile refusal, but it compiled", c.name)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter must run the fallback: %v", werr)
 			}

@@ -150,7 +150,7 @@ func TestCompiledCombinationParity(t *testing.T) {
 		ac := newDifferentialInstance(t)
 		gotC, _, errC := ac.RunCompiled(src)
 		ai := newDifferentialInstance(t)
-		gotI, errI := ai.Run(src)
+		gotI, errI := ai.RunInterp(src)
 
 		if cdC, cdI := errCode(errC), errCode(errI); cdC != cdI {
 			diverge++

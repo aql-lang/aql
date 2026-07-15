@@ -243,7 +243,7 @@ call {cmd: "inc"} svc`
 	}
 	// Byte-identical compiled (nested-VM) vs interpreted.
 	ai, _ := New()
-	interp, ierr := ai.Run(src)
+	interp, ierr := ai.RunInterp(src)
 	ac, _ := New()
 	comp, cerr := ac.RunCompiledStrict(src)
 	if ierr != nil || cerr != nil {

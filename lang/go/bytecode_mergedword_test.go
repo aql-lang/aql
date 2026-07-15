@@ -31,7 +31,7 @@ import (
 func mergedWordSound(t *testing.T, src string) {
 	t.Helper()
 	a, _ := New()
-	want, werr := a.Run(src)
+	want, werr := a.RunInterp(src)
 	b, _ := New()
 	got, _, gerr := b.RunCompiled(src)
 	if (werr == nil) != (gerr == nil) {
@@ -175,7 +175,7 @@ func TestMergedWordSeam_NegativeTwins(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			a, _ := New()
-			_, werr := a.Run(c.src)
+			_, werr := a.RunInterp(c.src)
 			if werr == nil {
 				t.Fatalf("negative twin unexpectedly succeeded interpreted:\n  src: %s", c.src)
 			}

@@ -29,7 +29,7 @@ func TestTailCallReturnContract(t *testing.T) {
 				t.Fatalf("a [Map] fn tail-calling a non-Map returner must RAISE, not return %v", gotC)
 			}
 			b, _ := New()
-			_, errI := b.Run(src)
+			_, errI := b.RunInterp(src)
 			if errI == nil {
 				t.Fatalf("interpreter must raise too")
 			}
@@ -61,7 +61,7 @@ func TestTailCallReturnContract(t *testing.T) {
 				t.Fatalf("must run, error: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) || fmt.Sprint(got) != c.want {
 				t.Errorf("got %v, want %s (interp %v)", got, c.want, want)
 			}

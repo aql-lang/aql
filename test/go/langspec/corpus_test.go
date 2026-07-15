@@ -63,7 +63,7 @@ func TestCorpusThreeModes(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				// 1. INTERPRET
 				ai, _ := lang.New()
-				gotI, err := ai.Run(src)
+				gotI, err := ai.RunInterp(src)
 				if err != nil {
 					t.Fatalf("interpret error: %v\nsrc: %s", err, src)
 				}

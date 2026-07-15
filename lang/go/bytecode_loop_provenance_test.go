@@ -46,7 +46,7 @@ func TestForBodyUnknownProvenanceRefuses(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotI, err := i.Run(c.src)
+			gotI, err := i.RunInterp(c.src)
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}

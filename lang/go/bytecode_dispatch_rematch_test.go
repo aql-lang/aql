@@ -39,7 +39,7 @@ func TestDispatchRematchRaisesByteIdentical(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, errI := b.Run(src)
+			_, errI := b.RunInterp(src)
 			if errI == nil {
 				t.Fatal("the interpreter must raise")
 			}
@@ -80,7 +80,7 @@ func TestDispatchRematchMatchDefers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	outI, err := c.Run(src)
+	outI, err := c.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestDispatchRematchWideWindowRendersBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, errI := c.Run(src)
+	_, errI := c.RunInterp(src)
 	if errC == nil || errI == nil || errC.Error() != errI.Error() {
 		t.Errorf("render-bounded rematch is not byte-identical:\n=== COMPILED ===\n%v\n=== INTERP ===\n%v", errC, errI)
 	}
@@ -163,7 +163,7 @@ func TestDispatchRematchVariadicIfGraduated(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, errI := c.Run(src)
+		_, errI := c.RunInterp(src)
 		if errC == nil || errI == nil || errC.Error() != errI.Error() {
 			t.Errorf("variadic-if rematch not byte-identical (src %s):\n=== COMPILED ===\n%v\n=== INTERP ===\n%v", src, errC, errI)
 		}

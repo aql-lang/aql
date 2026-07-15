@@ -46,7 +46,7 @@ func TestCatchFrame(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s", c.src, compiled, gotC, errC, gotI, c.want)
 		}
@@ -68,7 +68,7 @@ func TestCatchFrame(t *testing.T) {
 		ar, _ := New()
 		gotC, _, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
 			t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v errI=%v want=%s", c.src, gotC, errC, gotI, errI, c.want)
 		}

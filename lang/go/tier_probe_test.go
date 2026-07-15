@@ -33,7 +33,7 @@ func TestTierFeasibilityProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run(`def tpfib fn [[n:Integer] [Integer] [if (n lte 1) [n] [(tpfib (n sub 1)) add (tpfib (n sub 2))]]]`); err != nil {
+	if _, err := a.RunInterp(`def tpfib fn [[n:Integer] [Integer] [if (n lte 1) [n] [(tpfib (n sub 1)) add (tpfib (n sub 2))]]]`); err != nil {
 		t.Fatalf("install fn: %v", err)
 	}
 

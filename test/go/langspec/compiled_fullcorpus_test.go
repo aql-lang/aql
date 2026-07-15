@@ -195,7 +195,7 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 				compiledPath++
 			}
 			ai := newDifferentialInstance(t)
-			gotI, errI := ai.Run(input)
+			gotI, errI := ai.RunInterp(input)
 
 			// Error taxonomy parity: same presence AND same code.
 			if cdC, cdI := errCode(errC), errCode(errI); cdC != cdI {

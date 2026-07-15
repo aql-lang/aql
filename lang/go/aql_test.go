@@ -60,7 +60,7 @@ func TestRunInteger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("42")
+	result, err := a.RunInterp("42")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestRunString(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run(`"hello"`)
+	result, err := a.RunInterp(`"hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestRunArithmetic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1 add 2")
+	result, err := a.RunInterp("1 add 2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestRunEmptyResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1 drop")
+	result, err := a.RunInterp("1 drop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestRunMultipleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1 2 3")
+	result, err := a.RunInterp("1 2 3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestIndependentInstances(t *testing.T) {
 	}
 
 	// Store and retrieve in a within a single Run.
-	result, err := a.Run("context set x 42 end context dot x")
+	result, err := a.RunInterp("context set x 42 end context dot x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestIndependentInstances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = b.Run("context dot x")
+	_, err = b.RunInterp("context dot x")
 	if err == nil {
 		t.Fatal("expected error: b should not have key x")
 	}
@@ -164,7 +164,7 @@ func TestStatePersistsWithinRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := a.Run("context set counter 10 end context dot counter")
+	result, err := a.RunInterp("context set counter 10 end context dot counter")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestManyIndependentInstances(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := a.Run("context set idx " + itoa(i) + " end context dot idx")
+		result, err := a.RunInterp("context set idx " + itoa(i) + " end context dot idx")
 		if err != nil {
 			t.Fatalf("instance %d: %v", i, err)
 		}
@@ -209,7 +209,7 @@ func TestMultilineNewlines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1\nadd\n2")
+	result, err := a.RunInterp("1\nadd\n2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestMultilineTabs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1\tadd\t2")
+	result, err := a.RunInterp("1\tadd\t2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestMultilineMixed(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := "context set x 10 end\ncontext set y 20 end\n(context dot x)\n(context dot y)\nadd"
-	result, err := a.Run(src)
+	result, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestMultilineCRLF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1\r\nadd\r\n2")
+	result, err := a.RunInterp("1\r\nadd\r\n2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestMultilineBlankLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1\n\n\nadd\n\n2")
+	result, err := a.RunInterp("1\n\n\nadd\n\n2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestMultilineScript(t *testing.T) {
 		(context dot height)
 		mul
 	`
-	result, err := a.Run(script)
+	result, err := a.RunInterp(script)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestMultilineWithComments(t *testing.T) {
 		add
 		# result should be 10
 	`
-	result, err := a.Run(script)
+	result, err := a.RunInterp(script)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestRunParseError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(`"unterminated`)
+	_, err = a.RunInterp(`"unterminated`)
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -338,7 +338,7 @@ func TestRunEngineError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run("10 div 0")
+	_, err = a.RunInterp("10 div 0")
 	if err == nil {
 		t.Fatal("expected engine error")
 	}
@@ -349,7 +349,7 @@ func TestRunEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("")
+	result, err := a.RunInterp("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,15 +376,15 @@ func TestSetFileOps(t *testing.T) {
 	a.SetFileOps(ops)
 
 	// read/write moved to aql:io; import once (state persists across Run).
-	if _, err = a.Run(`import "aql:io"`); err != nil {
+	if _, err = a.RunInterp(`import "aql:io"`); err != nil {
 		t.Fatal(err)
 	}
 	// Write and read back via the mem file ops.
-	_, err = a.Run(`IO.write "test.txt" "hello"`)
+	_, err = a.RunInterp(`IO.write "test.txt" "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run(`IO.read "test.txt"`)
+	result, err := a.RunInterp(`IO.read "test.txt"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,11 +406,11 @@ func TestRunDefaultBranch(t *testing.T) {
 	// Write a JSON file with a map value, then read it back.
 	// The result is a map which hits the default v.String() branch.
 	// read moved to aql:io; import once (state persists across Run).
-	if _, err = a.Run(`import "aql:io"`); err != nil {
+	if _, err = a.RunInterp(`import "aql:io"`); err != nil {
 		t.Fatal(err)
 	}
 	ops.Files["data.json"] = []byte(`{"a":1}`)
-	result, err := a.Run(`IO.read "data.json"`)
+	result, err := a.RunInterp(`IO.read "data.json"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestRegisterForwardWord(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	result, err := a.Run("5 double")
+	result, err := a.RunInterp("5 double")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +466,7 @@ func TestRegisterForwardWordCollectsAfter(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	result, err := a.Run("double 7")
+	result, err := a.RunInterp("double 7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +489,7 @@ func TestRegisterStackOnlyWord(t *testing.T) {
 		}), BarrierPos: 0,
 	})
 
-	result, err := a.Run("5 neg")
+	result, err := a.RunInterp("5 neg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,7 +514,7 @@ func TestRegisterStackOnlyDoesNotCollectForward(t *testing.T) {
 		BarrierPos: 0,
 	})
 
-	_, err = a.Run("neg 5")
+	_, err = a.RunInterp("neg 5")
 	if err == nil {
 		t.Fatal("expected error: neg is stack-only and has no prefix args")
 	}
@@ -546,7 +546,7 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 		},
 	)
 
-	result, err := a.Run("4 square")
+	result, err := a.RunInterp("4 square")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestRegisterMultipleSignatures(t *testing.T) {
 	}
 
 	// String signature.
-	result, err = a.Run(`"ab" square`)
+	result, err = a.RunInterp(`"ab" square`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +590,7 @@ func TestRegisterLeftToRight(t *testing.T) {
 		-1,
 	})
 
-	result, err := a.Run("2 myadd 3 mymul 4")
+	result, err := a.RunInterp("2 myadd 3 mymul 4")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -618,7 +618,7 @@ func TestRegisterReturnsMultipleValues(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	result, err := a.Run("17 divmod 5")
+	result, err := a.RunInterp("17 divmod 5")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +639,7 @@ func TestRegisterErrorPropagation(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	_, err = a.Run("42 fail")
+	_, err = a.RunInterp("42 fail")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -664,7 +664,7 @@ func TestRegisterWorksWithBuiltins(t *testing.T) {
 		-1,
 	})
 
-	result, err := a.Run("2 triple add 1")
+	result, err := a.RunInterp("2 triple add 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +694,7 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 		-1,
 	})
 
-	result, err := a.Run("5 custom")
+	result, err := a.RunInterp("5 custom")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +703,7 @@ func TestRegisterIsolatedBetweenInstances(t *testing.T) {
 	}
 
 	// b should not have "custom" — it errors.
-	_, err = b.Run("5 custom")
+	_, err = b.RunInterp("5 custom")
 	if err == nil {
 		t.Fatal("expected error for undefined word 'custom' in b, got nil")
 	}
@@ -722,7 +722,7 @@ func TestRegisterStringHandler(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	result, err := a.Run(`"hello" shout`)
+	result, err := a.RunInterp(`"hello" shout`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -745,7 +745,7 @@ func TestRegisterZeroArgWord(t *testing.T) {
 		}), BarrierPos: -1,
 	})
 
-	result, err := a.Run("tick tick tick")
+	result, err := a.RunInterp("tick tick tick")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -777,7 +777,7 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 		-1,
 	})
 
-	result, err := a.Run(`"hello" upper`)
+	result, err := a.RunInterp(`"hello" upper`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,7 +786,7 @@ func TestRegisterAddsAlongsideBuiltin(t *testing.T) {
 	}
 
 	// New integer signature works.
-	result, err = a.Run("7 upper")
+	result, err = a.RunInterp("7 upper")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -817,7 +817,7 @@ func TestRegisterWithTypeAny(t *testing.T) {
 		-1,
 	})
 
-	result, err := a.Run("42 identity")
+	result, err := a.RunInterp("42 identity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -826,7 +826,7 @@ func TestRegisterWithTypeAny(t *testing.T) {
 	}
 
 	// Works with string.
-	result, err = a.Run(`"hi" identity`)
+	result, err = a.RunInterp(`"hi" identity`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -847,7 +847,7 @@ func TestNewWithNoPolicyPreservesDefault(t *testing.T) {
 	}
 	// Run something that exercises every capability surface — no
 	// policy means no checks fire, behaviour is unchanged.
-	if _, err := a.Run("1 add 2"); err != nil {
+	if _, err := a.RunInterp("1 add 2"); err != nil {
 		t.Errorf("Run with nil policy failed: %s", err)
 	}
 }
@@ -879,7 +879,7 @@ func TestNewWithSandboxPolicyDoesNotBreakBasicEval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.Run("1 add 2")
+	result, err := a.RunInterp("1 add 2")
 	if err != nil {
 		t.Fatalf("Phase 2 sandbox policy should not yet block eval: %s", err)
 	}

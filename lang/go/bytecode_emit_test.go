@@ -254,7 +254,7 @@ func TestEmitP5MultiResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := b.Run(`5 7 swap sub`)
+	want, err := b.RunInterp(`5 7 swap sub`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestEmitDynOutNative(t *testing.T) {
 	}
 	gotP, _, errP := mustRun(t, `def l [1 2] push 3 l unify l`)
 	ai, _ := New()
-	gotI, errI := ai.Run(`def l [1 2] push 3 l unify l`)
+	gotI, errI := ai.RunInterp(`def l [1 2] push 3 l unify l`)
 	if errP != nil || errI != nil || fmt.Sprint(gotP) != fmt.Sprint(gotI) {
 		t.Errorf("push-typed unify parity: compiled=%v(%v) interp=%v(%v)", gotP, errP, gotI, errI)
 	}
@@ -901,7 +901,7 @@ func TestEmitPolySiteLowersToRuntimeMatch(t *testing.T) {
 		t.Fatalf("compiled run: compiled=%v err=%v", compiled, errC)
 	}
 	b, _ := New()
-	gotI, _ := b.Run(src)
+	gotI, _ := b.RunInterp(src)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[true]" {
 		t.Errorf("poly is: compiled=%v interp=%v (want [true])", gotC, gotI)
 	}
@@ -1129,7 +1129,7 @@ func TestEmitClosureCaptureSlots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := b.Run(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
+	want, err := b.RunInterp(`def oc fn [[m:Integer] [Integer] [def gc fn [[n:Integer] [Integer] [m sub n]] gc 3]] oc 10`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1443,7 +1443,7 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 	gc, _, ec := a.RunCompiled(src)
 	b, _ := New()
-	gi, ei := b.Run(src)
+	gi, ei := b.RunInterp(src)
 	if (ec == nil) != (ei == nil) {
 		t.Fatalf("mini accessor error divergence: compiled=%v interp=%v", ec, ei)
 	}
@@ -1559,7 +1559,7 @@ func TestEmitFallbackIsland(t *testing.T) {
 		t.Fatalf("module group: %v", merr)
 	}
 	d, _ := New()
-	iout, _ := d.Run(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	iout, _ := d.RunInterp(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}
@@ -1677,7 +1677,7 @@ func TestEmitIslandSentinelRefusal(t *testing.T) {
 		t.Errorf("%q took the compiled path but a sentinel island must fall back", src)
 	}
 	b, _ := New()
-	iout, _ := b.Run(src)
+	iout, _ := b.RunInterp(src)
 	if len(out) != len(iout) {
 		t.Fatalf("%q: compiled-fallback %v != interpreter %v", src, out, iout)
 	}

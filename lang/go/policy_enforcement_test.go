@@ -41,11 +41,11 @@ func TestEngineScopeDeniesWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// add is allowed.
-	if _, err := a.Run("1 add 2"); err != nil {
+	if _, err := a.RunInterp("1 add 2"); err != nil {
 		t.Errorf("add should be allowed: %v", err)
 	}
 	// sub is not.
-	_, err = a.Run("3 sub 1")
+	_, err = a.RunInterp("3 sub 1")
 	if err == nil {
 		t.Fatal("sub should be denied")
 	}
@@ -60,7 +60,7 @@ func TestEngineScopeAllowsWithFullProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run("1 add 2"); err != nil {
+	if _, err := a.RunInterp("1 add 2"); err != nil {
 		t.Errorf("full should allow add: %v", err)
 	}
 }
@@ -70,7 +70,7 @@ func TestEngineScopeNoPolicyAllowsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run("1 add 2"); err != nil {
+	if _, err := a.RunInterp("1 add 2"); err != nil {
 		t.Errorf("no policy should allow add: %v", err)
 	}
 }
@@ -92,7 +92,7 @@ func TestModulesScopeDeniesImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(`import "aql:math-util"`)
+	_, err = a.RunInterp(`import "aql:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be denied")
 	}
@@ -120,7 +120,7 @@ func TestModulesScopeAllowsSpecificModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run(`import "aql:math-util"`); err != nil {
+	if _, err := a.RunInterp(`import "aql:math-util"`); err != nil {
 		t.Errorf("aql:math should be allowed: %v", err)
 	}
 }
@@ -140,7 +140,7 @@ func TestModulesScopeUninstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(`import "aql:math-util"`)
+	_, err = a.RunInterp(`import "aql:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be refused")
 	}
@@ -171,7 +171,7 @@ func TestInternalMarkersBypass(t *testing.T) {
 	}
 	// Pure literal evaluation doesn't dispatch any word, so it
 	// succeeds even under deny-all engine.
-	result, err := a.Run("42")
+	result, err := a.RunInterp("42")
 	if err != nil {
 		t.Errorf("literal eval should not be denied: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestEngineDenialErrorContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run("5 sub 1")
+	_, err = a.RunInterp("5 sub 1")
 	var d *policy.Denied
 	// The engine wraps the Denied in an AqlError; the .Error()
 	// string surfaces it. We can't direct-assert As(*Denied)

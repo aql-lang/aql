@@ -27,7 +27,7 @@ func benchExecInterp(b *testing.B, setup, src string) {
 		b.Fatal(err)
 	}
 	if setup != "" {
-		if _, err := a.Run(setup); err != nil {
+		if _, err := a.RunInterp(setup); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -55,7 +55,7 @@ func benchExecCompiled(b *testing.B, setup, src string) {
 		b.Fatal(err)
 	}
 	if setup != "" {
-		if _, err := a.Run(setup); err != nil {
+		if _, err := a.RunInterp(setup); err != nil {
 			b.Fatal(err)
 		}
 	}

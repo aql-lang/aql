@@ -32,7 +32,7 @@ import (
 func crossmodSound(t *testing.T, src string) {
 	t.Helper()
 	a, _ := New()
-	want, werr := a.Run(src)
+	want, werr := a.RunInterp(src)
 	b, _ := New()
 	got, _, gerr := b.RunCompiled(src)
 	if (werr == nil) != (gerr == nil) {

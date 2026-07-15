@@ -37,7 +37,7 @@ func TestCompiledIslandReuseNoStateLeak(t *testing.T) {
 			t.Fatalf("%q: compiled=%v err=%v", src, compiled, err)
 		}
 		b, _ := New()
-		iout, _ := b.Run(src)
+		iout, _ := b.RunInterp(src)
 		if len(out) != len(iout) {
 			t.Fatalf("%q: length %d != %d (%v vs %v)", src, len(out), len(iout), out, iout)
 		}

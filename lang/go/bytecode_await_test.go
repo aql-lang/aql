@@ -40,7 +40,7 @@ func TestAwaitCompiledBranchParity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotI, err := b.Run(src)
+			gotI, err := b.RunInterp(src)
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
@@ -91,7 +91,7 @@ func TestAwaitRefusedBranchInterpretsPerElement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotI, err := b.Run(src)
+	gotI, err := b.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestAwaitBranchBailBeforeEffectFallsBack(t *testing.T) {
 	}
 	b := zzShapedInstance(t)
 	b.SetOutput(&bytes.Buffer{})
-	gotI, err := b.Run(src)
+	gotI, err := b.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

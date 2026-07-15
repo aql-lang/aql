@@ -16,7 +16,7 @@ func TestArmInterpEntryHookForwarder(t *testing.T) {
 	var entries []InterpEntry
 	disarm := a.ArmInterpEntryHook(func(e InterpEntry) { entries = append(entries, e) })
 
-	if _, err := a.Run(`1 add 2`); err != nil {
+	if _, err := a.RunInterp(`1 add 2`); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	var sawRun bool
@@ -31,7 +31,7 @@ func TestArmInterpEntryHookForwarder(t *testing.T) {
 
 	before := len(entries)
 	disarm()
-	if _, err := a.Run(`2 add 3`); err != nil {
+	if _, err := a.RunInterp(`2 add 3`); err != nil {
 		t.Fatalf("post-disarm Run: %v", err)
 	}
 	if len(entries) != before {

@@ -39,7 +39,7 @@ func TestModuleTableTypeFold(t *testing.T) {
 		ar, _ := New()
 		gotC, compiled, errC := ar.RunCompiled(c.src)
 		b, _ := New()
-		gotI, errI := b.Run(c.src)
+		gotI, errI := b.RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != c.want {
 			t.Errorf("%q: parity broke: compiled=%v gotC=%v errC=%v gotI=%v want=%s",
 				c.src, compiled, gotC, errC, gotI, c.want)
@@ -59,7 +59,7 @@ func TestModuleTableTypeFold(t *testing.T) {
 	dr, _ := New()
 	gotC, compiled, errC := dr.RunCompiled(local)
 	e, _ := New()
-	gotI, errI := e.Run(local)
+	gotI, errI := e.RunInterp(local)
 	if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != "[true]" {
 		t.Errorf("%q: parity broke (compiled=%v): gotC=%v errC=%v gotI=%v errI=%v",
 			local, compiled, gotC, errC, gotI, errI)

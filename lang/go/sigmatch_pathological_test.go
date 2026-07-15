@@ -32,7 +32,7 @@ func mustRun(t *testing.T, src string) []interface{} {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(src)
+	res, err := a.RunInterp(src)
 	if err != nil {
 		t.Fatalf("Run(%q) errored: %v", src, err)
 	}
@@ -45,7 +45,7 @@ func mustErr(t *testing.T, src, wantSubstr string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run(src)
+	_, err = a.RunInterp(src)
 	if err == nil {
 		t.Fatalf("Run(%q) succeeded, want error containing %q", src, wantSubstr)
 	}

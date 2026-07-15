@@ -105,7 +105,7 @@ func TestStoreShapeContextLayerTyping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	got, rerr := a.Run(`context set 'k' 1 end do [context set 'k' 'str' end] context get 'k'`)
+	got, rerr := a.RunInterp(`context set 'k' 1 end do [context set 'k' 'str' end] context get 'k'`)
 	if rerr != nil || fmt.Sprint(got) != "[1]" {
 		t.Errorf("layer-isolation runtime: got %v err=%v, want [1]", got, rerr)
 	}
@@ -178,7 +178,7 @@ func TestStoreShapePatrunTyping(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		got, rerr := a.Run(c.src)
+		got, rerr := a.RunInterp(c.src)
 		if rerr != nil || fmt.Sprint(got) != c.wantRun {
 			t.Errorf("%q: runtime got %v err=%v, want %s", c.src, got, rerr, c.wantRun)
 		}
@@ -304,7 +304,7 @@ func TestStoreShapeCompileDiscipline(t *testing.T) {
 		b, _ := New()
 		gotC, compiled, errC := b.RunCompiled(c.src)
 		d, _ := New()
-		gotI, errI := d.Run(c.src)
+		gotI, errI := d.RunInterp(c.src)
 		if !compiled || errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 			t.Errorf("%q: compiled/interpreted parity broke: compiled=%v gotC=%v errC=%v gotI=%v errI=%v",
 				c.src, compiled, gotC, errC, gotI, errI)

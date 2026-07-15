@@ -528,7 +528,7 @@ func extractPassing(inPath, outPath string, maxLen int) {
 				atomic.AddInt64(&checked, 1)
 
 				// 1. interpret → a value (no runtime error)
-				gotI, errI := ai.Run(r.input)
+				gotI, errI := ai.RunInterp(r.input)
 				if errI != nil {
 					continue
 				}
@@ -655,7 +655,7 @@ func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
 	// it to capture why: almost always a runtime error the static checker
 	// cannot predict (e.g. `incomparable`), occasionally a value the
 	// passing-extractor rejected.
-	if _, errRun := a.Run(src); errRun != nil {
+	if _, errRun := a.RunInterp(src); errRun != nil {
 		detail := strings.TrimPrefix(errorClass(errRun), "ERROR:")
 		if detail == "" {
 			detail = "error"
@@ -944,7 +944,7 @@ func freshDivergence(s string) (string, bool) {
 		return "", false
 	}
 	a.SetClock(specClock)
-	gotI, errI := a.Run(s)
+	gotI, errI := a.RunInterp(s)
 	gotC, wasC, errC := runCompiled(a, s)
 	if !wasC {
 		return "", false
@@ -1054,7 +1054,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 					classes[k], notes[k] = fiveCompile, sanitizeNote(reason)
 					atomic.AddInt64(&nCompile, 1)
 				default:
-					gotI, errI := la.Run(s)
+					gotI, errI := la.RunInterp(s)
 					if errI != nil {
 						classes[k], notes[k] = fiveRuntime, strings.TrimPrefix(errorClass(errI), "ERROR:")
 						atomic.AddInt64(&nRuntime, 1)

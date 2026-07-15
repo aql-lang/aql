@@ -24,14 +24,14 @@ func benchRun(b *testing.B, setup, src string) {
 		b.Fatal(err)
 	}
 	if setup != "" {
-		if _, err := a.Run(setup); err != nil {
+		if _, err := a.RunInterp(setup); err != nil {
 			b.Fatal(err)
 		}
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := a.Run(src); err != nil {
+		if _, err := a.RunInterp(src); err != nil {
 			b.Fatal(err)
 		}
 	}

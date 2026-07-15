@@ -37,7 +37,7 @@ func TestCompiledReturnCheck(t *testing.T) {
 		ac, _ := New()
 		_, _, errC := ac.RunCompiled(src)
 		ai, _ := New()
-		_, errI := ai.Run(src)
+		_, errI := ai.RunInterp(src)
 		if errC == nil || errI == nil {
 			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
 			continue
@@ -103,7 +103,7 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		gotI, errI := ai.Run(src)
+		gotI, errI := ai.RunInterp(src)
 
 		if (errC != nil) != (errI != nil) {
 			t.Errorf("%q: error divergence: compiled-fallback=%v interpreter=%v", src, errC, errI)
@@ -173,7 +173,7 @@ func TestCompiledTraceRenders(t *testing.T) {
 	b, _ := New()
 	var bufI bytes.Buffer
 	b.SetOutput(&bufI)
-	if _, errI := b.Run(src); errI != nil {
+	if _, errI := b.RunInterp(src); errI != nil {
 		t.Fatalf("interpreter trace: %v", errI)
 	}
 	if !strings.Contains(bufC.String(), "trace") {
@@ -205,7 +205,7 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 		}
 		_, _, errC := ac.RunCompiled(src)
 		ai, _ := New()
-		_, errI := ai.Run(src)
+		_, errI := ai.RunInterp(src)
 		if errC == nil || errI == nil {
 			t.Errorf("%q: expected both to error, compiled=%v interp=%v", src, errC, errI)
 			continue

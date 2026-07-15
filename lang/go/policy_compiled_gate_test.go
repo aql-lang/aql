@@ -32,7 +32,7 @@ func denyAddPolicy(t *testing.T) Policy {
 func TestPolicyGatedRegistryRefusesCompilationWithParity(t *testing.T) {
 	pol := denyAddPolicy(t)
 	a, _ := New(Options{Policy: pol})
-	gotI, errI := a.Run("1 add 2")
+	gotI, errI := a.RunInterp("1 add 2")
 	if errI == nil || !strings.Contains(errI.Error(), "permission denied") {
 		t.Fatalf("interpreter must deny: got %v / %v", gotI, errI)
 	}

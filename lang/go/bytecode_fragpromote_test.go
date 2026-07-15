@@ -60,7 +60,7 @@ func TestFragmentValueDefPromotion(t *testing.T) {
 				t.Fatalf("RunCompiledStrict refused: %v", err)
 			}
 			d, _ := New()
-			want, werr := d.Run(c.src)
+			want, werr := d.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}

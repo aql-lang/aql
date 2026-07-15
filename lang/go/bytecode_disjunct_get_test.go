@@ -31,7 +31,7 @@ func TestGetOverDisjunctReceiver(t *testing.T) {
 				t.Fatalf("get over a union receiver must compile, refused: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(src)
+			want, werr := b.RunInterp(src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}
@@ -57,7 +57,7 @@ func TestGetOverConcreteNonContainerRefuses(t *testing.T) {
 	}
 	// And it must still error the same way under the interpreter / fallback.
 	b, _ := New()
-	if _, err := b.Run(src); err == nil {
+	if _, err := b.RunInterp(src); err == nil {
 		t.Fatal("get over a concrete Integer must error under the interpreter too")
 	}
 }

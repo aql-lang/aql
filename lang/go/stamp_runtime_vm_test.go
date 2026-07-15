@@ -20,7 +20,7 @@ func stampHarness(t *testing.T, src, name string, armed bool) (*AQL, Value) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Run(src); err != nil {
+	if _, err := a.RunInterp(src); err != nil {
 		t.Fatalf("setup run: %v", err)
 	}
 	if armed {
@@ -162,7 +162,7 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 
 	// Rebind the dep. The stamped unit froze bump=10; the interpreter (and
 	// therefore the stale-dep fallback) must see 20.
-	if _, err := a.Run(`def bump 20`); err != nil {
+	if _, err := a.RunInterp(`def bump 20`); err != nil {
 		t.Fatalf("rebind: %v", err)
 	}
 	out = invokeFnValue(t, a, stamped, eng.NewInteger(1))
@@ -252,7 +252,7 @@ func countStamped(events []eng.StampEvent, name string) int {
 // keeps a compiled-mode request from leaking the armed flag into a later Run.
 func TestCompiledEntriesArmRuntimeStamping(t *testing.T) {
 	a, _ := New()
-	if _, err := a.Run(`import ` + stampModuleSrc); err != nil {
+	if _, err := a.RunInterp(`import ` + stampModuleSrc); err != nil {
 		t.Fatal(err)
 	}
 	if a.registry.RuntimeStampingEnabled() {
@@ -315,7 +315,7 @@ func TestRunCompiledDoesNotLeakStampingIntoLaterRun(t *testing.T) {
 	before := len(a.StampReport())
 
 	// A later plain Run that constructs a fresh handler must add no stamps.
-	if _, err := a.Run(`def svc2 (service {}) add {cmd:"Y"} ([req:Map state:Any] => [ 20 ]) svc2`); err != nil {
+	if _, err := a.RunInterp(`def svc2 (service {}) add {cmd:"Y"} ([req:Map state:Any] => [ 20 ]) svc2`); err != nil {
 		t.Fatal(err)
 	}
 	if after := len(a.StampReport()); after != before {
@@ -355,7 +355,7 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	a.registry.EnableRuntimeStamping()
 	// Rebind the export's fn to a top-level name so the test reads it from
 	// the def table without unwrapping the ModuleExport payload Go-side.
-	if _, err := a.Run(`import ` + src + ` def hh M.helper/r`); err != nil {
+	if _, err := a.RunInterp(`import ` + src + ` def hh M.helper/r`); err != nil {
 		t.Fatalf("armed import: %v", err)
 	}
 	helper, ok := a.registry.Defs.Top("hh")
@@ -371,7 +371,7 @@ func TestModuleRegistryInheritsRuntimeStamping(t *testing.T) {
 	}
 
 	b, _ := New()
-	if _, err := b.Run(`import ` + src + ` def hh M.helper/r`); err != nil {
+	if _, err := b.RunInterp(`import ` + src + ` def hh M.helper/r`); err != nil {
 		t.Fatalf("unarmed import: %v", err)
 	}
 	h2, ok := b.registry.Defs.Top("hh")
@@ -437,7 +437,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 
 	fetch := func(a *AQL, name string) Value {
 		t.Helper()
-		if _, err := a.Run(`def got M.` + name + `/r`); err != nil {
+		if _, err := a.RunInterp(`def got M.` + name + `/r`); err != nil {
 			t.Fatalf("fetch %s: %v", name, err)
 		}
 		v, ok := a.registry.Defs.Top("got")
@@ -478,7 +478,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 
 	armed, _ := New()
 	armed.registry.EnableRuntimeStamping()
-	if _, err := armed.Run(`import ` + src); err != nil {
+	if _, err := armed.RunInterp(`import ` + src); err != nil {
 		t.Fatalf("armed import: %v", err)
 	}
 	if ref := refOf(inner(armed, "helper")); ref == nil || ref.Prog == nil {
@@ -491,15 +491,15 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 	// Applications route through the runtime seam and agree with the
 	// unarmed interpreter, including recursion through the module name.
 	plain, _ := New()
-	if _, err := plain.Run(`import ` + src); err != nil {
+	if _, err := plain.RunInterp(`import ` + src); err != nil {
 		t.Fatalf("plain import: %v", err)
 	}
 	if refOf(inner(plain, "helper")) != nil {
 		t.Fatalf("an unarmed load must not stamp module fns")
 	}
 	for _, probe := range []string{`M.helper 41`, `M.fact 5`, `M.refuser 7`} {
-		gotA, errA := armed.Run(probe)
-		gotP, errP := plain.Run(probe)
+		gotA, errA := armed.RunInterp(probe)
+		gotP, errP := plain.RunInterp(probe)
 		if errA != nil || errP != nil {
 			t.Fatalf("%s: errs armed=%v plain=%v", probe, errA, errP)
 		}

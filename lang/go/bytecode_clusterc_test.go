@@ -30,7 +30,7 @@ func TestMultiOverloadGradualArg(t *testing.T) {
 				t.Fatalf("RunCompiled error: %v", err)
 			}
 			b, _ := New()
-			want, werr := b.Run(c.src)
+			want, werr := b.RunInterp(c.src)
 			if werr != nil {
 				t.Fatalf("interpreter error: %v", werr)
 			}
@@ -56,7 +56,7 @@ func TestMultiOverloadGradualArg(t *testing.T) {
 				t.Fatalf("must compile natively, error: %v", err)
 			}
 			b, _ := New()
-			want, _ := b.Run(c.src)
+			want, _ := b.RunInterp(c.src)
 			if fmt.Sprint(got) != fmt.Sprint(want) || fmt.Sprint(got) != c.want {
 				t.Errorf("got %v, want %s (interp %v)", got, c.want, want)
 			}

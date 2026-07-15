@@ -30,7 +30,7 @@ func runBothEngines(t *testing.T, src string) (gotC []any, compiled bool, errC e
 	}
 	gotC, compiled, errC = b.RunCompiled(src)
 	d, _ := New()
-	gotI, errI = d.Run(src)
+	gotI, errI = d.RunInterp(src)
 	return
 }
 
@@ -184,7 +184,7 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 		if compiled {
 			out, took, err = a.RunCompiled(src)
 		} else {
-			out, err = a.Run(src)
+			out, err = a.RunInterp(src)
 		}
 		return out, buf.String(), took, err
 	}
