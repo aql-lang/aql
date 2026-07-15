@@ -306,6 +306,13 @@ func runPasswordRm(args []string, homeDir string, stdin io.Reader, stdout, stder
 			fmt.Fprintln(stderr, "error: `password rm --temp` revokes every temporary password; do not also name one")
 			return 1
 		}
+		if *rekey {
+			// Bulk temp-revoke does not rotate data keys; rejecting is honest
+			// rather than silently ignoring --rekey. Rekey each slot's
+			// namespaces individually with `password rm --rekey <name>`.
+			fmt.Fprintln(stderr, "error: --rekey is not supported with --temp; rekey a namespace by revoking a slot individually (`password rm --rekey <name>`)")
+			return 1
+		}
 		return runPasswordRmTemp(homeDir, *yes, stdin, stdout, stderr)
 	}
 	if fs.NArg() != 1 {

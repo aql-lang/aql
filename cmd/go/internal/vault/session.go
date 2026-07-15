@@ -229,6 +229,7 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 	}
 	defer zeroize(master)
 
+	sawExpired := false
 	for i := range s.Passwords {
 		slot := &s.Passwords[i]
 		salt, err := base64.StdEncoding.DecodeString(slot.Salt)
@@ -244,10 +245,14 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 			continue
 		}
 		if slotExpired(slot, time.Now()) {
-			// The passphrase matched a temporary slot whose max duration
-			// has elapsed: refuse before unsealing any key material.
+			// The passphrase matched a temporary slot whose max duration has
+			// elapsed. Do NOT return yet: the same passphrase may also be a
+			// permanent (or still-valid) slot's — password reuse is not
+			// forbidden — and an expired temporary slot must not shadow it.
+			// Keep scanning; only report expiry if nothing unexpired matches.
 			zeroize(kek)
-			return nil, errSlotExpired
+			sawExpired = true
+			continue
 		}
 		priv, err := openPrivKey(kek, slot.EncPrivKey, privAAD(slot.Name, slot.Scope, slot.ExpiresAt))
 		zeroize(kek)
@@ -255,6 +260,9 @@ func openSession(s *Store, homeDir, pass string) (*Session, error) {
 			return nil, err // tampered scope/namespace binding, or corrupt slot
 		}
 		return buildSession(s, homeDir, slot, priv)
+	}
+	if sawExpired {
+		return nil, errSlotExpired
 	}
 	return nil, errSlotAuth
 }
