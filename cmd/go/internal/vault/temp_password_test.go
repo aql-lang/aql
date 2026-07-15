@@ -342,6 +342,47 @@ func TestPasswordRmTempMutateError(t *testing.T) {
 	}
 }
 
+// TestExpiredSlotDoesNotShadowReusedPassphrase covers the openSession fix: an
+// expired temporary slot must not lock out a permanent slot that happens to
+// share the same passphrase (password reuse is not forbidden).
+func TestExpiredSlotDoesNotShadowReusedPassphrase(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	if code, _, e := runVault(t, "sk\n", "add", "--from-stdin", "ci:token"); code != 0 {
+		t.Fatalf("seed: %s", e)
+	}
+	// A temporary slot and a permanent slot, both with passphrase "shared".
+	mustAddPassword(t, "test-pass", "shared", "agent", "--scope=read", "--namespaces=*", "--ttl=1h")
+	mustAddPassword(t, "test-pass", "shared", "keeper", "--scope=read", "--namespaces=*")
+
+	// Expire the temporary one; the shared passphrase must still open the
+	// permanent slot rather than reporting "expired".
+	forceSlotExpiry(t, home, "agent", time.Now().Add(-time.Minute))
+	setPass(t, "shared")
+	if code, out, e := runVault(t, "", "get", "--reveal", "ci:token"); code != 0 || strings.TrimSpace(out) != "sk" {
+		t.Fatalf("reused passphrase should open the permanent slot: code=%d out=%q err=%s", code, out, e)
+	}
+
+	// And if ONLY the expired temporary slot matched, it is still reported
+	// expired (remove the permanent twin, keep the expired temp).
+	if err := mutateStore(home, func(st *Store) error { st.RemovePasswordSlot("keeper"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	setPass(t, "shared")
+	if code, _, e := runVault(t, "", "get", "--reveal", "ci:token"); code == 0 || !strings.Contains(e, "expired") {
+		t.Errorf("only-expired match should report expired: code=%d err=%q", code, e)
+	}
+}
+
+// TestPasswordRmTempRejectsRekey covers the --rekey + --temp guard.
+func TestPasswordRmTempRejectsRekey(t *testing.T) {
+	tempReaderVault(t, "1h")
+	setPass(t, "test-pass")
+	if code, _, e := runVault(t, "", "password", "rm", "--temp", "--rekey", "--yes"); code == 0 || !strings.Contains(e, "not supported with --temp") {
+		t.Errorf("rm --temp --rekey: code=%d err=%q", code, e)
+	}
+}
+
 // --- TUI --------------------------------------------------------------------
 
 func TestTUITempPasswordRevoke(t *testing.T) {
