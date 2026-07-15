@@ -168,7 +168,7 @@ func TestControllerPasswordSlotLifecycle(t *testing.T) {
 		t.Fatalf("fresh vault slots = %v,%v", slots, err)
 	}
 	// Adding the first password migrates the vault to envelope format.
-	if err := ctl.passwordAdd("reader", ScopeRead, "proj", "reader-pass"); err != nil {
+	if err := ctl.passwordAdd("reader", ScopeRead, "proj", "reader-pass", ""); err != nil {
 		t.Fatalf("passwordAdd: %v", err)
 	}
 	slots, _ = ctl.listPasswordSlots()
@@ -184,7 +184,7 @@ func TestControllerPasswordSlotLifecycle(t *testing.T) {
 		t.Fatalf("reveal after migrate = %q, %v", got, err)
 	}
 	// Duplicate add is rejected.
-	if err := ctl.passwordAdd("reader", ScopeRead, "proj", "x"); err == nil {
+	if err := ctl.passwordAdd("reader", ScopeRead, "proj", "x", ""); err == nil {
 		t.Error("duplicate password add should error")
 	}
 	// passwordRemove passes --yes (the TUI form runs its own typed
@@ -209,7 +209,7 @@ func TestControllerRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Envelope mode activates journaling; a later generation is restorable.
-	if err := ctl.passwordAdd("reader", ScopeRead, "*", "reader-pass"); err != nil {
+	if err := ctl.passwordAdd("reader", ScopeRead, "*", "reader-pass", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctl.addSecret("k2", "v2", "", "", ""); err != nil {

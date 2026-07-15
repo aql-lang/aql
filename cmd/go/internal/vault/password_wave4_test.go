@@ -176,7 +176,7 @@ func TestMigrateLegacyAndAddWrongPass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = migrateLegacyAndAdd(s, home, "wrong-pass", "n", ScopeRead, []string{"*"}, "npw")
+	err = migrateLegacyAndAdd(s, home, "wrong-pass", "n", ScopeRead, []string{"*"}, "npw", "")
 	if err == nil || !strings.Contains(err.Error(), "wrong passphrase") {
 		t.Errorf("migrateLegacyAndAdd with wrong pass = %v", err)
 	}
@@ -366,7 +366,7 @@ func TestReadNewPassphraseEOFArms(t *testing.T) {
 func TestBuildSlotMissingCurrentID(t *testing.T) {
 	salt := mustRandom(t, keyringSaltLen)
 	grant := map[string][]byte{"ns": mustRandom(t, ndkLen)}
-	_, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, map[string]string{}, mustRandom(t, 32))
+	_, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, map[string]string{}, mustRandom(t, 32), "")
 	if err == nil || !strings.Contains(err.Error(), "no current id") {
 		t.Errorf("buildSlot without current id = %v", err)
 	}
@@ -392,14 +392,14 @@ func TestAddSlotToEnvelopeDirect(t *testing.T) {
 		}
 		return s
 	}
-	if err := addSlotToEnvelope(fresh(), home, "wrong", "x", ScopeRead, []string{"*"}, "pw"); err == nil {
+	if err := addSlotToEnvelope(fresh(), home, "wrong", "x", ScopeRead, []string{"*"}, "pw", ""); err == nil {
 		t.Error("wrong passphrase should fail")
 	}
-	if err := addSlotToEnvelope(fresh(), home, "reader-pass", "x", ScopeRead, []string{"*"}, "pw"); err == nil ||
+	if err := addSlotToEnvelope(fresh(), home, "reader-pass", "x", ScopeRead, []string{"*"}, "pw", ""); err == nil ||
 		!strings.Contains(err.Error(), "admin") {
 		t.Errorf("non-admin add = %v", err)
 	}
-	if err := addSlotToEnvelope(fresh(), home, "test-pass", "reader", ScopeRead, []string{"*"}, "pw"); err == nil ||
+	if err := addSlotToEnvelope(fresh(), home, "test-pass", "reader", ScopeRead, []string{"*"}, "pw", ""); err == nil ||
 		!strings.Contains(err.Error(), "already exists") {
 		t.Errorf("duplicate add = %v", err)
 	}
@@ -407,14 +407,14 @@ func TestAddSlotToEnvelopeDirect(t *testing.T) {
 	// integrity key.
 	s := fresh()
 	delete(s.CurrentNDK, integrityNamespace)
-	if err := addSlotToEnvelope(s, home, "test-pass", "x", ScopeRead, []string{"*"}, "pw"); err == nil ||
+	if err := addSlotToEnvelope(s, home, "test-pass", "x", ScopeRead, []string{"*"}, "pw", ""); err == nil ||
 		!strings.Contains(err.Error(), "integrity key unavailable") {
 		t.Errorf("missing integrity NDK = %v", err)
 	}
 	// A namespace whose current NDK id the admin session cannot resolve.
 	s = fresh()
 	s.CurrentNDK["ghostns"] = "00112233aabbccdd"
-	if err := addSlotToEnvelope(s, home, "test-pass", "x", ScopeAdmin, []string{"*"}, "pw"); err == nil ||
+	if err := addSlotToEnvelope(s, home, "test-pass", "x", ScopeAdmin, []string{"*"}, "pw", ""); err == nil ||
 		!strings.Contains(err.Error(), "lacks the data key") {
 		t.Errorf("ghost namespace id = %v", err)
 	}

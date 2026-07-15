@@ -121,7 +121,7 @@ func TestFormCommandPreviews(t *testing.T) {
 	if got := renameCommandPreview("a", "b", false); !strings.Contains(got, "mv a b") {
 		t.Errorf("rename: %q", got)
 	}
-	if got := passwordAddCommandPreview("ci", "read", "*"); !strings.Contains(got, "password add") ||
+	if got := passwordAddCommandPreview("ci", "read", "*", ""); !strings.Contains(got, "password add") ||
 		!strings.Contains(got, "--scope=read") || !strings.Contains(got, "--namespaces=*") {
 		t.Errorf("password add: %q", got)
 	}

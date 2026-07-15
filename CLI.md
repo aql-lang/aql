@@ -571,7 +571,9 @@ aql vault policy apply policy.aql       # declaratively apply policy
 aql vault config                        # show vault config
 aql vault config --set namespace.default=proj   # set a config key (also --unset)
 aql vault password add --scope=read --namespaces=ci ci-bot  # scoped password (keyslot)
-aql vault password list                 # list keyslots and their scope/namespaces
+aql vault password add --scope=read --ttl=30m --generate agent  # TEMPORARY password: random, printed once, expires in 30m (hand to an agent)
+aql vault password rm --temp            # revoke ALL temporary passwords at once
+aql vault password list                 # list keyslots (with scope/namespaces + EXPIRES)
 aql vault history                       # content-revision history (newest first)
 aql vault restore 7                     # restore metadata to generation 7 (admin)
 aql vault proxy                         # run local credential broker (loopback only)
@@ -627,7 +629,23 @@ A few modes that need more than one line:
   root); `assign` binds it to a user, `set` changes its value, `rm`
   removes it (`--rekey` re-encrypts the namespaces it could reach),
   and `list` shows them. This is how a CI password reads `ci:` secrets
-  without being able to touch `prod:`. See
+  without being able to touch `prod:`.
+
+  **Temporary passwords** (`--ttl`) are the way to authorize an
+  already-running agent (e.g. a Claude session) without handing over the
+  master passphrase: `password add --scope=read --ttl=30m --generate
+  <name>` mints a **time-boxed** slot with a **randomly generated**
+  password printed once. It stops authenticating the moment `--ttl`
+  elapses (enforced at every `openSession`), and is never admin-scoped.
+  Revoke one early with `password rm <name>`, or pull **every** temporary
+  password at once with `password rm --temp`. `list`'s `EXPIRES` column
+  shows each slot's expiry (marked `(expired)` once past). The interactive
+  TUI (`vault -i` → Passwords) can create a temporary password (set a TTL
+  in the Add form), and revoke one (`D`) or all of them (`T`); the
+  randomly-`--generate`d form is CLI-only. **Brokers**: `vault proxy` /
+  `vault mcp` started under a temporary password refuse to cache the
+  session and re-authenticate per request, so they stop serving the moment
+  it expires (and warn at startup). See
   [Explanation → the vault](EXPLANATION.md#the-vault-why-a-local-credential-store)
   for the model.
 

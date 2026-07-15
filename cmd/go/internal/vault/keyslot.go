@@ -145,11 +145,22 @@ func derivePubMAC(integrityKey []byte, name, pubB64, scope string, namespaces []
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-// privAAD builds the AES-GCM additional data binding an EncPrivKey to
-// its slot Name and Scope (namespaces are gated by NDK possession, not
-// bound here — see deriveVerifier).
-func privAAD(name, scope string) []byte {
-	return macInput(labelPriv, name, scope)
+// privAAD builds the AES-GCM additional data binding an EncPrivKey to its
+// slot Name and Scope — and, for a temporary password, its ExpiresAt — so
+// a naive plaintext edit of any of them fails authentication (the AEAD tag
+// no longer verifies). A permanent slot (empty ExpiresAt) yields the
+// pre-v6 AAD unchanged, so existing slots still open. Namespaces are gated
+// by NDK possession, not bound here (see deriveVerifier).
+//
+// NOTE: a slot HOLDER possesses the KEK, private key, and integrity key,
+// so a determined holder with write access to the store can re-seal a slot
+// under a new AAD and extend their own expiry. This binding stops casual
+// store edits; the hard revoke is an admin `password rm` / `rm --temp`.
+func privAAD(name, scope, expiresAt string) []byte {
+	if expiresAt == "" {
+		return macInput(labelPriv, name, scope)
+	}
+	return macInput(labelPriv, name, scope, expiresAt)
 }
 
 func newGCM(key []byte) (cipher.AEAD, error) {

@@ -104,10 +104,19 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 	// passphrase yet) is non-fatal: the handler falls back to a
 	// per-request authenticate.
 	if sess, serr := authenticate(s, homeDir, nil, io.Discard, ""); serr == nil {
-		p.sess = sess
-		defer sess.Close()
-		if sess.Slot != nil && sess.Scope == ScopeAdmin {
-			fmt.Fprintln(stderr, "warning: broker is running under an ADMIN password; prefer a scoped read password (vault password add <name> --scope=read --namespaces=...)")
+		if sess.Slot != nil && sess.Slot.ExpiresAt != "" {
+			// A TEMPORARY password must NOT be cached: a frozen session would
+			// keep serving past the advertised expiry. Leave p.sess nil so the
+			// handler re-authenticates per request — openSession re-checks
+			// slotExpired every time, so the broker stops serving at expiry.
+			fmt.Fprintf(stderr, "warning: broker is running under a TEMPORARY password (expires %s); it re-authenticates per request and stops serving once it expires\n", sess.Slot.ExpiresAt)
+			sess.Close()
+		} else {
+			p.sess = sess
+			defer sess.Close()
+			if sess.Slot != nil && sess.Scope == ScopeAdmin {
+				fmt.Fprintln(stderr, "warning: broker is running under an ADMIN password; prefer a scoped read password (vault password add <name> --scope=read --namespaces=...)")
+			}
 		}
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

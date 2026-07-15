@@ -108,6 +108,13 @@ type PasswordSlot struct {
 	WrappedKeys map[string]string `json:"wrapped_keys,omitempty"` // "ns#ndkID" -> base64 sealed NDK
 	CreatedAt   string            `json:"created_at"`
 	UpdatedAt   string            `json:"updated_at,omitempty"`
+	// ExpiresAt is an optional RFC3339 timestamp after which this slot's
+	// passphrase no longer authenticates — the mechanism behind a
+	// temporary, time-boxed password (`password add --ttl`). Empty means
+	// the password never expires. openSession enforces it (slotExpired);
+	// an unparseable value fails closed. Present only on temporary slots,
+	// so it is omitempty and absent on every pre-v6 slot.
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 // Store is the on-disk vault metadata file. It contains aliases,
@@ -167,7 +174,12 @@ const maxPasswordSlots = 64
 //	     client-IP allowlist). The bump makes an older binary refuse a v5
 //	     store rather than silently dropping a key's IP restriction on its
 //	     next save, which would relax a deliberately-scoped secret.
-const storeVersion = 5
+//	v6 — password slots gain the optional ExpiresAt field (temporary,
+//	     time-boxed passwords via `password add --ttl`). The bump makes an
+//	     older binary refuse a v6 store rather than silently dropping a
+//	     slot's expiry on its next save — which would quietly turn a
+//	     deliberately temporary password into a permanent one.
+const storeVersion = 6
 
 // storeMigrations[i] upgrades a store from schema version i+1 to i+2.
 // Each is a pure, in-place transform; the slice length must be
@@ -177,12 +189,21 @@ var storeMigrations = []func(*Store) error{
 	migrateStoreV2ToV3, // index 1: v2 -> v3
 	migrateStoreV3ToV4, // index 2: v3 -> v4
 	migrateStoreV4ToV5, // index 3: v4 -> v5
+	migrateStoreV5ToV6, // index 4: v5 -> v6
 }
 
 // migrateStoreV4ToV5 is a no-op. v5 only adds the optional per-alias
 // IPWhitelist field; a v4 store loads with every alias unrestricted,
 // which is exactly the pre-v5 behaviour.
 func migrateStoreV4ToV5(*Store) error { return nil }
+
+// migrateStoreV5ToV6 is a no-op. v6 only adds the optional
+// PasswordSlot.ExpiresAt field; a v5 store loads with every slot
+// non-expiring, which is exactly the pre-v6 behaviour. The version bump
+// alone is the migration — it makes an older binary refuse a v6 store
+// rather than stripping a temporary password's expiry it cannot model
+// (which would silently make it permanent).
+func migrateStoreV5ToV6(*Store) error { return nil }
 
 // migrateStoreV1ToV2 revokes capabilities that predate token hashing.
 // They have an empty TokenHash and therefore cannot be presented as a
@@ -477,6 +498,40 @@ func (s *Store) SortedPasswordSlots() []PasswordSlot {
 	out := append([]PasswordSlot(nil), s.Passwords...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// TemporaryPasswordSlots returns the expiry-bearing slots — the time-boxed
+// passwords minted with `password add --ttl` — ordered by name. Permanent
+// slots (no ExpiresAt) are never included.
+func (s *Store) TemporaryPasswordSlots() []PasswordSlot {
+	var out []PasswordSlot
+	for i := range s.Passwords {
+		if s.Passwords[i].ExpiresAt != "" {
+			out = append(out, s.Passwords[i])
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// RemoveTemporaryPasswordSlots drops every temporary (expiry-bearing)
+// slot at once — the "revoke all temporary passwords" primitive. A
+// temporary slot is never admin-scoped (creation forbids `--ttl` with
+// `--scope=admin`), so this can never remove a permanent or admin slot.
+// Returns the removed slot names, sorted.
+func (s *Store) RemoveTemporaryPasswordSlots() []string {
+	var survivors []PasswordSlot
+	var removed []string
+	for i := range s.Passwords {
+		if s.Passwords[i].ExpiresAt != "" {
+			removed = append(removed, s.Passwords[i].Name)
+			continue
+		}
+		survivors = append(survivors, s.Passwords[i])
+	}
+	s.Passwords = survivors
+	sort.Strings(removed)
+	return removed
 }
 
 // OtherFunctionalAdminExists reports whether an admin-scoped slot other

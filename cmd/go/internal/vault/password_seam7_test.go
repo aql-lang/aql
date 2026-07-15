@@ -106,42 +106,42 @@ func TestP7_BuildSlotArms(t *testing.T) {
 	t.Run("master KEK error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapScryptKey(t, p7failScrypt)
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a master-KEK failure")
 		}
 	})
 	t.Run("salt entropy error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapRandRead(t, p7failRead)
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a slot-salt entropy failure")
 		}
 	})
 	t.Run("slot KEK error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapIOReadFull(t, func(io.Reader, []byte) (int, error) { return 0, p7boom() })
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a slot-KEK failure")
 		}
 	})
 	t.Run("keypair error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapBoxRand(t, p7failReader{})
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a keypair-generation failure")
 		}
 	})
 	t.Run("seal priv key error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapRandRead(t, p7countRead(1)) // slot salt ok, priv-key nonce fails
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a sealPrivKey nonce failure")
 		}
 	})
 	t.Run("seal NDK error", func(t *testing.T) {
 		salt, grant, cur, ik := p7buildSlotArgs(t)
 		p7swapBoxRand(t, &p7byteReader{left: 32}) // keypair ok, sealNDK fails
-		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik); err == nil {
+		if _, err := buildSlot("n", ScopeRead, []string{"ns"}, "pw", salt, grant, cur, ik, ""); err == nil {
 			t.Fatal("buildSlot should surface a sealNDK failure")
 		}
 	})
@@ -172,70 +172,70 @@ func TestP7_MigrateLegacyAndAddArms(t *testing.T) {
 	t.Run("vault salt entropy", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapRandRead(t, p7countRead(0))
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface a vault-salt entropy failure")
 		}
 	})
 	t.Run("integrity NDK", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapRandRead(t, p7countRead(1)) // vsalt ok, integrity newNDK fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the integrity newNDK failure")
 		}
 	})
 	t.Run("integrity NDK id", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapRandRead(t, p7countRead(2)) // vsalt, newNDK ok; newNDKID fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the integrity newNDKID failure")
 		}
 	})
 	t.Run("root NDK", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapRandRead(t, p7countRead(3)) // integrity done; root newNDK fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the root newNDK failure")
 		}
 	})
 	t.Run("entry NDK", func(t *testing.T) {
 		home, s := p7legacyVault(t, "proj:k")
 		p7swapRandRead(t, p7countRead(5)) // integrity+root done; entry proj newNDK fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the entry-namespace newNDK failure")
 		}
 	})
 	t.Run("requested-namespace NDK", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapRandRead(t, p7countRead(5)) // integrity+root done; newNS "extra" newNDK fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, []string{"extra"}, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, []string{"extra"}, "np", ""); err == nil {
 			t.Fatal("migrate should surface the requested-namespace newNDK failure")
 		}
 	})
 	t.Run("admin slot build", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapBoxRand(t, p7failReader{}) // buildSlot("admin") keypair fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the admin-slot build failure")
 		}
 	})
 	t.Run("requested slot build", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapScryptKey(t, p7countScrypt(1)) // admin buildSlot ok, req buildSlot master-KEK fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface the requested-slot build failure")
 		}
 	})
 	t.Run("store save", func(t *testing.T) {
 		home, s := p7legacyVault(t, "")
 		p7swapOsRename(t, p7renameFailSuffix("vault.jsonic"))
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface a store-save failure")
 		}
 	})
 	t.Run("reseal value", func(t *testing.T) {
 		home, s := p7legacyVault(t, "k")
 		p7swapRandRead(t, p7countRead(9)) // through both buildSlots; phase-5 sealValue nonce fails
-		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np"); err == nil {
+		if err := migrateLegacyAndAdd(s, home, "test-pass", "n", ScopeRead, star, "np", ""); err == nil {
 			t.Fatal("migrate should surface a value re-seal failure")
 		}
 	})
@@ -254,21 +254,21 @@ func TestP7_AddSlotToEnvelopeArms(t *testing.T) {
 	t.Run("new namespace NDK", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapRandRead(t, p7failRead)
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw"); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", ""); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a new-namespace newNDK failure")
 		}
 	})
 	t.Run("new namespace NDK id", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapRandRead(t, p7countRead(1)) // newNDK ok, newNDKID fails
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw"); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", ""); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a new-namespace newNDKID failure")
 		}
 	})
 	t.Run("slot build", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapBoxRand(t, p7failReader{})
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"proj"}, "pw"); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"proj"}, "pw", ""); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a buildSlot failure")
 		}
 	})
