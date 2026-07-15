@@ -1882,3 +1882,28 @@ raises the interpreter's exact predicate error at bind time).
 
 Remaining flip blockers: the model watch fork (-race), the mini
 host-compile hook, and the cross-instance observability pollution.
+
+### Flip blocker 2 CLOSED — the mini compile-hook miscompile (2026-07-15)
+
+The mini-lang Go COMPILE HOOK (`RegisterMiniLang{Compile:…}`) was gated
+out of check mode entirely, so a compile pass recorded the standard
+transducer call where the interpreter runs the hook at the call site —
+`mini up 'hi'` compiled [hi] vs interpreted [HI], the second live
+miscompile the flip attempt surfaced. The fix: a COMPILE pass runs the
+Go hook over a concrete src exactly as the interpreter will, splicing
+the hook's expansion for recording — gated by miniHookToksMaterialisable
+(a hook splicing a KNOWN-unpoolable runtime carrier, re's precompiled
+pattern Extension, diverts to the standard transducer call instead,
+sound per the §13 contract: the transducer is the semantic reference).
+Shapes a compile pass cannot mirror REFUSE rather than bake: a
+non-concrete src or opts (the runtime expansion would run the hook over
+values the record cannot see), and an AQL compile hook (a macro whose
+check-mode expansion is not the runtime expansion — and which cannot
+even be registered during its own compile pass, register-compiled not
+being a RunInCheckMode word; the refusal covers the pre-registered
+case). Pinned: hook-parity compiled [HI], the non-concrete-opts and
+AQL-hook refusals with fallback parity, and the materialisable-screen
+arms. A PLAIN check pass keeps the standard-call validation unchanged.
+
+Remaining flip blockers: the model watch fork (-race), and the
+cross-instance observability pollution.

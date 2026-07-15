@@ -381,26 +381,72 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 
 	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
 	// a compile hook AND src is concrete, compile at the call site and splice
-	// the hook's tokens instead of the standard call. NOT in check mode: the
-	// checker validates the standard `lang_<kind>` call (the semantic
-	// reference), and a check-mode src is a carrier with no text to compile.
-	// `mini` has no expansion cache, so the hook re-runs whenever the call is
-	// stepped — hooks memoize their compile (as `re` does). A non-concrete
-	// runtime src falls back to the standard transducer call.
-	if !r.Check.IsActive() {
+	// the hook's tokens instead of the standard call. A PLAIN check pass
+	// stays on the standard `lang_<kind>` call (the semantic reference for
+	// checking; a check-mode src is usually a carrier anyway) — but a
+	// COMPILE pass must take the SAME path the interpreter takes, or the
+	// recorded program bakes the transducer where the runtime runs the hook
+	// (`mini up 'hi'` compiled [hi] vs interpreted [HI] — a live miscompile
+	// the 2026-07-15 flip attempt caught). So the hook runs when NOT
+	// checking, or when COMPILING with a concrete src: the GO hook is pure
+	// expansion machinery over the source text (the §13 contract — hooks
+	// memoize, deterministic over src+opts), so its spliced tokens record
+	// exactly as the interpreter splices them. A compile pass that cannot
+	// mirror the hook faithfully (non-concrete src/opts, or an AQL hook —
+	// a macro whose check-mode expansion is not the runtime expansion)
+	// REFUSES instead of baking the transducer — slow, not wrong.
+	// `mini` has no expansion cache, so the hook re-runs whenever the call
+	// is stepped — hooks memoize their compile (as `re` does). A
+	// non-concrete runtime src falls back to the standard transducer call.
+	if !r.Check.IsActive() || r.Check.Compiling {
 		goHook, hasGo := miniGoHook(r, kind)
 		aqlHook, hasAQL := miniCompileExport(r, kind)
+		if (hasGo || hasAQL) && r.Check.IsActive() {
+			refuse := func(why string) {
+				if es := r.Check.Recorder(); es.Active() {
+					es.MarkUncompilable("mini " + kind + ": " + why)
+				}
+			}
+			switch {
+			case hasAQL && !hasGo:
+				refuse("AQL compile hook is interpreter-only (check-mode expansion is not the runtime expansion)")
+			case func() bool { _, serr := args[1].AsConcreteString(); return serr != nil }():
+				refuse("compile hook needs a concrete src at compile time")
+			case !IsConcrete(opts):
+				refuse("compile hook needs concrete opts at compile time")
+			}
+		}
 		if hasGo || hasAQL {
 			if src, serr := args[1].AsConcreteString(); serr == nil {
 				var hookToks []Value
 				var herr error
-				if hasGo {
+				switch {
+				case hasGo && r.Check.IsActive() && !IsConcrete(opts):
+					// Refused above; keep the standard call for analysis.
+					hookToks = nil
+				case hasGo:
 					hookToks, herr = goHook(src, opts, r)
-				} else {
+					// A COMPILE pass can only take the hook path when the
+					// expansion RECORDS — every token statically
+					// materialisable. A hook splicing a runtime carrier
+					// (re's precompiled pattern) compiles via the standard
+					// transducer call instead, which §13's contract makes
+					// sound: the transducer is the semantic reference.
+					if herr == nil && r.Check.IsActive() && !miniHookToksMaterialisable(hookToks) {
+						hookToks = nil
+					}
+				case r.Check.IsActive():
+					// AQL hook under a compile pass: refused above; the
+					// standard call below keeps the check-mode analysis.
+					hookToks = nil
+				default:
 					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
 				}
 				if herr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					return nil, herr
+				}
+				if hookToks == nil {
+					goto standardCall
 				}
 				if partial, pok := miniPartialFn(r, kind, target, hookToks); pok {
 					// No trailing End: the partial's sigs are STACK-ONLY
@@ -414,6 +460,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		}
 	}
 
+standardCall:
 	// Standard call tail. For a FILTER kind (every sig takes exactly one
 	// input beyond the [src opts] prefix) the expansion produces a
 	// PARTIALLY-APPLIED anonymous Function instead of a stranded call:

@@ -34,3 +34,23 @@ func TestRecordTypedBindOrRefuseConcreteDecline(t *testing.T) {
 		t.Fatalf("declined record must refuse; Finalize reason = %q", reason)
 	}
 }
+
+// miniHookToksMaterialisable's decline arms: a carrier/dynamic token and a
+// non-inert marker token (a Forward) both divert the compile pass onto the
+// standard transducer call.
+func TestMiniHookToksMaterialisableArms(t *testing.T) {
+	if !miniHookToksMaterialisable([]eng.Value{NewString("x"), NewWord("w"), NewEnd()}) {
+		t.Fatal("inert tokens must be materialisable")
+	}
+	if miniHookToksMaterialisable([]eng.Value{NewCarrier(TAny)}) {
+		t.Fatal("a carrier token must not be materialisable")
+	}
+	dyn := NewCarrier(TAny)
+	dyn.Dynamic = true
+	if miniHookToksMaterialisable([]eng.Value{dyn}) {
+		t.Fatal("a dynamic token must not be materialisable")
+	}
+	if miniHookToksMaterialisable([]eng.Value{eng.NewExtension(TAny, 1)}) {
+		t.Fatal("an extension-payload token must not be materialisable")
+	}
+}
