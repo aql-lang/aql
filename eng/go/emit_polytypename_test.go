@@ -30,7 +30,7 @@ func TestRecordPolyCallTypeNameOperand(t *testing.T) {
 	// Slashed type path (the ResolveTypePath arm).
 	es := newState()
 	out := NewDynamicCarrier(TInteger)
-	if !es.RecordPolyCall("convert", []Value{NewWord("Scalar/Number/Integer")}, []Value{out}, SrcPos{}, es.reg) {
+	if !es.RecordPolyCall("convert", []Value{NewWord("Scalar/Number/Integer")}, []Value{out}, SrcPos{}, es.reg, nil) {
 		t.Fatal("a slashed type-path word operand should record")
 	}
 	if ops := lastOps(es); len(ops) != 1 || ops[0].kind != opType {
@@ -39,7 +39,7 @@ func TestRecordPolyCallTypeNameOperand(t *testing.T) {
 
 	// Bare kernel type name (the typeNames arm).
 	es = newState()
-	if !es.RecordPolyCall("convert", []Value{NewWord("Integer")}, []Value{out}, SrcPos{}, es.reg) {
+	if !es.RecordPolyCall("convert", []Value{NewWord("Integer")}, []Value{out}, SrcPos{}, es.reg, nil) {
 		t.Fatal("a bare type-name word operand should record")
 	}
 	if ops := lastOps(es); len(ops) != 1 || ops[0].kind != opType {
@@ -50,17 +50,17 @@ func TestRecordPolyCallTypeNameOperand(t *testing.T) {
 	// unresolvable-operand decline:
 	// a MODIFIED word (the /s form changes collection semantics);
 	es = newState()
-	if es.RecordPolyCall("convert", []Value{NewWordModified("Integer", -1, true, false)}, []Value{out}, SrcPos{}, es.reg) {
+	if es.RecordPolyCall("convert", []Value{NewWordModified("Integer", -1, true, false)}, []Value{out}, SrcPos{}, es.reg, nil) {
 		t.Fatal("a modified type-name word must decline")
 	}
 	// a word that names no type at all;
 	es = newState()
-	if es.RecordPolyCall("convert", []Value{NewWord("no-such-name")}, []Value{out}, SrcPos{}, es.reg) {
+	if es.RecordPolyCall("convert", []Value{NewWord("no-such-name")}, []Value{out}, SrcPos{}, es.reg, nil) {
 		t.Fatal("a non-type word must decline")
 	}
 	// a slashed path that resolves to no builtin.
 	es = newState()
-	if es.RecordPolyCall("convert", []Value{NewWord("No/Such/Type")}, []Value{out}, SrcPos{}, es.reg) {
+	if es.RecordPolyCall("convert", []Value{NewWord("No/Such/Type")}, []Value{out}, SrcPos{}, es.reg, nil) {
 		t.Fatal("an unknown slashed path must decline")
 	}
 }

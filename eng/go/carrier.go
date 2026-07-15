@@ -625,16 +625,29 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// Integer|String reaches add's [Scalar Scalar]→String catch-all
 	// although the Integer path takes [Number Number]. Resolve each
 	// alternative independently and join the per-alternative returns.
+	var partOut []Value
 	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
 		// A strict-disjunct straddle is a runtime-dispatch case, not an
 		// inherent refusal: if the word is a safe poly candidate (core builtin,
 		// no meta/fn-value/code-body sig) and its operands resolve, lower it to
 		// OpCallNativePoly so the VM re-matches the one concrete alternative at
-		// run time — e.g. `5 is (tnot (Integer gt 0))`. Otherwise refuse.
-		if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false) {
-			r.Check.Recorder().RecordPoly(word)
+		// run time — e.g. `5 is (tnot (Integer gt 0))`. A USER FN under an
+		// ARMED recording instead falls THROUGH to the ordinary dispatch
+		// below — one recorded CALL_USER with the ORIGINAL (provenance-
+		// carrying) args; the runtime value is one concrete alternative the
+		// unit's param contract admits — and the partition-joined carriers
+		// are re-IDed onto the recorded results at the tail, keeping the
+		// per-alternative type precision without orphaning the residual
+		// (the L-JOIN recursive-union refusal). Everything else refuses.
+		if r.Check.Recorder().active() && sig != nil && sig.fnFrame() != nil &&
+			disjunctCombosTakeSig(r, word, args, sig) {
+			partOut = out
+		} else {
+			if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
+				r.Check.Recorder().RecordPoly(word)
+			}
+			return out
 		}
-		return out
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
 	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
@@ -652,6 +665,20 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
 	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
+	// The partitioned user-fn dispatch (above): hand back the partition-
+	// joined carriers under the RECORDED results' identities, so downstream
+	// operand resolution reaches the recorded call while the checker keeps
+	// the per-alternative precision. A count mismatch keeps the recorded
+	// results verbatim — sound, just wider.
+	if partOut != nil {
+		if len(partOut) != len(out) {
+			return out
+		}
+		for i := range partOut {
+			partOut[i].ID = out[i].ID
+		}
+		return partOut
+	}
 	return out
 }
 
@@ -1030,7 +1057,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		!tryRecordDeferredList(r, sig, out) &&
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordDynBody(r, word, sig, args, out, pos) &&
-		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false) &&
+		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false, nil) &&
 		!tryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
 		// A CompileRunsBodyIsolated word (Test.check-prop) whose dynamic operands
@@ -1400,7 +1427,10 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // faithfully; only the dynamic-only gate is bypassed, every other safety gate
 // (core builtin, no meta/fn-value/code-body sig, sig identity, resolvable
 // operands) still applies.
-func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool) bool {
+// noMatch, when non-nil, is the faithful-raise plan for the runtime no-match
+// arm (PolyNoMatchSpec, plan 3c) — derived by the caller at the failed-
+// dispatch tape state it recovered from; nil keeps the sound defer.
+func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool, noMatch *PolyNoMatchSpec) bool {
 	es := r.Check.Recorder()
 	// 0 outputs (a side-effect word like the test framework's `test-record`) or
 	// 1 output (the common get/size/is shape). A multi-result poly is beyond
@@ -1500,7 +1530,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// looked the word up in the main registry, found 0 sigs, and deferred. Safe for
 	// core words too: poly only ever records BUILTINS (guarded above), which exist
 	// identically in every registry instance, so matchReg.Lookup always resolves.
-	return es.RecordPolyCall(word, args, outs, pos, matchReg)
+	return es.RecordPolyCall(word, args, outs, pos, matchReg, noMatch)
 }
 
 // tryRecordDynBody is the universal `do` backstop (the always-compile goal):
@@ -1533,8 +1563,11 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	// tokens are unknowable — the interpreter faces the same tokens through
 	// the same sub-engine, so a runtime sentinel behaves identically there;
 	// what differs is only tape-coupled RE-STEPPING, which the sub-run
-	// contains entirely.
-	if IsConcrete(body) && bodyHasSentinel(body) {
+	// contains entirely. It must also be replay-hazard-free: a capitalised
+	// def / import inside the baked body re-runs a registry mutation the
+	// check pass already applied and half-rolled-back (the do-unit
+	// registry-replay miscompile — see bodyHasReplayHazard).
+	if IsConcrete(body) && (bodyHasSentinel(body) || bodyHasReplayHazard(body)) {
 		return false
 	}
 	// Every operand must have a compiled home: the body rides as a threaded
@@ -1576,6 +1609,10 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	if !fixedValueEval {
 		f.variadicResult = true
 	}
+	// The dyn-body backstop already marks every code-body result variadic
+	// above; consume the ReturnsFn's catch-variadic latch so it cannot leak
+	// past this dispatch (L-DO — see catchVariadicFor).
+	es.catchVariadicFor(sig)
 	es.eventInfo[seq] = f
 	// Carrier-identity de-collision, extended to INTRA-event repeats: the
 	// modeled outs of a dyn-body sub-run may repeat one value — an unrolled
@@ -1930,7 +1967,18 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 	// combo whose overload is unannotated declines the whole partition
 	// (the whole-disjunct fallback — missing_returns + dynamic Any —
 	// beats a partial join). Surviving rows are joined position-wise.
+	//
+	// The combo runs are TYPE PROBES over per-alternative carrier COPIES
+	// (alternativeCarriers mints fresh IDs), so under an ARMED recording
+	// they must not record: a user fn's ReturnsFn would RecordUserCall the
+	// fresh-ID copies ("fn call operand of unknown provenance" — the
+	// L-JOIN recursive-union refusal) and compile one unit per combo.
+	// Suspend for the loop (a no-op on a plain check); the caller records
+	// the dispatch ONCE with the original args (carrierResults' partition
+	// arm). Diagnostics (partial_dispatch) are not gated by suspension.
 	rows := make([][]Value, 0, len(combos))
+	resume := r.Check.Recorder().Suspend()
+	defer resume()
 	for _, combo := range combos {
 		comboSig := firstMatchingSig(fn, combo)
 		if comboSig == nil {
@@ -1976,6 +2024,36 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		}
 	}
 	return joinReturnRows(rows)
+}
+
+// disjunctCombosTakeSig reports whether EVERY per-alternative combination of
+// the disjunct args first-matches exactly the caller's committed sig — the
+// condition under which ONE recorded CALL_USER of that sig's unit is faithful
+// for every runtime alternative (carrierResults' partitioned user-fn arm). A
+// combo that would first-match a SIBLING overload (a narrow arm ahead of the
+// committed wide one) makes the single baked call a miscompile — the
+// interpreter dispatches the sibling for that alternative — so the caller
+// keeps the refusal. Combo enumeration failure (over the cap) declines.
+func disjunctCombosTakeSig(r *Registry, word string, args []Value, sig *Signature) bool {
+	fn := r.Lookup(word)
+	if fn == nil {
+		return false
+	}
+	combos, ok := disjunctCombos(args, disjunctPartitionCap)
+	if !ok {
+		return false
+	}
+	for _, combo := range combos {
+		cs := firstMatchingSig(fn, combo)
+		// Lookup mints a FRESH aggregate per call in check mode (the
+		// pointer-identity contract), so compare by the stable
+		// run-implementation identity — Signature.Impl, the same primitive
+		// the user-poly drift guard keys on.
+		if cs == nil || cs.Impl != sig.Impl {
+			return false
+		}
+	}
+	return true
 }
 
 // alternativeCarriers expands a strict disjunct carrier into one carrier
@@ -2974,6 +3052,20 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 	return stk
 }
 
+// RunCarrierBodyKeepDefs is RunCarrierBody WITHOUT the def rollback — the
+// check-mode twin of `do`'s runtime scoping, where body defs LEAK to the
+// enclosing scope (`do [def x 5] end x add 1` → 6; a do-installed TYPE stays
+// bound after the do). Rolling do-defs back was an infidelity with two
+// symptoms: post-do reads flagged undefined (the wrapped-context
+// false-positive family) and a do-installed type's binding vanishing while
+// its minted part survived, so a later re-analysis of the SAME body tripped
+// the parts conflict instead of the type-shadow path (validateTypeName's
+// Defs.IsType skip). Branch / loop / quotation bodies keep the rollback —
+// their execution is conditional and their defs are join-managed.
+func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
+	return runCarrierBodyDefs(r, body, true)
+}
+
 // RunCarrierBodyWithDefs is the branch-aware helper that snapshots
 // DefStack depths, runs the body through a sub-engine in check
 // mode, and returns both the residual carrier stack and a map of
@@ -2985,6 +3077,17 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
 func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
+	stk, adds := runCarrierBodyDefsAdds(r, body, false)
+	return stk, adds
+}
+
+// runCarrierBodyDefs is the keep-defs entry over the shared body run.
+func runCarrierBodyDefs(r *Registry, body Value, keep bool) []Value {
+	stk, _ := runCarrierBodyDefsAdds(r, body, keep)
+	return stk
+}
+
+func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[string]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -3030,6 +3133,11 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 		result = nil
 	}
 
+	// Keep-defs mode (`do` — leak fidelity): the body's bindings stay,
+	// exactly as the runtime leaves them; nothing to report.
+	if keep {
+		return result, nil
+	}
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
 	adds := map[string]Value{}

@@ -416,6 +416,26 @@ func InstallType(r *Registry, name string, body Value) error {
 		// `make` constraints, the `unify` word). Without this, Unify
 		// would take the lattice subtype path and admit any
 		// base-compatible value without checking the predicate.
+		// Phase 6 (predicate stamps): compile the predicate body to a
+		// detached unit at CONSTRUCTION, so RunPredicate's InvokeCallback
+		// runs it on the VM instead of the CallAQL interpreter fallback —
+		// the same pre-publication in-place stamp module load applies to
+		// its exports (the binding has not escaped this goroutine).
+		// Declines (captures, compile refusals) keep the interpreter path;
+		// only the REF is stamped, never the payload Name (the canon-
+		// ordering note above stands).
+		if r.RuntimeStampingEnabled() {
+			if fd, isFn := body.Data.(FnDefInfo); isFn {
+				// The stamp EVENT carries the type name so -compile-report
+				// (and the stamp-report gates) attribute the unit; the
+				// binding's payload Name stays empty (the canon note above).
+				named := fd
+				named.Name = name
+				if ref, stampOK := StampDetachedFn(r, named, body.Pos()); stampOK {
+					stampCompiledRef(fd, ref)
+				}
+			}
+		}
 		installPredicateUnifier(def, body, r, name)
 		r.Defs.PushType(name, def, body)
 	} else if IsRefinePrefab(body) {

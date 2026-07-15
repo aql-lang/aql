@@ -190,31 +190,31 @@ func TestCompiledCoverage(t *testing.T) {
 	// return discipline), and a for-body per-iteration apply of a Function
 	// param lowers to OpCallDynamic in source order (apply-first / apply-last),
 	// with an escaping break/continue crossing the island to the enclosing
-	// compiled loop (escapedFlow). What remains:
-	//   3  sound non-definite error rows (convert-ideal 30, forward-barrier
-	//      80, word-splice 115) — the entire error allowlist: each recovers
-	//      an unmatched dispatch that the interpreter resolves (or errors)
-	//      at runtime, so a compiled best guess could diverge; the fallback
-	//      owns them.
-	//   7  CARRIER no-match rows (phase 7 — DIAGNOSTICS.0.md): an
-	//      unmatched dispatch whose operands are CARRIERS (non-concrete at
-	//      compile time) can no longer bake a terminal OpTrap, because the
-	//      baked diagnostic (received args, per-candidate value verdicts)
-	//      could not match the interpreter's runtime concrete-value one, and
-	//      "errors from compiled mode must be exactly the same." Such a row
-	//      falls back to the interpreter, which raises the byte-identical
-	//      rich error. This SUPERSEDES the Phase-6 M4 carrier-disjointness
-	//      trap (removed) — a trap is terminal, so the fallback gives up only
-	//      the error-path compilation of a tail that never runs. The rows:
-	//      user-types 91/102/103/104/117, open-words 83/84/90, edge-dispatch
-	//      3:56 and generics — a stable cluster of carrier-operand no-matches.
-	//   1  fn value reaching a consuming word (module-repl 17): the served
-	//      handler's teardown pipeline passes a Function value to `drop` —
-	//      fn-as-data reaching a word with no CompileStoresFn declaration
-	//      stays a sound refusal (the value's identity/capture state cannot
-	//      bake).
-	const refusalGate = 11 // P7: I1–I7 close-out to 4, +7 carrier-parity fallbacks (tier above)
-	const islandGate = 0   // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
+	// compiled loop (escapedFlow). What remains (2026-07-13, corpus 6267):
+	// ONE tier — 9 "unmatched dispatch recovered" soundness rows, pinned
+	// row-exact in compiled_refusals_test.go (knownRefusals, the
+	// authoritative per-row ledger):
+	//   2  apply rows — a bare fn auto-fires on the value before `apply`
+	//      sees it, so `apply` recovers an unmatched dispatch the
+	//      interpreter raises at runtime.
+	//   4  generics wrong-instantiation rows — a generic-typed param called
+	//      with the WRONG instantiation is a runtime no-match; the checker's
+	//      recovery is a best guess.
+	//   1  variadic-if result feeding `each` over a recovered dispatch.
+	//   1  locally/module-redefined `add` overload — an operand outside the
+	//      overload stays a no-match.
+	//   1  word-splice reaching an fn call (code splice is NOT spread).
+	// All are ERROR rows the interpreter raises at runtime; a compiled best
+	// guess could diverge, so the fallback owns them until the sound runtime
+	// re-dispatch mechanism lands
+	// (design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md, Phase 3). The
+	// 11-row inventory this comment previously carried (convert-ideal /
+	// forward-barrier / user-types / open-words / module-repl / carrier-
+	// parity rows) described an earlier corpus generation; those rows now
+	// compile and the carrier-parity error doctrine they recorded lives on
+	// in DIAGNOSTICS.0.md.
+	const refusalGate = 3 // ratcheted 9 -> 3 (2026-07-14): OpDispatchRematch compiles the six single-carrier-window dispatch rows to runtime rematches; the three left are the wide-window / courtesy-screen / splice shapes (knownRefusals)
+	const islandGate = 0  // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)
 	}

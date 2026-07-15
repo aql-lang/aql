@@ -2,6 +2,7 @@ package lang
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 
@@ -166,6 +167,19 @@ func New(opts ...Options) (*AQL, error) {
 	return &AQL{registry: reg, options: o, manager: um}, nil
 }
 
+// NewFromRegistry wraps an ALREADY-WIRED registry in an *AQL instance so a
+// host with a long-lived registry of its own — the REPL, a service — can use
+// the compiled-by-default entry points (RunAutoValues / RunCompiledReason)
+// over it. The caller owns the wiring (parse func, module resolver, Manager,
+// Output, policy): nothing is installed or re-installed here, and the zero
+// Options apply. Plan Phase 2 prerequisite (entry-point routing).
+func NewFromRegistry(reg *native.Registry) (*AQL, error) {
+	if reg == nil {
+		return nil, fmt.Errorf("NewFromRegistry: nil registry")
+	}
+	return &AQL{registry: reg}, nil
+}
+
 // Options returns the Options the instance was created with.
 func (a *AQL) Options() Options {
 	return a.options
@@ -292,6 +306,28 @@ func (a *AQL) StampReport() []eng.StampEvent {
 	return a.registry.StampEvents()
 }
 
+// InterpEntry / BailEvent are the observability-seam event types (eng
+// interp_entry.go), re-exported for the frontier test suite.
+type InterpEntry = eng.InterpEntry
+
+// BailEvent is one designed VM defer-to-interpreter (see InterpEntry).
+type BailEvent = eng.BailEvent
+
+// ArmInterpEntryHook forwards to the registry's interpreter-entry
+// observability seam (eng interp_entry.go — a TEST seam, not API): fn fires
+// on every entry into tree-walking machinery until the returned disarm func
+// runs.
+func (a *AQL) ArmInterpEntryHook(fn func(InterpEntry)) func() {
+	return a.registry.ArmInterpEntryHook(fn)
+}
+
+// ArmRuntimeBailHook forwards to the registry's runtime-bail observability
+// seam (eng interp_entry.go — a TEST seam, not API): fn fires on every
+// designed VM defer-to-interpreter until the returned disarm func runs.
+func (a *AQL) ArmRuntimeBailHook(fn func(BailEvent)) func() {
+	return a.registry.ArmRuntimeBailHook(fn)
+}
+
 // CompileCheck runs the source through the checker with the bytecode
 // recording pass enabled (Stage 1: straight-line, monomorphic native
 // calls only) and linearises the trace into a Program. When the
@@ -300,6 +336,18 @@ func (a *AQL) StampReport() []eng.StampEvent {
 // the Program is nil and reason names the first offender; the
 // CheckResult is valid either way.
 func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
+	// SECURITY GATE: compiled dispatch does not consult the engine word
+	// policy — the interpreter's policyGateWord runs per stepWord dispatch
+	// (and deliberately not in check mode), so a compiled program would
+	// BYPASS every word deny rule (found 2026-07-13: a "deny add" policy
+	// interpreted `1 add 2` to permission-denied but ran it compiled to 3).
+	// A policy-gated registry therefore refuses compilation outright and the
+	// interpreter, where the gate lives, owns every dispatch. Lifting this
+	// requires a VM-side policy gate at CALL_NATIVE/CALL_USER/poly dispatch
+	// (recorded as a Phase 10 item in the completion plan).
+	if eng.LookupWordChecker(a.registry) != nil {
+		return nil, "policy-gated registry (compiled dispatch does not consult word rules)", CheckResult{}, nil
+	}
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, "parse error", CheckResult{}, err
@@ -596,6 +644,18 @@ func (a *AQL) SetSDK(spec string, sdk any) {
 //
 // State from set/get persists across multiple Run calls on the same instance.
 func (a *AQL) Run(src string) ([]any, error) {
+	result, err := a.runValues(src)
+	if err != nil {
+		return nil, err
+	}
+	return convertResults(result), nil
+}
+
+// runValues is Run without the host-value projection: the raw engine stack.
+// The Value-returning entry points (RunAutoValues' fallback arms) need the
+// unprojected Values so a host renderer (the REPL's v.String()) stays
+// byte-identical with what the engine produced.
+func (a *AQL) runValues(src string) ([]native.Value, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, err
@@ -604,11 +664,7 @@ func (a *AQL) Run(src string) ([]any, error) {
 	a.registry.Source = src
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
-	result, err := eng.Run(values)
-	if err != nil {
-		return nil, err
-	}
-	return convertResults(result), nil
+	return eng.Run(values)
 }
 
 // convertResults maps a residual engine stack to host-friendly Go
@@ -671,7 +727,12 @@ func convertResults(result []eng.Value) []any {
 //     error, are NOT surfaced: the run rolls back and re-executes on the
 //     interpreter, so a latent compiler bug degrades to the correct result
 //     rather than a raw failure (the differential gate's row-count floor still
-//     catches the regression).
+//     catches the regression). EXCEPT when observable output already escaped:
+//     rolling back cannot un-print, so a re-run would duplicate every effect
+//     (the L-DUP class, design/VOXGIG-COMPILE-LEAVES.2.md). The effect fence
+//     (eng effects.go, design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md C1)
+//     then PROPAGATES the internal_error, annotated with a run-with
+//     --no-compile hint, instead of silently re-running.
 //   - The step budget. The interpreter counts it per tape token stepped, the
 //     VM per bytecode instruction, both capped at eng.DefaultStepLimit. Only
 //     iteration/recursion can approach that ceiling, and for those the compiled
@@ -704,6 +765,21 @@ func (a *AQL) RunCompiled(src string) ([]any, bool, error) {
 //     refusal is "slow, not wrong"). A refusal is surprising performance debt,
 //     so the CLI surfaces this reason as a warning.
 func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
+	vals, ran, reason, err := a.RunAutoValues(src)
+	if err != nil {
+		return nil, ran, reason, err
+	}
+	return convertResults(vals), ran, reason, nil
+}
+
+// RunAutoValues is the compiled-by-default entry point returning the RAW
+// engine Values — RunCompiledReason without the host-value projection
+// (convertResults collapses Integer→int64/String→string, which cannot back
+// a renderer that needs the engine's own Value.String() — the REPL's
+// per-line echo and /stack). Identical semantics: same compiled/fallback
+// arms, same fence, same reason contract (plan Phase 2's prerequisite for
+// entry-point routing).
+func (a *AQL) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// CompileCheck executes the program in check mode, so its
 	// RunInCheckMode words (def/import/type/macro, the Test harness)
 	// leave real side effects on the registry. The COMPILED path needs
@@ -714,6 +790,28 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 	// the mutable scopes before the check pass and roll them back on the
 	// fallback path; keep them on the compiled path.
 	snap := a.registry.SnapshotForCompile()
+	// C1 effect fence (eng effects.go): a silent interpreter re-run — on
+	// either fallback arm below — is sound only while NO observable effect
+	// has escaped, because RestoreForCompile rolls back registry scopes but
+	// cannot un-print emitted output; a re-run after an effect duplicates it
+	// (the L-DUP class the pure-value differential is blind to). Armed BEFORE
+	// the check pass, which executes module imports: an import-time effect
+	// must count against the refusal arm too.
+	//
+	// The ledger is PER-REQUEST: a fresh one is installed for this run and
+	// the prior one restored on return. Detached work from an EARLIER request
+	// (a ForkConcurrent body still printing) captured the ledger pointer live
+	// at ITS fork/arm time, so its late effects land on the old ledger and
+	// cannot spuriously block THIS request's fallback — while a fork this
+	// request spawns (an import-time module body) copies the fresh pointer
+	// and counts, exactly the ownership the fence needs. Installed before
+	// arming so the writer wrappers capture the fresh ledger.
+	savedEffects := a.registry.Effects
+	a.registry.Effects = &eng.EffectLedger{}
+	defer func() { a.registry.Effects = savedEffects }()
+	disarmFence := a.registry.ArmEffectFence()
+	defer disarmFence()
+	effectsAt := a.registry.Effects.Count()
 	// Compiled execution requested: arm detached fn-unit stamping so
 	// runtime-constructed callbacks (service handlers, custom codec fns)
 	// compile to units at their store sites (eng.StampDetachedFn). The flag
@@ -730,14 +828,41 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 	if !wasArmed {
 		defer a.registry.DisableRuntimeStamping()
 	}
-	prog, reason, _, err := a.CompileCheck(src)
+	prog, reason, res, err := a.CompileCheck(src)
 	if err != nil || prog == nil {
 		a.registry.RestoreForCompile(snap)
 		// The check pass's in-place module-load stamps were rolled back with the
 		// scopes; drop them so -compile-report shows only the fallback re-run's
 		// authoritative stamps, not each rolled-back stamp twice.
 		a.registry.ResetStampLog()
-		out, rerr := a.Run(src)
+		// C1 fence on the REFUSAL arm: the check pass executed module imports
+		// (and any other RunInCheckMode word) for real — if one of them emitted
+		// an observable effect, re-running the whole source would emit it
+		// twice. A statically-invalid program still surfaces its own verdict —
+		// the check error, or the first ERROR-severity model-undermining
+		// diagnostic behind the "check diagnostics" sentinel: that program
+		// fails identically in both engines, so the diagnostic IS the truthful
+		// result. A CaughtAtRuntime diagnostic is deliberately NOT surfaced
+		// here even though it also raises the sentinel: it was downgraded
+		// because a surrounding `do [...]` catches the failure — the
+		// interpreter would CONTINUE with the handler's result — so reporting
+		// it as the program's own error would be wrong; it falls through to
+		// the honest blocked-fallback internal_error below, like any other
+		// refusal the fence cannot resolve.
+		if a.registry.Effects.Count() != effectsAt {
+			if err != nil {
+				return nil, false, "", err
+			}
+			for _, d := range res.Diagnostics {
+				if !d.RuntimeMirror && d.Severity == SeverityError {
+					return nil, false, "", a.registry.AqlError(d.Code, d.Detail, d.Word)
+				}
+			}
+			return nil, false, "", fenceBlockedFallback(a.registry,
+				a.registry.AqlError("internal_error",
+					"compiled-mode refusal after the check pass emitted observable output ("+forceCompileReason(reason)+")", ""))
+		}
+		out, rerr := a.runValues(src)
 		// Report the reason ONLY for a genuine performance refusal. A
 		// statically-invalid program (err != nil, or the "check diagnostics"
 		// sentinel) fails in both engines — the interpreter fallback raises the
@@ -745,7 +870,10 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 		if err != nil || reason == "check diagnostics" {
 			reason = ""
 		}
-		return out, false, reason, rerr
+		if rerr != nil {
+			return nil, false, reason, rerr
+		}
+		return out, false, reason, nil
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
@@ -762,14 +890,25 @@ func (a *AQL) RunCompiledReason(src string) ([]any, bool, string, error) {
 		// only burn the same budget again. The program DID compile, so this is
 		// not a compilable-subset refusal — report no reason.
 		if runtimeShouldFallback(err) {
+			// C1 fence on the RUNTIME-BAIL arm: the compiled run may already
+			// have printed/written before bailing (the L-DUP shape: every
+			// section prints, then a dynamic-scope read misses); a silent
+			// whole-source re-run would double every effect. Propagate the
+			// internal_error, annotated, instead.
+			if a.registry.Effects.Count() != effectsAt {
+				return nil, true, "", fenceBlockedFallback(a.registry, err)
+			}
 			a.registry.RestoreForCompile(snap)
 			a.registry.ResetStampLog()
-			out, rerr := a.Run(src)
-			return out, false, "", rerr
+			out, rerr := a.runValues(src)
+			if rerr != nil {
+				return nil, false, "", rerr
+			}
+			return out, false, "", nil
 		}
 		return nil, true, "", err
 	}
-	return convertResults(result), true, "", nil
+	return result, true, "", nil
 }
 
 // RunCompiledStrict is RunCompiled in FORCE mode: it REQUIRES the bytecode
@@ -824,6 +963,31 @@ func forceCompileReason(reason string) string {
 		return "program is not compilable"
 	}
 	return reason
+}
+
+// fenceBlockedFallback annotates a compiled-mode error whose silent
+// interpreter re-run the effect fence blocked (eng effects.go,
+// design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md C1): observable output
+// already escaped, so re-running the source would duplicate it. The original
+// error survives — an AqlError gains an explanatory note; a foreign Go error
+// is wrapped in an internal_error carrying its text — so the caller sees both
+// what failed and what to do about it.
+func fenceBlockedFallback(r *native.Registry, err error) error {
+	const note = "the interpreter fallback was blocked: output was already emitted, so re-running would duplicate it; run with --no-compile and report this as a compiler bug"
+	var ae *eng.AqlError
+	if errors.As(err, &ae) {
+		// A designed defer that PREPARED for this arm (a no-match whose site
+		// proved the interpreter would also fail the dispatch) carries the
+		// rich user-facing raise — surface it instead of an internal error
+		// telling the user to report a compiler bug (plan 3c).
+		if ae.DeferAlt != nil {
+			return ae.DeferAlt
+		}
+		cp := *ae
+		cp.Notes = append(append([]string(nil), ae.Notes...), note)
+		return &cp
+	}
+	return r.AqlErrorHint("internal_error", err.Error(), "", note)
 }
 
 // runtimeShouldFallback reports whether a compiled-mode RUN error should be

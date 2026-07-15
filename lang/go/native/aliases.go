@@ -82,6 +82,7 @@ type (
 	GoOpt                = eng.GoOpt   // optional dispatch knob for Go(...)
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
+	StoredBodySpec       = eng.StoredBodySpec
 	ClassInstanceInfo    = eng.ClassInstanceInfo
 	ClassTypeInfo        = eng.ClassTypeInfo
 	ResourceInstanceInfo = eng.ResourceInstanceInfo
@@ -239,6 +240,7 @@ const (
 	CompileDiverges         = eng.CompileDiverges
 	CompileValueDiverges    = eng.CompileValueDiverges
 	CompileStoresBody       = eng.CompileStoresBody
+	CompileStoresBodyList   = eng.CompileStoresBodyList
 	CompileExecutesBody     = eng.CompileExecutesBody
 	CompileRunsBodyIsolated = eng.CompileRunsBodyIsolated
 	CompileDynBody          = eng.CompileDynBody
@@ -580,6 +582,7 @@ var (
 	CheckAtIndices         = eng.CheckAtIndices
 	NewCarrierTypedListLen = eng.NewCarrierTypedListLen
 	RunCarrierBody         = eng.RunCarrierBody
+	RunCarrierBodyKeepDefs = eng.RunCarrierBodyKeepDefs
 	AnalyseCodeEffect      = eng.AnalyseCodeEffectCarrier
 	SetIDSeed              = eng.SetIDSeed
 	SeverityFor            = eng.SeverityFor

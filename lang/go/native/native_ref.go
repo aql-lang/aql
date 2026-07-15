@@ -457,7 +457,7 @@ func recordGradualWrap(reg *Registry, word string, args, outs []Value) {
 	if len(args) > 0 {
 		pos = args[len(args)-1].Pos()
 	}
-	reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil)
+	reg.Check.Recorder().RecordPolyCall(word, args, outs, pos, nil, nil)
 }
 
 // checkModeGradualFn handles a dispatch-modifier word (usurp / stack-args /

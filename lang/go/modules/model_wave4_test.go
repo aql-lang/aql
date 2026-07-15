@@ -375,6 +375,36 @@ func TestModelWave4FileOpsFSDelegate(t *testing.T) {
 	}
 }
 
+// TestModelWave4FileOpsFSNotesEffects pins the C1 effect seam: a non-dry
+// write/mkdir reaching the underlying FileOps notes the ledger callback
+// exactly once each; dryrun overlay writes never leave the handle and stay
+// uncounted.
+func TestModelWave4FileOpsFSNotesEffects(t *testing.T) {
+	mem := capabilities.NewMem()
+	notes := 0
+	f := &fileOpsFS{ops: mem, mem: map[string][]byte{}, note: func() { notes++ }}
+	if err := f.WriteFile("/d/a.txt", []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := f.MkdirAll("/d/sub", 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if notes != 2 {
+		t.Errorf("notes = %d, want 2 (one write + one mkdir)", notes)
+	}
+
+	fd := &fileOpsFS{ops: mem, dry: true, mem: map[string][]byte{}, note: func() { notes++ }}
+	if err := fd.WriteFile("/d/b.txt", []byte("y"), 0o600); err != nil {
+		t.Fatalf("dry write: %v", err)
+	}
+	if err := fd.MkdirAll("/d/sub2", 0o755); err != nil {
+		t.Fatalf("dry mkdir: %v", err)
+	}
+	if notes != 2 {
+		t.Errorf("dry ops noted the ledger: notes = %d, want still 2", notes)
+	}
+}
+
 // TestModelWave4Stat pins the three Stat arms: a real OS file (real
 // FileInfo), an in-memory file (synthetic FileInfo), and a missing file
 // (error) — plus every synthFileInfo accessor.

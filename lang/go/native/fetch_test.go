@@ -40,6 +40,38 @@ func TestFetchFunc(t *testing.T) {
 	}
 }
 
+// C1 effect fence: a fetch that reaches the network counts one effect on the
+// registry's ledger (noted on the attempt — once Do runs, the request may
+// have escaped even on error), while a request rejected BEFORE the send (a
+// missing url) provably sent nothing and stays uncounted.
+func TestFetchNotesEffectLedger(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer ts.Close()
+
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft := MintFetchTypes(r)
+	before := r.Effects.Count()
+	if _, err := ft.fetchStringHandler([]Value{NewString(ts.URL)}, nil, nil, r); err != nil {
+		t.Fatal(err)
+	}
+	if delta := r.Effects.Count() - before; delta != 1 {
+		t.Errorf("fetch ledger delta = %d, want exactly 1", delta)
+	}
+
+	om := NewOrderedMap()
+	if _, err := ft.doFetch(om, r); err == nil {
+		t.Fatal("missing url must error")
+	}
+	if delta := r.Effects.Count() - before; delta != 1 {
+		t.Errorf("a pre-send rejection counted: delta = %d, want still 1", delta)
+	}
+}
+
 func TestFetchStringHandler(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Custom", "test-value")

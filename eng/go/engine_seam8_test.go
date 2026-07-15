@@ -1293,3 +1293,206 @@ func TestW8ResolveOrphanedUnmatchedClose(t *testing.T) {
 		t.Errorf("err = %v, want closing-paren error", err)
 	}
 }
+
+// --- OpDispatchRematch record/lower/VM degenerate arms ----------------------
+
+// TestW8DispatchRematchDeclines pins the rematch record's decline arms: an
+// inactive recorder, an empty window, an unresolvable operand, an empty word,
+// no operands, the first-trap-wins latch, the inactive-recorder interface
+// no-op, the promoted-operand rewrite of a rematch trap, and the VM
+// underflow guard.
+func TestW8DispatchRematchDeclines(t *testing.T) {
+	// Inactive recorder + interface no-op.
+	var nilES *EmitState
+	if nilES.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 1, SrcPos{}) {
+		t.Error("inactive EmitState must decline")
+	}
+	if theInactiveEmit.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 1, SrcPos{}) {
+		t.Error("the inactive recorder must decline")
+	}
+
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es, _ := r.Check.Recorder().(*EmitState)
+	es.bindRegistry(r)
+	if es.RecordDispatchRematchValues("w", nil, 1, SrcPos{}) {
+		t.Error("an empty window must decline")
+	}
+	// A dynamic value with no provenance fails resolveOperand.
+	dyn := NewCarrier(TAny)
+	dyn.Dynamic = true
+	dyn.ID = ""
+	if es.RecordDispatchRematchValues("w", []Value{dyn}, 1, SrcPos{}) {
+		t.Error("an unresolvable operand must decline")
+	}
+	if es.RecordDispatchRematch("", []emitOperand{constOperand(0)}, 1, SrcPos{}) {
+		t.Error("an empty word must decline")
+	}
+	if es.RecordDispatchRematch("w", nil, 1, SrcPos{}) {
+		t.Error("no operands must decline")
+	}
+	// The render bound must be a leading slice: 0 and out-of-range decline.
+	if es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 0, SrcPos{}) {
+		t.Error("a zero render bound must decline")
+	}
+	if es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 2, SrcPos{}) {
+		t.Error("a render bound beyond the window must decline")
+	}
+	// First trap wins: with a trap latched, a second record reports owned.
+	if !es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 1, SrcPos{}) {
+		t.Fatal("the first rematch record must land")
+	}
+	if !es.RecordDispatchRematch("w2", []emitOperand{constOperand(1)}, 1, SrcPos{}) {
+		t.Error("a second record after the latch must report owned (true), not re-record")
+	}
+
+	// The promoted-operand rewrite reaches a rematch trap's window.
+	ev := emitEvent{kind: evTrap, trap: emitTrap{
+		rematchWord: "w",
+		rematchOps:  []emitOperand{eventOperand(0, 0)},
+	}}
+	rewritePromotedRefs(&ev, map[int]int{0: 3})
+	if op := ev.trap.rematchOps[0]; op.kind != opLocal || op.idx != 3 {
+		t.Errorf("rematch operand not rewritten to the promoted local: %+v", op)
+	}
+
+	// VM underflow guard.
+	vc := &vmContext{r: r}
+	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 2, NWritten: 2}, nil, nil, 0); err == nil {
+		t.Error("a short stack must error")
+	}
+	// VM render-bound guard: a spec whose written bound is outside 1..NArgs
+	// is malformed (the recorder proves the bound before recording).
+	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 1},
+		[]Value{NewInteger(1)}, nil, 0); err == nil || !strings.Contains(err.Error(), "written bound") {
+		t.Errorf("a zero written bound must raise the bound guard, got %v", err)
+	}
+}
+
+// TestW8DispatchRematchNoneLiteralWindow — a `none` word in the failed
+// window resolves to the None value exactly as the match's forward walk
+// resolved it (the known-literal arm); the record still declines here
+// because the written tuple is EMPTY (the forward walk stops at the word
+// and the stack prefix is bare) — no render bound exists for it.
+func TestW8DispatchRematchNoneLiteralWindow(t *testing.T) {
+	r := covRegistry(t, nil)
+	r.RegisterNativeFunc(NativeFunc{Name: "w8rn", Signatures: []Signature{{
+		Args: []*Type{TInteger, TNone}, BarrierPos: -1,
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		}),
+	}}})
+	done := w8ArmCompile(t, r)
+	defer done()
+	e := NewTop(r)
+	e.tape = NewTape([]Value{NewWord("w8rn"), NewWord("none"), NewCarrier(TInteger)}, stackHeadroom)
+	e.pointer = 0
+	fn := r.Lookup("w8rn")
+	if fn == nil {
+		t.Fatal("w8rn not registered")
+	}
+	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rn", ArgCount: -1}, fn, SrcPos{}) {
+		t.Error("the word-narrowed written tuple must decline the rematch record")
+	}
+}
+
+// TestW8DispatchRematchPermutedStackTakesDefiniteTrap — a permuted CONCRETE
+// stack window never reaches the rematch gates: the stack positions fill the
+// window first (resolvedIndicesBefore), every value is runtime-identical, so
+// the DEFINITE trap serialises the interpreter's error — reorder hint
+// included — with no runtime rebuild needed.
+func TestW8DispatchRematchPermutedStackTakesDefiniteTrap(t *testing.T) {
+	r := covRegistry(t, nil)
+	r.RegisterNativeFunc(NativeFunc{Name: "w8rh", Signatures: []Signature{{
+		Args: []*Type{TInteger, TString}, BarrierPos: -1,
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		}),
+	}}})
+	done := w8ArmCompile(t, r)
+	defer done()
+	e := NewTop(r)
+	e.tape = NewTape([]Value{
+		NewInteger(1), NewString("s"), // prefix: permutes (Integer, String)
+		NewWord("w8rh"),
+		NewCarrier(TInteger), NewInteger(2),
+	}, stackHeadroom)
+	e.pointer = 2
+	fn := r.Lookup("w8rh")
+	if fn == nil {
+		t.Fatal("w8rh not registered")
+	}
+	if !e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rh", ArgCount: -1}, fn, SrcPos{}) {
+		t.Error("a concrete permuted stack window must serialise the definite trap")
+	}
+}
+
+// TestW8DispatchRematchFnShapeDeclines — the fn-shape typed-binding hint is
+// TAPE state the runtime rebuild has no access to: a carrier no-match inside
+// a def whose constraint is a function-shape type must decline the rematch
+// record so the interpreter's suggestion-bearing error stays canonical.
+func TestW8DispatchRematchFnShapeDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	r.Defs.Push("MyShape", NewCarrier(TFnUndef))
+	r.RegisterNativeFunc(NativeFunc{Name: "w8rf", Signatures: []Signature{{
+		Args: []*Type{TString}, BarrierPos: -1,
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		}),
+	}}})
+	sig := &Signature{Params: []FnParam{{Type: TMap}, {Type: TAny}}, BarrierPos: -1}
+	m := NewOrderedMap()
+	m.Set("f", NewWord("MyShape"))
+	done := w8ArmCompile(t, r)
+	defer done()
+	e := NewTop(r)
+	// The def Forward sits below the failing word (both back-walks skip it);
+	// its typed-name map rides at FuncIndex-CollectedArgs — above the
+	// pointer, so the stack window stays empty and the carrier forms the
+	// forward window; the trailing word bounds the written walk.
+	e.tape = NewTape([]Value{
+		NewForward(ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 5}),
+		NewWord("w8rf"),
+		NewCarrier(TInteger),
+		NewWord("zz-stop"),
+		NewMap(m),
+	}, stackHeadroom)
+	e.pointer = 1
+	if !e.isFnShapeTypedBindingContext() {
+		t.Fatal("setup: expected the fn-shape typed-binding context")
+	}
+	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rf", ArgCount: -1}, r.Lookup("w8rf"), SrcPos{}) {
+		t.Error("the fn-shape context must decline the rematch record")
+	}
+}
+
+// TestW8DispatchTrapDeferredTokenDeclines — a RAW deferred-expression token
+// in the failed window (a Reach here) EXPANDS at dispatch/step time, so
+// neither a serialized trap nor a runtime rematch models what the runtime
+// match examines (flex.tsv L88/L95): the definiteness screen declines. The
+// graduated word-splice trap removed the screen's only corpus reach, so this
+// pins the arm directly. (A PARKED __SP splice marker deliberately no longer
+// declines — see TestUnmatchedDispatchTrapSpliceGraduated in lang/go.)
+func TestW8DispatchTrapDeferredTokenDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	r.RegisterNativeFunc(NativeFunc{Name: "w8dt", Signatures: []Signature{{
+		Args: []*Type{TList}, BarrierPos: -1,
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return nil, nil
+		}),
+	}}})
+	done := w8ArmCompile(t, r)
+	defer done()
+	e := NewTop(r)
+	reach := NewReachFromKeys(NewWord("m"), []Value{NewString("a")})
+	e.tape = NewTape([]Value{NewWord("w8dt"), reach}, stackHeadroom)
+	e.pointer = 0
+	fn := r.Lookup("w8dt")
+	if fn == nil {
+		t.Fatal("w8dt not registered")
+	}
+	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8dt", ArgCount: -1}, fn, SrcPos{}) {
+		t.Error("a raw Reach window token must decline the trap/rematch record")
+	}
+}

@@ -1,0 +1,10 @@
+# Parameterised-mutable-Array carrier (plan Phase 9, radix-msd class): Array
+# get over a non-concrete carrier returns gradual Any and cascades
+# (design/MODULE-FN-PARAM-SLOT-COMPILATION.0.md §16).
+#
+# DROPPED 2026-07-13 (investigative rule, RUNTIME-INDEPENDENCE plan §WS2.3):
+# a minimal in-repo repro could not be constructed this round — the
+# ArrayUtil.from + Any-param get shape reads None on the interpreter rather
+# than exercising the carrier cascade, and the faithful radix-msd shape needs
+# the external voxgig radix library (chained behind L-JOIN). Re-attempt when
+# Phase 7 lands the module-fn param slots or the external corpus is reachable.

@@ -1,0 +1,5 @@
+# Stage-D 3/4 (fn-body computed-list residual) and 4/4 (raise over a dynamic
+# operand, caught) — plan Phase 5. The [6,6]-hazard negative lives in the MAIN
+# corpus (it must never compile to a value).
+def y (2 add 1) [y y]	[3 3]
+def f fn [[c:Atom] [Any] [raise {code:c message:"boom"}]] do [f aa/q] error [dot code]	aa/q

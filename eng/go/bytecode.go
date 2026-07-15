@@ -142,6 +142,24 @@ const (
 	// (shared taxonomy text) at exactly the point execution reaches it. Terminal:
 	// the recorder ends the program at the trap (everything after is unreachable).
 	OpTrap
+	// OpDispatchRematch re-runs a STATICALLY-FAILED dispatch over the live
+	// runtime values — the runtime-evaluated twin of OpTrap for an unmatched
+	// dispatch whose window held CARRIER operands (a concrete value at run
+	// time, only a typed stand-in at check time — tryRecordUnmatchedDispatchTrap
+	// declines the definite trap for those). The recorder pushed the failed
+	// window's operands so stack[top-i] is sig position i (the callPoly
+	// layout); the op re-matches them against the word's LIVE signatures
+	// (Program.Dispatches[Arg] names the word; the live registry binding is
+	// what the interpreter would consult at this point). NO MATCH — the
+	// expected case, this compiled an ERROR row — raises the shared rich
+	// diagnostic built over the CONCRETE values (noMatchDiag via
+	// runtimeNoMatch), byte-identical to the interpreter's sigError at the
+	// same point. A MATCH means the static model was wrong (a refined
+	// runtime tag, a value-sensitive predicate satisfied) — the tail was
+	// truncated at this terminal op, so the run defers to the interpreter
+	// (vm:rematch-matched, the fenced whole-program fallback — slow, not
+	// wrong). Terminal like OpTrap.
+	OpDispatchRematch
 	// OpReverse reverses the top Arg operand-stack values in place. It is the
 	// stack-scheduling primitive for an N-operand call whose computed args sit in
 	// exact REVERSE signature order — the common forward-call shape `f (a)(b)(c)`,
@@ -382,6 +400,15 @@ const (
 	// bindings live across the call in its body tail), so bindings stack
 	// per-activation and pop innermost-first.
 	OpBindDynScope
+	// OpCallDynMixedFromMark is the VARIADIC-REGION twin of OpCallDynamicMixed
+	// (plan Phase 5, L-DO part 2b): the window is bounded by the topmost
+	// OpStackMark instead of a fixed count — stack[mark:] islands verbatim
+	// through the same re-step machinery, so a runtime-variable region (a
+	// fallible do-catch residual: 1 Error caught vs N values) plus the fixed
+	// values above it reproduce the interpreter exactly, auto-apply hazard
+	// included. The mark is consumed. An empty window is a no-op (the mark
+	// still pops).
+	OpCallDynMixedFromMark
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -390,46 +417,48 @@ const (
 // only to format each opcode's ARGUMENT (a different concern — it reads the
 // program's const/sig/type/fallback pools).
 var opcodeNames = [...]string{
-	OpPushConst:           "PUSH_CONST",
-	OpSwap:                "SWAP",
-	OpCallNative:          "CALL_NATIVE",
-	OpJmp:                 "JMP",
-	OpJmpIfFalse:          "JMP_IF_FALSE",
-	OpPushLocal:           "PUSH_LOCAL",
-	OpForSetup:            "FOR_SETUP",
-	OpForNext:             "FOR_NEXT",
-	OpCallUser:            "CALL_USER",
-	OpTailCallUser:        "TAIL_CALL_USER",
-	OpRet:                 "RET",
-	OpPushType:            "PUSH_TYPE",
-	OpFallback:            "FALLBACK",
-	OpPushClosure:         "PUSH_CLOSURE",
-	OpCallNativePoly:      "CALL_NATIVE_POLY",
-	OpCallDynamic:         "CALL_DYNAMIC",
-	OpStoreLocal:          "STORE_LOCAL",
-	OpDrop:                "DROP",
-	OpMakeList:            "MAKE_LIST",
-	OpMakeMap:             "MAKE_MAP",
-	OpTrap:                "TRAP",
-	OpReverse:             "REVERSE",
-	OpCallDynamicTrailing: "CALL_DYNAMIC_TRAILING",
-	OpFlowBreak:           "FLOW_BREAK",
-	OpFlowContinue:        "FLOW_CONTINUE",
-	OpStackMark:           "STACK_MARK",
-	OpDropToMark:          "DROP_TO_MARK",
-	OpPopMark:             "POP_MARK",
-	OpCallDynamicMixed:    "CALL_DYNAMIC_MIXED",
-	OpInterp:              "INTERP",
-	OpCallUserPoly:        "CALL_USER_POLY",
-	OpCallDynTrailTop:     "CALL_DYN_TRAIL_TOP",
-	OpCallDynApplyTop:     "CALL_DYN_APPLY_TOP",
-	OpCallDynFrame:        "CALL_DYN_FRAME",
-	OpPushConstFresh:      "PUSH_CONST_FRESH",
-	OpPushConstFreshLocal: "PUSH_CONST_FRESH_LOCAL",
-	OpBindTyped:           "BIND_TYPED",
-	OpCallDynMethod:       "CALL_DYN_METHOD",
-	OpLookupDynScope:      "LOOKUP_DYN_SCOPE",
-	OpBindDynScope:        "BIND_DYN_SCOPE",
+	OpPushConst:            "PUSH_CONST",
+	OpSwap:                 "SWAP",
+	OpCallNative:           "CALL_NATIVE",
+	OpJmp:                  "JMP",
+	OpJmpIfFalse:           "JMP_IF_FALSE",
+	OpPushLocal:            "PUSH_LOCAL",
+	OpForSetup:             "FOR_SETUP",
+	OpForNext:              "FOR_NEXT",
+	OpCallUser:             "CALL_USER",
+	OpTailCallUser:         "TAIL_CALL_USER",
+	OpRet:                  "RET",
+	OpPushType:             "PUSH_TYPE",
+	OpFallback:             "FALLBACK",
+	OpPushClosure:          "PUSH_CLOSURE",
+	OpCallNativePoly:       "CALL_NATIVE_POLY",
+	OpCallDynamic:          "CALL_DYNAMIC",
+	OpStoreLocal:           "STORE_LOCAL",
+	OpDrop:                 "DROP",
+	OpMakeList:             "MAKE_LIST",
+	OpMakeMap:              "MAKE_MAP",
+	OpTrap:                 "TRAP",
+	OpDispatchRematch:      "DISPATCH_REMATCH",
+	OpReverse:              "REVERSE",
+	OpCallDynamicTrailing:  "CALL_DYNAMIC_TRAILING",
+	OpFlowBreak:            "FLOW_BREAK",
+	OpFlowContinue:         "FLOW_CONTINUE",
+	OpStackMark:            "STACK_MARK",
+	OpDropToMark:           "DROP_TO_MARK",
+	OpPopMark:              "POP_MARK",
+	OpCallDynamicMixed:     "CALL_DYNAMIC_MIXED",
+	OpInterp:               "INTERP",
+	OpCallUserPoly:         "CALL_USER_POLY",
+	OpCallDynTrailTop:      "CALL_DYN_TRAIL_TOP",
+	OpCallDynApplyTop:      "CALL_DYN_APPLY_TOP",
+	OpCallDynFrame:         "CALL_DYN_FRAME",
+	OpPushConstFresh:       "PUSH_CONST_FRESH",
+	OpPushConstFreshLocal:  "PUSH_CONST_FRESH_LOCAL",
+	OpBindTyped:            "BIND_TYPED",
+	OpCallDynMethod:        "CALL_DYN_METHOD",
+	OpLookupDynScope:       "LOOKUP_DYN_SCOPE",
+	OpBindDynScope:         "BIND_DYN_SCOPE",
+	OpCallDynMixedFromMark: "CALL_DYN_MIXED_FROM_MARK",
 }
 
 func (o Opcode) String() string {
@@ -459,6 +488,39 @@ type PolyRef struct {
 	// is the same sub-registry the check pass created on the shared registry, so
 	// it stays valid for the compiled run (RunProgram runs on that registry).
 	Reg *Registry
+	// NoMatch, when non-nil, is the FAITHFUL-RAISE plan for the runtime
+	// no-match arm (plan 3c): the check pass proved, at the failed-dispatch
+	// tape state it recovered from, that the interpreter's sigError diagnostic
+	// is rebuildable from the runtime operand window alone, so callPoly raises
+	// the byte-identical signature_error directly instead of deferring the
+	// whole run to the interpreter. Nil (the record-time gates declined, or an
+	// older/foreign record site) keeps the sound defer.
+	NoMatch *PolyNoMatchSpec
+}
+
+// PolyNoMatchSpec carries the tape-derived pieces of the interpreter's
+// unmatched-dispatch diagnostic (sigError) that the VM cannot see at run
+// time, resolved at record time into operand-window indices. sigError reads
+// the tape twice — the WRITTEN tuple its notes render (unclaimed concrete
+// forward tokens in source order, else the stack prefix top-first) and the
+// SECONDARY reorder-probe tuple (always the stack prefix) — and both were
+// proven at record time to be exactly window values, position for position
+// (Value.ID equality, the RecordDispatchRematchValues gate). Everything else
+// in the diagnostic (the candidate verdicts, the value-based reorder probe,
+// the suggestions) is a pure function of the word, its live signature table,
+// and these tuples (noMatchDiag / reorderHintFor).
+type PolyNoMatchSpec struct {
+	// Written / StackTuple index the runtime operand window (window[i] = sig
+	// position i, the callPoly layout) to rebuild the two tape tuples.
+	Written    []int
+	StackTuple []int
+	// NSigs pins the record-time signature-table length: a table that grew or
+	// shrank between the record and the run invalidates the record-time arity
+	// screen (an other-arity overload could now match where this raise claims
+	// nothing can), so the VM falls back to the defer.
+	NSigs int
+	// Pos is the word's source position — the interpreter's raise anchor.
+	Pos SrcPos
 }
 
 // UserPolyRef names one runtime-dispatched multi-overload USER-FN call: the
@@ -765,6 +827,28 @@ type TrapSpec struct {
 	Suggestions []DiagSuggestion
 }
 
+// DispatchSpec describes one OpDispatchRematch (see the opcode doc): the
+// word whose dispatch statically failed, the failed window's operand count
+// (the values the recorder pushed, stack[top-i] = sig position i), and the
+// dispatch site's source position, stamped onto the runtime-built
+// diagnostic so it labels the same site the interpreter's would.
+//
+// NWritten is the RENDER BOUND: how many LEADING window operands form the
+// WRITTEN tuple the interpreter's sigError renders (its forward-else-stack
+// derivation). The match view can be wider than the raise view — the
+// local-add shape's match probed 3 positions where its error renders the
+// single stack value — so the rematch re-runs the match over the FULL
+// window but builds the diagnostic over window[:NWritten]. Always explicit,
+// 1..NArgs (never the Go zero): the record gate proves the bound by ID
+// identity (the written tuple IS the window's leading slots) before
+// recording, and the VM rejects a spec outside the range.
+type DispatchSpec struct {
+	Word     string
+	NArgs    int
+	NWritten int
+	Pos      SrcPos
+}
+
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
 // word name (diagnostics only — dispatch is over the runtime VALUE, never the
 // name), the arity the check-mode match consumed, and the result count the
@@ -789,6 +873,7 @@ type Program struct {
 	MakeMaps   []MakeMapSpec
 	Interps    []InterpSpec
 	Traps      []TrapSpec
+	Dispatches []DispatchSpec
 	TypedBinds []TypedBindSpec
 	DynMethods []DynMethodSpec
 	// ConstLocals backs OpPushConstFreshLocal: a {ConstIdx, Slot} pair naming the

@@ -81,7 +81,9 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	if lp.hasBodyOut {
 		out = &lp.bodyOut
 	}
-	reason := lw.lowerFragment(lp.body, out, false, lp.pos)
+	// A multi-out body (net drivers) allows the residualN>1 variadic
+	// reconciliation; its per-iteration values accumulate across iterations.
+	reason := lw.lowerFragment(lp.body, out, lp.multiOut, lp.pos)
 	lw.loops = lw.loops[:len(lw.loops)-1]
 	if reason != "" {
 		return reason
@@ -417,6 +419,21 @@ func planVariadicClaims(events []emitEvent) (markBefore, variadicElse map[int]bo
 	return markBefore, variadicElse
 }
 
+// verifyMarkWindow checks the post-lowering sim stack IS the mark-window
+// residual — nothing seats, nothing re-pushes: slot i (deepest-first) must be
+// exactly the event result the residual lists (plan Phase 5, L-DO part 2b).
+func (lw *lowerer) verifyMarkWindow(ops []emitOperand) string {
+	if len(lw.vm) != len(ops) {
+		return "mark-window residual does not match the lowered stack"
+	}
+	for i, op := range ops {
+		if op.kind != opEvent || lw.vm[i].seq != op.idx || lw.vm[i].idx != op.resIdx {
+			return "mark-window residual does not match the lowered stack"
+		}
+	}
+	return ""
+}
+
 func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
@@ -540,8 +557,15 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 		for _, c := range ev.loop.carried {
 			visit(c.init)
 		}
-	case evBreak, evContinue, evTrap:
+	case evBreak, evContinue:
 		// no operands
+	case evTrap:
+		// A plain trap has no operands; a runtime-rematch trap's window
+		// operands are reference-counted like call ops so their producers
+		// stay live (and promoted refs rewrite).
+		for _, op := range ev.trap.rematchOps {
+			visit(op)
+		}
 	case evCallUser:
 		for _, op := range ev.uc.ops {
 			visit(op)
@@ -710,6 +734,10 @@ func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
 // event operand the closed-fragment lowering expects.
 func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 	switch ev.kind {
+	case evTrap:
+		for i := range ev.trap.rematchOps {
+			promoteOperand(&ev.trap.rematchOps[i], promoted)
+		}
 	case evCall:
 		for i := range ev.call.ops {
 			promoteOperand(&ev.call.ops[i], promoted)
@@ -1628,7 +1656,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		// Runtime-matched dispatch: no baked sig, the VM re-matches over the
 		// word's signatures against the n stack values.
 		pi := len(lw.p.PolyRefs)
-		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, NOut: c.nout, Reg: c.polyReg})
+		lw.p.PolyRefs = append(lw.p.PolyRefs, PolyRef{Word: c.word, Arity: n, NOut: c.nout, Reg: c.polyReg, NoMatch: c.polyNoMatch})
 		lw.emit(OpCallNativePoly, pi, c.pos)
 	} else {
 		si, ok := lw.sigIdx[c.sig]
@@ -1781,6 +1809,18 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 		if !allowVariadic {
 			return "branch leaves extra values (Stage 2 lowers single-result branches)"
 		}
+		// ALL-INERT loop residual (`for 3 [1 2]`): nothing event-produced on
+		// the sim; re-push the captured operands in order per iteration. The
+		// parked-fn screen at RecordLoop already excluded Function entries.
+		if len(frag.residualOps) == frag.residualN && len(lw.vm) == 0 {
+			for _, op := range frag.residualOps {
+				lw.pushOperand(op, pos)
+			}
+			lw.vm = lw.vm[:0]
+			lw.fragMulti = true
+			lw.vm = parent
+			return ""
+		}
 		switch {
 		case len(lw.vm) == frag.residualN && slotIs(lw.vm[len(lw.vm)-1], *out):
 			// Every value EVENT-produced on the sim, the top matching out.
@@ -1867,6 +1907,32 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 // lowerTrap emits the terminal OpTrap for a check-mode-suppressed runtime error,
 // pooling its TrapSpec. Execution never continues past it.
 func (lw *lowerer) lowerTrap(ev *emitEvent) string {
+	if ev.trap.rematchWord != "" {
+		// A runtime-rematch trap: seat the failed window's operands like a
+		// call's args — ops[0] (examined first, sig position 0) ends on TOP
+		// (layoutOperands' contract, the callPoly window layout), event
+		// results consumed from where they lie, consts pushed. A layout the
+		// scheduler cannot seat refuses the trap; the caller's whole-program
+		// fallback stands (slow, not wrong).
+		if reason := lw.layoutOperands(ev.trap.rematchOps, ev.trap.pos, layoutMsgs{
+			loopResults:  "rematch operands include a variadic loop result",
+			resultNotTop: "stack discipline: rematch operand is not on top (rematch of " + ev.trap.rematchWord + ")",
+			reorder:      "rematch operand shape needs reordering beyond Stage 3",
+			shapeBeyond:  "rematch operand shape beyond Stage 3",
+			notAdjacent:  "stack discipline: rematch operands not adjacent on top",
+		}); reason != "" {
+			return reason
+		}
+		idx := len(lw.p.Dispatches)
+		lw.p.Dispatches = append(lw.p.Dispatches, DispatchSpec{
+			Word:     ev.trap.rematchWord,
+			NArgs:    len(ev.trap.rematchOps),
+			NWritten: ev.trap.rematchNWritten,
+			Pos:      ev.trap.pos,
+		})
+		lw.emit(OpDispatchRematch, idx, ev.trap.pos)
+		return ""
+	}
 	idx := len(lw.p.Traps)
 	lw.p.Traps = append(lw.p.Traps, ev.trap.spec)
 	lw.emit(OpTrap, idx, ev.trap.pos)

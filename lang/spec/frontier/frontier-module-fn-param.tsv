@@ -1,0 +1,4 @@
+# Module-fn Function param slot (plan Phase 7;
+# design/MODULE-FN-PARAM-SLOT-COMPILATION.0.md): a comparator passed as a
+# module-fn Function param binds a bare Word placeholder during re-entry.
+import module [ def use fn [[comp:Function xs:List] [List] [ xs each [ var [[a] (a comp)] ] ]] export "S" {use: use/r} ] end S.use ([a:Integer] => [a mul 2]) [1 2 3]	[2 4 6]

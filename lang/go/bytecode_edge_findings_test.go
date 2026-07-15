@@ -76,20 +76,27 @@ func mustCompileWithParity(t *testing.T, src, want string) {
 }
 
 // §1 — forward collection reaching across an error-handler residual. `add`
-// matches all-stack `[dynamic-error-out, leading-residual]` under the dynamic
-// island output (its [Scalar Scalar] catch-all), stranding the forward token
-// the interpreter collects (`5 do … error [drop 9] add 1` → `5 10` interp,
-// `14 1` compiled). Refuse. Words whose forward collection is NOT blocked by
-// the dynamic operand (`mul`, `sub`, a String forward token) keep compiling.
+// used to match all-stack `[dynamic-error-out, leading-residual]` under the
+// dynamic(Any) island output (its String catch-all), stranding the forward
+// token the interpreter collects (`5 do … error [drop 9] add 1` → `5 10`
+// interp, `14 1` compiled). GRADUATED (L-EACH, plan Phase 5): errorReturnsFn
+// narrows the catch result to dynamic(join(pass-through, handler)) — here
+// dynamic(Integer) — so the String overload is disjoint, check mode selects
+// the interpreter's forward collection, and the rows compile natively. A
+// GENUINELY wide join (an Integer|String boundary) keeps the drift refusal —
+// pinned below. Words whose forward collection was never blocked (`mul`,
+// `sub`, a String forward token) keep compiling as before.
 func TestEdgeFindingForwardAcrossErrorResidual(t *testing.T) {
+	mustCompileWithParity(t, `5 do [raise aa "x"] error [drop 9] add 1`, "[5 10]")
+	mustCompileWithParity(t, `5 do [7] error [drop 9] add 1`, "[5 8]")
+	mustCompileWithParity(t, `1 2 3 do [7] error [drop 9] add 1`, "[1 2 3 8]")
+
+	// The genuinely dynamic boundary keeps refusing: the handler nets a
+	// String while the pass-through is Integer, so the joined bound stays
+	// wide enough that the all-stack String match is viable and the runtime
+	// dispatch is value-dependent — no faithful static record exists.
 	mustRefuseWithParity(t,
-		`5 do [raise aa "x"] error [drop 9] add 1`,
-		"forward operand accounting across a dynamic/island residual")
-	mustRefuseWithParity(t,
-		`5 do [7] error [drop 9] add 1`,
-		"forward operand accounting across a dynamic/island residual")
-	mustRefuseWithParity(t,
-		`1 2 3 do [7] error [drop 9] add 1`,
+		`5 do [7] error ["x"] add 1`,
 		"forward operand accounting across a dynamic/island residual")
 
 	// Negatives — the drift guard must NOT over-refuse: `mul`/`sub` forward-

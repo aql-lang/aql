@@ -44,10 +44,21 @@ type EmitRecorder interface {
 	Sites() map[string]int
 	Finalize(residual []Value) (*Program, string, bool)
 
+	// SetCatchVariadic latches the NEXT catch-word (CompileFallbackBody)
+	// dispatch's recorded result as VARIADIC: `do` catches a body raise into
+	// ONE Error value, so a fallible multi-value body's runtime count varies
+	// (N no-raise vs 1 caught) and a static N-seat underflows on the caught
+	// path. The word's ReturnsFn — the single point that both computes the
+	// fallibility (lang doBodyMayRaise) and runs immediately before its own
+	// dispatch records — sets/clears it per dispatch; the record paths
+	// consume it keyed to the CompileFallbackBody sig, so it can never leak
+	// onto an unrelated word's event. Plan Phase 5, L-DO.
+	SetCatchVariadic(pending bool)
+
 	// --- dispatch / value recording -------------------------------------
 	RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool)
 	RecordPoly(word string)
-	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry) bool
+	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
 	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
@@ -55,6 +66,7 @@ type EmitRecorder interface {
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
 	RecordTrap(code, detail, word, hint string, pos SrcPos) bool
 	RecordTrapErr(ae *AqlError, pos SrcPos) bool
+	RecordDispatchRematchValues(word string, vals []Value, nWritten int, pos SrcPos) bool
 	RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool)
 	RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool
 	recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool
@@ -135,6 +147,7 @@ func (inactiveEmit) bodyAnalysisGuard() func() { return func() {} }
 func (inactiveEmit) fnBodyGuard() func()       { return func() {} }
 
 func (inactiveEmit) MarkUncompilable(string) {}
+func (inactiveEmit) SetCatchVariadic(bool)   {}
 
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
@@ -145,17 +158,20 @@ func (inactiveEmit) Finalize([]Value) (*Program, string, bool) {
 
 func (inactiveEmit) RecordCall(string, *Signature, []Value, []Value, SrcPos, bool, bool) {}
 func (inactiveEmit) RecordPoly(string)                                                   {}
-func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry) bool     { return false }
-func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos)                        {}
+func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry, *PolyNoMatchSpec) bool {
+	return false
+}
+func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
 func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Value, []Value, SrcPos) {
 }
 func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {
 	return false
 }
-func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool { return false }
-func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool   { return false }
-func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                     { return false }
+func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool      { return false }
+func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool        { return false }
+func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                          { return false }
+func (inactiveEmit) RecordDispatchRematchValues(string, []Value, int, SrcPos) bool { return false }
 func (inactiveEmit) RecordTypedBind(_ TypedBindSpec, _, out Value, _ SrcPos) (Value, bool) {
 	return out, false
 }

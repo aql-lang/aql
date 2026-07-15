@@ -35,6 +35,13 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
+	// The effect ledger rides with the writers: a module body's non-writer
+	// effects (file writes, net sends) must count against the SAME fence
+	// the parent's compiled request armed (eng effects.go, C1). The
+	// observability hooks ride along too — a module body's interpreter
+	// entries and runtime bails report to the request's observers.
+	modReg.Effects = parent.Effects
+	modReg.InheritObserveHooks(parent)
 	// A compiled execution arms runtime stamping on the top registry; module
 	// bodies (and the store words their fns execute later — service `add`,
 	// codec resolution) run on THIS sub-registry, so the policy must ride
@@ -733,10 +740,15 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 // module whose namespace binding was torn down (e.g. by CallAQL's
 // fn-body def-cleanup). Only absent names are installed, so a plain
 // repeated top-level import stays a no-op rather than stacking bindings.
+// The re-bind MUST be a real ModuleExport, exactly like the first-load
+// installExports — a plain Map here made the re-bound namespace a
+// DIFFERENT value kind (asModuleExportInfo fails), so mini/parse kind
+// lookups and `$module`/`$name` reads broke after any teardown+re-import.
 func ensureExportsBound(r *Registry, desc ModuleDesc) {
+	mod := NewModuleInstance(desc)
 	for name, exportMap := range desc.Exports {
 		if !r.Defs.Has(name) {
-			InstallDef(r, name, NewMap(exportMap))
+			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
 		}
 	}
 }

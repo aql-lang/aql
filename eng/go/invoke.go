@@ -68,10 +68,35 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 		// catch it out here past the enclosing run — the seam itself falls back to
 		// CallAQL, exactly as RunCompiled does. Genuine AQL runtime errors are the
 		// interpreter's answer too and pass straight through.
-		if res, err, ran := invokeCompiledUnit(r, ref, args); ran && !isInternalErr(err) {
-			return res, err
+		//
+		// The writer fence is armed around the attempt because a DETACHED
+		// callback fires after the enclosing compiled run disarmed its own
+		// fence: without the wrap, a callback that PRINTS and then bails would
+		// leave the ledger untouched and the CallAQL retry below would emit
+		// the output a second time. Nested invocations (mid-compiled-run) are
+		// already armed; the second wrap only double-counts, and the fence
+		// reads deltas, not magnitudes.
+		disarm := r.ArmEffectFence()
+		effectsAt := r.Effects.Count()
+		res, err, ran := invokeCompiledUnit(r, ref, args)
+		disarm()
+		if ran {
+			if !isInternalErr(err) {
+				return res, err
+			}
+			// C1 effect fence (effects.go): the retry re-runs the whole body,
+			// so it is sound only while the failed unit emitted NO observable
+			// effect — a callback that wrote to the peer and THEN bailed must
+			// surface the internal_error rather than double its output.
+			if r.Effects.Count() != effectsAt {
+				return nil, err
+			}
 		}
 	}
+	// Observability seam (interp_entry.go): the callback seam's interpreter
+	// fallback — its own name so the C4 decline tag can attach later without
+	// conflating it with a direct CallAQL.
+	r.noteInterp("InvokeCallback:callaql")
 	return r.CallAQL(sig, args, captures)
 }
 
@@ -105,6 +130,11 @@ func isInternalErr(err error) bool {
 	return errors.As(err, &ae) && ae.Code == "internal_error"
 }
 
+// IsInternalError is the exported face of isInternalErr, for run-side seams
+// outside eng that take the same degrade-to-interpreter decision on a stamped
+// unit's result (await's per-branch fork runs — native_temporal_await.go).
+func IsInternalError(err error) bool { return isInternalErr(err) }
+
 // runPooledSub runs input on a pooled reusable sub-engine and returns a
 // caller-owned COPY of the results. It is the shared seam behind every
 // per-element sub-evaluation (higher-order bodies, list/paren/interp-hole
@@ -119,6 +149,8 @@ func isInternalErr(err error) bool {
 // recording flag (see Engine.elemEvalRecordable); pass false when the
 // caller does not evaluate recordable container elements.
 func runPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value, error) {
+	// Observability seam (interp_entry.go): the per-element sub-evaluation path.
+	r.noteInterp("runPooledSub")
 	sub := r.takeSubEngine()
 	sub.elemEvalRecordable = elemEvalRecordable
 	res, err := sub.Run(input)

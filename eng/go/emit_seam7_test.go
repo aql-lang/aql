@@ -40,7 +40,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 
 	e.RecordCall("w", nil, nil, nil, SrcPos{}, false, false)
 	e.RecordPoly("w")
-	if e.RecordPolyCall("w", nil, nil, SrcPos{}, nil) {
+	if e.RecordPolyCall("w", nil, nil, SrcPos{}, nil, nil) {
 		t.Fatal("inactive RecordPolyCall should refuse")
 	}
 	e.RecordUserCall(0, nil, nil, SrcPos{})
@@ -846,7 +846,7 @@ func TestRecordCallOperandsInertFnBake(t *testing.T) {
 func TestRecordPolyCallGuard(t *testing.T) {
 	es := NewEmitState()
 	// more than one output → declines.
-	if es.RecordPolyCall("w", nil, []Value{NewInteger(1), NewInteger(2)}, SrcPos{}, nil) {
+	if es.RecordPolyCall("w", nil, []Value{NewInteger(1), NewInteger(2)}, SrcPos{}, nil, nil) {
 		t.Fatal("multi-out poly call should decline")
 	}
 }

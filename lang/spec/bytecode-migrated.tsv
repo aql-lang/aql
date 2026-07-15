@@ -1,0 +1,91 @@
+# Bytecode regression rows migrated from lang/go Go tests (WS4 priority-1,
+# design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md "Test-first frontier
+# suite"). Each row was a hand-pinned off-corpus compiled/interpreted parity
+# regression whose VALUE half is ordinary shared-spec material; the
+# opcode/refusal/disassembly halves stay in the owning Go tests. Expected
+# values are interpreter-derived (eng.Canon), and every row was verified to
+# compile NATIVELY (no refusal, no island) before entering the corpus — the
+# census gates now own them.
+#
+# Sources: bytecode_computedmap_test.go (computed-map fn-body/do-map shapes),
+# bytecode_do_catch_test.go (infallible multi-value do bodies),
+# bytecode_user_poly_test.go (OpCallUserPoly dispatch directions),
+# bytecode_edge_findings_test.go (the over-widening guards — negatives that
+# prove the EDGE-SPEC-FINDINGS refusals are not blanket).
+#
+def f fn [[a:Integer] [Map] [ def m {x:(a 1 add) y:(a 2 mul)} m ]] (f 5)	{x:6 y:10}
+def f fn [[a:Integer] [Integer] [ def m {x:(a 1 add)} (m "x" get) ]] (f 5)	6
+def f fn [[a:Integer] [Map] [ def m {x:(1 add 2)} m ]] (f 5)	{x:3}
+def f fn [[a:Integer] [Map] [ def m {n:[a add 1]} m ]] (f 5)	{n:[6]}
+def f fn [[a:Integer] [Map] [ do {n:[a add 1]} ]] (f 5)	{n:6}
+def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:[bf "m" get]} ]] ({n:1 m:2} f)	{m:2 n:1}
+def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:(bf "m" get)} ]] ({n:1 m:2} f)	{m:2 n:1}
+def g fn [[x:Integer] [Integer] [x add 1]]  def f fn [[x:Integer] [Map] [ def mv (x g)  do {a:(mv add 0), b:(mv g)} ]] (5 f)	{a:6 b:7}
+def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [do {code:["y"] next:[i]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)	'y'
+def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [def more (mk (i sub 1)) do {code:[(more get "code")] next:[(more get "next")]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)	'x'
+def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"]}] [def t (i add 100) do {code:[(t 0 add)]}] ]]  def use fn [[i:Integer] [Integer] [ ((mk i) get "code") ]] (mk 3 get "code")	103
+do [10 20 30]	10 20 30
+do [1 add 2 10 mul 4]	1 48
+do [(1 add 2) (3 mul 4)]	3 12
+def x 5  do [x 1 add 2]	5 3
+def b true  do [1 2 (if b [] [9 9])]	1 2
+do [for 3 [1]]	1 1 1
+def g fn [[a:Integer] [String] ["i"] [a:String] [String] ["s"]] def m (flex {k:5}) def x (m get "k") (g x)	'i'
+def g fn [[a:Integer] [String] ["i"] [a:String] [String] ["s"]] def m (flex {k:"str"}) def x (m get "k") (g x)	's'
+def Comparable surface {cmp: (fnsig [[Self Self] [Integer]])} Integer exposes Comparable String exposes Comparable def apop gen [(T extends Comparable)] fn [[rhs:T op:String lhs:T] [Boolean] [if (op "eq" eq) [lhs rhs eq] [if (op "lt" eq) [lhs rhs lt] [raise unknown_op op]]] [rhs:Any op:String lhs:Any] [Boolean] [if (op "eq" eq) [lhs rhs eq] [raise not_comparable op]]] def c (flex {l:3 o:"lt" v:5}) ((c get "l") (c get "o") (c get "v") apop)	true
+5 do [7] error [drop 9] mul 2	5 14
+5 do [7] error [drop 9] sub 1	5 6
+5 do [7] error [drop 9] add "z"	5 '7z'
+do [7] error [drop 9] add 1	8
+5 do [9] add 1	5 10
+def xs [{ok:true} {ok:false}] def _ (xs each [ var [[r] def ok (r "ok" get) def res (if ok [1] [2]) def _2 res 0 ] ]) 9	9
+def m {ok:true} def ok (m get "ok") if ok [ 1 print ] [ 2 print ] 7	7
+def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21	42
+def m {x: 5} m.x eq 5	true
+def m {a: [1 2 3]} m.a get 0 eq 1	true
+def n 0 if (n eq 0) [99] (range 2 4)	99
+def n 5 if (n eq 0) (range 2 4) [99]	99
+def n 5 if (n eq 0) [99] 42	42
+def n 5 if (n eq 0) [99] (add 1 2)	3
+def n 0 if (n eq 0) [99] [88]	99
+def f fn [[Integer String] [String] [args.1]] f 1 "hi"	'hi'
+def f fn [[Integer String] [Integer] [args.0]] f 1 "hi"	1
+def f fn [[a:Integer Integer] [Integer] [args.0]] f 3 4	3
+def f fn [[a:Integer b:String] [String] [args.1]] f 1 "hi"	'hi'
+def f fn [[a:Integer b:Integer] [Integer] [args.0 add args.1]] f 3 4	7
+def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3	0
+# Graduated from frontier-do-catch.tsv (L-DO part 1, 2026-07-13): a
+# fallible multi-value do body records a VARIADIC result and the program
+# residual absorbs it — the first catch-arity row to compile natively.
+def y 5  do [(10 div y) 2]	2 2
+# L-DO end-to-end pin (2026-07-14): a TYPED-return fallible multi-value do
+# body under a catch compiles natively — the variadic latch + strip-input
+# propagation carry the caught path (runtime nets 1 Error where the static
+# model says 2) with byte-identical parity. Any-typed returns stay refused
+# (the parked-fn auto-apply carve-out) pending the window lowering.
+def f fn [[x:Any] [Integer] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
+# Net drivers part 1 (2026-07-14): a computed multi-value loop body compiles
+# via the residualN>1 fragment reconciliation — per-iteration values
+# accumulate exactly as the interpreter.
+for 2 [(1 add 2) (3 mul 4)]	3 12 3 12
+# Net drivers COMPLETE (2026-07-14): the inert-const multi-value loop body
+# graduates — captured operands re-push per iteration (frontier-for-multi).
+for 3 [1 2]	1 2 1 2 1 2
+# await branch bodies compile per element (CompileStoresBodyList, 2026-07-14):
+# each parallels element becomes its own 0-param unit run via RunUnit on its
+# branch fork; a raising branch surfaces as the mode's error value.
+import "aql:time-util" end TimeUtil.await [[1 add 2] [3 mul 4]]	[3 12]
+import "aql:time-util" end TimeUtil.await [[def x 5 x add 1] [3 mul 4]]	[6 12]
+# do-unit registry-replay rows GRADUATED to native compiles (2026-07-14):
+# do-def LEAK fidelity (the check pass keeps do-body defs, matching the
+# runtime) lets the typed-def bodies compile as closure units.
+do [def Big Integer 15 is Big]	true
+do [def Big (Integer gt 10) 15 is Big]	true
+def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)	none
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(M.boom 5) "x"] error [dot code]	bad_input/q
+def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
+import "aql:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]	parse_error/q
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(if true [M.boom 5] [7]) 8] error [dot code]	bad_input/q
+5 do [raise aa "x"] error [drop 9] add 1	5 10
+5 do [7] error [drop 9] add 1	5 8
+1 2 3 do [7] error [drop 9] add 1	1 2 3 8

@@ -25,18 +25,10 @@ func TestDoCatchMultiValueArity(t *testing.T) {
   export "M" {dec: dec/r, boom: boom/r}
 ] end `
 
-	// COMPILES natively — pure/infallible multi-value bodies keep their exact N.
-	native := []string{
-		`do [10 20 30]`,                        // pure literals
-		`do [1 add 2 10 mul 4]`,                // infallible core natives
-		`do [(1 add 2) (3 mul 4)]`,             // computed, infallible
-		`def x 5  do [x 1 add 2]`,              // a binding read + infallible native
-		`def b true  do [1 2 (if b [] [9 9])]`, // variadic (rides the backstop)
-		`do [for 3 [1]]`,                       // loop residual (variadic backstop)
-	}
-	for _, src := range native {
-		requireEngineParity(t, src, true)
-	}
+	// The COMPILES-natively half (pure/infallible multi-value bodies keeping
+	// their exact N) lives in the main corpus now:
+	// lang/spec/bytecode-migrated.tsv (WS4 migration) — the census owns
+	// native-compile + parity for those rows.
 
 	// FALLS BACK (refuses natively) — fallible multi-value bodies. Parity must
 	// still hold: the caught-error path is byte-identical to the interpreter,

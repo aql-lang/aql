@@ -27,29 +27,44 @@ import "testing"
 // then delete its entry. Do NOT add a row here to silence a real gap — an entry
 // is a promise that compiling the row would be UNSOUND, not merely unimplemented.
 var knownRefusals = map[string]string{
-	// apply.tsv — a bare fn auto-fires on the value before `apply` sees it, so
-	// `apply` has no fn: an unmatched dispatch the interpreter raises (ERROR rows).
-	`def inc fn [[n:Integer][Integer][n add 1]]  5 inc apply`:       "unmatched dispatch recovered at apply (bare inc fires on 5 first)",
-	`def inc fn [[n:Integer][Integer][n add 1]]  5 (ref inc) apply`: "unmatched dispatch recovered at apply ((ref inc) re-steps inc on 5)",
+	// GRADUATED 2026-07-14 (OpDispatchRematch, plan Phase 3): the apply.tsv
+	// pair and the four generics rows compile to a terminal runtime rematch —
+	// the failed window (a single event-carrier in every one) re-matches over
+	// the live values at run time and raises the shared rich diagnostic
+	// byte-identical to the interpreter (or defers when it unexpectedly
+	// matches). The one row below stays refused: its window carries a
+	// variadic-if operand (each). The former local-add and word-splice
+	// entries graduated (see the dated notes below).
 
-	// generics — a generic-typed param called with the WRONG instantiation is a
-	// no-match the interpreter raises; the checker's recovery is a best guess.
-	`def Box gen [T] class {v:T} def f fn [[x:(Box of [Number])] [Integer] [1]] end f (make (Box of [Integer]) {v:1})`:                               "unmatched dispatch recovered at f (Box of Number vs Box of Integer)",
-	`def Box gen [T] class {v:T} def BoxI (Box of [Integer]) def BoxS (Box of [String]) def g fn [[b:BoxI] [Integer] [1]] end g (make BoxS {v:'s'})`: "unmatched dispatch recovered at g (BoxI vs BoxS)",
-	`def Box<T> class {value:T} def f fn [[x:Box<Integer>] [Integer] [x dot value]] end f (make Box<String> {value:'s'})`:                            "unmatched dispatch recovered at f (Box<Integer> vs Box<String>)",
-	`def Box gen [T] class {value:T} def f fn [[x:(Box of [Integer])] [Integer] [x dot value]] end f (make (Box of [String]) {value:'s'})`:           "unmatched dispatch recovered at f (Box of Integer vs Box of String)",
-
-	// a variadic-if result feeding a higher-order word (`each`) over a recovered
-	// dispatch — the interpreter resolves it at runtime; a static guess diverges.
+	// a VARIADIC-IF result feeding `each`: the arms leave DIFFERENT counts
+	// (then [99] = one value, else [1 2] = two), so the merged position joins
+	// to a None|Integer disjunct and the Any/Disjunct-carrier recovery owns
+	// the dispatch — tryRecordPoly rightly declines each's code-body sigs,
+	// and a runtime rematch would need a FIXED window arity the variadic
+	// residual cannot give it (probe 2026-07-14: the trap is never reached;
+	// the old "0-arg courtesy screen" attribution was wrong — each has no
+	// 0-arg overload). Graduation rides the Phase 5 variadic-region lowering
+	// (OpStackMark/OpDropToMark over the branch merge), which seats the
+	// 1-vs-2 residual and lets a terminal rematch own the raise.
 	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "unmatched dispatch recovered at each (variadic-if operand)",
 
-	// open-words — a locally/module-redefined `add` overload anchored to a user
-	// type: an operand outside the overload stays a no-match (negative rows).
-	`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`: "unmatched dispatch recovered at add (local add overload)",
+	// GRADUATED 2026-07-15 (render bound, plan 3a): the local-add row — a
+	// locally-redefined `add` overload whose merge is invisible after fn
+	// exit — compiles to a runtime rematch. Its match probed a WIDER window
+	// (3 positions) than the tuple its error renders (the single stack
+	// value: the forward walk breaks at the `true`/`false` WORD tokens), so
+	// DispatchSpec carries NWritten, proven a leading prefix of the window
+	// by ID at the record gate; the VM re-matches the full window and
+	// renders over window[:NWritten], byte-identical to the interpreter.
 
-	// word-splice — `word` is a live-stack splice, not a spread; `f p` is a
-	// no-match the interpreter raises (code splice is NOT spread).
-	`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`: "unmatched dispatch recovered at f (code splice is not spread)",
+	// GRADUATED 2026-07-14 (word-splice): a PARKED `__SP` marker (def-bound,
+	// collected by value — never stepped before the dispatch) is identical at
+	// run time, so the definiteness screen no longer lists IsSplice and the
+	// row compiles to a serialized terminal trap raising the interpreter's
+	// byte-identical no-match. The cascade fn_body_error of the post-trap
+	// assumed-dispatch body analysis joined the SuppressBodyErrors codes. A
+	// splice AT the pointer fires before any dispatch on both engines, so no
+	// window ever holds a would-have-fired marker.
 }
 
 // TestRefusalsAreFailures fails on any spec-row compilation refusal that is not

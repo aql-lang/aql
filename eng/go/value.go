@@ -347,6 +347,18 @@ type FnSig struct {
 	// names no specific (often module) word. Copied from NativeFunc.Callable
 	// onto every signature at registration. nil = not closure-eligible.
 	Callable *CallableSpec
+	// StoredBodies declares the word's PARAM-CARRYING stored code-body
+	// positions (Test.check-prop's gen/property): NoEvalArgs lists the
+	// handler stores and later invokes per call with the declared params
+	// bound (its own CallAQL frames). The recorder compiles each declared
+	// position to a closure unit with those params and replaces the operand
+	// with a synthetic fn-value carrier whose single sig mirrors the
+	// handler's CallAQL sig — same Params, same raw Body — plus the
+	// CompiledFnRef, so the handler upgrades to InvokeCallback and the VM
+	// hosts the unit nested (same-program ref); every decline leaves the
+	// raw list and the handler's interpreter path unchanged. Copied from
+	// NativeFunc.StoredBodies onto every signature at registration.
+	StoredBodies []StoredBodySpec
 
 	// Locked marks a signature registered through the Go registration
 	// layer (Registry.Register — every native / kernel word plus host
@@ -505,6 +517,15 @@ const (
 	// refuses to compile rides as the plain inert const list and the word runs it
 	// on the interpreter, unchanged.
 	CompileStoresBody
+	// CompileStoresBodyList marks a word that stores a NoEvalArgs LIST OF
+	// code-body lists to run later on per-branch registry forks — `await`'s
+	// parallels. The recorder compiles each list element to its own 0-param
+	// unit (compileStoredBody) and rebuilds the list with synthetic fn-value
+	// carriers in place of the elements that compiled, so the word runs each
+	// branch via RunUnit on its fork. An element that refuses to compile
+	// rides as its plain list and that branch interprets — per-element and
+	// sound.
+	CompileStoresBodyList
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -527,6 +548,15 @@ func (e CompileEffect) Has(f CompileEffect) bool { return e&f != 0 }
 // Out-of-domain per the no-zero-value-overload rule — 0 remains the valid
 // explicit "side-effect body" count.
 const BodyOutResidual = -1
+
+// StoredBodySpec is one Signature.StoredBodies entry: the sig position of a
+// NoEvalArgs code-body list the word's handler stores and invokes per call,
+// and the params the handler's own CallAQL frame binds for it (a named param
+// binds the body's reads of that name; an unnamed param rides the stack).
+type StoredBodySpec struct {
+	Pos    int
+	Params []FnParam
+}
 
 type CallableSpec struct {
 	// BodyPos is the body operand's sig position (the code list / lambda).

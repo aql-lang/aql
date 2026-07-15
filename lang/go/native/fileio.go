@@ -302,6 +302,12 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 		}
 	}
 
+	// C1 effect fence (eng effects.go): a filesystem write is an observable
+	// effect the compiled-mode fallback cannot un-do, so it counts against
+	// the silent re-run. Noted on the ATTEMPT: an OS WriteFile can create
+	// or truncate the target before failing, so even the error path may
+	// already have mutated the filesystem.
+	r.NoteEffect()
 	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}

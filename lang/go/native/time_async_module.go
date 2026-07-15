@@ -61,6 +61,11 @@ func TimeAsyncModuleNatives(tt TemporalModuleTypes) []NativeFunc {
 		},
 		{
 			Name: "await",
+			// The parallels list's ELEMENTS are branch code-bodies stored to run
+			// later on per-branch forks: the recorder compiles each to its own
+			// 0-param unit (the spawn pattern, per element) and runParallelBranch
+			// runs the carriers via RunUnit; refused elements interpret unchanged.
+			CompileEffect: CompileStoresBodyList,
 			Signatures: []Signature{
 				{Args: []*Type{TOptions, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(awaitWithOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TList}, NoEvalArgs: map[int]bool{0: true}, Impl: Go(awaitDefaultHandler), Returns: []*Type{TAny}, BarrierPos: -1},

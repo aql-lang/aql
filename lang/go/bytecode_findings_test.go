@@ -3825,38 +3825,65 @@ func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
 // dispatch whose runtime outcome can differ from the static one.
 func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	// (The former "carrier operand declines" negative — `5 inc apply` —
-	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension:
-	// an Integer carrier is provably disjoint from apply's Function slot, so
-	// that failure IS definite; see TestUnmatchedDispatchTrapCarrierDisjoint.
-	// The negatives below pin the shapes the extension must keep declining.)
-	refusals := []struct{ name, src, want string }{
+	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension,
+	// and since OpDispatchRematch landed the whole single-carrier-window
+	// class compiles to a runtime rematch. The two carrier hazards below —
+	// the refinement escape and the value-sensitive predicate — now compile
+	// too, and their soundness pin MOVED with them: the rematch MATCHES at
+	// run time and DEFERS to the interpreter, which computes the value a
+	// static trap would have wrongly raised over. The deferred-token shapes
+	// keep the whole-program refusal.)
+	rematches := []struct{ name, src string }{
 		// The REFINEMENT ESCAPE (the original carrier hazard, in its live
 		// form): mkb's declared return is Boolean but the runtime value
 		// carries the Flag-reparented tag, so the merged [Flag Flag] overload
-		// MATCHES at run time (the fallback computes true below). Boolean is
-		// not disjoint from Flag (Flag ⊑ Boolean), so the disjointness proof
-		// must decline — a trap here would raise where the interpreter
-		// computes.
-		{"refined-subtype carrier declines",
-			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`,
-			"unmatched dispatch recovered at add"},
+		// MATCHES at run time — the rematch defers and the interpreter
+		// computes true.
+		{"refined-subtype carrier rematch defers",
+			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`},
 		// A value-sensitive predicate param (membershipBeyondNominal): the
-		// carrier's runtime VALUE decides membership, so nothing nominal is
-		// provable — and this variant PASSES at run time (f 5 → 11 ∈ Big).
-		{"predicate-param carrier declines (runtime pass)",
-			`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] def f fn [[x:Integer] [Integer] [x add 6]] g (f 5)`,
-			"unmatched dispatch recovered at g"},
+		// carrier's runtime VALUE decides membership — this variant PASSES at
+		// run time (f 5 → 11 ∈ Big), so the rematch matches and defers.
+		{"predicate-param carrier rematch defers (runtime pass)",
+			`def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] def f fn [[x:Integer] [Integer] [x add 6]] g (f 5)`},
+	}
+	for _, c := range rematches {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog == nil {
+			t.Fatalf("%s: refused (%q); want a runtime-rematch compile", c.name, reason)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if compiled {
+			t.Errorf("%s: the runtime MATCH must defer to the interpreter", c.name)
+		}
+		if codeOf(errC) != codeOf(errI) {
+			t.Errorf("%s: defer err=[%s] interp err=[%s] (should agree)", c.name, codeOf(errC), codeOf(errI))
+		}
+		if errC == nil && errI == nil && fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: defer value=%v interp value=%v (should agree)", c.name, gotC, gotI)
+		}
+	}
+	refusals := []struct{ name, src, want string }{
 		// A disjunct carrier with a MATCHING alternative (forward-barrier:80's
 		// shape): the if result is Integer|List and each's List overload could
 		// take the List arm, so the failure is not definite (this run's 99
-		// arm does raise — via the fallback, faithfully).
+		// arm does raise — via the fallback, faithfully). The each dispatch
+		// takes the courtesy-dispatch screen, not the rematch.
 		{"disjunct matching-alternative declines",
 			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
 			"unmatched dispatch recovered at each"},
-		// A deferred-expression token (a word splice) expands at dispatch/step
-		// time; its expansion is not statically modelled, so decline.
-		{"splice operand declines",
-			`def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`,
+		// A RAW deferred-expression token in the failed window — a flex-cell
+		// Reach the static match sees unresolved but the runtime EVALUATES
+		// (to 1 here) before dispatching: neither a serialized trap nor a
+		// rematch can model the evaluation, so the definiteness screen
+		// declines and the program falls back whole. (The word-splice decline
+		// that used to sit here GRADUATED 2026-07-14 — a PARKED __SP marker
+		// is identical at run time; pinned positively in
+		// TestUnmatchedDispatchTrapSpliceGraduated below. The splice was the
+		// screen's only corpus reach, so this row is now its coverage.)
+		{"flex-reach operand declines",
+			`def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`,
 			"unmatched dispatch recovered at f"},
 	}
 	for _, c := range refusals {
@@ -3898,6 +3925,39 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	}
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
 		t.Errorf("flex-reach parity: compiled=%v interp=%v", gotC, gotI)
+	}
+}
+
+// The graduated word-splice trap (GRADUATED 2026-07-14, refusals 3->2): a
+// PARKED __SP marker (def-bound, collected by value — never stepped before
+// the failing dispatch) is identical at run time, so the definiteness screen
+// admits it and the row compiles to a serialized terminal OpTrap raising the
+// interpreter's byte-identical signature_error. A pointer-position splice
+// fires before any dispatch on BOTH engines, so no window ever holds a
+// would-have-fired marker (the flex-reach pin above guards the Reach family
+// that stays screened).
+func TestUnmatchedDispatchTrapSpliceGraduated(t *testing.T) {
+	const src = `def p word [1 add 2] def f fn [[x:Integer][Integer][x mul 10]] f p`
+	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
+	if cerr != nil || prog == nil {
+		t.Fatalf("the splice trap must compile, got refusal %q / err %v", reason, cerr)
+	}
+	if !strings.Contains(prog.Disassemble(), "TRAP") {
+		t.Fatalf("the row must lower to a terminal trap:\n%s", prog.Disassemble())
+	}
+	gotC, compiled, errC := mustNew(t).RunCompiled(src)
+	if !compiled {
+		t.Fatal("the trap program must run compiled")
+	}
+	gotI, errI := mustNew(t).Run(src)
+	if errC == nil || errI == nil {
+		t.Fatalf("both engines must raise: compiled=%v interp=%v", errC, errI)
+	}
+	if errC.Error() != errI.Error() {
+		t.Errorf("diagnostic drift:\n compiled: %s\n interp:   %s", errC, errI)
+	}
+	if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Errorf("residuals must agree: compiled=%v interp=%v", gotC, gotI)
 	}
 }
 

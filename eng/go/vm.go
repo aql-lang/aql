@@ -349,10 +349,14 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 // fresh operand stack exactly as invokeClosureOn does for a compiled closure, so
 // the outer run resumes cleanly when it returns. Returns handled=false (letting
 // InvokeCallback fall back to the interpreter) when the ref belongs to a
-// different program than the one running — a stamped fn baked by the running
-// program always matches, so this is a defensive guard, not a normal path.
+// different program than the one running: a compile-time stamp baked by the
+// running program always matches, but a DETACHED stamp (StampDetachedFn — a
+// model action, a runtime-stamped codec) carries its own standalone Program
+// whose unit indices mean nothing against vc.p, so a mid-run invoke of one
+// takes the interpreter seam. Hosting a foreign program's unit nested is the
+// Phase 6 JIT detached-unit cache's territory.
 func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, bool, error) {
-	if ref.Prog != vc.p { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if ref.Prog != vc.p {
 		return nil, false, nil
 	}
 	res, err := vc.run(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures), nil)
@@ -460,8 +464,9 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	if pr.Reg != nil {
 		lookupReg = pr.Reg
 	}
+	fn := lookupReg.Lookup(pr.Word)
 	var sigs []Signature
-	if fn := lookupReg.Lookup(pr.Word); fn != nil {
+	if fn != nil {
 		sigs = fn.Signatures
 	}
 	// Build the args in sig order (position 0 = top of stack, as OpCallNative
@@ -474,15 +479,24 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		// No runtime match. The interpreter's signature_error is built from its
-		// live tape / forward-collection state (engine.go sigError) — available
-		// signatures, a reorder hint, the nearby stack types — which the VM
-		// cannot faithfully reproduce, so emitting a bare signature_error here
-		// DIVERGES from the interpreter's detail/hint. Route through the
-		// whole-program fallback instead (internal_error → RunCompiled re-runs
-		// the interpreter), which raises the canonical, byte-identical error.
-		// Sound because the interpreter takes the SAME MatchSignature first-match
-		// and so reaches the same no-match.
-		return nil, vmErrAt(curDebug, pc, "CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		// live tape / forward-collection state (engine.go sigError) — the
+		// written tuple, a reorder hint, two tape-only layers — which the VM
+		// alone cannot reproduce. When the record carried a faithfulness plan
+		// (PolyNoMatchSpec — the check pass proved, at the failed-dispatch
+		// state it recovered from, that the diagnostic is rebuildable from the
+		// window), raise the byte-identical signature_error right here (plan
+		// 3c). Otherwise route through the whole-program fallback
+		// (internal_error → RunCompiled re-runs the interpreter), which raises
+		// the canonical error — sound because the interpreter takes the SAME
+		// MatchSignature first-match and so reaches the same no-match.
+		if mr == nil || mr.Sig == nil {
+			if err := vc.polyNoMatchRaise(r, pr, fn, window, curDebug, pc); err != nil {
+				return nil, err
+			}
+		}
+		return nil, vmDeferAlt(r, curDebug, pc, "vm:poly-no-match",
+			"CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error",
+			bestEffortNoMatch(r, fn, pr.Word, window, curDebug, pc))
 	}
 	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
@@ -504,7 +518,7 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	// silently shift every downstream operand, so defer to the interpreter
 	// instead (runtimeShouldFallback — slow, not wrong).
 	if len(results) != pr.NOut {
-		return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+		return nil, vmDefer(r, curDebug, pc, "vm:poly-nout-drift", fmt.Sprintf(
 			"poly dispatch %s: result count %d differs from the recorded claim %d; deferring to the interpreter",
 			pr.Word, len(results), pr.NOut))
 	}
@@ -537,7 +551,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	}
 	fd := lookupReg.Lookup(pr.Word)
 	if fd == nil {
-		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
+		return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-unresolved", "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
 	}
 	subset := make([]Signature, 0, len(pr.SigIdx))
 	units := make([]int, 0, len(pr.SigIdx))
@@ -546,7 +560,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 			si < 0 || si >= len(fd.Signatures) ||
 			fd.Signatures[si].Impl != pr.Impls[k] ||
 			fd.Signatures[si].TotalArgs() != n {
-			return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
+			return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-drift", "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
 		}
 		u := pr.Units[k]
 		if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n {
@@ -563,7 +577,25 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	}
 	mr := MatchSignature(subset, window, WordInfo{ArgCount: n})
 	if mr == nil || mr.Sig == nil {
-		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error")
+		// The fence-blocked alt (vmDeferAlt) additionally needs the recorded
+		// subset to COVER the live table's non-fallback overloads: an arm
+		// appended after the record (same arity, so the index drift guard
+		// above stayed quiet) could match at run time where this raise would
+		// claim failure — bestEffortNoMatch's own arity screen cannot see it.
+		alt := bestEffortNoMatch(vc.r, fd, pr.Word, window, curDebug, pc)
+		if alt != nil {
+			nonFallback := 0
+			for i := range fd.Signatures {
+				if !fd.Signatures[i].Fallback {
+					nonFallback++
+				}
+			}
+			if nonFallback != len(subset) {
+				alt = nil
+			}
+		}
+		return 0, nil, vmDeferAlt(vc.r, curDebug, pc, "vm:user-poly-no-match",
+			"CALL_USER_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error", alt)
 	}
 	for j := range subset {
 		if mr.Sig == &subset[j] {
@@ -828,7 +860,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	}
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
-			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+			return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method", fmt.Sprintf(
 				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
 				spec.Word, len(results), spec.NOut))
 		}
@@ -849,7 +881,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 		// method value. The interpreter would leave it as data and continue
 		// with a DIFFERENT stack shape, which this program cannot express —
 		// defer wholesale.
-		return nil, vmErrAt(curDebug, pc, "shaped method apply "+spec.Word+
+		return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
 	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
@@ -1236,9 +1268,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				return nil, vmErrAt(curDebug, pc, "DROP stack underflow")
 			}
 			stack = stack[:len(stack)-1]
-		case OpStackMark, OpDropToMark, OpPopMark:
+		case OpStackMark, OpDropToMark, OpPopMark, OpCallDynMixedFromMark:
 			var err error
-			if marks, stack, err = vmMark(in.Op, marks, stack, curDebug, pc); err != nil {
+			if marks, stack, err = vc.vmMarkOp(curReg, in.Op, marks, stack, curDebug, pc); err != nil {
 				return nil, err
 			}
 		case OpMakeList:
@@ -1280,6 +1312,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			ae.Notes = tr.Notes
 			ae.Suggestions = tr.Suggestions
 			return nil, stampAt(ae, curDebug, pc, r)
+		case OpDispatchRematch:
+			// Terminal either way: the rematch raises or defers (vm_rematch.go).
+			return nil, vc.dispatchRematch(&p.Dispatches[in.Arg], stack, curDebug, pc)
 		case OpPushClosure:
 			nc := p.Fns[in.Arg].NCaptures
 			if len(stack) < nc {
@@ -1575,14 +1610,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			v, ok := curReg.Defs.Top(name)
 			if !ok {
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-miss", "dynamic-scope read miss for `"+name+"`; deferring to the interpreter")
 			}
 			switch v.Data.(type) {
 			case FnDefInfo, *ClassTypeInfo:
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of a dispatching binding `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-dispatching", "dynamic-scope read of a dispatching binding `"+name+"`; deferring to the interpreter")
 			}
 			if IsSplice(v) || IsReach(v) || IsWord(v) || IsMark(v) || IsMove(v) {
-				return nil, vmErrAt(curDebug, pc, "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-active-token", "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
 			}
 			stack = append(stack, v)
 		case OpRet:
@@ -1960,7 +1995,7 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 			produced -= trim
 		}
 		if produced != len(rets) {
-			return stack, vmErrAt(nil, 0, fmt.Sprintf(
+			return stack, vmDefer(r, nil, 0, "vm:dyn-frame-replay", fmt.Sprintf(
 				"dynamic frame replay %s: result count %d differs from the declared %d; deferring to the interpreter",
 				fn.Name, produced, len(rets)))
 		}

@@ -118,6 +118,11 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.Output = parent.Output
 	modReg.ErrOutput = parent.ErrOutput
 	modReg.Input = parent.Input
+	// Ledger rides with the writers so this sub-registry's effects count
+	// against the parent's compiled-mode fallback fence (eng effects.go);
+	// the observability hooks ride along for the same reason.
+	modReg.Effects = parent.Effects
+	modReg.InheritObserveHooks(parent)
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 
@@ -619,6 +624,17 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// failing input verbatim.
 		{
 			Name: "test-check-prop",
+			// The gen/property bodies are param-carrying stored bodies: the
+			// recorder compiles each to a closure unit with the SAME params
+			// runCheckProp's own CallAQL frames bind (gen: named `r`; property:
+			// one unnamed Any), and runCheckProp dispatches the carriers via
+			// InvokeCallback — per-iteration VM runs instead of interpreter
+			// frames. A body that refuses (a frame-local ${interp} — the
+			// fn-scope guard) keeps its raw list and interprets, unchanged.
+			StoredBodies: []native.StoredBodySpec{
+				{Pos: 1, Params: []native.FnParam{{Name: "r", Type: native.TMap}}},
+				{Pos: 2, Params: []native.FnParam{{Type: native.TAny}}},
+			},
 			Signatures: []native.Signature{{
 				Args: []*native.Type{
 					native.TString,  // name
@@ -724,24 +740,41 @@ func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, 
 	return []native.Value{resultVal}, nil
 }
 
+// storedBodyArg splits a check-prop body arg into its dispatch sig and raw
+// tokens. A COMPILED body arrives as a stored-param-body carrier
+// (Signature.StoredBodies): its single sig — the handler's own CallAQL param
+// shape plus the CompiledFnRef — dispatches through InvokeCallback, so the
+// unit runs nested on the VM with the interpreter as its per-invoke
+// fallback. A raw list (interpreter mode, or a body the compile declined)
+// yields tokens only, and the caller builds today's throwaway CallAQL sig.
+func storedBodyArg(arg native.Value, what string) (*native.FnSig, []native.Value, error) {
+	if fd, ok := arg.Data.(native.FnDefInfo); ok && len(fd.Signatures) == 1 {
+		if impl, isAQL := fd.Signatures[0].Impl.(*eng.AQLImpl); isAQL && fd.Signatures[0].CompiledRef() != nil {
+			return &fd.Signatures[0], impl.Body, nil
+		}
+	}
+	lst, err := native.RequireConcreteList(arg, what)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, lst.Slice(), nil
+}
+
 // runCheckProp is the PBT inner loop. Extracted for readability —
 // the check-prop native's handler delegates here.
 func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value, error) {
 	name, _ := args[0].AsConcreteString()
-	genList, err := native.RequireConcreteList(args[1], "Test.check-prop gen")
+	genSigC, genBody, err := storedBodyArg(args[1], "Test.check-prop gen")
 	if err != nil {
 		return nil, err
 	}
-	propList, err := native.RequireConcreteList(args[2], "Test.check-prop property")
+	propSigC, propBody, err := storedBodyArg(args[2], "Test.check-prop property")
 	if err != nil {
 		return nil, err
 	}
 	runs, _ := args[3].AsConcreteInteger()
 	seed, _ := args[4].AsConcreteInteger()
 	maxShrinks, _ := args[5].AsConcreteInteger()
-
-	genBody := genList.Slice()
-	propBody := propList.Slice()
 
 	var (
 		failed       bool
@@ -765,16 +798,24 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			break
 		}
 
-		// Run the generator body in a CallAQL frame where `r` is
-		// bound to the iteration's rand instance. Body must leave
-		// exactly one value on the stack — the generated input.
-		genSig := native.FnSig{
-			Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL(append([]native.Value(nil), genBody...)),
-			BarrierPos: -1,
+		// Run the generator body with `r` bound to the iteration's rand
+		// instance. Body must leave exactly one value on the stack — the
+		// generated input. A stored-param-body carrier (compiled path)
+		// dispatches through InvokeCallback — the unit runs nested on the
+		// VM, and stale deps / internal errors degrade to the identical
+		// CallAQL frame; a raw body builds today's throwaway sig.
+		var genResults []native.Value
+		if genSigC != nil {
+			genResults, err = eng.InvokeCallback(parent, genSigC, []native.Value{native.NewMap(randMap)}, nil)
+		} else {
+			genSig := native.FnSig{
+				Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
+				Returns:    []*native.Type{native.TAny},
+				Impl:       native.AQL(append([]native.Value(nil), genBody...)),
+				BarrierPos: -1,
+			}
+			genResults, err = parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
 		}
-		genResults, err := parent.CallAQL(&genSig, []native.Value{native.NewMap(randMap)}, nil)
 		if err != nil {
 			failed = true
 			failingIter = i
@@ -795,13 +836,18 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		// the stack (so stack-form bodies like `[0 gte]` work) AND
 		// can reference it via `args.0` (so map-destructuring bodies
 		// work). Body must leave a Boolean; anything else is a failure.
-		propSig := native.FnSig{
-			Params:     []native.FnParam{{Type: native.TAny}},
-			Returns:    []*native.Type{native.TAny},
-			Impl:       native.AQL(append([]native.Value(nil), propBody...)),
-			BarrierPos: -1,
+		var propResults []native.Value
+		if propSigC != nil {
+			propResults, err = eng.InvokeCallback(parent, propSigC, []native.Value{input}, nil)
+		} else {
+			propSig := native.FnSig{
+				Params:     []native.FnParam{{Type: native.TAny}},
+				Returns:    []*native.Type{native.TAny},
+				Impl:       native.AQL(append([]native.Value(nil), propBody...)),
+				BarrierPos: -1,
+			}
+			propResults, err = parent.CallAQL(&propSig, []native.Value{input}, nil)
 		}
-		propResults, err := parent.CallAQL(&propSig, []native.Value{input}, nil)
 		if err != nil {
 			failed = true
 			failingIter = i

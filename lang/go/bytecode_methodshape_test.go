@@ -179,9 +179,19 @@ func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 func zzShapedInstance(t *testing.T) *AQL {
 	t.Helper()
 	a := mustNew(t)
+	if err := zzInstallShapedInstance(a); err != nil {
+		t.Fatalf("zz-inst fixture: %v", err)
+	}
+	return a
+}
+
+// zzInstallShapedInstance registers the zz-inst fixture on an existing
+// instance without a *testing.T, so data-driven suites (the frontier cases)
+// can build it too.
+func zzInstallShapedInstance(a *AQL) error {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
-		t.Fatalf("sub-registry: %v", err)
+		return err
 	}
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "zz-m",
@@ -220,7 +230,7 @@ func zzShapedInstance(t *testing.T) *AQL {
 			return []native.Value{inst()}, nil
 		}),
 	})
-	return a
+	return nil
 }
 
 func TestShapedMethodClaimViolationDefers(t *testing.T) {

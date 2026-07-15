@@ -76,6 +76,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/aql-lang/aql/test/go/vary"
 )
 
 // Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
@@ -94,6 +95,10 @@ var (
 	// seams make those arms drivable.
 	newNativeRegistry = native.DefaultRegistry
 	compileCheck      = (*lang.AQL).CompileCheck
+	// varySweep: the healthy build has no reachable divergence (the do-unit
+	// registry-replay class is fixed), so the vary mode's diverged-report arm
+	// is drivable only by swapping the sweep.
+	varySweep = vary.SweepSeeds
 )
 
 // alphabet is the fixed, ordered set of syntax atoms the enumeration
@@ -222,7 +227,20 @@ func main() {
 	len123 := flag.String("len123", "", "length-1..3 passing-subset path (extend5 mode, used to isolate the length-4 passing rows)")
 	passOut := flag.String("pass-out", "", "output path for the length-5 passing combinations (extend5 mode)")
 	mismatchOut := flag.String("mismatch-out", "", "optional output path for compiler/interpreter mismatches (extend5 mode)")
+	varyMode := flag.Bool("vary", false, "vary mode: classify structured variations of passing lang/spec rows (test/go/vary)")
+	seedDir := flag.String("seed-dir", "../../lang/spec", "seed corpus directory (vary mode)")
+	varyOut := flag.String("vary-out", "", "output DIRECTORY for the vary classification files (vary mode)")
+	varySeeds := flag.Int("vary-seeds", 0, "deterministic seed sample size; 0 = the whole corpus (vary mode)")
 	flag.Parse()
+
+	if *varyMode {
+		if *varyOut == "" {
+			fmt.Fprintln(os.Stderr, "specgen -vary requires -vary-out (an output directory)")
+			osExit(2)
+		}
+		runVarySweep(*seedDir, *varyOut, *varySeeds)
+		return
+	}
 
 	if *frontier {
 		if *passing == "" || *checkOut == "" || *compileOut == "" || *runtimeOut == "" {
@@ -1134,6 +1152,82 @@ func writeLen5Fail(path, kind string, cands []string, classes []fiveClass, notes
 	writeLen5Header(w, kind, n)
 	writeFailRows(w, cands, notes, func(k int) bool { return classes[k] == want })
 	return n
+}
+
+// ---- vary: structured variations of passing corpus rows -------------------
+//
+// runVarySweep drives test/go/vary (the shared transform table + dual-
+// pipeline classifier — also the engine behind langspec's standing
+// TestVariationDifferential gate) at triage breadth and writes the four
+// classification files under outDir:
+//
+//	vary-pass.tsv          variants that compile natively with parity
+//	vary-refused.tsv       compile refusals + islands (the NEW-frontier feed)
+//	vary-diverged.tsv      compiler/interpreter divergences — MISCOMPILES
+//	vary-interp-reject.tsv variants the interpreter (or checker) rejects — discards
+//
+// Outputs are triage artifacts, deliberately NOT checked in (the same
+// no-lang/spec-pollution rule as the syntax matrix: the CI gate recomputes
+// its variants at test time, so there is no snapshot to drift).
+func runVarySweep(seedDir, outDir string, nSeeds int) {
+	seeds, err := vary.LoadSeeds(seedDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specgen -vary: %v\n", err)
+		osExit(1)
+	}
+	sample := vary.Sample(seeds, nSeeds)
+	variants := varySweep(sample, func(done, total int) {
+		if done%50 == 0 || done == total {
+			fmt.Fprintf(os.Stderr, "specgen -vary: %d/%d seeds\n", done, total)
+		}
+	})
+
+	name := map[vary.Outcome]string{
+		vary.Pass:         "vary-pass.tsv",
+		vary.Refused:      "vary-refused.tsv",
+		vary.Islanded:     "vary-refused.tsv",
+		vary.Diverged:     "vary-diverged.tsv",
+		vary.InterpReject: "vary-interp-reject.tsv",
+		vary.CheckReject:  "vary-interp-reject.tsv",
+	}
+	files := map[string]*bufio.Writer{}
+	counts := map[vary.Outcome]int{}
+	skippedSeeds := 0
+	for _, v := range variants {
+		if v.Transform == "seed" {
+			if v.Res.Outcome != vary.Pass {
+				skippedSeeds++ // base not vary-eligible; ratchets own it
+			}
+			continue
+		}
+		counts[v.Res.Outcome]++
+		fn := name[v.Res.Outcome]
+		w, ok := files[fn]
+		if !ok {
+			f, err := os.Create(outDir + "/" + fn)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "specgen -vary: create %s: %v\n", fn, err)
+				osExit(1)
+			}
+			defer f.Close()
+			w = bufio.NewWriter(f)
+			defer w.Flush()
+			fmt.Fprintf(w, "# specgen -vary classification (GENERATED, triage artifact — do not check in)\n")
+			fmt.Fprintf(w, "# Format: variant-src<TAB>outcome: detail<TAB>transform(seed-file:line)\n#\n")
+			files[fn] = w
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s(%s:%d)\n",
+			v.Src, sanitizeNote(v.Res.Outcome.String()+": "+v.Res.Detail), v.Transform, v.Seed.File, v.Seed.Line)
+	}
+
+	fmt.Fprintf(os.Stderr, "specgen -vary: %d seeds (%d skipped non-passing) × %d transforms\n",
+		len(sample), skippedSeeds, len(vary.Transforms()))
+	fmt.Fprintf(os.Stderr, "specgen -vary: pass=%d refused=%d islanded=%d diverged=%d interp-reject=%d check-reject=%d\n",
+		counts[vary.Pass], counts[vary.Refused], counts[vary.Islanded], counts[vary.Diverged],
+		counts[vary.InterpReject], counts[vary.CheckReject])
+	if counts[vary.Diverged] > 0 {
+		fmt.Fprintf(os.Stderr, "specgen -vary: NOTE %d divergences — MISCOMPILES, see vary-diverged.tsv\n", counts[vary.Diverged])
+	}
 }
 
 // writeLen5Header emits the leading comment block of a length-5 file.

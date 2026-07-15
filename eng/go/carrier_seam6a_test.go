@@ -262,7 +262,7 @@ func TestS6aTryRecordPolyQuotedNonGetDeclines(t *testing.T) {
 		t.Fatalf("registration: %v", err)
 	}
 	sig := &r.Lookup("s6apolyq").Signatures[0]
-	if tryRecordPoly(r, "s6apolyq", sig, []Value{NewAtom("k")}, []Value{}, SrcPos{}, true, nil, false) {
+	if tryRecordPoly(r, "s6apolyq", sig, []Value{NewAtom("k")}, []Value{}, SrcPos{}, true, nil, false, nil) {
 		t.Error("a quoted-operand word other than get/getr/set must not poly")
 	}
 }
@@ -284,7 +284,7 @@ func TestS6aTryRecordPolyFnValuedArgDeclines(t *testing.T) {
 		t.Fatalf("registration: %v", err)
 	}
 	sig := &r.Lookup("s6apolyf").Signatures[0]
-	if tryRecordPoly(r, "s6apolyf", sig, []Value{NewInteger(1)}, []Value{}, SrcPos{}, true, nil, false) {
+	if tryRecordPoly(r, "s6apolyf", sig, []Value{NewInteger(1)}, []Value{}, SrcPos{}, true, nil, false, nil) {
 		t.Error("a Function-typed arg slot must not poly")
 	}
 }
@@ -294,7 +294,7 @@ func TestS6aTryRecordPolyReservedLiteralNoBinding(t *testing.T) {
 	// no Lookup binding — the fn == nil arm.
 	r := newTestRegistry(t)
 	armEmit(r)
-	if tryRecordPoly(r, "true", &Signature{}, nil, []Value{}, SrcPos{}, true, nil, false) {
+	if tryRecordPoly(r, "true", &Signature{}, nil, []Value{}, SrcPos{}, true, nil, false, nil) {
 		t.Error("a reserved literal with no fn binding must not poly")
 	}
 }
@@ -889,7 +889,7 @@ func TestS6aTryRecordPolyFnValueDataDeclines(t *testing.T) {
 	}
 	sig := &r.Lookup("s6apolyv").Signatures[0]
 	args := []Value{NewValueRaw(TFnDef, FnDefInfo{Name: "s6afn2"})}
-	if tryRecordPoly(r, "s6apolyv", sig, args, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, false, nil, false) {
+	if tryRecordPoly(r, "s6apolyv", sig, args, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, false, nil, false, nil) {
 		t.Error("a concrete fn-valued arg must not poly")
 	}
 }

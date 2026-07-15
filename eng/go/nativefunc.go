@@ -39,4 +39,9 @@ type NativeFunc struct {
 	// sig.Callable instead of a name-keyed eng table — eng then names no
 	// specific (often module) word. nil = not closure-eligible.
 	Callable *CallableSpec
+
+	// StoredBodies declares the word's param-carrying stored code-body
+	// positions (see Signature.StoredBodies). Copied onto every one of this
+	// word's signatures at registration, like Callable.
+	StoredBodies []StoredBodySpec
 }

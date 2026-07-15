@@ -244,7 +244,12 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 		timeout = time.Duration(tvInt) * time.Millisecond
 	}
 
-	// Execute request.
+	// Execute request. C1 effect fence (eng effects.go): once Do runs, the
+	// request may have reached the peer even when it returns an error (sent,
+	// response lost), so the effect is noted on the attempt — everything
+	// before this point (policy denial, a malformed request) provably sent
+	// nothing and stays uncounted.
+	r.NoteEffect()
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
