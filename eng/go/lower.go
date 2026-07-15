@@ -1908,6 +1908,35 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 // pooling its TrapSpec. Execution never continues past it.
 func (lw *lowerer) lowerTrap(ev *emitEvent) string {
 	if ev.trap.rematchWord != "" {
+		// A VARIADIC leading operand — a multi-count branch merge (`if c [99]
+		// [1 2] each …`) — cannot be seated by layout: the region is already
+		// live on the runtime stack with an ARM-DEPENDENT depth. The rematch
+		// is TERMINAL and only READS the top NArgs values, so seat the single
+		// remaining const operand UNDER the region top instead: push it and
+		// swap. The window then reads [region-top, const] — exactly the
+		// [merge-carrier, const] the static match examined — for either arm
+		// depth (deeper region values sit below the window and the raise
+		// consumes nothing). The offset-form render bound keeps the raise
+		// byte-identical (the written tuple is the const, arm-independent).
+		if ops := ev.trap.rematchOps; len(ops) == 2 &&
+			ops[0].kind == opEvent && lw.variadic[ops[0].idx] &&
+			ops[1].kind != opEvent {
+			if len(lw.vm) == 0 || !slotIs(lw.vm[len(lw.vm)-1], ops[0]) {
+				return "stack discipline: variadic rematch region is not on top"
+			}
+			lw.pushOperand(ops[1], ev.trap.pos)
+			lw.emit(OpSwap, 0, ev.trap.pos)
+			idx := len(lw.p.Dispatches)
+			lw.p.Dispatches = append(lw.p.Dispatches, DispatchSpec{
+				Word:       ev.trap.rematchWord,
+				NArgs:      len(ops),
+				NWritten:   ev.trap.rematchNWritten,
+				WrittenOff: ev.trap.rematchWrittenOff,
+				Pos:        ev.trap.pos,
+			})
+			lw.emit(OpDispatchRematch, idx, ev.trap.pos)
+			return ""
+		}
 		// A runtime-rematch trap: seat the failed window's operands like a
 		// call's args — ops[0] (examined first, sig position 0) ends on TOP
 		// (layoutOperands' contract, the callPoly window layout), event

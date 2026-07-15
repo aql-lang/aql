@@ -3053,8 +3053,6 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  m 3 add 1`,
 		// Same, paren form: the variadic result as a forward-collected fixed arg.
 		`def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]  add (m 3) 1`,
-		// A multi-value arm built from inert consts cannot be reconstructed.
-		`if true [1 2 3] [4]`,
 		// A value after the variadic recursive call inside the arm.
 		`def w fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 w (n sub 1) add 5]]]  w 3`,
 	}
@@ -3068,6 +3066,21 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 		gi, ei := mustNew(t).Run(src)
 		if fmt.Sprint(gc) != fmt.Sprint(gi) || codeOf(ec) != codeOf(ei) {
 			t.Errorf("fallback parity: compiled=%v/%s interp=%v/%s :: %s", gc, codeOf(ec), gi, codeOf(ei), src)
+		}
+	}
+	// GRADUATED 2026-07-15: an all-inert multi-value arm IS reconstructible
+	// now — captureInertArmResidual records the arm's operand list and the
+	// lowering re-pushes it per taken path, so the merge goes variadic and
+	// the PROGRAM RESIDUAL (the one variadic-absorbing consumer) carries it
+	// faithfully on either polarity. The variadic->fixed-arity consumers
+	// above stay refused — the gate's soundness contract is unchanged.
+	for _, c := range []struct{ src, want string }{
+		{`if true [1 2 3] [4]`, "[1 2 3]"},
+		{`if false [1 2 3] [4]`, "[4]"},
+	} {
+		got, err := mustNew(t).RunCompiledStrict(c.src)
+		if err != nil || fmt.Sprint(got) != c.want {
+			t.Errorf("graduated inert-arm merge: compiled %v (err %v), want %s :: %s", got, err, c.want, c.src)
 		}
 	}
 }
@@ -3865,13 +3878,10 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 		}
 	}
 	refusals := []struct{ name, src, want string }{
-		// The variadic-if shape (forward-barrier:80): the each dispatch now
-		// RECORDS an offset-form rematch (the body list at window offset 1),
-		// so the refusal moved down to the branch merge — the 1-vs-2
-		// residual has no fixed-slot lowering yet. Fallback stays faithful.
-		{"variadic-if residual refuses at the branch merge",
-			`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
-			"branch leaves extra values"},
+		// (The variadic-if shape that used to sit here GRADUATED 2026-07-15
+		// — the branch merge seats the 1-vs-2 residual and the terminal
+		// rematch seats its const under the live region top; pinned
+		// positively in TestDispatchRematchVariadicIfGraduated.)
 		// A RAW deferred-expression token in the failed window — a flex-cell
 		// Reach the static match sees unresolved but the runtime EVALUATES
 		// (to 1 here) before dispatching: neither a serialized trap nor a

@@ -1702,3 +1702,40 @@ pieces, in order:
    the trap is TERMINAL — the raise consumes nothing; the window could
    be rebuilt from the live stack without layout at all (the rematch is
    the LAST op; stack[mark:] IS the region regardless of seat order).
+
+### REFUSALS REACHED ZERO — the each row graduated (2026-07-15)
+
+The two pieces from the branch-merge probe landed:
+
+1. **captureInertArmResidual** (emit.go, called from RecordBranch beside
+   the residualN stamps): the loop side's all-inert residual capture
+   mirrored to branch arms — a multi-value arm whose residual is entirely
+   inert (consts/locals, nothing event-produced) records its resolved
+   operand list so lowerFragment's re-push arm reconstructs it per taken
+   path and the existing lowerArms variadic-merge machinery absorbs the
+   1-vs-2 counts. Parked-fn and unresolvable entries decline (the arm
+   keeps its refusal) — the loop side's auto-apply screen, mirrored.
+2. **The terminal-rematch region seat** (lower.go lowerTrap): a trap whose
+   leading operand is a VARIADIC branch merge cannot be seated by layout
+   (arm-dependent region depth), but the rematch is terminal and only
+   READS the top NArgs values — so the single remaining const operand is
+   pushed and SWAPPED under the live region top. The window then reads
+   [region-top, const] for either arm depth; deeper region values sit
+   below the window and the raise consumes nothing. The offset-form
+   render bound keeps the raise byte-identical (verified on both
+   polarities end-to-end).
+
+Census: 5999 -> 6000/6000 natively compiled; corpus refusals 1 -> 0 —
+the refusal ratchet reached its finish line. knownRefusals is EMPTY.
+Bonus graduation: `if true [1 2 3] [4]` (the StageA soundness gate's
+inert-arm row) now compiles faithfully on both polarities — moved from
+the mustRefuse list to a graduated positive; the variadic->fixed-arity
+consumers stay refused (the gate's soundness contract is unchanged).
+The fixture cascade moved every refusal pin to an off-corpus shape (the
+flex-reach deferred-token decline): zzRefusingRow, the RunCompiledReason
+offender subtest, the CLI warning fixture, and the specgen classify pin.
+The irreconstructible-arm default (not inert-captured, not event-seated)
+is pinned directly (TestLowerFragmentIrreconstructibleMultiArm).
+
+Stage J's first gate (refusals=0) is now satisfied; the remaining gate
+is the runtime-bail census (Phase 10) before the public Run flip.

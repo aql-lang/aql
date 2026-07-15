@@ -83,16 +83,15 @@ func zzCheckEmit(a *AQL) {
 	})
 }
 
-// zzRefusingRow is the each variadic-if knownRefusals row (the branch arms
-// leave DIFFERENT residual counts — 1 vs 2 — which the fixed-slot branch
-// merge cannot seat until the Phase 5 variadic-region lowering; its dispatch
-// half already records an offset-form rematch): it compiles to a nil
-// Program with no check error, driving the
-// refusal arm, and the interpreter raises its canonical signature_error at
-// run time. (The word-splice row that used to sit here graduated 2026-07-14
-// to a serialized terminal trap; the local-add row graduated 2026-07-15 to
-// a render-bounded runtime rematch.)
-const zzRefusingRow = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
+// zzRefusingRow is an OFF-CORPUS refusing shape (a raw flex-cell Reach in
+// the failed dispatch window — the definiteness screen's deferred-token
+// decline, pinned in TestUnmatchedDispatchTrapNegatives): it compiles to a
+// nil Program with no check error, driving the refusal arm, and the
+// interpreter raises its canonical signature_error at run time. Every CORPUS
+// refusal has graduated (the each variadic-if row was the last, 2026-07-15),
+// so the fence pins ride this off-corpus shape until the deferred-token
+// class graduates too.
+const zzRefusingRow = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 
 // A REFUSAL after the check pass emitted an effect must not re-run the
 // source (the re-run would execute zz-emit a second time): it surfaces a

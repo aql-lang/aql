@@ -2459,9 +2459,11 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// lowering leaves an extra sim artifact (see EmitFragment.residualN).
 	if ev.br.then != nil {
 		ev.br.then.residualN = len(b.ThenStk)
+		es.captureInertArmResidual(ev.br.then, b.ThenStk)
 	}
 	if ev.br.els != nil {
 		ev.br.els.residualN = len(b.ElsStk)
+		es.captureInertArmResidual(ev.br.els, b.ElsStk)
 	}
 	seq := es.appendEvent(ev)
 	es.SiteCounts[SiteMono]++
@@ -3353,6 +3355,34 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
 	es.setProduced(out, seq)
 	return true
+}
+
+// captureInertArmResidual mirrors the loop side's all-inert residual capture
+// (RecordLoop's net-drivers arm) for a BRANCH arm: a multi-value arm whose
+// residual is entirely inert (consts/locals — nothing event-produced) leaves
+// nothing on the lowering sim, so lowerFragment's all-inert re-push arm needs
+// the resolved operand list to reconstruct it per taken path (`if c [99]
+// [1 2]` — the 1-vs-2 variadic merge). The parked-fn screen matches the
+// loop's: a Function value in the region auto-applies in the interpreter when
+// a later value lands above it, so a verbatim re-push would diverge — leave
+// those uncaptured (the arm then keeps its refusal). Single-value arms
+// (residualN < 2) never need the capture.
+func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
+	if frag == nil || len(stk) < 2 {
+		return
+	}
+	ops := make([]emitOperand, 0, len(stk))
+	for i := range stk {
+		if sigTypeMatches(stk[i], TFunction) || sigTypeMatches(stk[i], TFnDef) {
+			return
+		}
+		op, ok := es.resolveOperand(stk[i])
+		if !ok || op.kind == opEvent {
+			return
+		}
+		ops = append(ops, op)
+	}
+	frag.residualOps = ops
 }
 
 // RecordLoop records a counted/range `for`: start/end/step operand

@@ -128,40 +128,44 @@ func TestDispatchRematchWideWindowRendersBounded(t *testing.T) {
 	}
 }
 
-// TestDispatchRematchVariadicIfOperandStaysRefused — the remaining negative:
-// a variadic-if result feeding `each` RECORDS an offset-form rematch (the
-// written tuple — the body list — sits at window offset 1, after the region
-// carrier), but the BRANCH merge cannot seat the arm-dependent 1-vs-2
-// residual yet, so the whole-program refusal stands there (fallback parity
-// via the interpreter's canonical raise) until the Phase 5 variadic-region
-// lowering seats the merged residual.
-func TestDispatchRematchVariadicIfOperandStaysRefused(t *testing.T) {
-	const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
-	a, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	prog, reason, _, err := a.CompileCheck(src)
-	if err != nil {
-		t.Fatalf("CompileCheck: %v", err)
-	}
-	if prog != nil || !strings.Contains(reason, "branch leaves extra values") {
-		t.Fatalf("prog=%v reason=%q — the variadic-if residual must stay refused at the branch merge until the variadic-region lowering lands", prog, reason)
-	}
-	b, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, ran, errC := b.RunCompiled(src)
-	if ran {
-		t.Fatal("refused program must fall back")
-	}
-	c, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, errI := c.Run(src)
-	if errC == nil || errI == nil || errC.Error() != errI.Error() {
-		t.Errorf("fallback parity: compiled-path err %v != interp err %v", errC, errI)
+// TestDispatchRematchVariadicIfGraduated — the LAST corpus refusal's
+// graduation pin (both polarities): the branch merge seats the 1-vs-2
+// arm-dependent residual (captureInertArmResidual + the variadic merge), and
+// the terminal rematch seats its const operand under the live region top
+// (push + swap), so the row compiles, runs COMPILED, and raises the
+// offset-form render-bounded diagnostic byte-identical to the interpreter —
+// whichever arm ran.
+func TestDispatchRematchVariadicIfGraduated(t *testing.T) {
+	for _, src := range []string{
+		`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`,
+		`def n 5 if (n eq 0) [99] [1 2] each [dup mul]`,
+	} {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		prog, reason, _, err := a.CompileCheck(src)
+		if err != nil || prog == nil {
+			t.Fatalf("the variadic-if row must compile (reason=%q err=%v)\n  src: %s", reason, err, src)
+		}
+		if !strings.Contains(prog.Disassemble(), "DISPATCH_REMATCH") {
+			t.Fatal("expected a DISPATCH_REMATCH terminal in the lowering")
+		}
+		b, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ran, errC := b.RunCompiled(src)
+		if !ran {
+			t.Fatal("the row must run COMPILED — the rematch owns the raise, not a fallback")
+		}
+		c, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, errI := c.Run(src)
+		if errC == nil || errI == nil || errC.Error() != errI.Error() {
+			t.Errorf("variadic-if rematch not byte-identical (src %s):\n=== COMPILED ===\n%v\n=== INTERP ===\n%v", src, errC, errI)
+		}
 	}
 }

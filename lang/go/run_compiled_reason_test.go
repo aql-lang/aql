@@ -22,20 +22,20 @@ func TestRunCompiledReason(t *testing.T) {
 	})
 
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
-	// the first offending construct. The each variadic-if shape refuses at
-	// the BRANCH merge ("branch leaves extra values" — the 1-vs-2 residual;
-	// its dispatch half records an offset-form rematch since
-	// DispatchSpec.WrittenOff landed) and falls back to the interpreter,
-	// which raises.
+	// the first offending construct. Every CORPUS refusal has graduated, so
+	// the pin rides an off-corpus shape: a raw flex-cell Reach in the failed
+	// dispatch window (the definiteness screen's deferred-token decline)
+	// refuses "unmatched dispatch recovered at f" and falls back to the
+	// interpreter, which raises.
 	t.Run("refusal names the offender", func(t *testing.T) {
-		const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
+		const src = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
 		a, _ := New()
 		_, ran, reason, _ := a.RunCompiledReason(src)
 		if ran {
 			t.Fatalf("expected the interpreter fallback (ran=false), got ran=true")
 		}
-		if !strings.Contains(reason, "branch") {
-			t.Fatalf("refusal reason %q does not name the offending construct (the branch residual)", reason)
+		if !strings.Contains(reason, "unmatched dispatch recovered at f") {
+			t.Fatalf("refusal reason %q does not name the offending dispatch", reason)
 		}
 	})
 
