@@ -201,6 +201,11 @@ var frontierCases = []frontierCase{
 		// the service handler closes over n, so StampDetachedFn declines.
 		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
 	}},
+	// GRADUATED 2026-07-15: the gen/property bodies landed 2026-07-14
+	// (stored-param-body units run nested on the VM), and the residual
+	// module-load entries are now attributed under the "module-load" C4
+	// seam (the preamble bracket in BuildTestModule / RunModuleBody /
+	// BuildReplModule). The case stays as a permanent pin.
 	{"p6/check-prop-body-on-vm", func() error {
 		// Module-scope check-prop (the compiling half of
 		// bytecode_checkprop_interp_test.go). Target: the per-iteration
@@ -327,19 +332,6 @@ var frontierLedger = map[string]frontierEntry{
 	"p6/capturing-handler-stamps": {
 		why:       "plan Phase 6.3: StampDetachedFn declines lexical captures (eng stamp_runtime.go); capturing bodies need closure units with capture slots",
 		failsWith: "no stamp attempt recorded for \"anonymous fn\"",
-	},
-	"p6/check-prop-body-on-vm": {
-		// DRIFTED 2026-07-14 (the body half LANDED): the gen/property bodies
-		// compile as same-program stored-param-body units
-		// (Signature.StoredBodies → compileStoredParamBody) and run nested on
-		// the VM via InvokeCallback — the per-iteration CallAQL entries are
-		// GONE, and iteration count adds ZERO entries (pinned by
-		// TestCheckPropIterationsAddNoInterpEntries). The residual entries
-		// are `import "aql:test"` MODULE-LOAD AQL (BuildTestModule preamble
-		// runs — identical counts for an import-only program), which needs
-		// the Phase 10 module-load attribution seam, not body compilation.
-		why:       "plan Phase 10: aql:test module-load AQL runs unattributed (Engine.Run/runPooledSub at BuildTestModule) — the module-load C4 seam is unbuilt",
-		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
 	// GRADUATED 2026-07-14: p6/concurrent-fork-bodies-on-vm — await's
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody

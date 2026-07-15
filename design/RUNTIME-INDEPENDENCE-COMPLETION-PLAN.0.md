@@ -2130,3 +2130,31 @@ Pinned: TestPredicateOverloadDispatchCompiledParity (poly routing +
 static negatives), TestXmlLiteralIdentityCompiledParity (identity /
 self-eq via the stripped-literal rescue / structural deq), the
 fence-guarantee pair, and the graduated p11 case as a permanent pin.
+
+### The module-load C4 seam — p6/check-prop-body-on-vm GRADUATES (frontier 3→2) (2026-07-15)
+
+A module import's preamble/body run is a SANCTIONED interpreter entry
+— registration code executed once at load — so it now reports under
+the named "module-load" attribution: the three load sites
+(BuildTestModule's preamble, RunModuleBody's inline body,
+BuildReplModule's preamble) bracket their sub-engine run with
+SetInterpAttribution("module-load"), restore on return (the seam never
+leaks into post-import execution — pinned both ways by
+TestModuleLoadEntriesAttributed). With the gen/property bodies already
+running as stored-param-body units (landed 2026-07-14), the check-prop
+case's residual unattributed entries were exactly this class, and the
+stale arm fired on the first run after the bracket — graduated; the
+case stays as a permanent pin.
+
+The frontier is TWO expected-red:
+
+- p6/capturing-handler-stamps — StampDetachedFn declines lexical
+  captures; capturing bodies need capture-aware detached units.
+- p6/vm-run-on-vm — BLOCKED BEHIND THE VM-SIDE WORD-POLICY GATE:
+  Vm.run always composes the sandbox policy, so its sub-registry is
+  policy-gated and the CompileCheck security refusal (compiled
+  dispatch consults no word rules) correctly bars the fork-isolated
+  runtime compile. Graduating it means building the Phase-10 VM
+  dispatch gate (CALL_NATIVE / CALL_USER / poly / dyn consult the
+  WordChecker exactly as stepWord's policyGateWord does), then
+  re-scoping the CompileCheck and StampDetachedFn refusals.

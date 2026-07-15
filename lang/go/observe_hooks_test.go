@@ -3,6 +3,7 @@ package lang
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -47,6 +48,62 @@ func TestArmInterpEntryHookForwarder(t *testing.T) {
 // to sit here was reclassified 2026-07-15: a host handler violating its own
 // registered signature is the host-contract internal_error class, not a
 // designed model-miss bail, so it no longer feeds the census.)
+// The module-load C4 seam: a module import's preamble/body run reports its
+// interpreter entries ATTRIBUTED as "module-load" (the p6/check-prop
+// graduation's residual class), and an import-driving compiled program has
+// zero unattributed entries. The negative: the attribution never leaks past
+// the load — a post-import unattributed interp entry still reports bare.
+func TestModuleLoadEntriesAttributed(t *testing.T) {
+	a := mustNew(t)
+	var (
+		mu      sync.Mutex
+		entries []InterpEntry
+	)
+	disarm := a.ArmInterpEntryHook(func(e InterpEntry) {
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, e)
+	})
+	defer disarm()
+	if _, _, err := a.RunCompiled(`import "aql:test" 1 add 2`); err != nil {
+		t.Fatalf("import run: %v", err)
+	}
+	mu.Lock()
+	loads, unattributed := 0, 0
+	for _, e := range entries {
+		switch e.Attribution {
+		case "module-load":
+			loads++
+		case "":
+			unattributed++
+		}
+	}
+	mu.Unlock()
+	if loads == 0 {
+		t.Errorf("expected module-load-attributed entries from the aql:test preamble, got none")
+	}
+	if unattributed != 0 {
+		t.Errorf("import-driving compiled program: %d unattributed entries", unattributed)
+	}
+	// Post-import, an explicit interpreter run reports its entries BARE —
+	// the load bracket restored the attribution.
+	entries = entries[:0]
+	if _, err := a.RunInterp(`3 add 4`); err != nil {
+		t.Fatalf("post-import interp: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	bare := 0
+	for _, e := range entries {
+		if e.Attribution == "" {
+			bare++
+		}
+	}
+	if bare == 0 {
+		t.Errorf("post-import RunInterp must report bare entries (the seam must not leak), got %+v", entries)
+	}
+}
+
 func TestArmRuntimeBailHookForwarder(t *testing.T) {
 	a := mustNew(t)
 	var bails []BailEvent
