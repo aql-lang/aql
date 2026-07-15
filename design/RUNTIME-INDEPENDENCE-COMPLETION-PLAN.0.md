@@ -1669,3 +1669,36 @@ also handle the region: the recorded window operand for the region
 carrier is the branch's merged result, which layoutOperands must seat
 against a runtime region of varying depth — the mark-window machinery
 (OpCallDynMixedFromMark's stack[mark:] discipline) is the model.
+
+### Branch-merge probe facts — the exact seat (2026-07-15, post e3d6c69)
+
+Instrumented lowerFragment's three "branch leaves extra values" arms on
+the each row. The refusal fires in the MULTI-VALUE arm switch's default
+case with residualN=2, len(residualOps)=0, len(lw.vm)=0, out.kind=const:
+the else arm [1 2] is ALL-INERT (nothing event-produced on the sim), and
+the existing all-inert re-push path (which sets fragMulti and would let
+lowerArms mark the merge variadic — that machinery all EXISTS and handles
+`if c [1 2] [3]` per its own comment) requires frag.residualOps to carry
+the captured operands — but the recorder captures residualOps only for
+LOOP bodies (RecordLoop), never for branch-arm fragments. Two remaining
+pieces, in order:
+
+1. Capture residualOps for branch-arm fragments (RecordBranch /
+   TakeFragment side): when an arm's residual values are inert and
+   resolvable (resolveOperand), record them so the all-inert re-push arm
+   fires and the merge goes variadic (fragMulti → lw.variadic[seq]).
+2. The terminal rematch's operand layout must then absorb a VARIADIC
+   merge slot: lowerTrap's layoutOperands refuses variadic loop results
+   today ("rematch operands include a variadic loop result"). The
+   mark-bounded variant is the model (vm_markwindow.go's stack[mark:]
+   discipline): plan an OpStackMark before the branch event
+   (markBefore/planVariadicClaims machinery exists), and lower the trap
+   as a FromMark rematch whose runtime window = the baked const operands
+   (the body list) + stack[mark:], with the offset-form render bound
+   over the written slice (here the const body — arm-independent, the
+   probe showed both polarities render the identical note set).
+   Alternatively investigate whether the existing variadic-residual
+   absorption (program residual absorbs variadic merges) suffices when
+   the trap is TERMINAL — the raise consumes nothing; the window could
+   be rebuilt from the live stack without layout at all (the rematch is
+   the LAST op; stack[mark:] IS the region regardless of seat order).
