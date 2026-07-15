@@ -32,9 +32,9 @@ var knownRefusals = map[string]string{
 	// the failed window (a single event-carrier in every one) re-matches over
 	// the live values at run time and raises the shared rich diagnostic
 	// byte-identical to the interpreter (or defers when it unexpectedly
-	// matches). The three rows below stay refused: their windows exceed the
-	// written-tuple bound (local add), carry a variadic-if operand (each),
-	// or hold a splice.
+	// matches). The one row below stays refused: its window carries a
+	// variadic-if operand (each). The former local-add and word-splice
+	// entries graduated (see the dated notes below).
 
 	// a VARIADIC-IF result feeding `each`: the arms leave DIFFERENT counts
 	// (then [99] = one value, else [1 2] = two), so the merged position joins
@@ -48,9 +48,14 @@ var knownRefusals = map[string]string{
 	// 1-vs-2 residual and lets a terminal rematch own the raise.
 	`def n 0 if (n eq 0) [99] [1 2] each [dup mul]`: "unmatched dispatch recovered at each (variadic-if operand)",
 
-	// open-words — a locally/module-redefined `add` overload anchored to a user
-	// type: an operand outside the overload stays a no-match (negative rows).
-	`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`: "unmatched dispatch recovered at add (local add overload)",
+	// GRADUATED 2026-07-15 (render bound, plan 3a): the local-add row — a
+	// locally-redefined `add` overload whose merge is invisible after fn
+	// exit — compiles to a runtime rematch. Its match probed a WIDER window
+	// (3 positions) than the tuple its error renders (the single stack
+	// value: the forward walk breaks at the `true`/`false` WORD tokens), so
+	// DispatchSpec carries NWritten, proven a leading prefix of the window
+	// by ID at the record gate; the VM re-matches the full window and
+	// renders over window[:NWritten], byte-identical to the interpreter.
 
 	// GRADUATED 2026-07-14 (word-splice): a PARKED `__SP` marker (def-bound,
 	// collected by value — never stepped before the dispatch) is identical at

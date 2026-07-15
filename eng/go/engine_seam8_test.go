@@ -1304,10 +1304,10 @@ func TestW8ResolveOrphanedUnmatchedClose(t *testing.T) {
 func TestW8DispatchRematchDeclines(t *testing.T) {
 	// Inactive recorder + interface no-op.
 	var nilES *EmitState
-	if nilES.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, SrcPos{}) {
+	if nilES.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 1, SrcPos{}) {
 		t.Error("inactive EmitState must decline")
 	}
-	if theInactiveEmit.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, SrcPos{}) {
+	if theInactiveEmit.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 1, SrcPos{}) {
 		t.Error("the inactive recorder must decline")
 	}
 
@@ -1316,27 +1316,34 @@ func TestW8DispatchRematchDeclines(t *testing.T) {
 	defer done()
 	es, _ := r.Check.Recorder().(*EmitState)
 	es.bindRegistry(r)
-	if es.RecordDispatchRematchValues("w", nil, SrcPos{}) {
+	if es.RecordDispatchRematchValues("w", nil, 1, SrcPos{}) {
 		t.Error("an empty window must decline")
 	}
 	// A dynamic value with no provenance fails resolveOperand.
 	dyn := NewCarrier(TAny)
 	dyn.Dynamic = true
 	dyn.ID = ""
-	if es.RecordDispatchRematchValues("w", []Value{dyn}, SrcPos{}) {
+	if es.RecordDispatchRematchValues("w", []Value{dyn}, 1, SrcPos{}) {
 		t.Error("an unresolvable operand must decline")
 	}
-	if es.RecordDispatchRematch("", []emitOperand{constOperand(0)}, SrcPos{}) {
+	if es.RecordDispatchRematch("", []emitOperand{constOperand(0)}, 1, SrcPos{}) {
 		t.Error("an empty word must decline")
 	}
-	if es.RecordDispatchRematch("w", nil, SrcPos{}) {
+	if es.RecordDispatchRematch("w", nil, 1, SrcPos{}) {
 		t.Error("no operands must decline")
 	}
+	// The render bound must be a leading slice: 0 and out-of-range decline.
+	if es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 0, SrcPos{}) {
+		t.Error("a zero render bound must decline")
+	}
+	if es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 2, SrcPos{}) {
+		t.Error("a render bound beyond the window must decline")
+	}
 	// First trap wins: with a trap latched, a second record reports owned.
-	if !es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, SrcPos{}) {
+	if !es.RecordDispatchRematch("w", []emitOperand{constOperand(0)}, 1, SrcPos{}) {
 		t.Fatal("the first rematch record must land")
 	}
-	if !es.RecordDispatchRematch("w2", []emitOperand{constOperand(1)}, SrcPos{}) {
+	if !es.RecordDispatchRematch("w2", []emitOperand{constOperand(1)}, 1, SrcPos{}) {
 		t.Error("a second record after the latch must report owned (true), not re-record")
 	}
 
@@ -1352,16 +1359,22 @@ func TestW8DispatchRematchDeclines(t *testing.T) {
 
 	// VM underflow guard.
 	vc := &vmContext{r: r}
-	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 2}, nil, nil, 0); err == nil {
+	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 2, NWritten: 2}, nil, nil, 0); err == nil {
 		t.Error("a short stack must error")
+	}
+	// VM render-bound guard: a spec whose written bound is outside 1..NArgs
+	// is malformed (the recorder proves the bound before recording).
+	if err := vc.dispatchRematch(&DispatchSpec{Word: "w", NArgs: 1},
+		[]Value{NewInteger(1)}, nil, 0); err == nil || !strings.Contains(err.Error(), "written bound") {
+		t.Errorf("a zero written bound must raise the bound guard, got %v", err)
 	}
 }
 
 // TestW8DispatchRematchNoneLiteralWindow — a `none` word in the failed
 // window resolves to the None value exactly as the match's forward walk
 // resolved it (the known-literal arm); the record still declines here
-// because the written tuple (forward walk stops at the word) is narrower
-// than the window.
+// because the written tuple is EMPTY (the forward walk stops at the word
+// and the stack prefix is bare) — no render bound exists for it.
 func TestW8DispatchRematchNoneLiteralWindow(t *testing.T) {
 	r := covRegistry(t, nil)
 	r.RegisterNativeFunc(NativeFunc{Name: "w8rn", Signatures: []Signature{{

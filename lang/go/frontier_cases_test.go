@@ -220,9 +220,9 @@ var frontierCases = []frontierCase{
 
 	// Phase 10 — the executed-census seeds.
 	{"p10/no-unattributed-interp-on-islanded-program", func() error {
-		// A genuine whole-program refusal (the local-add knownRefusals row):
-		// today the silent fallback re-runs the source unattributed. Target:
-		// every residual interpreter entry belongs to a named C4 seam.
+		// A genuine whole-program refusal (the each variadic-if knownRefusals
+		// row): today the silent fallback re-runs the source unattributed.
+		// Target: every residual interpreter entry belongs to a named C4 seam.
 		return fcNoUnattributedInterp(func(a *AQL) error {
 			_, _, _ = a.RunCompiled(zzRefusingRow) // the row raises; the entries are the assertion
 			return nil

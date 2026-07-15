@@ -22,19 +22,20 @@ func TestRunCompiledReason(t *testing.T) {
 	})
 
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
-	// the first offending construct. The wide-window local-add shape refuses
-	// ("unmatched dispatch recovered at add") and falls back to the
-	// interpreter, which raises. (`5 inc apply` — the former fixture —
-	// compiles to a runtime rematch since OpDispatchRematch landed.)
+	// the first offending construct. The each variadic-if shape refuses
+	// ("unmatched dispatch recovered at each") and falls back to the
+	// interpreter, which raises. (The wide-window local-add row — the former
+	// fixture — compiles to a render-bounded runtime rematch since the
+	// DispatchSpec.NWritten bound landed.)
 	t.Run("refusal names the offender", func(t *testing.T) {
-		const src = `def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`
+		const src = `def n 0 if (n eq 0) [99] [1 2] each [dup mul]`
 		a, _ := New()
 		_, ran, reason, _ := a.RunCompiledReason(src)
 		if ran {
 			t.Fatalf("expected the interpreter fallback (ran=false), got ran=true")
 		}
-		if !strings.Contains(reason, "add") {
-			t.Fatalf("refusal reason %q does not name the offending word `add`", reason)
+		if !strings.Contains(reason, "each") {
+			t.Fatalf("refusal reason %q does not name the offending word `each`", reason)
 		}
 	})
 

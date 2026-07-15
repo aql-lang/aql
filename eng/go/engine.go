@@ -8466,21 +8466,25 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// Not statically definite — but every position is a runtime-stable
 		// value or a provenance-carrying carrier: record the runtime
 		// rematch (OpDispatchRematch), under three byte-identity guards.
-		// (1) The window must EQUAL the written tuple sigError renders
-		// (the carrier-aware twin of its forward-else-stack derivation) —
-		// a wider match view than the raise view (the local-add shape,
-		// where the match probed 3 positions but the error renders 1)
-		// cannot yet be rebuilt faithfully at run time; it stays refused
-		// until the DispatchErrCtx window-bound lands. (2)+(3) The two
-		// TAPE-state diagnostic layers the runtime rebuild has no access
-		// to — the tape reorder probe and the fn-shape typed-binding hint
-		// — must not apply; runtimeNoMatch rebuilds the value-based
-		// reorderHintFor itself. Declines leave the caller's refusal.
+		// (1) The written tuple sigError renders (the carrier-aware twin
+		// of its forward-else-stack derivation) must be a LEADING PREFIX
+		// of the window, proven by ID identity — its length rides as the
+		// spec's render bound (NWritten), so a wider match view than the
+		// raise view (the local-add shape, where the match probed 3
+		// positions but the error renders the single stack value) re-runs
+		// the match over the full window while rendering over the bounded
+		// slice. An empty tuple, or one that is not the window's leading
+		// slice, cannot be rebuilt faithfully and declines. (2)+(3) The
+		// two TAPE-state diagnostic layers the runtime rebuild has no
+		// access to — the tape reorder probe and the fn-shape
+		// typed-binding hint — must not apply; runtimeNoMatch rebuilds
+		// the value-based reorderHintFor itself. Declines leave the
+		// caller's refusal.
 		written := e.rematchWritten()
-		if len(written) != len(vals) {
+		if len(written) == 0 || len(written) > len(vals) {
 			return false
 		}
-		for i := range vals {
+		for i := range written {
 			if written[i].ID != vals[i].ID {
 				return false
 			}
@@ -8491,7 +8495,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		if e.reorderHint(w.Name, fn) != "" || e.isFnShapeTypedBindingContext() {
 			return false
 		}
-		return es.RecordDispatchRematchValues(w.Name, vals, pos)
+		return es.RecordDispatchRematchValues(w.Name, vals, len(written), pos)
 	}
 	// Serialise the FULL interpreter error into the trap so the compiled
 	// OpTrap raises byte-identical to the interpreter (Detail + spans +

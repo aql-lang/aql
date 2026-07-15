@@ -1577,3 +1577,26 @@ landed; all five closed in one hardening pass:
    closed pipe: 0, err) counted as an escaped effect and blocked a
    still-safe fallback. It now delegates first and notes only n > 0
    (partial writes still count).
+
+### Local-add GRADUATED — the 3a render bound landed (2026-07-15)
+
+DispatchSpec gained `NWritten` — the RENDER BOUND: how many leading window
+operands form the written tuple sigError renders. The record gate
+(tryRecordUnmatchedDispatchTrap) relaxed its written-tuple guard from full
+equality to LEADING-PREFIX-BY-ID: rematchWritten must be non-empty and its
+values must be the window's first len(written) slots (ID identity), and
+that length rides through emitTrap.rematchNWritten into the spec. The VM
+(dispatchRematch) re-runs MatchSignature over the FULL window — the view
+the failed static match examined — and renders runtimeNoMatch over
+window[:NWritten]. The render-parity probe confirmed byte-identity on the
+local-add row before the ledger moved: received note over the single stack
+value, the same three candidate verdicts + "…and 3 more", both help
+suggestions, same span. Census 5998→5999/6000; refusals 2→1 (the stale arm
+fired; the each variadic-if row is the LAST corpus refusal). The fixture
+cascade moved zzRefusingRow (effect-fence + p10/p11 frontier cases), the
+RunCompiledReason offender-naming subtest, and the CLI refusal-warning test
+onto the each row; TestDispatchRematchWideWindowStaysRefused flipped to
+TestDispatchRematchWideWindowRendersBounded (compiled + byte-identical) with
+a new stays-refused negative pinning the each row's exact reason. New guard
+arms pinned directly: RecordDispatchRematch declines bounds outside
+1..len(ops); the VM raises on a spec outside 1..NArgs.

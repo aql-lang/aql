@@ -832,10 +832,21 @@ type TrapSpec struct {
 // (the values the recorder pushed, stack[top-i] = sig position i), and the
 // dispatch site's source position, stamped onto the runtime-built
 // diagnostic so it labels the same site the interpreter's would.
+//
+// NWritten is the RENDER BOUND: how many LEADING window operands form the
+// WRITTEN tuple the interpreter's sigError renders (its forward-else-stack
+// derivation). The match view can be wider than the raise view — the
+// local-add shape's match probed 3 positions where its error renders the
+// single stack value — so the rematch re-runs the match over the FULL
+// window but builds the diagnostic over window[:NWritten]. Always explicit,
+// 1..NArgs (never the Go zero): the record gate proves the bound by ID
+// identity (the written tuple IS the window's leading slots) before
+// recording, and the VM rejects a spec outside the range.
 type DispatchSpec struct {
-	Word  string
-	NArgs int
-	Pos   SrcPos
+	Word     string
+	NArgs    int
+	NWritten int
+	Pos      SrcPos
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member

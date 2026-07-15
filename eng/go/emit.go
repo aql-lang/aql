@@ -366,8 +366,12 @@ type emitTrap struct {
 	// (OpDispatchRematch): the statically-failed dispatch's window operands
 	// ride in rematchOps (sig-position order — index 0 is what the failed
 	// match examined first), re-matched over the live values at run time.
-	rematchWord string
-	rematchOps  []emitOperand
+	// rematchNWritten is the render bound (DispatchSpec.NWritten): the
+	// leading rematchOps slice the runtime diagnostic renders as the
+	// written tuple. Always 1..len(rematchOps).
+	rematchWord     string
+	rematchOps      []emitOperand
+	rematchNWritten int
 }
 
 // emitEvent is one node of the recorded trace, tagged by kind. The two largest
@@ -3670,8 +3674,10 @@ func (es *EmitState) RecordTrapErr(ae *AqlError, pos SrcPos) bool {
 // RecordDispatchRematch: it resolves each window VALUE to its operand
 // (a make-result carrier resolves to its producing event; a concrete
 // forward token to a const) and declines — leaving the caller's refusal to
-// stand — when any value has no resolvable provenance.
-func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, pos SrcPos) bool {
+// stand — when any value has no resolvable provenance. nWritten is the
+// render bound (DispatchSpec.NWritten): how many leading vals form the
+// written tuple the interpreter's error renders.
+func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, nWritten int, pos SrcPos) bool {
 	if !es.active() || len(vals) == 0 {
 		return false
 	}
@@ -3683,7 +3689,7 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, pos 
 		}
 		ops[i] = op
 	}
-	return es.RecordDispatchRematch(word, ops, pos)
+	return es.RecordDispatchRematch(word, ops, nWritten, pos)
 }
 
 // RecordDispatchRematch records a TERMINAL runtime-rematch trap
@@ -3693,10 +3699,15 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, pos 
 // error now (RecordTrapErr) the compiled program re-runs the match over the
 // live values and raises the shared rich diagnostic built over them — or
 // defers to the interpreter when the match unexpectedly succeeds. ops are
-// the window operands in the order the failed match examined them. Same
-// top-level-only guard and first-trap-wins latch as RecordTrap.
-func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, pos SrcPos) bool {
+// the window operands in the order the failed match examined them; nWritten
+// is the render bound over their leading slice (1..len(ops) — anything else
+// declines, the producer's proof did not hold). Same top-level-only guard
+// and first-trap-wins latch as RecordTrap.
+func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, nWritten int, pos SrcPos) bool {
 	if word == "" || len(ops) == 0 {
+		return false
+	}
+	if nWritten < 1 || nWritten > len(ops) {
 		return false
 	}
 	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
@@ -3706,9 +3717,10 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, pos S
 		return true
 	}
 	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
-		rematchWord: word,
-		rematchOps:  append([]emitOperand(nil), ops...),
-		pos:         pos,
+		rematchWord:     word,
+		rematchOps:      append([]emitOperand(nil), ops...),
+		rematchNWritten: nWritten,
+		pos:             pos,
 	}})
 	return true
 }
