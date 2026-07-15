@@ -860,8 +860,17 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	}
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
-			return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method", fmt.Sprintf(
-				"shaped method apply %s: result count %d differs from the shape claim %d; deferring to the interpreter",
+			// A count differing from the shape claim indicts a HOST-CONTRACT
+			// violation, not compiler model debt: an AQL-source method's
+			// count is the checker's own body model (return contracts are
+			// engine-enforced), so the only way here is a host registration
+			// whose handler returned a count its own signature denies — the
+			// recovered-panic class. Raise the plain internal_error
+			// (runtimeShouldFallback still resolves it by re-running on the
+			// tolerant interpreter, fenced as ever); the runtime-bail census
+			// counts DESIGNED model-miss defers only, and this is not one.
+			return nil, vmErrAt(curDebug, pc, fmt.Sprintf(
+				"shaped method apply %s: result count %d violates the host-registered shape claim %d",
 				spec.Word, len(results), spec.NOut))
 		}
 		if err := vc.screenResults(results, "shaped method result at "+spec.Word, curDebug, pc); err != nil {

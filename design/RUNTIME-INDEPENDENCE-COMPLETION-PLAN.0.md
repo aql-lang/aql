@@ -1739,3 +1739,22 @@ is pinned directly (TestLowerFragmentIrreconstructibleMultiArm).
 
 Stage J's first gate (refusals=0) is now satisfied; the remaining gate
 is the runtime-bail census (Phase 10) before the public Run flip.
+
+### Phase 10: the executed bail census canary GRADUATED (2026-07-15)
+
+The shaped-method COUNT-VIOLATION defer was reclassified: an AQL-source
+method's result count is the checker's own body model (return contracts
+are engine-enforced), so a count differing from the shape claim indicts
+a HOST registration whose handler returned a count its own signature
+denies — the recovered-panic class (host-contract violation), not
+compiler model debt. The guard now raises the plain internal_error
+(runtimeShouldFallback resolves it identically — silent tolerant
+fallback, fenced as ever; the zz-inst effect-fence pins pass unchanged)
+without feeding the runtime-bail census, which counts DESIGNED
+model-miss defers only. The not-appliable defer (the shape claim itself
+failing — a genuine static-model miss) remains a designed bail.
+p10/runtime-bail-census-canary is GREEN (frontier expected-red 7→6);
+the hook-forwarder pin moved to the vm:rematch-matched defer (a real
+designed bail that stays). Remaining expected-red: capturing-handler
+stamps, check-prop/vm-run module-load seams, the C4 attribution ratchet
+(p10), and the two Stage-J flips (p11).

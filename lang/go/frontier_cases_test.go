@@ -324,10 +324,6 @@ var frontierLedger = map[string]frontierEntry{
 		why:       "plan Phase 10: the whole-program refusal fallback re-runs the source with no seam attribution; attribution + per-seam ratchets are unbuilt",
 		failsWith: "unattributed interpreter entries: Engine.Run",
 	},
-	"p10/runtime-bail-census-canary": {
-		why:       "plan Phase 10: the shaped-method claim-violation defer is a live designed bail; the executed census must be driven to zero before Stage J",
-		failsWith: "runtime bails: vm:shaped-method",
-	},
 	"p11/public-run-is-compiled": {
 		why:       "plan Phase 11: the public (*AQL).Run is the tree-walker until Stage J flips it to the compiled path (RunInterp retained as the oracle)",
 		failsWith: "unattributed interpreter entries: Engine.Run",
