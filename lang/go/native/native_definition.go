@@ -647,6 +647,77 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	}
 }
 
+// defFnPredicateBind is defTypedHandler's fn-PREDICATE branch (extracted for
+// gocyclo): validate/transform via the predicate, reparent per the
+// interpreter's decision, and record the runtime bind — for CONCRETE bodies
+// too, since the predicate is a runtime evaluation (the 2026-07-15 flip
+// finding: a check-lenient bake bound the raw value where the interpreter
+// runs the transform). In a COMPILE pass the check-mode run is ANALYSIS ONLY
+// (recording suspended so the predicate body's dispatches are not emitted
+// inline ahead of the bind); a declined record refuses regardless of
+// concreteness — slow, not wrong.
+func defFnPredicateBind(r *Registry, name, typeName string, constraint, body Value, describeType func() string, pos SrcPos) ([]Value, error) {
+	resumePred := func() {}
+	if es := r.Check.Recorder(); es.Active() && IsConcrete(body) {
+		resumePred = es.Suspend()
+	}
+	out, matched, err := r.RunPredicate(constraint, body)
+	resumePred()
+	if err != nil {
+		return nil, fmt.Errorf("def %s: predicate type %s: %w", name, describeType(), err)
+	}
+	if !matched {
+		return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
+			name, body.String(), describeType())
+	}
+
+	// Rewrap with the predicate's *Type so dispatch keys off
+	// the nominal name. The underlying Data is unchanged —
+	// accessors (AsInteger, AsString, …) read the payload the
+	// same way — but the Parent change lets the LCA walk find
+	// behaviors installed via `behave compare/q (fn
+	// [[Positive Positive] …])` etc.
+	//
+	// Only fires when the predicate declares a concrete input
+	// type (e.g. `fn [n:Integer …]`). Predicates with `Any`
+	// input — the historical `fn [x:Any Any […]]` shape — are
+	// pure validation gates: their *Type is parented at
+	// TFnDef and rewrapping would break rendering and
+	// downstream type tests (the value would print as
+	// `Type/Function/Bbd({…})` rather than its underlying
+	// scalar). The PredicateInputType check below mirrors the
+	// InstallType decision so the two paths stay aligned.
+	var reparentTo *Type
+	if typeName != "" && eng.PredicateInputType(constraint) != nil {
+		if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
+			out = ReparentValue(out, def)
+			reparentTo = def
+		}
+	}
+	// A DYNAMIC body records a typed-bind event (OpBindTyped runs the
+	// predicate + reparent over the runtime value); RunPredicate above
+	// short-circuited on the carrier in check mode, so the runtime bind is
+	// the first real evaluation. reparentTo carries the SAME reparent
+	// decision the interpreter just took, so the two engines agree.
+	out = recordTypedBindOrRefuseConcrete(r, func() eng.TypedBindSpec {
+		predCons := constraint
+		return eng.TypedBindSpec{
+			Kind: eng.TypedBindPredicate, Name: name, Describe: describeType(),
+			Def: reparentTo, Cons: &predCons,
+		}
+	}, body, out, pos, func() { markFnPredicateBindUncompilable(r, name) })
+	return installAndRecordDef(r, name, out, pos)
+}
+
+// markFnPredicateBindUncompilable refuses compilation when a fn-predicate
+// typed-def's bind record declined: the predicate is a runtime evaluation
+// for every body shape, so there is no sound bake — slow, not wrong.
+func markFnPredicateBindUncompilable(r *Registry, name string) {
+	if es := r.Check.Recorder(); es.Active() {
+		es.MarkUncompilable("typed-def `" + name + "`: fn-predicate bind is runtime-evaluated (no compiled bind at this site)")
+	}
+}
+
 // recordTypedBindOrRefuse threads a refinement typed-def through the bytecode
 // recorder: on success the returned binding carries a fresh provenance ID
 // registered against a typed-bind event (OpBindTyped re-runs the SAME
@@ -661,6 +732,20 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 // recorded — a plain interpreter run pays nothing it did not pay before.
 func recordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
 	if es := r.Check.Recorder(); es.Active() && !IsConcrete(body) {
+		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
+			return out
+		}
+	}
+	refuse()
+	return bound
+}
+
+// recordTypedBindOrRefuseConcrete is recordTypedBindOrRefuse WITHOUT the
+// concrete-body decline: the fn-PREDICATE bind is a runtime evaluation for
+// every body shape (the predicate can transform, raise, or read live state),
+// so a concrete operand records the bind rather than riding the const pool.
+func recordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+	if es := r.Check.Recorder(); es.Active() {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
 		}
@@ -808,50 +893,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 	}
 	if constraint.Parent.Equal(TFnDef) || constraint.Parent.Equal(TFunction) {
-		out, matched, err := r.RunPredicate(constraint, body)
-		if err != nil {
-			return nil, fmt.Errorf("def %s: predicate type %s: %w", name, describeType(), err)
-		}
-		if !matched {
-			return nil, fmt.Errorf("def %s: value %s does not satisfy predicate type %s",
-				name, body.String(), describeType())
-		}
-		// Rewrap with the predicate's *Type so dispatch keys off
-		// the nominal name. The underlying Data is unchanged —
-		// accessors (AsInteger, AsString, …) read the payload the
-		// same way — but the Parent change lets the LCA walk find
-		// behaviors installed via `behave compare/q (fn
-		// [[Positive Positive] …])` etc.
-		//
-		// Only fires when the predicate declares a concrete input
-		// type (e.g. `fn [n:Integer …]`). Predicates with `Any`
-		// input — the historical `fn [x:Any Any […]]` shape — are
-		// pure validation gates: their *Type is parented at
-		// TFnDef and rewrapping would break rendering and
-		// downstream type tests (the value would print as
-		// `Type/Function/Bbd({…})` rather than its underlying
-		// scalar). The PredicateInputType check below mirrors the
-		// InstallType decision so the two paths stay aligned.
-		var reparentTo *Type
-		if typeName != "" && eng.PredicateInputType(constraint) != nil {
-			if def := r.LookupTypeName(typeName); def != nil && def.Origin != eng.OriginBuiltin {
-				out = ReparentValue(out, def)
-				reparentTo = def
-			}
-		}
-		// A DYNAMIC body records a typed-bind event (OpBindTyped runs the
-		// predicate + reparent over the runtime value); RunPredicate above
-		// short-circuited on the carrier in check mode, so the runtime bind is
-		// the first real evaluation. reparentTo carries the SAME reparent
-		// decision the interpreter just took, so the two engines agree.
-		out = recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
-			predCons := constraint
-			return eng.TypedBindSpec{
-				Kind: eng.TypedBindPredicate, Name: name, Describe: describeType(),
-				Def: reparentTo, Cons: &predCons,
-			}
-		}, body, out, args[0].Pos(), func() { markRefineDefUncompilable(r, name, body) })
-		return installAndRecordDef(r, name, out, args[0].Pos())
+		return defFnPredicateBind(r, name, typeName, constraint, body, describeType, args[0].Pos())
 	}
 
 	// ObjectType constraint (`def x:Person {map}` where Person is

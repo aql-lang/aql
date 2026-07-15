@@ -82,3 +82,16 @@ func TestLowerFragmentIrreconstructibleMultiArm(t *testing.T) {
 		t.Fatalf("irreconstructible multi-arm reason = %q, want the branch-residual refusal", reason)
 	}
 }
+
+// RecordTypedBind's inactive-recorder decline (the guard split when concrete
+// PREDICATE operands were admitted — the fn-predicate bind is a runtime
+// evaluation, so concreteness no longer short-circuits that kind).
+func TestRecordTypedBindInactiveDeclines(t *testing.T) {
+	es := NewEmitState()
+	resume := es.Suspend()
+	defer resume()
+	if _, ok := es.RecordTypedBind(TypedBindSpec{Kind: TypedBindPredicate, Name: "x"},
+		NewInteger(1), NewInteger(1), SrcPos{}); ok {
+		t.Fatal("a suspended recorder must decline the typed-bind record")
+	}
+}

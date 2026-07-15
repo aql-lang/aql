@@ -3779,7 +3779,16 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writt
 // no resolvable provenance; the caller then falls back to the refusal mark,
 // which itself no-ops for the concrete/inactive cases.
 func (es *EmitState) RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool) {
-	if !es.active() || IsConcrete(in) {
+	if !es.active() {
+		return out, false
+	}
+	// A CONCRETE operand declines for the refine/DepScalar kinds (their
+	// const-pool bake is proven), but a fn-PREDICATE bind is a runtime
+	// evaluation for every body shape — the predicate can transform, raise,
+	// or read live state — so concrete operands record too (the 2026-07-15
+	// flip finding: a check-lenient bake bound the raw value where the
+	// interpreter runs the transform).
+	if IsConcrete(in) && spec.Kind != TypedBindPredicate {
 		return out, false
 	}
 	op, ok := es.resolveOperand(in)

@@ -1860,3 +1860,25 @@ an inline drive) — is recorded on the p11 ledger row. Both p11 rows
 stay honestly red: the flip mechanics are proven, the remaining work is
 divergence-closing, which is exactly the runtime-independence program's
 core loop.
+
+### Flip blocker 1 CLOSED — the fn-predicate bind miscompile (2026-07-15)
+
+The fn-predicate typed-def (`def shout:Up "hello"` where Up is a fn) is a
+RUNTIME EVALUATION for every body shape — the predicate can transform,
+raise, or read live state — so the concrete-body const-pool bake that is
+proven for refine/DepScalar was UNSOUND here: the check-lenient run bound
+the raw value where the interpreter runs the transform (probe: compiled
+[hello] with no error vs interp undefined_word — a live miscompile the
+corpus missed, caught by the flip attempt). The fix: RecordTypedBind
+admits CONCRETE operands for the PREDICATE kind (refine/DepScalar keep
+their proven const path); defTypedHandler's predicate branch (extracted
+to defFnPredicateBind for gocyclo) suspends recording around the
+check-mode analysis run and records the bind unconditionally, with a
+declined record REFUSING regardless of concreteness
+(markFnPredicateBindUncompilable — shared with its direct decline pin).
+Verified end-to-end: the transform shape, the range pass, and the raise
+shape all run COMPILED byte-identical (the raise row's OpBindTyped
+raises the interpreter's exact predicate error at bind time).
+
+Remaining flip blockers: the model watch fork (-race), the mini
+host-compile hook, and the cross-instance observability pollution.
