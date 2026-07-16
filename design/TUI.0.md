@@ -432,7 +432,12 @@ an xterm.js backend exists (§9). Unlike parselang there is **no AQL-level
   stdout fails with `tui_error not_a_tty`.
 - **`virtual`** — `tuikit.VirtualBackend`, exported for tests everywhere
   (§8.1): fixed-size in-memory grid, `Inject(ev)` to script input,
-  `Screen() []string` / `CellAt(x,y)` for assertions, no OS anything.
+  `Screen() []string` / `CellAt(x,y)` for assertions over the current
+  grid, **plus a bounded history of every `Present`ed frame**
+  (`FrameCount()` / `Screen(i)`) — the terminal is restored on quit, so
+  every meaningful golden is a *mid-run* frame and the current grid alone
+  cannot see them (surfaced by the `design/examples/tui/` probe). No OS
+  anything.
 - **Registration wiring**: `cmd/go`'s run/REPL/exec setup registers the
   `tty` spec unconditionally (registration is cheap; failure is deferred to
   `Open`), in the same place host policy/FileOps wiring already happens. A
@@ -528,6 +533,12 @@ The viewer sees pixel-for-cell the §5.2 app; keys travel up, trees travel
 down (§6). `Tui.serve` returns the final state exactly as `Tui.run` does —
 the picked row is available *on the server* when the viewer picks or
 disconnects.
+
+The reuse idiom this rests on: an app exports its `{init update view}`
+**map** (not only a `run`-shaped word) — `Tui.run` and `Tui.serve` take
+the same value, so serving is a one-word change. The
+`design/examples/tui/` probe pins the shape (`TodoTui.app` beside
+`TodoTui.run`).
 
 ## 6. The remote tier
 
@@ -678,9 +689,10 @@ stance as codecs-are-pure in `NETWORK-SERVERS.0.md` §9.
 
 The driver is tested end-to-end with scripted event queues and screen
 assertions, no TTY anywhere (which CI does not have): inject
-`init → keys → ctrl-c`, assert `run`'s return value and golden
-`Screen()` snapshots (goldens include CJK/emoji rows to pin the width
-tables); error paths one-for-one with positives (ADR-house rule): update
+`init → keys → ctrl-c`, assert `run`'s return value and golden snapshots
+taken from the backend's **recorded frame history** (§4.4 — after quit
+the live grid is restored-empty, so goldens read `Screen(i)`, not
+`Screen()`; CJK/emoji rows pin the width tables); error paths one-for-one with positives (ADR-house rule): update
 raises mid-loop (terminal restored, error propagates), view returns a
 non-widget (`tui_error bad_widget`), second `run` (`already_running`),
 backend `Open` failure, no-backend-registered. Remote: a loopback
@@ -794,7 +806,12 @@ best-effort, mouse gated off (§9).
    one `update` function, unifying TUI apps with services? (Leaning: keep
    the single function in v1 — a `case` inside `update` is honest and
    simple; revisit when the `service` surface stabilizes, since an app
-   *being* a service would also give `call`-based app introspection.)
+   *being* a service would also give `call`-based app introspection. The
+   `design/examples/tui/` todo probe adds evidence for the revisit: its
+   two-zone focus routing is hand-written `state.focus` guards on every
+   key clause — exactly patrun-shaped — and the REST app's `wrap` hits
+   counter has no TUI analog short of editing `update`, while a
+   service-shaped app would inherit `wrap`/`prior` for free.)
 2. **Native ticks.** Ship a `{tick: ms}` run option, or leave animation to
    `TimeUtil.interval` + `send`? (Leaning: no native ticks — the timer words
    exist, compose with the mailbox, and a tick option would be the first
