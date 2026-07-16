@@ -3,6 +3,7 @@ package eng
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // Bytecode Program model — Stage 1 of design/aql-bytecode-plan.0.md.
@@ -665,6 +666,27 @@ type CompiledFnRef struct {
 	// interpreter. nil = compile-time ref, no validation (nil is the
 	// unambiguous unset for a map).
 	depSnap map[string]depSnapEntry
+	// restamp is the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): a DETACHED
+	// ref whose depSnap went stale re-compiles against the LIVE bindings at
+	// invoke time (CompiledFnRef.jitRestamp) instead of degrading
+	// permanently to CallAQL. Allocated by StampDetachedFn only — a
+	// compile-time ref re-poisons via NotifyNameRebound and never re-stamps
+	// (nil box → the interpreter, as before). A POINTER field keeps the
+	// struct copyable while the box's mutex serialises concurrent invokers
+	// of the same shared sig.
+	restamp *restampBox
+}
+
+// restampBox carries a detached ref's stamp inputs and its current
+// re-stamped twin (see CompiledFnRef.restamp). tries caps the TOTAL
+// re-compiles per ref so a hot rebinding loop cannot pay a compile per
+// invoke — once exhausted, the seam stays on CallAQL (slow, not wrong).
+type restampBox struct {
+	mu    sync.Mutex
+	fd    FnDefInfo
+	pos   SrcPos
+	tries int
+	cur   *CompiledFnRef
 }
 
 // depSnapEntry is one dep's binding state at stamp time (see depSnap).

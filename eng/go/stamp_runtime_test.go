@@ -530,3 +530,93 @@ func TestInterpMemberInertMapArms(t *testing.T) {
 		t.Error("a paren-expr bearing a non-inert token is NOT interp-inert")
 	}
 }
+
+// The §7c JIT re-stamp (REFUSAL-CLOSURE.0): a detached ref whose dep was
+// REBOUND after the stamp re-compiles against the live binding at invoke
+// time — the fresh twin runs on the VM with the NEW value (parity with the
+// interpreter's live resolution) — instead of degrading permanently to
+// CallAQL. A second invoke under the same binding REUSES the twin (no
+// second compile); the try budget bounds a hot rebinding loop; and a
+// declined re-stamp (stamping disarmed) takes the interpreter.
+func TestInvokeCallbackJITRestamp(t *testing.T) {
+	r := stampReg(t)
+	r.EnableRuntimeStamping()
+	r.Defs.Push("dep", NewInteger(1))
+
+	fd := aqlBodyFd(NewWord("dep"))
+	fd.Name = "reader"
+	ref, ok := StampDetachedFn(r, fd, SrcPos{Row: 1, Col: 1})
+	if !ok {
+		t.Fatalf("initial stamp declined: %+v", r.StampEvents())
+	}
+	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
+
+	// Fresh: the frozen unit returns the stamp-time binding.
+	out, err := InvokeCallback(r, sig, nil, nil)
+	if err != nil {
+		t.Fatalf("fresh invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 1 {
+		t.Fatalf("fresh unit must return the stamp-time value 1, got %v", out[0])
+	}
+
+	// Rebind dep → the old snapshot is stale → the seam re-stamps and the
+	// twin returns the LIVE value, exactly as the interpreter resolves it.
+	r.Defs.Pop("dep")
+	r.Defs.Push("dep", NewInteger(2))
+	stampsBefore := len(r.StampEvents())
+	out, err = InvokeCallback(r, sig, nil, nil)
+	if err != nil {
+		t.Fatalf("restamped invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 2 {
+		t.Fatalf("re-stamped unit must return the live value 2, got %v", out[0])
+	}
+	if got := len(r.StampEvents()); got != stampsBefore+1 {
+		t.Fatalf("the re-stamp must record one stamp event, got %d new", got-stampsBefore)
+	}
+
+	// Same binding, second invoke: the twin is fresh — REUSED, no compile.
+	stampsBefore = len(r.StampEvents())
+	if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+		t.Fatalf("reuse invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 2 {
+		t.Fatalf("twin reuse must return 2, got %v", out[0])
+	}
+	if got := len(r.StampEvents()); got != stampsBefore {
+		t.Fatalf("twin reuse must not re-compile, got %d new events", got-stampsBefore)
+	}
+
+	// The try budget: each further rebind pays one re-stamp until the budget
+	// (restampMaxTries, one already spent) exhausts; after that the seam
+	// stays on CallAQL — which STILL resolves the live binding, so values
+	// keep matching the interpreter (slow, not wrong).
+	for i := 3; i <= 6; i++ {
+		r.Defs.Pop("dep")
+		r.Defs.Push("dep", NewInteger(int64(i)))
+		if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+			t.Fatalf("rebind %d invoke: %v", i, err)
+		}
+		if n, _ := AsInteger(out[0]); n != int64(i) {
+			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallAQL alike)", i, out[0])
+		}
+	}
+	if tries := ref.restamp.tries; tries != restampMaxTries {
+		t.Fatalf("try budget must exhaust at %d, got %d", restampMaxTries, tries)
+	}
+
+	// A declined re-stamp (stamping disarmed mid-life) takes the interpreter:
+	// reset the budget to isolate the decline arm from the exhausted arm.
+	ref.restamp.tries = 0
+	ref.restamp.cur = nil
+	r.DisableRuntimeStamping()
+	r.Defs.Pop("dep")
+	r.Defs.Push("dep", NewInteger(9))
+	if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+		t.Fatalf("disarmed invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 9 {
+		t.Fatalf("disarmed re-stamp must fall to CallAQL's live resolution (9), got %v", out[0])
+	}
+}

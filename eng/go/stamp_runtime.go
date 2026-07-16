@@ -135,8 +135,52 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 		// keeps "detached ref" distinguishable from "compile-time ref".
 		ref.depSnap = map[string]depSnapEntry{}
 	}
+	// Arm the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): the stamp inputs ride
+	// the ref so a later dep rebind re-compiles against the live bindings at
+	// invoke time (jitRestamp) instead of degrading permanently to CallAQL.
+	// fd here carries the §7a identity-minted capture clone, so a re-stamp
+	// needs no re-clone.
+	ref.restamp = &restampBox{fd: fd, pos: pos}
 	r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
+}
+
+// restampMaxTries bounds the TOTAL re-compiles one detached ref may pay
+// across its lifetime: a dep that keeps rebinding between invokes would
+// otherwise cost a compile per invoke — after the budget the seam stays on
+// CallAQL, which resolves the live binding exactly as the interpreter.
+const restampMaxTries = 3
+
+// jitRestamp is InvokeCallback's stale-ref recovery (REFUSAL-CLOSURE.0 §7c):
+// when a detached ref's depSnap no longer matches the live def table, re-run
+// StampDetachedFn against the CURRENT bindings and return the fresh twin —
+// each re-stamp snapshots the new generations, so a stable rebind pays one
+// compile and then runs on the VM again. Returns nil when the seam should
+// take the interpreter instead: a compile-time ref (no box), an exhausted
+// try budget, or a declined re-stamp (stamping disarmed, the body now
+// refusing). The box mutex serialises concurrent invokers of one shared sig
+// — the winner compiles, the rest reuse its twin; StampDetachedFn itself
+// runs on the CALLER's registry per its ForkConcurrent contract.
+func (ref *CompiledFnRef) jitRestamp(r *Registry) *CompiledFnRef {
+	box := ref.restamp
+	if box == nil {
+		return nil
+	}
+	box.mu.Lock()
+	defer box.mu.Unlock()
+	if box.cur != nil && box.cur.depsFresh(r) {
+		return box.cur
+	}
+	if box.tries >= restampMaxTries {
+		return nil
+	}
+	box.tries++
+	nr, ok := StampDetachedFn(r, box.fd, box.pos)
+	if !ok {
+		return nil
+	}
+	box.cur = nr
+	return nr
 }
 
 // StampFnValue is the value-level entry over StampDetachedFn: given a fn

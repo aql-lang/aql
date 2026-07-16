@@ -206,12 +206,20 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
   CompiledFnRef a sig-table dispatch mode — MatchFnSig at invoke picks
   the unit, the user-poly re-match precedent applied to the callback
   seam. Effort: M.
-- **Stale-dep refs degrade permanently to CallAQL**: add a JIT
-  re-stamp — InvokeCallback, on depsFresh failure, re-runs
-  StampDetachedFn against the live bindings (bounded retries; each
-  re-stamp snapshots the new generations). This is also the mechanism
-  for the plan's Phase-6 "JIT detached-unit cache" item (key: body
-  identity + def-table generation). Effort: M.
+- **Stale-dep refs degrade permanently to CallAQL**: **LANDED
+  2026-07-16.** InvokeCallback, on depsFresh failure, re-runs
+  StampDetachedFn against the live bindings via a per-ref restampBox
+  (CompiledFnRef.restamp — allocated by StampDetachedFn only, so
+  compile-time refs keep the interpreter path): the box carries the
+  stamp inputs (the §7a-cloned fd + pos) and the current re-stamped twin
+  under a mutex serialising concurrent invokers of one shared sig; each
+  re-stamp snapshots the new generations, a stable rebind pays ONE
+  compile then runs the VM again, and restampMaxTries (3) bounds a hot
+  rebinding loop — after the budget the seam stays on CallAQL (slow,
+  not wrong). Pinned in TestInvokeCallbackJITRestamp (freshen-to-live-
+  value parity, twin reuse without recompile, budget exhaustion,
+  disarmed decline). This is also the mechanism for the plan's Phase-6
+  "JIT detached-unit cache" item.
 
 ## 8. AQL-written mini compile hooks — keep the opt-out
 
@@ -243,7 +251,8 @@ Cheapest-first, each with the standard battery + fullcorpus
    were re-pointed to the §5 variadic-loop-def fixture (stable — §5 is
    blocked indefinitely).
 4. §7a capture identities — **LANDED 2026-07-16** (the detached-stamp
-   capture-clone mint; see §7). §7c JIT re-stamp (S–M) remains.
+   capture-clone mint; see §7). §7c JIT re-stamp — **LANDED 2026-07-16**
+   (the per-ref restampBox; see §7).
 5. §1 mark-bounded drift island, §3 arrival-apply, §4 dyn-body arms,
    §6b sig-table poly, §7b multi-sig stamps (M each).
 
