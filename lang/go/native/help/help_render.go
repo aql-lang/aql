@@ -31,7 +31,7 @@ var moduleCatalog = []ModuleInfo{
 	{"rand", "Pseudo-random number generation."},
 	{"query", "SQL-style query pipelines: from, where, join, group, order."},
 	{"struct-util", "Structured-data utilities: merge, walk, transform, jsonify, …."},
-	{"io", "I/O: read, write, stdin/stdout/stderr, printstr, trace."},
+	{"io", "I/O: read/write (text/binary/positioned), stat, list, remove, move, copy, link, touch, folder, stdin/stdout/stderr, printstr, trace."},
 	{"net", "Networking: HTTP requests, raw TCP sockets, codecs, and service endpoints."},
 	{"logic-util", "Derived boolean connectives: nand, nor, xnor, iff, implies."},
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},

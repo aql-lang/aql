@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `list`, `remove`, `move`, `copy`, `link`, `touch`, `folder`, `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core). |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2149,6 +2149,20 @@ modules keep plain names.
 > sibling structures. For a single-field edit, use the copy-returning
 > `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
+
+> **`aql:io` filesystem surface.** Beyond `read`/`write`, the module covers
+> the full batch API, each word collapsing several operations via options:
+> `stat path {follow, resolve}` returns a FileInfo record
+> (`name`/`path`/`type`/`size`/`mode`/`mtime`, where `type` is an
+> `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or `none` when absent;
+> `list path {detail, recursive}` enumerates a directory; `remove path
+> {recursive, force}`, `move src dst`, `copy src dst {recursive}`, `link
+> src dst {hard}`, and `touch path {mode, mtime, atime, size}`. `read`/
+> `write` also do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes`
+> payload writes verbatim) and positioned (`read {offset, length}`, `write
+> {offset}`) I/O. Every op routes through the swappable `FileOps`
+> capability, so `context.__sys.fs set mem true` runs them against an
+> in-memory filesystem.
 
 
 ## Diagnostic reports
