@@ -117,16 +117,21 @@ Refusal: "computed branch arm is a spliced list body". The interpreter's
 spliceArg EXECUTES a paren-arrived list as a code body; the compiled
 value path would push the list as data.
 
-**Mechanism: the dyn-body island, per arm.** tryRecordDynBody /
-CompileDynBody already compile a DYNAMIC code body dispatch: the body's
-runtime sub-run reads any name (dynEnv widens every def to
-registry-visible — the OpBindDynScope/OpBindGlobal machinery), and the
-VM brackets the frame so `args` resolves. Lower the REACHABLE computed
-arm exactly as a dyn-body dispatch: the branch takes the arm → push the
-computed list → the island re-steps it as a body over the live registry.
-The interpreter's splice semantics are the island's semantics — parity
-by construction. Dead arms (constant condition) and scalar arms keep
-today's native lowering. Effort: M.
+**Mechanism: the dyn-body island, per arm. LANDED 2026-07-16** — as a
+BODY SYNTHESIS rather than a bespoke lowering: computedArmDoBody
+(native_control.go) rewrites a COMPUTED List-conforming arm to the
+equivalent `[do <arm>]` body and routes it through the ORDINARY arm-body
+path (RunCarrierBodyWithDefs + the branch fragment capture), where the
+dyn-body machinery already owns the computed `do`. The equivalence was
+probe-proven on every axis before landing: multi-values, def leaking
+(do's keep-defs ≡ the splice's inline leak), and break/continue (the
+FlowCtrl escape — the divergence-1 OpFallback translation makes this
+hold in compiled loops). Recording pass only, so plain checks keep the
+value-arm surface; dead arms, scalar/paren-scalar arms, def-bound
+concrete list arms and quoted arms all keep their prior behavior
+(pinned). The 2-arg `if`'s computed arm keeps a SOUND refusal ("if:
+then-branch not captured" — a follow-on widening if it ever matters);
+`case` arms are value-semantics in both engines and stay native.
 
 ## 5. Variadic loop-collect defs — `def xs (for 3 [1])`
 

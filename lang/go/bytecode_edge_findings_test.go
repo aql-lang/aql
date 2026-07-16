@@ -169,30 +169,32 @@ func TestEdgeFindingMemberFnApplyMidExpression(t *testing.T) {
 }
 
 // §3 — a paren-arrived value run as an else body. `(range 2 4)` reaches the
-// compiler as a non-concrete list carrier, so the branch value path pushes the
-// LIST while the interpreter's spliceArg EXECUTES it (`if (n eq 0) [99] (range
-// 2 4)` → `2 3` interp, `[2 3]` compiled). Refuse the reachable list-value arm;
-// a dead arm (a constant condition makes the opposite arm unreachable) and a
-// scalar-valued arm keep compiling.
+// compiler as a non-concrete list carrier: the branch value path used to push
+// the LIST while the interpreter's spliceArg EXECUTES it, so the shape refused
+// ("computed branch arm is a spliced list body"). GRADUATED 2026-07-16
+// (REFUSAL-CLOSURE.0 §4): computedArmDoBody synthesizes the equivalent
+// `[do <arm>]` body — probes prove arm-splice ≡ do on every axis (multi-
+// values, def leaking, break/continue via the FlowCtrl escape) — and the arm
+// takes the ordinary body path, with the dyn-body machinery owning the
+// computed `do`. Both arms, either position, taken or not.
 func TestEdgeFindingComputedElseBody(t *testing.T) {
-	mustRefuseWithParity(t,
-		`def n 5 if (n eq 0) [99] (range 2 4)`,
-		"computed branch arm is a spliced list body")
-	mustRefuseWithParity(t,
-		`def n 0 if (n eq 0) (range 2 4) [99]`,
-		"computed branch arm is a spliced list body")
-	mustRefuseWithParity(t,
-		`def n 5 if (n eq 0) [99] (range 2 3)`,
-		"computed branch arm is a spliced list body")
+	mustCompileWithParity(t, `def n 5 if (n eq 0) [99] (range 2 4)`, "[2 3]")
+	mustCompileWithParity(t, `def n 0 if (n eq 0) (range 2 4) [99]`, "[2 3]")
+	mustCompileWithParity(t, `def n 5 if (n eq 0) [99] (range 2 3)`, "[2]")
 
-	// Negatives: the spliceable-list arm is the DEAD branch (constant cond →
-	// never taken), or the arm is a scalar/paren-scalar the interpreter pushes
-	// as a value, or both arms are literal `[…]` bodies.
+	// The formerly-negative siblings keep compiling identically: the DEAD
+	// spliceable arm, scalar/paren-scalar value arms, both-literal bodies.
 	mustCompileWithParity(t, `def n 0 if (n eq 0) [99] (range 2 4)`, "[99]")
 	mustCompileWithParity(t, `def n 5 if (n eq 0) (range 2 4) [99]`, "[99]")
 	mustCompileWithParity(t, `def n 5 if (n eq 0) [99] 42`, "[42]")
 	mustCompileWithParity(t, `def n 5 if (n eq 0) [99] (add 1 2)`, "[3]")
 	mustCompileWithParity(t, `def n 0 if (n eq 0) [99] [88]`, "[99]")
+
+	// The synthesized do-arm keeps splice semantics under FLOW and DEF axes
+	// compiled: a break inside the computed arm escapes the enclosing loop,
+	// and a def inside it leaks to the enclosing scope.
+	mustCompileWithParity(t, `def body (quote [break]) for 3 [ if (i eq 1) body [] i ]`, "[0]")
+	mustCompileWithParity(t, `def body (quote [def zz 7 zz]) def n 5 (if (n eq 0) [99] body) zz add 1`, "[7 8]")
 }
 
 // §5 (divergence fix) — a `do` body arriving as a QUOTED VALUE (via
