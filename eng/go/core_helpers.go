@@ -1433,6 +1433,20 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.RecordUserCall(fnUnit, args, nil, pos)
 				return nil
 			}
+			// A ZERO-declared-return POLY set (REFUSAL-CLOSURE.0 §6a): every
+			// same-arity arm compiled and nets zero (tryCompileUserPolyArms'
+			// unitNetsZero gate), so record the runtime-re-matched 0-output
+			// poly call — the residual matches runtime exactly whichever arm
+			// the VM's MatchSignature selects, and there is no downstream
+			// value to type.
+			if polyPlan != nil {
+				pos := SrcPos{}
+				if len(args) > 0 {
+					pos = args[0].Pos()
+				}
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, nil, pos)
+				return nil
+			}
 			// The 0-net / undeclared call whose body unit declined leaves a
 			// lenient STRICT Any approximation so a downstream consumer that reads
 			// the value refuses on unknown provenance and the program falls back.

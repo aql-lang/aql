@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -64,25 +65,57 @@ classify "hi"`
 		t.Errorf("single-overload predicate fn must not go poly:\n%s", oneDis)
 	}
 
-	// When the poly bake DECLINES (a zero-return overload set fails the
-	// poly gate's committed-returns requirement), the hazard refuses the
-	// program — slow, not wrong — and the interpreter keeps parity.
-	declining := `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
+	// A ZERO-return overload set BAKES (REFUSAL-CLOSURE.0 §6a): every arm
+	// nets zero values, so the call site records a 0-output poly call and
+	// the VM's runtime re-match picks the arm — output parity included.
+	zeroRet := `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
 def shout fn [
   [x:Pos] [] ["p" print]
   [x:Any] [] ["o" print]
 ]
 shout -3`
 	e := mustNew(t)
-	prog, reason, _, cerr := e.CompileCheck(declining)
+	var eOut bytes.Buffer
+	e.SetOutput(&eOut)
+	gotZ, compiledZ, errZ := e.RunCompiled(zeroRet)
+	if !compiledZ || errZ != nil {
+		t.Fatalf("zero-return poly run: compiled=%v err=%v", compiledZ, errZ)
+	}
+	f := mustNew(t)
+	var fOut bytes.Buffer
+	f.SetOutput(&fOut)
+	gotZI, errZI := f.RunInterp(zeroRet)
+	if errZI != nil || fmt.Sprint(gotZ) != fmt.Sprint(gotZI) || eOut.String() != fOut.String() {
+		t.Errorf("zero-return poly parity: compiled=%v out=%q interp=%v out=%q (err=%v)",
+			gotZ, eOut.String(), gotZI, fOut.String(), errZI)
+	}
+	if eOut.String() != "o\n" {
+		t.Errorf("zero-return poly output = %q, want \"o\\n\"", eOut.String())
+	}
+	if zDis := compileDisasm(t, zeroRet); !strings.Contains(zDis, "CALL_USER_POLY") {
+		t.Errorf("zero-return poly call must ride CALL_USER_POLY:\n%s", zDis)
+	}
+
+	// When the poly bake DECLINES — a zero-DECLARED-return arm whose body
+	// leaves a residual (the interpreter's "residual IS the result" shape,
+	// which a 0-output call site cannot carry) — the hazard refuses the
+	// program: slow, not wrong, and the interpreter keeps parity.
+	declining := `def Pos fn [[n:Integer] [Boolean] [n gt 0]]
+def zpick fn [
+  [x:Pos] [] [x]
+  [x:Any] [] [0]
+]
+zpick -3`
+	g := mustNew(t)
+	prog, reason, _, cerr := g.CompileCheck(declining)
 	if cerr != nil || prog != nil ||
-		!strings.Contains(reason, "fn-predicate-typed overload dispatch at `shout`") {
+		!strings.Contains(reason, "fn-predicate-typed overload dispatch at `zpick`") {
 		t.Errorf("declining poly bake must refuse with the hazard reason: prog=%v reason=%q err=%v",
 			prog != nil, reason, cerr)
 	}
-	f := mustNew(t)
-	if _, ierr := f.RunInterp(declining); ierr != nil {
-		t.Errorf("the refused program must interpret cleanly: %v", ierr)
+	h := mustNew(t)
+	if got, ierr := h.RunInterp(declining); ierr != nil || fmt.Sprint(got) != "[0]" {
+		t.Errorf("the refused program must interpret cleanly: got=%v err=%v", got, ierr)
 	}
 }
 

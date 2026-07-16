@@ -103,33 +103,67 @@ today's native lowering. Effort: M.
 
 ## 5. Variadic loop-collect defs — `def xs (for 3 [1])`
 
-Refusal: "dynamic-scope def `xs` of unpromoted computed value" (the
-OpBindGlobal write-back has no single value to peek: the loop's sim slot
-is variadic). PROBED 2026-07-15: the interpreter binds xs to the
-region's TOP value (xs = 1) and leaves the REST as residual
-(`def xs (for 3 [1]) 99` → residual [1 1 99]) — the def consumes one
-value off the collected group, not a list.
+Refusal: "def `xs` consumes loop results (Stage 2 loops only feed the
+program residual)" (lower.go — the variadic sim slot has no single value
+to bind).
 
-**Mechanism: peek-at-mark.** The loop collect is already mark-bounded at
-runtime. Add a from-mark mode to the write-back: BIND_GLOBAL_FROM_MARK
-peeks the region's TOP (stack[len-1] when the region is non-empty) and
-writes it to the recorded slot — the same SetAt discipline, the same
-peek-never-pop contract, one new op variant (or an Arg-encoded mode on
-OpBindGlobal). The empty-region case is already refused upstream by the
-zeroOut consumed-result gate (a 0-value loop result consumed by `def`
-refuses today for its own divergence — that refusal stays). Effort: S.
+PROBED 2026-07-16 (RunInterp, the authoritative runtime): the interpreter
+binds `xs` to the region's FIRST value (the stack-deepest — `def i 0 def
+xs (for 3 [def i (add i 1) i]) xs` → `[2 3 1]`: `xs = 1`, residual `[2
+3]`) and spills the remaining N−1 as residual. The empty-region case
+diverges: `def xs (for 0 [1]) 99` → `[]` (the interpreter FORWARD-COLLECTS
+the next token `99` as `xs`, so nothing spills), and `def xs (for 0 [1])
+xs` raises `undefined_word` — hence a static-trip≥1 gate is mandatory.
+
+**Mechanism designed and PROTOTYPED 2026-07-16 (splice-at-mark).** An
+`OpStackMark` opens the region before the loop; a from-mark `OpBindGlobal`
+binds `stack[mark]` (the first value) and SPLICES it out of the region
+bottom (`copy(stack[mark:], stack[mark+1:])`), leaving the rest as the
+residual; a `loopStaticallyNonEmpty` gate (all bounds concrete, the
+FOR_NEXT trip test true on the first iteration) guarantees a non-empty
+region so the splice never underflows. The VM/lowering side is correct.
+
+**BLOCKED — reclassified S → check-mode change.** A probe of the compile
+front-end shows the CHECKER does not model this shape as the interpreter
+does. It collapses the loop into a single variadic carrier and has `def`
+consume the WHOLE region: `def xs (for 3 [1])` records a check residual of
+LENGTH 0 (region fully consumed), and `def xs (for 3 [1]) xs` binds
+`xs = [:Integer]` — the ENTIRE region carrier, producer = the loop event —
+so the read re-surfaces the whole region. The runtime splice removes ONE
+value, so the read case would ship `[1 1]` where the interpreter yields
+`[1 1 1]` — a SILENT MISCOMPILE. There is no seam to detect the mismatch
+at lower time (the read "matches" the variadic sim slot spuriously).
+
+Making §5 sound therefore requires a CHECK-MODE forward-collection change:
+a forward-collecting word consuming a variadic loop region must take ONE
+element (bind the first-value carrier) and leave N−1 as a variadic
+residual carrier, mirroring the interpreter's per-value collection. That
+is a deep, broad engine change (stepLiteral / autoEval / the def handler's
+value source), well beyond the original "S" lowering estimate, and it must
+be validated against the whole `compiled_fullcorpus` oracle before it can
+land. Until then the refusal STAYS — slow, not wrong. The splice-at-mark
+mechanism above is the ready lowering half for that future landing.
 
 ## 6. Poly-decline arms (fn-predicate / gradual-Any overloads)
 
 Two decline reasons in tryCompileUserPolyArms keep sites refusing:
 
 - **Zero committed returns** (`len(committedReturns) == 0` — the
-  zero-return overload set). Mechanism: make poly arms count-agnostic
-  exactly as closures already are (compileClosureBody's `declared = nil`
-  path: the unit RETs its actual residual and the caller takes it
-  verbatim). The poly gate required identical declared returns across
-  arms for downstream TYPING; a zero-return set has no downstream
-  consumers to type, so `declared nil` is sound. Effort: S.
+  zero-return overload set). **LANDED 2026-07-16.** The poly gate's
+  `len(committedReturns) == 0` bar is dropped: an empty committed contract
+  is admitted, `userPolyArmShapeOK` already matches Returns position-wise
+  (0 == 0 keeps the arms consistent), and a new per-arm `unitNetsZero`
+  gate requires every arm's body to net exactly zero residual values — so
+  the recorded 0-output `OpCallUserPoly` is byte-identical to whichever arm
+  the VM's runtime re-match selects. `buildFnBodyReturnsFn`'s 0-residual
+  path records the poly call and returns nothing; anonymity stays refused
+  by `findOwningFnDef`'s `owner.Anonymous` gate. A declared-`[]` arm whose
+  body leaves a RESIDUAL (the "residual IS the result" shape) fails
+  `unitNetsZero`, so that set keeps its refusal (the `pick`/`zpick`
+  fixture). The `shout` fixture (`TestPredicateOverloadDispatchCompiledParity`)
+  now compiles with output parity (`"o\n"`, two `CALL_USER_POLY`); the
+  declining fixture was re-pointed to `zpick` to keep `planUserPolyDispatch`'s
+  refusal arm covered.
 - **Body-local multi-overload fns** (the fn-baseline gate: the runtime
   Lookup cannot resolve a name popped before the VM runs). Mechanism:
   UserPolyRef already stores per-arm units AND impls — the runtime
@@ -176,8 +210,13 @@ values the runtime expansion would consume.)
 Cheapest-first, each with the standard battery + fullcorpus
 0-divergence + census ratchets, one landing per commit:
 
-1. §5 peek-at-mark (S) — flips the TestGlobalBindEnvelope variadic pin.
-2. §6a zero-return poly arms (S) — flips the declining-poly pin.
+1. §5 peek-at-mark — **RECLASSIFIED S → check-mode change, BLOCKED** (see
+   §5: the checker binds the whole variadic region where the interpreter
+   binds one value; the lowering half is prototyped and ready, but the
+   sound landing needs a forward-collection change validated against the
+   full corpus). The TestGlobalBindEnvelope variadic pin STAYS red.
+2. §6a zero-return poly arms — **LANDED 2026-07-16** (unitNetsZero gate);
+   the declining-poly pin flipped, re-pointed to the `zpick` fixture.
 3. §2 deferred-token island (S–M) — flips zzRefusingRow, which is the
    effect-fence pins' refusing fixture: those pins then need the NEXT
    off-corpus refusing shape (§1 or §3) as their fixture, or the §1/§3

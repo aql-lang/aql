@@ -113,6 +113,7 @@ type EmitRecorder interface {
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
 	SetUnitDecl(unit int, decl DeclSite)
 	unitVariadic(unit int) bool
+	unitNetsZero(unit int) bool
 }
 
 // inactiveEmit is the no-op EmitRecorder a NON-compiling pass runs against:
@@ -222,3 +223,4 @@ func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, 
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}
 func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
 func (inactiveEmit) unitVariadic(int) bool                    { return false }
+func (inactiveEmit) unitNetsZero(int) bool                    { return false }

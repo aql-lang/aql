@@ -1053,6 +1053,23 @@ func (es *EmitState) unitVariadic(unit int) bool {
 	return es.fnRecs[unit].variadic
 }
 
+// unitNetsZero reports whether the fn unit's recorded body nets ZERO
+// residual values — the zero-return user-poly gate (REFUSAL-CLOSURE.0
+// §6a): a zero-declared-return arm set records a 0-output poly call, so
+// whichever arm the VM's runtime re-match selects must leave nothing on
+// the caller's stack. A declared-[] body with a non-empty residual is the
+// interpreter's "residual IS the result" shape — the fixed nout cannot
+// carry it, so the set keeps its refusal. A diverging trailing event never
+// returns at all, so its empty outOps qualify (the 0-out accounting is
+// never consulted on a raise/tail-out path).
+func (es *EmitState) unitNetsZero(unit int) bool {
+	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
+		return false
+	}
+	rec := es.fnRecs[unit]
+	return !rec.variadic && len(rec.outOps) == 0
+}
+
 // newIsolatedEmit returns the FRESH EmitState IsolateEmit swaps in for a
 // hermetic throwaway evaluation, inheriting only the registry back-pointer
 // from the saved recorder. Construction knowledge stays in this file: the

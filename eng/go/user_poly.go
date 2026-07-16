@@ -41,7 +41,10 @@ type userPolyPlan struct {
 //     value args, exactly like OpCallNativePoly;
 //   - every arm declares the IDENTICAL Returns as the committed overload: the
 //     checker's downstream typing rides the committed return carriers, so an
-//     arm returning a different type could bake a wrong downstream dispatch;
+//     arm returning a different type could bake a wrong downstream dispatch
+//     (a zero-return contract additionally requires every arm's unit to NET
+//     zero — the 0-output call site cannot absorb a "residual IS the result"
+//     body);
 //   - every arm's owning def entry is capture-free, named, and non-macro —
 //     captures ride as hidden trailing CALL_USER operands resolved per call
 //     site, which the fixed-arity poly window cannot carry;
@@ -49,9 +52,16 @@ type userPolyPlan struct {
 //     interpreter's module-scope late binding — see buildFnBodyReturnsFn);
 //   - no arm's unit is variadic-returning (the call site bakes a fixed nout).
 func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Value, committedReturns []*Type) *userPolyPlan {
-	if !es.active() || len(args) == 0 || len(committedReturns) == 0 {
+	if !es.active() || len(args) == 0 {
 		return nil
 	}
+	// An EMPTY committedReturns admits the all-zero-return overload set
+	// (REFUSAL-CLOSURE.0 §6a): userPolyArmShapeOK requires every arm's
+	// Returns to match the committed contract position-wise, so 0==0 keeps
+	// the arms consistent, and a zero-return call contributes nothing to
+	// the residual — no downstream typing exists to diverge. Anonymity
+	// (whose declaredReturns is also empty) is still refused below by
+	// findOwningFnDef's owner.Anonymous gate.
 	// A word bound INSIDE an enclosing fn body (Depth above the innermost fn
 	// baseline — the same test closure capture uses) is popped before the VM
 	// runs, so the runtime Lookup could never resolve it: the poly call would
@@ -91,6 +101,14 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 		}
 		unit, ok := compileUserPolyArm(r, es, word, s, owner)
 		if !ok {
+			return nil
+		}
+		// A ZERO-declared-return set records a 0-output call site, so the
+		// VM-selected arm must net exactly zero residual values. A declared-[]
+		// arm whose body leaves a residual is the interpreter's "residual IS
+		// the result" shape — a fixed nout of 0 cannot carry it, so the whole
+		// set keeps its refusal (all-or-nothing).
+		if len(committedReturns) == 0 && !es.unitNetsZero(unit) {
 			return nil
 		}
 		plan.units = append(plan.units, unit)

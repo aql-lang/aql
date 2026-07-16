@@ -71,9 +71,18 @@ func TestW9TryCompileUserPolyEarlyReturns(t *testing.T) {
 	r := newTestRegistry(t)
 	args := []Value{NewInteger(1)}
 
-	// Empty committedReturns → nil (the len(committedReturns)==0 gate).
+	// The early-return guard: an inactive recorder OR empty args refuses
+	// before any lookup.
+	if tryCompileUserPolyArms(r, inactiveEmitState(), "w", args, []*Type{TInteger}) != nil {
+		t.Error("inactive recorder should refuse")
+	}
+	if tryCompileUserPolyArms(r, NewEmitState(), "w", nil, []*Type{TInteger}) != nil {
+		t.Error("empty args should refuse")
+	}
+	// Empty committedReturns is ADMITTED (REFUSAL-CLOSURE.0 §6a) — an
+	// unknown word still refuses through the agg==nil gate.
 	if tryCompileUserPolyArms(r, NewEmitState(), "w", args, nil) != nil {
-		t.Error("empty committedReturns should refuse")
+		t.Error("unknown word should refuse (zero-return contract is admitted)")
 	}
 	// Unknown word → agg==nil → nil.
 	if tryCompileUserPolyArms(r, NewEmitState(), "w9unknown", args, []*Type{TInteger}) != nil {
@@ -127,6 +136,37 @@ func TestW9TryCompileUserPolyArmCompileFails(t *testing.T) {
 	})
 	if tryCompileUserPolyArms(r, NewEmitState(), "w9defer", []Value{NewInteger(1)}, []*Type{TInteger}) != nil {
 		t.Error("a poly set with an uncompilable arm should refuse")
+	}
+}
+
+func TestW9UnitNetsZero(t *testing.T) {
+	// Bounds guards: nil recorder / out-of-range unit → false.
+	var nilES *EmitState
+	if nilES.unitNetsZero(0) {
+		t.Error("nil EmitState must report false")
+	}
+	es := NewEmitState()
+	if es.unitNetsZero(-1) || es.unitNetsZero(0) {
+		t.Error("out-of-range unit must report false")
+	}
+	// A 0-residual unit qualifies; a residual-carrying or variadic one does not.
+	es.fnRecs = append(es.fnRecs,
+		&fnUnitRec{},
+		&fnUnitRec{outOps: []emitOperand{constOperand(0)}},
+		&fnUnitRec{variadic: true},
+	)
+	if !es.unitNetsZero(0) {
+		t.Error("an empty-residual unit must net zero")
+	}
+	if es.unitNetsZero(1) {
+		t.Error("a residual-carrying unit must not net zero")
+	}
+	if es.unitNetsZero(2) {
+		t.Error("a variadic unit must not net zero")
+	}
+	// The inactive recorder's stub answer.
+	if (inactiveEmit{}).unitNetsZero(0) {
+		t.Error("inactive recorder must report false")
 	}
 }
 
