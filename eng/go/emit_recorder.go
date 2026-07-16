@@ -60,7 +60,7 @@ type EmitRecorder interface {
 	RecordPoly(word string)
 	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
-	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos)
+	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
 	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
@@ -73,7 +73,7 @@ type EmitRecorder interface {
 	RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool
 	RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool
 	RegisterTrailingApply(fnID string, arity int)
-	noteMemberFnRead(id string)
+	noteMemberFnRead(id string, member Value)
 	memberFnRead(id string) bool
 	dynInputsProven(sig *Signature, args []Value) bool
 	materialise(v Value) (Value, bool)
@@ -163,7 +163,7 @@ func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry, 
 	return false
 }
 func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
-func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Value, []Value, SrcPos) {
+func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Signature, []Value, []Value, SrcPos) {
 }
 func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {
@@ -185,7 +185,7 @@ func (inactiveEmit) RecordMakeMap(*Registry, []string, []Value, bool, Value, Src
 }
 func (inactiveEmit) RecordInterp([]InterpPart, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RegisterTrailingApply(string, int)                      {}
-func (inactiveEmit) noteMemberFnRead(string)                                {}
+func (inactiveEmit) noteMemberFnRead(string, Value)                         {}
 func (inactiveEmit) memberFnRead(string) bool                               { return false }
 func (inactiveEmit) dynInputsProven(*Signature, []Value) bool               { return false }
 func (inactiveEmit) materialise(v Value) (Value, bool)                      { return v, false }

@@ -560,29 +560,53 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 	if len(stack) < n {
 		return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY underflow at "+pr.Word)
 	}
-	lookupReg := vc.r
-	if pr.Reg != nil {
-		lookupReg = pr.Reg
-	}
-	fd := lookupReg.Lookup(pr.Word)
-	if fd == nil {
-		return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-unresolved", "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
-	}
-	subset := make([]Signature, 0, len(pr.SigIdx))
-	units := make([]int, 0, len(pr.SigIdx))
-	for k, si := range pr.SigIdx {
-		if k >= len(pr.Units) || k >= len(pr.Impls) ||
-			si < 0 || si >= len(fd.Signatures) ||
-			fd.Signatures[si].Impl != pr.Impls[k] ||
-			fd.Signatures[si].TotalArgs() != n {
-			return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-drift", "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
+	var subset []Signature
+	var units []int
+	var fd *FnDefInfo
+	if len(pr.Sigs) > 0 {
+		// STORED mode (REFUSAL-CLOSURE.0 §6b): a body-local fn's binding is
+		// popped before the VM runs, so the dispatch table was frozen at
+		// record time (see UserPolyRef.Sigs — the freeze's faithfulness
+		// gates live there). No live Lookup, no index/Impl drift guard: the
+		// frozen table IS the table.
+		subset = make([]Signature, 0, len(pr.Sigs))
+		units = make([]int, 0, len(pr.Sigs))
+		for k := range pr.Sigs {
+			if k >= len(pr.Units) || pr.Sigs[k].TotalArgs() != n { //covergate:allow compiler/VM defensive arm; the recorder freezes same-arity sigs with parallel units — unreachable without a bytecode-level fault (§compiler)
+				return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY stored-sig shape mismatch at "+pr.Word)
+			}
+			u := pr.Units[k]
+			if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+				return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unit shape mismatch at "+pr.Word)
+			}
+			subset = append(subset, pr.Sigs[k])
+			units = append(units, u)
 		}
-		u := pr.Units[k]
-		if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n {
-			return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unit shape mismatch at "+pr.Word)
+	} else {
+		lookupReg := vc.r
+		if pr.Reg != nil {
+			lookupReg = pr.Reg
 		}
-		subset = append(subset, fd.Signatures[si])
-		units = append(units, u)
+		fd = lookupReg.Lookup(pr.Word)
+		if fd == nil {
+			return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-unresolved", "CALL_USER_POLY unresolved fn "+pr.Word+"; deferring to interpreter")
+		}
+		subset = make([]Signature, 0, len(pr.SigIdx))
+		units = make([]int, 0, len(pr.SigIdx))
+		for k, si := range pr.SigIdx {
+			if k >= len(pr.Units) || k >= len(pr.Impls) ||
+				si < 0 || si >= len(fd.Signatures) ||
+				fd.Signatures[si].Impl != pr.Impls[k] ||
+				fd.Signatures[si].TotalArgs() != n {
+				return 0, nil, vmDefer(vc.r, curDebug, pc, "vm:user-poly-drift", "CALL_USER_POLY signature drift at "+pr.Word+"; deferring to interpreter")
+			}
+			u := pr.Units[k]
+			if u < 0 || u >= len(vc.p.Fns) || vc.p.Fns[u].NParams != n {
+				return 0, nil, vmErrAt(curDebug, pc, "CALL_USER_POLY unit shape mismatch at "+pr.Word)
+			}
+			subset = append(subset, fd.Signatures[si])
+			units = append(units, u)
+		}
 	}
 	// Build the args in sig order (position 0 = top of stack, as OpCallUser
 	// binds them), then match — identical to callPoly's window.
@@ -597,16 +621,22 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 		// appended after the record (same arity, so the index drift guard
 		// above stayed quiet) could match at run time where this raise would
 		// claim failure — bestEffortNoMatch's own arity screen cannot see it.
-		alt := bestEffortNoMatch(vc.r, fd, pr.Word, window, curDebug, pc)
-		if alt != nil {
-			nonFallback := 0
-			for i := range fd.Signatures {
-				if !fd.Signatures[i].Fallback {
-					nonFallback++
+		// STORED mode has no live table to compare against (fd is nil): the
+		// plain defer re-runs the interpreter, which raises the canonical
+		// signature_error over its own live dispatch.
+		var alt *AqlError
+		if fd != nil {
+			alt = bestEffortNoMatch(vc.r, fd, pr.Word, window, curDebug, pc)
+			if alt != nil {
+				nonFallback := 0
+				for i := range fd.Signatures {
+					if !fd.Signatures[i].Fallback {
+						nonFallback++
+					}
 				}
-			}
-			if nonFallback != len(subset) {
-				alt = nil
+				if nonFallback != len(subset) {
+					alt = nil
+				}
 			}
 		}
 		return 0, nil, vmDeferAlt(vc.r, curDebug, pc, "vm:user-poly-no-match",

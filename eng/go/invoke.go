@@ -59,8 +59,15 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 	// it non-nil first — serve-raw's handler dispatch is the canonical caller).
 	// depsFresh guards RUNTIME-stamped refs (StampDetachedFn): a module dep
 	// rebound or shadowed since the stamp means the frozen unit would diverge
-	// from live resolution, so the seam takes the interpreter instead.
-	if ref := sig.CompiledRef(); ref != nil && ref.Prog != nil && ref.depsFresh(r) {
+	// from live resolution. A stale DETACHED ref first tries the JIT re-stamp
+	// (REFUSAL-CLOSURE.0 §7c) — recompile against the live bindings, bounded
+	// by the ref's try budget — and only a declined re-stamp takes the
+	// interpreter, where the seam previously degraded permanently.
+	ref := sig.CompiledRef()
+	if ref != nil && ref.Prog != nil && !ref.depsFresh(r) {
+		ref = ref.jitRestamp(r)
+	}
+	if ref != nil && ref.Prog != nil {
 		// A stamped unit runs on the VM (fresh run on an idle registry, or nested
 		// in the enclosing compiled run). Its result is used ONLY when the unit did
 		// not raise an internal_error: that class means a VM/lowering soundness

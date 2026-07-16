@@ -594,8 +594,20 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		thenStk, thenDefs = RunCarrierBodyWithDefs(r, args[1])
 		thenFrag = es.Recorder().TakeFragment()
 		restoreThen()
+	} else if body, ok := computedArmDoBody(r, args[1]); ok {
+		// REFUSAL-CLOSURE.0 §4: a COMPUTED List-conforming arm is the
+		// interpreter's spliced code body (spliceArg executes it), and
+		// arm-splice ≡ `do <arm>` on every probed axis (multi-values,
+		// def leaking, flow escape) — so synthesize the `[do <arm>]` body
+		// and take the ordinary body path; the dyn-body machinery compiles
+		// the computed `do` (recording pass only; plain checks keep the
+		// value-arm surface unchanged).
+		restoreThen := ApplyGuardNarrowing(r, args[0])
+		es.Recorder().ArmBranchCapture()
+		thenStk, thenDefs = RunCarrierBodyWithDefs(r, body)
+		thenFrag = es.Recorder().TakeFragment()
+		restoreThen()
 	} else {
-		refuseComputedBranchBody(r, args[0], args[1], true)
 		v := args[1]
 		thenValue = &v
 		thenStk = []Value{v}
@@ -616,8 +628,14 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		elseStk, elseDefs = RunCarrierBodyWithDefs(r, args[2])
 		elseFrag = es.Recorder().TakeFragment()
 		restoreElse()
+	} else if body, ok := computedArmDoBody(r, args[2]); ok {
+		// §4 — the else-arm twin of the then-arm synthesis above.
+		restoreElse := ApplyComplementNarrowing(r, args[0])
+		es.Recorder().ArmBranchCapture()
+		elseStk, elseDefs = RunCarrierBodyWithDefs(r, body)
+		elseFrag = es.Recorder().TakeFragment()
+		restoreElse()
 	} else {
-		refuseComputedBranchBody(r, args[0], args[2], false)
 		v := args[2]
 		elseValue = &v
 		elseStk = []Value{v}
@@ -666,46 +684,23 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	return []Value{out}
 }
 
-// refuseComputedBranchBody refuses (compile mode only) an `if` arm that
-// arrives as a non-body VALUE which is nonetheless LIST-shaped — the shape a
-// paren group evaluating to a list produces (`if c [t] (range 2 4)`). The
-// interpreter's spliceArg EXECUTES any plain list arm at run time (its
-// elements run as a sub-expression, `(range 2 4)` → `2 3`), but the value path
-// here pushes the LIST as data, so the branch lowering would diverge
-// (design/EDGE-SPEC-FINDINGS.0.md §3). A literal `[…]` bracket body takes the
-// IsConcrete body path instead (and a genuinely multi-value one refuses at the
-// single-result branch gate). The static carrier's typed-ness does NOT predict
-// the split — `range` is statically `[:Integer]` (IsTypedList) yet returns a
-// plain, spliced list — so any TList-conforming value arm is refused rather
-// than guessed.
-//
-// isThen marks which arm this is; the refusal fires only when the condition
-// can actually SELECT it (condSelectsArm). A constant condition makes the
-// opposite arm dead — `def n 0 if (n eq 0) [99] (range 2 4)` never runs the
-// range else, so its list-value lowering is harmless and stays compiled. A
-// non-concrete condition leaves both arms reachable. No-op outside a compile
-// pass (recorder inactive); interpreter and plain check unaffected.
-func refuseComputedBranchBody(r *Registry, cond, arm Value, isThen bool) {
-	es := r.Check.Recorder()
-	if !es.Active() || !condSelectsArm(cond, isThen) {
-		return
+// computedArmDoBody synthesizes the `[do <arm>]` body for a COMPUTED
+// List-conforming branch arm (REFUSAL-CLOSURE.0 §4): the interpreter's
+// spliceArg EXECUTES a computed list arm as a code body, and probes prove
+// the splice ≡ `do <arm>` (multi-values, def leaking via do's keep-defs,
+// break/continue via the FlowCtrl escape) — so the arm compiles through the
+// ordinary body path with the dyn-body machinery owning the computed `do`.
+// Recording pass only: plain checks keep today's value-arm surface (no
+// ratchet churn), and a concrete arm (a real body or a scalar value) never
+// reaches here (the body/value paths own those).
+func computedArmDoBody(r *Registry, arm Value) (Value, bool) {
+	if !r.Check.Recorder().Active() {
+		return Value{}, false
 	}
-	if arm.Parent.ConformsTo(TList) {
-		es.MarkUncompilable("if: computed branch arm is a spliced list body, not a value (Stage 3)")
+	if IsConcrete(arm) || arm.Parent == nil || !arm.Parent.ConformsTo(TList) {
+		return Value{}, false
 	}
-}
-
-// condSelectsArm reports whether the branch arm (then when isThen, else
-// otherwise) can be taken given cond. A concrete boolean condition fixes the
-// taken arm and leaves the other dead; a non-concrete condition leaves both
-// reachable (conservative — either could run at run time).
-func condSelectsArm(cond Value, isThen bool) bool {
-	if IsConcrete(cond) && cond.Parent.ConformsTo(TBoolean) {
-		if b, err := AsBoolean(cond); err == nil {
-			return b == isThen
-		}
-	}
-	return true
+	return NewList([]Value{NewWord("do"), arm}), true
 }
 
 // staticCondArm reports the taken arm for a statically-known BARE concrete

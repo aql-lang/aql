@@ -206,11 +206,18 @@ func TestCompileStoredBodyGuards(t *testing.T) {
 // path. A nil receiver and a reg-less state both return (0, false).
 func TestCompileStoredFnUnitGuards(t *testing.T) {
 	var nilES *EmitState
-	if _, ok := nilES.compileStoredFnUnit(FnDefInfo{}, SrcPos{}); ok {
+	if _, ok := nilES.compileStoredFnUnit(FnDefInfo{}, 0, SrcPos{}); ok {
 		t.Fatal("nil EmitState must decline")
 	}
-	if _, ok := (&EmitState{}).compileStoredFnUnit(FnDefInfo{}, SrcPos{}); ok {
+	if _, ok := (&EmitState{}).compileStoredFnUnit(FnDefInfo{}, 0, SrcPos{}); ok {
 		t.Fatal("reg-less EmitState must decline")
+	}
+	// A reg-ful state with an out-of-range / ineligible sig index declines
+	// at the per-sig gate (REFUSAL-CLOSURE §7b).
+	es := NewEmitState()
+	es.reg = runUnitReg(t)
+	if _, ok := es.compileStoredFnUnit(FnDefInfo{}, 0, SrcPos{}); ok {
+		t.Fatal("an out-of-range sig index must decline")
 	}
 }
 
