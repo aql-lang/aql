@@ -171,6 +171,47 @@ func TestEdgeFindingComputedElseBody(t *testing.T) {
 	mustCompileWithParity(t, `def n 0 if (n eq 0) [99] [88]`, "[99]")
 }
 
+// §5 (divergence fix) — a `do` body arriving as a QUOTED VALUE (via
+// `def b (quote [break])`) runs its tokens AS CODE, so a break/continue inside
+// escapes `do` to the enclosing loop exactly as the interpreter's shared tape
+// does. Two bugs made the compiled run diverge: (a) bodyHasSentinel honoured
+// the .Quoted flag and missed the break, so the const-folded body compiled into
+// a closure whose break raised "flow signal with no enclosing loop" and `do`
+// caught it as an error VALUE; (b) even routed to a FALLBACK `do`, the VM did
+// not translate the escaped FlowCtrl on the fallback seam. Fixed:
+// valueHasSentinel ignores .Quoted (routing the body off the closure path), and
+// OpFallback now resolves escaped flow like the fn-value-call family. The break
+// now unwinds the compiled loop → interpreter parity.
+func TestEdgeFindingQuotedDoBodyFlowEscapesLoop(t *testing.T) {
+	// The previously-miscompiling shapes now compile with parity: the break
+	// terminates the enclosing `for`, so nothing is collected.
+	mustCompileWithParity(t, `def b (quote [break]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, `def b (quote [continue]) for 3 [do b i]`, "[]")
+	// A nested loop: the inner break terminates only the INNER `for`, so the
+	// outer loop's `i` values survive.
+	mustCompileWithParity(t, `def b (quote [break]) for 2 [ for 3 [do b] i ]`, "[0 1]")
+
+	// Negatives — the fix must not over-refuse a sentinel-free quoted do body.
+	mustCompileWithParity(t, `def b (quote [7]) for 3 [do b i]`, "[7 0 7 1 7 2]")
+
+	// No ENCLOSING loop: the escaped break has nowhere to unwind to, so the
+	// fallback seam's resolveEscapedFlow returns flowSignal's no-loop error and
+	// the compiled run raises the interpreter's canonical "break outside loop"
+	// — parity on the RAISE, not the value (mustCompileWithParity can't express
+	// a raising row). Covers the vm.go OpFallback error arm.
+	{
+		src := `def b (quote [break]) do b`
+		a, _ := New()
+		_, iErr := a.RunInterp(src)
+		b, _ := New()
+		_, _, cErr := b.RunCompiled(src)
+		if iErr == nil || cErr == nil || codeOf(iErr) != codeOf(cErr) {
+			t.Errorf("%q: raise parity — compiled=[%s]%v interp=[%s]%v",
+				src, codeOf(cErr), cErr, codeOf(iErr), iErr)
+		}
+	}
+}
+
 // §4 — `args.N` inside a compiled fn body with UNNAMED params. Unnamed params
 // now bind to frame locals exactly like named ones (CompiledFn.NUnnamed: RET
 // discards the unconsumed frame-bottom copies the interpreter's body splice

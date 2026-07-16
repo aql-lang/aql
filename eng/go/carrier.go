@@ -1899,14 +1899,46 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 // threads an enclosing-fn binding as a capture, and the probe compile refuses
 // anything it cannot resolve.
 func bodyHasSentinel(body Value) bool {
-	found := false
-	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
-		switch w.Name {
-		case "break", "continue", "return":
-			found = true
+	return valueHasSentinel(body)
+}
+
+// valueHasSentinel reports whether a code-BODY value contains a live
+// break/continue/return that would run when the body executes. It differs
+// from WalkBodyWords (capture analysis) in one load-bearing way: it does NOT
+// honour the .Quoted flag. A `quote`d list handed to `do`/`each`/… runs ALL
+// its tokens as CODE — quote marks the LIST as data, not its tokens as
+// non-executable — so a quoted `break` inside is a live sentinel (verified:
+// `def b (quote [break]) for 5 [do b i]` breaks the loop in the interpreter).
+// WalkBodyWords skipped it, letting the const-folded do-body compile past the
+// sentinel gate; the escaped break then reached the loop epilogue as "flow
+// signal with no enclosing loop" and was caught as a value — a miscompile.
+// Nested fn bodies are still skipped: their sentinel targets their own scope.
+func valueHasSentinel(v Value) bool {
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return false
+	}
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		return w.Name == "break" || w.Name == "continue" || w.Name == "return"
+	}
+	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
+		lst, _ := AsList(v)
+		for i := 0; i < lst.Len(); i++ {
+			if valueHasSentinel(lst.Get(i)) {
+				return true
+			}
 		}
-	})
-	return found
+		return false
+	}
+	if IsParenExpr(v) {
+		toks, _ := AsParenExpr(v)
+		for _, t := range toks {
+			if valueHasSentinel(t) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // disjunctPartitionCap bounds the alternative cross product a
