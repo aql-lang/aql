@@ -1937,6 +1937,72 @@ func valueHasSentinel(v Value) bool {
 				return true
 			}
 		}
+		return false
+	}
+	// Interpolated string: every ${...} expression part runs as code when
+	// the string materialises, so a sentinel there is live (verified:
+	// an interp-string `${break}` in a quoted do-body breaks the loop in
+	// the interpreter).
+	if IsInterpString(v) {
+		parts, _ := AsInterpString(v)
+		for _, p := range parts {
+			for _, t := range p.Expr {
+				if valueHasSentinel(t) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	// Interpolated XML literal: attribute-value and child ${...} holes run
+	// as code exactly like string interpolation parts.
+	if IsXmlInterp(v) {
+		tmpl, _ := AsXmlInterp(v)
+		return xmlTmplHasSentinel(tmpl)
+	}
+	// Map literal: values evaluate when the literal assembles in a code
+	// body, so `{k: break}` is a live sentinel (keys are strings, inert).
+	if v.Parent != nil && v.Parent.Equal(TMap) && v.Data != nil {
+		m, _ := AsMap(v)
+		if m == nil {
+			return false
+		}
+		for _, key := range m.Keys() {
+			mv, _ := m.Get(key)
+			if valueHasSentinel(mv) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// xmlTmplHasSentinel is valueHasSentinel over an XML interpolation
+// skeleton: every ${...} expression token in attribute values and child
+// holes, recursing into nested child templates (mirrors walkXmlTmplExprs).
+func xmlTmplHasSentinel(t XmlTmpl) bool {
+	for _, a := range t.Attr {
+		for _, p := range a.Parts {
+			for _, tok := range p.Expr {
+				if valueHasSentinel(tok) {
+					return true
+				}
+			}
+		}
+	}
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case XmlCrenExpr:
+			for _, tok := range c.Expr {
+				if valueHasSentinel(tok) {
+					return true
+				}
+			}
+		case XmlCrenChild:
+			if c.Child != nil && xmlTmplHasSentinel(*c.Child) {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -3148,17 +3214,28 @@ func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
 func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
-	stk, adds := runCarrierBodyDefsAdds(r, body, false)
+	stk, adds := runCarrierBodyDefsAdds(r, body, false, false)
+	return stk, adds
+}
+
+// RunCarrierCondBody is RunCarrierBodyWithDefs for an `if` CONDITION or a
+// `case` code-body scrutinee: the fragment runs unconditionally exactly
+// once BEFORE the branch decision, so it does NOT raise CondBodyDepth —
+// an in-place fn redefinition there is not path-dependent and stays
+// compilable (the paren-`do` condition twin compiles it with parity).
+// Defs still roll back keep=false-style, exactly as before.
+func RunCarrierCondBody(r *Registry, body Value) ([]Value, map[string]Value) {
+	stk, adds := runCarrierBodyDefsAdds(r, body, false, true)
 	return stk, adds
 }
 
 // runCarrierBodyDefs is the keep-defs entry over the shared body run.
 func runCarrierBodyDefs(r *Registry, body Value, keep bool) []Value {
-	stk, _ := runCarrierBodyDefsAdds(r, body, keep)
+	stk, _ := runCarrierBodyDefsAdds(r, body, keep, false)
 	return stk
 }
 
-func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[string]Value) {
+func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Value, map[string]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -3197,13 +3274,17 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[st
 	// raises CondBodyDepth: unlike `do` (keep=true, which leaks its defs
 	// unconditionally), its bindings are conditional, so an in-place fn
 	// redefinition that clobbers an enclosing overload there is unsound to
-	// compile (installDef consults CondBodyDepth to refuse it).
+	// compile (installDef consults CondBodyDepth to refuse it). Condition/
+	// scrutinee fragments (condFrag — RunCarrierCondBody) are exempt: they
+	// run unconditionally exactly once before the branch decision, so a
+	// redefinition there is not path-dependent.
 	r.Check.NestedBodyDepth++
-	if !keep {
+	raiseCond := !keep && !condFrag
+	if raiseCond {
 		r.Check.CondBodyDepth++
 	}
 	result, err := sub.Run(tokens)
-	if !keep {
+	if raiseCond {
 		r.Check.CondBodyDepth--
 	}
 	r.Check.NestedBodyDepth--
