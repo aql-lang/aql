@@ -119,12 +119,22 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 		t.Fatalf("the INPUT capture value must stay identity-less (clone, not mutate), got %q", captured.Captured[0].Value.ID)
 	}
 
+	// A multi-own-sig fn stamps PER SIG since the §7b landing: the
+	// single-sig entry takes the first stampable sig, and StampDetachedSig
+	// reaches each remaining overload — MatchFnSig at the invoke seam picks
+	// the sig, whose own Impl ref then runs.
 	multi := FnDefInfo{Signatures: []Signature{
 		{Impl: AQL([]Value{NewInteger(1)})},
 		{Impl: AQL([]Value{NewInteger(2)})},
 	}}
-	if _, ok := StampDetachedFn(r, multi, SrcPos{}); ok {
-		t.Fatalf("multi-own-sig fn must decline (MatchFnSig picks at runtime)")
+	if ref0, ok := StampDetachedFn(r, multi, SrcPos{}); !ok || ref0 == nil {
+		t.Fatalf("multi-own-sig first overload must stamp (§7b)")
+	}
+	if ref1, ok := StampDetachedSig(r, multi, 1, SrcPos{}); !ok || ref1 == nil {
+		t.Fatalf("multi-own-sig second overload must stamp (§7b)")
+	}
+	if _, ok := StampDetachedSig(r, multi, 9, SrcPos{}); ok {
+		t.Fatalf("an out-of-range sig index must decline")
 	}
 
 	if _, ok := StampDetachedFn(r, aqlBodyFd(), SrcPos{}); ok {
@@ -355,13 +365,10 @@ func TestStampReportCollector(t *testing.T) {
 	if _, ok := StampDetachedFn(r, argsy, SrcPos{Row: 3, Col: 7}); ok {
 		t.Fatalf("args-reading fn must decline")
 	}
-	// Shape noise (multi-own-sig) records NOTHING.
-	multi := FnDefInfo{Signatures: []Signature{
-		{Impl: AQL([]Value{NewInteger(1)})},
-		{Impl: AQL([]Value{NewInteger(2)})},
-	}}
-	if _, ok := StampDetachedFn(r, multi, SrcPos{}); ok {
-		t.Fatalf("multi-sig must decline")
+	// Shape noise (a fallback-only fn) records NOTHING.
+	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: AQL([]Value{NewInteger(1)})}}}
+	if _, ok := StampDetachedFn(r, noise, SrcPos{}); ok {
+		t.Fatalf("a fallback-only fn must decline")
 	}
 
 	events := r.StampEvents()

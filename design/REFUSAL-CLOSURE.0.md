@@ -243,10 +243,24 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
   freshen/share concern is live). Pinned in TestStampDetachedFnShapeGates
   (eng) and TestComputedCaptureStampsAndRunsWithCaptures (lang,
   end-to-end with per-value refs + interpreter parity).
-- **Multi-overload fn values**: stamp EVERY own sig to a unit and give
-  CompiledFnRef a sig-table dispatch mode — MatchFnSig at invoke picks
-  the unit, the user-poly re-match precedent applied to the callback
-  seam. Effort: M.
+- **Multi-overload fn values**: **LANDED 2026-07-16** — and no
+  sig-table dispatch mode was needed (a stale-premise reduction again):
+  the invoke seam already dispatches through MatchFnSig BEFORE
+  InvokeCallback, so the matched sig's own `Impl.Compiled` ref IS the
+  sig table. As landed: `storedSigEligible` replaces the
+  single-own-sig gate (per-sig: own, AQL body, non-empty,
+  sentinel-free); the compile-time store-fn bake loops every stampable
+  sig (per-sig unit + ref, `compileStoredFnUnit(fd, sigIdx, pos)`);
+  the runtime path gains `StampDetachedSig(r, fd, sigIdx, pos)` with
+  per-sig deps and a per-sig §7c restamp box, and
+  StampFnValue/StampFnValueInPlace loop all stampable sigs (partial
+  success is per-sig fail-safe: a declining sibling stays plain and
+  interprets at its own matches). Pins:
+  TestStoredFnMultiOverloadStampsPerSig (compile-time, incl. the
+  sentinel-declined sibling), TestMultiOverloadHandlerStampsPerSig +
+  ...PartialStamp (end-to-end service dispatch: the two-arity handler
+  shape that never stamped, both units on the VM, parity), and the eng
+  stamp-gate/report pins flipped to per-sig.
 - **Stale-dep refs degrade permanently to CallAQL**: **LANDED
   2026-07-16.** InvokeCallback, on depsFresh failure, re-runs
   StampDetachedFn against the live bindings via a per-ref restampBox
@@ -300,7 +314,11 @@ Cheapest-first, each with the standard battery + fullcorpus
    see §3). §4 computed branch arms — **LANDED 2026-07-16**
    (computedArmDoBody synthesis; see §4). §1 drift window — **LANDED
    2026-07-16** (tryRecordDriftWindow — a STATIC OpCallDynamicMixed
-   window, no marks needed; see §1). §7b multi-sig stamps (M) remains.
+   window, no marks needed; see §1). §7b multi-sig stamps — **LANDED
+   2026-07-16** (per-sig refs; the matched sig's Impl IS the sig
+   table; see §7). Every schedulable item of §1–§7 is now landed;
+   only §5 (blocked on the check-mode forward-collection change) and
+   the §8 designed opt-out remain open.
 
 After all of §1–§7, the only remaining interpreter execution on any
 default path would be: check-mode (the compile front-end itself),

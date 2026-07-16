@@ -695,11 +695,12 @@ type CompiledFnRef struct {
 // re-compiles per ref so a hot rebinding loop cannot pay a compile per
 // invoke — once exhausted, the seam stays on CallAQL (slow, not wrong).
 type restampBox struct {
-	mu    sync.Mutex
-	fd    FnDefInfo
-	pos   SrcPos
-	tries int
-	cur   *CompiledFnRef
+	mu     sync.Mutex
+	fd     FnDefInfo
+	sigIdx int // which own sig this ref compiled (REFUSAL-CLOSURE §7b: per-sig refs)
+	pos    SrcPos
+	tries  int
+	cur    *CompiledFnRef
 }
 
 // depSnapEntry is one dep's binding state at stamp time (see depSnap).

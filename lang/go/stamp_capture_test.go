@@ -98,3 +98,72 @@ func TestComputedCaptureStampsAndRunsWithCaptures(t *testing.T) {
 		t.Errorf("unarmed run must not stamp, got %+v", got)
 	}
 }
+
+// The §7b landing (REFUSAL-CLOSURE.0, 2026-07-16): a MULTI-OVERLOAD handler
+// stamps EVERY own sig to its own unit — the invoke seam dispatches through
+// MatchFnSig, so the matched sig's own Impl ref is the "sig table". The
+// two-arity service-handler shape (a `[req st prior]` overload beside a
+// `[req st]` one) was the standing decline: under the old single-own-sig
+// gate such a value never stamped and permanently interpreted.
+func TestMultiOverloadHandlerStampsPerSig(t *testing.T) {
+	const src = `def svc (service {}) add {cmd:"G"} (fn [[req:Map st:Map p:Function] [Any] [41 add 1] [req:Map st:Map] [Any] [99]]) svc [(call {cmd:"G"} svc)]`
+
+	a := mustNew(t)
+	disarm := a.ArmRuntimeStamping()
+	out, err := a.RunInterp(src)
+	disarm()
+	if err != nil || fmt.Sprint(out) != "[[42]]" {
+		t.Fatalf("armed run: out=%v err=%v, want [[42]] (the matched 3-arity unit)", out, err)
+	}
+	stamped := 0
+	for _, ev := range a.StampReport() {
+		if ev.Stamped {
+			stamped++
+		}
+	}
+	if stamped != 2 {
+		t.Errorf("both overloads must stamp (§7b), got %d: %+v", stamped, a.StampReport())
+	}
+	// Parity: the unarmed interpreter run is byte-identical.
+	b := mustNew(t)
+	outI, errI := b.RunInterp(src)
+	if errI != nil || fmt.Sprint(outI) != fmt.Sprint(out) {
+		t.Errorf("parity: armed=%v unarmed=%v (err=%v)", out, outI, errI)
+	}
+	if got := b.StampReport(); len(got) != 0 {
+		t.Errorf("unarmed run must not stamp, got %+v", got)
+	}
+}
+
+// Per-sig fail-safe: an overload whose body DECLINES the unit compile (the
+// context-dependent `args`) stays plain while its sibling stamps; the seam's
+// matched sig runs its own ref — or CallAQL when it has none — so a partial
+// stamp can never change behaviour.
+func TestMultiOverloadHandlerPartialStamp(t *testing.T) {
+	const src = `def svc (service {}) add {cmd:"P"} (fn [[req:Map st:Map p:Function] [Any] [req get "v"] [req:Map st:Map] [Any] [args]]) svc [(call {v:7 cmd:"P"} svc)]`
+
+	a := mustNew(t)
+	disarm := a.ArmRuntimeStamping()
+	out, err := a.RunInterp(src)
+	disarm()
+	if err != nil || fmt.Sprint(out) != "[[7]]" {
+		t.Fatalf("armed run: out=%v err=%v, want [[7]]", out, err)
+	}
+	stamped, refused := 0, 0
+	for _, ev := range a.StampReport() {
+		if ev.Stamped {
+			stamped++
+		} else if ev.Reason != "" {
+			refused++
+		}
+	}
+	if stamped != 1 || refused != 1 {
+		t.Errorf("want exactly one stamped + one reasoned refusal, got stamped=%d refused=%d: %+v",
+			stamped, refused, a.StampReport())
+	}
+	b := mustNew(t)
+	outI, errI := b.RunInterp(src)
+	if errI != nil || fmt.Sprint(outI) != fmt.Sprint(out) {
+		t.Errorf("parity: armed=%v unarmed=%v (err=%v)", out, outI, errI)
+	}
+}

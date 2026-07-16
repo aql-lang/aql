@@ -1732,20 +1732,20 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 // CompileStoresFn word stashes for later invocation — a serve-raw connection
 // handler) to its own fn unit, so the native word can run it on the VM via
 // RunUnit instead of CallAQL. Returns the unit index and true, or (0, false)
-// when the body refuses (a refusal-class word, a flow sentinel, no single own
-// sig) — the caller then bakes only the plain const and the handler falls back
-// to the interpreter, per-body and sound. Mirrors tryReturnedClosure's
+// when the body refuses (a refusal-class word, a flow sentinel, an ineligible
+// sig) — the caller then bakes only the plain const and that overload falls
+// back to the interpreter, per-sig and sound. Mirrors tryReturnedClosure's
 // probe-then-real compile, but bodyOut 0 (count-agnostic): a stored handler is
 // invoked for effect and its residual, like CallAQL's, is the caller's to use
 // or discard.
-func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
+func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (int, bool) {
 	if es == nil || es.reg == nil {
 		return 0, false
 	}
-	lam, ok := storedFnUnitEligible(fd)
-	if !ok {
+	if sigIdx < 0 || sigIdx >= len(fd.Signatures) || !storedSigEligible(&fd.Signatures[sigIdx]) {
 		return 0, false
 	}
+	lam := &fd.Signatures[sigIdx]
 	inputs, paramNames := fnValueInputs(lam.Params)
 	r := es.reg
 	// PROBE in a throwaway state so a refusing body leaves THIS program
@@ -1783,25 +1783,37 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	return unit, true
 }
 
-// storedFnUnitEligible reports whether fd is the SHAPE a stored-fn unit
-// compile accepts — exactly one own (non-fallback) signature carrying a
-// non-empty body with no flow-control sentinel — returning that signature.
-// Shared by the compile-time store-fn bake (compileStoredFnUnit) and the
-// runtime detached stamp (StampDetachedFn) so the two gates cannot drift.
-// Capture-freedom is the CALLER's gate (recordCallOperands / StampFnValue):
-// it is a property of the storing context, not of the unit shape.
-func storedFnUnitEligible(fd FnDefInfo) (*Signature, bool) {
-	own := 0
+// storedSigEligible reports whether ONE signature of a stored fn value is a
+// stampable unit shape: an own (non-fallback) AQL body, non-empty and free
+// of flow-control sentinels. Every own sig stamps INDEPENDENTLY
+// (REFUSAL-CLOSURE §7b): the callback seam dispatches through MatchFnSig
+// first, so the matched sig's own Impl ref IS the "sig table" — an
+// unstamped sibling simply interprets via CallAQL, per-sig and fail-safe.
+// Shared by the compile-time store-fn bake and the runtime detached stamp
+// so the two gates cannot drift. Capture-freedom is the CALLER's gate
+// (recordCallOperands / StampFnValue): it is a property of the storing
+// context, not of the unit shape.
+func storedSigEligible(sig *Signature) bool {
+	if sig.Fallback {
+		return false
+	}
+	if _, isAQL := sig.Impl.(*AQLImpl); !isAQL {
+		return false
+	}
+	return len(sig.body()) > 0 && !bodyToksHaveSentinel(sig.body())
+}
+
+// firstStampableSig returns fd's first stampable own AQL sig — the
+// single-sig entry the predicate-type constructor and the module-load
+// sweep use (their values are single-overload by construction); multi-sig
+// values stamp per sig through the callers' own loops.
+func firstStampableSig(fd FnDefInfo) (int, bool) {
 	for i := range fd.Signatures {
-		if !fd.Signatures[i].Fallback {
-			own++
+		if storedSigEligible(&fd.Signatures[i]) {
+			return i, true
 		}
 	}
-	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
-		return nil, false
-	}
-	return lam, true
+	return -1, false
 }
 
 // compileStoredBody compiles a NoEvalArgs CODE-BODY list (spawn's process body) to
@@ -1973,15 +1985,6 @@ func (es *EmitState) storedHandlerDeps(body []Value) map[string]bool {
 		}
 	})
 	return deps
-}
-
-// storedFnDeps is storedHandlerDeps for a stored fn VALUE: it reads the module
-// deps from the fn's single own-sig body.
-func (es *EmitState) storedFnDeps(fd FnDefInfo) map[string]bool {
-	if lam, ok := fd.FirstOwnSig(); ok {
-		return es.storedHandlerDeps(lam.body())
-	}
-	return nil
 }
 
 // NotifyNameRebound poisons any already-created stored-handler / spawn ref whose
@@ -4271,9 +4274,22 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// handler falls back to the interpreter, per-body and sound.
 		if sig.CompileEffect.Has(CompileStoresFn) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
-				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos()); cOK {
-					ref := &CompiledFnRef{Unit: unit, depNames: es.storedFnDeps(fd)}
-					if stampCompiledRef(fd, ref) {
+				// EVERY stampable own sig gets its own unit + ref
+				// (REFUSAL-CLOSURE §7b): the callback seam dispatches via
+				// MatchFnSig, so the matched sig's Impl ref is the sig table.
+				// A sig whose body refuses stays un-stamped and interprets —
+				// per-sig and sound.
+				for si := range fd.Signatures {
+					if !storedSigEligible(&fd.Signatures[si]) {
+						continue
+					}
+					aImpl := fd.Signatures[si].Impl.(*AQLImpl)
+					if aImpl.Compiled != nil {
+						continue // first stamp wins
+					}
+					if unit, cOK := es.compileStoredFnUnit(fd, si, a.Pos()); cOK {
+						ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].body())}
+						aImpl.Compiled = ref
 						es.storedFnRefs = append(es.storedFnRefs, ref)
 					}
 				}

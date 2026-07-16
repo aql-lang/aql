@@ -26,8 +26,26 @@ package eng
 // the interpreter would.
 
 // StampDetachedFn compiles a runtime-constructed, capture-free fn VALUE's
-// single own-sig body to a standalone one-unit Program and returns its
-// CompiledFnRef. It runs only when runtime stamping is armed on r
+// FIRST stampable own-sig body to a standalone one-unit Program and returns
+// its CompiledFnRef — the single-sig entry the predicate-type constructor
+// and the module-load sweep use (their values are single-overload by
+// construction). Multi-overload values stamp EVERY own sig through the
+// value-level loops (StampFnValue / StampFnValueInPlace →
+// StampDetachedSig, REFUSAL-CLOSURE §7b).
+func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, bool) {
+	si, ok := firstStampableSig(fd)
+	if !ok {
+		// Not recorded: native-word bindings swept by the module-load loop
+		// land here — a shape that was never a compile candidate is report
+		// noise, not an attempt.
+		return nil, false
+	}
+	return StampDetachedSig(r, fd, si, pos)
+}
+
+// StampDetachedSig is the per-signature detached stamp: it compiles
+// fd.Signatures[sigIdx]'s body to a standalone one-unit Program and returns
+// its CompiledFnRef. It runs only when runtime stamping is armed on r
 // (EnableRuntimeStamping — the compiled execution entry points). The compile
 // is fully isolated: it runs on a ForkConcurrent copy of r carrying a FRESH
 // CheckState (Registry.Check is a shared pointer the fork's shallow copy
@@ -37,14 +55,11 @@ package eng
 // The caller contract is ForkConcurrent's: invoke from the goroutine that
 // owns r (store words and codec resolution run on the registry executing
 // them, so this holds at every trigger site).
-func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, bool) {
+func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*CompiledFnRef, bool) {
 	if r == nil || !r.RuntimeStampingEnabled() {
 		return nil, false
 	}
-	if _, ok := storedFnUnitEligible(fd); !ok {
-		// Not recorded: multi-overload fns and native-word bindings swept by
-		// the module-load loop land here — a shape that was never a compile
-		// candidate is report noise, not an attempt.
+	if sigIdx < 0 || sigIdx >= len(fd.Signatures) || !storedSigEligible(&fd.Signatures[sigIdx]) {
 		return nil, false
 	}
 	fork := r.ForkConcurrent()
@@ -96,8 +111,8 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	// here), so the snapshot below describes exactly what the body resolved
 	// against — the analysis inside compileStoredFnUnit installs and restores
 	// its own body-local bindings.
-	deps := es.storedFnDeps(fd)
-	unit, ok := es.compileStoredFnUnit(fd, pos)
+	deps := es.storedHandlerDeps(fd.Signatures[sigIdx].body())
+	unit, ok := es.compileStoredFnUnit(fd, sigIdx, pos)
 	if !ok {
 		// The probe's latched reason when it gave one; the report printer
 		// substitutes a generic text for an empty reason (a refusal path
@@ -140,7 +155,7 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	// invoke time (jitRestamp) instead of degrading permanently to CallAQL.
 	// fd here carries the §7a identity-minted capture clone, so a re-stamp
 	// needs no re-clone.
-	ref.restamp = &restampBox{fd: fd, pos: pos}
+	ref.restamp = &restampBox{fd: fd, sigIdx: sigIdx, pos: pos}
 	r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
 }
@@ -175,7 +190,7 @@ func (ref *CompiledFnRef) jitRestamp(r *Registry) *CompiledFnRef {
 		return nil
 	}
 	box.tries++
-	nr, ok := StampDetachedFn(r, box.fd, box.pos)
+	nr, ok := StampDetachedSig(r, box.fd, box.sigIdx, box.pos)
 	if !ok {
 		return nil
 	}
@@ -198,37 +213,42 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 	if !ok {
 		return v, false
 	}
-	// Locate the stamp target — the first own (non-fallback) AQL body sig,
-	// mirroring stampCompiledRef's choice — while refusing an already-stamped
-	// value (first stamp wins: a compile-time stamp or an earlier detached
-	// one already carries the VM edge).
-	target, aImpl := -1, (*AQLImpl)(nil)
+	// Refuse an already-stamped value wholesale (first stamp wins: a
+	// compile-time stamp or an earlier detached one already carries the VM
+	// edge for the sigs it accepted; re-stamping is the §7c box's job).
 	for i := range fd.Signatures {
 		if fd.Signatures[i].CompiledRef() != nil {
 			return v, false
 		}
-		if target < 0 && !fd.Signatures[i].Fallback {
-			if a, isAQL := fd.Signatures[i].Impl.(*AQLImpl); isAQL {
-				target, aImpl = i, a
-			}
+	}
+	// EVERY stampable own sig compiles to its OWN unit and ref
+	// (REFUSAL-CLOSURE §7b): the callback seam dispatches through
+	// MatchFnSig, so the matched sig's Impl ref is the sig table. A sig
+	// whose body declines stays plain and interprets — per-sig, fail-safe.
+	// The sig slice clones once (and each stamped impl clones) so the stamp
+	// never writes through a shared pointer of a published value.
+	var sigs []Signature
+	for i := range fd.Signatures {
+		if !storedSigEligible(&fd.Signatures[i]) {
+			continue
 		}
+		ref, ok := StampDetachedSig(r, fd, i, v.Pos())
+		if !ok {
+			continue
+		}
+		if sigs == nil {
+			sigs = make([]Signature, len(fd.Signatures))
+			copy(sigs, fd.Signatures)
+		}
+		na := *(sigs[i].Impl.(*AQLImpl))
+		na.Compiled = ref
+		sigs[i].Impl = &na
 	}
-	if target < 0 {
-		// A Go-backed or fallback-only fn value (a built-in codec) — nothing
-		// to stamp; it already dispatches natively.
+	if sigs == nil {
+		// Nothing stamped: a Go-backed / fallback-only value (a built-in
+		// codec), or every eligible body declined.
 		return v, false
 	}
-	ref, ok := StampDetachedFn(r, fd, v.Pos())
-	if !ok {
-		return v, false
-	}
-	// Clone the sig slice and the target impl so the stamp never writes
-	// through a shared pointer of a published value.
-	sigs := make([]Signature, len(fd.Signatures))
-	copy(sigs, fd.Signatures)
-	na := *aImpl
-	na.Compiled = ref
-	sigs[target].Impl = &na
 	fd.Signatures = sigs
 	out := v
 	out.Data = fd
@@ -252,9 +272,20 @@ func StampFnValueInPlace(r *Registry, v Value) bool {
 			return false
 		}
 	}
-	ref, ok := StampDetachedFn(r, fd, v.Pos())
-	if !ok {
-		return false
+	// Per-sig stamps onto the value's own shared impls (pre-publication —
+	// see the doc above): every stampable own sig gets its own ref
+	// (REFUSAL-CLOSURE §7b); a declining body leaves that sig plain.
+	any := false
+	for i := range fd.Signatures {
+		if !storedSigEligible(&fd.Signatures[i]) {
+			continue
+		}
+		ref, ok := StampDetachedSig(r, fd, i, v.Pos())
+		if !ok {
+			continue
+		}
+		fd.Signatures[i].Impl.(*AQLImpl).Compiled = ref
+		any = true
 	}
-	return stampCompiledRef(fd, ref)
+	return any
 }
