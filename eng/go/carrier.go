@@ -1047,13 +1047,26 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Independent of how the read itself
 	// records — the tag rides the result ID onto the tape.
 	if len(out) == 1 && (isGetWord(word) || isGetrWord(word)) {
-		if es := r.Check.Recorder(); es.active() && readsFnMember(args) {
-			// The member VALUE rides the tag when the read pinpoints it (a
-			// concrete container + key) so the §3 arrival-apply model can
-			// claim its signature's window; a computed-key read tags alone
-			// and the model declines (the stranded-fn refusal stands).
-			member, _ := readFnMemberValue(args)
-			es.noteMemberFnRead(out[0].ID, member)
+		if es := r.Check.Recorder(); es.active() {
+			if readsFnMember(args) {
+				// The member VALUE rides the tag when the read pinpoints it (a
+				// concrete container + key) so the §3 arrival-apply model can
+				// claim its signature's window; a computed-key read tags alone
+				// and the model declines (the stranded-fn refusal stands).
+				member, _ := readFnMemberValue(args)
+				es.noteMemberFnRead(out[0].ID, member)
+			} else if rec, isEmit := es.(*EmitState); isEmit {
+				// A CONSTRUCTED-instance receiver is a carrier here (the make
+				// result — payload inspection sees only the schema), so the
+				// member rides the construction-time fnMemberFields note
+				// instead: tagging it routes the landing through the same §3
+				// model / stranded-fn guard as a concrete-container read —
+				// the fix for the pre-existing `o.f 21 eq 42` stranded-apply
+				// miscompile.
+				if member, ok := rec.instanceFnMember(args); ok {
+					rec.noteMemberFnRead(out[0].ID, member)
+				}
+			}
 		}
 	}
 	if !tryRecordMethodApply(r, word, args, out, pos) &&

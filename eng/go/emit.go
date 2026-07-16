@@ -562,6 +562,16 @@ type EmitState struct {
 	// holding genuinely-0-param fn values (noteFnRiskFields /
 	// instanceFnFieldRisk — the carrier-receiver auto-dispatch hazard).
 	fnRiskFields map[string]map[string]bool
+	// fnMemberFields is fnRiskFields' any-arity VALUE-carrying sibling
+	// (the instance-field fn-read fix): constructed-instance value ID →
+	// field key → the fn member VALUE from the concrete construction map.
+	// Consulted at the get-family tag site (instanceFnMember) so a read
+	// through the instance CARRIER — whose payload inspection sees only the
+	// schema — still tags noteMemberFnRead: the §3 arrival model then
+	// compiles the landing with parity, and every shape it declines gets
+	// refuseStrandedMemberFn's sound refusal instead of the pre-existing
+	// stranded-apply miscompile (`o.f 21 eq 42` → fn-as-data + eq(21,42)).
+	fnMemberFields map[string]map[string]Value
 	// memberFnReads holds the value IDs of get-family reads that surfaced a
 	// FUNCTION-valued container member (readsFnMember). The read's static type is
 	// dynamic(Any), so downstream code cannot see it is a fn; this side table
@@ -4489,6 +4499,7 @@ func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
 		return
 	}
 	var risky map[string]bool
+	var members map[string]Value
 	for _, a := range args {
 		mp, ok := a.Data.(MapPayload)
 		if !ok || a.Carrier || mp.M == nil {
@@ -4501,6 +4512,25 @@ func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
 					risky = map[string]bool{}
 				}
 				risky[k] = true
+			}
+			// The any-arity sibling: EVERY fn-valued field is remembered
+			// with its VALUE, so a later read through the instance carrier
+			// can tag the member-fn landing (see fnMemberFields).
+			if _, isFn := mv.Data.(FnDefInfo); isFn {
+				if members == nil {
+					members = map[string]Value{}
+				}
+				members[k] = mv
+			}
+		}
+	}
+	if members != nil {
+		if es.fnMemberFields == nil {
+			es.fnMemberFields = map[string]map[string]Value{}
+		}
+		for _, o := range outs {
+			if o.ID != "" {
+				es.fnMemberFields[o.ID] = members
 			}
 		}
 	}
@@ -4538,6 +4568,30 @@ func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
 		return true
 	}
 	return false
+}
+
+// instanceFnMember consults fnMemberFields for a get-family dispatch whose
+// receiver is (a carrier of) a tracked constructed instance with a CONCRETE
+// key: it returns that field's fn member value so the read result can be
+// tagged (noteMemberFnRead) exactly like a concrete-container member read.
+// An unresolvable key reports nothing — the fnRiskFields guard already owns
+// the conservative refusal for those.
+func (es *EmitState) instanceFnMember(args []Value) (Value, bool) {
+	if len(es.fnMemberFields) == 0 {
+		return Value{}, false
+	}
+	for _, a := range args {
+		members := es.fnMemberFields[a.ID]
+		if members == nil {
+			continue
+		}
+		if key, ok := concreteMapKey(args); ok {
+			if mv, hit := members[key]; hit {
+				return mv, true
+			}
+		}
+	}
+	return Value{}, false
 }
 
 // zeroArgFnOut is the OUT-side backstop to the receiver heuristic: when a
@@ -4871,12 +4925,11 @@ func readFnMemberValue(args []Value) (Value, bool) {
 				}
 			}
 		}
-		// Class-instance fields are deliberately NOT pinpointed: the
-		// instance-field fn-read family has a PRE-EXISTING check-model gap
-		// (the read models the fn as inert data where the interpreter
-		// auto-applies it — `def o (make C {f: d/r}) o.f 21 eq 42` diverges
-		// on main), so the arrival model must not build on that read path
-		// until the gap is fixed. List and map members are the §3 class.
+		// Class-instance receivers never reach this payload walk: the make
+		// result is a CARRIER at the read site (schema only), so instance
+		// members ride the construction-time fnMemberFields note instead
+		// (instanceFnMember at the tag site) — the fix for the formerly
+		// pre-existing `o.f 21 eq 42` stranded-apply miscompile.
 	}
 	return Value{}, false
 }

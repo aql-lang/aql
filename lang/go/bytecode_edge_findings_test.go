@@ -341,3 +341,32 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 		})
 	}
 }
+
+// The CLASS-INSTANCE member-fn arrival family — the formerly PRE-EXISTING
+// stranded-apply miscompile (`o.f 21 eq 42` compiled to the fn-as-data plus
+// eq(21,42)=false where the interpreter applies the member → true; the make
+// result is a CARRIER at the read site, so the concrete-container tag walk
+// never saw the member). Fixed by the construction-time fnMemberFields note:
+// `make` remembers every fn-valued field VALUE from its concrete map, the
+// get-family tag site consults it through the carrier (instanceFnMember),
+// and the landing routes through the same §3 arrival model / stranded-fn
+// guard as a map-member read.
+func TestInstanceMemberFnArrival(t *testing.T) {
+	// The miscompile shape compiles with parity now (the arrival model).
+	mustCompileWithParity(t,
+		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) o.f 21 eq 42`, "[true]")
+	// The statement-tail apply and the bare (unapplied) read keep compiling.
+	mustCompileWithParity(t,
+		`def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) o.f 21`, "[42]")
+	// A shape the arrival model declines — a WORD right after the carrier —
+	// must now REFUSE via the stranded-fn guard (sound), never miscompile.
+	declined := `def d fn [[n:Integer][Integer][n mul 2]] def C class {f: Function} def o (make C {f: d/r}) def x 21 o.f x eq 42`
+	a, _ := New()
+	if prog, reason, _, _ := a.CompileCheck(declined); prog != nil {
+		t.Errorf("the declined instance landing must refuse (reason=%q):\n%s", reason, prog.Disassemble())
+	}
+	b, _ := New()
+	if got, errI := b.RunInterp(declined); errI != nil || fmt.Sprint(got) != "[true]" {
+		t.Errorf("declined-shape interp = %v (err=%v), want [true]", got, errI)
+	}
+}
