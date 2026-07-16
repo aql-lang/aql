@@ -34,7 +34,7 @@ import "github.com/aql-lang/aql/eng/go"
 //	stderr    the standard-error stream handle (a StreamKind atom)
 //	trace     run a list as a sub-program with step-by-step tracing
 //	folder    create / list a filesystem folder (Path; optional options)
-func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
+func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
@@ -45,6 +45,18 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 				}),
 				Returns: []*Type{streamKind}, BarrierPos: -1,
 			}},
+		}
+	}
+	// statImpl / listImpl close over fileType so the filesystem-structure
+	// handlers can tag stat records with the module's FileType atoms.
+	statImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			return statHandler(a, r, fileType, hasOpts)
+		}
+	}
+	listImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			return listHandler(a, r, fileType, hasOpts)
 		}
 	}
 	return []NativeFunc{
@@ -106,6 +118,29 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			Signatures: []Signature{
 				{Args: []*Type{TOptions, TPathon}, Impl: Go(folderOptsHandler), Returns: []*Type{TList}, BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(folderHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			},
+		},
+		{
+			// stat returns a FileInfo record (or none when absent). The
+			// target may be a Path or a string; an optional map carries
+			// {follow, resolve}.
+			Name: "stat",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TString, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
+			// list enumerates a directory's entries (names, or FileInfo
+			// records with {detail:true}); {recursive:true} walks the tree.
+			Name: "list",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
+				{Args: []*Type{TString, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
 			},
 		},
 	}

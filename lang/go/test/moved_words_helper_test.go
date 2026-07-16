@@ -11,7 +11,7 @@ import (
 // Production requires `import "aql:<mod>"` (proved by the module-*.tsv specs).
 func seedAQL(a *lang.AQL) {
 	moved := [][]native.NativeFunc{
-		native.IOModuleNativeFuncs(native.NewStreamKind()),
+		native.IOModuleNativeFuncs(native.NewStreamKind(), native.NewFileType()),
 		native.StructModuleNatives,
 		native.NetModuleNatives(native.MintFetchTypes(a.NativeRegistry())),
 		native.BitwiseModuleNatives,

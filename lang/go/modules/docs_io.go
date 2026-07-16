@@ -10,5 +10,7 @@ func init() {
 		"stderr":   "Standard-error handle.",
 		"trace":    "Run a list as a traced sub-program, returning its result.",
 		"folder":   "Create a directory, returning its Path.",
+		"stat":     "Describe a path (name/size/type/mode/mtime), or none if absent.",
+		"list":     "List a directory's entries; {detail} for records, {recursive} to walk.",
 	})
 }

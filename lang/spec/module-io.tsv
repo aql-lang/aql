@@ -45,6 +45,23 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.read (IO.write "mem:/
 #     fileio_test.go (they return Any / raise runtime-only errors, which do
 #     not belong on the static-checker spec surface).
 #
+# §8  stat — describe a path, returning a FileInfo record (name/path/type/
+#     size/mode/mtime, plus target for a symlink), or `none` when absent.
+#     `type` is an IO.FileType atom (file/dir/symlink/other).
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "hello" drop  (IO.stat "mem://s.txt").size	5	stat reports a file's byte size
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "x" drop  (IO.stat "mem://s.txt").type	file/q	stat's type field is a FileType atom
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "x" drop  (IO.stat "mem://s.txt").type is IO.FileType	true	the type field inhabits IO.FileType
+import "aql:io"  context dot __sys dot fs set mem true  file/q is IO.FileType	true	a bare `file` atom is a FileType
+import "aql:io"  context dot __sys dot fs set mem true  "file" is IO.FileType	false	the STRING "file" is not a FileType
+import "aql:io"  context dot __sys dot fs set mem true  IO.stat "mem://ghost.txt"	None	stat of an absent path is none
+#
+# §9  list — enumerate a directory's entries (names, or records with
+#     {detail:true}); {recursive:true} walks the tree. Listing a missing
+#     directory or a file is an error.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://L/a.txt" "x" drop  IO.list "mem://L"	['a.txt']	list returns entry names
+import "aql:io"  context dot __sys dot fs set mem true  IO.list "mem://nope"	ERROR:list	listing an absent directory errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.list (IO.write "mem://f.txt" "x")	ERROR:list	listing a file (not a directory) errors
+#
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not
 #     engage through a spec row's context layering, and `make Pathon` collapses

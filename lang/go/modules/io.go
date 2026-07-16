@@ -38,13 +38,18 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// signatures, and is exported as a type literal so `x is IO.StreamKind`
 	// works after import.
 	streamKind := native.MintStreamKind(subReg)
-	ioNatives := native.IOModuleNativeFuncs(streamKind)
+	// FileType — the kind field of a stat record (file/dir/symlink/other) —
+	// is owned by this module too: minted per import into the sub-registry
+	// and exported as a type literal so `x is IO.FileType` works.
+	fileType := native.MintFileType(subReg)
+	ioNatives := native.IOModuleNativeFuncs(streamKind, fileType)
 	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := delegatingExports(ioNatives, subReg)
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
+	exports.Set("FileType", native.NewTypeLiteral(fileType))
 
 	return moduleDesc(parent, "IO", subReg, exports), nil
 }

@@ -405,10 +405,14 @@ WORD list
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/List] barrier=2 returns=[Node/List]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Node/List]
+  [Scalar/String Node/Map] barrier=2 returns=[Node/List]
   [Ideal/Resource/Entity] barrier=1 returns=[Node/List]
   [Node/Map] barrier=1 returns=[Node/List]
   [Node/Map] barrier=1 returns=[Node/List]
   [Node/List] barrier=1 returns=[Node/List]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Node/List]
+  [Scalar/String] barrier=1 returns=[Node/List]
 WORD load
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Any]
@@ -647,6 +651,11 @@ WORD stack
 WORD stack-args
   [Type/Function] barrier=1 runcheck returns=[Type/Function]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
+WORD stat
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
+  [Scalar/String Node/Map] barrier=2 returns=[Any]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+  [Scalar/String] barrier=1 returns=[Any]
 WORD state-of
   [Ideal/Service] barrier=1 returns=[Node/Map]
 WORD stderr
