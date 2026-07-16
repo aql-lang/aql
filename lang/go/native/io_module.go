@@ -179,5 +179,32 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 				{Args: []*Type{TString, TString}, Impl: Go(copyHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			},
 		},
+		{
+			// link creates a link at dst referring to src — a symbolic link by
+			// default, a hard link with {hard:true}. Returns dst.
+			Name: "link",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString}, Impl: Go(linkHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString}, Impl: Go(linkHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			},
+		},
+		{
+			// touch creates a path if absent and applies metadata options
+			// {mode, mtime, atime, size} (folding chmod/utimes/truncate).
+			// Returns the path.
+			Name: "touch",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(touchOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(touchHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TMap}, Impl: Go(touchOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(touchHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			},
+		},
 	}
 }

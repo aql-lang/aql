@@ -409,10 +409,37 @@ func TestCopyWord(t *testing.T) {
 }
 
 // failAtOps wraps a MemFileOps and fails a chosen operation when its path
-// contains the configured substring, so doCopy's error branches are reachable.
+// contains the configured substring, so doCopy's and applyTouch's error
+// branches are reachable.
 type failAtOps struct {
 	*capabilities.MemFileOps
 	failReadFile, failWriteFile, failMkdir, failReadDir, failSymlink string
+	failStat, failChmod, failChtimes, failTruncate                   string
+}
+
+func (f *failAtOps) Stat(p string, follow bool) (capabilities.FileInfo, error) {
+	if f.failStat != "" && strings.Contains(p, f.failStat) {
+		return capabilities.FileInfo{}, fmt.Errorf("stat boom")
+	}
+	return f.MemFileOps.Stat(p, follow)
+}
+func (f *failAtOps) Chmod(p string, m os.FileMode) error {
+	if f.failChmod != "" && strings.Contains(p, f.failChmod) {
+		return fmt.Errorf("chmod boom")
+	}
+	return f.MemFileOps.Chmod(p, m)
+}
+func (f *failAtOps) Chtimes(p string, a, mt time.Time) error {
+	if f.failChtimes != "" && strings.Contains(p, f.failChtimes) {
+		return fmt.Errorf("chtimes boom")
+	}
+	return f.MemFileOps.Chtimes(p, a, mt)
+}
+func (f *failAtOps) Truncate(p string, size int64) error {
+	if f.failTruncate != "" && strings.Contains(p, f.failTruncate) {
+		return fmt.Errorf("truncate boom")
+	}
+	return f.MemFileOps.Truncate(p, size)
 }
 
 func (f *failAtOps) ReadFile(p string) ([]byte, error) {
@@ -499,5 +526,140 @@ func TestCopyErrorBranches(t *testing.T) {
 		&failAtOps{failReadFile: "a.txt"})
 	if err := doCopy(r, "dir", "out", true); err == nil {
 		t.Error("expected child-copy error to propagate")
+	}
+}
+
+// ── link / touch ─────────────────────────────────────────────────────────
+
+func TestLinkWord(t *testing.T) {
+	r, mem := ioFSReg(t)
+	// symbolic link (default).
+	res := runAQL(t, r, []Value{NewWord("link"), NewString("t.txt"), NewString("sl")})
+	if res[0].String() != "'sl'" {
+		t.Errorf("link returned %v", res[0])
+	}
+	if li, err := mem.Stat("sl", false); err != nil || !li.Symlink || li.Target != "t.txt" {
+		t.Errorf("symlink = %+v (%v)", li, err)
+	}
+	// linking over an existing path errors.
+	if err := runAQLError(t, r, []Value{NewWord("link"), NewString("t.txt"), NewString("sl")}); err == nil {
+		t.Error("expected error creating a link over an existing path")
+	}
+	// hard link.
+	if err := mem.WriteFile("f.txt", []byte("body"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAQL(t, r, []Value{
+		NewWord("link"), NewString("f.txt"), NewString("hl"),
+		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
+	})
+	if b, err := mem.ReadFile("hl"); err != nil || string(b) != "body" {
+		t.Errorf("hard link content = %q (%v)", b, err)
+	}
+	// hard-linking an absent target errors.
+	if err := runAQLError(t, r, []Value{
+		NewWord("link"), NewString("ghost"), NewString("hl2"),
+		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
+	}); err == nil {
+		t.Error("expected error hard-linking an absent target")
+	}
+	// A Pathon destination is returned as a Pathon.
+	res = runAQL(t, r, []Value{NewWord("link"), NewString("t.txt"), NewPathon([]string{"pl"}, false)})
+	if !IsPathon(res[0]) {
+		t.Errorf("link to Pathon returned %v (want Pathon)", res[0])
+	}
+}
+
+func TestTouchWord(t *testing.T) {
+	r, mem := ioFSReg(t)
+	// touch creates an empty file when absent.
+	res := runAQL(t, r, []Value{NewWord("touch"), NewString("new.txt")})
+	if res[0].String() != "'new.txt'" {
+		t.Errorf("touch returned %v", res[0])
+	}
+	if fi, err := mem.Stat("new.txt", false); err != nil || fi.Size != 0 {
+		t.Errorf("touched file = %+v (%v)", fi, err)
+	}
+	// touch on an existing file leaves its content.
+	if err := mem.WriteFile("keep.txt", []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAQL(t, r, []Value{NewWord("touch"), NewString("keep.txt")})
+	if b, _ := mem.ReadFile("keep.txt"); string(b) != "data" {
+		t.Errorf("touch clobbered content: %q", b)
+	}
+	// {mode} chmods, {mtime} sets the time, {size} truncates/grows.
+	runAQL(t, r, []Value{
+		NewWord("touch"), NewString("new.txt"),
+		wrapMap(func(om *OrderedMap) {
+			om.Set("mode", NewInteger(0o600))
+			om.Set("mtime", NewInteger(1000))
+			om.Set("size", NewInteger(3))
+		}),
+	})
+	fi, _ := mem.Stat("new.txt", false)
+	if fi.Mode.Perm() != 0o600 || fi.Size != 3 || fi.ModTime.Unix() != 1000 {
+		t.Errorf("touch metadata = %+v", fi)
+	}
+	// a negative size is rejected.
+	if err := runAQLError(t, r, []Value{
+		NewWord("touch"), NewString("new.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("size", NewInteger(-1)) }),
+	}); err == nil {
+		t.Error("expected error on a negative touch size")
+	}
+	// {atime} alone still drives Chtimes.
+	runAQL(t, r, []Value{
+		NewWord("touch"), NewString("new.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("atime", NewInteger(2000)) }),
+	})
+}
+
+func TestTouchErrorBranches(t *testing.T) {
+	mkOpts := func(set func(*OrderedMap)) Value { return wrapMap(set) }
+
+	// Stat error (non-not-exist) short-circuits.
+	f := &failAtOps{MemFileOps: capabilities.NewMem(), failStat: "p"}
+	if err := applyTouch(f, "p.txt", NewTypeLiteral(TMap), false); err == nil {
+		t.Error("expected Stat error")
+	}
+	// WriteFile error when creating an absent file.
+	f = &failAtOps{MemFileOps: capabilities.NewMem(), failWriteFile: "p"}
+	if err := applyTouch(f, "p.txt", NewTypeLiteral(TMap), false); err == nil {
+		t.Error("expected WriteFile-create error")
+	}
+	// Chmod error.
+	mem := capabilities.NewMem()
+	mem.WriteFile("p.txt", []byte("x"), 0644)
+	f = &failAtOps{MemFileOps: mem, failChmod: "p"}
+	if err := applyTouch(f, "p.txt", mkOpts(func(om *OrderedMap) { om.Set("mode", NewInteger(0o600)) }), true); err == nil {
+		t.Error("expected Chmod error")
+	}
+	// Chtimes error.
+	mem = capabilities.NewMem()
+	mem.WriteFile("p.txt", []byte("x"), 0644)
+	f = &failAtOps{MemFileOps: mem, failChtimes: "p"}
+	if err := applyTouch(f, "p.txt", mkOpts(func(om *OrderedMap) { om.Set("mtime", NewInteger(1)) }), true); err == nil {
+		t.Error("expected Chtimes error")
+	}
+	// Truncate error.
+	mem = capabilities.NewMem()
+	mem.WriteFile("p.txt", []byte("x"), 0644)
+	f = &failAtOps{MemFileOps: mem, failTruncate: "p"}
+	if err := applyTouch(f, "p.txt", mkOpts(func(om *OrderedMap) { om.Set("size", NewInteger(1)) }), true); err == nil {
+		t.Error("expected Truncate error")
+	}
+}
+
+func TestMapIntOpt(t *testing.T) {
+	if _, ok := mapIntOpt(NewTypeLiteral(TMap), "mode"); ok {
+		t.Error("type-literal opts should report absent")
+	}
+	if _, ok := mapIntOpt(NewOptionsType(NewOrderedMap()), "mode"); ok {
+		t.Error("options-typed opts should report absent")
+	}
+	opts := wrapMap(func(om *OrderedMap) { om.Set("mode", NewInteger(7)) })
+	if v, ok := mapIntOpt(opts, "mode"); !ok || v != 7 {
+		t.Errorf("mapIntOpt = %d %v, want 7 true", v, ok)
 	}
 }

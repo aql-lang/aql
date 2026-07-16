@@ -15,5 +15,7 @@ func init() {
 		"remove":   "Delete a path; {recursive} for a tree, {force} to ignore absent.",
 		"move":     "Rename/move a path to a new location, returning the destination.",
 		"copy":     "Copy a path to a destination; {recursive} copies a directory tree.",
+		"link":     "Link dst to src: a symlink by default, a hard link with {hard}.",
+		"touch":    "Create a path if absent and set {mode}/{mtime}/{atime}/{size}.",
 	})
 }

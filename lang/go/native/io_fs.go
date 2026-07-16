@@ -249,3 +249,110 @@ func copyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func copyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	return doCopyWord(args, r, true)
 }
+
+// mapIntOpt reads one integer key from an options map, reporting presence.
+func mapIntOpt(opts Value, key string) (int64, bool) {
+	if !opts.Parent.Equal(TMap) || !IsConcrete(opts) {
+		return 0, false
+	}
+	m, _ := AsMap(opts)
+	if m == nil {
+		return 0, false
+	}
+	return MapFieldInteger(m, key)
+}
+
+// doLinkWord implements IO.link: a symbolic link (default) or a hard link
+// ({hard:true}) at dst referring to src. Returns dst.
+func doLinkWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
+	target := extractPath(args[0])
+	link := extractPath(args[1])
+	hard := false
+	if hasOpts {
+		hard = mapBoolOpt(args[2], "hard", false)
+	}
+	r.NoteEffect()
+	var err error
+	if hard {
+		err = EffectiveFileOps(r).Link(target, link)
+	} else {
+		err = EffectiveFileOps(r).Symlink(target, link)
+	}
+	if err != nil {
+		return nil, r.AqlError("link_error", fmt.Sprintf("link: %v", err), "link")
+	}
+	return []Value{returnPath(args[1], link)}, nil
+}
+
+func linkHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doLinkWord(args, r, false)
+}
+
+func linkOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doLinkWord(args, r, true)
+}
+
+// applyTouch is IO.touch's core: create the file if absent (Unix touch), then
+// apply the metadata options {mode, mtime, atime, size}. It is a standalone
+// function so its error branches are directly reachable in tests.
+func applyTouch(ops capabilities.FileOps, path string, opts Value, hasOpts bool) error {
+	if _, err := ops.Stat(path, false); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if werr := ops.WriteFile(path, []byte{}, 0o644); werr != nil {
+			return werr
+		}
+	}
+	if !hasOpts {
+		return nil
+	}
+	if mode, ok := mapIntOpt(opts, "mode"); ok {
+		if err := ops.Chmod(path, os.FileMode(mode)); err != nil {
+			return err
+		}
+	}
+	mtime, hasM := mapIntOpt(opts, "mtime")
+	atime, hasA := mapIntOpt(opts, "atime")
+	if hasM || hasA {
+		mt, at := time.Unix(mtime, 0), time.Unix(atime, 0)
+		if !hasM {
+			mt = at
+		}
+		if !hasA {
+			at = mt
+		}
+		if err := ops.Chtimes(path, at, mt); err != nil {
+			return err
+		}
+	}
+	if size, ok := mapIntOpt(opts, "size"); ok {
+		if err := ops.Truncate(path, size); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// doTouchWord implements IO.touch (the chmod/utimes/truncate/touch setter).
+// Returns the path.
+func doTouchWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
+	path := extractPath(args[0])
+	var opts Value
+	if hasOpts {
+		opts = args[1]
+	}
+	r.NoteEffect()
+	if err := applyTouch(EffectiveFileOps(r), path, opts, hasOpts); err != nil {
+		return nil, r.AqlError("touch_error", fmt.Sprintf("touch: %v", err), "touch")
+	}
+	return []Value{returnPath(args[0], path)}, nil
+}
+
+func touchHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doTouchWord(args, r, false)
+}
+
+func touchOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doTouchWord(args, r, true)
+}

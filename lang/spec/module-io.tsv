@@ -76,6 +76,17 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.move "mem://ghost.txt
 import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://c.txt" "hi" drop  IO.copy "mem://c.txt" "mem://c2.txt" drop  IO.read "mem://c2.txt"	'hi'	copy duplicates a file's contents
 import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://cd/a.txt" "x" drop  IO.copy "mem://cd" "mem://cd2"	ERROR:copy	copying a directory without {recursive} errors
 #
+# §13  link — create a link at dst referring to src: a symlink by default,
+#      a hard link with {hard:true}. Returns the link path.
+import "aql:io"  context dot __sys dot fs set mem true  IO.link "mem://target.txt" "mem://sl"	'mem://sl'	link returns the created link path
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://h.txt" "hi" drop  IO.link "mem://h.txt" "mem://h2" {hard:true} drop  IO.read "mem://h2"	'hi'	a hard link shares the file's contents
+import "aql:io"  context dot __sys dot fs set mem true  IO.link "mem://ghost" "mem://hl" {hard:true}	ERROR:link	a hard link to an absent target errors
+#
+# §14  touch — create a path if absent and apply {mode}/{mtime}/{atime}/{size}.
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch "mem://t.txt" drop  (IO.stat "mem://t.txt").size	0	touch creates an empty file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://t.txt" "hello" drop  IO.touch "mem://t.txt" {size:2} drop  (IO.stat "mem://t.txt").size	2	touch {size} truncates a file
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch "mem://t.txt" {size:-1}	ERROR:touch	a negative touch size errors
+#
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not
 #     engage through a spec row's context layering, and `make Pathon` collapses
