@@ -272,8 +272,15 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	// A body with a flow-control sentinel (break/continue/return) targets an
 	// enclosing loop the VM can't reach across the call boundary — keep it on
-	// the whole-program fallback path.
-	if bodyHasSentinel(body) {
+	// the whole-program fallback path. The scan is DEEP: a body word resolving
+	// to a user fn whose body transitively holds a bare break/continue leaks
+	// the signal through the call (`do [f 1]` with a breaking f unwinds the
+	// caller's loop in the interpreter; the closure unit starts a fresh loop
+	// stack and surfaces internal flow-signal errors — a miscompile). The
+	// decline is conservative-but-parity: callback words that do NOT thread
+	// the signal (each/filter — the interpreter raises `break outside loop`)
+	// fall back to the interpreter, which raises identically.
+	if bodyHasSentinelDeep(r, body) {
 		return false
 	}
 	inputs := spec.Inputs(args)

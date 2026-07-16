@@ -1,21 +1,35 @@
 # REFUSAL-CLOSURE.0 — compiling the remaining refusal shapes
 
-Status: DESIGN (2026-07-15). The runtime-independence program's ratchets
-sit at their finish lines (census 6000/6000 native, refusals 0, bails 0,
-frontier 0 expected-red, public `Run` compiled). What remains is the
-OFF-CORPUS refusal envelope — shapes that return `compile_refused` and
-run on the interpreter by design ("slow, not wrong"). This note designs
-the compile strategy for each, so any of them can be landed when its
-cost is justified. Every mechanism below reuses machinery that already
-exists and is proven; none requires a new architectural idea.
+Status: DESIGN (2026-07-15; **revised 2026-07-16** after an adversarial
+review — reason strings, op names, and mechanism preconditions corrected
+against HEAD; a §9 inventory added; the closure claim scoped honestly.
+§6a **landed** 2026-07-16 with the review's required net-zero gate; §5
+**blocked**, reclassified to a check-mode change — see the sections).
+The runtime-independence program's ratchets sit at their finish lines
+(census 6000/6000 native, refusals 0, bails 0, spec frontier 0
+expected-red, public `Run` compiled; the *langspec* frontier compile
+ledger separately carries 3 expected-red rows — §9.1, a different
+ledger, not a contradiction). What remains is the OFF-CORPUS refusal
+envelope — shapes that return `compile_refused` and run on the
+interpreter by design ("slow, not wrong"). This note designs the
+compile strategy for **each of the eight families below** (§9 inventories
+what the eight do NOT cover), so any of them can be landed when its cost
+is justified. Every mechanism reuses machinery that already exists and
+is proven; none requires a new architectural idea.
 
 The shared soundness rule, unchanged: a shape compiles only when its
 compiled execution is BYTE-IDENTICAL to the interpreter (values, error
 taxonomy, output, binding state) — otherwise it keeps the refusal. Each
-landing must fire the corresponding pinned-refusal test's contract (the
-mustRefuseWithParity pins in bytecode_edge_findings_test.go and friends
-flip to mustCompileWithParity — the edge-findings file documents this
-exact graduation pattern in its §1 header) and pass the full battery.
+landing must flip the shape's pinned-refusal test to a compile-parity
+pin: for §1/§3/§4 those are the `mustRefuseWithParity` calls in
+bytecode_edge_findings_test.go (whose §1 header documents the
+graduation pattern); §2/§5/§6a are pinned elsewhere — `zzRefusingRow`
+(bytecode_effectfence_test.go), the variadic pin in
+`TestGlobalBindEnvelope` (bytecode_globalbind_test.go), and the
+declining-poly pin (bytecode_flip_divergences_test.go, re-pointed to
+the `zpick` fixture at the §6a landing) — which assert
+`compile_refused` (and should also pin the reason substring; see §5)
+directly. And every landing passes the full battery.
 
 ## 1. Wide error-join forward drift — `5 do [7] error ["x"] add 1`
 
@@ -61,7 +75,19 @@ paths compile with parity; both decline fences pinned). The negatives
 already pinned (mul/sub/String tokens, no-leading-residual) stay native —
 the window fires only where refuseForwardStackDrift fired.
 
-## 2. Deferred-token dispatch windows — `def m (flex {a:1}) f m.a`
+**Scope (per the adversarial review's qualification):** this is the
+review's sanctioned narrow-window variant — the island result is
+variadic, so mid-statement drift shapes (`… add 1 mul 2`) and
+fragment-context drift sites keep the sound refusal (pinned:
+`… add 1 drop`). The statement-end window the review sketched remains
+the future widening if those shapes ever matter.
+
+## 2. Deferred-token dispatch windows — `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
+
+(The reproducer is the full `zzRefusingRow` fixture,
+bytecode_effectfence_test.go:94 — `f` must be a defined fn for the
+dispatch-recovery window to exist; without the preamble the source fails
+as check diagnostics, not this refusal.)
 
 Refusal: "unmatched dispatch recovered at f". **LANDED 2026-07-16** — and
 the mechanism turned out SMALLER than the island this section originally
@@ -94,6 +120,17 @@ that genuinely hold unevaluated tokens; if such a shape resurfaces, the
 island election originally designed here (a fully-baked OpFallback span
 re-step, arming dynEnv so the island resolves names registry-visibly)
 is the ready mechanism.
+
+**Scope note (from the adversarial review):** "unmatched dispatch
+recovered at `w`" has several decline causes; the landing above owns
+the deferred-token one. The others keep the refusal until designed:
+multi-overload user fns over an Any/disjunct operand at the no-match
+recovery sites (plausibly §6b's stored-sig-table re-match);
+predicate/refinement-typed user-fn params, where the guarded CALL_USER
+enforces only nominal types (a candidate for re-running the predicate
+via the existing RunTypedBind/OpBindTyped machinery); and
+tryRecordPoly's own safety gates (meta / fn-value / mutating /
+code-body / multi-result words).
 
 ## 3. Member-fn auto-apply mid-expression — `m.double 21 eq 42`
 
@@ -128,9 +165,10 @@ anonymous members, quote/no-eval params, non-inert windows.
 
 ## 4. Computed branch bodies — `if (n eq 0) [99] (range 2 4)`
 
-Refusal: "computed branch arm is a spliced list body". The interpreter's
-spliceArg EXECUTES a paren-arrived list as a code body; the compiled
-value path would push the list as data.
+Refusal: "computed branch arm is a spliced list body" (raised from
+lang/go/native/native_control.go:694, prefixed "if: …"). The
+interpreter's spliceArg EXECUTES a paren-arrived list as a code body;
+the compiled value path would push the list as data.
 
 **Mechanism: the dyn-body island, per arm. LANDED 2026-07-16** — as a
 BODY SYNTHESIS rather than a bespoke lowering: computedArmDoBody
@@ -148,11 +186,20 @@ concrete list arms and quoted arms all keep their prior behavior
 then-branch not captured" — a follow-on widening if it ever matters);
 `case` arms are value-semantics in both engines and stay native.
 
+(The review's filed quoted-break divergence in the adjacent do-body
+seam landed independently as the divergence-1 fix + the PR #275
+sentinel-scan widenings: valueHasSentinel, the interp/XML/map
+recursion, and the transitive callee scan.)
+
 ## 5. Variadic loop-collect defs — `def xs (for 3 [1])`
 
 Refusal: "def `xs` consumes loop results (Stage 2 loops only feed the
-program residual)" (lower.go — the variadic sim slot has no single value
-to bind).
+program residual)" — the VARIADIC-producer arm of lowerDynBind
+(eng/go/lower.go:186): the variadic sim slot has no single value to
+bind. (The sibling reason "dynamic-scope def `xs` of unpromoted computed
+value", lower.go:195, is the NON-variadic unpromoted-producer arm —
+including the zero-output-body loop — a DIFFERENT refusal that this
+section does not clear.)
 
 PROBED 2026-07-16 (RunInterp, the authoritative runtime): the interpreter
 binds `xs` to the region's FIRST value (the stack-deepest — `def i 0 def
@@ -193,23 +240,41 @@ mechanism above is the ready lowering half for that future landing.
 
 ## 6. Poly-decline arms (fn-predicate / gradual-Any overloads)
 
-Two decline reasons in tryCompileUserPolyArms keep sites refusing:
+tryCompileUserPolyArms declines for MORE than two reasons; the full
+reachable set (user_poly.go): zero committed returns, the body-local
+fn-baseline gate, non-identical declared returns across arms
+(userPolyArmShapeOK — probe-verified reachable:
+`def id fn [[x:Any][Any][x]] def g fn [[a:Integer][Integer][a]
+[a:String][String][a]] g (id 5)` refuses "gradual-Any arg to
+multi-overload user fn `g`"), quote/type-literal/no-eval/raw/form param
+slots, anonymous/macro/captured owning defs, deferred-param-list arms,
+and variadic-returning arm units — plus defensive gates (<2 same-arity
+arms, nil aggregate) that are non-shapes. This section designs the first
+two; the others need mechanisms (the differing-returns case could type
+the call's residual as the dynamic join of the arms' declared returns —
+the §1 machinery) or an explicit designed-keep entry in §9 before the
+envelope closes. The gradual-Any probe above should be pinned in
+bytecode_edge_findings_test.go.
 
-- **Zero committed returns** (`len(committedReturns) == 0` — the
+- **§6a: zero committed returns** (`len(committedReturns) == 0` — the
   zero-return overload set). **LANDED 2026-07-16.** The poly gate's
   `len(committedReturns) == 0` bar is dropped: an empty committed contract
   is admitted, `userPolyArmShapeOK` already matches Returns position-wise
   (0 == 0 keeps the arms consistent), and a new per-arm `unitNetsZero`
   gate requires every arm's body to net exactly zero residual values — so
   the recorded 0-output `OpCallUserPoly` is byte-identical to whichever arm
-  the VM's runtime re-match selects. `buildFnBodyReturnsFn`'s 0-residual
-  path records the poly call and returns nothing; anonymity stays refused
-  by `findOwningFnDef`'s `owner.Anonymous` gate. A declared-`[]` arm whose
-  body leaves a RESIDUAL (the "residual IS the result" shape) fails
-  `unitNetsZero`, so that set keeps its refusal (the `pick`/`zpick`
-  fixture). The `shout` fixture (`TestPredicateOverloadDispatchCompiledParity`)
-  now compiles with output parity (`"o\n"`, two `CALL_USER_POLY`); the
-  declining fixture was re-pointed to `zpick` to keep `planUserPolyDispatch`'s
+  the VM's runtime re-match selects. (The gate is load-bearing: a
+  declared-`[]` arm pushes no ReturnCheck, so a body that nets values
+  flows them verbatim to downstream consumers — `def f fn [[x:Integer]
+  [] [x add 1]] f 1 add 1` → 3 — which a fixed 0-out call site cannot
+  carry.) `buildFnBodyReturnsFn`'s 0-residual path records the poly call
+  and returns nothing; anonymity stays refused by `findOwningFnDef`'s
+  `owner.Anonymous` gate. A declared-`[]` arm whose body leaves a
+  RESIDUAL (the "residual IS the result" shape) fails `unitNetsZero`, so
+  that set keeps its refusal (the `pick`/`zpick` fixture). The `shout`
+  fixture (`TestPredicateOverloadDispatchCompiledParity`) now compiles
+  with output parity (`"o\n"`, two `CALL_USER_POLY`); the declining
+  fixture was re-pointed to `zpick` to keep `planUserPolyDispatch`'s
   refusal arm covered.
 - **Body-local multi-overload fns** (the fn-baseline gate: the runtime
   Lookup cannot resolve a name popped before the VM runs). **LANDED
@@ -228,6 +293,10 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
   through one compiled program, a no-match defers to the interpreter's
   canonical signature_error, and the module-scope live-Lookup mode is
   untouched.
+
+  (The review's filed single-overload analogue — body-local conditional
+  shadowing baking the shadow — landed as the CondBodyDepth
+  conditional-fn-shadow refusal, PR #275 divergence 2.)
 
 ## 7. Per-callback stamp declines (not whole-program refusals)
 
@@ -279,14 +348,102 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
 ## 8. AQL-written mini compile hooks — keep the opt-out
 
 An AQL compile hook is a macro whose check-time expansion is
-CONTRACTUALLY not the runtime expansion (§13): the hook may read state
-that exists only at runtime. Both compile strategies are unsound or
-self-defeating: baking the check-time expansion violates the contract,
-and a runtime JIT of the hook + re-step of its expansion is exactly the
-interpreter with extra steps. This is a DESIGNED opt-out, like wasm's
-pinned RunInterp — recorded, not scheduled. (Go hooks compile since
-fa9e844; non-concrete src/opts refusals stay: the record cannot see the
-values the runtime expansion would consume.)
+CONTRACTUALLY not the runtime expansion (MINILANG.5.md §13): the hook
+may read state that exists only at runtime. Both compile strategies are
+unsound or self-defeating: baking the check-time expansion violates the
+contract, and a runtime JIT of the hook + re-step of its expansion is
+exactly the interpreter with extra steps. This is a DESIGNED opt-out,
+like wasm's pinned RunInterp — recorded, not scheduled. (Go hooks
+compile since fa9e844; non-concrete src/opts refusals stay: the record
+cannot see the values the runtime expansion would consume.)
+
+## 9. Inventory — what §1–§8 do NOT cover
+
+The eight families above were derived from the raise-site inventory
+(grep MarkUncompilable / refusal-reason strings across eng/go/emit.go,
+lower.go, engine.go, carrier.go, core_helpers.go and the lang natives).
+The following LIVE shapes are outside them; each needs a mechanism, a
+designed-keep entry, or an unreachability argument before the envelope
+can be called closed.
+
+### 9.1 The langspec frontier's three expected-red rows (L-DO part 2)
+
+The langspec frontier compile ledger (frontierCompileLedger,
+test/go/langspec/frontier_spec_test.go) pins three live refusing rows:
+two def-msg do-catch rows refusing **"residual shape beyond Stage 1"**
+(the seatResults raise family, emit.go:6808 — call-result-above-a-
+literal / results-reordered / unconsumed-call-results) and one
+module-export-in-variadic-region row refusing **"residual value not
+statically materialisable"** (emit.go:6569). Their design belongs to the
+completion plan's Phase-5 "L-DO part 2b" (see
+RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md); those landings flip the
+frontierCompileLedger rows. Until then the closure claim excludes them.
+
+### 9.2 Probe-verified expressible shapes with no section
+
+- **Splice over a computed payload** (engine.go:3852) — `def xs (range
+  1 3) def d word xs d` (pinned in multiout_closure_test.go). Candidate:
+  the §4 dyn-body / mixed re-step island generalised beyond branch arms.
+- **Interpolated XML with a runtime-computed part** (engine.go:4225) —
+  the string sibling already compiles via RecordInterp/OpInterp; mirror
+  it (an OpInterpXml rebuilding the tree per run, or a re-step island).
+- **Loop-carried store of a variadic result** (lower.go:246) —
+  `for 3 [ def acc (for 2 [1]) ]`. §5 covers only the top-level
+  def-of-loop-collect; this needs a STORE_LOCAL_FROM_MARK sibling — and
+  inherits §5's check-mode blocker.
+- **Curried-factory body provenance** (emit.go:2959, "fn mk: body result
+  of unknown provenance") — `((mk 1) 2) 3`. Candidate: extend
+  tryReturnedClosure to capturing/nested closures via §7a's
+  unpooled-const capture mechanism. Note emit.go:6343 ("fn-value apply
+  arity mismatch — curried chain or partial apply", currently ZERO test
+  pins) is shadowed upstream by :2959 for this shape and remains the
+  backstop once :2959 graduates — pin both.
+- **Paren-bounded fn-value application** (engine.go:6882, "fn-value
+  application bounded by a paren (dynamic value precedes args)") —
+  `add 1 ((m get "f") 5)`, the stamp suite's canonical refusing fixture.
+  Distinct from §3 (a paren-close guard on a LEADING dynamic carrier,
+  not the arrival-loop member event; the trailing arm already compiles
+  via RecordDynApply). Candidates: extend RecordDynApply to the leading
+  case with the paren as the event boundary, or a §1-style mark-bounded
+  island over the paren window. Retiring the AQL_COMPILE_FALLBACK hatch
+  (Sequencing) requires re-pointing or graduating the two stamp-suite
+  pins whose fixture this is — the same bookkeeping as zzRefusingRow.
+- **Surface-shape typed dispatch** (engine.go:7857) — the S2 generic
+  surface call (`g (make Circle {})` over `gen [(T extends Shape)]`).
+  Candidate: runtime re-match over the exposer's registered op (the
+  §2/§6b precedent), or a designed opt-out.
+- **fn/afn construction over a computed operand**
+  (native_definition.go:1282/:1446) — `fn Integer (mk [String])
+  ['five']`. Either a §8-style designed opt-out (the site's rationale:
+  the compiled unit would bake the check-time placeholder) or a runtime
+  re-construction op in the OpBindTyped style.
+
+### 9.3 Residual guard-owned declines
+
+The typed-def RecordTypedBind decline arms (native_definition.go:646
+dynamic-refinement reparent, :717 fn-predicate bind, :998 DepScalar
+validation — the first two pinned) and the shaped-method guards
+(method_shape.go:213 zero-arg landing, :482 operand of unknown
+provenance — both pinned) stay interpreter-owned; each should be marked
+expressible-keep or defensive-only as it is audited.
+(callable_words.go:250's gradual-Any collection ambiguity is
+DEFENSIVE-ONLY — every shipping Callable word carries CompileDynBody or
+CrossCollectionTokenShape; pinned white-box in dynbody_unit_test.go.)
+
+### 9.4 The Stage-2/3 raise-site tail
+
+~50 further MarkUncompilable sites (clusters in emit.go 2294–4360 and
+lower.go) carry neither a section nor an unreachability argument.
+Several are PINNED reachable: "branch reads enclosing computation"
+(lower.go:528), the fn-body residual family ("body leaves extra values"
+/ "result is a variadic loop value" / "result above a literal",
+lower.go:1677), "apply of a dynamic fn value not at the body tail"
+(emit.go:3015), "anonymous function dispatch" (emit.go:4002). Where one
+of these is subsumed by a §-mechanism (e.g. dynamic-apply-not-at-tail
+under a generalised §1 body-window re-step), the subsumption must be
+stated when that mechanism lands and the corresponding pins flipped;
+where it is a designed keep (as lower.go:1108's consumed side-effect
+loop already is, per §5), say so; the remainder need the audit.
 
 ## Sequencing and gates
 
@@ -320,12 +477,19 @@ Cheapest-first, each with the standard battery + fullcorpus
    only §5 (blocked on the check-mode forward-collection change) and
    the §8 designed opt-out remain open.
 
-After all of §1–§7, the only remaining interpreter execution on any
-default path would be: check-mode (the compile front-end itself),
-module loads (attributed), const-folds (attributed), explicit RunInterp,
-and the §8 designed opt-outs — at which point the refusal envelope is
-empty for every expressible shape and the `AQL_COMPILE_FALLBACK` hatch
-plus the 51 hatched legacy pins can be retired on schedule.
+After all of §1–§7, **the enumerated refusal families are closed** —
+the remaining interpreter execution on any default path would be:
+check-mode (the compile front-end itself), module loads (attributed),
+const-folds (attributed), explicit RunInterp, the §8 designed opt-outs,
+and the **§9 inventory** (the L-DO part-2 residues, the seven
+probe-verified shapes, the guard-owned declines, and whatever the §9.4
+tail audit does not retire). The envelope is empty for every expressible
+shape only once §9 is also worked off; at that point the
+`AQL_COMPILE_FALLBACK` hatch plus the hatched legacy pins (49 at this
+writing — the authoritative count is
+`git grep -c 'Setenv("AQL_COMPILE_FALLBACK"' -- '*_test.go'`; each
+landing shifts it) can be retired on schedule, after re-pointing the
+stamp-suite pins per §9.2.
 
 The external validation for all of this remains the voxgig-aql sweep
 (steps 7–9 re-baseline) in a session sourced from that org.
