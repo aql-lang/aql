@@ -668,6 +668,19 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
+	// CondBodyDepth, when > 0, marks analysis running inside a
+	// CONDITIONALLY-reached, def-rolled-back body — an if/case branch arm
+	// or a loop body (the `keep=false` bodies of runCarrierBodyDefsAdds,
+	// whose net def growth is snapshot-restored). It EXCLUDES `do`
+	// (keep=true — always executes, leaks its defs by design). The compiler
+	// consults it to refuse a fn REDEFINITION that clobbers an enclosing
+	// binding in-place (the overlap-removal drops the outer overload without
+	// growing depth, so the branch rollback can't restore it): compiled
+	// resolution would statically bake the conditional shadow while the
+	// interpreter keeps the outer fn when the branch is not taken. Refusing
+	// keeps compiled == interpreter (slow, not wrong).
+	CondBodyDepth int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares

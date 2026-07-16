@@ -1246,7 +1246,7 @@ func seatConstLocal(p *Program, locals []Value, cl ConstLocalRef) Value {
 	return locals[cl.Slot]
 }
 
-//nolint:gocyclo // the VM instruction dispatch is inherently one big switch — one
+//nolint:gocyclo,gocognit // the VM instruction dispatch is inherently one big switch — one
 func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut []Value, runErr error) {
 	p, r := vc.p, vc.r
 	ceiling := vc.ceiling
@@ -1558,6 +1558,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				return nil, err
 			}
 			stack = ns
+			// runFallback re-steps the word through the interpreter, which can
+			// leave FlowCtrl set for an escaped break/continue (e.g. a fallback
+			// `do <computed>` inside a compiled loop) — translate it the same way
+			// as the fn-value seam. resolveEscapedFlow is a no-op when no flow
+			// signal escaped (escapedFlow returns 0), so call it unconditionally.
+			if err := resolveEscapedFlow(); err != nil {
+				return nil, err
+			}
 		case OpCallNativePoly:
 			ns, err := vc.callPolyIn(curReg, &p.PolyRefs[in.Arg], stack, curDebug, pc)
 			if err != nil {

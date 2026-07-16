@@ -137,6 +137,22 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 				filtered = append(filtered, entry)
 			}
 			if changed {
+				// A fn REDEFINITION whose overlap-removal drops an existing
+				// overload inside a CONDITIONALLY-reached body (an if/case arm
+				// or a loop body — CondBodyDepth) clobbers the enclosing
+				// binding in-place: the drop-then-push leaves the def depth
+				// UNCHANGED, so the branch/loop def rollback (which restores by
+				// depth growth) cannot revert it, and compiled resolution bakes
+				// the conditional shadow. The interpreter keeps the outer fn
+				// when the branch is not taken (or the loop runs zero times), so
+				// the two diverge. Refuse — MarkUncompilable is a no-op off the
+				// compile pass, so plain check and the interpreter are unaffected
+				// and the program runs correctly (slow, not wrong). An
+				// UNCONDITIONAL redefinition (top level or inside `do`) is sound
+				// and keeps compiling: CondBodyDepth is 0 there.
+				if r.Check.CondBodyDepth > 0 {
+					r.Check.Recorder().MarkUncompilable("fn '" + name + "' redefined inside a conditional body (branch/loop) shadows an outer overload")
+				}
 				r.Defs.Set(name, filtered)
 			}
 		}

@@ -796,16 +796,20 @@ func reduceStaticArm(r *Registry, cond, arm Value, isThen bool) []Value {
 	return stk
 }
 
-// analyseCondFragment captures a list-form `if` condition body as an
-// emit fragment (nil when the condition is a pre-evaluated value, or
-// when no bytecode recording is active).
+// analyseCondFragment captures a list-form `if` condition body (or a
+// `case` code-body scrutinee) as an emit fragment (nil when the condition
+// is a pre-evaluated value, or when no bytecode recording is active). The
+// fragment runs unconditionally exactly once before the branch decision,
+// so it rides RunCarrierCondBody — the CondBodyDepth-exempt body run: an
+// in-place fn redefinition in a condition is not path-dependent and stays
+// compilable, exactly like its paren-`do` condition twin.
 func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
 	es := r.Check.Recorder()
 	if !es.Armed() || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
 		return nil, nil
 	}
 	es.ArmBranchCapture()
-	stk, _ := RunCarrierBodyWithDefs(r, cond)
+	stk, _ := RunCarrierCondBody(r, cond)
 	return es.TakeFragment(), stk
 }
 

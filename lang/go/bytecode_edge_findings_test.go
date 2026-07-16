@@ -171,6 +171,47 @@ func TestEdgeFindingComputedElseBody(t *testing.T) {
 	mustCompileWithParity(t, `def n 0 if (n eq 0) [99] [88]`, "[99]")
 }
 
+// §5 (divergence fix) — a `do` body arriving as a QUOTED VALUE (via
+// `def b (quote [break])`) runs its tokens AS CODE, so a break/continue inside
+// escapes `do` to the enclosing loop exactly as the interpreter's shared tape
+// does. Two bugs made the compiled run diverge: (a) bodyHasSentinel honoured
+// the .Quoted flag and missed the break, so the const-folded body compiled into
+// a closure whose break raised "flow signal with no enclosing loop" and `do`
+// caught it as an error VALUE; (b) even routed to a FALLBACK `do`, the VM did
+// not translate the escaped FlowCtrl on the fallback seam. Fixed:
+// valueHasSentinel ignores .Quoted (routing the body off the closure path), and
+// OpFallback now resolves escaped flow like the fn-value-call family. The break
+// now unwinds the compiled loop → interpreter parity.
+func TestEdgeFindingQuotedDoBodyFlowEscapesLoop(t *testing.T) {
+	// The previously-miscompiling shapes now compile with parity: the break
+	// terminates the enclosing `for`, so nothing is collected.
+	mustCompileWithParity(t, `def b (quote [break]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, `def b (quote [continue]) for 3 [do b i]`, "[]")
+	// A nested loop: the inner break terminates only the INNER `for`, so the
+	// outer loop's `i` values survive.
+	mustCompileWithParity(t, `def b (quote [break]) for 2 [ for 3 [do b] i ]`, "[0 1]")
+
+	// Negatives — the fix must not over-refuse a sentinel-free quoted do body.
+	mustCompileWithParity(t, `def b (quote [7]) for 3 [do b i]`, "[7 0 7 1 7 2]")
+
+	// No ENCLOSING loop: the escaped break has nowhere to unwind to, so the
+	// fallback seam's resolveEscapedFlow returns flowSignal's no-loop error and
+	// the compiled run raises the interpreter's canonical "break outside loop"
+	// — parity on the RAISE, not the value (mustCompileWithParity can't express
+	// a raising row). Covers the vm.go OpFallback error arm.
+	{
+		src := `def b (quote [break]) do b`
+		a, _ := New()
+		_, iErr := a.RunInterp(src)
+		b, _ := New()
+		_, _, cErr := b.RunCompiled(src)
+		if iErr == nil || cErr == nil || codeOf(iErr) != codeOf(cErr) {
+			t.Errorf("%q: raise parity — compiled=[%s]%v interp=[%s]%v",
+				src, codeOf(cErr), cErr, codeOf(iErr), iErr)
+		}
+	}
+}
+
 // §4 — `args.N` inside a compiled fn body with UNNAMED params. Unnamed params
 // now bind to frame locals exactly like named ones (CompiledFn.NUnnamed: RET
 // discards the unconsumed frame-bottom copies the interpreter's body splice
@@ -191,4 +232,124 @@ func TestEdgeFindingArgsOverUnnamedParams(t *testing.T) {
 		`def f fn [[a:Integer b:Integer] [Integer] [args.0 add args.1]] f 3 4`, "[7]")
 	mustCompileWithParity(t,
 		`def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3`, "[0]")
+}
+
+// Conditional fn-shadow divergence — a user fn REDEFINED inside a branch/loop
+// body clobbers the enclosing overload in place (installDef's overlap-removal
+// drops the outer entry without growing the def depth, so the branch/loop
+// rollback cannot restore it). Compiled resolution then statically bakes the
+// conditional shadow while the interpreter keeps the outer fn when the branch
+// is not taken (or the loop runs zero times), so `if false [def g …] g 1`
+// returned the shadow's value compiled but the ORIGINAL interpreted. The fix
+// refuses to compile the redefinition (CondBodyDepth-gated) so the interpreter
+// owns the shape — slow, not wrong.
+func TestEdgeFindingConditionalFnShadowRefuses(t *testing.T) {
+	fnA := `fn [[x:Any] [Integer] [x add 100]]`
+	fnB := `fn [[x:Any] [Integer] [x add 1]]`
+	want := "redefined inside a conditional body"
+
+	// REFUSE: every conditionally-reached redefinition of an outer fn.
+	mustRefuseWithParity(t, `def g `+fnA+` if false [def g `+fnB+`] g 1`, want) // branch not taken
+	mustRefuseWithParity(t, `def c false def g `+fnA+` if c [def g `+fnB+`] g 1`, want)
+	mustRefuseWithParity(t, `def g `+fnA+` if true [def g `+fnB+`] g 1`, want) // taken, still unsound-at-shape
+	mustRefuseWithParity(t, `def g `+fnA+` for 2 [def g `+fnB+`] g 1`, want)   // loop body
+	mustRefuseWithParity(t, `def g `+fnA+` ([1 2] each [def g `+fnB+`]) g 1`, want)
+
+	// COMPILE (must NOT over-refuse): the redefinition is UNCONDITIONAL.
+	mustCompileWithParity(t, `def g `+fnA+` def g `+fnB+` g 1`, "[2]")      // top-level shadow
+	mustCompileWithParity(t, `def g `+fnA+` do [def g `+fnB+`] g 1`, "[2]") // do leaks unconditionally
+	// COMPILE: no outer overload to clobber — a NEW name defined in a branch.
+	mustCompileWithParity(t, `if true [def h `+fnB+` h 1]`, "[2]")
+	// COMPILE: the control fn with no shadow at all.
+	mustCompileWithParity(t, `def g `+fnA+` g 1`, "[101]")
+}
+
+// PR #275 review finding (P1) — valueHasSentinel missed break/continue nested
+// inside INTERPOLATED literal expression parts (string `${...}`, XML attribute
+// and child holes) and MAP values, all of which run as code when the container
+// materialises in a do-body. The scanner returned false, the do-body compiled
+// to a closure, and the escaped signal surfaced as "flow signal with no
+// enclosing loop" error values instead of breaking the outer loop. The fix
+// recurses into all three container families (mirroring walkBodyValue), so the
+// closure compile declines and the fallback seam threads the signal — parity.
+func TestEdgeFindingSentinelInInterpolatedParts(t *testing.T) {
+	// The reported fixture: interp-string ${break} in a quoted do-body.
+	mustCompileWithParity(t, "def b (quote [`${break}`]) for 5 [do b i]", "[]")
+	mustCompileWithParity(t, "def b (quote [`${continue}`]) for 3 [do b i]", "[]")
+	// XML interpolation: child hole, attribute hole, NESTED child template.
+	mustCompileWithParity(t, `def b (quote [<p>${break}</p>]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, `def b (quote [<p a=${break}></p>]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, `def b (quote [<p><q>${break}</q></p>]) for 5 [do b i]`, "[]")
+	// Map literal: values evaluate when the literal assembles.
+	mustCompileWithParity(t, `def b (quote [{k: break}]) for 5 [do b i]`, "[]")
+	// An APPLIED anonymous fn is raw tokens at scan time (`fn` + sig/body
+	// lists), so the body-list recursion sees its break — and the interpreter
+	// does propagate an applied callee's break to the enclosing loop.
+	mustCompileWithParity(t, "def b (quote [`${(fn [[x:Integer] [Integer] [break 7]]) 1}`]) for 5 [do b i]", "[]")
+	mustCompileWithParity(t, `def b (quote [(fn [[x:Integer] [Integer] [break 7]]) 1]) for 5 [do b i]`, "[]")
+
+	// Negatives — sentinel-free interpolations/maps must KEEP compiling.
+	mustCompileWithParity(t, "def b (quote [`v${1 add 1}`]) for 2 [do b i]", "[v2 0 v2 1]")
+	mustCompileWithParity(t, `def b (quote [<p>${1 add 1}</p>]) for 2 [do b i]`, "[<p>2</p> 0 <p>2</p> 1]")
+	mustCompileWithParity(t, `def b (quote [<p><q>${1 add 1}</q></p>]) for 2 [do b i]`, "[<p><q>2</q></p> 0 <p><q>2</q></p> 1]")
+	mustCompileWithParity(t, `def b (quote [{k: 7}]) for 2 [do b i]`, "[{k:7} 0 {k:7} 1]")
+	// A typed-map body element (ChildTypeInfo — Parent=TMap, non-OrderedMap
+	// payload) rides the scanner's nil-AsMap guard and keeps compiling.
+	mustCompileWithParity(t, `def b (quote [{:String}]) for 2 [do b i]`, "[{:String} 0 {:String} 1]")
+
+	// TRANSITIVE sentinels (pre-existing on main): a NAMED fn whose body holds
+	// a bare break, CALLED from the do-body. The syntactic scanner sees only
+	// the word `f`, but the interpreter unwinds the callee's break to the
+	// enclosing loop — while a compiled do-closure starts a fresh loop stack
+	// (invokeClosureOn, unlike OpCallUser's loopBase frames) and surfaced
+	// flow-signal error values. bodyHasSentinelDeep resolves body words to
+	// user-fn bodies (recursively, cycle-guarded) at the tryRecordDynBody
+	// gate, so the closure compile declines and the fallback threads the
+	// signal — parity, for the quoted, inline-literal, and two-hop shapes.
+	fnBreak := `def f fn [[x:Integer] [Integer] [break 7]] `
+	mustCompileWithParity(t, fnBreak+`def b (quote [f 1]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, fnBreak+`for 5 [do [f 1] i]`, "[]")
+	mustCompileWithParity(t,
+		fnBreak+`def g fn [[x:Integer] [Integer] [f x]] def b (quote [g 1]) for 5 [do b i]`, "[]")
+	// Recursive callee: the seen-set terminates the scan (and the shape
+	// declines conservatively — parity rides the fallback).
+	mustCompileWithParity(t,
+		`def r fn [[n:Integer] [Integer] [if (n lte 0) [break 0] [r (n sub 1)]]] def b (quote [r 2]) for 5 [do b i]`, "[]")
+	// The direct-call sibling keeps parity natively: OpCallUser frames share
+	// the caller's loop stack, so the callee's escaped break lands in the loop.
+	mustCompileWithParity(t, fnBreak+`for 5 [f 1]`, "[]")
+	// Negative — a sentinel-free callee must NOT decline the do-body compile.
+	mustCompileWithParity(t,
+		`def g fn [[x:Integer] [Integer] [x add 1]] def b (quote [g 1]) for 2 [do b i]`, "[2 0 2 1]")
+}
+
+// PR #275 review finding (P2) — the CondBodyDepth raise (conditional fn-shadow
+// refusal) over-applied to list-form `if` CONDITIONS and `case` code-body
+// scrutinees, which run unconditionally exactly once BEFORE the branch
+// decision: a same-sig redefinition there is not path-dependent, and the
+// equivalent paren-`do` condition already compiled with parity. The fix routes
+// analyseCondFragment through RunCarrierCondBody (CondBodyDepth-exempt);
+// branch arms and loop bodies keep the raise (TestEdgeFindingConditionalFnShadowRefuses).
+func TestEdgeFindingCondFragmentRedefCompiles(t *testing.T) {
+	fnA := `fn [[x:Any] [Integer] [x add 100]]`
+	fnB := `fn [[x:Any] [Integer] [x add 1]]`
+
+	// The reported fixture: redefinition inside the list-form if condition.
+	mustCompileWithParity(t,
+		`def g `+fnA+` if [def g `+fnB+` true] [0] [9] g 1`, "[0 2]")
+	// Its paren-`do` twin (the semantic reference) keeps compiling.
+	mustCompileWithParity(t,
+		`def g `+fnA+` if (do [def g `+fnB+` true]) [0] [9] g 1`, "[0 2]")
+	// 2-arg if condition rides the same fragment path.
+	mustCompileWithParity(t,
+		`def g `+fnA+` if [def g `+fnB+` true] [0] g 1`, "[0 2]")
+	// `case` code-body scrutinee: runs once before dispatch — also exempt.
+	mustCompileWithParity(t,
+		`def g `+fnA+` case [def g `+fnB+` 5] [5 88 99] g 1`, "[88 2]")
+
+	// Negative — a redefinition in an ARM (conditionally reached) must STILL
+	// refuse, even with a non-constant condition.
+	mustRefuseWithParity(t,
+		`def p 5 def g `+fnA+` if [p gt 3] [def g `+fnB+` 0] [9] g 1`,
+		"redefined inside a conditional body")
 }
