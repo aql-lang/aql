@@ -192,11 +192,16 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
 
 - **Runtime-minted capture values** ("closure captures a runtime-minted
   value (no compile identity)"): the identity gate exists so the
-  freshen/share machinery can't misclassify. For a DETACHED unit the
-  capture is per-ref and frozen — bake it as an UNPOOLED const operand
-  (internUnpooled) instead of resolving by ID; the ref's Captures slot
-  path (landed today) already delivers per-value semantics, so the
-  const is only the COMPILE-time home for body reads. Effort: S–M.
+  freshen/share machinery can't misclassify. **LANDED 2026-07-16** — and
+  simpler than the const-bake this bullet designed: for a DETACHED unit
+  the capture is per-ref and frozen, so StampDetachedFn mints a fresh
+  identity on a CLONE of the captured slice (confined to the fork's
+  compile; the published value stays untouched) and the existing capture
+  slot path keys it like any ID-bearing capture — no emit change at all.
+  The whole-program compile keeps the identity gate (there the
+  freshen/share concern is live). Pinned in TestStampDetachedFnShapeGates
+  (eng) and TestComputedCaptureStampsAndRunsWithCaptures (lang,
+  end-to-end with per-value refs + interpreter parity).
 - **Multi-overload fn values**: stamp EVERY own sig to a unit and give
   CompiledFnRef a sig-table dispatch mode — MatchFnSig at invoke picks
   the unit, the user-poly re-match precedent applied to the callback
@@ -237,7 +242,8 @@ Cheapest-first, each with the standard battery + fullcorpus
    effect-fence pins, RunCompiledReason and the trap-negatives refusal
    were re-pointed to the §5 variadic-loop-def fixture (stable — §5 is
    blocked indefinitely).
-4. §7a capture consts, §7c JIT re-stamp (S–M each).
+4. §7a capture identities — **LANDED 2026-07-16** (the detached-stamp
+   capture-clone mint; see §7). §7c JIT re-stamp (S–M) remains.
 5. §1 mark-bounded drift island, §3 arrival-apply, §4 dyn-body arms,
    §6b sig-table poly, §7b multi-sig stamps (M each).
 

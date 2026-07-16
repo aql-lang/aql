@@ -70,6 +70,28 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 		// one silently declined stamp.
 		es.storedGradualDepth = 1
 	}
+	// An identity-less capture value (minted at pure runtime, where the
+	// mode-gated ID elision skips minting) cannot key its positional capture
+	// slot, so StartFnCompile's identity gate would refuse the unit
+	// (REFUSAL-CLOSURE.0 §7a). For a DETACHED unit the capture is per-ref
+	// and FROZEN — ref.Captures carries the construction-time snapshot — so
+	// minting a fresh identity on a CLONE of the captured slice is confined
+	// to this unit's compile: body reads resolve to the slot by the minted
+	// ID exactly like an ID-bearing capture, and no shared published value
+	// is mutated (the input's Captured backing array stays untouched). The
+	// compile pass armed above keeps GenerateID live.
+	for i := range fd.Captured {
+		if fd.Captured[i].Value.ID == "" {
+			cloned := append([]CapturedBinding(nil), fd.Captured...)
+			for j := range cloned {
+				if cloned[j].Value.ID == "" {
+					cloned[j].Value.ID = GenerateID(IDPrefixForType(cloned[j].Value.Parent))
+				}
+			}
+			fd.Captured = cloned
+			break
+		}
+	}
 	// Deps are read off the PRE-analysis def table (the fork clone equals r
 	// here), so the snapshot below describes exactly what the body resolved
 	// against — the analysis inside compileStoredFnUnit installs and restores
