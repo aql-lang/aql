@@ -8358,7 +8358,9 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 //     values, so its static failure replays verbatim; one whose window
 //     cannot even fill (arity shortfall over the same tape) fails
 //     deterministically too;
-//   - a DYNAMIC operand (no static type at all);
+//   - a DYNAMIC operand (no static type at all) — routed to the runtime
+//     rematch alongside carriers (REFUSAL-CLOSURE.0 §2): the rematch reads
+//     only the operand's live runtime value, never the static tag;
 //   - an UNDEFINED-word placeholder (the interpreter raises undefined_word,
 //     a different taxonomy — and the pass already carries an error diagnostic
 //     that refuses the program before Finalize);
@@ -8446,7 +8448,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			}
 		}
 		vals = append(vals, v)
-		if v.Dynamic || v.Undefined {
+		if v.Undefined {
 			return false
 		}
 		// A deferred-expression token (a reach path, an unexpanded paren
@@ -8474,7 +8476,17 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// classifies as rematchable below, and the compiled program
 		// re-runs the match over the CONCRETE values and builds the same
 		// rich diagnostic at run time (or defers when it matches).
-		if v.Carrier {
+		//
+		// A DYNAMIC operand (statically-unknown type — an evaluated flex
+		// read, a do-result) classifies the same way (REFUSAL-CLOSURE.0 §2):
+		// the rematch never reads the static tag, only the operand's LIVE
+		// runtime value — which is exactly what the interpreter's dispatch
+		// examines — so a bounded-dynamic that failed the static match
+		// re-matches faithfully (defer on match, the byte-identical rich
+		// raise on no-match). The provenance requirement still gates: a
+		// dynamic with no compiled home fails RecordDispatchRematchValues'
+		// operand resolution and the refusal stands.
+		if v.Carrier || v.Dynamic {
 			hasCarrier = true
 		}
 	}

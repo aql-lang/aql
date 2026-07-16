@@ -439,9 +439,10 @@ func TestClassifyFrontierKnownInputs(t *testing.T) {
 		// forward barrier → check stage (`not` cannot feed off `dup`).
 		{"0 not dup", classCheck, "check", false},
 		// Checks clean but the compiler refuses it (an off-corpus shape — a
-		// raw flex-cell Reach in the failed dispatch window; every corpus
-		// refusal has graduated, the each variadic-if row last, 2026-07-15).
-		{"def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a", classCompile, "unmatched dispatch", false},
+		// `def` consuming a variadic loop region, REFUSAL-CLOSURE.0 §5;
+		// every corpus refusal has graduated, and the former flex-cell-Reach
+		// shape graduated 2026-07-16 via the §2 dynamic-operand rematch).
+		{"def xs (for 3 [1]) xs", classCompile, "consumes loop results", false},
 		// Checks clean AND compiles, yet errors at run.
 		{"0 true not lt", classRuntime, "incomparable", true},
 		// A genuinely passing program reaches the runtime stage and is

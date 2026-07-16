@@ -48,22 +48,37 @@ refuseForwardStackDrift fires today.
 
 ## 2. Deferred-token dispatch windows — `def m (flex {a:1}) f m.a`
 
-Refusal: "unmatched dispatch recovered at f". The rematch-trap machinery
-(OpDispatchRematch, DispatchSpec.{NWritten,WrittenOff}) declines because
-the recovery window holds a DEFERRED token (the flex Reach `m.a`, not
-yet evaluated at record time) — the definiteness screen protects the
-trap's "guaranteed no-match" claim.
+Refusal: "unmatched dispatch recovered at f". **LANDED 2026-07-16** — and
+the mechanism turned out SMALLER than the island this section originally
+designed. Investigation showed the premise was stale: by dispatch-recovery
+time the check pass has already EVALUATED the reach in place (the recorded
+poly-dot event, a product of the Phase-4.2 store-shape typing), so the
+failed window holds an event-produced DYNAMIC carrier — not a raw Reach
+token. The definiteness screen was declining it at its `v.Dynamic` arm,
+one line above the Reach screen the refusal was attributed to.
 
-**Mechanism: stop protecting a claim the island doesn't need.** The
-re-step islands (OpCallDynamicMixed / FromMark) re-step VERBATIM tokens
-through interpreter machinery — a Reach token in the window is simply
-evaluated live (`m.a` → the flex cell) and the dispatch proceeds or
-raises exactly as the interpreter. So: when the recovery window contains
-deferred tokens, lower the site to a mixed re-step island over the
-window instead of an OpDispatchRematch trap. The trap stays for fully
-materialisable windows (cheaper: no re-step). Effort: S–M — the decline
-arm in the tryRecordUnmatchedDispatchTrap gate becomes an island
-election instead of a MarkUncompilable.
+**Mechanism as landed: route dynamics to the runtime rematch.** The
+screen now classifies a Dynamic operand alongside carriers
+(`v.Carrier || v.Dynamic → hasCarrier`, engine.go): OpDispatchRematch
+re-runs the match over the operand's LIVE runtime value — exactly what
+the interpreter's dispatch examines, so the static tag (which is all
+"dynamic" means) never enters. A runtime no-match raises the
+byte-identical rich signature_error (verified: code, detail, position,
+notes and help all match); a match defers to the interpreter. The
+existing rematch gates still hold the line: a dynamic with no compiled
+home fails operand resolution, and a window under a leading stack
+residual fails the written-tuple contiguity bound (that shape — the
+cell mutated through an opaque fn param behind a residual — keeps the
+sound whole-program refusal, pinned in
+TestUnmatchedDispatchTrapNegatives). The zzRefusingRow fence fixture,
+the RunCompiledReason pin and the trap-negatives pin were re-pointed to
+the §5 variadic-loop-def shape (blocked indefinitely, so stable).
+
+The raw-Reach/ParenExpr/InterpString token screen REMAINS for windows
+that genuinely hold unevaluated tokens; if such a shape resurfaces, the
+island election originally designed here (a fully-baked OpFallback span
+re-step, arming dynEnv so the island resolves names registry-visibly)
+is the ready mechanism.
 
 ## 3. Member-fn auto-apply mid-expression — `m.double 21 eq 42`
 
@@ -217,10 +232,11 @@ Cheapest-first, each with the standard battery + fullcorpus
    full corpus). The TestGlobalBindEnvelope variadic pin STAYS red.
 2. §6a zero-return poly arms — **LANDED 2026-07-16** (unitNetsZero gate);
    the declining-poly pin flipped, re-pointed to the `zpick` fixture.
-3. §2 deferred-token island (S–M) — flips zzRefusingRow, which is the
-   effect-fence pins' refusing fixture: those pins then need the NEXT
-   off-corpus refusing shape (§1 or §3) as their fixture, or the §1/§3
-   landings must come after re-pointing them.
+3. §2 deferred-token windows — **LANDED 2026-07-16** (the dynamic-operand
+   rematch; see §2 for why the island design was not needed). The
+   effect-fence pins, RunCompiledReason and the trap-negatives refusal
+   were re-pointed to the §5 variadic-loop-def fixture (stable — §5 is
+   blocked indefinitely).
 4. §7a capture consts, §7c JIT re-stamp (S–M each).
 5. §1 mark-bounded drift island, §3 arrival-apply, §4 dyn-body arms,
    §6b sig-table poly, §7b multi-sig stamps (M each).
