@@ -91,12 +91,29 @@ func TestEdgeFindingForwardAcrossErrorResidual(t *testing.T) {
 	mustCompileWithParity(t, `5 do [7] error [drop 9] add 1`, "[5 8]")
 	mustCompileWithParity(t, `1 2 3 do [7] error [drop 9] add 1`, "[1 2 3 8]")
 
-	// The genuinely dynamic boundary keeps refusing: the handler nets a
-	// String while the pass-through is Integer, so the joined bound stays
-	// wide enough that the all-stack String match is viable and the runtime
-	// dispatch is value-dependent — no faithful static record exists.
+	// GRADUATED (REFUSAL-CLOSURE §1, 2026-07-16 — the drift window): the
+	// genuinely dynamic boundary now compiles as a TERMINAL OpCallDynamicMixed
+	// island. tryRecordDriftWindow records the whole window — [leading
+	// residual, catch-result, the word as an inert const, the forward
+	// literal] — as one event; the VM re-steps it verbatim, so the island's
+	// own dispatch performs the interpreter's forward collection over the
+	// LIVE value: the Integer pass-through forward-collects (`7 add 1` →
+	// [5 8]) while the String handler path binds all-stack — byte-identical
+	// on both paths, residual count included (the event is variadic).
+	mustCompileWithParity(t, `5 do [7] error ["x"] add 1`, "[5 8]")
+	mustCompileWithParity(t, `5 do [raise aa 'm'] error ['x'] add 1`, "[5x 1]")
+	mustCompileWithParity(t, `5 do [raise aa 'm'] error ['x'] add 'y'`, "[5 xy]")
+
+	// The window's decline fences keep the sound refusal: a NON-TERMINAL
+	// drift site (a downstream consumer would need a result count the island
+	// cannot promise) and BYSTANDER data below the window (the in-order
+	// reconciliation cannot interleave the window's const re-pushes with
+	// values the dispatch never touched).
 	mustRefuseWithParity(t,
-		`5 do [7] error ["x"] add 1`,
+		`5 do [7] error ["x"] add 1 drop`,
+		"forward operand accounting across a dynamic/island residual")
+	mustRefuseWithParity(t,
+		`1 2 3 do [7] error ["x"] add 1`,
 		"forward operand accounting across a dynamic/island residual")
 
 	// Negatives — the drift guard must NOT over-refuse: `mul`/`sub` forward-

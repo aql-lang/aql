@@ -167,6 +167,7 @@ type emitCall struct {
 	makeList        bool             // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
 	dynApply        int              // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
 	dynApplyUnquote bool             // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	dynMixed        bool             // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
 	makeMap         bool             // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys         []string
 	mapImpl         bool // the source map's Implicit flag

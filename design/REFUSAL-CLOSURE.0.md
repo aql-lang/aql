@@ -19,32 +19,47 @@ exact graduation pattern in its §1 header) and pass the full battery.
 
 ## 1. Wide error-join forward drift — `5 do [7] error ["x"] add 1`
 
-Refusal: "forward operand accounting across a dynamic/island residual
+**LANDED 2026-07-16** (`tryRecordDriftWindow`, eng/go/drift_window.go).
+
+Refusal was: "forward operand accounting across a dynamic/island residual
 (Stage 3)". The catch result joins to dynamic(Integer|String), so `add`'s
 dispatch is value-dependent: the String overload matches all-stack
 (consuming the leading `5`), the Integer overload forward-collects `1`.
 No static record picks one arm, and the two arms consume DIFFERENT stack
-depths — that accounting is the refusal.
+depths — that accounting was the refusal.
 
-**Mechanism: the mark-bounded mixed re-step, generalised.**
-`OpStackMark` + `OpCallDynMixedFromMark` already reproduce the
-interpreter verbatim over a runtime-variable region (landed for the
-do-catch variadic merge): the region `stack[mark:]` plus fixed values
-above it re-step through the island machinery, auto-apply hazard
-included. The drift site is the same shape one word later: emit the mark
-BEFORE the leading residual (`5`), let the do-catch lower as today, then
-lower the drifting word (`add` + its forward const `1`) as a
-from-mark mixed re-step whose window is [region, forward-const]. The
-island re-steps `5 <catch-result> add 1` — the interpreter's own
-dispatch resolves the arm, so both consumptions are correct by
-construction. Depth accounting disappears because the island returns
-the WHOLE region's net (the existing FromMark contract).
+**As landed — a STATIC window, no marks.** The doc's from-mark sketch
+rested on a stale premise (the §2 lesson again): the window is
+fixed-width at record time — [leading residual(s), the ONE catch result,
+the word, the forward literal] — because the drift gate itself requires
+the matched operands to be a contiguous span directly under the word, and
+a fixed window needs no `OpStackMark`. `tryRecordDriftWindow` (hooked
+right before `refuseForwardStackDrift`) records one generic evCall event
+whose operands are the window laid out top-first — the WORD ITSELF rides
+as an inert const (`word(add)`) — lowering to the existing
+`OpCallDynamicMixed` with Arg = window width. The VM islands the window
+verbatim through `islandRun`: the word token DISPATCHES in the island
+with the interpreter's own registry-resolved forward collection over the
+LIVE value, so the arm choice AND its residual count are byte-identical
+by construction (the Integer pass-through forward-collects → `[5 8]`; the
+String handler binds all-stack). The event is variadic-flagged; the
+in-order layout machinery promotes the catch result to a frame local and
+re-pushes the window in source order.
 
-Cost: an island (interpreter machinery for one statement), not a native
-lowering — but the program compiles, and the island is bounded to the
-one statement. Effort: M. The negatives already pinned (mul/sub/String
-tokens, no-leading-residual) stay native — the gate fires only where
-refuseForwardStackDrift fires today.
+Gates (each declining shape keeps the refusal, pinned):
+- TERMINAL only — nothing after the forward literal but End/DefCleanup
+  (a downstream consumer would need a static count the island can't
+  promise): `… add 1 drop` still refuses.
+- BYSTANDER-FREE — no data values below the window (`1 2 3 do … add 1`):
+  the in-order reconciliation cannot interleave the window's const
+  re-pushes with untouched values.
+- No variadic-event operands (fixed width), contiguous matched span,
+  every operand with a compiled home.
+
+Landing tests: `TestEdgeFindingForwardAcrossErrorResidual` (both raise
+paths compile with parity; both decline fences pinned). The negatives
+already pinned (mul/sub/String tokens, no-leading-residual) stay native —
+the window fires only where refuseForwardStackDrift fired.
 
 ## 2. Deferred-token dispatch windows — `def m (flex {a:1}) f m.a`
 
@@ -282,8 +297,10 @@ Cheapest-first, each with the standard battery + fullcorpus
 5. §6b sig-table poly — **LANDED 2026-07-16** (UserPolyRef.Sigs stored
    mode + the FnBinders dynamic-scope gate; see §6). §3 arrival-apply —
    **LANDED 2026-07-16** (tryMemberFnArrivalDispatch on the M2c chassis;
-   see §3). §1 mark-bounded drift island, §4 dyn-body arms, §7b
-   multi-sig stamps (M each) remain.
+   see §3). §4 computed branch arms — **LANDED 2026-07-16**
+   (computedArmDoBody synthesis; see §4). §1 drift window — **LANDED
+   2026-07-16** (tryRecordDriftWindow — a STATIC OpCallDynamicMixed
+   window, no marks needed; see §1). §7b multi-sig stamps (M) remains.
 
 After all of §1–§7, the only remaining interpreter execution on any
 default path would be: check-mode (the compile front-end itself),

@@ -1716,6 +1716,14 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 			op = OpCallDynApplyTop
 		}
 		lw.emit(op, c.dynApply, c.pos)
+	} else if c.dynMixed {
+		// Forward-drift window (REFUSAL-CLOSURE §1): the layout placed
+		// [leading residual(s), dynamic value, word const, forward literal];
+		// the VM islands the window verbatim — the word token dispatches in
+		// the island with the interpreter's own forward collection over the
+		// LIVE top value, so the value-dependent binding (and its residual
+		// count) is byte-identical on every runtime path.
+		lw.emit(OpCallDynamicMixed, len(c.ops), c.pos)
 	} else if c.dynMethod != nil {
 		// Guarded shaped-instance-method apply (Stage M2c): the layout above
 		// placed [fn, a1..aN] with the fn at the base (source order — the

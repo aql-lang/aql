@@ -2895,8 +2895,16 @@ func (e *Engine) stepWord(val Value) error {
 	// (the dynamic carrier blocks that overload's stack slot) reached PAST the
 	// dynamic value to a deeper leading residual (`add` over [dyn, 5] → 5+7).
 	// The residual-window operand accounting across the reified-error / island
-	// boundary is unsound, so refuse in compile mode and fall back. The
+	// boundary is unsound as a STATIC record — but a TERMINAL window models it
+	// faithfully as a runtime island (tryRecordDriftWindow, REFUSAL-CLOSURE §1):
+	// the window re-steps [residual, dynamic value, word, forward literal]
+	// verbatim, so the island's own dispatch performs the interpreter's
+	// forward collection. Shapes the window declines (non-terminal, variadic
+	// operands, non-contiguous) keep the refusal and fall back. The
 	// interpreter and plain check mode are untouched (recorder inactive).
+	if e.tryRecordDriftWindow(w, sig, positions) {
+		return nil
+	}
 	e.refuseForwardStackDrift(sig, positions)
 
 	// Immediate execution: read args from recorded positions.
