@@ -3,6 +3,7 @@ package native
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
@@ -28,6 +29,42 @@ func (notInstalledFileOps) WriteFile(path string, data []byte, perm os.FileMode)
 
 func (notInstalledFileOps) MkdirAll(path string, perm os.FileMode) error {
 	return capabilityNotInstalled("fileops", "mkdir", path)
+}
+
+func (notInstalledFileOps) Stat(path string, follow bool) (capabilities.FileInfo, error) {
+	return capabilities.FileInfo{}, capabilityNotInstalled("fileops", "stat", path)
+}
+
+func (notInstalledFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
+	return nil, capabilityNotInstalled("fileops", "list", path)
+}
+
+func (notInstalledFileOps) Remove(path string, recursive bool) error {
+	return capabilityNotInstalled("fileops", "remove", path)
+}
+
+func (notInstalledFileOps) Rename(oldPath, newPath string) error {
+	return capabilityNotInstalled("fileops", "rename", oldPath)
+}
+
+func (notInstalledFileOps) Symlink(target, linkPath string) error {
+	return capabilityNotInstalled("fileops", "link", linkPath)
+}
+
+func (notInstalledFileOps) Link(target, linkPath string) error {
+	return capabilityNotInstalled("fileops", "link", linkPath)
+}
+
+func (notInstalledFileOps) Chmod(path string, mode os.FileMode) error {
+	return capabilityNotInstalled("fileops", "chmod", path)
+}
+
+func (notInstalledFileOps) Chtimes(path string, atime, mtime time.Time) error {
+	return capabilityNotInstalled("fileops", "chmod", path)
+}
+
+func (notInstalledFileOps) Truncate(path string, size int64) error {
+	return capabilityNotInstalled("fileops", "write", path)
 }
 
 func (notInstalledFileOps) ResolvePath(path string) (string, error) {

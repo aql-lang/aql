@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/capabilities"
@@ -296,6 +297,22 @@ func (f *failOpsWave4) MkdirAll(string, os.FileMode) error {
 	return nil
 }
 func (f *failOpsWave4) ResolvePath(string) (string, error) { return "", errors.New("no resolve") }
+
+func (f *failOpsWave4) Stat(string, bool) (capabilities.FileInfo, error) {
+	return capabilities.FileInfo{}, errors.New("stat refused")
+}
+func (f *failOpsWave4) ReadDir(string) ([]capabilities.FileInfo, error) {
+	return nil, errors.New("readdir refused")
+}
+func (f *failOpsWave4) Remove(string, bool) error       { return errors.New("remove refused") }
+func (f *failOpsWave4) Rename(string, string) error     { return errors.New("rename refused") }
+func (f *failOpsWave4) Symlink(string, string) error    { return errors.New("symlink refused") }
+func (f *failOpsWave4) Link(string, string) error       { return errors.New("link refused") }
+func (f *failOpsWave4) Chmod(string, os.FileMode) error { return errors.New("chmod refused") }
+func (f *failOpsWave4) Chtimes(string, time.Time, time.Time) error {
+	return errors.New("chtimes refused")
+}
+func (f *failOpsWave4) Truncate(string, int64) error { return errors.New("truncate refused") }
 
 // TestModelWave4InlineIOFailures pins the model_io arms: a failing MkdirAll
 // and a failing WriteFile during inline scratch setup are loud errors.

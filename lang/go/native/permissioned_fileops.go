@@ -2,6 +2,7 @@ package native
 
 import (
 	"os"
+	"time"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/policy"
@@ -57,6 +58,78 @@ func (p *permissionedFileOps) MkdirAll(path string, perm os.FileMode) error {
 		return err
 	}
 	return p.inner.MkdirAll(path, perm)
+}
+
+// Stat gates on fileops.stat{path} (a read-like op).
+func (p *permissionedFileOps) Stat(path string, follow bool) (capabilities.FileInfo, error) {
+	if err := p.policy.Check("fileops", "stat", policy.Args{"path": path}); err != nil {
+		return capabilities.FileInfo{}, err
+	}
+	return p.inner.Stat(path, follow)
+}
+
+// ReadDir gates on fileops.list{path} (a read-like op).
+func (p *permissionedFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
+	if err := p.policy.Check("fileops", "list", policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.ReadDir(path)
+}
+
+// Remove gates on fileops.remove{path} (a write-like op).
+func (p *permissionedFileOps) Remove(path string, recursive bool) error {
+	if err := p.policy.Check("fileops", "remove", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.Remove(path, recursive)
+}
+
+// Rename gates on fileops.rename{path,to} (a write-like op).
+func (p *permissionedFileOps) Rename(oldPath, newPath string) error {
+	if err := p.policy.Check("fileops", "rename", policy.Args{"path": oldPath, "to": newPath}); err != nil {
+		return err
+	}
+	return p.inner.Rename(oldPath, newPath)
+}
+
+// Symlink gates on fileops.link{path,to} (a write-like op).
+func (p *permissionedFileOps) Symlink(target, linkPath string) error {
+	if err := p.policy.Check("fileops", "link", policy.Args{"path": linkPath, "to": target}); err != nil {
+		return err
+	}
+	return p.inner.Symlink(target, linkPath)
+}
+
+// Link gates on fileops.link{path,to} (a write-like op).
+func (p *permissionedFileOps) Link(target, linkPath string) error {
+	if err := p.policy.Check("fileops", "link", policy.Args{"path": linkPath, "to": target}); err != nil {
+		return err
+	}
+	return p.inner.Link(target, linkPath)
+}
+
+// Chmod gates on fileops.chmod{path} (a write-like op).
+func (p *permissionedFileOps) Chmod(path string, mode os.FileMode) error {
+	if err := p.policy.Check("fileops", "chmod", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.Chmod(path, mode)
+}
+
+// Chtimes gates on fileops.chmod{path} (a write-like metadata op).
+func (p *permissionedFileOps) Chtimes(path string, atime, mtime time.Time) error {
+	if err := p.policy.Check("fileops", "chmod", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.Chtimes(path, atime, mtime)
+}
+
+// Truncate gates on fileops.write{path} (it mutates file content).
+func (p *permissionedFileOps) Truncate(path string, size int64) error {
+	if err := p.policy.Check("fileops", "write", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.Truncate(path, size)
 }
 
 // ResolvePath is pure path manipulation — no I/O, no policy check.
