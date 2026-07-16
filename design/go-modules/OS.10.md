@@ -247,9 +247,9 @@ Os.args len                                     # → arg count incl. program
   (`Open`/`ReadFile`/`Create`/`Stat`/…) **and the location getters**
   (`Getwd`/`UserHomeDir`/`TempDir`) — → `aql:io` ([`IO.10.md`](IO.10.md));
   `os/exec` process spawning (a separate, even more
-  dangerous capability — a future `aql:exec` with its own `process`
-  gate); `os.Getenv`-style `os.Expand`; signals (`os/signal`); user/
-  group lookup (`os/user`).
+  dangerous capability — `aql:exec` with its own `process`
+  gate, now designed: [EXEC](EXEC.10.md)); `os.Getenv`-style `os.Expand`;
+  signals (`os/signal`); user/group lookup (`os/user`).
 - **Open:** should `setenv`/`unsetenv` exist at all, given how rarely a
   query-language guest should mutate the host environment? Proposal:
   ship them but gate them off by default; a host opts in. Revisit if no
