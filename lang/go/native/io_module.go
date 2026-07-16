@@ -143,5 +143,41 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 				{Args: []*Type{TString}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
 			},
 		},
+		{
+			// remove deletes a path, returning it. {recursive:true} removes a
+			// directory tree; {force:true} ignores an absent path.
+			Name: "remove",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString}, Impl: Go(ioRemoveHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			},
+		},
+		{
+			// move renames/moves src to dst, returning dst.
+			Name: "move",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString}, Impl: Go(moveHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString}, Impl: Go(moveHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			},
+		},
+		{
+			// copy copies src to dst, returning dst. {recursive:true} copies a
+			// directory tree.
+			Name: "copy",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TPathon, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(copyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TPathon}, Impl: Go(copyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TString}, Impl: Go(copyHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TString}, Impl: Go(copyHandler), Returns: []*Type{TString}, BarrierPos: -1},
+			},
+		},
 	}
 }

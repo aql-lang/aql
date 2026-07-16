@@ -108,6 +108,15 @@ WORD convert
   [Scalar/Bytes Scalar/String] barrier=2 typearg={0} +returnsfn
   [Scalar/String Scalar/Bytes] barrier=2 typearg={0} +returnsfn
   [Scalar Scalar] barrier=2 typearg={0} +returnsfn
+WORD copy
+  [Scalar/Micron/Pathon Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
+  [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/String Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/String]
+  [Scalar/String Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
 WORD create
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Any]
@@ -454,6 +463,11 @@ WORD mod
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD module
   [Node/List] barrier=1 runcheck noeval={0} returns=[Ideal/Module]
+WORD move
+  [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/String]
+  [Scalar/String Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
 WORD mul
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD nand
@@ -567,8 +581,12 @@ WORD remove
   [Node/Map Node/Map] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/List] barrier=2 returns=[Node/List]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Ideal/Resource/Entity] barrier=1 returns=[Any]
   [Node/Map] barrier=1 returns=[Any]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Scalar/Micron/Pathon]
+  [Scalar/String] barrier=1 returns=[Scalar/String]
 WORD repeat
   [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]

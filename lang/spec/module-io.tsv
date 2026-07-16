@@ -62,6 +62,20 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://L/a.txt"
 import "aql:io"  context dot __sys dot fs set mem true  IO.list "mem://nope"	ERROR:list	listing an absent directory errors
 import "aql:io"  context dot __sys dot fs set mem true  IO.list (IO.write "mem://f.txt" "x")	ERROR:list	listing a file (not a directory) errors
 #
+# §10  remove — delete a path, returning it. {recursive:true} removes a
+#      directory tree; {force:true} makes an absent removal a no-op.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://R/a.txt" "x" drop  IO.remove "mem://R/a.txt"	'mem://R/a.txt'	remove returns the deleted path
+import "aql:io"  context dot __sys dot fs set mem true  IO.remove "mem://ghost.txt"	ERROR:remove	removing an absent path errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.remove "mem://ghost.txt" {force:true}	'mem://ghost.txt'	{force:true} makes an absent removal a no-op
+#
+# §11  move — rename/move a path, returning the destination.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://m.txt" "x" drop  IO.move "mem://m.txt" "mem://m2.txt"	'mem://m2.txt'	move returns the destination
+import "aql:io"  context dot __sys dot fs set mem true  IO.move "mem://ghost.txt" "mem://z.txt"	ERROR:move	moving an absent path errors
+#
+# §12  copy — copy a path to a destination. {recursive:true} copies a tree.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://c.txt" "hi" drop  IO.copy "mem://c.txt" "mem://c2.txt" drop  IO.read "mem://c2.txt"	'hi'	copy duplicates a file's contents
+import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://cd/a.txt" "x" drop  IO.copy "mem://cd" "mem://cd2"	ERROR:copy	copying a directory without {recursive} errors
+#
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not
 #     engage through a spec row's context layering, and `make Pathon` collapses

@@ -9,10 +9,28 @@ import (
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
-// io_fs.go holds the aql:io filesystem-structure words — stat and list —
-// plus the shared record/option helpers. Handlers route every filesystem
-// touch through EffectiveFileOps(r) (so the in-memory backing engages under
-// context.__sys.fs) and reuse extractPath for target routing.
+// io_fs.go holds the aql:io filesystem-structure words — stat, list, remove,
+// move, and copy — plus the shared record/option helpers. Handlers route
+// every filesystem touch through EffectiveFileOps(r) (so the in-memory
+// backing engages under context.__sys.fs) and reuse extractPath for target
+// routing. Mutating words call r.NoteEffect() (the compiled-mode effect fence).
+
+// mapBoolOpt reads one boolean key from an options map, returning def when the
+// value is not a concrete map or the key is absent. It is the single option
+// reader all of the io words share.
+func mapBoolOpt(opts Value, key string, def bool) bool {
+	if !opts.Parent.Equal(TMap) || !IsConcrete(opts) {
+		return def
+	}
+	m, _ := AsMap(opts)
+	if m == nil {
+		return def
+	}
+	if v, ok := MapFieldBoolean(m, key); ok {
+		return v
+	}
+	return def
+}
 
 // mtimeUnix renders a modification time as Unix seconds, mapping the zero
 // time (an unset in-memory mtime) to 0 rather than a large negative number.
@@ -40,34 +58,16 @@ func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Valu
 	return NewMap(om)
 }
 
-// parseStatOpts reads stat's option map: follow (default true — dereference a
-// symlink, {follow:false} for lstat) and resolve ({resolve:true} sets .path
-// to the absolute resolved form).
-func parseStatOpts(opts Value) (follow, resolve bool) {
-	follow = true
-	if !opts.Parent.Equal(TMap) || !IsConcrete(opts) {
-		return
-	}
-	m, _ := AsMap(opts)
-	if m == nil {
-		return
-	}
-	if v, ok := MapFieldBoolean(m, "follow"); ok {
-		follow = v
-	}
-	if v, ok := MapFieldBoolean(m, "resolve"); ok {
-		resolve = v
-	}
-	return
-}
-
 // statHandler implements IO.stat. It returns a stat record, or `none` when
 // the path does not exist (folding in exists/access); other errors (e.g. a
-// symlink cycle, a policy denial) surface loudly.
+// symlink cycle, a policy denial) surface loudly. follow defaults true
+// (dereference a symlink; {follow:false} for lstat); {resolve:true} sets
+// .path to the absolute resolved form.
 func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Value, error) {
 	follow, resolve := true, false
 	if hasOpts {
-		follow, resolve = parseStatOpts(args[1])
+		follow = mapBoolOpt(args[1], "follow", true)
+		resolve = mapBoolOpt(args[1], "resolve", false)
 	}
 	path := extractPath(args[0])
 	fi, err := EffectiveFileOps(r).Stat(path, follow)
@@ -84,25 +84,6 @@ func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 		}
 	}
 	return []Value{buildStatRecord(fi, displayPath, fileType)}, nil
-}
-
-// parseListOpts reads list's option map: detail ({detail:true} returns stat
-// records instead of names) and recursive ({recursive:true} walks the tree).
-func parseListOpts(opts Value) (detail, recursive bool) {
-	if !opts.Parent.Equal(TMap) || !IsConcrete(opts) {
-		return
-	}
-	m, _ := AsMap(opts)
-	if m == nil {
-		return
-	}
-	if v, ok := MapFieldBoolean(m, "detail"); ok {
-		detail = v
-	}
-	if v, ok := MapFieldBoolean(m, "recursive"); ok {
-		recursive = v
-	}
-	return
 }
 
 // listEntry pairs a directory entry's metadata with its path relative to the
@@ -144,7 +125,8 @@ func collectEntries(r *Registry, root, prefix string, recursive bool) ([]listEnt
 func listHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Value, error) {
 	detail, recursive := false, false
 	if hasOpts {
-		detail, recursive = parseListOpts(args[1])
+		detail = mapBoolOpt(args[1], "detail", false)
+		recursive = mapBoolOpt(args[1], "recursive", false)
 	}
 	path := extractPath(args[0])
 	entries, err := collectEntries(r, path, "", recursive)
@@ -160,4 +142,110 @@ func listHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 		}
 	}
 	return []Value{NewList(items)}, nil
+}
+
+// doRemoveWord implements IO.remove: {recursive:true} removes a directory
+// tree, {force:true} ignores an absent path. Returns the target it removed.
+func doRemoveWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
+	recursive, force := false, false
+	if hasOpts {
+		recursive = mapBoolOpt(args[1], "recursive", false)
+		force = mapBoolOpt(args[1], "force", false)
+	}
+	path := extractPath(args[0])
+	r.NoteEffect()
+	err := EffectiveFileOps(r).Remove(path, recursive)
+	if err != nil {
+		if force && errors.Is(err, os.ErrNotExist) {
+			return []Value{returnPath(args[0], path)}, nil
+		}
+		return nil, r.AqlError("remove_error", fmt.Sprintf("remove: %v", err), "remove")
+	}
+	return []Value{returnPath(args[0], path)}, nil
+}
+
+func ioRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doRemoveWord(args, r, false)
+}
+
+func ioRemoveOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doRemoveWord(args, r, true)
+}
+
+// moveHandler implements IO.move (rename/move). Returns the destination.
+func moveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	src := extractPath(args[0])
+	dst := extractPath(args[1])
+	r.NoteEffect()
+	if err := EffectiveFileOps(r).Rename(src, dst); err != nil {
+		return nil, r.AqlError("move_error", fmt.Sprintf("move: %v", err), "move")
+	}
+	return []Value{returnPath(args[1], dst)}, nil
+}
+
+// doCopy copies src to dst: a symlink is recreated, a directory is copied
+// recursively (requires recursive), a file's bytes are read and written.
+func doCopy(r *Registry, src, dst string, recursive bool) error {
+	ops := EffectiveFileOps(r)
+	fi, err := ops.Stat(src, false)
+	if err != nil {
+		return err
+	}
+	switch {
+	case fi.Symlink:
+		return ops.Symlink(fi.Target, dst)
+	case fi.IsDir:
+		if !recursive {
+			return fmt.Errorf("%q is a directory (use {recursive:true})", src)
+		}
+		return copyTree(r, src, dst)
+	default:
+		data, rerr := ops.ReadFile(src)
+		if rerr != nil {
+			return rerr
+		}
+		return ops.WriteFile(dst, data, fi.Mode.Perm())
+	}
+}
+
+// copyTree recursively copies a directory, delegating each child to doCopy.
+func copyTree(r *Registry, src, dst string) error {
+	ops := EffectiveFileOps(r)
+	if err := ops.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := ops.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := doCopy(r, src+"/"+e.Name, dst+"/"+e.Name, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// doCopyWord implements IO.copy. {recursive:true} copies a directory tree.
+// Returns the destination.
+func doCopyWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
+	src := extractPath(args[0])
+	dst := extractPath(args[1])
+	recursive := false
+	if hasOpts {
+		recursive = mapBoolOpt(args[2], "recursive", false)
+	}
+	r.NoteEffect()
+	if err := doCopy(r, src, dst, recursive); err != nil {
+		return nil, r.AqlError("copy_error", fmt.Sprintf("copy: %v", err), "copy")
+	}
+	return []Value{returnPath(args[1], dst)}, nil
+}
+
+func copyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doCopyWord(args, r, false)
+}
+
+func copyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doCopyWord(args, r, true)
 }

@@ -241,15 +241,13 @@ func TestIsFileTypeAtom(t *testing.T) {
 	}
 }
 
-func TestParseStatOptsNonMap(t *testing.T) {
-	// A type-literal (non-concrete) opts value falls back to defaults.
-	follow, resolve := parseStatOpts(NewTypeLiteral(TMap))
-	if !follow || resolve {
-		t.Errorf("parseStatOpts(type literal) = follow %v resolve %v, want true false", follow, resolve)
+func TestMapBoolOptNonMap(t *testing.T) {
+	// A type-literal (non-concrete) opts value falls back to the default.
+	if !mapBoolOpt(NewTypeLiteral(TMap), "follow", true) {
+		t.Error("type-literal opts should yield the true default")
 	}
-	detail, recursive := parseListOpts(NewTypeLiteral(TMap))
-	if detail || recursive {
-		t.Errorf("parseListOpts(type literal) = detail %v recursive %v, want false false", detail, recursive)
+	if mapBoolOpt(NewTypeLiteral(TMap), "detail", false) {
+		t.Error("type-literal opts should yield the false default")
 	}
 }
 
@@ -260,16 +258,16 @@ func wrapMap(set func(*OrderedMap)) Value {
 	return NewMap(om)
 }
 
-// TestParseOptsNonOrderedMap covers the AsMap-nil path: an Options-typed
-// value is a concrete TMap whose AsMap returns nil, so the option readers
-// fall back to defaults rather than dereferencing a nil map.
-func TestParseOptsNonOrderedMap(t *testing.T) {
+// TestMapBoolOptNonOrderedMap covers the AsMap-nil path: an Options-typed
+// value is a concrete TMap whose AsMap returns nil, so mapBoolOpt falls back
+// to the default rather than dereferencing a nil map.
+func TestMapBoolOptNonOrderedMap(t *testing.T) {
 	opts := NewOptionsType(NewOrderedMap())
-	if follow, resolve := parseStatOpts(opts); !follow || resolve {
-		t.Errorf("parseStatOpts(options) = %v %v, want true false", follow, resolve)
+	if !mapBoolOpt(opts, "follow", true) {
+		t.Error("options-typed opts should yield the true default")
 	}
-	if detail, recursive := parseListOpts(opts); detail || recursive {
-		t.Errorf("parseListOpts(options) = %v %v, want false false", detail, recursive)
+	if mapBoolOpt(opts, "recursive", false) {
+		t.Error("options-typed opts should yield the false default")
 	}
 }
 
@@ -292,5 +290,214 @@ func TestCollectEntriesRecursionError(t *testing.T) {
 	SetHostFileOps(r, walkFailOps{capabilities.NewMem()})
 	if _, err := collectEntries(r, "root", "", true); err == nil {
 		t.Error("expected the recursive-walk error to propagate")
+	}
+}
+
+// ── remove / move / copy ─────────────────────────────────────────────────
+
+func TestRemoveWord(t *testing.T) {
+	r, mem := ioFSReg(t)
+	if err := mem.WriteFile("f.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// remove a file → returns the path, file gone.
+	res := runAQL(t, r, []Value{NewWord("remove"), NewString("f.txt")})
+	if res[0].String() != "'f.txt'" {
+		t.Errorf("remove returned %v", res[0])
+	}
+	if _, err := mem.Stat("f.txt", false); err == nil {
+		t.Error("file not removed")
+	}
+	// removing an absent path errors without {force}.
+	if err := runAQLError(t, r, []Value{NewWord("remove"), NewString("f.txt")}); err == nil {
+		t.Error("expected error removing an absent path")
+	}
+	// {force:true} makes an absent removal a no-op.
+	res = runAQL(t, r, []Value{
+		NewWord("remove"), NewString("ghost"),
+		wrapMap(func(om *OrderedMap) { om.Set("force", NewBoolean(true)) }),
+	})
+	if res[0].String() != "'ghost'" {
+		t.Errorf("forced remove returned %v", res[0])
+	}
+	// removing a non-empty dir needs {recursive}.
+	if err := mem.WriteFile("d/c.txt", []byte("y"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAQLError(t, r, []Value{NewWord("remove"), NewString("d")}); err == nil {
+		t.Error("expected error removing a non-empty dir non-recursively")
+	}
+	runAQL(t, r, []Value{
+		NewWord("remove"), NewString("d"),
+		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
+	})
+	if _, err := mem.Stat("d/c.txt", false); err == nil {
+		t.Error("tree not removed")
+	}
+}
+
+func TestMoveWord(t *testing.T) {
+	r, mem := ioFSReg(t)
+	if err := mem.WriteFile("a.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	res := runAQL(t, r, []Value{NewWord("move"), NewString("a.txt"), NewString("b.txt")})
+	if res[0].String() != "'b.txt'" {
+		t.Errorf("move returned %v", res[0])
+	}
+	if _, err := mem.Stat("b.txt", false); err != nil {
+		t.Error("move destination missing")
+	}
+	if _, err := mem.Stat("a.txt", false); err == nil {
+		t.Error("move source remains")
+	}
+	if err := runAQLError(t, r, []Value{NewWord("move"), NewString("ghost"), NewString("z")}); err == nil {
+		t.Error("expected error moving an absent path")
+	}
+	// A Pathon destination is returned as a Pathon.
+	if err := mem.WriteFile("c.txt", []byte("y"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	res = runAQL(t, r, []Value{NewWord("move"), NewString("c.txt"), NewPathon([]string{"e.txt"}, false)})
+	if !IsPathon(res[0]) {
+		t.Errorf("move to Pathon returned %v (want Pathon)", res[0])
+	}
+}
+
+func TestCopyWord(t *testing.T) {
+	r, mem := ioFSReg(t)
+	if err := mem.WriteFile("src.txt", []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// copy a file.
+	res := runAQL(t, r, []Value{NewWord("copy"), NewString("src.txt"), NewString("dst.txt")})
+	if res[0].String() != "'dst.txt'" {
+		t.Errorf("copy returned %v", res[0])
+	}
+	if b, err := mem.ReadFile("dst.txt"); err != nil || string(b) != "hello" {
+		t.Errorf("copy content = %q (%v)", b, err)
+	}
+	// copy a symlink recreates it.
+	if err := mem.Symlink("src.txt", "link"); err != nil {
+		t.Fatal(err)
+	}
+	runAQL(t, r, []Value{NewWord("copy"), NewString("link"), NewString("link2")})
+	if li, err := mem.Stat("link2", false); err != nil || !li.Symlink || li.Target != "src.txt" {
+		t.Errorf("copied symlink = %+v (%v)", li, err)
+	}
+	// copying a directory needs {recursive}.
+	if err := mem.WriteFile("tree/a.txt", []byte("1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.WriteFile("tree/sub/b.txt", []byte("2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAQLError(t, r, []Value{NewWord("copy"), NewString("tree"), NewString("treecopy")}); err == nil {
+		t.Error("expected error copying a dir without {recursive}")
+	}
+	runAQL(t, r, []Value{
+		NewWord("copy"), NewString("tree"), NewString("treecopy"),
+		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
+	})
+	if b, err := mem.ReadFile("treecopy/sub/b.txt"); err != nil || string(b) != "2" {
+		t.Errorf("recursive copy child = %q (%v)", b, err)
+	}
+	// copying an absent source errors.
+	if err := runAQLError(t, r, []Value{NewWord("copy"), NewString("ghost"), NewString("z")}); err == nil {
+		t.Error("expected error copying an absent path")
+	}
+}
+
+// failAtOps wraps a MemFileOps and fails a chosen operation when its path
+// contains the configured substring, so doCopy's error branches are reachable.
+type failAtOps struct {
+	*capabilities.MemFileOps
+	failReadFile, failWriteFile, failMkdir, failReadDir, failSymlink string
+}
+
+func (f *failAtOps) ReadFile(p string) ([]byte, error) {
+	if f.failReadFile != "" && strings.Contains(p, f.failReadFile) {
+		return nil, fmt.Errorf("readfile boom")
+	}
+	return f.MemFileOps.ReadFile(p)
+}
+func (f *failAtOps) WriteFile(p string, d []byte, m os.FileMode) error {
+	if f.failWriteFile != "" && strings.Contains(p, f.failWriteFile) {
+		return fmt.Errorf("writefile boom")
+	}
+	return f.MemFileOps.WriteFile(p, d, m)
+}
+func (f *failAtOps) MkdirAll(p string, m os.FileMode) error {
+	if f.failMkdir != "" && strings.Contains(p, f.failMkdir) {
+		return fmt.Errorf("mkdir boom")
+	}
+	return f.MemFileOps.MkdirAll(p, m)
+}
+func (f *failAtOps) ReadDir(p string) ([]capabilities.FileInfo, error) {
+	if f.failReadDir != "" && strings.Contains(p, f.failReadDir) {
+		return nil, fmt.Errorf("readdir boom")
+	}
+	return f.MemFileOps.ReadDir(p)
+}
+func (f *failAtOps) Symlink(target, link string) error {
+	if f.failSymlink != "" && strings.Contains(link, f.failSymlink) {
+		return fmt.Errorf("symlink boom")
+	}
+	return f.MemFileOps.Symlink(target, link)
+}
+
+func TestCopyErrorBranches(t *testing.T) {
+	newReg := func(setup func(*capabilities.MemFileOps), f *failAtOps) *Registry {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		mem := capabilities.NewMem()
+		setup(mem)
+		f.MemFileOps = mem
+		SetHostFileOps(r, f)
+		return r
+	}
+
+	// Stat error: copying an absent source.
+	r := newReg(func(*capabilities.MemFileOps) {}, &failAtOps{})
+	if err := doCopy(r, "ghost", "dst", false); err == nil {
+		t.Error("expected Stat error copying absent source")
+	}
+	// ReadFile error on a file copy.
+	r = newReg(func(m *capabilities.MemFileOps) { m.WriteFile("s.txt", []byte("x"), 0644) },
+		&failAtOps{failReadFile: "s.txt"})
+	if err := doCopy(r, "s.txt", "d.txt", false); err == nil {
+		t.Error("expected ReadFile error")
+	}
+	// WriteFile error on a file copy.
+	r = newReg(func(m *capabilities.MemFileOps) { m.WriteFile("s.txt", []byte("x"), 0644) },
+		&failAtOps{failWriteFile: "d.txt"})
+	if err := doCopy(r, "s.txt", "d.txt", false); err == nil {
+		t.Error("expected WriteFile error")
+	}
+	// MkdirAll error in copyTree.
+	r = newReg(func(m *capabilities.MemFileOps) { m.WriteFile("dir/a.txt", []byte("x"), 0644) },
+		&failAtOps{failMkdir: "out"})
+	if err := doCopy(r, "dir", "out", true); err == nil {
+		t.Error("expected MkdirAll error")
+	}
+	// ReadDir error in copyTree.
+	r = newReg(func(m *capabilities.MemFileOps) { m.WriteFile("dir/a.txt", []byte("x"), 0644) },
+		&failAtOps{failReadDir: "dir"})
+	if err := doCopy(r, "dir", "out", true); err == nil {
+		t.Error("expected ReadDir error")
+	}
+	// Symlink error copying a symlink.
+	r = newReg(func(m *capabilities.MemFileOps) { m.Symlink("t", "sl") },
+		&failAtOps{failSymlink: "d"})
+	if err := doCopy(r, "sl", "d", false); err == nil {
+		t.Error("expected Symlink error")
+	}
+	// Recursion error: a child copy fails inside copyTree.
+	r = newReg(func(m *capabilities.MemFileOps) { m.WriteFile("dir/a.txt", []byte("x"), 0644) },
+		&failAtOps{failReadFile: "a.txt"})
+	if err := doCopy(r, "dir", "out", true); err == nil {
+		t.Error("expected child-copy error to propagate")
 	}
 }

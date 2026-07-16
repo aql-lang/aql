@@ -12,5 +12,8 @@ func init() {
 		"folder":   "Create a directory, returning its Path.",
 		"stat":     "Describe a path (name/size/type/mode/mtime), or none if absent.",
 		"list":     "List a directory's entries; {detail} for records, {recursive} to walk.",
+		"remove":   "Delete a path; {recursive} for a tree, {force} to ignore absent.",
+		"move":     "Rename/move a path to a new location, returning the destination.",
+		"copy":     "Copy a path to a destination; {recursive} copies a directory tree.",
 	})
 }
