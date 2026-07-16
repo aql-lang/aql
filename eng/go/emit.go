@@ -345,6 +345,9 @@ type emitUserPolySpec struct {
 	sigIdx []int
 	units  []int
 	impls  []SigImpl
+	// sigs is the frozen dispatch table for a body-local word (REFUSAL-
+	// CLOSURE.0 §6b) — see UserPolyRef.Sigs. Nil for the live-Lookup mode.
+	sigs []Signature
 }
 
 // emitFallback is a recorded interpreter-island fallback (Stage 5): a
@@ -3290,7 +3293,7 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 // recorder). Captures are gated empty by the recorder, so no hidden trailing
 // operands ride here. An operand of unknown provenance marks the program
 // uncompilable, exactly as RecordUserCall does.
-func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos) {
+func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos) {
 	if !es.active() {
 		return
 	}
@@ -3305,7 +3308,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 	}
 	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{
 		unit: -1, ops: ops, nout: len(outs), pos: pos,
-		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls},
+		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls, sigs: sigs},
 	}})
 	es.SiteCounts[SiteDynamic]++
 	for i := range outs {

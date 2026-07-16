@@ -2163,6 +2163,7 @@ func (lw *lowerer) lowerUserPolyCall(ev *emitEvent) string {
 		SigIdx: uc.poly.sigIdx,
 		Units:  uc.poly.units,
 		Impls:  uc.poly.impls,
+		Sigs:   uc.poly.sigs,
 	})
 	lw.emit(OpCallUserPoly, pi, uc.pos)
 	lw.vm = lw.vm[:len(lw.vm)-n]

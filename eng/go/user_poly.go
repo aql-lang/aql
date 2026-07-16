@@ -25,6 +25,10 @@ type userPolyPlan struct {
 	sigIdx []int
 	units  []int
 	impls  []SigImpl
+	// sigs is the FROZEN dispatch table for a BODY-LOCAL word (REFUSAL-
+	// CLOSURE.0 §6b — see UserPolyRef.Sigs): non-nil arms the VM's stored
+	// re-match mode, which never Lookups the (popped-before-run) name.
+	sigs []Signature
 }
 
 // tryCompileUserPolyArms attempts the poly compile for one ambiguous
@@ -64,11 +68,32 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	// findOwningFnDef's owner.Anonymous gate.
 	// A word bound INSIDE an enclosing fn body (Depth above the innermost fn
 	// baseline — the same test closure capture uses) is popped before the VM
-	// runs, so the runtime Lookup could never resolve it: the poly call would
-	// ALWAYS defer mid-program. Keep the refusal instead — the interpreter
-	// owns body-local multi-overload fns.
+	// runs, so the runtime Lookup could never resolve it. Since the §6b
+	// landing (REFUSAL-CLOSURE.0) the plan FREEZES the dispatch table
+	// instead of refusing: the VM re-matches over the stored signatures
+	// (UserPolyRef.Sigs), which are faithful because a body-local fn's
+	// construction is source-determined and per-call identical — captures
+	// and conditional redefinitions already refuse upstream. The one way
+	// the live table can still drift from the freeze is DYNAMIC-SCOPE
+	// mutation: a callee run between the local def and this call whose own
+	// body rebinds the same name overlap-replaces the local IN PLACE (and
+	// the replacement survives the callee's teardown — interpreter
+	// semantics), which the frozen table cannot see. Gate it: when any
+	// OTHER fn in the program binds this name as a body-local
+	// (Check.FnBinders — the dynamic-scope attribution map), keep the
+	// refusal and let the interpreter own the shape.
+	bodyLocal := false
 	if baseline := r.TopFnBaseline(); baseline != nil && r.Defs.Depth(word) > baseline[word] {
-		return nil
+		bodyLocal = true
+		self := ""
+		if n := len(r.Check.FnNameStack); n > 0 {
+			self = r.Check.FnNameStack[n-1]
+		}
+		for fnName := range r.Check.FnBinders[word] {
+			if fnName != self {
+				return nil
+			}
+		}
 	}
 	agg := r.Lookup(word)
 	if agg == nil {
@@ -113,6 +138,16 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 		}
 		plan.units = append(plan.units, unit)
 		plan.impls = append(plan.impls, s.Impl)
+	}
+	// A body-local word's binding is gone at VM time: freeze the aggregate's
+	// arm signatures so matchUserPoly re-matches over the stored table (the
+	// aggregate is built fresh per check-mode Lookup, so the value copies
+	// alias nothing that mutates).
+	if bodyLocal {
+		plan.sigs = make([]Signature, 0, len(sigIdx))
+		for _, si := range sigIdx {
+			plan.sigs = append(plan.sigs, agg.Signatures[si])
+		}
 	}
 	return plan
 }

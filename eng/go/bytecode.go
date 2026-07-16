@@ -559,6 +559,19 @@ type UserPolyRef struct {
 	SigIdx []int
 	Units  []int
 	Impls  []SigImpl
+	// Sigs, when non-empty, is the STORED dispatch table (REFUSAL-CLOSURE.0
+	// §6b): the arm signatures frozen at record time, for a BODY-LOCAL
+	// multi-overload fn whose binding is popped before the VM runs — a live
+	// name Lookup could never resolve it, so the runtime re-match runs over
+	// this frozen subset instead (matchUserPoly's stored mode). Freezing is
+	// faithful because a body-local fn's construction is source-determined
+	// and per-call identical (captures and conditional redefinitions refuse
+	// upstream, and a same-named local in ANY other fn refuses the freeze —
+	// the dynamic-scope mutation gate in tryCompileUserPolyArms), so the
+	// frozen table IS the table the interpreter's dispatch sees at the same
+	// program point. Empty = the live-Lookup mode with its index/Impl drift
+	// guard (module-scope words, where a later rebind must defer).
+	Sigs []Signature
 }
 
 // ClosureInShape tags HOW a higher-order word must present each per-invocation

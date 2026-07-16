@@ -44,7 +44,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive RecordPolyCall should refuse")
 	}
 	e.RecordUserCall(0, nil, nil, SrcPos{})
-	e.RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, SrcPos{})
+	e.RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, nil, SrcPos{})
 	if e.RecordDynApply(nil, Value{}, Value{}, SrcPos{}) {
 		t.Fatal("inactive RecordDynApply should refuse")
 	}
@@ -373,10 +373,10 @@ func inactiveEmitState() *EmitState {
 
 func TestRecordUserPolyCallGuards(t *testing.T) {
 	// Inactive → no-op.
-	inactiveEmitState().RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, SrcPos{})
+	inactiveEmitState().RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, nil, SrcPos{})
 	// Active with an unresolvable operand → uncompilable.
 	es := NewEmitState()
-	es.RecordUserPolyCall("w", nil, nil, nil, nil, []Value{carrierVal(TInteger)}, []Value{NewInteger(1)}, SrcPos{})
+	es.RecordUserPolyCall("w", nil, nil, nil, nil, nil, []Value{carrierVal(TInteger)}, []Value{NewInteger(1)}, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unresolvable poly operand should refuse")
 	}

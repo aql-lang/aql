@@ -60,7 +60,7 @@ type EmitRecorder interface {
 	RecordPoly(word string)
 	RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool
 	RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos)
-	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos)
+	RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos)
 	RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool
 	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
@@ -163,7 +163,7 @@ func (inactiveEmit) RecordPolyCall(string, []Value, []Value, SrcPos, *Registry, 
 	return false
 }
 func (inactiveEmit) RecordUserCall(int, []Value, []Value, SrcPos) {}
-func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Value, []Value, SrcPos) {
+func (inactiveEmit) RecordUserPolyCall(string, *Registry, []int, []int, []SigImpl, []Signature, []Value, []Value, SrcPos) {
 }
 func (inactiveEmit) RecordDynApply([]Value, Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) bool {

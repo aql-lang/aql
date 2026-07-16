@@ -180,13 +180,22 @@ Two decline reasons in tryCompileUserPolyArms keep sites refusing:
   declining fixture was re-pointed to `zpick` to keep `planUserPolyDispatch`'s
   refusal arm covered.
 - **Body-local multi-overload fns** (the fn-baseline gate: the runtime
-  Lookup cannot resolve a name popped before the VM runs). Mechanism:
-  UserPolyRef already stores per-arm units AND impls — the runtime
-  re-match (MatchFnSig) can run against the STORED sig table instead of
-  a name Lookup, removing the resolve dependency entirely. The stored
-  sigs are frozen at record time, which is exactly the interpreter's
-  view for a body-local fn (its binding cannot change between
-  construction and the call inside the same body). Effort: M.
+  Lookup cannot resolve a name popped before the VM runs). **LANDED
+  2026-07-16.** UserPolyRef gains a stored dispatch table
+  (UserPolyRef.Sigs — the arm signatures frozen at record time);
+  matchUserPoly's stored mode re-matches over the frozen subset with no
+  live Lookup and no index/Impl drift guard (there is no live table to
+  drift from). The doc's "binding cannot change" premise needed one
+  repair, found by probing: DYNAMIC-SCOPE mutation — a callee whose own
+  body rebinds the same name overlap-replaces the local in place, and
+  the replacement SURVIVES the callee's teardown (interpreter
+  semantics, pinned at [141] in TestBodyLocalMultiOverloadPolyStored's
+  mutator negative) — so the freeze gates on Check.FnBinders: when any
+  OTHER fn binds the word as a body-local, the refusal stays and the
+  interpreter owns the shape. Pins: both arms dispatch by runtime value
+  through one compiled program, a no-match defers to the interpreter's
+  canonical signature_error, and the module-scope live-Lookup mode is
+  untouched.
 
 ## 7. Per-callback stamp declines (not whole-program refusals)
 
@@ -253,8 +262,10 @@ Cheapest-first, each with the standard battery + fullcorpus
 4. §7a capture identities — **LANDED 2026-07-16** (the detached-stamp
    capture-clone mint; see §7). §7c JIT re-stamp — **LANDED 2026-07-16**
    (the per-ref restampBox; see §7).
-5. §1 mark-bounded drift island, §3 arrival-apply, §4 dyn-body arms,
-   §6b sig-table poly, §7b multi-sig stamps (M each).
+5. §6b sig-table poly — **LANDED 2026-07-16** (UserPolyRef.Sigs stored
+   mode + the FnBinders dynamic-scope gate; see §6). §1 mark-bounded
+   drift island, §3 arrival-apply, §4 dyn-body arms, §7b multi-sig
+   stamps (M each) remain.
 
 After all of §1–§7, the only remaining interpreter execution on any
 default path would be: check-mode (the compile front-end itself),
