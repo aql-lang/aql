@@ -297,32 +297,30 @@ func TestEdgeFindingSentinelInInterpolatedParts(t *testing.T) {
 	// payload) rides the scanner's nil-AsMap guard and keeps compiling.
 	mustCompileWithParity(t, `def b (quote [{:String}]) for 2 [do b i]`, "[{:String} 0 {:String} 1]")
 
-	// KNOWN DIVERGENCE (pre-existing on main, out of this fix's syntactic
-	// scope): a NAMED fn whose body holds a bare break, CALLED from the quoted
-	// do-body. The scanner sees only the word `f` — reaching the sentinel needs
-	// a registry-resolved transitive scan (or loop-state threading through the
-	// closure-invocation boundary: invokeClosureOn starts a fresh vmLoop slice,
-	// unlike OpCallUser's loopBase frame). The interpreter breaks the outer
-	// loop; the compiled do-closure yields flow-signal error values. This pin
-	// FLIPS to mustCompileWithParity when the transitive fix lands.
-	{
-		src := `def f fn [[x:Integer] [Integer] [break 7]] def b (quote [f 1]) for 5 [do b i]`
-		gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
-		if !compiled || errC != nil || errI != nil {
-			t.Fatalf("%q: unexpected errors compiled=%v errC=%v errI=%v", src, compiled, errC, errI)
-		}
-		if fmt.Sprint(gotI) != "[]" {
-			t.Errorf("%q: interp = %v, want [] (break must reach the loop)", src, gotI)
-		}
-		if fmt.Sprint(gotC) == fmt.Sprint(gotI) {
-			t.Errorf("%q: compiled run now MATCHES the interpreter — the known "+
-				"transitive-sentinel divergence is fixed; flip this pin to "+
-				"mustCompileWithParity", src)
-		}
-	}
-	// The direct-call sibling keeps parity: OpCallUser frames share the
-	// caller's loop stack, so the callee's escaped break lands in the loop.
-	mustCompileWithParity(t, `def f fn [[x:Integer] [Integer] [break 7]] for 5 [f 1]`, "[]")
+	// TRANSITIVE sentinels (pre-existing on main): a NAMED fn whose body holds
+	// a bare break, CALLED from the do-body. The syntactic scanner sees only
+	// the word `f`, but the interpreter unwinds the callee's break to the
+	// enclosing loop — while a compiled do-closure starts a fresh loop stack
+	// (invokeClosureOn, unlike OpCallUser's loopBase frames) and surfaced
+	// flow-signal error values. bodyHasSentinelDeep resolves body words to
+	// user-fn bodies (recursively, cycle-guarded) at the tryRecordDynBody
+	// gate, so the closure compile declines and the fallback threads the
+	// signal — parity, for the quoted, inline-literal, and two-hop shapes.
+	fnBreak := `def f fn [[x:Integer] [Integer] [break 7]] `
+	mustCompileWithParity(t, fnBreak+`def b (quote [f 1]) for 5 [do b i]`, "[]")
+	mustCompileWithParity(t, fnBreak+`for 5 [do [f 1] i]`, "[]")
+	mustCompileWithParity(t,
+		fnBreak+`def g fn [[x:Integer] [Integer] [f x]] def b (quote [g 1]) for 5 [do b i]`, "[]")
+	// Recursive callee: the seen-set terminates the scan (and the shape
+	// declines conservatively — parity rides the fallback).
+	mustCompileWithParity(t,
+		`def r fn [[n:Integer] [Integer] [if (n lte 0) [break 0] [r (n sub 1)]]] def b (quote [r 2]) for 5 [do b i]`, "[]")
+	// The direct-call sibling keeps parity natively: OpCallUser frames share
+	// the caller's loop stack, so the callee's escaped break lands in the loop.
+	mustCompileWithParity(t, fnBreak+`for 5 [f 1]`, "[]")
+	// Negative — a sentinel-free callee must NOT decline the do-body compile.
+	mustCompileWithParity(t,
+		`def g fn [[x:Integer] [Integer] [x add 1]] def b (quote [g 1]) for 2 [do b i]`, "[2 0 2 1]")
 }
 
 // PR #275 review finding (P2) — the CondBodyDepth raise (conditional fn-shadow

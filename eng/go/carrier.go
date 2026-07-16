@@ -1559,15 +1559,17 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	body := args[bp]
 	// A concrete body must be sentinel-free (break/continue target an
-	// enclosing loop the handler boundary cannot cross). A computed body's
-	// tokens are unknowable — the interpreter faces the same tokens through
-	// the same sub-engine, so a runtime sentinel behaves identically there;
-	// what differs is only tape-coupled RE-STEPPING, which the sub-run
-	// contains entirely. It must also be replay-hazard-free: a capitalised
-	// def / import inside the baked body re-runs a registry mutation the
-	// check pass already applied and half-rolled-back (the do-unit
-	// registry-replay miscompile — see bodyHasReplayHazard).
-	if IsConcrete(body) && (bodyHasSentinel(body) || bodyHasReplayHazard(body)) {
+	// enclosing loop the handler boundary cannot cross) — including
+	// TRANSITIVELY through resolvable callees (bodyHasSentinelDeep: a called
+	// user fn's bare break unwinds the CALLER's loop in the interpreter). A
+	// computed body's tokens are unknowable — the interpreter faces the same
+	// tokens through the same sub-engine, so a runtime sentinel behaves
+	// identically there; what differs is only tape-coupled RE-STEPPING, which
+	// the sub-run contains entirely. It must also be replay-hazard-free: a
+	// capitalised def / import inside the baked body re-runs a registry
+	// mutation the check pass already applied and half-rolled-back (the
+	// do-unit registry-replay miscompile — see bodyHasReplayHazard).
+	if IsConcrete(body) && (bodyHasSentinelDeep(r, body) || bodyHasReplayHazard(body)) {
 		return false
 	}
 	// Every operand must have a compiled home: the body rides as a threaded
@@ -1930,38 +1932,52 @@ func valueHasSentinel(v Value) bool {
 		}
 		return false
 	}
-	if IsParenExpr(v) {
-		toks, _ := AsParenExpr(v)
-		for _, t := range toks {
-			if valueHasSentinel(t) {
+	return scanBodyContainers(v, valueHasSentinel)
+}
+
+// scanBodyContainers applies scan to every code-position element of v's
+// container families and reports the first hit: list elements, paren-expr
+// tokens, interpolated-string ${...} expression parts, XML-interpolation
+// attribute/child holes (recursing into nested child templates), and map
+// values (keys are strings, inert). Every one of these runs as CODE when
+// the container materialises in a body — verified: an interp-string
+// `${break}` / a `{k: break}` map value in a quoted do-body breaks the
+// loop in the interpreter. A non-container value returns false — leaf
+// classification (words, fn payloads) belongs to the caller's scan.
+func scanBodyContainers(v Value, scan func(Value) bool) bool {
+	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
+		lst, _ := AsList(v)
+		for i := 0; i < lst.Len(); i++ {
+			if scan(lst.Get(i)) {
 				return true
 			}
 		}
 		return false
 	}
-	// Interpolated string: every ${...} expression part runs as code when
-	// the string materialises, so a sentinel there is live (verified:
-	// an interp-string `${break}` in a quoted do-body breaks the loop in
-	// the interpreter).
+	if IsParenExpr(v) {
+		toks, _ := AsParenExpr(v)
+		for _, t := range toks {
+			if scan(t) {
+				return true
+			}
+		}
+		return false
+	}
 	if IsInterpString(v) {
 		parts, _ := AsInterpString(v)
 		for _, p := range parts {
 			for _, t := range p.Expr {
-				if valueHasSentinel(t) {
+				if scan(t) {
 					return true
 				}
 			}
 		}
 		return false
 	}
-	// Interpolated XML literal: attribute-value and child ${...} holes run
-	// as code exactly like string interpolation parts.
 	if IsXmlInterp(v) {
 		tmpl, _ := AsXmlInterp(v)
-		return xmlTmplHasSentinel(tmpl)
+		return xmlTmplScan(tmpl, scan)
 	}
-	// Map literal: values evaluate when the literal assembles in a code
-	// body, so `{k: break}` is a live sentinel (keys are strings, inert).
 	if v.Parent != nil && v.Parent.Equal(TMap) && v.Data != nil {
 		m, _ := AsMap(v)
 		if m == nil {
@@ -1969,7 +1985,7 @@ func valueHasSentinel(v Value) bool {
 		}
 		for _, key := range m.Keys() {
 			mv, _ := m.Get(key)
-			if valueHasSentinel(mv) {
+			if scan(mv) {
 				return true
 			}
 		}
@@ -1977,14 +1993,14 @@ func valueHasSentinel(v Value) bool {
 	return false
 }
 
-// xmlTmplHasSentinel is valueHasSentinel over an XML interpolation
-// skeleton: every ${...} expression token in attribute values and child
-// holes, recursing into nested child templates (mirrors walkXmlTmplExprs).
-func xmlTmplHasSentinel(t XmlTmpl) bool {
+// xmlTmplScan applies scan to every ${...} expression token in an XML
+// interpolation skeleton — attribute values and child holes, recursing
+// into nested child templates (mirrors walkXmlTmplExprs).
+func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
 	for _, a := range t.Attr {
 		for _, p := range a.Parts {
 			for _, tok := range p.Expr {
-				if valueHasSentinel(tok) {
+				if scan(tok) {
 					return true
 				}
 			}
@@ -1994,12 +2010,93 @@ func xmlTmplHasSentinel(t XmlTmpl) bool {
 		switch c.Kind {
 		case XmlCrenExpr:
 			for _, tok := range c.Expr {
-				if valueHasSentinel(tok) {
+				if scan(tok) {
 					return true
 				}
 			}
 		case XmlCrenChild:
-			if c.Child != nil && xmlTmplHasSentinel(*c.Child) {
+			if c.Child != nil && xmlTmplScan(*c.Child, scan) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// bodyHasSentinelDeep is bodyHasSentinel plus a TRANSITIVE callee scan: a
+// body word resolving to a user fn (registry-installed or a def-bound fn
+// value) whose body — transitively through further calls — holds a bare
+// break/continue leaks that signal through the call into the CALLER's loop
+// (probe-verified: the interpreter unwinds `def f fn [.. [break 7]] .. do
+// [f 1]` to the enclosing for), while a compiled closure boundary starts a
+// fresh loop stack and surfaces "flow signal with no enclosing loop" error
+// values — a miscompile. `return` is deliberately NOT counted in callees:
+// the fn boundary consumes it. The scan is conservative — a break consumed
+// by the callee's OWN loop still declines; the body then falls back with
+// parity, so the cost is speed, never correctness.
+//
+// The closure-compile gates with a Registry in hand ride this deep variant:
+// the token-list callable gate (which owns `do <body>` — the proven
+// divergence) and the dyn-body bake gate. Where the interpreter does not
+// thread a callee's break through the boundary anyway (each/filter callbacks
+// raise `break outside loop` — probe-verified), the deep decline is still
+// parity-safe: the fallback interpreter run raises identically. The
+// const-bake gates (the noEvalBodiesInert twins) and the lambda gates keep
+// the syntactic scan — no divergence reproduced there.
+func bodyHasSentinelDeep(r *Registry, body Value) bool {
+	if bodyHasSentinel(body) {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	return calleeValueLeaksFlow(r, body, map[string]bool{})
+}
+
+// calleeValueLeaksFlow is the transitive-scan walker: bare break/continue
+// count as leaks, other words resolve to callee fn bodies (recursively,
+// cycle-guarded by seen), and containers recurse. Constructed fn payloads
+// scan too — an APPLIED fn value's break escapes to the caller (only raw
+// tokens reach the direct scanner; a constructed FnDefInfo in a body is
+// treated as potentially applied).
+func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
+	if fd, ok := v.Data.(FnDefInfo); ok {
+		return fnDefLeaksFlow(r, &fd, seen)
+	}
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		if w.Name == "break" || w.Name == "continue" {
+			return true
+		}
+		return calleeLeaksFlow(r, w.Name, seen)
+	}
+	return scanBodyContainers(v, func(e Value) bool {
+		return calleeValueLeaksFlow(r, e, seen)
+	})
+}
+
+// calleeLeaksFlow resolves name to its aggregated dispatch table (Lookup
+// unions every FnDefInfo binding on the name's def stack — exactly what a
+// call would dispatch over) and scans the overload bodies. Native (Go-impl)
+// sigs have no AQL body and contribute nothing.
+func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
+	if name == "" || seen[name] {
+		return false
+	}
+	seen[name] = true
+	fd := r.Lookup(name)
+	return fd != nil && fnDefLeaksFlow(r, fd, seen)
+}
+
+// fnDefLeaksFlow scans every overload body of fd for a leaking
+// break/continue. A module fn's body words resolve in its OWN registry.
+func fnDefLeaksFlow(r *Registry, fd *FnDefInfo, seen map[string]bool) bool {
+	if fd.Registry != nil {
+		r = fd.Registry
+	}
+	for i := range fd.Signatures {
+		for _, t := range fd.Signatures[i].Body() {
+			if calleeValueLeaksFlow(r, t, seen) {
 				return true
 			}
 		}
