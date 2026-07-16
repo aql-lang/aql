@@ -3193,8 +3193,19 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[st
 	// Every body through here is a NESTED region (branch / loop /
 	// quotation) — reached-conditionally by construction. Mark the depth
 	// so unconditional-only diagnostics (unconditional_raise) stay silent.
+	// A def-rolled-back body (keep=false — a branch arm or loop body) also
+	// raises CondBodyDepth: unlike `do` (keep=true, which leaks its defs
+	// unconditionally), its bindings are conditional, so an in-place fn
+	// redefinition that clobbers an enclosing overload there is unsound to
+	// compile (installDef consults CondBodyDepth to refuse it).
 	r.Check.NestedBodyDepth++
+	if !keep {
+		r.Check.CondBodyDepth++
+	}
 	result, err := sub.Run(tokens)
+	if !keep {
+		r.Check.CondBodyDepth--
+	}
 	r.Check.NestedBodyDepth--
 	if err != nil {
 		r.Check.AddDiagnostic(CheckDiagnostic{

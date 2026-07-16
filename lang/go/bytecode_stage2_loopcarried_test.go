@@ -1,6 +1,7 @@
 package lang
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -133,11 +134,32 @@ func TestLoopCarriedUndefStaysSound(t *testing.T) {
 (flip 2)`)
 }
 
-// NEGATIVE: a rebind to a FUNCTION value refuses (fn values do not ride
-// carried slots in Stage 2) — sound fallback, identical results.
+// NEGATIVE: a rebind to a FUNCTION value inside a loop body REFUSES (fn
+// values do not ride carried slots in Stage 2). The loop-body `def h`
+// overlap-removes the enclosing `h` in place — the def depth is unchanged,
+// so the loop rollback cannot restore it — and compiled resolution statically
+// bakes the loop's `add 2` overload. The interpreter keeps the pre-loop
+// `add 1` when the loop runs ZERO times, so `(pickfn 0)` silently miscompiled
+// to 12 (should be 11) before this refusal landed; `(pickfn 2)` coincidentally
+// agreed at 12 because the loop runs. Refuse — compiled == interpreter at every
+// n (slow, not wrong). See the conditional-fn-shadow divergence fix.
 func TestLoopCarriedFnValueRebindStaysSound(t *testing.T) {
-	stage1aSound(t, `def pickfn fn [[n:Integer] [Integer] [def h ([x:Integer] => [x add 1]) for n [def h ([x:Integer] => [x add 2])] end (h 10)]]
-(pickfn 2)`)
+	base := `def pickfn fn [[n:Integer] [Integer] [def h ([x:Integer] => [x add 1]) for n [def h ([x:Integer] => [x add 2])] end (h 10)]]`
+	// The DEFINITION carries the unsound loop rebind, so every call refuses.
+	mustRefuseWithParity(t, base+"\n(pickfn 0)", "redefined inside a conditional body")
+	mustRefuseWithParity(t, base+"\n(pickfn 2)", "redefined inside a conditional body")
+	// The interpreter is the source of truth the refusal falls back to: the
+	// zero-iteration case (11) is exactly what the compiled bake got wrong.
+	for _, tc := range []struct {
+		n    int
+		want string
+	}{{0, "[11]"}, {1, "[12]"}, {2, "[12]"}} {
+		a, _ := New()
+		got, err := a.RunInterp(fmt.Sprintf("%s\n(pickfn %d)", base, tc.n))
+		if err != nil || fmt.Sprint(got) != tc.want {
+			t.Errorf("(pickfn %d): interp=%v err=%v, want %s", tc.n, got, err, tc.want)
+		}
+	}
 }
 
 // NEGATIVE: break skips the rebinds after it exactly as the interpreter

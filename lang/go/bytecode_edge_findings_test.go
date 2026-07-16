@@ -233,3 +233,33 @@ func TestEdgeFindingArgsOverUnnamedParams(t *testing.T) {
 	mustCompileWithParity(t,
 		`def f fn [[n:Integer] [Integer] [if (n lte 0) [args.0] [f (n sub 1)]]] f 3`, "[0]")
 }
+
+// Conditional fn-shadow divergence — a user fn REDEFINED inside a branch/loop
+// body clobbers the enclosing overload in place (installDef's overlap-removal
+// drops the outer entry without growing the def depth, so the branch/loop
+// rollback cannot restore it). Compiled resolution then statically bakes the
+// conditional shadow while the interpreter keeps the outer fn when the branch
+// is not taken (or the loop runs zero times), so `if false [def g …] g 1`
+// returned the shadow's value compiled but the ORIGINAL interpreted. The fix
+// refuses to compile the redefinition (CondBodyDepth-gated) so the interpreter
+// owns the shape — slow, not wrong.
+func TestEdgeFindingConditionalFnShadowRefuses(t *testing.T) {
+	fnA := `fn [[x:Any] [Integer] [x add 100]]`
+	fnB := `fn [[x:Any] [Integer] [x add 1]]`
+	want := "redefined inside a conditional body"
+
+	// REFUSE: every conditionally-reached redefinition of an outer fn.
+	mustRefuseWithParity(t, `def g `+fnA+` if false [def g `+fnB+`] g 1`, want) // branch not taken
+	mustRefuseWithParity(t, `def c false def g `+fnA+` if c [def g `+fnB+`] g 1`, want)
+	mustRefuseWithParity(t, `def g `+fnA+` if true [def g `+fnB+`] g 1`, want) // taken, still unsound-at-shape
+	mustRefuseWithParity(t, `def g `+fnA+` for 2 [def g `+fnB+`] g 1`, want)   // loop body
+	mustRefuseWithParity(t, `def g `+fnA+` ([1 2] each [def g `+fnB+`]) g 1`, want)
+
+	// COMPILE (must NOT over-refuse): the redefinition is UNCONDITIONAL.
+	mustCompileWithParity(t, `def g `+fnA+` def g `+fnB+` g 1`, "[2]")      // top-level shadow
+	mustCompileWithParity(t, `def g `+fnA+` do [def g `+fnB+`] g 1`, "[2]") // do leaks unconditionally
+	// COMPILE: no outer overload to clobber — a NEW name defined in a branch.
+	mustCompileWithParity(t, `if true [def h `+fnB+` h 1]`, "[2]")
+	// COMPILE: the control fn with no shadow at all.
+	mustCompileWithParity(t, `def g `+fnA+` g 1`, "[101]")
+}
