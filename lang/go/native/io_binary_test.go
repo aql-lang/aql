@@ -59,13 +59,6 @@ func TestPositionedRead(t *testing.T) {
 	if b, ok := AsBytesValue(res[0]); !ok || string(b) != "ell" {
 		t.Errorf("positioned byte read = %v (ok=%v)", b, ok)
 	}
-	// binary read on a stream errors.
-	if err := runAQLError(t, r, []Value{
-		NewWord("read"), NewWord("stdin"),
-		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
-	}); err == nil {
-		t.Error("expected error on a binary stream read")
-	}
 	// binary read of an absent file errors.
 	if err := runAQLError(t, r, []Value{
 		NewWord("read"), NewString("ghost"),
@@ -112,11 +105,28 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	}); err == nil {
 		t.Error("expected error on a negative offset write")
 	}
-	if err := runAQLError(t, r, []Value{
-		NewWord("write"), NewWord("stdout"), NewBytesValue([]byte("x")),
-		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) }),
-	}); err == nil {
-		t.Error("expected error using offset with a stream")
+}
+
+// TestBinaryStreamGuards exercises the stream-refusal branches directly: a
+// bare stream WORD (stdin/stdout) can't be forward-collected as a word
+// argument, so these are driven through the handlers with stream atoms.
+func TestBinaryStreamGuards(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	// A binary/positioned read of a stream is refused.
+	if _, _, rerr := tryBinaryRead(r, pathStdin, "bytes", NewTypeLiteral(TMap)); rerr == nil {
+		t.Error("expected a binary read of a stream to error")
+	}
+	// A positioned (offset) write to a stream is refused.
+	args := []Value{
+		NewAtom("stdin"), NewBytesValue([]byte("x")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(0)) }),
+	}
+	if _, werr := doWriteBytesWord(args, r, true); werr == nil {
+		t.Error("expected an offset write to a stream to error")
 	}
 }
 
