@@ -127,21 +127,45 @@ func TestEdgeFindingForwardAcrossErrorResidual(t *testing.T) {
 
 // §2 — an applied member-fn boundary mid-expression. A parked fn read from a
 // container (`m.double`) auto-applies the moment a value lands on it; the
-// compiler instead lets a downstream word (`eq`) steal that value and applies
-// the stranded fn at the residual tail to the wrong operand (`… m.double 21 eq
-// 42` → `true` interp, `fn d(Integer) false` compiled). Refuse mid-expression;
-// the statement-tail apply and non-fn member reads keep compiling.
+// compiler previously let a downstream word (`eq`) steal that value, so the
+// shape refused ("member fn value auto-applies mid-expression"). GRADUATED
+// 2026-07-16 (REFUSAL-CLOSURE.0 §3, the arrival-apply model): the member-fn
+// read tag now carries the pinpointed member VALUE, and when the member's
+// single plain signature's arity of inert tokens follows the carrier,
+// tryMemberFnArrivalDispatch models the interpreter's auto-dispatch at the
+// ARRIVAL — a guarded mid-stream OpCallDynMethod whose runtime value (the
+// real container read's product) drives the apply — so `m.double 21` runs
+// BEFORE `eq`, exactly the interpreter's order. The paren-bounded variant
+// graduates with it (the model fires inside the paren).
 func TestEdgeFindingMemberFnApplyMidExpression(t *testing.T) {
-	mustRefuseWithParity(t,
-		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21 eq 42`,
-		"member fn value auto-applies mid-expression")
+	mustCompileWithParity(t,
+		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21 eq 42`, "[true]")
+	mustCompileWithParity(t,
+		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} (m.double 21) eq 42`, "[true]")
+	// The String-typed twin: the arrival window binds the member's own sig.
+	mustCompileWithParity(t,
+		`def s fn [[x:String] [String] [x]] def m {id: s/r} m.id 'v' eq 'v'`, "[true]")
 
-	// Negatives: the bare statement-tail apply lowers to the trailing apply;
-	// unapplied member reads stay data; a non-fn member read never auto-applies.
+	// Negatives: the bare statement-tail apply keeps compiling; unapplied
+	// member reads stay data; a non-fn member read never auto-applies.
 	mustCompileWithParity(t,
 		`def d fn [[n:Integer] [Integer] [n mul 2]] def m {double: d/r} m.double 21`, "[42]")
 	mustCompileWithParity(t, `def m {x: 5} m.x eq 5`, "[true]")
 	mustCompileWithParity(t, `def m {a: [1 2 3]} m.a get 0 eq 1`, "[true]")
+
+	// The model's decline fence: a MULTI-overload member cannot claim one
+	// arity window (runtime first-match not modelled) — the shape keeps a
+	// sound whole-program refusal with interpreter parity via the hatch-free
+	// Stage-J contract (RunCompiled refuses; RunInterp owns it).
+	multi := `def d fn [[n:Integer] [Integer] [n mul 2] [x:String] [Integer] [9]] def m {double: d/r} m.double 21 eq 42`
+	a, _ := New()
+	if prog, _, _, _ := a.CompileCheck(multi); prog != nil {
+		t.Errorf("multi-overload member arrival must keep refusing (sound fence)")
+	}
+	b, _ := New()
+	if got, errI := b.RunInterp(multi); errI != nil || fmt.Sprint(got) != "[true]" {
+		t.Errorf("multi-overload member interp = %v (err=%v), want [true]", got, errI)
+	}
 }
 
 // §3 — a paren-arrived value run as an else body. `(range 2 4)` reaches the
@@ -262,4 +286,58 @@ func TestEdgeFindingConditionalFnShadowRefuses(t *testing.T) {
 	mustCompileWithParity(t, `if true [def h `+fnB+` h 1]`, "[2]")
 	// COMPILE: the control fn with no shadow at all.
 	mustCompileWithParity(t, `def g `+fnA+` g 1`, "[101]")
+}
+
+// The §3 arrival-apply model's decline fences, each with engine parity: a
+// shape the model cannot claim keeps a SOUND outcome (a native compile of the
+// unaffected form, or a refusal whose interpreter fallback/Stage-J contract
+// holds). One table so every fence stays exercised (the cover-gate demands
+// each decline arm).
+func TestMemberFnArrivalDeclineFences(t *testing.T) {
+	cases := []struct {
+		name, src string
+		compiles  bool
+		want      string // interp result (fmt.Sprint)
+	}{
+		// A computed key cannot pinpoint the member: the tag rides bool-only,
+		// the model declines — and with no static fn evidence the shape
+		// compiles through the ordinary dynamic paths with parity.
+		{"computed key", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} def k (do [double/q]) (m get k) 21 eq 42`, true, "[true]"},
+		// A LIST member pinpoints by concrete index — the arrival model fires.
+		{"list member", `def d fn [[n:Integer][Integer][n mul 2]] def lst [d/r] (lst get 0) 21 eq 42`, true, "[true]"},
+		// Anonymous lambda member: no name for the model — sound refusal.
+		{"anonymous member", `def m {double: ([n:Integer] => [n mul 2])} m.double 21 eq 42`, false, "[true]"},
+		// 0-arg member: the read-guard's auto-fire class — sound refusal.
+		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/r} m.z eq 7`, false, "[true]"},
+		// Quoted-param member: the plain-value-args assumption fails.
+		{"quoted param member", `def q fn [[k:Atom/q][Integer][9]] def m {q: q/r} m.q foo eq 9`, false, "[foo 9 9]"},
+		// Two-return member: the single-result claim fails — sound refusal.
+		{"two-return member", `def t fn [[n:Integer][Integer Integer][n n]] def m {t: t/r} m.t 3 eq 3`, false, "[3 true]"},
+		// The member read ends the tape: no window — the fn stays data.
+		{"read at tape end", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} m.double`, true, "[fn d(Integer)]"},
+		// A word right after the carrier: the window is not inert.
+		{"non-inert window", `def d fn [[n:Integer][Integer][n mul 2]] def m {double: d/r} def x 21 m.double x eq 42`, false, "[true]"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, cerr := a.CompileCheck(c.src)
+			if cerr != nil {
+				t.Fatalf("CompileCheck: %v", cerr)
+			}
+			if (prog != nil) != c.compiles {
+				t.Errorf("compiles=%v want %v (reason=%q)", prog != nil, c.compiles, reason)
+			}
+			b, _ := New()
+			gotC, ran, _ := b.RunCompiled(c.src)
+			d2, _ := New()
+			gotI, errI := d2.RunInterp(c.src)
+			if errI != nil || fmt.Sprint(gotI) != c.want {
+				t.Errorf("interp = %v (err=%v), want %s", gotI, errI, c.want)
+			}
+			if ran && fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+				t.Errorf("parity: compiled=%v interp=%v", gotC, gotI)
+			}
+		})
+	}
 }

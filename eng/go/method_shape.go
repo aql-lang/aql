@@ -483,3 +483,110 @@ func tryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPo
 	}
 	return true
 }
+
+// tryMemberFnArrivalDispatch models the interpreter's ARRIVAL-APPLY of a
+// container-member fn read mid-expression (REFUSAL-CLOSURE.0 §3): the
+// interpreter applies a surfaced member fn (`m.double`) the moment its
+// argument window fills — `m.double 21 eq 42` runs `(m.double 21)` BEFORE
+// `eq` — while the recorder previously only saw word dispatches, so the
+// downstream word stole the operand and refuseStrandedMemberFn refused the
+// program. This hook fires where the check pass steps the member-read
+// carrier: when the read pinpointed the member (memberFnReadValue — a
+// concrete container + key) and the member's SINGLE plain signature's whole
+// arity of inert tokens sits immediately after the carrier, it models the
+// dispatch through the shared PendingMethodApply → RecordDynMethod seam
+// (the M2c machinery: a guarded mid-stream OpCallDynMethod whose runtime
+// value — the real map read's product — drives the apply, byte-identical to
+// the interpreter's forward auto-dispatch of the same window).
+//
+// The window claim is the ARITY, not the statement: the interpreter's parked
+// fn fires the moment its single signature's args arrive, so the token after
+// the window (a word, `eq`) never enters the collection. Everything this
+// hook declines keeps today's paths — the statement-tail Finalize apply for
+// shapes it never sees, refuseStrandedMemberFn's sound refusal for the rest:
+//   - COMPILE pass only (live recording; plain checks and suspended passes
+//     stay byte-identical);
+//   - a uniquely-resolved, NAMED, non-anonymous, non-macro, capture-free
+//     member with exactly ONE non-fallback signature of plain params (the
+//     model's carrierResults and the arity claim assume plain value args —
+//     multi-sig first-match and captures are follow-on scope);
+//   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
+//     full arity of evaluation-fixed tokens inside the statement.
+func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
+	r := e.registry
+	es, isEmit := r.Check.Recorder().(*EmitState)
+	if !isEmit || !es.active() || es.suspendedNow() {
+		return false
+	}
+	v := e.tape.At(valIdx)
+	if !v.Dynamic || v.Quoted || v.ID == "" {
+		return false
+	}
+	member, ok := es.memberFnReadValue(v.ID)
+	if !ok {
+		return false
+	}
+	fnDef, _ := member.Data.(FnDefInfo) // validated by memberFnReadValue
+	if fnDef.Name == "" || fnDef.Anonymous || fnDef.Macro || len(fnDef.Captured) != 0 {
+		return false
+	}
+	var sig *Signature
+	for i := range fnDef.Signatures {
+		s := &fnDef.Signatures[i]
+		if s.Fallback {
+			continue
+		}
+		if sig != nil {
+			return false // multi-overload: runtime first-match not modelled here
+		}
+		sig = s
+	}
+	if sig == nil || sig.TotalArgs() < 1 || len(sig.body()) == 0 {
+		return false
+	}
+	// Plain value params only (the model and the arity claim assume them).
+	// FnParam.Quote needs no separate probe: the body gate above proves an
+	// AQL impl, whose normalizeSig derives QuoteArgs FROM the params.
+	if len(sig.QuoteArgs) != 0 || len(sig.TypeArgs) != 0 ||
+		len(sig.NoEvalArgs) != 0 || len(sig.NoEvalMapArgs) != 0 ||
+		len(sig.RawParens) != 0 || len(sig.FormArgs) != 0 {
+		return false
+	}
+	if len(sig.Returns) != 1 {
+		return false // the arity/result claim assumes one downstream value
+	}
+	n := sig.TotalArgs()
+	if valIdx+n >= e.tape.Len() {
+		return false
+	}
+	args := make([]Value, n)
+	for i := 1; i <= n; i++ {
+		tv := e.tape.At(valIdx + i)
+		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) ||
+			!evalFixedWindowToken(tv) {
+			return false
+		}
+		args[i-1] = tv
+		args[i-1].Eval = false
+		args[i-1].Undefined = false
+	}
+	// Model the dispatch SUSPENDED (a plain user fn's ReturnsFn records its
+	// own CALL_USER through core_helpers, not the outcome seam — a live probe
+	// would leak a phantom event the lowering cannot seat), then record the
+	// guarded dyn-method event directly. No body unit is needed: the VM's
+	// callDynMethod applies the RUNTIME member value — a plain user fn takes
+	// the island path, byte-identical to the interpreter's auto-dispatch —
+	// and the member's declared return contract is engine-enforced at run
+	// time, so the modelled out carrier is sound.
+	resume := es.Suspend()
+	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
+	resume()
+	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes carrierResults' count for an AQL-bodied sig (buildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
+		return false
+	}
+	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) { //covergate:allow the fn carrier is event-produced (memberFnRead tags recorded reads only) and the window args are inert consts, so operand resolution cannot fail — unreachable without a recorder fault (§compiler)
+		return false
+	}
+	e.tape.Splice(valIdx, 1+n, outs...)
+	return true
+}

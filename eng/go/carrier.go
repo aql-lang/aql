@@ -1048,7 +1048,12 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// records — the tag rides the result ID onto the tape.
 	if len(out) == 1 && (isGetWord(word) || isGetrWord(word)) {
 		if es := r.Check.Recorder(); es.active() && readsFnMember(args) {
-			es.noteMemberFnRead(out[0].ID)
+			// The member VALUE rides the tag when the read pinpoints it (a
+			// concrete container + key) so the §3 arrival-apply model can
+			// claim its signature's window; a computed-key read tags alone
+			// and the model declines (the stranded-fn refusal stands).
+			member, _ := readFnMemberValue(args)
+			es.noteMemberFnRead(out[0].ID, member)
 		}
 	}
 	if !tryRecordMethodApply(r, word, args, out, pos) &&

@@ -273,14 +273,13 @@ func TestBodyLocalMultiOverloadPolyStored(t *testing.T) {
 	// the canonical signature_error — code parity, never a stored-mode raise
 	// of its own.
 	nomatch := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:[1 2]}`
-	gotC, compiled, errC, gotI, errI = runBothEngines(t, nomatch)
+	_, compiled, errC, _, errI = runBothEngines(t, nomatch)
 	if compiled {
 		t.Error("the no-match run must defer to the interpreter")
 	}
 	if codeOf(errC) != "signature_error" || codeOf(errC) != codeOf(errI) {
 		t.Errorf("no-match parity: compiled=[%s]%v interp=[%s]%v", codeOf(errC), errC, codeOf(errI), errI)
 	}
-	_ = gotI
 
 	// NEGATIVE (the freeze's soundness fence): another fn whose body rebinds
 	// the same local name can mutate the live table between the def and the

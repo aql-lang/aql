@@ -3871,6 +3871,15 @@ func (e *Engine) stepLiteral() error {
 		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
 			return nil
 		}
+		// Container-member fn arrival-apply (REFUSAL-CLOSURE.0 §3): a
+		// pinpointed member-fn read carrier whose single signature's arity
+		// of inert tokens follows — model the interpreter's auto-dispatch
+		// mid-expression (`m.double 21 eq 42` applies BEFORE `eq`). Declines
+		// leave the carrier to today's paths (the statement-tail Finalize
+		// apply, refuseStrandedMemberFn's sound refusal).
+		if e.registry.Check.IsActive() && e.tryMemberFnArrivalDispatch(valIdx) {
+			return nil
+		}
 		// General dynamic-fn-value dispatch (method_shape.go): a DYNAMIC carrier
 		// whose bound is Function-bearing (a typed-patrun `find` result) followed
 		// by an inert forward window collapses to one dynamic(Any) on the

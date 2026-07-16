@@ -87,17 +87,29 @@ applies the parked fn the moment `21` arrives (a stepLiteral
 ARRIVAL-loop event, not a word dispatch); the recorder only sees word
 dispatches, so the downstream `eq` stole the operand in the record.
 
-**Mechanism: record the arrival-apply as a dispatch event.** The check
-pass runs the same arrival loop — at the moment execFnDefLiteral fires
-the parked fn on an arrival, the recorder is IN SCOPE and knows the fn
-operand (provenance: the `m.double` dot-read event) and the arriving
-operand. Record it as a call event lowering to the EXISTING
-OpCallDynamicTrailing (fn value + trailing arg — the CALL_DYNAMIC
-family landed in P4). The statement-tail form already lowers this way;
-the mid-expression form differs only in WHERE the event is recorded
-(the arrival loop rather than statement close). Effort: M — the
-arrival-loop recording seam is new, the lowering is not. The negative
-(`m.x eq 5` — non-fn member reads) never enters the arrival-apply path.
+**Mechanism: record the arrival-apply as a dispatch event. LANDED
+2026-07-16** — via the M2c shaped-method chassis rather than the
+OpCallDynamicTrailing seam this bullet sketched. The memberFnRead tag
+now carries the pinpointed member VALUE (readFnMemberValue — a concrete
+container + concrete key), and tryMemberFnArrivalDispatch
+(method_shape.go), hooked beside tryShapedMethodDispatch where the
+check pass steps the member-read carrier, claims the member's SINGLE
+plain signature's arity of inert tokens (the ARRIVAL window — the
+parked fn fires the moment its args arrive, so the next word never
+enters the collection) and records a guarded mid-stream OpCallDynMethod
+whose runtime value — the real container read's product — drives the
+apply (the island path, byte-identical to the interpreter's forward
+auto-dispatch). Two implementation notes: the model runs SUSPENDED (a
+plain user fn's ReturnsFn records its own CALL_USER through
+core_helpers, not the outcome seam — a live probe leaks a phantom event
+the lowering cannot seat), and no body unit is compiled (callDynMethod
+islands any plain callable; the declared return contract is
+engine-enforced at run time, so the modelled out carrier is sound). The
+paren-bounded variant (`(m.double 21) eq 42`, previously "fn-value
+application bounded by a paren") graduated with it. Decline fences keep
+today's refusals: computed-key reads (no pinpointed member),
+multi-overload members (runtime first-match not modelled), captures,
+anonymous members, quote/no-eval params, non-inert windows.
 
 ## 4. Computed branch bodies — `if (n eq 0) [99] (range 2 4)`
 
@@ -263,9 +275,10 @@ Cheapest-first, each with the standard battery + fullcorpus
    capture-clone mint; see §7). §7c JIT re-stamp — **LANDED 2026-07-16**
    (the per-ref restampBox; see §7).
 5. §6b sig-table poly — **LANDED 2026-07-16** (UserPolyRef.Sigs stored
-   mode + the FnBinders dynamic-scope gate; see §6). §1 mark-bounded
-   drift island, §3 arrival-apply, §4 dyn-body arms, §7b multi-sig
-   stamps (M each) remain.
+   mode + the FnBinders dynamic-scope gate; see §6). §3 arrival-apply —
+   **LANDED 2026-07-16** (tryMemberFnArrivalDispatch on the M2c chassis;
+   see §3). §1 mark-bounded drift island, §4 dyn-body arms, §7b
+   multi-sig stamps (M each) remain.
 
 After all of §1–§7, the only remaining interpreter execution on any
 default path would be: check-mode (the compile front-end itself),

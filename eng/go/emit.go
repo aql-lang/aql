@@ -569,7 +569,7 @@ type EmitState struct {
 	// value and refuse a mid-expression auto-apply
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Over-approximate + append-only like
 	// fnRiskFields — a stale entry only ever over-refuses (sound).
-	memberFnReads map[string]bool
+	memberFnReads map[string]Value
 
 	// shapedReads mirrors CheckState.MethodShapes annotations (by read-out
 	// value ID) so the get-family read guards can exempt a read whose
@@ -4733,21 +4733,47 @@ func (es *EmitState) shapedReadOut(outs []Value) bool {
 }
 
 // noteMemberFnRead records that the value with id came from a get-family read
-// of a fn-valued container member. Lazily-inits the side table; nil-safe and
-// active-gated (a suspended / uncompilable pass records nothing).
-func (es *EmitState) noteMemberFnRead(id string) {
+// of a fn-valued container member, along with the MEMBER value itself when the
+// read resolved it uniquely (a concrete container + concrete key —
+// readFnMemberValue); a zero member records the tag alone (a computed-key scan
+// knows a fn member exists somewhere but not which). Lazily-inits the side
+// table; nil-safe and active-gated (a suspended / uncompilable pass records
+// nothing).
+func (es *EmitState) noteMemberFnRead(id string, member Value) {
 	if !es.active() || id == "" {
 		return
 	}
 	if es.memberFnReads == nil {
-		es.memberFnReads = map[string]bool{}
+		es.memberFnReads = map[string]Value{}
 	}
-	es.memberFnReads[id] = true
+	es.memberFnReads[id] = member
 }
 
 // memberFnRead reports whether id was tagged by noteMemberFnRead.
 func (es *EmitState) memberFnRead(id string) bool {
-	return es != nil && es.memberFnReads != nil && es.memberFnReads[id]
+	if es == nil || es.memberFnReads == nil {
+		return false
+	}
+	_, ok := es.memberFnReads[id]
+	return ok
+}
+
+// memberFnReadValue returns the uniquely-resolved member FN value tagged for
+// id (REFUSAL-CLOSURE.0 §3 — the arrival-apply model needs the member's
+// signature to claim its window). ok=false for an untagged id or a tag whose
+// read could not pinpoint the member.
+func (es *EmitState) memberFnReadValue(id string) (Value, bool) {
+	if es == nil || es.memberFnReads == nil {
+		return Value{}, false
+	}
+	m, ok := es.memberFnReads[id]
+	if !ok {
+		return Value{}, false
+	}
+	if _, isFn := m.Data.(FnDefInfo); !isFn {
+		return Value{}, false
+	}
+	return m, true
 }
 
 // readsFnMember reports whether a get-family dispatch surfaces a FUNCTION-valued
@@ -4813,6 +4839,46 @@ func readsFnMember(args []Value) bool {
 		}
 	}
 	return false
+}
+
+// readFnMemberValue is readsFnMember's value-returning sibling (REFUSAL-
+// CLOSURE.0 §3): when the get-family dispatch resolves a UNIQUE fn member —
+// a concrete container with a concrete key/index — it returns that member so
+// the arrival-apply model can claim its signature's window. A computed-key
+// scan (readsFnMember's every-member walk) cannot pinpoint one member, so it
+// reports ok=false and the read carries the bool tag alone (the model then
+// declines and today's refusal paths stand).
+func readFnMemberValue(args []Value) (Value, bool) {
+	isFn := func(v Value) bool { _, ok := v.Data.(FnDefInfo); return ok }
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch d := a.Data.(type) {
+		case ListPayload:
+			if idx, ok := concreteIntKey(args); ok {
+				if idx >= 0 && idx < int64(len(d.Elems)) && isFn(d.Elems[idx]) {
+					return d.Elems[idx], true
+				}
+			}
+		case MapPayload:
+			if d.M == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := d.M.Get(key); hit && isFn(mv) {
+					return mv, true
+				}
+			}
+		}
+		// Class-instance fields are deliberately NOT pinpointed: the
+		// instance-field fn-read family has a PRE-EXISTING check-model gap
+		// (the read models the fn as inert data where the interpreter
+		// auto-applies it — `def o (make C {f: d/r}) o.f 21 eq 42` diverges
+		// on main), so the arrival model must not build on that read path
+		// until the gap is fixed. List and map members are the §3 class.
+	}
+	return Value{}, false
 }
 
 func containerFnAutoDispatchRisk(args []Value) bool {
