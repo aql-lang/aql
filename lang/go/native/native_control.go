@@ -1100,8 +1100,17 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		}
 	}
 	if lowerable {
+		// The STATIC region size (trips x per-iteration net) arms the S5
+		// first-value def bind (SplitLoopRegionBind): known only when all
+		// three bounds are concrete and the loop runs at least once.
+		regionN := 0
+		if staticBounds && len(stk) > 0 {
+			if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 1 {
+				regionN = int(n) * len(stk)
+			}
+		}
 		frag := es.TakeFragment()
-		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, args[countArg].Pos())
+		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, regionN, args[countArg].Pos())
 	}
 	// A body that nets ZERO values per iteration (every pass drops / is pure
 	// side effect) leaves the stack untouched at run time — BOTH engines net

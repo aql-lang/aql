@@ -439,10 +439,11 @@ func TestClassifyFrontierKnownInputs(t *testing.T) {
 		// forward barrier → check stage (`not` cannot feed off `dup`).
 		{"0 not dup", classCheck, "check", false},
 		// Checks clean but the compiler refuses it (an off-corpus shape — a
-		// `def` consuming a variadic loop region, REFUSAL-CLOSURE.0 §5;
-		// every corpus refusal has graduated, and the former flex-cell-Reach
-		// shape graduated 2026-07-16 via the §2 dynamic-operand rematch).
-		{"def xs (for 3 [1]) xs", classCompile, "consumes loop results", false},
+		// `def` consuming a variadic loop region with a DYNAMIC count; the
+		// S5 split needs the static region size, so this stays the stable
+		// refusing fixture now that the statically-counted sibling
+		// graduated 2026-07-17 via the S5 first-value split).
+		{`def m {n: 3} def xs (for (m get "n") [1]) xs`, classCompile, "consumes loop results", false},
 		// Checks clean AND compiles, yet errors at run.
 		{"0 true not lt", classRuntime, "incomparable", true},
 		// A genuinely passing program reaches the runtime stage and is

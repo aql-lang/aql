@@ -153,6 +153,11 @@ type eventFlags struct {
 	// RecordLoop), mirroring lowerArms' merge-variadic accounting; over-marking is
 	// sound (refuses more), under-marking is not.
 	variadicResult bool
+	// regionN is the loop region's STATIC size (trips x per-iteration net)
+	// when every bound is a concrete integer and the loop runs at least one
+	// iteration — the gate for the splice-at-depth def bind
+	// (REFUSAL-CLOSURE S5). 0 = not statically counted.
+	regionN int
 }
 
 type emitCall struct {
@@ -407,6 +412,10 @@ type emitEvent struct {
 // otherwise the event lowers to nothing.
 type emitDynBind struct {
 	name string
+	// spliceDepth >= 0 marks the S5 first-value loop bind: the bound value
+	// sits spliceDepth entries below the region top at bind time, and the
+	// lowering emits the splice-at-depth OpBindGlobal (-1 = a normal bind).
+	spliceDepth int
 	// src carries a LOCAL operand when the bound value is a live frame slot
 	// (a param re-bound by `def` — resolved via the unit's localByID at
 	// record time, a pure read). An EVENT-produced value rides srcSeq as a
@@ -489,6 +498,13 @@ type EmitState struct {
 	// lower; Reason names the first offender.
 	Compilable bool
 	Reason     string
+
+	// pendingLoopBind carries a SplitLoopRegionBind verdict to the
+	// RecordDynBind of the same installAndRecordDef call (S5).
+	pendingLoopBind *pendingLoopBind
+	// loopSplitBinds names the S5 first-value loop binds, so dynScopeRescue
+	// admits their top-level reads.
+	loopSplitBinds map[string]bool
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -1328,6 +1344,49 @@ func (es *EmitState) MarkValueDef(v Value) {
 		f.valueDef = true
 		es.eventInfo[pr.seq] = f
 	}
+}
+
+// pendingLoopBind carries a SplitLoopRegionBind verdict to the immediately
+// following RecordDynBind (both fire inside one installAndRecordDef call —
+// the def word's handler): the bound name takes the loop's FIRST value via
+// the splice-at-depth OpBindGlobal (REFUSAL-CLOSURE S5).
+type pendingLoopBind struct {
+	seq   int // the producing loop event
+	depth int // values above the first at bind time = regionN-1
+}
+
+// SplitLoopRegionBind implements the check-mode half of REFUSAL-CLOSURE S5:
+// a TOP-LEVEL def whose value is a STATICALLY-COUNTED variadic loop region
+// binds the region's FIRST value (the interpreter's pending-forward collects
+// the first-arrived value; the rest spill as residual — probe-pinned:
+// `def xs (for 3 [1]) xs` yields [1 1 1] with xs=1). Returns the ELEMENT
+// carrier the binding should take; the caller keeps the region carrier
+// itself on the check stack as the N-1 REST residual (still produced by the
+// loop event, so the existing variadic disposition owns it). Declines
+// (ok=false) outside a recording pass, outside the root scope, or for a
+// region without a static count — those shapes keep today's refusal.
+func (es *EmitState) SplitLoopRegionBind(v Value) (Value, bool) {
+	if !es.active() || es.suspendedNow() {
+		return Value{}, false
+	}
+	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 {
+		return Value{}, false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok || pr.idx != 0 {
+		return Value{}, false
+	}
+	f := es.eventInfo[pr.seq]
+	if !f.variadicResult || f.regionN < 1 {
+		return Value{}, false
+	}
+	elemType := TAny
+	if ct, isChild := v.Data.(ChildTypeInfo); isChild && ct.Child.Parent != nil {
+		elemType = ct.Child.Parent
+	}
+	elem := NewCarrier(elemType)
+	es.pendingLoopBind = &pendingLoopBind{seq: pr.seq, depth: f.regionN - 1}
+	return elem, true
 }
 
 // resolveOperand maps a dispatch value to its provenance: a prior
@@ -3435,7 +3494,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
 // dispatch's result carrier — registered so the dispatch isn't
 // re-recorded, and marked VARIADIC at lowering, so only the program
 // residual may absorb the accumulation.
-func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, pos SrcPos) {
+func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos) {
 	if !es.active() {
 		return
 	}
@@ -3540,8 +3599,11 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	if lp.hasBodyOut {
 		// A value-producing loop leaves a runtime-variable count (one per-iteration
 		// value, N unknown at compile time) — variadic, like lowerLoop marks
-		// lw.variadic. Only the program residual absorbs it.
+		// lw.variadic. Only the program residual absorbs it — except the S5
+		// first-value def bind, whose splice-at-depth lowering needs the exact
+		// STATIC region size the caller computed (0 when not static).
 		f.variadicResult = true
+		f.regionN = regionN
 	} else {
 		// A SIDE-EFFECT loop (body nets 0 per iteration — `for n [acc set …]`)
 		// leaves ZERO runtime values, deterministically: a zero-output event, NOT a
@@ -4719,9 +4781,24 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
 		root, depth = true, es.reg.Defs.Depth(name)
 	}
+	spliceDepth := -1
+	if plb := es.pendingLoopBind; plb != nil {
+		// The S5 first-value bind (SplitLoopRegionBind latched it in the same
+		// installAndRecordDef call): the bound value is the loop region's
+		// first value, live at a static depth inside the region — no operand
+		// home, the splice-at-depth lowering owns it. Track the name so
+		// dynScopeRescue admits its TOP-LEVEL reads (the runtime binding is
+		// installed by the splice bind before any read executes).
+		srcSeq, spliceDepth = plb.seq, plb.depth
+		es.pendingLoopBind = nil
+		if es.loopSplitBinds == nil {
+			es.loopSplitBinds = map[string]bool{}
+		}
+		es.loopSplitBinds[name] = true
+	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
-		root: root, depth: depth,
+		root: root, depth: depth, spliceDepth: spliceDepth,
 	}})
 }
 
@@ -4735,7 +4812,7 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 // reading fn, so a plain typo still refuses. The name joins dynScopeNames so
 // Finalize installs the OpBindDynScope twin in every binding unit.
 func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
-	if es.reg == nil || len(es.units) <= 1 {
+	if es.reg == nil {
 		return emitOperand{}, false
 	}
 	name := v.DynFrom()
@@ -4743,6 +4820,19 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 		name = es.defReads[v.ID]
 	}
 	if name == "" {
+		return emitOperand{}, false
+	}
+	if len(es.units) <= 1 {
+		// Top level: only an S5 first-value loop bind reads through the
+		// registry here (its value has no event/local home by construction;
+		// the splice bind installed the runtime binding before any read).
+		if es.loopSplitBinds[name] {
+			if es.dynScopeNames == nil {
+				es.dynScopeNames = map[string]bool{}
+			}
+			es.dynScopeNames[name] = true
+			return dynScopeOperand(es.intern(NewString(name))), true
+		}
 		return emitOperand{}, false
 	}
 	c := es.reg.Check
@@ -6719,6 +6809,13 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 		}
 		lit, okLit := es.materialise(rv)
 		if !okLit {
+			// An S5 first-value loop bind's READ has no event/local home by
+			// construction — it re-resolves the live registry binding the
+			// splice bind installed (dynScopeRescue's top-level arm).
+			if op, okDyn := es.dynScopeRescue(rv); okDyn {
+				ops = append(ops, op)
+				continue
+			}
 			return nil, "residual value of unknown provenance"
 		}
 		if !isInertConst(lit) {

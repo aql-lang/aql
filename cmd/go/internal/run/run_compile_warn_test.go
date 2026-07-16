@@ -12,13 +12,13 @@ import (
 // the interpreter (-no-compile) mode, print no warning.
 func TestExecuteCompileRefusalWarning(t *testing.T) {
 	// A program the compiler refuses to lower (an off-corpus shape — a `def`
-	// consuming a variadic loop region, REFUSAL-CLOSURE.0 §5, blocked on a
-	// check-mode change so it is the stable refusing fixture; every corpus
-	// refusal has graduated, and the former flex-cell-Reach shape graduated
-	// 2026-07-16 via the §2 dynamic-operand rematch). The interpreter runs
-	// it fine, so the warning is the only stderr trace. -no-check skips the
-	// pre-flight so the run reaches the compile-try fallback.
-	refuses := "def xs (for 3 [1]) xs"
+	// consuming a variadic loop region with a DYNAMIC count; the S5 split
+	// needs the static region size, so this is the stable refusing fixture
+	// now that the statically-counted sibling graduated 2026-07-17). The
+	// interpreter runs it fine, so the warning is the only stderr trace.
+	// -no-check skips the pre-flight so the run reaches the compile-try
+	// fallback.
+	refuses := `def m {n: 3} def xs (for (m get "n") [1]) xs`
 	const wantWarn = "warning: bytecode compilation refused"
 
 	var stdout, stderr strings.Builder

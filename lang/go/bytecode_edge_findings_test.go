@@ -483,3 +483,61 @@ func TestEdgeFindingCondFragmentRedefCompiles(t *testing.T) {
 		`def p 5 def g `+fnA+` if [p gt 3] [def g `+fnB+` 0] [9] g 1`,
 		"redefined inside a conditional body")
 }
+
+// §5 (REFUSAL-CLOSURE, landed 2026-07-17) — a def of a STATICALLY-COUNTED
+// variadic loop region binds the region's FIRST value and spills the rest,
+// exactly the interpreter's pending-forward collection (probe-pinned: the
+// first-ARRIVED value satisfies the forward; `def xs (for 2 [7 8]) xs` binds
+// 7). Check-mode half: SplitLoopRegionBind swaps the def's bound value for
+// an ELEMENT carrier and returns the region carrier to the check stack as
+// the N-1 REST residual (still the loop event's variadic out, owned by the
+// existing disposition). Lowering half: the splice-at-depth OpBindGlobal
+// binds stack[top-(regionN-1)] and splices it out; reads re-resolve the
+// live binding via OpLookupDynScope (the top-level dynScopeRescue arm).
+func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
+	// The canonical fixture family: bind + spill + read.
+	mustCompileWithParity(t, `def xs (for 3 [1]) xs`, "[1 1 1]")
+	mustCompileWithParity(t, `def xs (for 3 [1])`, "[1 1]")
+	// Distinct per-iteration values: xs = the FIRST value, spill order kept.
+	mustCompileWithParity(t, `def i0 0 def xs (for 3 [def i0 (add i0 1) i0]) xs`, "[2 3 1]")
+	// Multi-value body: region = trips x body-net; xs = the deepest value.
+	mustCompileWithParity(t, `def xs (for 2 [7 8]) xs`, "[8 7 8 7]")
+	// The read feeds a typed downstream dispatch (element typing, not the
+	// region type — the silent-miscompile risk the doc's blocker named).
+	mustCompileWithParity(t, `def xs (for 3 [1]) xs add 1`, "[1 1 2]")
+	// Two split binds stack their regions; each bind's depth spans only its
+	// own region (the second loop sits above the first's rest).
+	mustCompileWithParity(t, `def a (for 2 [1]) def b (for 2 [5]) a add b`, "[1 5 6]")
+	// Double read re-resolves the live binding.
+	mustCompileWithParity(t, `def xs (for 3 [1]) xs xs`, "[1 1 1 1]")
+	// A const-resolved count is static (n folds to 3).
+	mustCompileWithParity(t, `def n 3 def xs (for n [1]) xs`, "[1 1 1]")
+	// Range form.
+	mustCompileWithParity(t, `def xs (for [1 4] [i]) xs`, "[2 3 1]")
+
+	// Decline fences — each keeps the sound refusal with interpreter parity.
+	// A DYNAMIC count: the split needs the static region size.
+	mustRefuseWithParity(t,
+		`def m {n: 3} def xs (for (m get "n") [1]) xs`,
+		"consumes loop results")
+
+	// Zero-trip loops keep their existing behavior: the region is pruned,
+	// the def forward-collects the NEXT token (compiles), and a read with
+	// no next value is the interpreter's undefined_word (check refusal).
+	mustCompileWithParity(t, `def xs (for 0 [1]) 99`, "[]")
+
+	// The read inside a branch arm (the former TestEmitRefusals row): xs is
+	// the ELEMENT (Integer 0 here), so `.0` over it raises — byte-identical
+	// signature_error in both engines (error parity, not a value row).
+	{
+		src := `def xs (for 3 [i]) if (xs.0 gt 0) [xs] [[9]]`
+		a, _ := New()
+		_, iErr := a.RunInterp(src)
+		b, _ := New()
+		_, _, cErr := b.RunCompiled(src)
+		if iErr == nil || cErr == nil || codeOf(iErr) != codeOf(cErr) {
+			t.Errorf("%q: raise parity — compiled=[%s]%v interp=[%s]%v",
+				src, codeOf(cErr), cErr, codeOf(iErr), iErr)
+		}
+	}
+}

@@ -24,12 +24,12 @@ func TestRunCompiledReason(t *testing.T) {
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
 	// the first offending construct. Every CORPUS refusal has graduated, so
 	// the pin rides an off-corpus shape: a `def` consuming a variadic loop
-	// region (REFUSAL-CLOSURE.0 §5, blocked on a check-mode change) refuses
-	// naming `xs` and falls back to the interpreter, which runs it fine.
-	// (The former flex-cell-Reach fixture graduated 2026-07-16 — the §2
-	// dynamic-operand rematch compiles it to DISPATCH_REMATCH.)
+	// region with a DYNAMIC count (the S5 split needs the static region
+	// size; a runtime-only count keeps the refusal) — it falls back to the
+	// interpreter, which runs it fine. (The statically-counted fixture
+	// graduated 2026-07-17 — the S5 first-value split compiles it.)
 	t.Run("refusal names the offender", func(t *testing.T) {
-		const src = `def xs (for 3 [1]) xs`
+		const src = `def m {n: 3} def xs (for (m get "n") [1]) xs`
 		a, _ := New()
 		_, ran, reason, err := a.RunCompiledReason(src)
 		if ran {
