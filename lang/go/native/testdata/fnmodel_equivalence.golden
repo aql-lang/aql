@@ -799,16 +799,22 @@ WORD word
 WORD wrap
   [Any Ideal/Service] barrier=2
 WORD write
+  [Scalar/Atom/StreamKind Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Micron/Pathon Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/String Any Node/Map] barrier=3 returns=[Scalar/String]
+  [Scalar/Atom/StreamKind Scalar/Bytes] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any] barrier=2 returns=[Scalar/Atom/StreamKind]
+  [Scalar/Micron/Pathon Scalar/Bytes] barrier=2 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any] barrier=2 returns=[Scalar/Micron/Pathon]
+  [Scalar/String Scalar/Bytes] barrier=2 returns=[Scalar/String]
   [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
   [Scalar/String Any] barrier=2 returns=[Scalar/String]
 WORD xml-attr

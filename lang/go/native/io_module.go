@@ -88,6 +88,14 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 			// so the result can be threaded straight into read.
 			Name: "write",
 			Signatures: []Signature{
+				// Binary writes: a Bytes payload is written verbatim (more
+				// specific than the TAny/TString sigs, so it wins dispatch).
+				{Args: []*Type{TPathon, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TString, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{TString, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TString}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, BarrierPos: -1},

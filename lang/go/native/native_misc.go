@@ -272,6 +272,14 @@ func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	enc, format, _, nl, fmtExplicit, parserOpts := parseFileOpts(args[1])
+	// Binary ({enc:'bytes'}) and positioned ({offset}/{length}) reads bypass
+	// format decoding; anything else falls through to the normal decode path.
+	if res, handled, err := tryBinaryRead(r, path, enc, args[1]); handled {
+		if err != nil {
+			return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+		}
+		return res, nil
+	}
 	if !fmtExplicit {
 		if extFmt := formatFromExt(r, path); extFmt != "" {
 			format = extFmt

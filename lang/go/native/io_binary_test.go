@@ -1,0 +1,198 @@
+package native
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/aql-lang/aql/lang/go/capabilities"
+)
+
+func TestBinaryWriteRead(t *testing.T) {
+	r, mem := ioFSReg(t)
+	// write raw bytes, then read them back as Bytes.
+	res := runAQL(t, r, []Value{NewWord("write"), NewString("b.bin"), NewBytesValue([]byte{0, 1, 2, 255})})
+	if res[0].String() != "'b.bin'" {
+		t.Errorf("binary write returned %v", res[0])
+	}
+	if got, _ := mem.ReadFile("b.bin"); !bytes.Equal(got, []byte{0, 1, 2, 255}) {
+		t.Errorf("stored bytes = %v", got)
+	}
+	res = runAQL(t, r, []Value{
+		NewWord("read"), NewString("b.bin"),
+		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
+	})
+	if b, ok := AsBytesValue(res[0]); !ok || !bytes.Equal(b, []byte{0, 1, 2, 255}) {
+		t.Errorf("read bytes = %v (ok=%v)", b, ok)
+	}
+	// {enc:'binary'} is an alias for bytes.
+	res = runAQL(t, r, []Value{
+		NewWord("read"), NewString("b.bin"),
+		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("binary")) }),
+	})
+	if _, ok := AsBytesValue(res[0]); !ok {
+		t.Errorf("read {enc:binary} did not return Bytes: %v", res[0])
+	}
+}
+
+func TestPositionedRead(t *testing.T) {
+	r, mem := ioFSReg(t)
+	if err := mem.WriteFile("h.txt", []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// positioned text slice.
+	res := runAQL(t, r, []Value{
+		NewWord("read"), NewString("h.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)); om.Set("length", NewInteger(3)) }),
+	})
+	if res[0].String() != "'ell'" {
+		t.Errorf("positioned read = %v, want 'ell'", res[0])
+	}
+	// positioned byte slice.
+	res = runAQL(t, r, []Value{
+		NewWord("read"), NewString("h.txt"),
+		wrapMap(func(om *OrderedMap) {
+			om.Set("enc", NewString("bytes"))
+			om.Set("offset", NewInteger(1))
+			om.Set("length", NewInteger(3))
+		}),
+	})
+	if b, ok := AsBytesValue(res[0]); !ok || string(b) != "ell" {
+		t.Errorf("positioned byte read = %v (ok=%v)", b, ok)
+	}
+	// binary read on a stream errors.
+	if err := runAQLError(t, r, []Value{
+		NewWord("read"), NewWord("stdin"),
+		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
+	}); err == nil {
+		t.Error("expected error on a binary stream read")
+	}
+	// binary read of an absent file errors.
+	if err := runAQLError(t, r, []Value{
+		NewWord("read"), NewString("ghost"),
+		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
+	}); err == nil {
+		t.Error("expected error on a binary read of an absent file")
+	}
+}
+
+func TestBinaryWriteAppendAndOffset(t *testing.T) {
+	r, mem := ioFSReg(t)
+	// append.
+	runAQL(t, r, []Value{NewWord("write"), NewString("a.bin"), NewBytesValue([]byte("ab"))})
+	runAQL(t, r, []Value{
+		NewWord("write"), NewString("a.bin"), NewBytesValue([]byte("cd")),
+		wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("append")) }),
+	})
+	if got, _ := mem.ReadFile("a.bin"); string(got) != "abcd" {
+		t.Errorf("append = %q, want abcd", got)
+	}
+	// positioned splice into an existing file.
+	if err := mem.WriteFile("p.bin", []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAQL(t, r, []Value{
+		NewWord("write"), NewString("p.bin"), NewBytesValue([]byte("XY")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) }),
+	})
+	if got, _ := mem.ReadFile("p.bin"); string(got) != "hXYlo" {
+		t.Errorf("offset write = %q, want hXYlo", got)
+	}
+	// positioned write past the end grows the file with zero bytes.
+	runAQL(t, r, []Value{
+		NewWord("write"), NewString("grow.bin"), NewBytesValue([]byte("Z")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(3)) }),
+	})
+	if got, _ := mem.ReadFile("grow.bin"); !bytes.Equal(got, []byte{0, 0, 0, 'Z'}) {
+		t.Errorf("grow write = %v", got)
+	}
+	// negative offset and stream offset are rejected.
+	if err := runAQLError(t, r, []Value{
+		NewWord("write"), NewString("p.bin"), NewBytesValue([]byte("x")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(-1)) }),
+	}); err == nil {
+		t.Error("expected error on a negative offset write")
+	}
+	if err := runAQLError(t, r, []Value{
+		NewWord("write"), NewWord("stdout"), NewBytesValue([]byte("x")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) }),
+	}); err == nil {
+		t.Error("expected error using offset with a stream")
+	}
+}
+
+func TestBinaryWriteToStdout(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	var buf bytes.Buffer
+	r.Output = &buf
+	// A stdout atom routes the raw bytes to r.Output via doWrite.
+	if _, err := doWriteBytesWord([]Value{NewAtom("stdout"), NewBytesValue([]byte("hi!"))}, r, false); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "hi!" {
+		t.Errorf("stdout bytes = %q, want hi!", buf.String())
+	}
+}
+
+func TestBinaryWriteErrorBranches(t *testing.T) {
+	newReg := func(f *failAtOps) *Registry {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.MemFileOps = capabilities.NewMem()
+		SetHostFileOps(r, f)
+		return r
+	}
+	// doWrite (non-offset) WriteFile error.
+	r := newReg(&failAtOps{failWriteFile: "f.bin"})
+	if _, err := doWriteBytesWord([]Value{NewString("f.bin"), NewBytesValue([]byte("x"))}, r, false); err == nil {
+		t.Error("expected WriteFile error on a binary write")
+	}
+	// writeAtOffset WriteFile error.
+	r = newReg(&failAtOps{failWriteFile: "f.bin"})
+	args := []Value{
+		NewString("f.bin"), NewBytesValue([]byte("x")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(0)) }),
+	}
+	if _, err := doWriteBytesWord(args, r, true); err == nil {
+		t.Error("expected WriteFile error on a positioned write")
+	}
+}
+
+func TestSliceBytes(t *testing.T) {
+	data := []byte("hello")
+	cases := []struct {
+		off, ln       int64
+		hasOff, hasLn bool
+		want          string
+	}{
+		{0, 0, false, false, "hello"}, // whole
+		{1, 3, true, true, "ell"},     // middle
+		{-1, 2, true, true, "he"},     // negative offset clamps to 0
+		{10, 0, true, false, ""},      // offset past end clamps
+		{1, 100, true, true, "ello"},  // length past end clamps
+		{2, -5, true, true, ""},       // negative length → empty
+	}
+	for _, c := range cases {
+		if got := sliceBytes(data, c.off, c.ln, c.hasOff, c.hasLn); string(got) != c.want {
+			t.Errorf("sliceBytes(%d,%d,%v,%v) = %q, want %q", c.off, c.ln, c.hasOff, c.hasLn, got, c.want)
+		}
+	}
+}
+
+func TestMapStrOpt(t *testing.T) {
+	if _, ok := mapStrOpt(NewTypeLiteral(TMap), "mode"); ok {
+		t.Error("type-literal opts should report absent")
+	}
+	if _, ok := mapStrOpt(NewOptionsType(NewOrderedMap()), "mode"); ok {
+		t.Error("options-typed opts should report absent")
+	}
+	opts := wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("append")) })
+	if v, ok := mapStrOpt(opts, "mode"); !ok || v != "append" {
+		t.Errorf("mapStrOpt = %q %v, want append true", v, ok)
+	}
+}
