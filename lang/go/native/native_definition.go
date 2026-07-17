@@ -254,6 +254,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	if elem, split := r.Check.Recorder().SplitLoopRegionBind(name, value); split {
 		outs = []Value{value}
 		value = elem
+	} else if elem, split := r.Check.Recorder().SplitEventRegionBind(name, value); split {
+		// The S9.1 static-region twin: a def binding the FIRST result of a
+		// fallible do-catch's multi-value region. The event's rest results
+		// stay on the check stack by construction (only idx 0 binds), so no
+		// outs push — the splice lowering removes the bound value at depth.
+		value = elem
 	}
 	InstallDef(r, name, value, stackOnly...)
 	r.Check.RecordDef(name, pos)

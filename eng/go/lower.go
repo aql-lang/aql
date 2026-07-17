@@ -197,6 +197,27 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 			lw.emit(OpBindGlobal, gi, d.pos)
 			lw.note()
 			return ""
+		case d.srcSeq >= 0 && !lw.variadic[d.srcSeq] && d.spliceDepth >= 0 && needGlobal:
+			// The S9.1 STATIC-region first-value bind (SplitEventRegionBind):
+			// the bound value is idx 0 of a multi-out event — stack-deepest of
+			// the region, at the STATIC depth nout-1 below its top. Same
+			// splice bind as the S5 arm, plus the SIM entry for (seq, 0) is
+			// removed: unlike the variadic region (one sim entry standing for
+			// the whole region), the static region's results each own a slot
+			// and the spliced value's slot is gone at run time.
+			gi := len(lw.p.GlobalBinds)
+			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
+				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
+			})
+			lw.emit(OpBindGlobal, gi, d.pos)
+			for i := len(lw.vm) - 1; i >= 0; i-- {
+				if lw.vm[i].seq == d.srcSeq && lw.vm[i].idx == 0 {
+					lw.vm = append(lw.vm[:i], lw.vm[i+1:]...)
+					break
+				}
+			}
+			lw.note()
+			return ""
 		case d.srcSeq >= 0 && lw.variadic[d.srcSeq]:
 			// A def of a VARIADIC producer (a loop collect) has no single
 			// value to bind — the same Stage-2 boundary every other consumer

@@ -168,6 +168,12 @@ type eventFlags struct {
 	// was reassigned to this event, so a re-read of the payload after the
 	// spread must decline (resolveResidualOperands).
 	spliceDyn bool
+	// splitBound marks a variadic loop region whose FIRST value an S5 split
+	// bind consumed (SplitLoopRegionBind → RecordDynBind): the remaining
+	// regionN-1 values are the statically-counted rest. Inside a LOOP BODY
+	// (S9.2a) the rest is the iteration's residual, so RecordLoop admits the
+	// region as a multi-value body result instead of refusing the variadic.
+	splitBound bool
 }
 
 type emitCall struct {
@@ -1385,13 +1391,14 @@ func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
 		return Value{}, false
 	}
 	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
-		es.reg.Check.NestedBodyDepth != 0 {
-		// NestedBodyDepth: a def inside a BRANCH/LOOP/QUOTATION body analysis
-		// (AnalyseLoopBody / RunCarrierBodyWithDefs) is not the top-level
-		// straight-line bind the splice-at-depth lowering models — the
-		// fragment context owns its own depth accounting (probe-pinned: the
-		// loop-carried `for 2 [ def acc (for 2 [5]) acc ]` miscompiled
-		// [5 0 5 0] vs [5 5 5 5] without this gate).
+		es.reg.Check.NestedBodyDepth != es.reg.Check.LoopBodyDepth {
+		// The split lowers at the top level (0 == 0) and inside LOOP bodies
+		// (S9.2a — NestedBodyDepth == LoopBodyDepth means every enclosing
+		// body analysis is an unconditional-per-iteration loop body). A
+		// BRANCH/QUOTATION body keeps the decline: a conditionally-reached
+		// split would leak the analysis-only binding (PR #278 review P1-b),
+		// and its fragment owns different depth accounting (probe-pinned:
+		// the pre-gate widening miscompiled [5 0 5 0] vs [5 5 5 5]).
 		return Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]
@@ -1417,6 +1424,65 @@ func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
 	elem := NewCarrier(f.firstElemType)
 	es.pendingLoopBind = &pendingLoopBind{seq: pr.seq, depth: f.regionN - 1}
 	return elem, true
+}
+
+// SplitEventRegionBind is SplitLoopRegionBind's sibling for a def binding the
+// FIRST (stack-deepest, idx-0) result of a STATIC multi-out event — the
+// fallible do-catch region (`def msg (do [(1 add 2) "no-raise"] error [dot
+// code]) msg`, REFUSAL-CLOSURE S9.1 rows 1-2): the interpreter's pending
+// forward binds the first-arrived value and the rest spill. The bind takes a
+// fresh element carrier (so reads rescue via loopSplitBinds -> OpLookupDynScope
+// instead of resolving the spliced-out event slot); the splice-at-depth
+// lowering removes the runtime value AND its sim entry. Only the SUCCESS path
+// executes the splice — the compiled catch path defers to the interpreter
+// wholesale (the raise unwinds via vmDefer), so the static success count is
+// the only count the lowering needs. TOP LEVEL only (the loop-body
+// composition is S9.2a's separate machinery).
+func (es *EmitState) SplitEventRegionBind(name string, v Value) (Value, bool) {
+	if !es.active() || es.suspendedNow() {
+		return Value{}, false
+	}
+	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
+		es.reg.Check.NestedBodyDepth != 0 {
+		return Value{}, false
+	}
+	if name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+		return Value{}, false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok || pr.idx != 0 {
+		return Value{}, false
+	}
+	f := es.eventInfo[pr.seq]
+	ev := es.eventBySeq(pr.seq)
+	if f.variadicResult || ev == nil || ev.kind != evCall || ev.call.nout < 2 {
+		return Value{}, false
+	}
+	// The parked-fn screen: a Function among the SPILLED rest auto-applies in
+	// the interpreter when a later value lands above it — keep those refused
+	// (the same hazard the loop-region screens guard).
+	if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+		return Value{}, false
+	}
+	elemType := TAny
+	if v.Parent != nil {
+		elemType = v.Parent
+	}
+	elem := NewCarrier(elemType)
+	es.pendingLoopBind = &pendingLoopBind{seq: pr.seq, depth: ev.call.nout - 1}
+	return elem, true
+}
+
+// eventBySeq finds the event with the given seq in the CURRENT frame (nil
+// when absent — a fragment-frame seq after the frame closed).
+func (es *EmitState) eventBySeq(seq int) *emitEvent {
+	frame := es.frames[len(es.frames)-1]
+	for i := range frame {
+		if frame[i].seq == seq {
+			return &frame[i]
+		}
+	}
+	return nil
 }
 
 // resolveOperand maps a dispatch value to its provenance: a prior
@@ -3619,6 +3685,17 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 				return
 			}
 			lp.bodyOut, lp.hasBodyOut = bodyOut, true
+			if pr, okP := es.producedBy[bodyStk[0].ID]; okP && bodyOut.kind == opEvent &&
+				es.eventInfo[pr.seq].splitBound &&
+				!sigTypeMatches(bodyStk[0], TFunction) && !sigTypeMatches(bodyStk[0], TFnDef) {
+				// The body's sole residual is a SPLIT-BOUND region (S9.2a: `for 3
+				// [ def acc (for 2 [1]) ]` — the def consumed the first value,
+				// the statically-counted rest is the iteration's contribution).
+				// Ride the multiOut/allowVariadic reconciliation so the region
+				// stands as the body residual; a Function-bearing region keeps
+				// the refusal (the parked-fn accumulation hazard).
+				lp.multiOut = true
+			}
 		}
 	}
 	slot, ok := es.units[len(es.units)-1].localByID[iterID]
@@ -4872,6 +4949,19 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 			es.loopSplitBinds = map[string]bool{}
 		}
 		es.loopSplitBinds[name] = true
+		f := es.eventInfo[plb.seq]
+		f.splitBound = true
+		es.eventInfo[plb.seq] = f
+		if es.reg.Check.LoopBodyDepth > 0 && depth > 1 {
+			// Inside a LOOP BODY (S9.2a) the captured (final) analysis round
+			// runs with the PREVIOUS round's joined install still live, so
+			// Defs.Depth counts one analysis-only shadow the runtime name
+			// stack never has — the kept binding the splice must SetAt sits
+			// one below (stamping the inflated depth made the write-back a
+			// silent no-op and the in-loop OpLookupDynScope read the kept
+			// check-time carrier: the [5 0 5 0] miscompile).
+			depth--
+		}
 	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,

@@ -3589,7 +3589,9 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 			es.ArmBranchCapture()
 		}
 		var adds map[string]Value
+		r.Check.LoopBodyDepth++
 		stk, adds = RunCarrierBodyWithDefs(r, body)
+		r.Check.LoopBodyDepth--
 		for i := len(bindNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(bindNames[i])
 		}

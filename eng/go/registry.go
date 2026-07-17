@@ -668,6 +668,18 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
+	// LoopBodyDepth, when > 0, marks analysis running inside a counted-for
+	// LOOP body (AnalyseLoopBody brackets each round's body run). Unlike the
+	// other NestedBodyDepth contributors (branch arms, quotation bodies), a
+	// loop body executes UNCONDITIONALLY once per iteration — so when
+	// NestedBodyDepth == LoopBodyDepth every enclosing body is a loop body
+	// and a per-iteration binding is definitely reached. The S5 first-value
+	// loop split (SplitLoopRegionBind) consults exactly that equality for
+	// the loop-carried variadic def (REFUSAL-CLOSURE S9.2a); a branch arm
+	// keeps the decline (a conditionally-reached split would leak the
+	// analysis-only binding — PR #278 review P1-b).
+	LoopBodyDepth int
+
 	// CondBodyDepth, when > 0, marks analysis running inside a
 	// CONDITIONALLY-reached, def-rolled-back body — an if/case branch arm
 	// or a loop body (the `keep=false` bodies of runCarrierBodyDefsAdds,

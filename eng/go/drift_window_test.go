@@ -105,3 +105,40 @@ func TestRecordSpliceDynDeclines(t *testing.T) {
 		t.Error("an unresolvable payload must decline")
 	}
 }
+
+// SplitEventRegionBind's guard-owned decline arms (S9.1), white-box: the
+// parked-fn screen (a Function-typed idx-0 result — the spilled rest would
+// auto-apply it in the interpreter) and eventBySeq's closed-frame miss (a
+// producing seq recorded in a fragment frame that has since closed).
+func TestSplitEventRegionBindDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es := r.Check.Emit.(*EmitState)
+	es.bindRegistry(r)
+
+	// A 2-out call event whose idx-0 result is Function-typed.
+	fnOut := NewCarrier(TFunction)
+	fnOut.ID = GenerateID(IDPrefixForType(TFunction))
+	other := NewCarrier(TString)
+	other.ID = GenerateID(IDPrefixForType(TString))
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "zz", nout: 2}})
+	es.setProduced(fnOut, seq)
+	es.producedBy[other.ID] = producer{seq: seq, idx: 1}
+	if _, ok := es.SplitEventRegionBind("zzf", fnOut); ok {
+		t.Error("a Function-typed first result must decline (parked-fn screen)")
+	}
+
+	// A seq living in a CLOSED fragment frame: record the event inside a
+	// fragment, close it, then ask for the split — eventBySeq misses.
+	closeFrag := es.beginFragment()
+	iOut := NewCarrier(TInteger)
+	iOut.ID = GenerateID(IDPrefixForType(TInteger))
+	fseq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "zz2", nout: 2}})
+	es.setProduced(iOut, fseq)
+	closeFrag()
+	es.TakeFragment()
+	if _, ok := es.SplitEventRegionBind("zzg", iOut); ok {
+		t.Error("a closed-fragment producer must decline (eventBySeq miss)")
+	}
+}

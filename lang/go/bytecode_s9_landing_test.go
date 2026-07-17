@@ -1,6 +1,9 @@
 package lang
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // REFUSAL-CLOSURE §9 landing battery — written FAILING-FIRST (the goal's
 // test-driven discipline): every subtest asserts the TARGET compile-parity
@@ -9,21 +12,33 @@ import "testing"
 
 const s9DocMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end `
 
-func TestS9LoopCarriedVariadicStore(t *testing.T) { // §9.2a — DESIGNED FOLLOW-ON
-	// A loop-carried def of a variadic loop region (`for 2 [ def acc (for 2
-	// [5]) acc ]`) is the §5 first-value split ONE frame down — but the
-	// splice-at-depth bind (OpBindGlobal/OpBindDynScope) uses a stack-TOP-
-	// relative depth, and inside a loop-body fragment the region sits at a
-	// FRAGMENT-relative depth (the outer iterator locals sit below it), so
-	// the naive splice miscompiled [5 0 5 0] vs [5 5 5 5] — the reason
-	// SplitLoopRegionBind gates on NestedBodyDepth==0 today. Compiling it
-	// needs a fragment-stack-base-relative splice-at-depth (a real VM +
-	// lowering extension of §5, threading the fragment base through the
-	// bind) plus the spilled N-1 rest flowing as the enclosing loop's
-	// variadic body residual. Scoped as its own landing; refuses soundly
-	// with parity until then.
-	mustRefuseWithParity(t, `for 2 [ def acc (for 2 [5]) acc ]`, "consumes loop results")
-	mustRefuseWithParity(t, `for 3 [ def acc (for 2 [1]) ]`, "consumes loop results")
+func TestS9LoopCarriedVariadicStore(t *testing.T) { // §9.2a — LANDED
+	// A loop-carried def of a variadic loop region is the §5 first-value
+	// split one frame down. Two pieces landed it: (1) the split gate admits
+	// NestedBodyDepth == LoopBodyDepth (every enclosing body analysis is an
+	// unconditional-per-iteration LOOP body — a branch arm keeps declining,
+	// the P1-b leak fence); (2) the bind's depth stamp subtracts the one
+	// analysis-only shadow the final AnalyseLoopBody round carries (the
+	// inflated depth made the runtime SetAt a silent no-op and the in-loop
+	// read resolved the kept check-time carrier — the historical [5 0 5 0]).
+	// The statically-counted rest rides as the iteration's residual
+	// (splitBound → multiOut), and reads resolve via OpLookupDynScope.
+	mustCompileWithParity(t, `for 2 [ def acc (for 2 [5]) acc ]`, "[5 5 5 5]")
+	mustCompileWithParity(t, `for 3 [ def acc (for 2 [1]) ]`, "[1 1 1]")
+	mustCompileWithParity(t, `for 2 [ def acc (for 3 [7]) acc ]`, "[7 7 7 7 7 7]")
+	mustCompileWithParity(t, `for 2 [ def acc (for 2 [5]) 9 ]`, "[5 9 5 9]")
+	mustCompileWithParity(t, `for 2 [ def acc (for 1 [7 "x"]) acc ]`, "[x 7 x 7]")
+	mustCompileWithParity(t, `for 2 [ def acc (for 2 [5]) ] acc`, "[5 5 5]")
+
+	// Decline fences, each parity-faithful: a DYNAMIC inner count (no static
+	// region), a BRANCH between the loop and the def (conditionally-reached
+	// split — the P1-b leak), and a NESTED loop pair (depth-2 fence).
+	mustRefuseWithParity(t,
+		`def m {n: 2} for 2 [ def acc (for (m get "n") [5]) acc ]`, "")
+	mustRefuseWithParity(t,
+		`for 2 [ if true [ def acc (for 2 [5]) acc ] [0] ]`, "")
+	mustRefuseWithParity(t,
+		`for 2 [ for 2 [ def acc (for 2 [5]) acc ] ]`, "")
 }
 
 func TestS9SpliceComputedPayload(t *testing.T) { // §9.2b
@@ -67,22 +82,62 @@ func TestS9FnComputedOperand(t *testing.T) { // §9.2g — DESIGNED KEEP
 		"construction over a computed")
 }
 
-func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — DESIGNED FOLLOW-ON
-	// A DEF binding the fallible do-catch's VARIADIC region (`def msg (do
-	// [(true 5 M.dec) "no-raise"] error [dot code]) msg`) refuses "residual
-	// shape beyond Stage 1 (call result above a literal)" — the seatResults
-	// family. Unlike row 3 (a bare region residual the mark-window island
-	// owns, fixed by the ExtensionPayload ID mint), these have a call result
-	// ABOVE a literal INSIDE a runtime-variable region that a DEF then
-	// consumes: the L-DO part-2 region-top variable-arity lowering (a
-	// STORE_LOCAL_FROM_MARK sibling seating the region-top under the def
-	// while the mark bounds the variable arity). Scoped as its own landing;
-	// refuses soundly with interpreter parity until then.
+func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — LANDED
+	// A DEF binding the FIRST value of a fallible do-catch's multi-value
+	// region: SplitEventRegionBind (the S5/S9.2a split's STATIC-region twin)
+	// binds a fresh element carrier via the same splice-at-depth OpBindGlobal
+	// (SpliceFromTop = nout-1) and removes the spliced slot from the sim.
+	// Only the SUCCESS path executes the splice — the compiled catch path
+	// defers to the interpreter wholesale, so the static success count is
+	// the only count the lowering needs.
+	mustCompileWithParity(t,
+		`def msg (do [(1 add 2) "no-raise"] error [dot code]) msg`, "[no-raise 3]")
+	// Double read re-resolves the live binding.
+	mustCompileWithParity(t,
+		`def msg (do [(1 add 2) "a"] error [dot code]) msg msg`, "[a 3 3]")
+	// The RAISING region rides the catch path: the compiled run defers and
+	// the interpreter owns the catch — value parity through the defer.
+	{
+		src := `def msg (do [(0 div 0) "x"] error [dot code]) msg`
+		a, _ := New()
+		gotC, _, errC := a.RunCompiled(src)
+		b, _ := New()
+		gotI, errI := b.RunInterp(src)
+		if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("catch path: compiled=%v (%v) interp=%v (%v)", gotC, errC, gotI, errI)
+		}
+	}
+
+	// The doc's M.dec ERROR rows: the region's paren call genuinely fails
+	// dispatch — a GUARANTEED-error program, so there is no clean idx-0
+	// event for the split to bind (SplitEventRegionBind declines) and the
+	// refusal stands; the interpreter raises uncalled_function. (The no-def
+	// form of the same region refuses "check diagnostics" — either refusal
+	// is the sound terminal state for a program that cannot run.)
 	for _, src := range []string{
 		s9DocMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
 		s9DocMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`,
 	} {
-		mustRefuseWithParity(t, src, "residual shape beyond Stage 1")
+		a, _ := New()
+		prog, _, _, _ := a.CompileCheck(src)
+		b, _ := New()
+		_, errI := b.RunInterp(src)
+		if prog != nil || codeOf(errI) != "uncalled_function" {
+			t.Errorf("%.50q: want refusal + interp uncalled_function, got prognil=%v interp [%s]",
+				src, prog == nil, codeOf(errI))
+		}
+	}
+
+	// Fences (sound refusal / runtime defer, parity-faithful): a TWO-split
+	// program (the second read is a dynamic value preceding residual args)
+	// and a THREE-value region (runtime defer).
+	{
+		src := `def a (do [(1 add 2) "a"] error [dot code]) def b (do [(3 add 4) "b"] error [dot code]) a b`
+		x, _ := New()
+		prog, _, _, _ := x.CompileCheck(src)
+		if prog != nil {
+			t.Errorf("two-split program compiled — graduate this fence")
+		}
 	}
 }
 
