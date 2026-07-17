@@ -20,6 +20,20 @@ import "github.com/aql-lang/aql/eng/go"
 //
 // `print` is NOT here: it stays a core word so basic output needs no import.
 //
+// FILE I/O IS PATHON-ONLY. Every filesystem target is a `Scalar/Micron/Pathon`
+// — string paths are NOT accepted (write `IO.read (make Pathon "data.csv")`,
+// not `IO.read "data.csv"`). This keeps a file target type-distinct from an
+// arbitrary string and from a stream handle, so one polymorphic verb dispatches
+// unambiguously on the argument's TYPE. read / write additionally accept a
+// StreamKind handle (stdin / stdout / stderr).
+//
+// `list` and `remove` are NOT here: they are exported as POLYMORPHIC WORD
+// EXTENSIONS of the core `list` / `remove` words (built in modules/io.go via
+// NewWordExtensionAnchored), so after `import "aql:io"` the BARE words gain a
+// Pathon overload — `list somePath` / `remove somePath` — rather than a
+// separate IO.list / IO.remove. Their handlers (listHandler / doRemoveWord)
+// live in io_fs.go and are shared with those extensions.
+//
 // At dispatch the module FnDef wrapper short-circuits to the inner native's
 // handler, which runs against the LIVE engine registry (execMatch passes
 // e.registry, not the sub-registry) — so IO.read / IO.write reach the host
@@ -27,13 +41,18 @@ import "github.com/aql-lang/aql/eng/go"
 // exactly as the former core words did.
 //
 //	printstr  write a value's formatted form without a trailing newline
-//	read      read a file or stream (path/string/StreamKind; optional options map)
-//	write     write a file or stream (path/string/StreamKind; value; optional options map)
+//	read      read a file (Pathon) or stream (StreamKind); optional options map
+//	write     write a file (Pathon) or stream (StreamKind); value; optional options map
 //	stdin     the standard-input stream handle (a StreamKind atom)
 //	stdout    the standard-output stream handle (a StreamKind atom)
 //	stderr    the standard-error stream handle (a StreamKind atom)
 //	trace     run a list as a sub-program with step-by-step tracing
-//	folder    create / list a filesystem folder (Path; optional options)
+//	folder    create / list a filesystem folder (Pathon; optional options)
+//	stat      describe a Pathon, returning a FileInfo record or `none`
+//	move      rename/move a Pathon to a Pathon destination
+//	copy      copy a Pathon to a Pathon destination ({recursive} for a tree)
+//	link      create a symbolic (or {hard}) link at a Pathon destination
+//	touch     create/update a Pathon and apply {mode,mtime,atime,size}
 func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
@@ -47,16 +66,11 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 			}},
 		}
 	}
-	// statImpl / listImpl close over fileType so the filesystem-structure
-	// handlers can tag stat records with the module's FileType atoms.
+	// statImpl closes over fileType so the stat handler can tag records with
+	// the module's FileType atoms.
 	statImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 			return statHandler(a, r, fileType, hasOpts)
-		}
-	}
-	listImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
-		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-			return listHandler(a, r, fileType, hasOpts)
 		}
 	}
 	return []NativeFunc{
@@ -73,37 +87,28 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, TPathon}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, TString}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, streamKind}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
-			// write returns the target it wrote to, tagged with the target's
-			// type (a file path, or the Stream handle for a standard stream),
-			// so the result can be threaded straight into read.
+			// write returns the target it wrote to (the Pathon, or the Stream
+			// handle for a standard stream), so the result can be threaded
+			// straight into read.
 			Name: "write",
 			Signatures: []Signature{
 				// Binary writes: a Bytes payload is written verbatim (more
 				// specific than the TAny/TString sigs, so it wins dispatch).
 				{Args: []*Type{TPathon, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TString}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Impl: Go(writeHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TString}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString}, Impl: Go(writeHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
@@ -130,89 +135,78 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 		},
 		{
 			// stat returns a FileInfo record (or none when absent). The
-			// target may be a Path or a string; an optional map carries
-			// {follow, resolve}.
+			// target is a Pathon; an optional map carries {follow, resolve}.
 			Name: "stat",
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
-			// list enumerates a directory's entries (names, or FileInfo
-			// records with {detail:true}); {recursive:true} walks the tree.
-			Name: "list",
-			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
-			},
-		},
-		{
-			// remove deletes a path, returning it. {recursive:true} removes a
-			// directory tree; {force:true} ignores an absent path.
-			Name: "remove",
-			Signatures: []Signature{
-				{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(ioRemoveHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			},
-		},
-		{
-			// move renames/moves src to dst, returning dst.
+			// move renames/moves src to dst (both Pathon), returning dst.
 			Name: "move",
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString}, Impl: Go(moveHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Impl: Go(moveHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			},
 		},
 		{
-			// copy copies src to dst, returning dst. {recursive:true} copies a
-			// directory tree.
+			// copy copies src to dst (both Pathon), returning dst.
+			// {recursive:true} copies a directory tree.
 			Name: "copy",
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TPathon, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TPathon}, Impl: Go(copyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TPathon}, Impl: Go(copyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString}, Impl: Go(copyHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Impl: Go(copyHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			},
 		},
 		{
-			// link creates a link at dst referring to src — a symbolic link by
-			// default, a hard link with {hard:true}. Returns dst.
+			// link creates a link at dst referring to src (both Pathon) — a
+			// symbolic link by default, a hard link with {hard:true}. Returns dst.
 			Name: "link",
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TPathon, TString}, Impl: Go(linkHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Impl: Go(linkHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			},
 		},
 		{
-			// touch creates a path if absent and applies metadata options
+			// touch creates a Pathon if absent and applies metadata options
 			// {mode, mtime, atime, size} (folding chmod/utimes/truncate).
 			// Returns the path.
 			Name: "touch",
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TMap}, Impl: Go(touchOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(touchHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(touchOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(touchHandler), Returns: []*Type{TString}, BarrierPos: -1},
 			},
 		},
+	}
+}
+
+// IOWordExtensions builds the WORD-EXTENSION clones the aql:io module exports
+// for the core `list` and `remove` words: after `import "aql:io"` the bare
+// words gain a Pathon overload so `list somePath` enumerates a directory and
+// `remove somePath` deletes a filesystem path — polymorphism over the existing
+// verbs rather than a separate IO.list / IO.remove.
+//
+// These anchor on Pathon, a KERNEL builtin type. The module-scope safety rule
+// (requireUserTypedSigs) normally refuses a core-word extension whose tuple has
+// no user-minted type; NewWordExtensionAnchored waives it because aql:io ships
+// and versions WITH the kernel (see eng/go/word_extend.go). The core `list` /
+// `remove` sigs match only Map/ResourceEntity/List, disjoint from Pathon, so
+// dispatch is unambiguous. listHandler closes over fileType so a
+// `list p {detail:true}` record's `type` field is an IO.FileType atom.
+func IOWordExtensions(fileType *Type) []FnDefInfo {
+	listImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			return listHandler(a, r, fileType, hasOpts)
+		}
+	}
+	return []FnDefInfo{
+		NewWordExtensionAnchored("list", []Signature{
+			{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
+		}),
+		NewWordExtensionAnchored("remove", []Signature{
+			{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+		}),
 	}
 }

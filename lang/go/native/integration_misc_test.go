@@ -40,7 +40,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.csv")})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.csv")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -75,7 +75,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.tsv")})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.tsv")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -102,7 +102,7 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("csv"))
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.txt"), NewMap(opts)})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.txt"), NewMap(opts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -124,7 +124,7 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.csv"), NewMap(opts)})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.csv"), NewMap(opts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -149,7 +149,7 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.json")})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.json")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}

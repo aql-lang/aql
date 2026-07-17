@@ -33,7 +33,7 @@ func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
 	a := newAQL(t, nil)
 	// Default Vm.run uses sandbox. Sandbox allows importing aql:io but
 	// still denies the disk.write capability, so IO.write is blocked.
-	out, err := a.Run(`(import "aql:vm") "import \"aql:io\" IO.write 'data' '/tmp/aql-test'" Vm.run`)
+	out, err := a.Run(`(import "aql:vm") "import \"aql:io\" IO.write (make Pathon 'data') '/tmp/aql-test'" Vm.run`)
 	if err == nil {
 		t.Errorf("expected sandbox denial, got %v", out)
 	}
@@ -118,7 +118,7 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 	_, err = a.Run(`
 		(import "aql:vm")
 		{ scopes: { global: { words: { default: "allow" } }, fileops: { words: { default: "allow" } } } }
-		"import \"aql:io\" 'data' IO.write '/tmp/aql-attenuation-test'"
+		"import \"aql:io\" 'data' IO.write (make Pathon '/tmp/aql-attenuation-test')"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -163,7 +163,7 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 	_, err = a.Run(`
 		(import "aql:vm")
 		{ scopes: { fileops: { words: { default: "allow" } } } }
-		"import \"aql:io\" IO.read '/secret/credentials.txt'"
+		"import \"aql:io\" IO.read (make Pathon '/secret/credentials.txt')"
 		Vm.run-with
 	`)
 	if err == nil {

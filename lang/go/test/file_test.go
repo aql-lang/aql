@@ -31,7 +31,7 @@ func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 // --- CSV file loading ---
 
 func TestFileReadCSV(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/people.csv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/people.csv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestFileReadCSV(t *testing.T) {
 }
 
 func TestFileReadCSVSchema(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/people.csv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/people.csv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestFileReadCSVSchema(t *testing.T) {
 }
 
 func TestFileReadSimpleCSV(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/simple.csv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/simple.csv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestFileReadSimpleCSV(t *testing.T) {
 }
 
 func TestFileReadQuotedCSV(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/quoted.csv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/quoted.csv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestFileReadQuotedCSV(t *testing.T) {
 }
 
 func TestFileReadEmptyCSV(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/empty.csv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/empty.csv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestFileReadEmptyCSV(t *testing.T) {
 // --- TSV file loading ---
 
 func TestFileReadTSV(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/items.tsv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/items.tsv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestFileReadTSV(t *testing.T) {
 }
 
 func TestFileReadTSVSchema(t *testing.T) {
-	result, err := runWithOSFiles(t, `"file/items.tsv" read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/items.tsv") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestFileReadTSVSchema(t *testing.T) {
 
 func TestFileReadCSVWithTextOverride(t *testing.T) {
 	// Read a CSV file but force text format — should get raw string.
-	result, err := runWithOSFiles(t, `"file/simple.csv" {fmt:"text"} read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/simple.csv") {fmt:"text"} read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestFileReadCSVWithTextOverride(t *testing.T) {
 
 func TestFileReadCSVExplicitFmt(t *testing.T) {
 	// Read a CSV file with explicit csv format — should work same as auto.
-	result, err := runWithOSFiles(t, `"file/people.csv" {fmt:"csv"} read`)
+	result, err := runWithOSFiles(t, `(make Pathon "file/people.csv") {fmt:"csv"} read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestFileReadCSVPrint(t *testing.T) {
 	var buf strings.Builder
 	reg.Output = &buf
 
-	values, err := parser.Parse(`"file/people.csv" read print`)
+	values, err := parser.Parse(`(make Pathon "file/people.csv") read print`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestFileReadTSVPrint(t *testing.T) {
 	var buf strings.Builder
 	reg.Output = &buf
 
-	values, err := parser.Parse(`"file/items.tsv" read print`)
+	values, err := parser.Parse(`(make Pathon "file/items.tsv") read print`)
 	if err != nil {
 		t.Fatal(err)
 	}

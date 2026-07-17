@@ -157,11 +157,11 @@ func doRemoveWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	err := EffectiveFileOps(r).Remove(path, recursive)
 	if err != nil {
 		if force && errors.Is(err, os.ErrNotExist) {
-			return []Value{returnPath(args[0], path)}, nil
+			return []Value{returnPath(args[0])}, nil
 		}
 		return nil, r.AqlError("remove_error", fmt.Sprintf("remove: %v", err), "remove")
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 func ioRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -180,7 +180,7 @@ func moveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if err := EffectiveFileOps(r).Rename(src, dst); err != nil {
 		return nil, r.AqlError("move_error", fmt.Sprintf("move: %v", err), "move")
 	}
-	return []Value{returnPath(args[1], dst)}, nil
+	return []Value{returnPath(args[1])}, nil
 }
 
 // doCopy copies src to dst: a symlink is recreated, a directory is copied
@@ -239,7 +239,7 @@ func doCopyWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	if err := doCopy(r, src, dst, recursive); err != nil {
 		return nil, r.AqlError("copy_error", fmt.Sprintf("copy: %v", err), "copy")
 	}
-	return []Value{returnPath(args[1], dst)}, nil
+	return []Value{returnPath(args[1])}, nil
 }
 
 func copyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -281,7 +281,7 @@ func doLinkWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	if err != nil {
 		return nil, r.AqlError("link_error", fmt.Sprintf("link: %v", err), "link")
 	}
-	return []Value{returnPath(args[1], link)}, nil
+	return []Value{returnPath(args[1])}, nil
 }
 
 func linkHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -346,7 +346,7 @@ func doTouchWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	if err := applyTouch(EffectiveFileOps(r), path, opts, hasOpts); err != nil {
 		return nil, r.AqlError("touch_error", fmt.Sprintf("touch: %v", err), "touch")
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 func touchHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

@@ -110,13 +110,7 @@ WORD convert
   [Scalar Scalar] barrier=2 typearg={0} +returnsfn
 WORD copy
   [Scalar/Micron/Pathon Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
-  [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/String]
-  [Scalar/String Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
 WORD create
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Any]
@@ -411,26 +405,18 @@ WORD keys
   [Node/Map] barrier=1 returns=[Node/List]
 WORD link
   [Scalar/Micron/Pathon Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
-  [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/String]
-  [Scalar/String Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
 WORD list
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Node/List]
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/List] barrier=2 returns=[Node/List]
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Node/List]
-  [Scalar/String Node/Map] barrier=2 returns=[Node/List]
   [Ideal/Resource/Entity] barrier=1 returns=[Node/List]
   [Node/Map] barrier=1 returns=[Node/List]
   [Node/Map] barrier=1 returns=[Node/List]
   [Node/List] barrier=1 returns=[Node/List]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Node/List]
   [Scalar/Micron/Pathon] barrier=1 returns=[Node/List]
-  [Scalar/String] barrier=1 returns=[Node/List]
 WORD load
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Any]
@@ -474,9 +460,6 @@ WORD module
   [Node/List] barrier=1 runcheck noeval={0} returns=[Ideal/Module]
 WORD move
   [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/String]
-  [Scalar/String Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
 WORD mul
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD nand
@@ -560,13 +543,10 @@ WORD reach
 WORD read
   [Node/Map Scalar/Atom/StreamKind] barrier=2 returns=[Any]
   [Node/Map Scalar/Micron/Pathon] barrier=2 returns=[Any]
-  [Node/Map Scalar/String] barrier=2 returns=[Any]
   [Scalar/Atom/StreamKind Node/Map] barrier=2 returns=[Any]
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
-  [Scalar/String Node/Map] barrier=2 returns=[Any]
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
-  [Scalar/String] barrier=1 returns=[Any]
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive
@@ -590,12 +570,10 @@ WORD remove
   [Node/Map Node/Map] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Node/List]
   [Node/Map Node/List] barrier=2 returns=[Node/List]
-  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Ideal/Resource/Entity] barrier=1 returns=[Any]
   [Node/Map] barrier=1 returns=[Any]
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon] barrier=1 returns=[Scalar/Micron/Pathon]
-  [Scalar/String] barrier=1 returns=[Scalar/String]
 WORD repeat
   [Scalar/Number/Integer Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Number/Integer Scalar/String] barrier=2 returns=[Scalar/String]
@@ -680,9 +658,7 @@ WORD stack-args
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD stat
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
-  [Scalar/String Node/Map] barrier=2 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
-  [Scalar/String] barrier=1 returns=[Any]
 WORD state-of
   [Ideal/Service] barrier=1 returns=[Node/Map]
 WORD stderr
@@ -722,9 +698,7 @@ WORD tor
   [Any Any] barrier=1 +returnsfn
 WORD touch
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/Micron/Pathon] barrier=1 returns=[Scalar/Micron/Pathon]
-  [Scalar/String] barrier=1 returns=[Scalar/String]
 WORD tpartial
   [Any] barrier=1 returns=[Type]
 WORD trace
@@ -805,18 +779,12 @@ WORD write
   [Scalar/Micron/Pathon Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Scalar/String]
-  [Scalar/String Any Node/Map] barrier=3 returns=[Scalar/String]
   [Scalar/Atom/StreamKind Scalar/Bytes] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Micron/Pathon Scalar/Bytes] barrier=2 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String] barrier=2 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any] barrier=2 returns=[Scalar/Micron/Pathon]
-  [Scalar/String Scalar/Bytes] barrier=2 returns=[Scalar/String]
-  [Scalar/String Scalar/String] barrier=2 returns=[Scalar/String]
-  [Scalar/String Any] barrier=2 returns=[Scalar/String]
 WORD xml-attr
   [Scalar/String Node/Xml] barrier=2 returns=[Any] +returnsfn
   [Scalar/Atom Node/Xml] barrier=2 quote={0} returns=[Any] +returnsfn

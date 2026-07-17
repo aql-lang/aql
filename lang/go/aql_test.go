@@ -380,11 +380,11 @@ func TestSetFileOps(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write and read back via the mem file ops.
-	_, err = a.RunInterp(`IO.write "test.txt" "hello"`)
+	_, err = a.RunInterp(`IO.write (make Pathon "test.txt") "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := a.RunInterp(`IO.read "test.txt"`)
+	result, err := a.RunInterp(`IO.read (make Pathon "test.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestRunDefaultBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	ops.Files["data.json"] = []byte(`{"a":1}`)
-	result, err := a.RunInterp(`IO.read "data.json"`)
+	result, err := a.RunInterp(`IO.read (make Pathon "data.json")`)
 	if err != nil {
 		t.Fatal(err)
 	}

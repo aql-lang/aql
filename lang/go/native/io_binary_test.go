@@ -10,15 +10,15 @@ import (
 func TestBinaryWriteRead(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// write raw bytes, then read them back as Bytes.
-	res := runAQL(t, r, []Value{NewWord("write"), NewString("b.bin"), NewBytesValue([]byte{0, 1, 2, 255})})
-	if res[0].String() != "'b.bin'" {
+	res := runAQL(t, r, []Value{NewWord("write"), pathV("b.bin"), NewBytesValue([]byte{0, 1, 2, 255})})
+	if !IsPathon(res[0]) || res[0].String() != "b.bin" {
 		t.Errorf("binary write returned %v", res[0])
 	}
 	if got, _ := mem.ReadFile("b.bin"); !bytes.Equal(got, []byte{0, 1, 2, 255}) {
 		t.Errorf("stored bytes = %v", got)
 	}
 	res = runAQL(t, r, []Value{
-		NewWord("read"), NewString("b.bin"),
+		NewWord("read"), pathV("b.bin"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
 	})
 	if b, ok := AsBytesValue(res[0]); !ok || !bytes.Equal(b, []byte{0, 1, 2, 255}) {
@@ -26,7 +26,7 @@ func TestBinaryWriteRead(t *testing.T) {
 	}
 	// {enc:'binary'} is an alias for bytes.
 	res = runAQL(t, r, []Value{
-		NewWord("read"), NewString("b.bin"),
+		NewWord("read"), pathV("b.bin"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("binary")) }),
 	})
 	if _, ok := AsBytesValue(res[0]); !ok {
@@ -41,7 +41,7 @@ func TestPositionedRead(t *testing.T) {
 	}
 	// positioned text slice.
 	res := runAQL(t, r, []Value{
-		NewWord("read"), NewString("h.txt"),
+		NewWord("read"), pathV("h.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)); om.Set("length", NewInteger(3)) }),
 	})
 	if res[0].String() != "'ell'" {
@@ -49,7 +49,7 @@ func TestPositionedRead(t *testing.T) {
 	}
 	// positioned byte slice.
 	res = runAQL(t, r, []Value{
-		NewWord("read"), NewString("h.txt"),
+		NewWord("read"), pathV("h.txt"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("enc", NewString("bytes"))
 			om.Set("offset", NewInteger(1))
@@ -61,7 +61,7 @@ func TestPositionedRead(t *testing.T) {
 	}
 	// binary read of an absent file errors.
 	if err := runAQLError(t, r, []Value{
-		NewWord("read"), NewString("ghost"),
+		NewWord("read"), pathV("ghost"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
 	}); err == nil {
 		t.Error("expected error on a binary read of an absent file")
@@ -71,9 +71,9 @@ func TestPositionedRead(t *testing.T) {
 func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// append.
-	runAQL(t, r, []Value{NewWord("write"), NewString("a.bin"), NewBytesValue([]byte("ab"))})
+	runAQL(t, r, []Value{NewWord("write"), pathV("a.bin"), NewBytesValue([]byte("ab"))})
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("a.bin"), NewBytesValue([]byte("cd")),
+		NewWord("write"), pathV("a.bin"), NewBytesValue([]byte("cd")),
 		wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("append")) }),
 	})
 	if got, _ := mem.ReadFile("a.bin"); string(got) != "abcd" {
@@ -84,7 +84,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("p.bin"), NewBytesValue([]byte("XY")),
+		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("XY")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) }),
 	})
 	if got, _ := mem.ReadFile("p.bin"); string(got) != "hXYlo" {
@@ -92,7 +92,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	}
 	// positioned write past the end grows the file with zero bytes.
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("grow.bin"), NewBytesValue([]byte("Z")),
+		NewWord("write"), pathV("grow.bin"), NewBytesValue([]byte("Z")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(3)) }),
 	})
 	if got, _ := mem.ReadFile("grow.bin"); !bytes.Equal(got, []byte{0, 0, 0, 'Z'}) {
@@ -100,7 +100,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	}
 	// negative offset and stream offset are rejected.
 	if err := runAQLError(t, r, []Value{
-		NewWord("write"), NewString("p.bin"), NewBytesValue([]byte("x")),
+		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("x")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(-1)) }),
 	}); err == nil {
 		t.Error("expected error on a negative offset write")
@@ -159,13 +159,13 @@ func TestBinaryWriteErrorBranches(t *testing.T) {
 	}
 	// doWrite (non-offset) WriteFile error.
 	r := newReg(&failAtOps{failWriteFile: "f.bin"})
-	if _, err := doWriteBytesWord([]Value{NewString("f.bin"), NewBytesValue([]byte("x"))}, r, false); err == nil {
+	if _, err := doWriteBytesWord([]Value{pathV("f.bin"), NewBytesValue([]byte("x"))}, r, false); err == nil {
 		t.Error("expected WriteFile error on a binary write")
 	}
 	// writeAtOffset WriteFile error.
 	r = newReg(&failAtOps{failWriteFile: "f.bin"})
 	args := []Value{
-		NewString("f.bin"), NewBytesValue([]byte("x")),
+		pathV("f.bin"), NewBytesValue([]byte("x")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(0)) }),
 	}
 	if _, err := doWriteBytesWord(args, r, true); err == nil {

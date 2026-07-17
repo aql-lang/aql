@@ -14,8 +14,9 @@ func registerIOWords(r *Registry) {
 	if r == nil || r.Lookup("read") != nil {
 		return
 	}
+	fileType := MintFileType(r)
 	moved := [][]NativeFunc{
-		IOModuleNativeFuncs(MintStreamKind(r), MintFileType(r)),
+		IOModuleNativeFuncs(MintStreamKind(r), fileType),
 		StructModuleNatives,
 		NetModuleNatives(MintFetchTypes(r)),
 		BitwiseModuleNatives,
@@ -27,6 +28,14 @@ func registerIOWords(r *Registry) {
 	for _, slice := range moved {
 		for _, n := range slice {
 			r.RegisterNativeFunc(n)
+		}
+	}
+	// list / remove are exported as word extensions, not namespaced natives:
+	// transplant their Pathon overloads onto the core list / remove words so
+	// the bare-word behaviour tests can call `list`/`remove` on a Pathon.
+	for _, ext := range IOWordExtensions(fileType) {
+		if err := TransplantExtension(r, ext, "aql:io"); err != nil {
+			panic(err)
 		}
 	}
 }

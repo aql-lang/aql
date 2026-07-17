@@ -51,5 +51,13 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 	exports.Set("FileType", native.NewTypeLiteral(fileType))
 
+	// list / remove are exported as WORD EXTENSIONS, not namespaced FnDef
+	// wrappers: import transplants a Pathon overload onto the importer's bare
+	// `list` / `remove` (design/OPEN-WORDS.0.md). transplantWordExtensions
+	// picks these out of the export map by IsWordExtension.
+	for _, ext := range native.IOWordExtensions(fileType) {
+		exports.Set(ext.Extends, native.NewFnDef(ext))
+	}
+
 	return moduleDesc(parent, "IO", subReg, exports), nil
 }

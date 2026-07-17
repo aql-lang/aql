@@ -124,7 +124,7 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 		if err := writeAtOffset(r, path, data, offset); err != nil {
 			return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
 		}
-		return []Value{returnPath(args[0], path)}, nil
+		return []Value{returnPath(args[0])}, nil
 	}
 	// Plain and append writes reuse doWrite (which also handles the stdio
 	// streams). nl="raw" means no newline rewriting; doWrite writes the
@@ -132,7 +132,7 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 	if _, err := doWrite(r, path, string(data), "utf8", "text", mode, "raw"); err != nil {
 		return nil, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 func writeBytesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

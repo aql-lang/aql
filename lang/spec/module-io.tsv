@@ -2,9 +2,21 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of input/output words that were moved out of the core
-# registry. They are reached only after `import`, under the `IO`
+# registry. Most are reached only after `import`, under the `IO`
 # namespace: `import "aql:io" IO.word args`. `print` is NOT here — it
 # stays a core word so basic output needs no import.
+#
+# FILE I/O IS PATHON-ONLY. Every filesystem target is a `Scalar/Micron/
+# Pathon` built with `make Pathon "…"` — a bare string is refused, so a
+# file target is type-distinct from an arbitrary string and from a stream
+# handle. A word that returns its target returns that Pathon (rendered
+# without quotes), so `IO.read (IO.write p x)` threads through.
+#
+# `list` and `remove` are the exception to the namespace rule: aql:io
+# extends the CORE `list` / `remove` words with a Pathon overload, so
+# after import the BARE words gain filesystem behaviour — `list p` /
+# `remove p` — rather than a separate `IO.list` / `IO.remove` (see
+# design/OPEN-WORDS.0.md). The overload only registers on import.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  stream handles — `stdin`/`stdout`/`stderr` are ATOMs of the
@@ -29,6 +41,10 @@ read "x"	ERROR:undefined_word	`read` is no longer a core word
 folder "x"	ERROR:undefined_word	`folder` (filesystem op) also moved to aql:io
 IO.stdout	ERROR:undefined_word	`IO` is unbound without `import`
 #
+# §3a  Pathon-only — a STRING target is refused; the caller supplies a Pathon
+import "aql:io"  IO.read "data.csv"	ERROR:signature	a String read target no longer matches — file I/O is Pathon-only
+import "aql:io"  IO.write "out.txt" "hi"	ERROR:signature	a String write target is refused too
+#
 # §4  printstr / stdin — output a value without a newline; the stdin handle
 import "aql:io"  IO.printstr "hi"		printstr writes formatted text to output, leaving no value
 import "aql:io"  IO.stdin	stdin/q	standard-input handle is the `stdin` atom
@@ -36,8 +52,9 @@ import "aql:io"  IO.stdin	stdin/q	standard-input handle is the `stdin` atom
 # §5  read / write against an in-memory filesystem
 #     `context get __sys get fs set mem true` switches the FileOps capability
 #     to an in-memory backing, so write-then-read is deterministic here.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"	'mem://b.txt'	write returns the path it wrote
-import "aql:io"  context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")	'hello'	read back the bytes just written
+#     `make Pathon "mem://b.txt"` collapses to the Pathon `mem:/b.txt`.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.txt") "hi"	mem:/b.txt	write returns the Pathon it wrote
+import "aql:io"  context dot __sys dot fs set mem true  IO.read (IO.write (make Pathon "mem://a.txt") "hello")	'hello'	read back the bytes just written
 #
 # §6  writing NON-STRING data needs no options map, reading a stream that is
 #     not stdin errors, and StreamKind-tagged write returns the handle — all
@@ -45,56 +62,62 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.read (IO.write "mem:/
 #     fileio_test.go (they return Any / raise runtime-only errors, which do
 #     not belong on the static-checker spec surface).
 #
-# §8  stat — describe a path, returning a FileInfo record (name/path/type/
+# §8  stat — describe a Pathon, returning a FileInfo record (name/path/type/
 #     size/mode/mtime, plus target for a symlink), or `none` when absent.
 #     `type` is an IO.FileType atom (file/dir/symlink/other).
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "hello" drop  (IO.stat "mem://s.txt").size	5	stat reports a file's byte size
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "x" drop  (IO.stat "mem://s.txt").type	file/q	stat's type field is a FileType atom
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://s.txt" "x" drop  (IO.stat "mem://s.txt").type is IO.FileType	true	the type field inhabits IO.FileType
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://s.txt") "hello" drop  (IO.stat (make Pathon "mem://s.txt")).size	5	stat reports a file's byte size
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://s.txt") "x" drop  (IO.stat (make Pathon "mem://s.txt")).type	file/q	stat's type field is a FileType atom
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://s.txt") "x" drop  (IO.stat (make Pathon "mem://s.txt")).type is IO.FileType	true	the type field inhabits IO.FileType
 import "aql:io"  context dot __sys dot fs set mem true  file/q is IO.FileType	true	a bare `file` atom is a FileType
 import "aql:io"  context dot __sys dot fs set mem true  "file" is IO.FileType	false	the STRING "file" is not a FileType
-import "aql:io"  context dot __sys dot fs set mem true  IO.stat "mem://ghost.txt"	None	stat of an absent path is none
+import "aql:io"  context dot __sys dot fs set mem true  IO.stat (make Pathon "mem://ghost.txt")	None	stat of an absent path is none
 #
-# §9  list — enumerate a directory's entries (names, or records with
-#     {detail:true}); {recursive:true} walks the tree. Listing a missing
-#     directory or a file is an error.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://L/a.txt" "x" drop  IO.list "mem://L"	['a.txt']	list returns entry names
-import "aql:io"  context dot __sys dot fs set mem true  IO.list "mem://nope"	ERROR:list	listing an absent directory errors
-import "aql:io"  context dot __sys dot fs set mem true  IO.list (IO.write "mem://f.txt" "x")	ERROR:list	listing a file (not a directory) errors
+# §9  list — the CORE `list` word, EXTENDED by aql:io with a Pathon overload:
+#     `list p` enumerates a directory's entries (names, or records with
+#     {detail:true}); {recursive:true} walks the tree. It is a BARE word
+#     after import, not IO.list. Listing a missing directory or a file errors.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://L/a.txt") "x" drop  list (make Pathon "mem://L")	['a.txt']	list returns entry names
+import "aql:io"  context dot __sys dot fs set mem true  list (make Pathon "mem://nope")	ERROR:list	listing an absent directory errors
+import "aql:io"  context dot __sys dot fs set mem true  list (IO.write (make Pathon "mem://f.txt") "x")	ERROR:list	listing a file (not a directory) errors
+list (make Pathon "mem://X")	ERROR:signature	the Pathon overload is absent without `import "aql:io"`
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://L/a.txt") "x" drop  IO.list (make Pathon "mem://L")	['a.txt']	the same handler is also reachable namespaced as IO.list
 #
-# §10  remove — delete a path, returning it. {recursive:true} removes a
-#      directory tree; {force:true} makes an absent removal a no-op.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://R/a.txt" "x" drop  IO.remove "mem://R/a.txt"	'mem://R/a.txt'	remove returns the deleted path
-import "aql:io"  context dot __sys dot fs set mem true  IO.remove "mem://ghost.txt"	ERROR:remove	removing an absent path errors
-import "aql:io"  context dot __sys dot fs set mem true  IO.remove "mem://ghost.txt" {force:true}	'mem://ghost.txt'	{force:true} makes an absent removal a no-op
+# §10  remove — the CORE `remove` word, EXTENDED by aql:io with a Pathon
+#      overload: `remove p` deletes a path, returning it. {recursive:true}
+#      removes a directory tree; {force:true} makes an absent removal a no-op.
+#      A bare word after import, not IO.remove.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://R/a.txt") "x" drop  remove (make Pathon "mem://R/a.txt")	mem:/R/a.txt	remove returns the deleted Pathon
+import "aql:io"  context dot __sys dot fs set mem true  remove (make Pathon "mem://ghost.txt")	ERROR:remove	removing an absent path errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k.txt") "x" drop  remove (make Pathon "mem://ghost.txt") {force:true}	mem:/ghost.txt	{force:true} makes an absent removal a no-op
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://R2/a.txt") "x" drop  IO.remove (make Pathon "mem://R2/a.txt")	mem:/R2/a.txt	the same handler is also reachable namespaced as IO.remove
 #
-# §11  move — rename/move a path, returning the destination.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://m.txt" "x" drop  IO.move "mem://m.txt" "mem://m2.txt"	'mem://m2.txt'	move returns the destination
-import "aql:io"  context dot __sys dot fs set mem true  IO.move "mem://ghost.txt" "mem://z.txt"	ERROR:move	moving an absent path errors
+# §11  move — rename/move a Pathon, returning the destination Pathon.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m.txt") "x" drop  IO.move (make Pathon "mem://m.txt") (make Pathon "mem://m2.txt")	mem:/m2.txt	move returns the destination
+import "aql:io"  context dot __sys dot fs set mem true  IO.move (make Pathon "mem://ghost.txt") (make Pathon "mem://z.txt")	ERROR:move	moving an absent path errors
 #
-# §12  copy — copy a path to a destination. {recursive:true} copies a tree.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://c.txt" "hi" drop  IO.copy "mem://c.txt" "mem://c2.txt" drop  IO.read "mem://c2.txt"	'hi'	copy duplicates a file's contents
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://cd/a.txt" "x" drop  IO.copy "mem://cd" "mem://cd2"	ERROR:copy	copying a directory without {recursive} errors
+# §12  copy — copy a Pathon to a destination. {recursive:true} copies a tree.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://c.txt") "hi" drop  IO.copy (make Pathon "mem://c.txt") (make Pathon "mem://c2.txt") drop  IO.read (make Pathon "mem://c2.txt")	'hi'	copy duplicates a file's contents
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://cd/a.txt") "x" drop  IO.copy (make Pathon "mem://cd") (make Pathon "mem://cd2")	ERROR:copy	copying a directory without {recursive} errors
 #
 # §13  link — create a link at dst referring to src: a symlink by default,
-#      a hard link with {hard:true}. Returns the link path.
-import "aql:io"  context dot __sys dot fs set mem true  IO.link "mem://target.txt" "mem://sl"	'mem://sl'	link returns the created link path
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://h.txt" "hi" drop  IO.link "mem://h.txt" "mem://h2" {hard:true} drop  IO.read "mem://h2"	'hi'	a hard link shares the file's contents
-import "aql:io"  context dot __sys dot fs set mem true  IO.link "mem://ghost" "mem://hl" {hard:true}	ERROR:link	a hard link to an absent target errors
+#      a hard link with {hard:true}. Returns the link Pathon.
+import "aql:io"  context dot __sys dot fs set mem true  IO.link (make Pathon "mem://target.txt") (make Pathon "mem://sl")	mem:/sl	link returns the created link path
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://h.txt") "hi" drop  IO.link (make Pathon "mem://h.txt") (make Pathon "mem://h2") {hard:true} drop  IO.read (make Pathon "mem://h2")	'hi'	a hard link shares the file's contents
+import "aql:io"  context dot __sys dot fs set mem true  IO.link (make Pathon "mem://ghost") (make Pathon "mem://hl") {hard:true}	ERROR:link	a hard link to an absent target errors
 #
 # §14  touch — create a path if absent and apply {mode}/{mtime}/{atime}/{size}.
-import "aql:io"  context dot __sys dot fs set mem true  IO.touch "mem://t.txt" drop  (IO.stat "mem://t.txt").size	0	touch creates an empty file
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://t.txt" "hello" drop  IO.touch "mem://t.txt" {size:2} drop  (IO.stat "mem://t.txt").size	2	touch {size} truncates a file
-import "aql:io"  context dot __sys dot fs set mem true  IO.touch "mem://t.txt" {size:-1}	ERROR:touch	a negative touch size errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch (make Pathon "mem://t.txt") drop  (IO.stat (make Pathon "mem://t.txt")).size	0	touch creates an empty file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://t.txt") "hello" drop  IO.touch (make Pathon "mem://t.txt") {size:2} drop  (IO.stat (make Pathon "mem://t.txt")).size	2	touch {size} truncates a file
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch (make Pathon "mem://t.txt") {size:-1}	ERROR:touch	a negative touch size errors
 #
 # §15  binary & positioned read/write — {enc:'bytes'} returns Bytes,
 #      {offset}/{length} slice a read, a Bytes payload writes verbatim, and
 #      {offset} splices a positioned write.
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://h.txt" "hello" drop  IO.read "mem://h.txt" {offset:1 length:3}	'ell'	positioned read returns a text slice
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://h.txt" "hello" drop  IO.read "mem://h.txt" {enc:'bytes'}	Bytes<68 65 6c 6c 6f>	a binary read returns Bytes
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://b.bin" (convert Bytes "hi") drop  IO.read "mem://b.bin"	'hi'	writing Bytes stores the raw bytes
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://p.bin" "hello" drop  IO.write "mem://p.bin" (convert Bytes "XY") {offset:1} drop  IO.read "mem://p.bin"	'hXYlo'	{offset} splices a positioned write
-import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://z.bin" (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://h.txt") "hello" drop  IO.read (make Pathon "mem://h.txt") {offset:1 length:3}	'ell'	positioned read returns a text slice
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://h.txt") "hello" drop  IO.read (make Pathon "mem://h.txt") {enc:'bytes'}	Bytes<68 65 6c 6c 6f>	a binary read returns Bytes
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.bin") (convert Bytes "hi") drop  IO.read (make Pathon "mem://b.bin")	'hi'	writing Bytes stores the raw bytes
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://p.bin") "hello" drop  IO.write (make Pathon "mem://p.bin") (convert Bytes "XY") {offset:1} drop  IO.read (make Pathon "mem://p.bin")	'hXYlo'	{offset} splices a positioned write
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://z.bin") (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
 #
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not

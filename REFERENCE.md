@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `list`, `remove`, `move`, `copy`, `link`, `touch`, `folder`, `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core). |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2150,19 +2150,30 @@ modules keep plain names.
 > `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
-> **`aql:io` filesystem surface.** Beyond `read`/`write`, the module covers
-> the full batch API, each word collapsing several operations via options:
-> `stat path {follow, resolve}` returns a FileInfo record
+> **`aql:io` filesystem surface.** File I/O is **Pathon-only**: every
+> target is a `Scalar/Micron/Pathon` built with `make Pathon "…"` — a bare
+> string is refused, so a file target is type-distinct from an arbitrary
+> string and from a stream handle, and one polymorphic verb dispatches on
+> the argument's type. A word that returns its target returns that Pathon,
+> so `IO.read (IO.write p x)` threads through. Beyond `read`/`write`, the
+> module covers the full batch API, each word collapsing several operations
+> via options: `IO.stat p {follow, resolve}` returns a FileInfo record
 > (`name`/`path`/`type`/`size`/`mode`/`mtime`, where `type` is an
 > `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or `none` when absent;
-> `list path {detail, recursive}` enumerates a directory; `remove path
-> {recursive, force}`, `move src dst`, `copy src dst {recursive}`, `link
-> src dst {hard}`, and `touch path {mode, mtime, atime, size}`. `read`/
-> `write` also do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes`
-> payload writes verbatim) and positioned (`read {offset, length}`, `write
-> {offset}`) I/O. Every op routes through the swappable `FileOps`
-> capability, so `context.__sys.fs set mem true` runs them against an
-> in-memory filesystem.
+> `IO.move src dst`, `IO.copy src dst {recursive}`, `IO.link src dst
+> {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
+> do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes
+> verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O.
+>
+> `list` and `remove` are different: rather than a namespaced `IO.list` /
+> `IO.remove`, importing `aql:io` **extends the core `list` / `remove`
+> words** with a Pathon overload (design/OPEN-WORDS.0.md), so the BARE words
+> gain filesystem behaviour — `list p {detail, recursive}` enumerates a
+> directory, `remove p {recursive, force}` deletes a path. The overload
+> registers only on import and coexists with the core table/collection
+> meanings (its Pathon argument is type-disjoint), so `list [1 2 3]` still
+> works. Every op routes through the swappable `FileOps` capability, so
+> `context.__sys.fs set mem true` runs them against an in-memory filesystem.
 
 
 ## Diagnostic reports

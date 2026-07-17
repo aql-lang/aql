@@ -25,7 +25,7 @@ func ioFSReg(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 
 func statField(t *testing.T, r *Registry, path string) ReadMap {
 	t.Helper()
-	res := runAQL(t, r, []Value{NewWord("stat"), NewString(path)})
+	res := runAQL(t, r, []Value{NewWord("stat"), pathV(path)})
 	if len(res) != 1 {
 		t.Fatalf("stat %q: expected 1 result, got %d", path, len(res))
 	}
@@ -66,7 +66,7 @@ func TestStatFileAndDir(t *testing.T) {
 
 func TestStatAbsentReturnsNone(t *testing.T) {
 	r, _ := ioFSReg(t)
-	res := runAQL(t, r, []Value{NewWord("stat"), NewString("ghost")})
+	res := runAQL(t, r, []Value{NewWord("stat"), pathV("ghost")})
 	if len(res) != 1 || !res[0].Is(TNone) {
 		t.Fatalf("stat of absent path: expected none, got %v", res)
 	}
@@ -90,7 +90,7 @@ func TestStatSymlinkAndFollow(t *testing.T) {
 
 	// {follow:false} describes the link itself and exposes .target.
 	res := runAQL(t, r, []Value{
-		NewWord("stat"), NewString("link"),
+		NewWord("stat"), pathV("link"),
 		wrapMap(func(om *OrderedMap) { om.Set("follow", NewBoolean(false)) }),
 	})
 	lm, err := AsMap(res[0])
@@ -112,7 +112,7 @@ func TestStatResolveOption(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := runAQL(t, r, []Value{
-		NewWord("stat"), NewString("a.txt"),
+		NewWord("stat"), pathV("a.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("resolve", NewBoolean(true)) }),
 	})
 	m, err := AsMap(res[0])
@@ -130,7 +130,7 @@ func TestStatCycleErrors(t *testing.T) {
 	if err := mem.Symlink("cyc", "cyc"); err != nil { // self-referential
 		t.Fatal(err)
 	}
-	if err := runAQLError(t, r, []Value{NewWord("stat"), NewString("cyc")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("stat"), pathV("cyc")}); err == nil {
 		t.Error("expected stat error on a symlink cycle")
 	}
 }
@@ -155,7 +155,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 	}
 
 	// Shallow names.
-	res := runAQL(t, r, []Value{NewWord("list"), NewString("root")})
+	res := runAQL(t, r, []Value{NewWord("list"), pathV("root")})
 	lst, err := AsList(res[0])
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +166,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 
 	// Detail records.
 	res = runAQL(t, r, []Value{
-		NewWord("list"), NewString("root"),
+		NewWord("list"), pathV("root"),
 		wrapMap(func(om *OrderedMap) { om.Set("detail", NewBoolean(true)) }),
 	})
 	dlst, _ := AsList(res[0])
@@ -176,7 +176,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 
 	// Recursive walk.
 	res = runAQL(t, r, []Value{
-		NewWord("list"), NewString("root"),
+		NewWord("list"), pathV("root"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
 	rlst, _ := AsList(res[0])
@@ -190,10 +190,10 @@ func TestListErrors(t *testing.T) {
 	if err := mem.WriteFile("f.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runAQLError(t, r, []Value{NewWord("list"), NewString("ghost")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("list"), pathV("ghost")}); err == nil {
 		t.Error("expected list error on nonexistent dir")
 	}
-	if err := runAQLError(t, r, []Value{NewWord("list"), NewString("f.txt")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("list"), pathV("f.txt")}); err == nil {
 		t.Error("expected list error on a file")
 	}
 }
@@ -258,6 +258,21 @@ func wrapMap(set func(*OrderedMap)) Value {
 	return NewMap(om)
 }
 
+// pathV builds a Pathon micron from a POSIX path string, mirroring the
+// engine's `make Pathon "s"` parse (segments split on "/", absolute iff it
+// begins with "/"). The io words are Pathon-only, so tests pass every file
+// target through this rather than a bare string.
+func pathV(s string) Value {
+	abs := strings.HasPrefix(s, "/")
+	var parts []string
+	for _, p := range strings.Split(s, "/") {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return NewPathon(parts, abs)
+}
+
 // TestMapBoolOptNonOrderedMap covers the AsMap-nil path: an Options-typed
 // value is a concrete TMap whose AsMap returns nil, so mapBoolOpt falls back
 // to the default rather than dereferencing a nil map.
@@ -301,34 +316,34 @@ func TestRemoveWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// remove a file → returns the path, file gone.
-	res := runAQL(t, r, []Value{NewWord("remove"), NewString("f.txt")})
-	if res[0].String() != "'f.txt'" {
+	res := runAQL(t, r, []Value{NewWord("remove"), pathV("f.txt")})
+	if !IsPathon(res[0]) || res[0].String() != "f.txt" {
 		t.Errorf("remove returned %v", res[0])
 	}
 	if _, err := mem.Stat("f.txt", false); err == nil {
 		t.Error("file not removed")
 	}
 	// removing an absent path errors without {force}.
-	if err := runAQLError(t, r, []Value{NewWord("remove"), NewString("f.txt")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("remove"), pathV("f.txt")}); err == nil {
 		t.Error("expected error removing an absent path")
 	}
 	// {force:true} makes an absent removal a no-op.
 	res = runAQL(t, r, []Value{
-		NewWord("remove"), NewString("ghost"),
+		NewWord("remove"), pathV("ghost"),
 		wrapMap(func(om *OrderedMap) { om.Set("force", NewBoolean(true)) }),
 	})
-	if res[0].String() != "'ghost'" {
+	if !IsPathon(res[0]) || res[0].String() != "ghost" {
 		t.Errorf("forced remove returned %v", res[0])
 	}
 	// removing a non-empty dir needs {recursive}.
 	if err := mem.WriteFile("d/c.txt", []byte("y"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runAQLError(t, r, []Value{NewWord("remove"), NewString("d")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("remove"), pathV("d")}); err == nil {
 		t.Error("expected error removing a non-empty dir non-recursively")
 	}
 	runAQL(t, r, []Value{
-		NewWord("remove"), NewString("d"),
+		NewWord("remove"), pathV("d"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
 	if _, err := mem.Stat("d/c.txt", false); err == nil {
@@ -341,8 +356,8 @@ func TestMoveWord(t *testing.T) {
 	if err := mem.WriteFile("a.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res := runAQL(t, r, []Value{NewWord("move"), NewString("a.txt"), NewString("b.txt")})
-	if res[0].String() != "'b.txt'" {
+	res := runAQL(t, r, []Value{NewWord("move"), pathV("a.txt"), pathV("b.txt")})
+	if !IsPathon(res[0]) || res[0].String() != "b.txt" {
 		t.Errorf("move returned %v", res[0])
 	}
 	if _, err := mem.Stat("b.txt", false); err != nil {
@@ -351,14 +366,14 @@ func TestMoveWord(t *testing.T) {
 	if _, err := mem.Stat("a.txt", false); err == nil {
 		t.Error("move source remains")
 	}
-	if err := runAQLError(t, r, []Value{NewWord("move"), NewString("ghost"), NewString("z")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("move"), pathV("ghost"), pathV("z")}); err == nil {
 		t.Error("expected error moving an absent path")
 	}
 	// A Pathon destination is returned as a Pathon.
 	if err := mem.WriteFile("c.txt", []byte("y"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res = runAQL(t, r, []Value{NewWord("move"), NewString("c.txt"), NewPathon([]string{"e.txt"}, false)})
+	res = runAQL(t, r, []Value{NewWord("move"), pathV("c.txt"), NewPathon([]string{"e.txt"}, false)})
 	if !IsPathon(res[0]) {
 		t.Errorf("move to Pathon returned %v (want Pathon)", res[0])
 	}
@@ -370,8 +385,8 @@ func TestCopyWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// copy a file.
-	res := runAQL(t, r, []Value{NewWord("copy"), NewString("src.txt"), NewString("dst.txt")})
-	if res[0].String() != "'dst.txt'" {
+	res := runAQL(t, r, []Value{NewWord("copy"), pathV("src.txt"), pathV("dst.txt")})
+	if !IsPathon(res[0]) || res[0].String() != "dst.txt" {
 		t.Errorf("copy returned %v", res[0])
 	}
 	if b, err := mem.ReadFile("dst.txt"); err != nil || string(b) != "hello" {
@@ -381,7 +396,7 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.Symlink("src.txt", "link"); err != nil {
 		t.Fatal(err)
 	}
-	runAQL(t, r, []Value{NewWord("copy"), NewString("link"), NewString("link2")})
+	runAQL(t, r, []Value{NewWord("copy"), pathV("link"), pathV("link2")})
 	if li, err := mem.Stat("link2", false); err != nil || !li.Symlink || li.Target != "src.txt" {
 		t.Errorf("copied symlink = %+v (%v)", li, err)
 	}
@@ -392,18 +407,18 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.WriteFile("tree/sub/b.txt", []byte("2"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runAQLError(t, r, []Value{NewWord("copy"), NewString("tree"), NewString("treecopy")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("copy"), pathV("tree"), pathV("treecopy")}); err == nil {
 		t.Error("expected error copying a dir without {recursive}")
 	}
 	runAQL(t, r, []Value{
-		NewWord("copy"), NewString("tree"), NewString("treecopy"),
+		NewWord("copy"), pathV("tree"), pathV("treecopy"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
 	if b, err := mem.ReadFile("treecopy/sub/b.txt"); err != nil || string(b) != "2" {
 		t.Errorf("recursive copy child = %q (%v)", b, err)
 	}
 	// copying an absent source errors.
-	if err := runAQLError(t, r, []Value{NewWord("copy"), NewString("ghost"), NewString("z")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("copy"), pathV("ghost"), pathV("z")}); err == nil {
 		t.Error("expected error copying an absent path")
 	}
 }
@@ -534,15 +549,15 @@ func TestCopyErrorBranches(t *testing.T) {
 func TestLinkWord(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// symbolic link (default).
-	res := runAQL(t, r, []Value{NewWord("link"), NewString("t.txt"), NewString("sl")})
-	if res[0].String() != "'sl'" {
+	res := runAQL(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")})
+	if !IsPathon(res[0]) || res[0].String() != "sl" {
 		t.Errorf("link returned %v", res[0])
 	}
 	if li, err := mem.Stat("sl", false); err != nil || !li.Symlink || li.Target != "t.txt" {
 		t.Errorf("symlink = %+v (%v)", li, err)
 	}
 	// linking over an existing path errors.
-	if err := runAQLError(t, r, []Value{NewWord("link"), NewString("t.txt"), NewString("sl")}); err == nil {
+	if err := runAQLError(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")}); err == nil {
 		t.Error("expected error creating a link over an existing path")
 	}
 	// hard link.
@@ -550,7 +565,7 @@ func TestLinkWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	runAQL(t, r, []Value{
-		NewWord("link"), NewString("f.txt"), NewString("hl"),
+		NewWord("link"), pathV("f.txt"), pathV("hl"),
 		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
 	})
 	if b, err := mem.ReadFile("hl"); err != nil || string(b) != "body" {
@@ -558,13 +573,13 @@ func TestLinkWord(t *testing.T) {
 	}
 	// hard-linking an absent target errors.
 	if err := runAQLError(t, r, []Value{
-		NewWord("link"), NewString("ghost"), NewString("hl2"),
+		NewWord("link"), pathV("ghost"), pathV("hl2"),
 		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
 	}); err == nil {
 		t.Error("expected error hard-linking an absent target")
 	}
 	// A Pathon destination is returned as a Pathon.
-	res = runAQL(t, r, []Value{NewWord("link"), NewString("t.txt"), NewPathon([]string{"pl"}, false)})
+	res = runAQL(t, r, []Value{NewWord("link"), pathV("t.txt"), NewPathon([]string{"pl"}, false)})
 	if !IsPathon(res[0]) {
 		t.Errorf("link to Pathon returned %v (want Pathon)", res[0])
 	}
@@ -573,8 +588,8 @@ func TestLinkWord(t *testing.T) {
 func TestTouchWord(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// touch creates an empty file when absent.
-	res := runAQL(t, r, []Value{NewWord("touch"), NewString("new.txt")})
-	if res[0].String() != "'new.txt'" {
+	res := runAQL(t, r, []Value{NewWord("touch"), pathV("new.txt")})
+	if !IsPathon(res[0]) || res[0].String() != "new.txt" {
 		t.Errorf("touch returned %v", res[0])
 	}
 	if fi, err := mem.Stat("new.txt", false); err != nil || fi.Size != 0 {
@@ -584,13 +599,13 @@ func TestTouchWord(t *testing.T) {
 	if err := mem.WriteFile("keep.txt", []byte("data"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runAQL(t, r, []Value{NewWord("touch"), NewString("keep.txt")})
+	runAQL(t, r, []Value{NewWord("touch"), pathV("keep.txt")})
 	if b, _ := mem.ReadFile("keep.txt"); string(b) != "data" {
 		t.Errorf("touch clobbered content: %q", b)
 	}
 	// {mode} chmods, {mtime} sets the time, {size} truncates/grows.
 	runAQL(t, r, []Value{
-		NewWord("touch"), NewString("new.txt"),
+		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("mode", NewInteger(0o600))
 			om.Set("mtime", NewInteger(1000))
@@ -603,14 +618,14 @@ func TestTouchWord(t *testing.T) {
 	}
 	// a negative size is rejected.
 	if err := runAQLError(t, r, []Value{
-		NewWord("touch"), NewString("new.txt"),
+		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("size", NewInteger(-1)) }),
 	}); err == nil {
 		t.Error("expected error on a negative touch size")
 	}
 	// {atime} alone still drives Chtimes.
 	runAQL(t, r, []Value{
-		NewWord("touch"), NewString("new.txt"),
+		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("atime", NewInteger(2000)) }),
 	})
 }

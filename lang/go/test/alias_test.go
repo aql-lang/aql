@@ -492,8 +492,8 @@ func TestAliasList(t *testing.T) {
 		name:      "list",
 		files:     map[string]string{"data.csv": csv},
 		defStep:   "def mylist word [list]",
-		origSteps: []string{`def tbl (read "data.csv")`, `list tbl`},
-		aliaSteps: []string{`def tbl (read "data.csv")`, `mylist tbl`},
+		origSteps: []string{`def tbl (read (make Pathon "data.csv"))`, `list tbl`},
+		aliaSteps: []string{`def tbl (read (make Pathon "data.csv"))`, `mylist tbl`},
 	})
 }
 
@@ -507,8 +507,8 @@ func TestAliasCreate(t *testing.T) {
 		name:      "create",
 		files:     map[string]string{"data.csv": csv},
 		defStep:   "def mycreate word [create]",
-		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl create {id:"2" name:"Bob"}`},
-		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl mycreate {id:"2" name:"Bob"}`},
+		origSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl create {id:"2" name:"Bob"}`},
+		aliaSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl mycreate {id:"2" name:"Bob"}`},
 	})
 }
 
@@ -522,8 +522,8 @@ func TestAliasLoad(t *testing.T) {
 		name:      "load",
 		files:     map[string]string{"data.csv": csv},
 		defStep:   "def myload word [load]",
-		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl load {id:"1"}`},
-		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myload {id:"1"}`},
+		origSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl load {id:"1"}`},
+		aliaSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl myload {id:"1"}`},
 	})
 }
 
@@ -537,8 +537,8 @@ func TestAliasUpdate(t *testing.T) {
 		name:      "update",
 		files:     map[string]string{"data.csv": csv},
 		defStep:   "def myupdate word [update]",
-		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl update {id:"1" name:"Alicia"}`},
-		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myupdate {id:"1" name:"Alicia"}`},
+		origSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl update {id:"1" name:"Alicia"}`},
+		aliaSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl myupdate {id:"1" name:"Alicia"}`},
 	})
 }
 
@@ -552,7 +552,7 @@ func TestAliasRemove(t *testing.T) {
 		name:      "remove",
 		files:     map[string]string{"data.csv": csv},
 		defStep:   "def myremove word [remove]",
-		origSteps: []string{`def tbl word [read "data.csv"]`, `tbl remove {id:"1"}`},
-		aliaSteps: []string{`def tbl word [read "data.csv"]`, `tbl myremove {id:"1"}`},
+		origSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl remove {id:"1"}`},
+		aliaSteps: []string{`def tbl word [read (make Pathon "data.csv")]`, `tbl myremove {id:"1"}`},
 	})
 }

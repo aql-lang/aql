@@ -719,16 +719,27 @@ aql> t cancel
 
 ## 19. Reading and writing files
 
+File I/O lives in the `aql:io` module, and every filesystem target is a
+`Pathon` micron built with `make Pathon "…"` — a bare string is not
+accepted, so a file path is type-distinct from ordinary text.
+
 ```
-aql> read "data.json"
-aql> read "data.csv" {fmt: 'csv}
-aql> write "out.txt" "hello"
-aql> write "out.json" {x:1, y:2}
+aql> import "aql:io"
+aql> IO.read (make Pathon "data.json")
+aql> IO.read (make Pathon "data.csv") {fmt: 'csv}
+aql> IO.write (make Pathon "out.txt") "hello"
+aql> IO.write (make Pathon "out.json") {x:1, y:2}
 ```
 
 Supported formats: `json`, `csv`, `tsv`, `jsonic`, `text`. By
-default the format is inferred from the extension. `read stdin`
-and `write stdout "..."` work too.
+default the format is inferred from the extension. `IO.read IO.stdin`
+and `IO.write IO.stdout "..."` work too (the stream handles are not
+Pathons — they are `StreamKind` atoms).
+
+Importing `aql:io` also extends the core `list` and `remove` words with a
+Pathon overload, so `list (make Pathon "dir")` enumerates a directory and
+`remove (make Pathon "f")` deletes a path — the same bare words that list a
+table or remove a record, now polymorphic over a filesystem path.
 
 File access requires the **`fileio`** capability to be enabled.
 The CLI enables it by default; embeddings may disable it.

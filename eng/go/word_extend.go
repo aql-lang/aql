@@ -259,6 +259,23 @@ func NewWordExtension(name string, sigs []Signature) FnDefInfo {
 	}
 }
 
+// NewWordExtensionAnchored is NewWordExtension with the builtin-anchor
+// waiver set (AllowBuiltinAnchor): the returned clone's signatures may
+// extend a CORE word with builtin-only argument tuples, bypassing the
+// requireUserTypedSigs rule at both the def-time and transplant guards.
+// It is the FIRST-PARTY escape hatch for aql-shipped native modules — a
+// module versioned WITH the kernel, where the rule's forward-compat
+// rationale (a third party claiming a tuple core later locks) does not
+// apply. aql:io uses it to extend the core `list`/`remove` words with
+// Pathon-anchored signatures (Pathon being a kernel builtin the rule
+// would otherwise refuse). Third-party / source extensions must keep
+// using NewWordExtension and anchor on a type they mint.
+func NewWordExtensionAnchored(name string, sigs []Signature) FnDefInfo {
+	ext := NewWordExtension(name, sigs)
+	ext.AllowBuiltinAnchor = true
+	return ext
+}
+
 // InstallWordExtension performs the def-merge for `def name fn […]`
 // where name resolves to a locked-bearing word: it constructs the word
 // clone — the base word's full dispatch list merged with ext's
@@ -379,8 +396,10 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	// Defence in depth for the module-scope core-word rule: the merge
 	// that built the exported clone already refused all-kernel tuples,
 	// but a transplant onto a CORE word re-checks so a hand-built /
-	// host-constructed clone can't smuggle one past the importer.
-	if r.IsBuiltinWord(name) {
+	// host-constructed clone can't smuggle one past the importer. The
+	// first-party anchor waiver (NewWordExtensionAnchored) skips both
+	// checks — aql:io extends core `list`/`remove` on Pathon, a builtin.
+	if r.IsBuiltinWord(name) && !ext.AllowBuiltinAnchor {
 		if err := requireUserTypedSigs(r, name, "import", incoming); err != nil {
 			return err
 		}

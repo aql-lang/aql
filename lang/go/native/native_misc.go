@@ -233,31 +233,25 @@ func init() {
 
 // ---- file I/O handlers ----
 
-// extractPath returns the routing path from a Stream handle, Path, or
-// String value. A Stream atom (stdin/stdout/stderr) resolves to its
-// internal stream sentinel so doRead/doWrite route to the host stream.
+// extractPath returns the routing path from a Stream handle or a Pathon. A
+// Stream atom (stdin/stdout/stderr) resolves to its internal stream sentinel
+// so doRead/doWrite route to the host stream; a Pathon renders to its path
+// string. File I/O is Pathon-only — string paths are not accepted — so these
+// are the only two shapes reaching here.
 func extractPath(v Value) string {
 	if sentinel, ok := streamSentinel(v); ok {
 		return sentinel
 	}
-	if IsPathon(v) {
-		_as5, _ := AsPathon(v)
-		return _as5.String()
-	}
-	_as6, _ := AsString(v)
-	return _as6
+	_as5, _ := AsPathon(v)
+	return _as5.String()
 }
 
-// returnPath wraps the result: a Stream handle or Path returns itself;
-// a String path returns the resolved string.
-func returnPath(v Value, pathStr string) Value {
-	if _, ok := streamSentinel(v); ok {
-		return v
-	}
-	if IsPathon(v) {
-		return v
-	}
-	return NewString(pathStr)
+// returnPath is the value a filesystem word hands back: the Pathon or Stream
+// handle the caller passed. Every io target is now a value-carrying micron or
+// stream handle, so the input is returned verbatim — the resolved path string
+// is used only for the operation itself, never as the return.
+func returnPath(v Value) Value {
+	return v
 }
 
 func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -301,7 +295,7 @@ func writeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -315,7 +309,7 @@ func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // checkWritableFormat rejects a write whose explicit {fmt:…} resolves to a
@@ -348,7 +342,7 @@ func writeAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
@@ -366,7 +360,7 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // ---- help / describe handlers ----

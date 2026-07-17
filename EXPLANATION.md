@@ -669,7 +669,7 @@ the stack and choose what to do with it:
 ```
 do [1 div 0] error [drop 42]      # returns 42
 
-do [read "missing.json"] error [
+do [IO.read (make Pathon "missing.json")] error [
   dup .code eq 'io_error if [
     drop {}
   ] [
