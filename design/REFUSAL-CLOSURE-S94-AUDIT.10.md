@@ -2,6 +2,48 @@
 Full classification of all 71 MarkUncompilable / refusal raise-sites.
 5 subsumed | 23 designed-keep | 16 defensive-only | 27 open.
 
+## Probe-sweep + landings update (2026-07-17, feat/refusal-closure-tail)
+
+A 6-agent worktree-isolated probe sweep re-tested every open site (plus the
+three review declines) EMPIRICALLY on HEAD — 4 already-compile (stale
+premises), 8 quick wins, 18 confirmed deep. Landed on the tail branch:
+
+- **S9.2a loop-carried variadic store — LANDED** (was designed follow-on):
+  CheckState.LoopBodyDepth + the NestedBodyDepth==LoopBodyDepth split gate +
+  the analysis-round depth correction (the [5 0 5 0] silent-SetAt root cause)
+  + the splitBound multiOut residual.
+- **S9.1 rows 1-2 def-over-catch-region — LANDED** (was designed follow-on):
+  SplitEventRegionBind, the STATIC-region twin of the S5 split (splice at
+  nout-1, sim-entry removal; the compiled catch path defers wholesale).
+- **Closure-body trailing apply (emit.go:3176 family) — FIXED as a real
+  compile**: the probe surfaced a live off-corpus miscompile ([[1 1]] vs
+  [[3 3]]); root cause was a QUOTE-DISCIPLINE mismatch (a compiled local
+  carries the stored /r quote verbatim; the interpreter's read strips one
+  level). callDynTrailTop now strips the applied copy's quote and
+  RecordDynApply fences inline-quoted fns. The shape compiles with parity.
+- **emit.go:4215-family computed range START/STEP — LANDED**:
+  computedRangeBounds passes bounds as-is; RecordLoop admits const+local,
+  refuses events.
+- **method_shape.go:213 0-arg landing — LANDED**: an all-0-arg member skips
+  the statement-window scan (it never forward-collects).
+- **emit.go:4326 (behave case) — LANDED**: behave carries CompileStoresFn.
+
+Stale premises confirmed already-compiling (no change needed):
+engine.go:8286-family (Any-operand poly — compiles via OpCallUserPoly; the
+site only fires on discarded isolated-analysis passes), emit.go:2848-family
+(computed rebind sources all resolve), emit.go:4114 (the documented fixture
+compiles; the site is narrower), the quoted-returned-fn review fence
+(working as designed).
+
+Remaining quick wins (probed mechanisms in the sweep result, unlanded):
+engine.go:8219-family union-RETURN poly (wire tryCompileUserPolyArms in the
+strict-disjunct branch), emit.go:2539 both-computed arms over a non-event
+cond (widen the RecordBranch gate + a lowerBothComputed cond-materialise
+arm), engine.go:3161 multi-overload member arrival (equal-arity/equal-return
+first-match claim), and the interp-hole FUNCTION formatting fix (stamp
+formatFnDef's string onto ClosurePayload at OpPushClosure — graduates the
+review decline). The other 18 open sites are confirmed deep.
+
 ## open (27)
 - `core_helpers.go:1032` — gradual-Any arg to multi-overload user fn `<w>`: ambiguous dispatch, no poly re-match
   The §6 poly-decline funnel for the clusterC (gradual-Any ambiguous) hazard: §6a/§6b subsumed the bakeable arms (those now compile via OpCallUserPoly and never reach here), but this fires when tryCompileUserPolyArms still declines an arm (residual-carrying / differing-declared-returns) — §6 sketches the missing mechanism (type the call residual as the dynamic join of the arms' returns, the §1 machinery).

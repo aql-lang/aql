@@ -142,3 +142,36 @@ func TestSplitEventRegionBindDeclines(t *testing.T) {
 		t.Error("a closed-fragment producer must decline (eventBySeq miss)")
 	}
 }
+
+// recordCallRefusal's computed-range-list classifier (white-box): a `for`
+// whose range arg carries an OpMakeList producer refuses with the dedicated
+// reason. Source shapes rarely reach this arm since the start/step widening
+// (RecordLoop owns the const/local/event partition), but the classifier
+// stays for the lowerable=false paths where the runtime-assembled range
+// diverges under the CALL_NATIVE for-handler.
+func containsStr(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRecordCallRefusalComputedRangeList(t *testing.T) {
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es := r.Check.Emit.(*EmitState)
+	es.bindRegistry(r)
+	lst := NewCarrier(TList)
+	lst.ID = GenerateID(IDPrefixForType(TList))
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordMakeList, nout: 1, makeList: true}})
+	es.setProduced(lst, seq)
+	if !es.recordCallRefusal("for", &Signature{}, []Value{lst}, nil, SrcPos{}, false, false) {
+		t.Fatal("the computed-range-list arm must classify the refusal")
+	}
+	if es.Compilable || !containsStr(es.Reason, "computed range list") {
+		t.Errorf("want the computed-range-list reason, got compilable=%v reason=%q", es.Compilable, es.Reason)
+	}
+}

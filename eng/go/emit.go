@@ -3626,7 +3626,12 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		es.MarkUncompilable("for: range of unknown provenance")
 		return
 	}
-	if startOp.kind != opConst || stepOp.kind != opConst {
+	rangeOpOK := func(op emitOperand) bool { return op.kind == opConst || op.kind == opLocal }
+	if !rangeOpOK(startOp) || !rangeOpOK(stepOp) {
+		// A const or a re-pushable frame LOCAL (a param read — `for [n 5]
+		// [...]`) lowers via the same pushOperand path the computed-END case
+		// proved out; an EVENT-produced start/step keeps the refusal (its
+		// value lives on the sim at its producer, not re-pushable here).
 		es.MarkUncompilable("for: computed range start/step (Stage 2 follow-on)")
 		return
 	}

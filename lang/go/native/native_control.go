@@ -1175,18 +1175,18 @@ const loopSpreadResidualCap = 256
 // ok=false when start or step is not a concrete integer (RecordLoop refuses a
 // computed start/step) or the arity is not 1–3.
 func computedRangeBounds(elems []Value) (startV, endV, stepV Value, ok bool) {
-	isInt := func(v Value) bool { return IsConcrete(v) && v.Parent.ConformsTo(TInteger) }
+	// Every bound may be computed (carrier / event values returned AS-IS so
+	// resolveOperand finds their homes): RecordLoop admits const AND local
+	// operands for start/step and keeps refusing event-produced ones — the
+	// VM's opForSetup pops the full triple generically with the
+	// interpreter's own runtime Integer/zero-step taxonomy either way.
 	switch len(elems) {
 	case 1:
 		return NewInteger(0), elems[0], NewInteger(1), true
 	case 2:
-		if isInt(elems[0]) {
-			return elems[0], elems[1], NewInteger(1), true
-		}
+		return elems[0], elems[1], NewInteger(1), true
 	case 3:
-		if isInt(elems[0]) && isInt(elems[2]) {
-			return elems[0], elems[1], elems[2], true
-		}
+		return elems[0], elems[1], elems[2], true
 	}
 	return Value{}, Value{}, Value{}, false
 }
