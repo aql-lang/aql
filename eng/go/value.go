@@ -3322,6 +3322,12 @@ func kernelFormatDefault(v Value) string {
 	case isFnDefValue(v):
 		fd, _ := v.Data.(FnDefInfo)
 		return formatFnDef(fd)
+	case func() bool { cl, ok := v.Data.(ClosurePayload); return ok && cl.Render != "" }():
+		// A compiled closure carrying its source fn's interpreter rendering
+		// (CompiledFn.Render via OpPushClosure) — byte-identical to the
+		// interpreter's fn value in interpolation holes and print output.
+		cl, _ := v.Data.(ClosurePayload)
+		return cl.Render
 	// TMap rendering moved to mapFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes Map values (and TMap-rooted subtypes

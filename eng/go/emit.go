@@ -803,6 +803,12 @@ type emitUnit struct {
 // OUT of tail marking, mirroring the interpreter's HasGen exclusion
 // from frame elision (plan Stage 4).
 type fnUnitRec struct {
+	// render is the interpreter's formatFnDef string for a RETURNED-closure
+	// unit (tryReturnedClosure) — stamped onto CompiledFn.Render and copied
+	// to the ClosurePayload at OpPushClosure, so a compiled closure VALUE
+	// renders byte-identically to the interpreter's fn value (interpolation
+	// holes, print). Empty for every other unit (default rendering).
+	render        string
 	name          string
 	nParams       int
 	nUnnamed      int // unnamed (stack-flowing) params — the RET trim allowance
@@ -1888,6 +1894,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return emitOperand{}, false
 	}
+	es.fnRecs[unit].render = formatFnDef(fd)
 	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
 }
 
@@ -5554,22 +5561,8 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 // loop — no top-frame restriction. Returns false, leaving es untouched (the
 // caller then marks the program uncompilable and it falls back), when a hole has
 // no compiled home or did not produce exactly one value.
-// interpHoleStringifiesUnstably reports whether any interpolation hole is a
-// FUNCTION value: compiled code produces a ClosurePayload whose ValToString
-// renders VM internals (`Function({1 [1] 0})`), while the interpreter renders
-// the source-level `fn (Integer)` — so a fn-valued hole must decline (fall
-// back) rather than expose the VM representation (PR #279 review).
-func interpHoleStringifiesUnstably(holeVals []Value) bool {
-	for _, h := range holeVals {
-		if h.Parent != nil && (h.Parent.ConformsTo(TFunction) || h.Parent.ConformsTo(TFnDef)) {
-			return true
-		}
-	}
-	return false
-}
-
 func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
+	if !es.active() || len(holeVals) == 0 {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
@@ -5607,7 +5600,7 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // events). Returns false, leaving es untouched, when a hole has no
 // compiled home — the caller then refuses and the program falls back.
 func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
+	if !es.active() || len(holeVals) == 0 {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
@@ -7420,7 +7413,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, Decl: rec.decl, LocalNames: names}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, Decl: rec.decl, LocalNames: names, Render: rec.render}
 		if rec.reg != nil && rec.reg != es.progReg {
 			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
 			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):

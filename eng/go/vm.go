@@ -1496,7 +1496,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape}
+			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
 			stack = append(stack, Value{Parent: TFunction, Data: cl})
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
