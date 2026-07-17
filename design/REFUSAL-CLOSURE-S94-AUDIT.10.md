@@ -39,10 +39,17 @@ Remaining quick wins (probed mechanisms in the sweep result, unlanded):
 engine.go:8219-family union-RETURN poly (wire tryCompileUserPolyArms in the
 strict-disjunct branch), emit.go:2539 both-computed arms over a non-event
 cond (widen the RecordBranch gate + a lowerBothComputed cond-materialise
-arm), engine.go:3161 multi-overload member arrival (equal-arity/equal-return
-first-match claim), and the interp-hole FUNCTION formatting fix (stamp
-formatFnDef's string onto ClosurePayload at OpPushClosure — graduates the
-review decline). The other 18 open sites are confirmed deep.
+arm), and engine.go:3161 multi-overload member arrival — ATTEMPTED and
+RECLASSIFIED DEEP: the probe's mechanism (widen tryMemberFnArrivalDispatch's
+single-sig gate) is misattributed — the dot fixture routes through the M2c
+tryShapedMethodDispatch whose statement-window scan declines on the trailing
+op, and the get-form fixture declines upstream of the §3 arrival gate too;
+landing it needs the window model relaxed to consume exactly the shared
+arity (the 0-arg precedent) PLUS the multi-sig claim, threaded through BOTH
+models. The interp-hole FUNCTION formatting fix LANDED (CompiledFn.Render →
+ClosurePayload.Render at OpPushClosure; interpHoleStringifiesUnstably
+deleted; the fn-hole pins flipped to compile rows). The other 18 open sites
+are confirmed deep.
 
 ## open (27)
 - `core_helpers.go:1032` — gradual-Any arg to multi-overload user fn `<w>`: ambiguous dispatch, no poly re-match
