@@ -242,6 +242,7 @@ plus:
 | key | default | meaning |
 |---|---|---|
 | `table:Boolean` | `false` | build a Table instead: record schema = union of keys across blocks in first-seen order; a block missing a field gets `None` — absent ≠ empty string, a deliberate divergence from csv's `""` padding (`format.go:340`), stated here so the asymmetry is on record |
+| `sep:'blank' \| 'indent'` | `'blank'` | block boundary. `'blank'` splits on blank lines; `'indent'` starts a new block at each line with **no leading whitespace** and folds indented lines into the current block — the BSD-ifconfig / `lsblk`-lite shape. *(Added by the §16 exercise: without it, indent-delimited block formats were inexpressible by any spec, which broke the §9 BSD preset-pack story.)* |
 
 **`columns` → Table**
 
@@ -290,7 +291,25 @@ Recorded as a v2 idea under `fixed`.
 | `re:String` | — | required. Go/RE2 syntax — the same engine and semantics as `mini re` (`minilang.go`); **named capture groups become fields**, and at least one named group is required (else `sift_spec_error`) |
 | `per:'source' \| 'line'` | `'source'` | `'source'`: first match over the whole source → Map of captures (no match raises `sift_parse_error` under `strict:'error'`, returns `None` under `'skip'` — reusing the shared knob rather than minting a new one). `'line'`: one row per matching line → Table; non-matching lines follow `strict` |
 | `names:'normalize' \| 'keep'` | `'normalize'` | RE2 group names are `[A-Za-z0-9_]+`, so `last_pid` → `last-pid` |
+| `vtype:<type name>` | `'string'` | one coercion (§5.4) applied to every named group; `types:` overrides per group *(added by the §16 exercise — counter-line patterns otherwise repeat `'integer'` five times)* |
 | `types:Map` | `{}` | per-field coercion |
+
+Two rules pinned by the §16 validation exercise:
+
+- **Unmatched groups yield `None`.** A named group that does not
+  *participate* in the match (an unexercised optional branch) yields
+  `None` regardless of declared type — participation, not emptiness, is
+  the test; a participating empty match yields the §5.4 empty-cell value
+  (`""` for `'string'`, `None` for typed fields). Keys are therefore
+  **always present**, so the output shape is match-independent. (Load
+  bearing: `inet` lines carry an optional `broadcast` group; without
+  this rule a consumer cannot distinguish "absent", `''`, and a missing
+  key.)
+- **`fields:` sugar × pattern.** In a `pattern` spec, top-level `fields`
+  must be the Map form and its keys must be declared (post-normalization)
+  group names; it merges to `opts.types` only. The List form, unknown
+  names, and the per-field `re:` extended form (circular here) are
+  `sift_spec_error`.
 
 ### 5.3 Name normalization — one rule, stated once
 
@@ -379,6 +398,29 @@ are these same maps, embedded.
   `sift_detect_conflict` at define time. Richer argv matching (flag
   subsets) was rejected for v1: ambiguity resolution costs more than
   variant preset names.
+- **The escape-hatch spec form — `family:'fn'`** *(added by the §16
+  exercise)*. A seventh pseudo-family makes fn-backed parsers first-class
+  spec citizens:
+
+  ```
+  { family:'fn'  fn:<Function>          # the [source opts:Map …] fn
+    opts:{…defaults…}                   # optional — opts defaults (merged
+                                        #   with call-site opts; unknown
+                                        #   call-site keys then error)
+    detect:{path:[…] cmd:{…}}           # optional — same claims as any spec
+    doc:"one-liner" }                   # optional — same describe stamping
+  ```
+
+  `Sift.define <name> <fn>` remains sugar for `{family:'fn' fn:<fn>}`.
+  The framework validates the fn's signature prefix exactly as before,
+  registers `detect:` claims and stamps `doc:` identically to declarative
+  specs, applies the shared §5.1 preprocessing (skip/chop/comment/strict,
+  merged spec + call-site) to the text **before** invoking the fn, and
+  `Sift.spec` returns the full map minus `fn:`. Without this form, fn
+  kinds were second-class on every discovery surface — no `Exec.parse` /
+  `{fmt:'auto'}` detection, no doc, hand-rolled preprocessing — which
+  §16's ifconfig exercise showed is untenable for exactly the ragged
+  formats (§9 cuts, BSD variants) that need fn kinds most.
 - **Rejected for v1: a `transform:` post-reshape hook.** One escape
   hatch, not two — arbitrary reshaping is what fn registration is for,
   and a registered fn can call `StructUtil.transform`
@@ -433,7 +475,7 @@ examples below read forward. Every export gets a one-liner in
 
 | word | signature (top-first) | returns | summary |
 |---|---|---|---|
-| `define` | `[name:Atom/q spec:Map]` / `[name:Atom/q fn:Function]` | nothing | Validate + register a spec (or fn) as parse kind `<name>` (and read format, §8.1). |
+| `define` | `[name:Atom/q spec:Map]` / `[name:Atom/q fn:Function]` | nothing | Validate + register a spec (or fn) as parse kind `<name>` (and read format, §8.1). The fn form is sugar for a `{family:'fn' fn:…}` spec (§6) — carry `detect:`/`doc:`/`opts:` by passing the spec form. |
 | `parse` | `[kind:Atom/q source]` / `[kind:Atom/q opts:Map source]` / `[spec:Map source]` / `[spec:Map opts:Map source]` | `Any` | Parse with a named kind **or an inline spec, without registering**. Call-site `opts` overlay the spec's `opts` (call site wins). |
 | `kinds` | `[]` | `List` | Atoms of every sift-registered kind (families + presets + user defines), registration order. |
 | `families` | `[]` | `List` | The six family atoms. |
@@ -465,6 +507,22 @@ Notes:
   design already claims bare kinds (`email`, `vcard` —
   `EXTENSION-MODULES.10.md` §5), so bare names are the established
   convention.
+- **Fn-kind call semantics** *(pinned by the §16 exercise)*. A bare fn
+  kind (`{family:'fn'}` with no `opts:`) receives call-site opts
+  **verbatim** (`{}` when omitted) — no overlay, no unknown-key
+  validation (the parselang precedent, `module-parselang.tsv`). Declaring
+  `opts:` defaults in the spec form opts into framework merging and
+  unknown-key `sift_spec_error` — restoring the §6 typo protection.
+  Sift resolves the **source to a String** before invoking an fn kind
+  (so user fns need not call `ParseLang.source` to handle `{src:…}`
+  sources; sift controls the wrapper it registers, so the parselang
+  registry contract is untouched).
+- **Trailing-Map source rule** *(pinned by the §16 exercise)*. In
+  `Sift.parse` (and `parse <kind>`), a **lone** trailing Map after the
+  kind/spec is the *source* and must carry `src:` (else the
+  `parse_bad_source` analog); a Map followed by a further collectable
+  value is *opts + source*. Examples end a Map-source statement with
+  `end` where ambiguity could arise.
 
 ## 8. Integration with `parse`, `read`, and detection
 
@@ -489,7 +547,8 @@ route it (§2.3). Proposed: a host **detection table** in `native` —
 `SetHostFormatDetect` / `HostFormatDetect`, following the
 `SetHostFormats` accessor pattern — holding `(path-glob → kind)` and
 `(argv0-basename → kind)` entries. Sift populates it from the `detect:`
-blocks of registered specs; the table is pure data.
+blocks of registered specs — **including `family:'fn'` specs (§6)**, so
+fn-backed kinds detect like any preset; the table is pure data.
 
 - `IO.read "/proc/meminfo" {fmt:'auto'}` resolves the format through the
   table; a miss raises `sift_no_preset`. A silent fallback to `text` was
@@ -559,12 +618,16 @@ multi-header shapes, v2 candidates).
 command output**; each command preset pins its canonical argv in
 `detect.cmd.argv` (that is the argv `Exec.parse` runs — `EXEC.10.md`
 §4.1) and states its contract in `doc:`. BSD/macOS variants (ps column
-drift: TT/STARTED) are the province of **preset packs**: ordinary
-publishable AQL modules whose body calls `Sift.define`, distributed with
-the existing toolchain (`aql prep` / `pack` / `publish` / `install`,
-`CLI.md`). Redefining an existing kind stays an error — variant packs use
-variant names (`ps-bsd`); a `{replace:true}` define option was rejected
-for v1 (silent behaviour swaps across imports).
+drift: TT/STARTED; indent-delimited ifconfig blocks) are the province of
+**preset packs**: ordinary publishable AQL modules whose body calls
+`Sift.define`, distributed with the existing toolchain (`aql prep` /
+`pack` / `publish` / `install`, `CLI.md`). The §16 exercise closed the
+two gaps that made this story hollow: `blocks {sep:'indent'}` (§5.2)
+expresses indent-delimited blocks declaratively, and `family:'fn'` specs
+(§6) let a pack's fn kinds carry `detect:` claims. Redefining an existing
+kind stays an error — variant packs use variant names (`ps-bsd`); a
+`{replace:true}` define option was rejected for v1 (silent behaviour
+swaps across imports).
 
 ## 10. Errors
 
@@ -587,6 +650,12 @@ matches its neighbors).
 
 Every code gets `ERROR:` rows in `module-sift.tsv` beside the positive
 rows (test discipline, `lang/go/CLAUDE.md`).
+
+Fn-registered kinds SHOULD raise `sift_parse_error` / `sift_type_error`
+(with a 1-based line number in the detail where applicable) so
+`do […] error […]` handling is uniform across declarative and fn kinds
+*(added by the §16 exercise — codes are open atoms, so this is
+convention, not enforcement)*.
 
 ## 11. Overlap — dividing lines
 
@@ -749,3 +818,68 @@ conventions (`go-modules/README.10.md`):
    handlers are pure string code, the cheapest kind to cover.
 7. No ADR edits. No policy-package changes (sift is pure; the read-side
    gating rides the existing `formats` capability).
+
+## 16. Validation exercise — a user ifconfig parser (DX probe)
+
+To pressure-test the extension mechanism before implementation, the user
+code for an `ifconfig` parser (Linux net-tools 2.x) was written
+speculatively against this RFC:
+[`examples/sift/ifconfig.aql`](examples/sift/ifconfig.aql). ifconfig was
+chosen *because* it defeats the declarative families: a block is a
+structured header line plus keyword-dispatched detail lines, repeated
+`inet`/`inet6` lines accumulate into Lists, and the RX/TX counter-line
+pairs deep-merge into nested `rx:`/`tx:` maps — so the exercise drives
+the fn escape hatch end-to-end, with every *line* shape still parsed by
+an inline `pattern` spec (specs-as-data inside user code). Everything in
+the probe that uses today's machinery (`join`/`fold`/`filter`/`push`/
+`set`/`raise`, `StringUtil`, `mini re`) was validated against the
+executable spec suite and the live binary; only the `Sift.*` surface is
+speculative.
+
+**What held.** The layering worked as designed: `Sift.parse` with inline
+(unregistered) pattern specs is the workhorse — a Map of
+keyword→pattern-spec entries reads like a grammar while staying plain
+jsonic data; `Sift.check` gives spec authors a pure validation surface;
+a registered fn kind is an ordinary `parse` kind; and named-group fields
+proved their worth against the verified-today alternative (`mini re` is
+positional-only). The Options pattern threaded per-call strictness
+through cleanly *once the fn implemented it* (which is the first
+finding).
+
+**What the exercise changed** (each edit is marked "added/pinned by the
+§16 exercise" in place):
+
+1. **`family:'fn'` spec form (§6, §7, §8.2)** — fn kinds were
+   second-class on every discovery surface: no `detect:` claims (so
+   `Exec.parse ifconfig` and `read {fmt:'auto'}` could not resolve
+   them), no `doc:`, no framework preprocessing, and the §9 preset-pack
+   story collapsed for exactly the ragged formats that need fn kinds.
+   The spec form fixes all four at once; `Sift.define <name> <fn>`
+   stays sugar.
+2. **Unmatched named groups yield `None` (§5.2)** — previously
+   unspecified and load-bearing: the `inet` line's optional `broadcast`
+   group would otherwise be `''`, `None`, or an absent key depending on
+   implementation choice, and per-line shape drift is exactly what
+   §5.1's strict-schema philosophy exists to prevent. It is also why
+   the probe keeps RX/TX packet- and error-line patterns as separate
+   dispatch entries rather than one alternation.
+3. **`blocks {sep:'indent'}` (§5.2)** — BSD/macOS ifconfig emits no
+   blank lines (a new block starts at an unindented line); without an
+   indent mode, indent-delimited blocks were inexpressible by any spec
+   and BSD packs were impossible-by-construction.
+4. **Fn-kind semantics pinned (§7)** — call-site opts pass through
+   verbatim for bare fn kinds (declaring `opts:` in the spec form opts
+   into merging + unknown-key errors), and sift resolves the source to
+   a String before invoking fn kinds (the probe's `ParseLang.source`
+   call becomes redundant).
+5. **Trailing-Map source rule (§7)**, **`pattern` `vtype` (§5.2)**,
+   **`fields:`×pattern restriction (§5.2)**, **fn-kind error-code
+   guidance (§10)** — smaller pins the probe forced.
+
+**Residual friction, accepted.** A hand-rolled fn kind still owns its
+own inner strictness semantics (the probe's `'skip'` drops unknown
+*keywords* but stays loud on malformed *known* lines — defensible, and
+now documented in the probe rather than hidden); and heterogeneous
+block formats remain fn territory by design — the exercise confirmed
+the families/fn boundary is in the right place rather than suggesting a
+seventh line-shape family.

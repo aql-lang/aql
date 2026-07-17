@@ -100,10 +100,11 @@ scope decision; running commands is exec's business. `Exec.parse`:
    never silently parse;
 4. resolves the preset through the shared host **detection table**
    (`HostFormatDetect` — the same hook `read {fmt:'auto'}` uses,
-   `SIFT.0.md` §8.2), keyed by the argv0 basename. **No hard module
-   dependency on sift in either direction**: with no sift (or preset
-   pack) imported the lookup misses and raises `exec-no-preset` with a
-   hint to `import "aql:sift"`;
+   `SIFT.0.md` §8.2), keyed by the argv0 basename — fn-backed kinds
+   participate via the `family:'fn'` spec form (`SIFT.0.md` §6, added by
+   its §16 validation exercise). **No hard module dependency on sift in
+   either direction**: with no sift (or preset pack) imported the lookup
+   misses and raises `exec-no-preset` with a hint to `import "aql:sift"`;
 5. dispatches the kind's parser and returns the parsed value.
 
 The kind form `Exec.parse df` looks up the preset's canonical
