@@ -62,7 +62,7 @@ func decodeInput(br *bufio.Reader, events chan<- tuikit.Event, closed *atomic.Bo
 func ctrlEvent(r rune) tuikit.Event {
 	switch {
 	case r >= 0x01 && r <= 0x1a:
-		return tuikit.Event{Tag: "key", Key: string(rune('a' + r - 1)), Mods: []string{"ctrl"}}
+		return tuikit.Event{Tag: "key", Key: string('a' + r - 1), Mods: []string{"ctrl"}}
 	case r == 0x1c:
 		return tuikit.Event{Tag: "key", Key: `\`, Mods: []string{"ctrl"}}
 	default:

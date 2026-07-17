@@ -492,6 +492,7 @@ func tuiNatives() []native.NativeFunc {
 	all := tuiTier1Natives()
 	all = append(all, tuiWidgetNatives()...)
 	all = append(all, tuiRunNatives()...)
+	all = append(all, tuiServeNatives()...)
 	return all
 }
 

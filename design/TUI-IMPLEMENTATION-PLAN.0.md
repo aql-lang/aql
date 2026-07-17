@@ -139,7 +139,54 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1, P2, P3 landed; later phases append here)
+## 3b. Outcome (P1–P4 landed; P5 appends here)
+
+### P4 — the remote tier
+
+**P4 landed in full**: `Tui.serve` (`modules/tui_serve.go` — json-lines
+tree protocol, constant-time token auth with the `token: "none"`
+opt-out, one viewer, busy denials, disconnect-quits) and `aql attach`
+(`cmd/go/internal/attach` — dial, handshake, local layout via the
+shared tuikit renderer, upstream event projection), with loopback tests
+over real ephemeral listeners plus seam-driven session tests over
+`net.Pipe`. Divergences and design points found necessary during
+implementation:
+
+- **The Renderer seam landed as driver closures, not an interface.**
+  `tuiDriver` holds `events <-chan tuikit.Event` + `paint` + `finish`;
+  the local half is `localPaint` (render → present → cursor), the
+  remote half `tuiWirePaint` (marshal the *unrendered* tree onto the
+  wire). The driver is transport-blind — exactly one loop for run and
+  serve, and the attach client decodes into the SAME `any` shape the
+  local path projects (P2's one-code-path claim held on the wire).
+- **A write-side viewer loss is the §6.3 disconnect-quit.** The wire
+  paint maps a failed frame write to the `errTuiViewerGone` sentinel
+  and the driver folds it into "quit with the current state", twinning
+  the read-side EOF (which arrives as a synthetic `__disconnect`
+  event). Found by the loopback test: a vanishing viewer EPIPEs the
+  in-flight frame, and that must not surface as an app error.
+- **Teardown order is listener-first.** The driver's `finish` releases
+  ONLY the listener (stopping the acceptor); the session conn outlives
+  the driver so the `{tag: "quit"}` goodbye still writes, and a
+  deferred close releases it on every path. The wire reader's channel
+  sends are non-blocking so an input storm cannot strand the goroutine
+  after the driver exits.
+- **The serve options map is transport-only** (`{tcp token}`); `title`
+  (and any future `mouse`/`ctrl-c` relevance) stays in the app config —
+  the SAME app map runs locally via `Tui.run` and remotely via
+  `Tui.serve`, with serve forwarding the title as a wire line.
+- **Policy order is network-then-terminal**: `serve` gates on
+  `network.listen` before `terminal.serve`, pinned by a stock-sandbox
+  denial (direct handler call — sandbox refuses the import itself) and
+  a `policy.LoadInline` split profile (network-allow/terminal-deny)
+  that reaches the terminal gate through the engine path.
+- **TSV**: +6 runtime-only `serve` option/config rows
+  (`lang/spec/module-tui.tsv`), check-accuracy ratchet pin 141 → 147
+  with the changelog entry.
+- **`todo-tui-served.aql` does not graduate here** — the probe apps
+  still use the aspirational guard-list `case` prose; all three
+  graduate together in P5 on the landed `case` spelling (per the P3
+  note).
 
 ### P3 — the Tier-2 app runtime + the real TTY backend
 

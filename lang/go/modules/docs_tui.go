@@ -12,6 +12,7 @@ func init() {
 		"title":      "Set the terminal window title.",
 		"bell":       "Ring the terminal bell.",
 		"run":        "Run an app map {init update view}: events fold through update, the pure view renders, run blocks until quit and returns the final state.",
+		"serve":      "Serve an app map to one remote viewer over {tcp token}: trees down, events up (attach with `aql attach`); returns the final state.",
 		"quit":       "Wrap the final state in the quit marker an update returns to end the app.",
 		"text":       "Build a text widget: a styled leaf line (wrap: \"wrap\" for multi-line).",
 		"rows":       "Build a vertical stack of child widgets.",

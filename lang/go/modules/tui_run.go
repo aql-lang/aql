@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"errors"
 	"fmt"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -23,6 +24,11 @@ const tuiRegisteredName = "tui"
 
 // tuiDrainLimit bounds the per-render mailbox drain (§2.2 coalescing).
 const tuiDrainLimit = 32
+
+// errTuiViewerGone is the remote paint's "viewer vanished mid-frame"
+// signal: losing the viewer is the §6.3 disconnect-quit (the current
+// state becomes the final state), not an app error.
+var errTuiViewerGone = errors.New("tui: viewer disconnected")
 
 // acquireTuiBackend resolves the host backend and opens it — shared by
 // Tui.open (which wraps the surface in a Terminal handle) and Tui.run
@@ -145,8 +151,11 @@ func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 		return nil, err
 	}
 	d := &tuiDriver{
-		reg: r, app: app, backend: backend, proc: proc,
-		cols: info.Cols, rows: info.Rows,
+		reg: r, app: app, proc: proc,
+		events: backend.Events(),
+		paint:  localPaint(r, "run", backend),
+		finish: func() { _ = backend.Close() },
+		cols:   info.Cols, rows: info.Rows,
 	}
 	final, err := d.run()
 	rt.UnregisterName(tuiRegisteredName)
@@ -157,21 +166,48 @@ func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	return []native.Value{final}, nil
 }
 
-type tuiDriver struct {
-	reg     *native.Registry
-	app     *tuiApp
-	backend tuikit.Backend
-	proc    *eng.Process
-	cols    int
-	rows    int
+// localPaint is the local half of the renderer seam (P4): view trees
+// lay out through the P2 core and present on the backend. The remote
+// half (tui_serve.go) marshals the tree onto the wire instead.
+func localPaint(r *native.Registry, word string, backend tuikit.Backend) func(native.Value, int, int) error {
+	return func(tree native.Value, cols, rows int) error {
+		res, rErr := tuikit.Render(native.ValueToAny(tree), cols, rows)
+		if rErr != nil {
+			return r.AqlError("bad_widget", word+": "+rErr.Error(), word)
+		}
+		if pErr := backend.Present(res.Frame); pErr != nil {
+			return mapTuiErr(r, word, pErr)
+		}
+		var cErr error
+		if res.Cursor != nil {
+			cErr = backend.SetCursor(res.Cursor.X, res.Cursor.Y, true)
+		} else {
+			cErr = backend.SetCursor(0, 0, false)
+		}
+		if cErr != nil {
+			return mapTuiErr(r, word, cErr)
+		}
+		return nil
+	}
 }
 
-// run owns the loop. The backend is restored (Close) on EVERY exit path
-// — quit, update/view error, driver panic — before the error propagates
-// (§2.5 teardown order).
+type tuiDriver struct {
+	reg    *native.Registry
+	app    *tuiApp
+	events <-chan tuikit.Event
+	paint  func(tree native.Value, cols, rows int) error
+	finish func()
+	proc   *eng.Process
+	cols   int
+	rows   int
+}
+
+// run owns the loop. The terminal (or connection) is released via
+// finish on EVERY exit path — quit, update/view error, driver panic —
+// before the error propagates (§2.5 teardown order).
 func (d *tuiDriver) run() (final native.Value, err error) {
 	defer func() {
-		_ = d.backend.Close()
+		d.finish()
 		if rec := recover(); rec != nil { //covergate:allow driver recover body: update/view run under InvokeCallback, whose CallAQL sub-engine converts body panics into internal_error AqlErrors flowing the covered error path; the remaining driver calls are the panic-free tuikit renderer and backend methods (§modules)
 			final = native.Value{}
 			err = d.reg.AqlError("internal", fmt.Sprintf("run: driver crashed: %v", rec), "run")
@@ -185,7 +221,7 @@ func (d *tuiDriver) run() (final native.Value, err error) {
 				_ = rec
 			}
 		}()
-		for ev := range d.backend.Events() {
+		for ev := range d.events {
 			_ = d.proc.Send(eventToMap(ev))
 		}
 	}()
@@ -205,6 +241,9 @@ func (d *tuiDriver) run() (final native.Value, err error) {
 		return state, nil
 	}
 	if err := d.render(state); err != nil {
+		if errors.Is(err, errTuiViewerGone) {
+			return state, nil
+		}
 		return native.Value{}, err
 	}
 
@@ -237,6 +276,9 @@ func (d *tuiDriver) run() (final native.Value, err error) {
 			}
 		}
 		if err := d.render(state); err != nil {
+			if errors.Is(err, errTuiViewerGone) {
+				return state, nil
+			}
 			return native.Value{}, err
 		}
 	}
@@ -246,7 +288,10 @@ func (d *tuiDriver) run() (final native.Value, err error) {
 func (d *tuiDriver) step(state, msg native.Value) (native.Value, bool, error) {
 	if mp, _ := native.AsMap(msg); mp != nil {
 		if tag, ok := mp.Get("tag"); ok {
-			if s, _ := tag.AsConcreteString(); s == "key" {
+			if s, _ := tag.AsConcreteString(); s == "__disconnect" {
+				// the remote viewer vanished: v1 disconnect-quits (§6.3)
+				return state, true, nil
+			} else if s == "key" {
 				if chordCtrl(mp, `\`) {
 					return state, true, nil // Ctrl-\ always quits (§2.5)
 				}
@@ -325,24 +370,7 @@ func (d *tuiDriver) render(state native.Value) error {
 	if len(out) == 0 {
 		return d.reg.AqlError("bad_widget", "run: view returned no widget tree", "run")
 	}
-	tree := native.ValueToAny(out[len(out)-1])
-	res, rErr := tuikit.Render(tree, d.cols, d.rows)
-	if rErr != nil {
-		return d.reg.AqlError("bad_widget", "run: "+rErr.Error(), "run")
-	}
-	if pErr := d.backend.Present(res.Frame); pErr != nil {
-		return mapTuiErr(d.reg, "run", pErr)
-	}
-	var cErr error
-	if res.Cursor != nil {
-		cErr = d.backend.SetCursor(res.Cursor.X, res.Cursor.Y, true)
-	} else {
-		cErr = d.backend.SetCursor(0, 0, false)
-	}
-	if cErr != nil {
-		return mapTuiErr(d.reg, "run", cErr)
-	}
-	return nil
+	return d.paint(out[len(out)-1], d.cols, d.rows)
 }
 
 // tuiRunNatives lists the Tier-2 runtime words.

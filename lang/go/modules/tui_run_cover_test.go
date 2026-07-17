@@ -245,7 +245,13 @@ func TestTuiRunRuntimeShutdownMidRun(t *testing.T) {
 	if err := rt.Insert(proc); err != nil {
 		t.Fatal(err)
 	}
-	d := &tuiDriver{reg: reg, app: app, backend: vb, proc: proc, cols: info.Cols, rows: info.Rows}
+	d := &tuiDriver{
+		reg: reg, app: app, proc: proc,
+		events: vb.Events(),
+		paint:  localPaint(reg, "run", vb),
+		finish: func() { _ = vb.Close() },
+		cols:   info.Cols, rows: info.Rows,
+	}
 	go func() { rt.Shutdown() }()
 	final, dErr := d.run()
 	if dErr != nil {
@@ -256,7 +262,8 @@ func TestTuiRunRuntimeShutdownMidRun(t *testing.T) {
 	}
 }
 
-// step's resize field guards and the chord classifier's arms.
+// step's resize field guards, the disconnect marker, and the chord
+// classifier's arms.
 func TestTuiStepAndChordArms(t *testing.T) {
 	reg := tcReg(t)
 	d := &tuiDriver{reg: reg, cols: 4, rows: 2}
@@ -264,6 +271,17 @@ func TestTuiStepAndChordArms(t *testing.T) {
 	out, err := runTuiStepsOn(t, reg, []string{appSrc, `[u/r]`})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// the read-side disconnect marker quits with the current state,
+	// before the update ever runs
+	disc := native.NewOrderedMap()
+	disc.Set("tag", native.NewString("__disconnect"))
+	dState, dQuit, dErr := d.step(native.NewInteger(3), native.NewMap(disc))
+	if dErr != nil || !dQuit {
+		t.Fatalf("disconnect step = %v %v", dQuit, dErr)
+	}
+	if n, _ := dState.AsConcreteInteger(); n != 3 {
+		t.Fatalf("disconnect state = %v", dState)
 	}
 	fns, _ := native.AsList(out[len(out)-1])
 	d.app = &tuiApp{update: fns.Get(0)}
@@ -377,5 +395,66 @@ func TestTuiWidgetResidualArms(t *testing.T) {
 	v2, _ := mp2.Get("value")
 	if s, _ := v2.AsConcreteString(); s != "aba" {
 		t.Fatalf("non-list mods blocked the insert: %q", s)
+	}
+}
+
+// a viewer vanishing mid-frame (the remote paint's errTuiViewerGone)
+// is the graceful §6.3 disconnect-quit carrying the current state —
+// both the init-frame arm and the loop-frame arm.
+func TestTuiRunViewerGoneArms(t *testing.T) {
+	reg := tcReg(t)
+	src := `def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
+	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src, `[u/r v/r]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fns, _ := native.AsList(out[len(out)-1])
+	app := &tuiApp{init: native.NewInteger(7), update: fns.Get(0), view: fns.Get(1)}
+	app.updateInfo, _ = native.FnDefFromValue(app.update)
+	app.viewInfo, _ = native.FnDefFromValue(app.view)
+	rt := reg.Procs
+	newDriver := func(paint func(native.Value, int, int) error, evs chan tuikit.Event) *tuiDriver {
+		t.Helper()
+		proc := eng.NewProcess(rt, 8, eng.OverflowBlock)
+		if err := rt.Insert(proc); err != nil {
+			t.Fatal(err)
+		}
+		return &tuiDriver{reg: reg, app: app, proc: proc,
+			events: evs, paint: paint, finish: func() {}, cols: 4, rows: 2}
+	}
+	noEvents := make(chan tuikit.Event)
+	close(noEvents)
+
+	// the init frame's write fails: final = the post-init state
+	d1 := newDriver(func(native.Value, int, int) error { return errTuiViewerGone }, noEvents)
+	final1, err1 := d1.run()
+	if err1 != nil {
+		t.Fatalf("init-frame viewer-gone: %v", err1)
+	}
+	if n, _ := final1.AsConcreteInteger(); n != 7 {
+		t.Fatalf("init-frame final = %v", final1)
+	}
+
+	// the init frame succeeds, an event-triggered frame fails
+	evs := make(chan tuikit.Event, 1)
+	evs <- tuikit.Event{Tag: "key", Key: "x", Char: "x"}
+	close(evs)
+	calls := 0
+	d2 := newDriver(func(native.Value, int, int) error {
+		calls++
+		if calls > 1 {
+			return errTuiViewerGone
+		}
+		return nil
+	}, evs)
+	final2, err2 := d2.run()
+	if err2 != nil {
+		t.Fatalf("loop-frame viewer-gone: %v", err2)
+	}
+	if n, _ := final2.AsConcreteInteger(); n != 7 {
+		t.Fatalf("loop-frame final = %v", final2)
+	}
+	if calls != 2 {
+		t.Fatalf("paint calls = %d, want 2", calls)
 	}
 }

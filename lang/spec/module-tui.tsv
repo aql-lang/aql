@@ -58,6 +58,12 @@ import "aql:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	foc
 import "aql:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String
 import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
 import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
+import "aql:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port
+import "aql:tui"  Tui.serve {tcp: "high" token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects a non-Integer port
+import "aql:tui"  Tui.serve {tcp: 70000 token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects an out-of-range port
+import "aql:tui"  Tui.serve {tcp: 0} {}	ERROR:token: is required	serve demands an explicit token (or the "none" opt-out)
+import "aql:tui"  Tui.serve {tcp: 0 token: 5} {}	ERROR:token: must be a String	serve rejects a non-String token
+import "aql:tui"  Tui.serve {tcp: 0 token: "x"} {}	ERROR:missing update	serve validates the app map before listening
 #
 import "aql:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
 import "aql:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle
