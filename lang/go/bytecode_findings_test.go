@@ -412,20 +412,17 @@ func TestBothComputedIfLowers(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: both arms computed with a NON-event (list-form) condition needs
-	// the cond materialised above two eager values, which lowerBothComputed does
-	// not model — it stays refused and falls back with the interpreter's result.
+	// GRADUATED 2026-07-17 (the S9.4 probe sweep): both arms computed with a
+	// NON-event cond now compiles — lowerBothComputedMatCond materialises the
+	// cond above the two eager values exactly as the single-computed
+	// lowerComputedCond does, then JMP_IF_FALSE selects.
 	const listCond = `if [1 eq 1] (add 1 2) (sub 9 4)`
-	n, _ := New()
-	if np, _, _, _ := n.CompileCheck(listCond); np != nil {
-		t.Errorf("%q: both-computed with a list-form cond must NOT compile natively", listCond)
-	}
 	nb, _ := New()
-	gotC, _, errC := nb.RunCompiled(listCond)
+	gotC, compiled, errC := nb.RunCompiled(listCond)
 	nbi, _ := New()
 	gotI, _ := nbi.RunInterp(listCond)
-	if errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v", listCond, gotC, errC, gotI)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[3]" {
+		t.Errorf("%q: want native compile with parity [3], got compiled=%v gotC=%v errC=%v gotI=%v", listCond, compiled, gotC, errC, gotI)
 	}
 }
 

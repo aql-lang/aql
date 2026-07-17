@@ -54,3 +54,23 @@ def alice (make Person {age:30})
 def bob (make Person {age:25})
 alice bob lt`, "[false]")
 }
+
+// Both-computed `if` over a NON-event condition (the S9.4 probe sweep):
+// lowerBothComputedMatCond materialises the condFrag / const / local cond
+// above the two eager arm values (the single-computed lowerComputedCond
+// shapes) and JMP_IF_FALSE selects — parens evaluate eagerly in BOTH
+// engines, so selection-only lowering is the event-cond arm's identical
+// semantics. Both branch directions, both cond forms.
+func TestProbeWideningBothComputedNonEventCond(t *testing.T) {
+	mustCompileWithParity(t,
+		`def f fn [[b:Boolean x:Integer] [Integer] [if b (x add 1) (x add 2)]] f true 5`, "[6]")
+	mustCompileWithParity(t,
+		`def f fn [[b:Boolean x:Integer] [Integer] [if b (x add 1) (x add 2)]] f false 5`, "[7]")
+	mustCompileWithParity(t,
+		`def f fn [[x:Integer] [Integer] [if [x lt 9] (x add 1) (x add 2)]] f 5`, "[6]")
+	mustCompileWithParity(t,
+		`def f fn [[x:Integer] [Integer] [if [x lt 9] (x add 1) (x add 2)]] f 50`, "[52]")
+	// The event-cond regression control.
+	mustCompileWithParity(t,
+		`def f fn [[x:Integer] [Integer] [if (x lt 9) (x add 1) (x add 2)]] f 5`, "[6]")
+}

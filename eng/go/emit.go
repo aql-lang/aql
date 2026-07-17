@@ -2624,13 +2624,15 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					// eagerly on the stack below the cond/then events. The lowerer
 					// branches and DROPs the unselected eager value(s).
 					if ev.br.thenComputed {
-						// `if cond (a) (b)` — BOTH arms computed. The three events
-						// stack as [cond, then, else]; lowerBothComputed selects one
-						// with OpReverse + JMP_IF_FALSE. It needs the cond on the
-						// stack (an event), so a const / condFrag / const-cond
-						// condition (where thenComputed was set under
-						// computedArmCondOK's wider rule) refuses here.
-						if ev.br.cond.kind != opEvent {
+						// `if cond (a) (b)` — BOTH arms computed. An EVENT cond
+						// stacks [cond, then, else] (lowerBothComputed's
+						// OpReverse select); a condFrag / const / local cond
+						// (computedArmCondOK's wider rule — widened 2026-07-17,
+						// the S9.4 probe sweep) has no eager stack home, so the
+						// lowering MATERIALISES it above the eagers exactly as
+						// the single-computed lowerComputedCond does. Anything
+						// else (a ConstCond fold) refuses.
+						if !computedArmCondOK(b, ev.br.cond) { //covergate:allow the only non-OK shape is a ConstCond, which constant-branch-elimination folds to one arm before both-computed lowering builds — unreachable without a recorder fault; the two single-computed twins carry the identical allow (§compiler)
 							es.MarkUncompilable("if: both computed arms need an event condition (Stage 2)")
 							return
 						}

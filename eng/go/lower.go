@@ -2640,6 +2640,9 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 // slot.
 func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
 	br := ev.br
+	if br.cond.kind != opEvent {
+		return lw.lowerBothComputedMatCond(ev)
+	}
 	if len(lw.vm) < 3 ||
 		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
 		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) ||
@@ -2666,6 +2669,48 @@ func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
 	(*lw.code)[jend].Arg = int32(len(*lw.code))
 	// Sim: the three input slots (cond/then/else) collapse to one merge slot.
 	lw.vm = lw.vm[:len(lw.vm)-3]
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
+	return ""
+}
+
+// lowerBothComputedMatCond lowers `if cond (a) (b)` when the cond has NO
+// eager stack home (a condFrag list body, or a const / local / type value —
+// computedArmCondOK's non-event shapes): the entry sim is [thenVal, elsVal]
+// and the cond MATERIALISES above them exactly as the single-computed
+// lowerComputedCond does, then JMP_IF_FALSE selects. TRUE/fall-through: the
+// result is thenVal, so DROP the elsVal on top; FALSE: SWAP + DROP leaves
+// elsVal. Both eagers evaluated in BOTH engines (paren eagerness), so the
+// selection-only lowering is the identical semantics the event-cond arm
+// already compiles.
+func (lw *lowerer) lowerBothComputedMatCond(ev *emitEvent) string {
+	br := ev.br
+	if len(lw.vm) < 2 ||
+		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
+		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) {
+		return "if: both-computed stack layout (Stage 2)"
+	}
+	if lw.variadic[br.thenVal.idx] || lw.variadic[br.elsVal.idx] {
+		return "if: both-computed arm is a variadic loop value (Stage 2)"
+	}
+	var jf int
+	if br.condFrag != nil {
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, false, br.pos); reason != "" { //covergate:allow the condFrag re-lowers after passing the recording pass's probe (RecordBranch), so a failure needs a bytecode-level fault; the single-computed twin (lowerComputedCond) carries the identical arm (§compiler)
+			return reason
+		}
+		jf = lw.emit(OpJmpIfFalse, 0, br.pos)
+	} else {
+		lw.pushOperand(br.cond, br.pos)
+		jf = lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	}
+	lw.emit(OpDrop, 0, br.pos)
+	jend := lw.emit(OpJmp, 0, br.pos)
+	(*lw.code)[jf].Arg = int32(len(*lw.code))
+	lw.emit(OpSwap, 0, br.pos)
+	lw.emit(OpDrop, 0, br.pos)
+	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	lw.vm = lw.vm[:len(lw.vm)-2]
 	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.note()
 	return ""
