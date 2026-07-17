@@ -119,6 +119,21 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://p.bin") "hello" drop  IO.write (make Pathon "mem://p.bin") (convert Bytes "XY") {offset:1} drop  IO.read (make Pathon "mem://p.bin")	'hXYlo'	{offset} splices a positioned write
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://z.bin") (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
 #
+# §18  mount — the AQL→FileOps bridge: `IO.mount {read: fn …}` installs a
+#      filesystem IMPLEMENTED IN AQL as the host FileOps, so every io word
+#      routes through the supplied handler fns (read/write/stat/list/remove,
+#      plus optional mkdir/rename/…; an op with no handler refuses cleanly).
+#      `IO.unmount` restores the previous filesystem. A mounted row is
+#      hermetic by construction — every operation lands in AQL state. The
+#      full handler contract and a database-backed example live in
+#      lang/go/native/io_mount.go and io_mount_test.go.
+import "aql:io"  IO.mount {read: (p:Pathon => ["from-aql"])}  IO.read (make Pathon "anything.txt")	'from-aql'	a mounted read handler serves IO.read
+import "aql:io"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon "n/a.txt") "hello mounted" drop  IO.read (make Pathon "n/a.txt")	'hello mounted'	a flex-map-backed AQL filesystem round-trips through the io words
+import "aql:io"  IO.mount {read: (p:Pathon => [none])}  IO.stat (make Pathon "x")	ERROR:stat	an operation with no mounted handler refuses cleanly
+import "aql:io"  IO.mount {write: ([p:Pathon d:Any] => [none])}	ERROR:mount	a mount needs at least a `read` handler
+import "aql:io"  IO.mount {read: 42}	ERROR:mount	every mounted handler must be a Function
+import "aql:io"  IO.unmount	ERROR:unmount	unmount with nothing mounted is refused
+#
 # §17  watch — subscribe to change events on a Pathon: `IO.watch p [body]`
 #      runs the body once per event (PUSH style, like TimeUtil.interval)
 #      with the {op path} record on the stack, and returns a Watcher

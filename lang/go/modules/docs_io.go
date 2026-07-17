@@ -19,5 +19,7 @@ func init() {
 		"touch":    "Create a path if absent and set {mode}/{mtime}/{atime}/{size}.",
 		"watch":    "Run a body per change event on a path; returns a Watcher.",
 		"unwatch":  "Stop a Watcher, closing its event stream.",
+		"mount":    "Install a map of AQL handler fns as the filesystem (the FileOps bridge).",
+		"unmount":  "Restore the filesystem that was active before mount.",
 	})
 }

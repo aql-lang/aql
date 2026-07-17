@@ -55,6 +55,8 @@ import "github.com/aql-lang/aql/eng/go"
 //	touch     create/update a Pathon and apply {mode,mtime,atime,size}
 //	watch     run a body per change event on a Pathon (returns a Watcher)
 //	unwatch   stop a Watcher, closing its event stream
+//	mount     install a map of AQL handler fns as the filesystem
+//	unmount   restore the filesystem that was active before mount
 func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
@@ -191,6 +193,25 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 			Name: "unwatch",
 			Signatures: []Signature{
 				{Args: []*Type{watcherType}, Impl: Go(unwatchImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// mount installs a map of AQL Function handlers as the host
+			// filesystem (the AQL→FileOps bridge); unmount restores the
+			// previous one. See io_mount.go for the handler contract.
+			Name: "mount",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountWord(a, r)
+				}), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			Name: "unmount",
+			Signatures: []Signature{
+				{Args: []*Type{}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doUnmountWord(a, r)
+				}), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 		{

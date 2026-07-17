@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `watch`/`unwatch` (change events), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2176,6 +2176,31 @@ modules keep plain names.
 > under `{mem}`, and the merged union of both layers under `{overlay}` —
 > so watch behaviour is part of the same real/mem parity surface as every
 > other io word.
+>
+> **Mounting an AQL-implemented filesystem.** `IO.mount {read: fn, …}`
+> installs a map of AQL handler functions as the host filesystem — every
+> io word then routes through them, so AQL code can expose any backing
+> (a flex map, a table, a service) as a filesystem:
+>
+> ```
+> import "aql:io"
+> def files (flex {})
+> IO.mount {
+>   read:  (p:Pathon => [files get `${p}`])
+>   write: ([p:Pathon data:Any] => [files set `${p}` data drop])
+> }
+> IO.write (make Pathon "notes/a.txt") "hello" drop
+> IO.read (make Pathon "notes/a.txt")        # returns 'hello'
+> ```
+>
+> Core handlers: `read` (required; return a String/Bytes, or `none` for
+> absent), `write`, `stat` (return a `{name size mode mtime type target}`
+> map or `none`), `list` (names or stat maps), `remove` (`[p opts]`).
+> Optional: `mkdir`, `rename`, `symlink`, `link`, `chmod`, `chtimes`,
+> `truncate`, `resolve`. An operation with no handler refuses cleanly, a
+> mounted filesystem is not watchable, and the `{mem}`/`{overlay}` context
+> toggles still take precedence. `IO.unmount` restores the previous
+> filesystem.
 >
 > `list` and `remove` are different: rather than a namespaced `IO.list` /
 > `IO.remove`, importing `aql:io` **extends the core `list` / `remove`

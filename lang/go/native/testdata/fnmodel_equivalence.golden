@@ -458,6 +458,8 @@ WORD mod
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD module
   [Node/List] barrier=1 runcheck noeval={0} returns=[Ideal/Module]
+WORD mount
+  [Node/Map] barrier=1
 WORD move
   [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
 WORD mul
@@ -721,6 +723,8 @@ WORD undef
   [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD unify
   [Any Any] barrier=2 returns=[Any Scalar/Boolean] +returnsfn
+WORD unmount
+  [] barrier=0
 WORD unpack
   [Ideal/Class Scalar/Bytes] barrier=2 typearg={0} returns=[Ideal/Class]
   [Node/Map Node/Map] barrier=2 runcheck noevalmap={0}
