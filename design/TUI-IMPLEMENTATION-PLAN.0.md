@@ -139,7 +139,47 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1, P2 landed; later phases append here)
+## 3b. Outcome (P1, P2, P3 landed; later phases append here)
+
+### P3 — the Tier-2 app runtime + the real TTY backend
+
+**P3 landed in full**: the fourteen Tier-2 words (nine constructors +
+`run`/`quit`/`style`/`edit`/`focusable`) in `modules/tui_widgets.go` /
+`tui_run.go`; the driver loop on a real `eng.Process` (input pump,
+32-message drain-coalescing, quit marker, Ctrl-C/Ctrl-\ policy, resize,
+init event carrying the UI's `Pid`); `cmd/go/internal/termback` (raw
+mode + alt-screen + SGR damage painting + a hand-rolled input decoder,
+every OS touchpoint behind TEST-SEAMS vars, 100% covered on a
+terminal-less CI); registration in `buildrt` (run/do/build binaries)
+and the REPL. Divergences found necessary during implementation:
+
+- **`Backend` gained `SetCursor(x, y, visible)`.** The RFC's §3.4
+  cursor-placement duty had no seam to land on — the driver calls it
+  after every `Present` with the render's cursor verdict.
+- **`RegisterName` REPLACES (BEAM re-register semantics)** — it never
+  errors on a duplicate, so the single-owner rule is a `Whereis`
+  pre-check; the residual register-fails-only-when-down guard carries a
+  `covergate:allow` pragma.
+- **No `x/cellbuf` promotion and no bubbletea input decoding.**
+  tuikit's own `DiffFrames` + `SGR` cover damage painting, so termback
+  needs only `x/term` + a small hand-rolled CSI/SS3/paste/SGR-mouse
+  decoder (table-tested; no ESC timeout — a lone ESC delivers when no
+  continuation byte is buffered, which VT-competent terminals satisfy).
+- **The RFC prose's guard-list `case` is not the landed `case`.** The
+  shipped word is VALUE dispatch (`case v [match block … default]`);
+  the RFC's §5 examples and the probe apps use the aspirational
+  guard-list form and read as pseudocode until P5 graduates them onto
+  the landed spelling (where blocks run with the matched value pushed —
+  a leading `drop` is the idiom).
+- **Coalescing is observable**: a fully pre-scripted session drains in
+  one batch and a quit skips the final paint — tests assert the init
+  frame and the returned state, not per-event frames (the tuikit
+  goldens own per-frame visuals).
+- **Overflow policy is one knob per mailbox**: the UI process uses
+  `block` (workers get backpressure; the pump is buffered upstream by
+  the backend's event channel), not the RFC's split drop-input/block-
+  workers scheme — the input-side shedding lives in the backends'
+  bounded channels.
 
 ### P2 — layout/render core
 

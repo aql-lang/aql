@@ -58,6 +58,10 @@ type Backend interface {
 	Size() (cols, rows int, err error)
 	Events() <-chan Event
 	Present(f *Frame) error
+	// SetCursor places (and shows) the hardware cursor, or hides it
+	// when visible is false — the runtime calls it after every Present
+	// with the RenderResult's cursor verdict (TUI.0.md §3.4).
+	SetCursor(x, y int, visible bool) error
 	SetTitle(title string) error
 	Bell() error
 }

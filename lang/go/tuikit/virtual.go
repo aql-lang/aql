@@ -26,6 +26,7 @@ type VirtualBackend struct {
 	CloseErr   error
 	SizeErr    error
 	PresentErr error
+	CursorErr  error
 	TitleErr   error
 	BellErr    error
 
@@ -41,6 +42,9 @@ type VirtualBackend struct {
 	title    string
 	bells    int
 	presents int
+	cursorX  int
+	cursorY  int
+	cursorOn bool
 }
 
 // NewVirtualBackend returns a Cols×Rows virtual terminal. Events may be
@@ -140,6 +144,24 @@ func (vb *VirtualBackend) Present(f *Frame) error {
 	}
 	vb.frames = append(vb.frames, c)
 	return nil
+}
+
+// SetCursor implements Backend, recording the placement for assertions.
+func (vb *VirtualBackend) SetCursor(x, y int, visible bool) error {
+	vb.mu.Lock()
+	defer vb.mu.Unlock()
+	if vb.CursorErr != nil {
+		return vb.CursorErr
+	}
+	vb.cursorX, vb.cursorY, vb.cursorOn = x, y, visible
+	return nil
+}
+
+// Cursor reports the last SetCursor placement.
+func (vb *VirtualBackend) Cursor() (x, y int, visible bool) {
+	vb.mu.Lock()
+	defer vb.mu.Unlock()
+	return vb.cursorX, vb.cursorY, vb.cursorOn
 }
 
 // SetTitle implements Backend.

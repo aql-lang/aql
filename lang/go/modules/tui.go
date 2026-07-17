@@ -320,10 +320,6 @@ func tuiOpenHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 	if err := checkTuiPolicy(r, "open"); err != nil {
 		return nil, err
 	}
-	spec := hostTuiSpec(r)
-	if spec == nil {
-		return nil, r.AqlError("no_backend", "open: no terminal backend registered", "open")
-	}
 	opts := tuikit.OpenOpts{}
 	if len(args) > 0 {
 		mp, _ := native.AsMap(args[0])
@@ -338,13 +334,9 @@ func tuiOpenHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 			return nil, r.AqlError("tui_error", "open: "+err.Error(), "open")
 		}
 	}
-	backend, err := spec.Open()
+	backend, info, err := acquireTuiBackend(r, "open", opts)
 	if err != nil {
-		return nil, mapTuiErr(r, "open", err)
-	}
-	info, err := backend.Open(opts)
-	if err != nil {
-		return nil, mapTuiErr(r, "open", err)
+		return nil, err
 	}
 	return []native.Value{newTerminalValue(backend, info)}, nil
 }
@@ -493,8 +485,18 @@ func tuiBellHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 
 func tuiNoReturns(_ []native.Value, _ *native.Registry) []native.Value { return nil }
 
-// tuiNatives lists the Tier-1 words BuildTuiModule registers.
+// tuiNatives lists everything BuildTuiModule registers: the Tier-1
+// terminal words below plus the Tier-2 pure words (tui_widgets.go) and
+// the app runtime (tui_run.go).
 func tuiNatives() []native.NativeFunc {
+	all := tuiTier1Natives()
+	all = append(all, tuiWidgetNatives()...)
+	all = append(all, tuiRunNatives()...)
+	return all
+}
+
+// tuiTier1Natives lists the Tier-1 raw-terminal words.
+func tuiTier1Natives() []native.NativeFunc {
 	T := func(ts ...*native.Type) []*native.Type { return ts }
 	return []native.NativeFunc{
 		{Name: "open", Signatures: []native.Signature{

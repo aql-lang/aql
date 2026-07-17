@@ -38,6 +38,27 @@ import "aql:tui"  Tui.open	ERROR:no terminal backend registered	zero-arg open re
 #
 # §5  wrong-handle rejections — a live run needs a backend, so each word
 #     pins its dispatch contract instead (module-fn unmatched call)
+#
+# §6  Tier-2 pure words — constructors are data in, data out (pinned by
+#     canon equality); the runtime words pin their guard arms
+import "aql:tui"  Tui.text "hi"	{w:'text' text:'hi' wrap:'truncate'}	text builds the §3.1 leaf shape
+import "aql:tui"  Tui.text "hi" {size: 1}	{w:'text' text:'hi' wrap:'truncate' size:1}	options overlay onto the widget map
+import "aql:tui"  Tui.rows [] {gap: 2}	{w:'rows' children:[] gap:2}	rows carries children and gap
+import "aql:tui"  Tui.cols []	{w:'cols' children:[] gap:0}	cols is the horizontal stack
+import "aql:tui"  Tui.box (Tui.spacer) {title: "t"}	{w:'box' child:{w:'spacer'} title:'t' border:'line'}	box wraps a child with chrome
+import "aql:tui"  Tui.list-view ["a"] {cursor: 0}	{w:'list-view' items:['a'] cursor:0}	list-view carries items and cursor
+import "aql:tui"  Tui.table [{title: "c"}] [[1]]	{w:'table' columns:[{title:'c'}] rows:[[1]] cursor:0}	table carries columns, rows, cursor
+import "aql:tui"  Tui.input "ab"	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	input renders state-owned text, cursor at end
+import "aql:tui"  Tui.viewport (Tui.spacer)	{w:'viewport' child:{w:'spacer'} offset:[0 0]}	viewport scrolls a child
+import "aql:tui"  Tui.spacer	{w:'spacer'}	spacer is the flexible filler
+import "aql:tui"  Tui.style {fg: "red"} {fg: "blue" bold: true}	{fg:'blue' bold:true}	style merge: overrides win
+import "aql:tui"  Tui.quit 7	{@quit:7}	quit wraps the final state in the marker map
+import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "backspace" char: "" mods: []}	{w:'input' value:'a' cursor:1 placeholder:'' focus:false}	edit folds a key event into the input
+import "aql:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	focusable walks ids in document order
+import "aql:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String
+import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
+import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
+#
 import "aql:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
 import "aql:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle
 import "aql:tui"  Tui.read-event 5	ERROR:uncalled_function	read-event requires a Terminal handle
