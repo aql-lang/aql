@@ -1763,6 +1763,10 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		mi := len(lw.p.MakeMaps)
 		lw.p.MakeMaps = append(lw.p.MakeMaps, MakeMapSpec{Keys: c.mapKeys, Implicit: c.mapImpl})
 		lw.emit(OpMakeMap, mi, c.pos)
+	} else if c.spliceDyn {
+		// Spread the laid-out payload at run time (§9.2b) — value payloads
+		// spread verbatim, code-bearing ones defer to the interpreter.
+		lw.emit(OpSpliceDyn, 0, c.pos)
 	} else if c.xmlTmpl != nil {
 		// Assemble the n laid-out hole operands into an interpolated XML
 		// element (§9.2c); the template skeleton rides in XmlInterps.

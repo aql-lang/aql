@@ -3857,7 +3857,17 @@ func (e *Engine) stepLiteral() error {
 				!IsConcrete(info.Data) && !IsBareTypeNode(info.Data) &&
 				(info.Data.Dynamic || info.Data.Parent == nil ||
 					TList.ConformsTo(info.Data.Parent) || info.Data.Parent.ConformsTo(TList)) {
-				rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
+				// REFUSAL-CLOSURE §9.2b: record the spread as an OpSpliceDyn
+				// event over the payload operand — the VM spreads a DATA
+				// payload exactly as the marker re-step (spliceExpand) and
+				// DEFERS to the interpreter for a code-bearing one. The
+				// result count is runtime-variable, so the event is variadic
+				// (only the program residual absorbs it; fixed-arity
+				// consumers keep refusing). An unresolvable payload keeps
+				// the refusal.
+				if !rec.RecordSpliceDyn(info.Data, info.Data, e.tape.At(valIdx).Pos()) {
+					rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
+				}
 			}
 			e.tape.Splice(valIdx, 1, spliceExpand(info.Data)...)
 			return nil

@@ -179,6 +179,7 @@ type emitCall struct {
 	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
 	interpSegs      []InterpSeg
 	xmlTmpl         *XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
+	spliceDyn       bool     // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
 	diverges        bool     // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
@@ -5464,6 +5465,40 @@ func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, 
 		word: "__interpxml", ops: ops, nout: 1, pos: pos,
 		xmlTmpl: &tmpl,
 	}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordSpliceDyn records a splice marker's spread over a COMPUTED payload
+// (REFUSAL-CLOSURE §9.2b): the payload rides as the one operand, the VM
+// spreads or defers (OpSpliceDyn), and the result is VARIADIC — the runtime
+// count is the payload's own — so only the program residual absorbs it. The
+// out is the check's carrier stand-in (the payload value itself, exactly
+// what the check-side splice contributes).
+func (es *EmitState) RecordSpliceDyn(payload, out Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	if len(es.units) != 1 || (es.reg != nil && es.reg.Check.NestedBodyDepth != 0) {
+		// TOP-FRAME straight-line only: inside a closure unit or a
+		// branch/loop body analysis the variadic spread has no residual
+		// home (probe-pinned: `do [word xs]` closure-compiled the spread
+		// as [7 [7 8]] vs the interpreter's [7 8]) — declining leaves the
+		// dyn-body backstop / the refusal, both parity-faithful.
+		return false
+	}
+	op, ok := es.resolveOperand(payload)
+	if !ok {
+		return false
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "__splicedyn", ops: []emitOperand{op}, nout: 1, pos: pos,
+		spliceDyn: true,
+	}})
+	f := es.eventInfo[seq]
+	f.variadicResult = true
+	es.eventInfo[seq] = f
 	es.setProduced(out, seq)
 	return true
 }

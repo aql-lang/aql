@@ -205,9 +205,12 @@ func TestDynBodyVariadicAndSpliceShapes(t *testing.T) {
 	// The variadic-run-then-value body also compiles: the closure declines
 	// (exactness screen) and the dyn-body CALL_NATIVE takes the whole body.
 	requireEngineParity(t, `def b true  do [do [1 2 (if b [] [9 9])] 7]`, true)
+	// GRADUATED (REFUSAL-CLOSURE §9.2b, 2026-07-17): the computed-payload
+	// splice compiles to OpSpliceDyn — a DATA payload spreads verbatim, a
+	// code-bearing one defers to the interpreter at run time. Full family
+	// pinned in bytecode_splicedyn_test.go.
+	requireEngineParity(t, `def mk fn [[] [List] [[7 8]]]  def xs (mk)  word xs`, true)
 	refusals := []string{
-		// bare top-level splice over a computed payload (runtime spread)
-		`def mk fn [[] [List] [[7 8]]]  def xs (mk)  word xs`,
 		// A variadic loop value MID-residual in a fn body: the RET cannot
 		// seat a runtime-variable count with a fixed value above it
 		// (seatResults' sameEventRunToEnd screen), so the fn refuses

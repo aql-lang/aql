@@ -223,6 +223,15 @@ const (
 	// order (the fn sits above a before-arg literal, which the in-order
 	// reconciliation otherwise forbids).
 	OpCallDynamicMixed
+	// OpSpliceDyn spreads a runtime splice payload (REFUSAL-CLOSURE §9.2b —
+	// `def d word xs d` over a computed xs): pop the payload; a plain list
+	// spreads its top-level elements (spliceExpand), any other value
+	// contributes itself — exactly the interpreter's marker re-step for a
+	// DATA payload. A payload bearing active tokens (words, parens, reaches,
+	// interpolations, nested splices — a Forth-style code macro) or a
+	// function value defers to the interpreter (vmDefer: the re-step
+	// dispatches against the live stack, which only the interpreter owns).
+	OpSpliceDyn
 	// OpInterpXml assembles an interpolated XML element from its computed
 	// holes (REFUSAL-CLOSURE §9.2c — the tree twin of OpInterp).
 	// Program.XmlInterps[Arg] holds the template skeleton; the VM pops one
@@ -471,6 +480,7 @@ var opcodeNames = [...]string{
 	OpCallDynamicMixed:     "CALL_DYNAMIC_MIXED",
 	OpInterp:               "INTERP",
 	OpInterpXml:            "INTERP_XML",
+	OpSpliceDyn:            "SPLICE_DYN",
 	OpCallUserPoly:         "CALL_USER_POLY",
 	OpCallDynTrailTop:      "CALL_DYN_TRAIL_TOP",
 	OpCallDynApplyTop:      "CALL_DYN_APPLY_TOP",
