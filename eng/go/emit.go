@@ -1729,7 +1729,11 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		return emitOperand{}, false
 	}
 	fd, ok := v.Data.(FnDefInfo)
-	if !ok || !fd.Anonymous {
+	// An ANONYMOUS lambda (=>/afn) or a NAMELESS verbose `fn` construction
+	// (REFUSAL-CLOSURE §9.2d — the curried factory's inner fn) both model as
+	// returned closures; a NAMED fn value carries registry dispatch and
+	// recursion semantics this model does not own, so it declines.
+	if !ok || (!fd.Anonymous && fd.Name != "") {
 		return emitOperand{}, false
 	}
 	// Resolve the lambda's captures in the ENCLOSING (factory body) scope, the
