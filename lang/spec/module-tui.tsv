@@ -92,12 +92,18 @@ import "aql:tui"  Tui.strip-ansi 5	ERROR:uncalled_function	strip-ansi requires a
 import "aql:tui"  Tui.text-width 5	ERROR:uncalled_function	text-width requires a String
 import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
 import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
+import "aql:tui"  Tui.run {service: 5 view: 6}	ERROR:service: must be a Service	the service-shaped config demands a real Service
+import "aql:tui"  Tui.run {service: 5 update: 6 view: 7}	ERROR:service: and update: are exclusive	one fold owner: service or update, never both
+import "aql:tui"  Tui.deliver-events 5 5	ERROR:uncalled_function	deliver-events requires a Terminal and a Pid
 import "aql:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port
 import "aql:tui"  Tui.serve {tcp: "high" token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects a non-Integer port
 import "aql:tui"  Tui.serve {tcp: 70000 token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects an out-of-range port
 import "aql:tui"  Tui.serve {tcp: 0} {}	ERROR:token: is required	serve demands an explicit token (or the "none" opt-out)
 import "aql:tui"  Tui.serve {tcp: 0 token: 5} {}	ERROR:token: must be a String	serve rejects a non-String token
 import "aql:tui"  Tui.serve {tcp: 0 token: "x"} {}	ERROR:missing update	serve validates the app map before listening
+import "aql:tui"  Tui.serve {tcp: 0 token: "x" viewers: 0} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a zero viewer cap
+import "aql:tui"  Tui.serve {tcp: 0 token: "x" viewers: "two"} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a non-Integer viewer cap
+import "aql:tui"  Tui.serve {tcp: 0 token: "x" reattach: 5} {}	ERROR:reattach: must be a Boolean	serve rejects a non-Boolean reattach flag
 #
 import "aql:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
 import "aql:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle

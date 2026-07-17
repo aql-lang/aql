@@ -458,3 +458,71 @@ func TestTuiRunViewerGoneArms(t *testing.T) {
 		t.Fatalf("paint calls = %d, want 2", calls)
 	}
 }
+
+// The §11.1 resolution: a SERVICE-shaped app — patrun handlers fold
+// events, wrap middleware observes every matched dispatch (the probe's
+// F4 ask), unmatched events (init, resize noise) are ignored, and the
+// quit marker rides the handler reply.
+func TestTuiRunServiceShapedApp(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(8, 2)
+	for _, ev := range []tuikit.Event{
+		{Tag: "key", Key: "up"},
+		{Tag: "resize", Cols: 9, Rows: 3}, // no handler → ignored
+		{Tag: "key", Key: "up"},
+		{Tag: "key", Key: "q", Char: "q"},
+	} {
+		vb.Inject(ev)
+	}
+	reg := trcRegWithBackend(t, vb)
+	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`,
+		`def svc (service {n: 0  events: 0})`,
+		`add {tag: "key"  key: "up"} ([ev:Map state:Any] => [
+		   (state set n (add 1 state.n)) drop
+		   state ]) svc`,
+		`add {tag: "key"  key: "q"} ([ev:Map state:Any] => [ Tui.quit state ]) svc`,
+		`wrap ([ev:Map state:Any prior:Any] => [
+		   (state set events (add 1 state.events)) drop
+		   prior ev ]) svc`,
+		`def final (Tui.run {service: svc  view: ([s:Any] => [ Tui.text (convert String s.n) ])})`,
+		`join "|" [(convert String final.n) (convert String final.events)]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := out[len(out)-1].AsConcreteString()
+	if s != "2|3" {
+		t.Fatalf("service app final = %q, want 2|3 (n from handlers, events from wrap)", s)
+	}
+	// the init frame rendered from the SERVICE's state
+	if vb.FrameCount() == 0 || !strings.Contains(strings.Join(vb.ScreenAt(0), "\n"), "0") {
+		t.Fatal("no init frame from the service state")
+	}
+}
+
+// The service-shaped config's own contract arms.
+func TestTuiRunServiceConfigArms(t *testing.T) {
+	view := `view: ([s:Any] => [Tui.spacer])`
+	for _, c := range []struct{ cfg, want string }{
+		{`{service: 5  ` + view + `}`, "service: must be a Service"},
+		{`{service: (service {})  update: ([s:Map e:Map] => [s])  ` + view + `}`, "service: and update: are exclusive"},
+		{`{service: (service {})  init: 5  ` + view + `}`, "service: and init: are exclusive"},
+		{`{service: (service {})}`, "missing view"},
+	} {
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`, `Tui.run ` + c.cfg})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("cfg %s = %v, want %q", c.cfg, err, c.want)
+		}
+	}
+	// a handler ERROR mid-dispatch propagates out of run
+	vb := tuikit.NewVirtualBackend(4, 2)
+	vb.Inject(tuikit.Event{Tag: "key", Key: "x", Char: "x"})
+	reg := trcRegWithBackend(t, vb)
+	_, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`,
+		`def svc (service {})`,
+		`add {tag: "key"} ([ev:Map state:Any] => [ raise "handler-boom" ]) svc`,
+		`Tui.run {service: svc  view: ([s:Any] => [Tui.spacer])}`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "handler-boom") {
+		t.Fatalf("handler error = %v", err)
+	}
+}

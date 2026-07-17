@@ -52,11 +52,12 @@ func registerTuiType(path string, id int, b eng.TypeBehavior) *eng.Type {
 // drawing words mutate (guarded by mu — handles are sendable, so two
 // processes may hold one), and a closed latch so double-close is a no-op.
 type termState struct {
-	id      string
-	backend tuikit.Backend
-	mu      sync.Mutex
-	grid    *tuikit.Frame
-	closed  atomic.Bool
+	id         string
+	backend    tuikit.Backend
+	mu         sync.Mutex
+	grid       *tuikit.Frame
+	closed     atomic.Bool
+	delivering atomic.Bool
 }
 
 func newTerminalValue(b tuikit.Backend, info tuikit.Info) native.Value {
@@ -380,6 +381,9 @@ func tuiReadEventHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	if err != nil {
 		return nil, err
 	}
+	if ts.delivering.Load() {
+		return nil, r.AqlError("tui_error", "read-event: events are being delivered to a process (deliver-events owns the stream)", "read-event")
+	}
 	dur, has, dErr := recvDeadline(args, 1)
 	if dErr != nil {
 		return nil, r.AqlError("tui_error", "read-event: "+dErr.Error(), "read-event")
@@ -403,6 +407,53 @@ func tuiReadEventHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	case <-timer.C:
 		return []native.Value{native.NewTypeLiteral(native.TNone)}, nil
 	}
+}
+
+// tuiDeliverEventsHandler is the Tier-1 ACTIVE delivery mode
+// (TUI.0.md §11.3 revisited, design plan follow-on): decoded events
+// flow to a process mailbox instead of being pulled via read-event, so
+// a Tier-1 program can fold terminal input together with its other
+// messages the actor way. One delivery per terminal at a time;
+// read-event refuses while a delivery owns the stream. Delivery stops
+// when the terminal closes (the event channel ends) or the target
+// process dies (Send fails), the latter releasing the stream for a new
+// deliver-events or read-event.
+func tuiDeliverEventsHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	ts, err := tuiOpenTerm(args, "deliver-events", r)
+	if err != nil {
+		return nil, err
+	}
+	proc, ok := native.PidProcess(args[1])
+	if !ok {
+		return nil, r.AqlError("tui_error", "deliver-events: expected a Pid target, got "+args[1].Parent.String(), "deliver-events")
+	}
+	if !ts.delivering.CompareAndSwap(false, true) {
+		return nil, r.AqlError("tui_error", "deliver-events: events are already being delivered", "deliver-events")
+	}
+	go func() {
+		defer ts.delivering.Store(false)
+		defer func() {
+			if rec := recover(); rec != nil { //covergate:allow delivery-pump recover body: the loop only selects on channels and calls Process.Send, both panic-free by construction (§modules)
+				_ = rec
+			}
+		}()
+		events := ts.backend.Events()
+		done := proc.Done()
+		for {
+			select {
+			case ev, ok := <-events:
+				if !ok {
+					return // the terminal closed
+				}
+				// a send to a dead process silently drops (BEAM), so
+				// liveness is watched via Done below, not the error
+				_ = proc.Send(eventToMap(ev))
+			case <-done:
+				return // the target died: release the stream
+			}
+		}
+	}()
+	return nil, nil
 }
 
 func tuiPrintAtHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -523,6 +574,10 @@ func tuiTier1Natives() []native.NativeFunc {
 		{Name: "read-event", Signatures: []native.Signature{
 			{Args: T(TTerminal, native.TMap), Impl: native.Go(tuiReadEventHandler), Returns: T(native.TAny), BarrierPos: -1},
 			{Args: T(TTerminal), Impl: native.Go(tuiReadEventHandler), Returns: T(native.TAny), BarrierPos: -1},
+		}},
+		{Name: "deliver-events", Signatures: []native.Signature{
+			{Args: T(TTerminal, native.TPid), Impl: native.Go(tuiDeliverEventsHandler), Returns: T(),
+				ReturnsFn: tuiNoReturns, BarrierPos: -1},
 		}},
 		{Name: "print-at", Signatures: []native.Signature{
 			{Args: T(TTerminal, native.TInteger, native.TInteger, native.TString, native.TMap),

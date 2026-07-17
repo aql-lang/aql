@@ -118,6 +118,19 @@ func ServiceCloser(v Value) func() error {
 	return nil
 }
 
+// ServiceStateOf returns the service's state value (the same value the
+// `state-of` word yields) — the hook a Go driver uses to render from a
+// service-shaped app's state. The bool is false for non-Service values.
+func ServiceStateOf(v Value) (Value, bool) {
+	s, ok := asService(v)
+	if !ok {
+		return Value{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state, true
+}
+
 func asService(v Value) (*serviceState, bool) {
 	ep, ok := v.Data.(eng.ExtensionPayload)
 	if !ok {

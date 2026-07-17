@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -390,5 +391,96 @@ func TestTuiTypeLiteralNoPanic(t *testing.T) {
 		"show": tuiShowHandler, "bell": tuiBellHandler,
 	} {
 		noPanic(name+" handle", func() { _, _ = h([]native.Value{lit}, nil, nil, reg) })
+	}
+}
+
+// The Tier-1 active delivery mode (deliver-events): decoded events
+// land in a process mailbox, the stream is exclusive against
+// read-event and double delivery, and a dead target releases it.
+func TestTuiDeliverEvents(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(4, 2)
+	reg := trcRegWithBackend(t, vb)
+	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, `Tui.open {}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var term native.Value
+	for _, v := range out {
+		if _, isTerm := asTerminal(v); isTerm {
+			term = v
+		}
+	}
+	if _, isTerm := asTerminal(term); !isTerm {
+		t.Fatalf("no Terminal in %v", out)
+	}
+	if reg.Procs == nil {
+		reg.Procs = eng.NewProcessRuntime()
+	}
+	proc := eng.NewProcess(reg.Procs, 8, eng.OverflowBlock)
+	if err := reg.Procs.Insert(proc); err != nil {
+		t.Fatal(err)
+	}
+
+	// a non-Pid target is refused before anything starts
+	if _, dErr := tuiDeliverEventsHandler([]native.Value{term, native.NewString("x")}, nil, nil, reg); dErr == nil ||
+		!strings.Contains(dErr.Error(), "expected a Pid target") {
+		t.Fatalf("non-pid target = %v", dErr)
+	}
+
+	if _, dErr := tuiDeliverEventsHandler([]native.Value{term, native.NewPid(proc)}, nil, nil, reg); dErr != nil {
+		t.Fatal(dErr)
+	}
+	// events flow into the mailbox as the §2.4 tagged maps
+	vb.Inject(tuikit.Event{Tag: "key", Key: "a", Char: "a"})
+	msg, ok, pErr := proc.PopFront(2*time.Second, true)
+	if pErr != nil || !ok {
+		t.Fatalf("no delivered event: %v %v", ok, pErr)
+	}
+	mp, _ := native.AsMap(msg)
+	if tag, _ := mp.Get("tag"); func() string { s, _ := tag.AsConcreteString(); return s }() != "key" {
+		t.Fatalf("delivered event = %v", msg)
+	}
+
+	// the stream is exclusive: a second delivery and read-event refuse
+	if _, dErr := tuiDeliverEventsHandler([]native.Value{term, native.NewPid(proc)}, nil, nil, reg); dErr == nil ||
+		!strings.Contains(dErr.Error(), "already being delivered") {
+		t.Fatalf("double delivery = %v", dErr)
+	}
+	if _, rErr := tuiReadEventHandler([]native.Value{term}, nil, nil, reg); rErr == nil ||
+		!strings.Contains(rErr.Error(), "deliver-events owns the stream") {
+		t.Fatalf("read-event during delivery = %v", rErr)
+	}
+
+	// a dead target releases the stream for a new delivery
+	proc.Close()
+	vb.Inject(tuikit.Event{Tag: "key", Key: "b", Char: "b"})
+	deadline := time.Now().Add(5 * time.Second)
+	for ts, _ := asTerminal(term); ts.delivering.Load(); {
+		if time.Now().After(deadline) {
+			t.Fatal("delivery never released after the target died")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	proc2 := eng.NewProcess(reg.Procs, 8, eng.OverflowBlock)
+	if err := reg.Procs.Insert(proc2); err != nil {
+		t.Fatal(err)
+	}
+	if _, dErr := tuiDeliverEventsHandler([]native.Value{term, native.NewPid(proc2)}, nil, nil, reg); dErr != nil {
+		t.Fatalf("re-delivery after release = %v", dErr)
+	}
+	vb.Inject(tuikit.Event{Tag: "key", Key: "c", Char: "c"})
+	if _, ok, _ := proc2.PopFront(2*time.Second, true); !ok {
+		t.Fatal("re-delivery received nothing")
+	}
+
+	// closing the terminal ends the pump; a fresh delivery is refused
+	// on the closed handle
+	ts, _ := asTerminal(term)
+	if err := ts.close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, dErr := tuiDeliverEventsHandler([]native.Value{term, native.NewPid(proc2)}, nil, nil, reg); dErr == nil ||
+		!strings.Contains(dErr.Error(), "closed") {
+		t.Fatalf("closed-terminal delivery = %v", dErr)
 	}
 }

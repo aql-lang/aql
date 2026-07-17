@@ -139,7 +139,47 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1–P5 landed — the plan is complete)
+## 3b. Outcome (P1–P6 landed — the plan and its follow-ups are complete)
+
+### P6 — the follow-ups stage (user-directed, post-plan)
+
+**P6 landed the §4 follow-ups that had unblocked.** Specifics:
+
+- **Serve v2 session rules** (`viewers: N` cap-64 multi-viewer,
+  `reattach: true`, unchanged-frame suppression) via a viewer HUB in
+  `tui_serve.go`: admission after auth (busy denials leak nothing to
+  unauthenticated probes — and the accept reply now goes out only
+  AFTER admission, fixing the v1 wire order accept-then-deny-busy),
+  per-write deadlines drop stuck viewers, late joiners replay the
+  title + current frame, input merges from every viewer, and each
+  attach client lays out at its own geometry (the tree wire makes
+  per-viewer sizes free). Losing the LAST viewer quits unless
+  reattach, which keeps the app headless until the next viewer.
+  The driver arm split: read-side loss arrives as the `__disconnect`
+  event, write-side loss as the `errTuiViewerGone` verdict from the
+  hub's alive report.
+- **§11.1 RESOLVED — service-shaped apps.** `SERVICES.0.md`'s surface
+  had landed, clearing the gate: `{service: svc  view: v}` dispatches
+  events through `native.DispatchServiceValue` (patrun handlers +
+  `wrap`/`prior` middleware — the probe's F1/F4 asks), renders from
+  `native.ServiceStateOf` (a new exported accessor), ignores
+  `no_match` events (resize noise must not error a pattern-routed
+  app), and quits on a marker reply. `service:` excludes `update:`
+  and `init:` — one fold owner.
+- **Tier-1 active input** (`deliver-events <Terminal> <Pid>`): decoded
+  events to a process mailbox — the actor-style alternative to
+  `read-event` polling, with the §11.3 hazard fenced (one delivery
+  per terminal; `read-event` refuses while a delivery owns the
+  stream). A send to a dead process silently drops (BEAM), so
+  liveness is watched via the process's `Done` channel — the target
+  dying releases the stream. `native.PidProcess` exported for the
+  pump.
+- **TSV**: +3 serve-v2 option rows, +2 service-config rows, +1
+  deliver-events dispatch negative; check-accuracy pin 149 → 152 →
+  154 (runtime-only option/config validation, per entry).
+- **RFC amendments**: §6.3 v2 session rules, §7.1 exports (28),
+  §9 trim, §11.1 resolved, §11.3/§11.5 leanings updated with what
+  landed.
 
 ### P5 — polish: graduation, full TSV, the coalescing benchmark
 
@@ -345,20 +385,32 @@ necessary during implementation, recorded per the network plan's habit:
   absent-scope-defaults-to-installed rule makes the *deny* edits the
   load-bearing ones.
 
-## 4. Follow-ups this plan leaves open
+## 4. Follow-ups (P6 landed most; the remainder, with reasons)
 
-- The §11.1 revisit (patrun-clause `update` / service-shaped apps
-  inheriting `wrap`/`prior`) once `SERVICES.0.md` lands its surface —
-  the probe's F1/F4 evidence is the input.
-- Multi-viewer `Tui.serve`, reattach/persistence, tree-diff and
-  cell-mode wire encodings, the xterm.js backend (wpg), image
-  protocols — all flagged v2 in RFC §9.
-- Whether `read-event` should gain an `{active: true}`-style
-  mailbox-delivery mode for Tier-1 users once P3's pump exists
-  (the net passive/active split, revisited for terminals).
-- ~~General terminal utilities usable outside the app framework~~ —
-  **landed post-plan** (user-directed): `Tui.colorize` /
-  `Tui.strip-ansi` / `Tui.text-width` on the module's pure no-backend
-  tier, with the placement investigation recorded in
-  [TUI-UTILITIES.0.md](TUI-UTILITIES.0.md) (a `term-util` extraction
-  stays the fallback if the surface outgrows terminal output).
+**Landed in P6** (see §3b): the §11.1 service-shaped-app revisit
+(`SERVICES.0.md`'s surface had stabilized, clearing its gate);
+multi-viewer `Tui.serve` + reattach; unchanged-frame suppression (the
+first slice of the frame-delta question); the Tier-1 active input mode
+(`deliver-events`, the net passive/active split revisited for
+terminals). Landed earlier post-plan: the standalone terminal
+utilities ([TUI-UTILITIES.0.md](TUI-UTILITIES.0.md)).
+
+**Still open, deliberately:**
+
+- **Full tree-diff / cell-mode wire encodings** — suppression zeroes
+  the steady-state cost; per-frame diffing only pays once a single
+  CHANGING tree is big enough to hurt, and no measured app is there
+  yet (§11.5 keeps the trigger question with the storm benchmark as
+  the instrument). The §6.2 envelope admits the extension without a
+  protocol break.
+- **The xterm.js `Backend` for the wasm playground (wpg)** — a
+  project-sized effort (wasm↔JS event/frame bridging, browser render
+  loop, playground UI work), not a module increment; the `Backend`
+  seam is the intended attachment point when it happens.
+- **Image/graphics protocols (sixel/kitty)** — niche, and needs a
+  backend capability-negotiation story first; nothing in the widget
+  vocabulary reserves against it.
+- **The rest of RFC §9's later tiers** (inline non-alt-screen widgets
+  + focus manager, reactivity sugar, layout dialect, theming,
+  `Stream`-fed widgets pending `aql:stream`, Windows VT parity) —
+  each a tier of its own, sequenced on demand.

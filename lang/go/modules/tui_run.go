@@ -75,12 +75,18 @@ func tuiRunOpts(cfg native.ReadMap, word string, r *native.Registry) (tuikit.Ope
 	return opts, deliverCtrlC, nil
 }
 
-// tuiApp is the parsed run config.
+// tuiApp is the parsed run config. An app is either fn-shaped
+// ({init update view} — update folds state) or SERVICE-shaped
+// ({service view} — events dispatch through the service's patrun
+// handlers and wrap middleware, and the service owns the state;
+// TUI.0.md §11.1, resolved).
 type tuiApp struct {
 	update, view native.Value
 	updateInfo   *native.FnDefInfo
 	viewInfo     *native.FnDefInfo
 	init         native.Value
+	service      native.Value
+	isService    bool
 	opts         tuikit.OpenOpts
 	deliverCtrlC bool
 }
@@ -91,14 +97,35 @@ func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, e
 		return nil, r.AqlError("tui_error", word+": expected an app config Map", word)
 	}
 	app := &tuiApp{}
-	up, ok := cfg.Get("update")
-	if !ok {
-		return nil, r.AqlError("tui_error", word+": missing update", word)
+	if sv, hasService := cfg.Get("service"); hasService {
+		if _, hasUpdate := cfg.Get("update"); hasUpdate {
+			return nil, r.AqlError("tui_error", word+": service: and update: are exclusive — the service owns the fold", word)
+		}
+		if _, hasInit := cfg.Get("init"); hasInit {
+			return nil, r.AqlError("tui_error", word+": service: and init: are exclusive — the service owns the state", word)
+		}
+		state, isSvc := native.ServiceStateOf(sv)
+		if !isSvc {
+			return nil, r.AqlError("tui_error", word+": service: must be a Service", word)
+		}
+		app.service = sv
+		app.isService = true
+		app.init = state
+	} else {
+		up, ok := cfg.Get("update")
+		if !ok {
+			return nil, r.AqlError("tui_error", word+": missing update", word)
+		}
+		if app.updateInfo, ok = native.FnDefFromValue(up); !ok {
+			return nil, r.AqlError("tui_error", word+": update must be a function taking (state, event)", word)
+		}
+		app.update = up
+		if iv, ok := cfg.Get("init"); ok {
+			app.init = iv
+		} else {
+			app.init = native.NewMap(native.NewOrderedMap())
+		}
 	}
-	if app.updateInfo, ok = native.FnDefFromValue(up); !ok {
-		return nil, r.AqlError("tui_error", word+": update must be a function taking (state, event)", word)
-	}
-	app.update = up
 	vw, ok := cfg.Get("view")
 	if !ok {
 		return nil, r.AqlError("tui_error", word+": missing view", word)
@@ -107,11 +134,6 @@ func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, e
 		return nil, r.AqlError("tui_error", word+": view must be a function taking the state", word)
 	}
 	app.view = vw
-	if iv, ok := cfg.Get("init"); ok {
-		app.init = iv
-	} else {
-		app.init = native.NewMap(native.NewOrderedMap())
-	}
 	if app.opts, app.deliverCtrlC, err = tuiRunOpts(cfg, word, r); err != nil {
 		return nil, err
 	}
@@ -340,6 +362,9 @@ func chordCtrl(ev native.ReadMap, key string) bool {
 }
 
 func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, error) {
+	if d.app.isService {
+		return d.applyServiceUpdate(msg)
+	}
 	sig := native.MatchFnSig(d.app.update, []native.Value{state, msg})
 	if sig == nil {
 		return native.Value{}, false, d.reg.AqlError("tui_error", "run: update does not accept (state, event)", "run")
@@ -356,6 +381,30 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 		return payload, true, nil
 	}
 	return next, false, nil
+}
+
+// applyServiceUpdate dispatches one event through the service-shaped
+// app: wraps run outermost, the patrun-matched handler mutates the
+// service state, and the reply carries the quit marker when the app is
+// done. An event NO handler matches is ignored — resize/mouse noise
+// must not error a pattern-routed app.
+func (d *tuiDriver) applyServiceUpdate(msg native.Value) (native.Value, bool, error) {
+	out, err := native.DispatchServiceValue(d.reg, d.app.service, msg)
+	if err != nil {
+		var ae *eng.AqlError
+		if errors.As(err, &ae) && ae.Code == "no_match" {
+			state, _ := native.ServiceStateOf(d.app.service)
+			return state, false, nil
+		}
+		return native.Value{}, false, err
+	}
+	if len(out) > 0 {
+		if payload, ok := isQuitMarker(out[len(out)-1]); ok {
+			return payload, true, nil
+		}
+	}
+	state, _ := native.ServiceStateOf(d.app.service)
+	return state, false, nil
 }
 
 func (d *tuiDriver) render(state native.Value) error {

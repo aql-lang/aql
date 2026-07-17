@@ -124,8 +124,11 @@ func TestTuiServeLoopback(t *testing.T) {
 	if msg := c.recv(t); msg["tag"] != "accept" {
 		t.Fatalf("handshake = %v", msg)
 	}
-	// a second viewer is denied busy while the session is live
+	// a second AUTHENTICATED viewer is denied busy at the default cap
+	// of one (the busy verdict comes after the handshake, so an
+	// unauthenticated probe learns nothing about the session)
 	c2 := dialWire(t, addr)
+	c2.send(t, map[string]any{"tag": "attach", "token": "s3cret", "cols": 8, "rows": 2, "proto": 1})
 	if msg := c2.recv(t); msg["tag"] != "deny" || msg["why"] != "busy" {
 		t.Fatalf("second viewer = %v", msg)
 	}
@@ -354,31 +357,157 @@ func newSquatter(t *testing.T, reg *native.Registry) interface{ Close() } {
 	return sq
 }
 
-// tuiWirePaint frames carry an increasing seq and the projected tree;
-// a failing write maps to the viewer-gone signal, not an app error.
-func TestTuiWirePaint(t *testing.T) {
-	var got []map[string]any
-	paint := tuiWirePaint(func(payload any) error {
-		m, ok := payload.(map[string]any)
-		if !ok {
-			t.Fatalf("payload = %T", payload)
+// The wire paint against the viewer hub: frames carry an increasing
+// seq, identical trees are suppressed, a viewer that stops reading is
+// dropped on the write deadline, and the last-viewer verdict
+// distinguishes reattach sessions.
+func TestTuiWirePaintHub(t *testing.T) {
+	hub := newTuiViewerHub(2, false)
+	client, server := net.Pipe()
+	defer client.Close()
+	lines := make(chan string, 16)
+	go func() {
+		sc := bufio.NewScanner(client)
+		for sc.Scan() {
+			lines <- sc.Text()
 		}
-		got = append(got, m)
-		return nil
-	})
+		close(lines)
+	}()
+	if _, ok := hub.admit(server); !ok {
+		t.Fatal("first admit refused")
+	}
+	paint := tuiWirePaint(hub)
+	if err := paint(native.NewString("x"), 4, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":1,\"tree\":\"x\"}" {
+		t.Fatalf("first frame = %s", got)
+	}
+	// the identical tree is suppressed; the next change is seq 2
 	if err := paint(native.NewString("x"), 4, 2); err != nil {
 		t.Fatal(err)
 	}
 	if err := paint(native.NewString("y"), 4, 2); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0]["tag"] != "frame" || got[0]["seq"] != 1 ||
-		got[1]["seq"] != 2 || got[1]["tree"] != "y" {
-		t.Fatalf("payloads = %v", got)
+	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":2,\"tree\":\"y\"}" {
+		t.Fatalf("post-suppression frame = %s", got)
 	}
-	bad := tuiWirePaint(func(any) error { return errors.New("gone") })
-	if err := bad(native.NewString("x"), 4, 2); !errors.Is(err, errTuiViewerGone) {
-		t.Fatalf("write failure = %v", err)
+}
+
+// Losing viewers mid-write: the deadline drops a stuck viewer; a
+// non-reattach session with none left reports viewer-gone, a reattach
+// session keeps painting into storage and replays to a late joiner.
+func TestTuiWirePaintViewerLoss(t *testing.T) {
+	oldTimeout := tuiWriteTimeout
+	t.Cleanup(func() { tuiWriteTimeout = oldTimeout })
+	tuiWriteTimeout = 50 * time.Millisecond
+
+	// a stuck viewer (nobody reads the pipe) times out and is dropped;
+	// it was the last of a non-reattach session
+	hub := newTuiViewerHub(1, false)
+	c1, s1 := net.Pipe()
+	defer c1.Close()
+	if _, ok := hub.admit(s1); !ok {
+		t.Fatal("admit refused")
+	}
+	if err := tuiWirePaint(hub)(native.NewString("z"), 4, 2); !errors.Is(err, errTuiViewerGone) {
+		t.Fatalf("stuck last viewer = %v", err)
+	}
+
+	// the same loss under reattach keeps the session alive, headless
+	hub2 := newTuiViewerHub(1, true)
+	c2, s2 := net.Pipe()
+	defer c2.Close()
+	if _, ok := hub2.admit(s2); !ok {
+		t.Fatal("admit refused")
+	}
+	paint2 := tuiWirePaint(hub2)
+	if err := paint2(native.NewString("z"), 4, 2); err != nil {
+		t.Fatalf("reattach stuck viewer = %v", err)
+	}
+	// headless paints keep storing; the title sticks too
+	if err := paint2(native.NewString("w"), 4, 2); err != nil {
+		t.Fatalf("headless paint = %v", err)
+	}
+	hub2.setTitle("back")
+	// a late joiner replays the title and the CURRENT frame
+	c3, s3 := net.Pipe()
+	defer c3.Close()
+	lines3 := make(chan string, 4)
+	go func() {
+		sc := bufio.NewScanner(c3)
+		for sc.Scan() {
+			lines3 <- sc.Text()
+		}
+		close(lines3)
+	}()
+	id3, ok := hub2.admit(s3)
+	if !ok {
+		t.Fatal("late joiner refused")
+	}
+	hub2.replay(id3)
+	if got := <-lines3; !strings.Contains(got, "\"text\":\"back\"") {
+		t.Fatalf("replayed title = %s", got)
+	}
+	hub2.replay(0) // an unknown id replays nothing: the no-op arm
+	if got := <-lines3; !strings.Contains(got, "\"tree\":\"w\"") {
+		t.Fatalf("replayed frame = %s", got)
+	}
+	// a stuck viewer is dropped by a title broadcast as well: nobody
+	// reads this pipe, so the deadline fires and the viewer is gone
+	hub5 := newTuiViewerHub(1, false)
+	c5t, s5t := net.Pipe()
+	defer c5t.Close()
+	if _, ok := hub5.admit(s5t); !ok {
+		t.Fatal("admit refused")
+	}
+	hub5.setTitle("stuck")
+	if hub5.broadcastFrame([]byte(`1`)) {
+		t.Fatal("title broadcast did not drop the stuck viewer")
+	}
+
+	// hub bookkeeping arms: drop's disconnect verdict and idempotence,
+	// goodbye idempotence, admissions after the session ends
+	hub3 := newTuiViewerHub(1, false)
+	c4, s4 := net.Pipe()
+	defer c4.Close()
+	id4, ok := hub3.admit(s4)
+	if !ok {
+		t.Fatal("admit refused")
+	}
+	hub3.drop(id4)
+	select {
+	case ev := <-hub3.events:
+		if ev.Tag != "__disconnect" {
+			t.Fatalf("last-drop event = %v", ev)
+		}
+	default:
+		t.Fatal("last drop emitted no disconnect")
+	}
+	hub3.drop(id4) // already gone: the no-op arm
+	hub3.goodbye()
+	hub3.goodbye() // idempotent
+	if _, ok := hub3.admit(s4); ok {
+		t.Fatal("admit after goodbye succeeded")
+	}
+	// evict semantics: an accepted-then-evicted viewer leaves silently
+	hub4 := newTuiViewerHub(1, false)
+	c5, s5 := net.Pipe()
+	defer c5.Close()
+	id5, ok := hub4.admit(s5)
+	if !ok {
+		t.Fatal("admit refused")
+	}
+	hub4.evict(id5)
+	select {
+	case ev := <-hub4.events:
+		t.Fatalf("evict emitted %v", ev)
+	default:
+	}
+	hub4.evict(id5) // already gone: the no-op arm
+	if !hub3.broadcastFrame([]byte("\"q\"")) {
+		t.Fatal("closed-session paint should report alive")
 	}
 }
 
@@ -464,15 +593,14 @@ func TestTuiServeAppErrorPropagates(t *testing.T) {
 }
 
 // tuiHandshake's transport arms and dimension defaulting, driven
-// directly over a net.Pipe.
+// directly over a net.Pipe (the handshake only VALIDATES — accept is
+// the acceptor's post-admission reply).
 func TestTuiHandshakeDirect(t *testing.T) {
 	// a hello with no dimensions defaults to 80×24
 	client, server := net.Pipe()
 	go func() {
 		data, _ := json.Marshal(map[string]any{"tag": "attach", "token": "t", "proto": 1})
 		_, _ = client.Write(append(data, '\n'))
-		sc := bufio.NewScanner(client)
-		_ = sc.Scan() // consume the accept reply
 	}()
 	cols, rows, why := tuiHandshake(server, "t")
 	if why != "" || cols != 80 || rows != 24 {
@@ -489,15 +617,248 @@ func TestTuiHandshakeDirect(t *testing.T) {
 	}
 	_ = server.Close()
 
-	// a viewer that vanishes before the accept reply lands
-	client, server = net.Pipe()
-	go func() {
-		data, _ := json.Marshal(map[string]any{"tag": "attach", "token": "t", "proto": 1})
-		_, _ = client.Write(append(data, '\n'))
-		_ = client.Close()
-	}()
-	if _, _, why := tuiHandshake(server, "t"); why != "transport" {
-		t.Fatalf("vanish before accept = %q", why)
+	// the accept reply failing to land evicts silently — driven through
+	// the ENGINE path by a scripted listener whose conn refuses writes
+	oldListen := tuiListen
+	t.Cleanup(func() { tuiListen = oldListen })
+	hello, _ := json.Marshal(map[string]any{"tag": "attach", "token": "x", "proto": 1})
+	tuiListen = func(string, string) (net.Listener, error) {
+		return &scriptedListener{conns: []net.Conn{
+			&scriptedConn{in: append(hello, '\n')},
+		}}, nil
 	}
-	_ = server.Close()
+	_, sErr := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+		`Tui.serve {tcp: 0  token: "x"} {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
+	if sErr == nil || !strings.Contains(sErr.Error(), "listener closed before a viewer attached") {
+		t.Fatalf("accept-write failure = %v", sErr)
+	}
+}
+
+// scriptedListener serves a fixed set of connections then errors.
+type scriptedListener struct {
+	conns []net.Conn
+	next  int
+}
+
+func (l *scriptedListener) Accept() (net.Conn, error) {
+	if l.next >= len(l.conns) {
+		return nil, errors.New("scripted listener exhausted")
+	}
+	c := l.conns[l.next]
+	l.next++
+	return c, nil
+}
+func (l *scriptedListener) Close() error   { return nil }
+func (l *scriptedListener) Addr() net.Addr { return &net.TCPAddr{} }
+
+// scriptedConn delivers fixed input and refuses every write.
+type scriptedConn struct {
+	in  []byte
+	off int
+}
+
+func (c *scriptedConn) Read(b []byte) (int, error) {
+	if c.off >= len(c.in) {
+		return 0, errors.New("scripted conn drained")
+	}
+	n := copy(b, c.in[c.off:])
+	c.off += n
+	return n, nil
+}
+func (c *scriptedConn) Write([]byte) (int, error)        { return 0, errors.New("write refused") }
+func (c *scriptedConn) Close() error                     { return nil }
+func (c *scriptedConn) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (c *scriptedConn) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (c *scriptedConn) SetDeadline(time.Time) error      { return nil }
+func (c *scriptedConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *scriptedConn) SetWriteDeadline(time.Time) error { return nil }
+
+// startServeOpts is startServe with extra transport options spliced in.
+func startServeOpts(t *testing.T, extra string) (net.Addr, chan error, chan string) {
+	t.Helper()
+	oldBound := tuiServeBound
+	t.Cleanup(func() { tuiServeBound = oldBound })
+	bound := make(chan net.Addr, 1)
+	tuiServeBound = func(a net.Addr) { bound <- a }
+
+	errs := make(chan error, 1)
+	finals := make(chan string, 1)
+	go func() {
+		reg, rErr := native.DefaultRegistry()
+		if rErr != nil {
+			errs <- rErr
+			return
+		}
+		out, sErr := runTuiStepsOn(t, reg, []string{
+			`import "aql:tui"`, serveApp,
+			`def final (Tui.serve {tcp: 0  token: "s3cret"` + extra + `} app)`,
+			`convert String final.n`,
+		})
+		if sErr != nil {
+			errs <- sErr
+			return
+		}
+		finals <- func() string {
+			s, _ := out[len(out)-1].AsConcreteString()
+			return s
+		}()
+	}()
+	select {
+	case addr := <-bound:
+		return addr, errs, finals
+	case err := <-errs:
+		t.Fatalf("serve failed before binding: %v", err)
+		return nil, nil, nil
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve never bound")
+		return nil, nil, nil
+	}
+}
+
+func attachViewer(t *testing.T, addr net.Addr) *wireClient {
+	t.Helper()
+	c := dialWire(t, addr)
+	c.send(t, map[string]any{"tag": "attach", "token": "s3cret", "cols": 10, "rows": 3, "proto": 1})
+	if msg := c.recv(t); msg["tag"] != "accept" {
+		t.Fatalf("handshake = %v", msg)
+	}
+	return c
+}
+
+// recvUntil reads until a message with the tag arrives, returning it.
+func (w *wireClient) recvUntil(t *testing.T, tag string) map[string]any {
+	t.Helper()
+	for {
+		msg := w.recv(t)
+		if msg["tag"] == tag {
+			return msg
+		}
+	}
+}
+
+// Two concurrent viewers: frames broadcast to both, input merges from
+// both, a third is denied busy, one leaving does NOT end the session,
+// and the survivor's quit ends it for everyone.
+func TestTuiServeMultiViewer(t *testing.T) {
+	addr, errs, finals := startServeOpts(t, `  viewers: 2`)
+	a := attachViewer(t, addr)
+	defer a.conn.Close()
+	// A sees the init frame (41) before B joins
+	if msg := a.recvUntil(t, "frame"); msg["seq"] != float64(1) {
+		t.Fatalf("A init frame = %v", msg)
+	}
+	b := attachViewer(t, addr)
+	defer b.conn.Close()
+	// the late joiner replays the CURRENT frame immediately
+	if msg := b.recvUntil(t, "frame"); msg["seq"] != float64(1) {
+		t.Fatalf("B replay frame = %v", msg)
+	}
+	// a third authenticated viewer is over the cap
+	c := dialWire(t, addr)
+	c.send(t, map[string]any{"tag": "attach", "token": "s3cret", "cols": 8, "rows": 2, "proto": 1})
+	if msg := c.recv(t); msg["why"] != "busy" {
+		t.Fatalf("third viewer = %v", msg)
+	}
+	c.conn.Close()
+	// B's keystroke reaches the app; the new frame reaches BOTH viewers
+	b.send(t, map[string]any{"tag": "key", "key": "up", "char": "", "mods": []string{}})
+	am := a.recvUntil(t, "frame")
+	bm := b.recvUntil(t, "frame")
+	if am["seq"] != float64(2) || bm["seq"] != float64(2) {
+		t.Fatalf("broadcast seqs = %v / %v", am["seq"], bm["seq"])
+	}
+	// A leaves; the session continues for B
+	a.conn.Close()
+	b.send(t, map[string]any{"tag": "key", "key": "up", "char": "", "mods": []string{}})
+	if msg := b.recvUntil(t, "frame"); msg["seq"] != float64(3) {
+		t.Fatalf("post-departure frame = %v", msg)
+	}
+	// B quits the app; the final state carries both keystrokes
+	b.send(t, map[string]any{"tag": "key", "key": "q", "char": "q", "mods": []string{}})
+	_ = b.recvUntil(t, "quit")
+	select {
+	case final := <-finals:
+		if final != "43" {
+			t.Fatalf("final = %s, want 43", final)
+		}
+	case err := <-errs:
+		t.Fatalf("serve error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not return")
+	}
+}
+
+// Losing every viewer of a multi-viewer session (no reattach) quits
+// the app with the current state.
+func TestTuiServeAllViewersGoneQuits(t *testing.T) {
+	addr, errs, finals := startServeOpts(t, `  viewers: 2`)
+	a := attachViewer(t, addr)
+	b := attachViewer(t, addr)
+	a.conn.Close()
+	b.conn.Close()
+	select {
+	case final := <-finals:
+		if final != "41" {
+			t.Fatalf("final = %s, want 41", final)
+		}
+	case err := <-errs:
+		t.Fatalf("serve error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not return when the last viewer left")
+	}
+}
+
+// A reattach session survives losing its only viewer; the next viewer
+// resumes with the title and current frame and can quit the app.
+func TestTuiServeReattach(t *testing.T) {
+	addr, errs, finals := startServeOpts(t, `  reattach: true`)
+	a := attachViewer(t, addr)
+	if msg := a.recvUntil(t, "frame"); msg["seq"] != float64(1) {
+		t.Fatalf("init frame = %v", msg)
+	}
+	// advance the state so the resumed frame is distinguishable
+	a.send(t, map[string]any{"tag": "key", "key": "up", "char": "", "mods": []string{}})
+	if msg := a.recvUntil(t, "frame"); msg["seq"] != float64(2) {
+		t.Fatalf("pre-detach frame = %v", msg)
+	}
+	a.conn.Close() // the app stays alive, headless
+
+	b := attachViewer(t, addr)
+	defer b.conn.Close()
+	// the resumed viewer replays the title and the CURRENT frame
+	if msg := b.recvUntil(t, "title"); msg["text"] != "served" {
+		t.Fatalf("replayed title = %v", msg)
+	}
+	msg := b.recvUntil(t, "frame")
+	if msg["seq"] != float64(2) || msg["tree"].(map[string]any)["text"] != "42" {
+		t.Fatalf("replayed frame = %v", msg)
+	}
+	b.send(t, map[string]any{"tag": "key", "key": "q", "char": "q", "mods": []string{}})
+	_ = b.recvUntil(t, "quit")
+	select {
+	case final := <-finals:
+		if final != "42" {
+			t.Fatalf("final = %s, want 42", final)
+		}
+	case err := <-errs:
+		t.Fatalf("serve error: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not return")
+	}
+}
+
+// The v2 transport options are validated like the v1 ones.
+func TestTuiServeV2ConfigArms(t *testing.T) {
+	check := func(opts, want string) {
+		t.Helper()
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+			`Tui.serve ` + opts + ` {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("serve %s = %v, want %q", opts, err, want)
+		}
+	}
+	check(`{tcp: 0  token: "x"  viewers: 0}`, "viewers: must be an Integer between 1 and 64")
+	check(`{tcp: 0  token: "x"  viewers: 65}`, "viewers: must be an Integer between 1 and 64")
+	check(`{tcp: 0  token: "x"  viewers: "two"}`, "viewers: must be an Integer between 1 and 64")
+	check(`{tcp: 0  token: "x"  reattach: 5}`, "reattach: must be a Boolean")
 }

@@ -610,12 +610,19 @@ type Renderer interface {
 - **Auth**: constant-time bearer-token compare, the `api`/`debug` service
   pattern. An **empty `token:` refuses to listen** — no accidentally-open
   TUIs; `token: "none"` is the explicit localhost-dev opt-out.
-- **One viewer at a time**: a second `attach` gets `deny busy`. LiveView
-  proves multi-viewer is coherent; it is deferred (§9).
-- **Disconnect quits** (decided): the client vanishing ends the app —
-  `Tui.serve` returns the current state, symmetric with Ctrl-C locally.
-  Detached-headless persistence and reattach are the natural v2, recorded in
-  §9 — the protocol reserves nothing against it.
+- **One viewer at a time BY DEFAULT** — `viewers: N` (landed v2, cap
+  64) admits up to N concurrent viewers: frames broadcast to all
+  (each attach client lays out at its OWN geometry — the tree wire
+  makes multi-size free), input merges from all, and over-cap
+  authenticated attaches get `deny busy` (the busy verdict comes
+  AFTER auth, so an unauthenticated probe learns nothing). A frame
+  identical to the previous one is not re-sent, and late joiners
+  replay the title plus the current frame.
+- **Disconnect quits BY DEFAULT** (decided): the LAST viewer vanishing
+  ends the app — `Tui.serve` returns the current state, symmetric with
+  Ctrl-C locally. `reattach: true` (landed v2) keeps the app running
+  headless instead; the next authenticated viewer resumes with the
+  title and current frame.
 - **Capability**: `Tui.serve` requires **both** `terminal` (§7.3) and the
   existing `network.listen` scope — it is a TUI *and* it binds a port.
 
@@ -635,21 +642,29 @@ converges rather than collides.
 
 ## 7. Word surface, types, capability
 
-### 7.1 Exports (24)
+### 7.1 Exports (28)
 
 Module id **`aql:tui`**, namespace **`Tui`** — a capability/framework
 module, so a plain name, not `-util` (`lang/go/CLAUDE.md` naming rules).
 
 | Group | Words |
 | --- | --- |
-| Tier 1 | `open` `close` `dims` `read-event` `print-at` `clear` `show` `title` `bell` |
+| Tier 1 | `open` `close` `dims` `read-event` `deliver-events` `print-at` `clear` `show` `title` `bell` |
 | Tier 2 runtime | `run` `serve` `quit` |
 | Pure helpers | `style` `edit` `focusable` |
 | Widget constructors | `text` `rows` `cols` `box` `list-view` `table` `input` `viewport` `spacer` |
+| Standalone utilities | `colorize` `strip-ansi` `text-width` ([TUI-UTILITIES.0.md](TUI-UTILITIES.0.md)) |
 | Type exports | `Terminal` (type literal, so `x is Tui.Terminal` works — the `IO.StreamKind`/`Net.Socket` precedent) |
 
-`Tui.run` options map (all optional): `{mouse: Boolean  ctrl-c: "quit"|"deliver"  title: String}`.
-`Tui.serve` adds `{tcp: Integer  token: String}`.
+`Tui.run` app config: `{init update view}` (fn-shaped) **or**
+`{service view}` (service-shaped — §11.1, resolved), plus the options
+(all optional): `{mouse: Boolean  ctrl-c: "quit"|"deliver"  title: String}`.
+`Tui.serve` transport options: `{tcp: Integer  token: String
+viewers: Integer  reattach: Boolean}` (viewers default 1, cap 64).
+`deliver-events <Terminal> <Pid>` is the Tier-1 ACTIVE input mode:
+decoded events flow to the pid's mailbox (one delivery per terminal;
+`read-event` refuses while a delivery owns the stream; the stream
+releases when the target dies).
 
 ### 7.2 ADR-001 audit (run against the live binary)
 
@@ -755,8 +770,9 @@ trivial-delegation wrappers, **inner sigs `BarrierPos:-1`**) · row in the
   and a runtime focus manager to power them; watch/computed reactivity
   sugar (Textual-style) over the same render loop; a VID-style layout
   dialect via `aql:minilang`/`aql:parselang`; theming/stylesheets;
-  multi-viewer and reattach/persistence for `Tui.serve`; tree-diff and
-  cell-mode wire encodings; an xterm.js `Backend` for the wasm playground;
+  tree-diff and cell-mode wire encodings (unchanged-frame suppression
+  landed as the first slice; full diffing awaits §11.5 evidence); an
+  xterm.js `Backend` for the wasm playground;
   `Stream`-fed widgets (log followers) pending `aql:stream`; Windows
   mouse/VT-input parity (raw mode works via `x/term`; declared best-effort
   in v1); image/graphics protocols (sixel/kitty).
@@ -801,25 +817,28 @@ best-effort, mouse gated off (§9).
 
 ## 11. Open questions
 
-1. **Patrun-clause update.** Should `Tui.run` (or a sibling entry point)
-   accept `SERVICES.0.md`-style `add {pattern} [handler]` clauses instead of
-   one `update` function, unifying TUI apps with services? (Leaning: keep
-   the single function in v1 — a `case` inside `update` is honest and
-   simple; revisit when the `service` surface stabilizes, since an app
-   *being* a service would also give `call`-based app introspection. The
-   `design/examples/tui/` todo probe adds evidence for the revisit: its
-   two-zone focus routing is hand-written `state.focus` guards on every
-   key clause — exactly patrun-shaped — and the REST app's `wrap` hits
-   counter has no TUI analog short of editing `update`, while a
-   service-shaped app would inherit `wrap`/`prior` for free.)
+1. **Patrun-clause update — RESOLVED (landed).** The service surface
+   stabilized, so `Tui.run`/`Tui.serve` now accept a SERVICE-shaped app:
+   `{service: svc  view: v}` instead of `{init update view}`. Events
+   dispatch through the service's patrun handlers (the probe's F1
+   focus-routing ask), `wrap`/`prior` middleware observes every matched
+   dispatch for free (the F4 ask), the service owns the state (`init:`
+   and `update:` are rejected alongside `service:`), an event NO
+   handler matches is ignored (resize/mouse noise must not error a
+   pattern-routed app), and a handler reply carrying the quit marker
+   ends the app. The single-`update` fn shape remains the simple
+   default; both shapes share the driver.
 2. **Native ticks.** Ship a `{tick: ms}` run option, or leave animation to
    `TimeUtil.interval` + `send`? (Leaning: no native ticks — the timer words
    exist, compose with the mailbox, and a tick option would be the first
    piece of event machinery not expressible as a message.)
 3. **`read-event` and Tier-2 coexistence.** Should `read-event` work
-   *inside* an app (peeking the mailbox) or stay Tier-1-only? (Leaning:
-   Tier-1-only; mixing pull and push event delivery in one app invites
-   ordering bugs.)
+   *inside* an app (peeking the mailbox) or stay Tier-1-only? (Leaning
+   held: Tier-1-only; mixing pull and push event delivery in one app
+   invites ordering bugs. The landed `deliver-events` gives Tier-1 the
+   ACTIVE mode instead — events to a pid's mailbox — and the same
+   hazard is fenced there too: `read-event` refuses while a delivery
+   owns the stream.)
 4. **Input widget depth.** Rune-level editing with grapheme-aware display
    is v1; is that enough before an editor-grade text widget exists?
    (Leaning: yes — `edit` covers line editing; multi-line editing is a
@@ -827,8 +846,11 @@ best-effort, mouse gated off (§9).
    scope for v1.)
 5. **Frame delta encoding trigger.** At what tree size / update rate does
    full-tree-per-render actually hurt, and does tree-diff or cell-mode win
-   then? (Leaning: measure in Phase E with the storm benchmark; the §6.2
-   envelope admits both extensions without a version bump beyond `proto`.)
+   then? (Leaning: measure with the storm benchmark; the §6.2 envelope
+   admits both extensions without a version bump beyond `proto`. First
+   slice landed: an unchanged tree is not re-sent at all — the
+   render-on-change wire rule — which zeroes the steady-state cost;
+   full diffing still awaits evidence of a tree big enough to hurt.)
 6. **Color capability negotiation over the wire.** The local backend
    degrades truecolor to the terminal's profile (§3.3); should `attach`
    report its profile in the handshake so the server could pre-degrade?
