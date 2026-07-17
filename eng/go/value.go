@@ -526,6 +526,17 @@ const (
 	// rides as its plain list and that branch interprets — per-element and
 	// sound.
 	CompileStoresBodyList
+	// CompileFnHandlerStrict marks a store-fn word (a CompileStoresFn slot)
+	// whose native VALIDATES and DISPATCHES its handler as an FnDefInfo value
+	// — the `service`/`add` family (requireHandlerFn + the call seam's
+	// MatchFnSig, which both need a real FnDefInfo). A CAPTURING handler at
+	// such a slot cannot stamp (captures) and would otherwise fall through to
+	// a bare OpPushClosure ClosurePayload the native rejects ("got Function")
+	// — a divergence. The recorder refuses it so the interpreter owns the
+	// shape; a non-strict store-fn word (a Patrun `add`, which invokes a
+	// stored closure fine) is unaffected. Non-capturing handlers stamp
+	// either way.
+	CompileFnHandlerStrict
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A

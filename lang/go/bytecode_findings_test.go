@@ -1425,39 +1425,31 @@ func TestOpMakeListCompiles(t *testing.T) {
 
 // Paren-bounded fn-value application — a method-field fn dispatch whose result
 // is consumed across a paren boundary. `m.g` is a dynamic method-field get the
-// checker cannot dispatch in place; it would otherwise flow to the residual's
-// paren-UNAWARE OpCallDynamic, which reorders a trailing op ahead of the apply
-// and miscomputes (`((m.g 3) add 1)` lowered `m.g(3 add 1)=8` instead of
-// `(m.g 3) add 1=7`). The paren-barrier guard refuses the shape so the
-// interpreter — which dispatches the concrete fn AT the paren — runs it
-// faithfully. Pairs the negative (hazard refuses + correct fallback) with the
-// positive (a simple method dispatch and a bare-word call still compile).
+// checker cannot dispatch in place. GRADUATED (REFUSAL-CLOSURE §9.2e,
+// 2026-07-17): the leading-dynamic paren apply records a guarded
+// OpCallDynMethod that COLLAPSES the window to one carrier BEFORE any
+// trailing op, so `(m.g 3) add 1` seats the apply RESULT (7) instead of the
+// old paren-unaware OpCallDynamic reorder that lowered `m.g(3 add 1)=8`. The
+// member-read provenance gate keeps a non-member leading dynamic refusing.
 func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const def = `def m {g: (fn [[x:Integer][Integer][x mul 2]])} `
 
-	// NEGATIVE: the paren-bounded apply must NOT compile native (it would
-	// miscompile); RunCompiled falls back to the faithful interpreter result.
-	for _, neg := range []struct{ src, want string }{
+	// GRADUATED: the paren-bounded member-read apply now compiles natively to
+	// an OpCallDynMethod, with the correct result.
+	for _, pos := range []struct{ src, want string }{
 		{def + `((m.g 3) add 1)`, "[7]"},
-		{def + `(m.g 3) add 1`, "[7]"}, // same hazard without the outer paren
+		{def + `(m.g 3) add 1`, "[7]"}, // same shape without the outer paren
 	} {
 		a, _ := New()
-		prog, _, _, _ := a.CompileCheck(neg.src)
-		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-			t.Errorf("%q: a paren-bounded fn-value apply must not compile native:\n%s", neg.src, prog.Disassemble())
+		gotC, compiled, errC := a.RunCompiled(pos.src)
+		if !compiled || errC != nil {
+			t.Errorf("%q: §9.2e must compile native, got compiled=%v err=%v", pos.src, compiled, errC)
 		}
-		b, _ := New()
-		gotC, compiled, errC := b.RunCompiled(neg.src)
 		c, _ := New()
-		gotI, _ := c.RunInterp(neg.src)
-		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != neg.want {
-			t.Errorf("%q: fallback parity: compiled=%v interp=%v want=%s (err %v)", neg.src, gotC, gotI, neg.want, errC)
+		gotI, _ := c.RunInterp(pos.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != pos.want {
+			t.Errorf("%q: parity: compiled=%v interp=%v want=%s", pos.src, gotC, gotI, pos.want)
 		}
-		_ = compiled
 	}
 
 	// POSITIVE: a simple method dispatch (arg directly follows, no paren

@@ -10,12 +10,14 @@ import (
 // attribution to stderr; without the flag nothing prints; under -no-compile
 // the header line explains the empty report.
 func TestExecuteCompileReport(t *testing.T) {
-	// An UNCOMPILABLE top level (the mid-expression fn-value apply) forces
-	// RunCompiled's armed interpreter fallback — the compile-time bake never
-	// sees the `add`, so the STORE-SITE stamp fires and records. (A fully
-	// compiled program pre-stamps its handlers; the skip is deliberately
-	// unrecorded — first stamp wins.)
-	src := `def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ 42 ]) svc (call {cmd:"X"} svc)`
+	// A CAPTURING service handler in a factory body refuses to compile (the
+	// handler is validated as a function value — CompileFnHandlerStrict), so
+	// RunCompiled's armed interpreter fallback runs the factory and the
+	// STORE-SITE stamp fires at runtime and records. (A fully compiled
+	// program pre-stamps its handlers; the skip is deliberately unrecorded —
+	// first stamp wins. The former paren-apply prefix graduated 2026-07-17,
+	// §9.2e, so it no longer forces the fallback on its own.)
+	src := `def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 42) (call {cmd:"X"} s)`
 
 	var stdout, stderr strings.Builder
 	if code := Execute([]string{"-compile-report", "-e", src}, strings.NewReader(""), &stdout, &stderr); code != 0 {

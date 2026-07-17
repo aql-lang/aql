@@ -4351,6 +4351,19 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// way. A body that refuses to compile leaves the const un-stamped and the
 		// handler falls back to the interpreter, per-body and sound.
 		if sig.CompileEffect.Has(CompileStoresFn) {
+			// A CAPTURING handler at a STRICT store slot (service/add — the
+			// native validates + dispatches the handler as an FnDefInfo)
+			// cannot stamp and would fall through to a bare OpPushClosure
+			// the native rejects: refuse so the interpreter owns it (the
+			// factory-body service-handler miscompile §9.2e's paren-apply
+			// unmasked). A non-strict store word (Patrun) invokes a stored
+			// closure fine and is untouched.
+			if sig.CompileEffect.Has(CompileFnHandlerStrict) {
+				if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) > 0 {
+					es.MarkUncompilable("capturing handler stored at " + word + " (validated as a function value)")
+					return nil, false
+				}
+			}
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
 				// EVERY stampable own sig gets its own unit + ref
 				// (REFUSAL-CLOSURE §7b): the callback seam dispatches via

@@ -175,7 +175,7 @@ var serviceNatives = []NativeFunc{
 			// already-registered pattern PUSHES a layering stack (prior).
 			// Returns nothing (statement form, like the Patrun overload).
 			{Args: []*Type{TMap, TAny, TService}, Impl: Go(serviceAddHandler), Returns: []*Type{},
-				BarrierPos: -1, CompileEffect: CompileStoresFn},
+				BarrierPos: -1, CompileEffect: CompileStoresFn | CompileFnHandlerStrict},
 		},
 	},
 	{
@@ -208,7 +208,7 @@ var serviceNatives = []NativeFunc{
 		Signatures: []Signature{
 			// wrap [handler] svc — ambient middleware around every dispatch.
 			{Args: []*Type{TAny, TService}, Impl: Go(serviceWrapHandler), Returns: []*Type{},
-				BarrierPos: -1, CompileEffect: CompileStoresFn},
+				BarrierPos: -1, CompileEffect: CompileStoresFn | CompileFnHandlerStrict},
 		},
 	},
 }

@@ -171,23 +171,23 @@ def h (fn [[x:Integer] [Integer] [x add bump]])
 	}
 }
 
-// A body the compiler refuses — a mid-expression fn-value application
-// ("fn-value application bounded by a paren", the verified Stage-3 refusal) —
-// declines the stamp and keeps interpreting unchanged.
+// A body the compiler refuses — a THREE-level curried inline apply threading
+// the enclosing param capture (§9.2d compiles two levels; the third refuses,
+// its own inventory item) — declines the stamp and keeps interpreting
+// unchanged. (The former paren-apply fixture graduated 2026-07-17, §9.2e.)
 func TestStampFnValueRefusingBodyInterpretsUnchanged(t *testing.T) {
 	a, v := stampHarness(t, `
-def m {f: ([y:Integer] => [y add 1])}
-def h (fn [[x:Integer] [Integer] [ add 1 ((m get "f") x) ]])
+def h (fn [[x:Integer] [Integer] [ (((fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) 1) 2) 3 ]])
 `, "h", true)
 	stamped, ok := eng.StampFnValue(a.registry, v)
 	if ok {
 		t.Fatalf("refusing body must decline the stamp")
 	}
 	// The returned value is the input, and it still runs on the interpreter:
-	// add 1 ((m.f) 7) = 1 + (7+1) = 9.
+	// x + 1 + 2 + 3 = 7+6 = 13.
 	out := invokeFnValue(t, a, stamped, eng.NewInteger(7))
-	if n, _ := out[len(out)-1].AsConcreteInteger(); n != 9 {
-		t.Fatalf("declined value must interpret unchanged: got %d, want 9", n)
+	if n, _ := out[len(out)-1].AsConcreteInteger(); n != 13 {
+		t.Fatalf("declined value must interpret unchanged: got %d, want 13", n)
 	}
 }
 
@@ -331,11 +331,12 @@ func TestRunCompiledFallbackNoDuplicateStampReport(t *testing.T) {
 	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
 	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	// A stampable module import followed by an uncompilable tail (fn-value
-	// applied inside a paren — "fn-value application bounded by a paren") so the
-	// whole program falls back to the interpreter after the check pass stamped
-	// the module helper in place.
-	src := `import ` + stampModuleSrc + ` def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)`
+	// A stampable module import followed by an uncompilable tail (a def
+	// consuming a DYNAMIC-count variadic loop region — the stable S5 refusing
+	// fixture) so the whole program falls back to the interpreter after the
+	// check pass stamped the module helper in place. (The former paren-apply
+	// tail graduated 2026-07-17, §9.2e.)
+	src := `import ` + stampModuleSrc + ` def dm {n: 3} def zz (for (dm get "n") [1]) zz`
 	a, _ := New()
 	_, compiled, err := a.RunCompiled(src)
 	if err != nil {
@@ -433,7 +434,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 	src := `module [
   def helper (fn [[x:Integer] [Integer] [x add 1]])
   def alias (helper/r)
-  def refuser (fn [[x:Integer] [Integer] [ add 1 (((( {f: ([y:Integer] => [y add 1])} )) get "f") x) ]])
+  def refuser (fn [[x:Integer] [Integer] [ (((fn [[a:Integer] [Function] [(fn [[b:Integer] [Function] [(fn [[c:Integer] [Integer] [x add a add b add c]])]])]]) 1) 2) 3 ]])
   def fact (fn [[n:Integer] [Integer] [ if (n lte 1) [1] [n mul (fact (n sub 1))] ]])
   def tbl {k: 1}
   export "M" {helper: helper/r fact: fact/r refuser: refuser/r}
