@@ -505,6 +505,9 @@ type EmitState struct {
 	// loopSplitBinds names the S5 first-value loop binds, so dynScopeRescue
 	// admits their top-level reads.
 	loopSplitBinds map[string]bool
+	// defReadGens snapshots each def-read's binding generation
+	// (residualReadStable — the end-of-program re-push soundness gate).
+	defReadGens map[string]int64
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -4748,6 +4751,29 @@ func (es *EmitState) NoteDefRead(id, name string) {
 		es.defReads = map[string]string{}
 	}
 	es.defReads[id] = name
+	// Snapshot the binding's generation at the read: a RESIDUAL re-push of
+	// this read (resolveResidualOperands) executes at PROGRAM END, so it is
+	// sound only while no later rebind moved the binding (residualReadStable).
+	if es.reg != nil {
+		if es.defReadGens == nil {
+			es.defReadGens = map[string]int64{}
+		}
+		es.defReadGens[id] = es.reg.Defs.Gen(name)
+	}
+}
+
+// residualReadStable reports whether a def-read value's binding is UNCHANGED
+// since the read (same DefTable generation): the end-of-program
+// OpLookupDynScope re-push then resolves the same value the read saw. A
+// consumer-position rescue needs no such gate (its op executes at the read's
+// own position); only the residual disposition calls this.
+func (es *EmitState) residualReadStable(v Value) bool {
+	name := es.defReads[v.ID]
+	if name == "" || es.reg == nil {
+		return false
+	}
+	gen, ok := es.defReadGens[v.ID]
+	return ok && es.reg.Defs.Gen(name) == gen
 }
 
 // RecordDynBind records a value-def site (name + the bound value's operand)
@@ -4833,6 +4859,9 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 		// Top level: only an S5 first-value loop bind reads through the
 		// registry here (its value has no event/local home by construction;
 		// the splice bind installed the runtime binding before any read).
+		// Widening this arm to every def-read name poisons dynScopeNames
+		// for defs whose bind then cannot lower (probe-pinned: the quoted
+		// interp-body def refused "unknown provenance").
 		if es.loopSplitBinds[name] {
 			if es.dynScopeNames == nil {
 				es.dynScopeNames = map[string]bool{}
@@ -6819,7 +6848,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 			// An S5 first-value loop bind's READ has no event/local home by
 			// construction — it re-resolves the live registry binding the
 			// splice bind installed (dynScopeRescue's top-level arm).
-			if op, okDyn := es.dynScopeRescue(rv); okDyn {
+			if op, okDyn := es.dynScopeRescue(rv); okDyn && es.residualReadStable(rv) {
 				ops = append(ops, op)
 				continue
 			}

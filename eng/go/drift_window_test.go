@@ -80,3 +80,11 @@ func TestDriftWindowUnresolvableOperandDeclines(t *testing.T) {
 		t.Error("an unresolvable window operand must decline the window")
 	}
 }
+
+// residualReadStable's no-name arm: a value never noted as a def read (or a
+// reg-less state) is never a stable residual re-push candidate.
+func TestResidualReadStableNoName(t *testing.T) {
+	if (&EmitState{}).residualReadStable(Value{}) {
+		t.Error("a value with no def-read note must not be stable")
+	}
+}
