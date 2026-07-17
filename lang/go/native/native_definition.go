@@ -251,7 +251,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// to the check stack as the N-1 REST residual (still produced by the
 	// loop event, so the variadic disposition owns it as today).
 	var outs []Value
-	if elem, split := r.Check.Recorder().SplitLoopRegionBind(value); split {
+	if elem, split := r.Check.Recorder().SplitLoopRegionBind(name, value); split {
 		outs = []Value{value}
 		value = elem
 	}

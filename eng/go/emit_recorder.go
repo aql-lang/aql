@@ -101,7 +101,7 @@ type EmitRecorder interface {
 	TakeFragment() *EmitFragment
 	RecordBranch(b BranchRecord)
 	RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos)
-	SplitLoopRegionBind(v Value) (Value, bool)
+	SplitLoopRegionBind(name string, v Value) (Value, bool)
 	BeginLoopCarried()
 	EndLoopCarried()
 	NoteLoopCarried(name string, joined, pre Value)
@@ -203,13 +203,13 @@ func (inactiveEmit) RegisterLocal(string) int                   { return -1 }
 func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}
 
-func (inactiveEmit) ArmBranchCapture()                       {}
-func (inactiveEmit) peekCaptureArm() bool                    { return false }
-func (inactiveEmit) ArmLoopCapture()                         {}
-func (inactiveEmit) ConsumeLoopArm() bool                    { return false }
-func (inactiveEmit) TakeFragment() *EmitFragment             { return nil }
-func (inactiveEmit) RecordBranch(BranchRecord)               {}
-func (inactiveEmit) SplitLoopRegionBind(Value) (Value, bool) { return Value{}, false }
+func (inactiveEmit) ArmBranchCapture()                               {}
+func (inactiveEmit) peekCaptureArm() bool                            { return false }
+func (inactiveEmit) ArmLoopCapture()                                 {}
+func (inactiveEmit) ConsumeLoopArm() bool                            { return false }
+func (inactiveEmit) TakeFragment() *EmitFragment                     { return nil }
+func (inactiveEmit) RecordBranch(BranchRecord)                       {}
+func (inactiveEmit) SplitLoopRegionBind(string, Value) (Value, bool) { return Value{}, false }
 
 func (inactiveEmit) RecordLoop(Value, Value, Value, *EmitFragment, []Value, string, Value, int, SrcPos) {
 }
