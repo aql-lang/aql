@@ -434,7 +434,7 @@ an xterm.js backend exists (§9). Unlike parselang there is **no AQL-level
   (§8.1): fixed-size in-memory grid, `Inject(ev)` to script input,
   `Screen() []string` / `CellAt(x,y)` for assertions over the current
   grid, **plus a bounded history of every `Present`ed frame**
-  (`FrameCount()` / `Screen(i)`) — the terminal is restored on quit, so
+  (`FrameCount()` / `ScreenAt(i)`) — the terminal is restored on quit, so
   every meaningful golden is a *mid-run* frame and the current grid alone
   cannot see them (surfaced by the `design/examples/tui/` probe). No OS
   anything.
@@ -691,7 +691,7 @@ The driver is tested end-to-end with scripted event queues and screen
 assertions, no TTY anywhere (which CI does not have): inject
 `init → keys → ctrl-c`, assert `run`'s return value and golden snapshots
 taken from the backend's **recorded frame history** (§4.4 — after quit
-the live grid is restored-empty, so goldens read `Screen(i)`, not
+the live grid is restored-empty, so goldens read `ScreenAt(i)`, not
 `Screen()`; CJK/emoji rows pin the width tables); error paths one-for-one with positives (ADR-house rule): update
 raises mid-loop (terminal restored, error propagates), view returns a
 non-widget (`tui_error bad_widget`), second `run` (`already_running`),

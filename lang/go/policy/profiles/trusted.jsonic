@@ -12,5 +12,6 @@
     env:     { words: { default: "allow" } }
     process: { words: { default: "allow" } }
     clock:   { words: { default: "allow" } }
+    terminal: { words: { default: "allow" } }
   }
 }

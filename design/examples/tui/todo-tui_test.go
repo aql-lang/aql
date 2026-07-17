@@ -84,7 +84,7 @@ func typeKeys(vb *tuikit.VirtualBackend, s string) {
 // virtual backend records at every Present (TUI.0.md §8.1).
 func anyFrameContains(vb *tuikit.VirtualBackend, want string) bool {
 	for i := 0; i < vb.FrameCount(); i++ {
-		if strings.Contains(strings.Join(vb.Screen(i), "\n"), want) {
+		if strings.Contains(strings.Join(vb.ScreenAt(i), "\n"), want) {
 			return true
 		}
 	}

@@ -84,7 +84,8 @@ final screen is empty by design — so every meaningful golden
 (`[x] walk dog`, the `todos 1/2` box title) is a **mid-run** frame.
 `Screen()`/`CellAt` over the current grid cannot see them.
 **Resolved:** §4.4/§8.1 now specify that the virtual backend records every
-`Present` into a bounded frame history (`FrameCount()`/`Screen(i)`), and
+`Present` into a bounded frame history (`FrameCount()`/`ScreenAt(i)` —
+`Screen(i)` as first amended could not coexist with `Screen()` in Go), and
 the goldens in `todo-tui_test.go` are written against it.
 
 ### F3 — "Export the app map" is the reuse idiom, and needed saying (fork 5, §5)

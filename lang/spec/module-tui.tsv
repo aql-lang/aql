@@ -1,0 +1,48 @@
+# AQL Language Specification: the aql:tui module (Tier-1 words)
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module of raw-terminal words (design/TUI.0.md §4). They are
+# reached only after `import`, under the `Tui` namespace:
+# `import "aql:tui" Tui.word args`.
+#
+#   Tui.open       — take the terminal over via the registered backend
+#   Tui.close      — restore the terminal; idempotent
+#   Tui.dims       — {cols rows}
+#   Tui.read-event — next decoded input event ({within: ms} → None on deadline)
+#   Tui.print-at   — styled text into the offscreen grid
+#   Tui.clear      — clear the offscreen grid
+#   Tui.show       — present the grid to the terminal
+#   Tui.title      — set the window title
+#   Tui.bell       — ring the bell
+#
+# The spec harness registers NO terminal backend (there is no TTY on CI),
+# so `open` pins the first-class no-backend error and every other word
+# pins its wrong-handle rejection; live happy paths run in Go against
+# tuikit.VirtualBackend (lang/go/modules/tui_test.go), exactly how
+# module-net.tsv leaves live sockets to Go.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  import binds the Tui namespace
+import "aql:tui" convert List Tui.$module	['Tui']	import binds the Tui namespace
+#
+# §2  negative — unbound without import
+Tui.open {}	ERROR:undefined_word	`Tui` is unbound without `import`
+#
+# §3  the Terminal handle type is exported as a type literal
+import "aql:tui"  canon Tui.Terminal	'Terminal'	Terminal is the terminal-handle type literal
+import "aql:tui"  5 is Tui.Terminal	false	a non-handle value is not a Terminal
+#
+# §4  no backend registered → the first-class no_backend error (both arities)
+import "aql:tui"  Tui.open {}	ERROR:no terminal backend registered	open with options requires a registered backend
+import "aql:tui"  Tui.open	ERROR:no terminal backend registered	zero-arg open requires a registered backend
+#
+# §5  wrong-handle rejections — a live run needs a backend, so each word
+#     pins its dispatch contract instead (module-fn unmatched call)
+import "aql:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
+import "aql:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle
+import "aql:tui"  Tui.read-event 5	ERROR:uncalled_function	read-event requires a Terminal handle
+import "aql:tui"  Tui.print-at 5 0 0 "x"	ERROR:uncalled_function	print-at requires a Terminal handle
+import "aql:tui"  Tui.clear 5	ERROR:uncalled_function	clear requires a Terminal handle
+import "aql:tui"  Tui.show 5	ERROR:uncalled_function	show requires a Terminal handle
+import "aql:tui"  Tui.title 5 "s"	ERROR:uncalled_function	title requires a Terminal handle
+import "aql:tui"  Tui.bell 5	ERROR:uncalled_function	bell requires a Terminal handle
