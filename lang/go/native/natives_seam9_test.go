@@ -27,6 +27,9 @@ func (w9ExtStub) Link(string, string) error                       { return fmt.E
 func (w9ExtStub) Chmod(string, os.FileMode) error                 { return fmt.Errorf("no") }
 func (w9ExtStub) Chtimes(string, time.Time, time.Time) error      { return fmt.Errorf("no") }
 func (w9ExtStub) Truncate(string, int64) error                    { return fmt.Errorf("no") }
+func (w9ExtStub) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
+	return nil, nil, fmt.Errorf("no")
+}
 
 // Seam-9 coverage (W9_nativeC) for natives.go: reach / folder / cancel
 // handler error and edge arms, driven directly with crafted args and an

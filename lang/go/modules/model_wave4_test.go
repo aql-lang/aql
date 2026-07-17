@@ -287,6 +287,9 @@ func TestModelWave4NewHandlerRejections(t *testing.T) {
 type failOpsWave4 struct{ failMkdir bool }
 
 func (f *failOpsWave4) ReadFile(string) ([]byte, error) { return nil, errors.New("read refused") }
+func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
+	return nil, nil, errors.New("watch refused")
+}
 func (f *failOpsWave4) WriteFile(string, []byte, os.FileMode) error {
 	return errors.New("write refused")
 }

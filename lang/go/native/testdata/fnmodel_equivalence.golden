@@ -738,6 +738,8 @@ WORD unregister
 WORD unshift
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
   [Any Node/List] barrier=2 returns=[Node/List]
+WORD unwatch
+  [Ideal/Watcher] barrier=1
 WORD update
   [Node/Map Ideal/Resource/Entity] barrier=2 returns=[Any]
   [Node/Map Node/Map] barrier=2 returns=[Any]
@@ -763,6 +765,8 @@ WORD walk
   [Node/Map Any Any] barrier=3 noeval={2} +returnsfn
   [Type/Function Any] barrier=2 returns=[Any]
   [Any] barrier=1 returns=[Node/List]
+WORD watch
+  [Scalar/Micron/Pathon Node/List] barrier=2 noeval={1} returns=[Ideal/Watcher]
 WORD whereis
   [Scalar/String] barrier=1 returns=[Any]
   [Scalar/Atom] barrier=1 returns=[Any]

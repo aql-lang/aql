@@ -123,6 +123,12 @@ type FileOps interface {
 	Chtimes(path string, atime, mtime time.Time) error
 	// Truncate changes the size of the file at path.
 	Truncate(path string, size int64) error
+	// Watch subscribes to change events for path — a file, or a
+	// directory's direct children (non-recursive, inotify semantics).
+	// Returns the event stream and a stop function that releases the
+	// watch and closes the stream. Watching an absent path errors.
+	// See WatchEvent (watch.go) for the shared op vocabulary.
+	Watch(path string) (<-chan WatchEvent, func() error, error)
 	ResolvePath(path string) (string, error)
 }
 
@@ -382,6 +388,10 @@ type MemFileOps struct {
 	// clock (mtime stamping). Nil means os.Geteuid / time.Now.
 	euidFn func() int
 	nowFn  func() time.Time
+
+	// watchers holds the live Watch subscriptions; every successful
+	// mutation fans an event out through emit (watch.go).
+	watchers []*memWatcher
 }
 
 func NewMem() *MemFileOps {
@@ -608,8 +618,10 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 			m.Meta[c] = meta
 		}
 		meta.MTime = m.now()
+		m.emit("write", final)
 	} else {
 		m.Meta[c] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+		m.emit("create", final)
 	}
 	return nil
 }
@@ -632,6 +644,7 @@ func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
 	}
 	m.recordDir(final)
 	m.Meta[final] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+	m.emit("create", final)
 	return nil
 }
 
@@ -744,10 +757,13 @@ func (m *MemFileOps) Remove(path string, recursive bool) error {
 			return &os.PathError{Op: "remove", Path: path, Err: errMemNotEmpty}
 		}
 		m.removeTree(final)
+		m.emit("remove", final)
 	case info.Symlink:
 		delete(m.Meta, final)
+		m.emit("remove", final)
 	default:
 		m.removeFileEntry(final)
+		m.emit("remove", final)
 	}
 	return nil
 }
@@ -903,6 +919,8 @@ func (m *MemFileOps) Rename(oldPath, newPath string) error {
 			m.Links[a] = nc
 		}
 	}
+	m.emit("rename", oldFinal)
+	m.emit("create", newFinal)
 	return nil
 }
 
@@ -921,6 +939,7 @@ func (m *MemFileOps) Symlink(target, linkPath string) error {
 	}
 	m.recordDir(filepath.Dir(linkFinal))
 	m.Meta[linkFinal] = &memMeta{Mode: os.ModeSymlink | 0o777, MTime: m.now(), Target: target}
+	m.emit("create", linkFinal)
 	return nil
 }
 
@@ -957,6 +976,7 @@ func (m *MemFileOps) Link(target, linkPath string) error {
 	default:
 		m.Links[linkFinal] = m.canon(targetFinal)
 	}
+	m.emit("create", linkFinal)
 	return nil
 }
 
@@ -986,6 +1006,7 @@ func (m *MemFileOps) Chmod(path string, mode os.FileMode) error {
 		return &os.PathError{Op: "chmod", Path: path, Err: os.ErrNotExist}
 	}
 	meta.Mode = mode & os.ModePerm
+	m.emit("chmod", final)
 	return nil
 }
 
@@ -1001,6 +1022,7 @@ func (m *MemFileOps) Chtimes(path string, atime, mtime time.Time) error {
 	}
 	meta.MTime = mtime
 	meta.ATime = atime
+	m.emit("chmod", final)
 	return nil
 }
 
@@ -1034,6 +1056,7 @@ func (m *MemFileOps) Truncate(path string, size int64) error {
 	if meta, ok := m.metaForExisting(final); ok {
 		meta.MTime = m.now()
 	}
+	m.emit("write", final)
 	return nil
 }
 

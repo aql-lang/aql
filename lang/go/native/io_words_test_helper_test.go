@@ -16,7 +16,7 @@ func registerIOWords(r *Registry) {
 	}
 	fileType := MintFileType(r)
 	moved := [][]NativeFunc{
-		IOModuleNativeFuncs(MintStreamKind(r), fileType),
+		IOModuleNativeFuncs(MintStreamKind(r), fileType, MintWatcherType(r)),
 		StructModuleNatives,
 		NetModuleNatives(MintFetchTypes(r)),
 		BitwiseModuleNatives,

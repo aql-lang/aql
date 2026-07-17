@@ -507,6 +507,15 @@ func makePathon(srcVal Value, abs bool) ([]Value, error) {
 	}
 }
 
+// NewPathonFromString parses a path string into a Pathon value with the
+// same rules as `make Pathon "<s>"` (a Windows drive prefix switches on
+// drive parsing; anything else is POSIX). Host code that surfaces OS
+// paths as values uses this — the aql:io watch events in particular,
+// whose records must carry Pathon microns, never bare strings.
+func NewPathonFromString(s string) Value {
+	return NewValueRaw(TPathon, PathonPayload{Info: parsePathonString(s)})
+}
+
 // isPathonSep reports whether c is a Pathon path separator. Both the POSIX
 // "/" and the Windows "\" separate segments, so a Windows path spelled
 // with either slash parses the same way.

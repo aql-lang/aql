@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `watch`/`unwatch` (change events), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2164,6 +2164,18 @@ modules keep plain names.
 > {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
 > do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes
 > verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O.
+>
+> **Watching.** `IO.watch p [body]` subscribes to change events on a
+> Pathon — a file, or a directory's direct children (non-recursive,
+> inotify semantics) — and runs the body once per event, push style
+> (like `TimeUtil.interval` runs its callback per tick), with the event
+> record `{op: create/write/remove/rename/chmod atom, path: Pathon}` on
+> the stack. It returns an `IO.Watcher` handle; `IO.unwatch w` stops it.
+> The backend follows the effective FileOps: fsnotify (inotify/FSEvents/
+> kqueue) on the real filesystem, a synchronous in-memory event source
+> under `{mem}`, and the merged union of both layers under `{overlay}` —
+> so watch behaviour is part of the same real/mem parity surface as every
+> other io word.
 >
 > `list` and `remove` are different: rather than a namespaced `IO.list` /
 > `IO.remove`, importing `aql:io` **extends the core `list` / `remove`

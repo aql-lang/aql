@@ -141,4 +141,13 @@ func (p *permissionedFileOps) ResolvePath(path string) (string, error) {
 }
 
 // compile-time interface check.
+// Watch gates on fileops.watch{path} (read-like: it observes, never
+// mutates), then delegates the live stream to the inner FileOps.
+func (p *permissionedFileOps) Watch(path string) (<-chan capabilities.WatchEvent, func() error, error) {
+	if err := p.policy.Check("fileops", "watch", policy.Args{"path": path}); err != nil {
+		return nil, nil, err
+	}
+	return p.inner.Watch(path)
+}
+
 var _ capabilities.FileOps = (*permissionedFileOps)(nil)

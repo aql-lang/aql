@@ -22,7 +22,7 @@ func registerIOWords(reg *native.Registry) {
 		return
 	}
 	moved := [][]native.NativeFunc{
-		native.IOModuleNativeFuncs(native.MintStreamKind(reg), native.MintFileType(reg)),
+		native.IOModuleNativeFuncs(native.MintStreamKind(reg), native.MintFileType(reg), native.MintWatcherType(reg)),
 		native.StructModuleNatives,
 		native.NetModuleNatives(native.MintFetchTypes(reg)),
 		native.BitwiseModuleNatives,

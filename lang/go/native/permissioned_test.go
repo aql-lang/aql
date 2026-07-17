@@ -4,7 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
@@ -117,5 +119,52 @@ func TestPermissionedFileOpsResolvePathBypasses(t *testing.T) {
 	ops := HostFileOps(r)
 	if _, err := ops.ResolvePath("/tmp/x"); err != nil {
 		t.Errorf("ResolvePath should not be gated: %v", err)
+	}
+}
+
+func TestPermissionedFileOpsGatesWatch(t *testing.T) {
+	// The watch gate follows the read-like pattern: the sandbox policy's
+	// fileops.default=deny refuses the subscription outright, and the
+	// denial arrives before any watcher resources are allocated.
+	r, err := DefaultRegistryWithPolicy(loadPolicy(t, "sandbox"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := HostFileOps(r)
+	_, _, err = ops.Watch("/tmp/foo")
+	var d *policy.Denied
+	if !errors.As(err, &d) {
+		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	}
+	if !strings.Contains(d.Blame, "fileops.words") {
+		t.Errorf("Blame = %q, expected to mention fileops.words", d.Blame)
+	}
+}
+
+func TestPermissionedFileOpsAllowsWatchThrough(t *testing.T) {
+	// With no policy the wrapper is absent; with an allow-all policy the
+	// gate passes and the inner backend's stream comes through.
+	mem := capabilities.NewMem()
+	if err := mem.MkdirAll("d", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wrapped := NewPermissionedFileOps(mem, loadPolicy(t, "trusted"))
+	ch, stop, err := wrapped.Watch("d")
+	if err != nil {
+		t.Fatalf("allow-all watch: %v", err)
+	}
+	if err := mem.WriteFile("d/x.txt", []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ev := <-ch:
+		if ev.Op != "create" {
+			t.Errorf("gated stream event = %+v", ev)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event through the permissioned wrapper")
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
 	}
 }

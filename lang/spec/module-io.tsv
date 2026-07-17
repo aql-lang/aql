@@ -119,6 +119,20 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://p.bin") "hello" drop  IO.write (make Pathon "mem://p.bin") (convert Bytes "XY") {offset:1} drop  IO.read (make Pathon "mem://p.bin")	'hXYlo'	{offset} splices a positioned write
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://z.bin") (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
 #
+# §17  watch — subscribe to change events on a Pathon: `IO.watch p [body]`
+#      runs the body once per event (PUSH style, like TimeUtil.interval)
+#      with the {op path} record on the stack, and returns a Watcher
+#      handle; `IO.unwatch w` stops it. Event DELIVERY is asynchronous
+#      (a concurrent fork), so the deterministic spec surface is the
+#      handle's identity and the error cases — delivery order/content is
+#      pinned in lang/go/native/io_watch_test.go and
+#      capabilities/watch_test.go (mem, fsnotify, and overlay backends).
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  typeof (IO.watch (make Pathon "mem://w.txt") [drop])	Watcher	watch returns a Watcher handle
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  (IO.watch (make Pathon "mem://w.txt") [drop]) is IO.Watcher	true	the handle inhabits the exported IO.Watcher type
+import "aql:io"  context dot __sys dot fs set mem true  IO.watch (make Pathon "mem://ghost") [drop]	ERROR:watch	watching an absent path errors (fsnotify parity)
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  IO.unwatch (IO.watch (make Pathon "mem://w.txt") [drop])		unwatch stops the watcher, leaving no value
+import "aql:io"  context dot __sys dot fs set mem true  IO.unwatch 42	ERROR:signature	unwatch of a non-Watcher is refused statically — its sole signature takes a Watcher
+#
 # §16  overlay filesystem — `context dot __sys dot fs set overlay true`
 #      switches the FileOps capability to a UNION: a writable in-memory
 #      upper over the host filesystem as a read-only lower. Reads fall
@@ -127,7 +141,7 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 #      rows below exercise the hermetic (upper-write) surface; the
 #      fall-through and whiteout behaviour over a REAL lower is pinned in
 #      lang/go/native/io_overlay_test.go and capabilities/overlay_test.go.
-import "aql:io"  context dot __sys dot fs set overlay true  IO.read (IO.write (make Pathon "mem://ov.txt") "shadowed")	'shadowed'	an overlay write lands in the mem upper and reads back
+import "aql:io"  context dot __sys dot fs set overlay true  IO.write (make Pathon "mem://ov.txt") "shadowed" drop  IO.read (make Pathon "mem://ov.txt")	'shadowed'	an overlay write lands in the mem upper and reads back
 import "aql:io"  context dot __sys dot fs set overlay true  IO.write (make Pathon "mem://ow.txt") "x" drop  remove (make Pathon "mem://ow.txt")	mem:/ow.txt	remove of an upper-only file behaves as usual under the overlay
 #
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the

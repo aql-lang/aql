@@ -48,10 +48,10 @@ import "aql:emitlang" end EmitLang.emit_auto 2 {}	'2'	emitlang:emit_auto
 import "aql:emitlang" end EmitLang.emit_json 2 {}	'2'	emitlang:emit_json
 import "aql:emitlang" end EmitLang.emit_jsonic 2 {}	'2'	emitlang:emit_jsonic
 import "aql:emitlang" end EmitLang.emit_yaml 2 {}	'2'	emitlang:emit_yaml
-import "aql:io" end IO.write (make Pathon 'a') 'b' {a:1,b:2}	a	io:write
-import "aql:io" end IO.write (make Pathon 'c') 2 {c:3,d:4}	c	io:write
-import "aql:io" end IO.write (make Pathon 'd') 'e'	d	io:write
-import "aql:io" end IO.write (make Pathon 'f') 3	f	io:write
+import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'a') 'b' {a:1,b:2}	a	io:write
+import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'c') 2 {c:3,d:4}	c	io:write
+import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'd') 'e'	d	io:write
+import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'f') 3	f	io:write
 import "aql:logic-util" end LogicUtil.iff 2 3	true	logic-util:iff
 import "aql:logic-util" end LogicUtil.iff true false	false	logic-util:iff
 import "aql:logic-util" end LogicUtil.implies 2 3	true	logic-util:implies

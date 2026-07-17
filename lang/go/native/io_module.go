@@ -53,7 +53,9 @@ import "github.com/aql-lang/aql/eng/go"
 //	copy      copy a Pathon to a Pathon destination ({recursive} for a tree)
 //	link      create a symbolic (or {hard}) link at a Pathon destination
 //	touch     create/update a Pathon and apply {mode,mtime,atime,size}
-func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
+//	watch     run a body per change event on a Pathon (returns a Watcher)
+//	unwatch   stop a Watcher, closing its event stream
+func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
@@ -72,6 +74,14 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 			return statHandler(a, r, fileType, hasOpts)
 		}
+	}
+	// watchImpl closes over watcherType so each import's watch handles
+	// carry its own Watcher identity.
+	watchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doWatchWord(a, r, watcherType)
+	}
+	unwatchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doUnwatchWord(a, r)
 	}
 	return []NativeFunc{
 		{
@@ -165,6 +175,22 @@ func IOModuleNativeFuncs(streamKind, fileType *Type) []NativeFunc {
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// watch subscribes to change events on a Pathon (a file, or a
+			// directory's direct children) and runs the body once per event
+			// with the {op, path} record on the stack. Returns a Watcher.
+			Name: "watch",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(watchImpl), Returns: []*Type{watcherType}, BarrierPos: -1},
+			},
+		},
+		{
+			// unwatch stops a Watcher, releasing the subscription.
+			Name: "unwatch",
+			Signatures: []Signature{
+				{Args: []*Type{watcherType}, Impl: Go(unwatchImpl), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 		{
