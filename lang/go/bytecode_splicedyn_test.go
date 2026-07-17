@@ -46,5 +46,12 @@ func TestSpliceDynComputedPayloadCompiles(t *testing.T) {
 	// The BARE `word xs` form is the SAME site (an __SP marker fires the
 	// instant it is stepped standalone) and graduates with it.
 	mustCompileWithParity(t, `def mk fn [[] [List] [[7 8]]]  def xs (mk)  word xs`, "[7 8]")
+
+	// A RE-READ of the payload def after the spread keeps the sound refusal:
+	// the splice reassigns the payload's provenance to the spread event, so
+	// the trailing `xs` would resolve to the variadic spread instead of the
+	// original list (PR #279 review: compiled [1 2 2] vs interp [1 2 [1 2]]).
+	mustRefuseWithParity(t, `def xs (range 1 3) def d word xs d xs`,
+		"splice payload re-read after the spread")
 	_ = strings.Contains
 }

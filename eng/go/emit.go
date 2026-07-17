@@ -164,6 +164,10 @@ type eventFlags struct {
 	// type (which mirrors the LAST value — a heterogeneous body like
 	// `for 2 [7 "x"]` binds Integer 7 while the carrier renders String).
 	firstElemType *Type
+	// spliceDyn marks an OpSpliceDyn event (§9.2b): its payload's provenance
+	// was reassigned to this event, so a re-read of the payload after the
+	// spread must decline (resolveResidualOperands).
+	spliceDyn bool
 }
 
 type emitCall struct {
@@ -1739,7 +1743,11 @@ func fnValueInputs(params []FnParam) (inputs []Value, names []string) {
 }
 
 func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
-	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
+	if es == nil || es.reg == nil || v.Carrier || v.Dynamic || v.Quoted {
+		// A QUOTED fn value is DATA the interpreter keeps unapplied; lowering
+		// it to an opClosure drops the Quoted flag, so the VM would
+		// auto-apply it (`[quote (fn …)]` returned then applied — PR #279
+		// review: compiled [3] vs interp [fn (Integer) 2]). Keep it inert.
 		return emitOperand{}, false
 	}
 	fd, ok := v.Data.(FnDefInfo)
@@ -5442,8 +5450,22 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 // loop — no top-frame restriction. Returns false, leaving es untouched (the
 // caller then marks the program uncompilable and it falls back), when a hole has
 // no compiled home or did not produce exactly one value.
+// interpHoleStringifiesUnstably reports whether any interpolation hole is a
+// FUNCTION value: compiled code produces a ClosurePayload whose ValToString
+// renders VM internals (`Function({1 [1] 0})`), while the interpreter renders
+// the source-level `fn (Integer)` — so a fn-valued hole must decline (fall
+// back) rather than expose the VM representation (PR #279 review).
+func interpHoleStringifiesUnstably(holeVals []Value) bool {
+	for _, h := range holeVals {
+		if h.Parent != nil && (h.Parent.ConformsTo(TFunction) || h.Parent.ConformsTo(TFnDef)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 {
+	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
@@ -5481,7 +5503,7 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // events). Returns false, leaving es untouched, when a hole has no
 // compiled home — the caller then refuses and the program falls back.
 func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 {
+	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
@@ -5507,9 +5529,9 @@ func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, 
 // (REFUSAL-CLOSURE §9.2b): the payload rides as the one operand, the VM
 // spreads or defers (OpSpliceDyn), and the result is VARIADIC — the runtime
 // count is the payload's own — so only the program residual absorbs it. The
-// out is the check's carrier stand-in (the payload value itself, exactly
-// what the check-side splice contributes).
-func (es *EmitState) RecordSpliceDyn(payload, out Value, pos SrcPos) bool {
+// The spread result gets a FRESH carrier (distinct provenance) so it never
+// clobbers the payload def's own producer.
+func (es *EmitState) RecordSpliceDyn(payload Value, pos SrcPos) bool {
 	if !es.active() {
 		return false
 	}
@@ -5532,8 +5554,9 @@ func (es *EmitState) RecordSpliceDyn(payload, out Value, pos SrcPos) bool {
 	}})
 	f := es.eventInfo[seq]
 	f.variadicResult = true
+	f.spliceDyn = true
 	es.eventInfo[seq] = f
-	es.setProduced(out, seq)
+	es.setProduced(payload, seq)
 	return true
 }
 
@@ -6916,6 +6939,21 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 // loop result is allowed here (the program residual may absorb it), unlike a
 // fn body. A non-empty reason refuses the program.
 func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]emitOperand, string) {
+	// A dynamic splice (§9.2b) reassigns its payload's provenance to the
+	// spread event, so a re-read of the payload def AFTER the splice
+	// (`def xs (range 1 3) def d word xs d xs`) surfaces the SAME payload
+	// value twice in the residual — the spread and the re-read. The re-read
+	// would resolve to the variadic spread instead of the original list, so
+	// decline (PR #279 review): the interpreter owns the re-read shape.
+	seenSplice := map[string]bool{}
+	for _, rv := range residual {
+		if pr, ok := es.producedBy[rv.ID]; ok && es.eventInfo[pr.seq].spliceDyn {
+			if seenSplice[rv.ID] {
+				return nil, "splice payload re-read after the spread (Stage 2)"
+			}
+			seenSplice[rv.ID] = true
+		}
+	}
 	ops := make([]emitOperand, 0, len(residual))
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {

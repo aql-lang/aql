@@ -3865,7 +3865,7 @@ func (e *Engine) stepLiteral() error {
 				// (only the program residual absorbs it; fixed-arity
 				// consumers keep refusing). An unresolvable payload keeps
 				// the refusal.
-				if !rec.RecordSpliceDyn(info.Data, info.Data, e.tape.At(valIdx).Pos()) {
+				if !rec.RecordSpliceDyn(info.Data, e.tape.At(valIdx).Pos()) {
 					rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
 				}
 			}

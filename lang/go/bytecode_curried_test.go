@@ -55,4 +55,12 @@ func TestCurriedFactoryCompiles(t *testing.T) {
 			t.Errorf("def-bound closure: compiled=%v (%v) interp=%v (%v), want [15]", gotC, errC, gotI, errI)
 		}
 	}
+	// A QUOTED returned fn value stays INERT: lowering it to a closure would
+	// drop the Quoted flag and the VM would auto-apply a value the
+	// interpreter keeps as data (PR #279 review: compiled [3] vs interp
+	// [fn (Integer) 2]). The nameless gate excludes quoted values, so it
+	// falls back with parity.
+	mustCompileWithParity(t,
+		`def mk fn [[] [Function] [quote (fn [[b:Integer] [Integer] [b add 1]])]] ((mk) 2)`,
+		"[fn (Integer) 2]")
 }
