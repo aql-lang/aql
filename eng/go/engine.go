@@ -4223,7 +4223,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	result, dynamic, err := e.buildXmlFromTmpl(tmpl)
+	result, dynamic, holes, holesOK, err := e.buildXmlFromTmpl(tmpl)
 	if err != nil {
 		return Value{}, err
 	}
@@ -4235,12 +4235,19 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 		// constant: baking the check-mode tree would freeze a wrong child (a
 		// carrier renders as its type tag, e.g. "Xml") and diverge from the
 		// interpreter, which builds the real tree at run time. When recording,
-		// refuse — the VM has no XML-interpolation op, so the program falls back
-		// to the interpreter (mirrors evalInterpString). At run time there are no
-		// carriers, so this never fires and the concrete element below is returned.
+		// lower it to OpInterpXml (REFUSAL-CLOSURE §9.2c): the hole
+		// expressions already recorded their own dispatch events in traversal
+		// order, and the op pops their results and rebuilds the element at
+		// run time (rebuildXmlFromTmpl — byte-identical to this build). The
+		// rare unlowerable shape (a 0-or-many-valued hole) keeps the refusal
+		// and falls back, exactly as the string sibling.
 		if es := e.registry.Check.Recorder(); es.active() {
-			es.MarkUncompilable("interpolated XML with a runtime-computed part")
-			return NewCarrier(TXml), nil
+			out := NewCarrier(TXml)
+			out.ID = GenerateID(IDPrefixForType(TXml))
+			if !holesOK || !es.RecordInterpXml(tmpl, holes, out, val.Pos()) {
+				es.MarkUncompilable("interpolated XML with a runtime-computed part")
+			}
+			return out, nil
 		}
 	}
 	return result, nil
@@ -4258,20 +4265,32 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 // expression, or a nested template) evaluated to a NON-CONCRETE value — a
 // carrier seen only under static analysis. evalXmlInterp uses it to refuse
 // const-folding while recording (the InterpString contract).
-func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
+// buildXmlFromTmpl additionally collects the per-hole single result values
+// in TRAVERSAL order (attrs first, then children left-to-right, depth-first
+// through nested elements) with holesOK reporting every hole produced
+// exactly one value — the precondition RecordInterpXml needs to lower the
+// element to OpInterpXml (one operand-stack value per hole), mirroring
+// evalInterpParts' holes contract.
+func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, []Value, bool, error) {
 	dynamic := false
+	holesOK := true
+	var holes []Value
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
-		s, dyn, _, _, err := e.evalInterpParts(a.Parts)
+		s, dyn, aHoles, aOK, err := e.evalInterpParts(a.Parts)
 		if err != nil {
-			return Value{}, false, err
+			return Value{}, false, nil, false, err
 		}
 		if dyn {
 			dynamic = true
 		}
+		if !aOK {
+			holesOK = false
+		}
+		holes = append(holes, aHoles...)
 		attr.Set(a.Name, NewString(s))
 		if e.registry.FlowCtrl != FlowNone {
-			return NewXmlElement(t.Tag, attr, nil), dynamic, nil
+			return NewXmlElement(t.Tag, attr, nil), dynamic, holes, false, nil
 		}
 	}
 
@@ -4328,28 +4347,40 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
 			if c.Child == nil {
 				continue
 			}
-			child, dyn, err := e.buildXmlFromTmpl(*c.Child)
+			child, dyn, cHoles, cOK, err := e.buildXmlFromTmpl(*c.Child)
 			if err != nil {
-				return Value{}, false, err
+				return Value{}, false, nil, false, err
 			}
 			if dyn {
 				dynamic = true
 			}
+			if !cOK {
+				holesOK = false
+			}
+			holes = append(holes, cHoles...)
 			cren = append(cren, child)
 		case XmlCrenExpr:
 			results, err := runPooledSub(e.registry, c.Expr, false)
 			if err != nil {
-				return Value{}, false, err
+				return Value{}, false, nil, false, err
+			}
+			if len(results) == 1 {
+				holes = append(holes, results[0])
+			} else {
+				// A 0-or-many-valued child hole cannot map to one stack
+				// slot for OpInterpXml; the element is still built below,
+				// but the template is not lowerable (the caller falls back).
+				holesOK = false
 			}
 			for _, r := range results {
 				addChild(r)
 			}
 			if e.registry.FlowCtrl != FlowNone {
-				return NewXmlElement(t.Tag, attr, cren), dynamic, nil
+				return NewXmlElement(t.Tag, attr, cren), dynamic, holes, false, nil
 			}
 		}
 	}
-	return NewXmlElement(t.Tag, attr, cren), dynamic, nil
+	return NewXmlElement(t.Tag, attr, cren), dynamic, holes, holesOK, nil
 }
 
 // expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …

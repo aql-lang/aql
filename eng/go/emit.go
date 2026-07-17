@@ -178,7 +178,8 @@ type emitCall struct {
 	mapImpl         bool // the source map's Implicit flag
 	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
 	interpSegs      []InterpSeg
-	diverges        bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	xmlTmpl         *XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
+	diverges        bool     // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
 	// word dispatch — recorded by RecordTypedBind from the def handler's
@@ -5433,6 +5434,35 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
 		word: wordInterp, ops: ops, nout: 1, pos: pos,
 		interp: true, interpSegs: segs,
+	}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordInterpXml is RecordInterp's XML twin (REFUSAL-CLOSURE §9.2c): the
+// template skeleton rides in Program.XmlInterps and OpInterpXml pops the
+// hole VALUES in traversal order (buildXmlFromTmpl's attrs-then-children
+// depth-first walk — the same order the hole dispatches recorded their
+// events). Returns false, leaving es untouched, when a hole has no
+// compiled home — the caller then refuses and the program falls back.
+func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool {
+	if !es.active() || len(holeVals) == 0 {
+		return false
+	}
+	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
+	// it deepest-first as hole 0, so reverse exactly like RecordInterp.
+	ops := make([]emitOperand, len(holeVals))
+	for k := range holeVals {
+		op, ok := es.resolveOperand(holeVals[k])
+		if !ok {
+			return false
+		}
+		ops[len(holeVals)-1-k] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "__interpxml", ops: ops, nout: 1, pos: pos,
+		xmlTmpl: &tmpl,
 	}})
 	es.setProduced(out, seq)
 	return true
