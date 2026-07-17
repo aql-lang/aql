@@ -3512,6 +3512,15 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	if !isFnValueResidual(fn) { // fn must be a genuine fn-value residual
 		return false
 	}
+	// A QUOTED fn value at the trailing position stays INERT in the
+	// interpreter (the paren never collapses — `(1 2 (quote (fn …)))` leaves
+	// [1 2 fn]); only a READ-substituted arrival (unquoted by the check's
+	// word substitution, mirroring the interpreter) applies. The VM op
+	// strips the STORED value's construction-time quote to mirror the read
+	// (callDynTrailTop), so an inline-quote must never record the apply.
+	if fn.Quoted {
+		return false
+	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
 	// below). AQL fns can return 0 or multiple values, so refuse the lowering
 	// for a CONCRETE callee (a baked `/r` reference) that is not provably

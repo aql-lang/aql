@@ -776,6 +776,16 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
+	// The op stands for a READ-SUBSTITUTED trailing fn (RecordDynApply fires
+	// at the paren collapse of a WORD-read arrival, where the interpreter's
+	// substitution strips one quote level before the auto-apply). A compiled
+	// LOCAL push carries the STORED value verbatim — including the
+	// construction-time quote of a `/r` reference or a `quote (fn …)` arg —
+	// so mirror the read here: strip Quoted from the applied copy (probe-
+	// found off-corpus divergence: `[1 2] each [(1 2 c)]` with c bound from
+	// `(…)/r` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
+	// the interpreter's [[3 3]]).
+	fnVal.Quoted = false
 	base := top - n
 	// The args sit BELOW the fn in stack order (deepest first). The interpreter
 	// binds a trailing fn's args TOP-DOWN (the top arg → the fn's first param);
