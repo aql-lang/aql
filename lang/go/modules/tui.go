@@ -145,10 +145,18 @@ func tuiHostStateFor(r *native.Registry, create bool) *tuiHostState {
 	return s
 }
 
+func init() {
+	// module bodies (file/inline imports) resolve the host backend too —
+	// the sub-registry inherits this slot by pointer at import time
+	native.ModuleInheritedCaps = append(native.ModuleInheritedCaps, capTuiHost)
+}
+
 // RegisterHostTui installs a terminal backend on reg — the embedder
 // seam of design/TUI.0.md §4.3. Registration may happen before or after
 // the program imports "aql:tui": the words resolve the backend at
-// dispatch time, not at module build, so there is no replay step.
+// dispatch time, not at module build, so there is no replay step
+// (register before the program runs if it loads TUI apps as file
+// modules — the module sub-registry snapshots the slot at import).
 func RegisterHostTui(reg *native.Registry, spec TuiSpec) error {
 	if spec.Name == "" {
 		return fmt.Errorf("register tui backend: name must not be empty")

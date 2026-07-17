@@ -1,6 +1,36 @@
 # Todo over TUI — a DX probe for the `aql:tui` design
 
-This folder is a **developer-experience experiment**, not runnable code. It
+> **GRADUATED (implementation plan P5).** The probe apps this README
+> describes were rewritten onto the landed `aql:tui` surface and moved
+> to `../apps/` as working, tested examples:
+>
+> - `todo-tui.aql` + `todo-tui-served.aql` → **`../apps/todo-tui.aql`**
+>   (one module: `TodoTui.run` / `TodoTui.serve` over the same app map),
+>   driven by `TestAppTodoTUI` (`lang/go/test/app_todo_tui_test.go`, a
+>   scripted virtual terminal) and `TestTuiServeGraduatedTodoApp`
+>   (`lang/go/modules/tui_serve_app_test.go`, a real wire viewer).
+> - `todo-tui-client.aql` → **`../apps/todo-tui-client.aql`** (the
+>   REST-backed client against the real `todo-api.aql`), driven by
+>   `TestAppTodoTUIClient` end to end over loopback HTTP.
+> - `todo-tui_test.go` (the speculative harness sketch) → superseded by
+>   the real tests above; the frame-history contract it demanded (F2)
+>   shipped in `tuikit.VirtualBackend`.
+>
+> What the graduation changed, spelling-wise (the probe's guesses vs the
+> landed language): the guard-list `case` became zone-routing `if` +
+> value-dispatch `case` (matched value pushed — blocks open with
+> `drop`); `append` (flex-only) became `push`; bare `min`/`max` became
+> `MathUtil.*` (`aql:math-util`); `filter`/`each` take quotation bodies
+> (`filter [ dot done ] xs`); `parse "json"` / `emit "json"` became
+> `parse json` / `emit json` (atom kinds, `aql:parselang` /
+> `aql:emitlang`); `sub a b` forward-form arithmetic became swap form
+> (`a sub 1`); a `help` local collided with the built-in help system;
+> the app map is bound with `def` before returning (body locals tear
+> down before a trailing literal evaluates); statement-position `spawn`
+> and `Net.close` calls need their residue dropped / a `;` terminator.
+> The findings below stand as the historical record.
+
+This folder was a **developer-experience experiment**, not runnable code. It
 rewrites the repo's canonical validation app — the todo list of
 `../apps/todo-api.aql` (the `NETWORK-SERVERS.0.md` §6.4 verification app,
 validated end-to-end by `TestAppTodoAPI` in `lang/go/test/apps_test.go`) —

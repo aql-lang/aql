@@ -139,7 +139,52 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1–P4 landed; P5 appends here)
+## 3b. Outcome (P1–P5 landed — the plan is complete)
+
+### P5 — polish: graduation, full TSV, the coalescing benchmark
+
+**P5 landed in full.** The probe apps graduated to working, tested
+examples in `design/examples/apps/`, the Tier-2 TSV grew its edit-fold
+and constructor-negative rows, and the keystroke-storm benchmark pinned
+the §2.2 render-on-change claim with a number. Specifics:
+
+- **Graduation**: `todo-tui.aql` + `todo-tui-served.aql` merged into
+  ONE module (`../apps/todo-tui.aql` exporting `TodoTui.app/run/serve`
+  — the §5 reuse idiom is literally one export map), and
+  `todo-tui-client.aql` became `../apps/todo-tui-client.aql` (spawned
+  HTTP workers against the real `todo-api.aql`). Driven by
+  `TestAppTodoTUI` (scripted virtual terminal, file-module import),
+  `TestTuiServeGraduatedTodoApp` (real wire viewer), and
+  `TestAppTodoTUIClient` (full loopback REST round trips, the test
+  pacing itself on the virtual screen's sync status). The probe folder
+  (`design/examples/tui/`) retired to a graduation record atop its
+  findings; the probe-vs-landed spelling delta is recorded there
+  (guard-list `case` → zone `if` + value-dispatch `case`, `append` →
+  `push`, `MathUtil.min/max`, quotation-form `filter`/`each`, atom
+  `parse json` / `emit json`, swap-form arithmetic, statement-residue
+  drops and the `Net.close …;` terminator, the trailing-map-literal
+  teardown gotcha, a `help` local colliding with the built-in).
+- **One production change**: module sub-registries now inherit
+  opted-in host-capability slots (`native.ModuleInheritedCaps`, the
+  tui host key registered via init in `modules/tui.go`) — without it a
+  TUI app loaded as a FILE MODULE could never see the host backend
+  (`no_backend`), because `RunModuleBody` copies only a curated
+  capability list. Registration must precede the importing program
+  (embedders register at startup, so this is the natural order).
+- **TSV**: +5 edit/`focusable` value rows (insert/left/home+delete/
+  non-key passthrough/empty tree) and +10 per-constructor
+  `uncalled_function` negatives. No check-accuracy pin churn —
+  dispatch-miss negatives are check-flagged and value rows don't
+  count.
+- **The §2.2 number**: `BenchmarkTuiKeystrokeStorm` (modules) floods
+  one session and reports renders per keystroke under coalescing —
+  **0.031 renders/keystroke** at a 2000-key storm (~1/32, the drain
+  limit), ~96µs per fold on CI-class hardware. Every keystroke folds;
+  batches render.
+- **Ecosystem finding, not tui's**: `Net.close h` with code following
+  on the same line collects the WRONG forward argument (the module-net
+  TSV's own `Net.close l;` semicolon spelling is the canon); the
+  graduated client hit it and the probe README records it.
 
 ### P4 — the remote tier
 

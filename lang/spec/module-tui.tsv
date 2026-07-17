@@ -54,8 +54,23 @@ import "aql:tui"  Tui.spacer	{w:'spacer'}	spacer is the flexible filler
 import "aql:tui"  Tui.style {fg: "red"} {fg: "blue" bold: true}	{fg:'blue' bold:true}	style merge: overrides win
 import "aql:tui"  Tui.quit 7	{@quit:7}	quit wraps the final state in the marker map
 import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "backspace" char: "" mods: []}	{w:'input' value:'a' cursor:1 placeholder:'' focus:false}	edit folds a key event into the input
+import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'abx' cursor:3 placeholder:'' focus:false}	edit inserts a typed character at the cursor
+import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "left" char: "" mods: []}	{w:'input' value:'ab' cursor:1 placeholder:'' focus:false}	edit moves the cursor left
+import "aql:tui"  Tui.edit (Tui.edit (Tui.input "ab") {tag: "key" key: "home" char: "" mods: []}) {tag: "key" key: "delete" char: "" mods: []}	{w:'input' value:'b' cursor:0 placeholder:'' focus:false}	home then delete removes the character under the cursor
+import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "resize" cols: 1 rows: 1}	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	a non-key event leaves the input unchanged
 import "aql:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	focusable walks ids in document order
+import "aql:tui"  Tui.focusable (Tui.spacer)	[]	a tree without ids has no focusables
 import "aql:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String
+import "aql:tui"  Tui.rows 5	ERROR:uncalled_function	rows requires a children List
+import "aql:tui"  Tui.cols 5	ERROR:uncalled_function	cols requires a children List
+import "aql:tui"  Tui.box 5 {}	ERROR:uncalled_function	box requires a widget Map child
+import "aql:tui"  Tui.list-view 5	ERROR:uncalled_function	list-view requires an items List
+import "aql:tui"  Tui.table 5 []	ERROR:uncalled_function	table requires a columns List
+import "aql:tui"  Tui.input 5	ERROR:uncalled_function	input requires a String value
+import "aql:tui"  Tui.viewport 5	ERROR:uncalled_function	viewport requires a widget Map child
+import "aql:tui"  Tui.style 5 {}	ERROR:uncalled_function	style requires a base Map
+import "aql:tui"  Tui.edit 5 {}	ERROR:uncalled_function	edit requires an input widget Map
+import "aql:tui"  Tui.focusable 5	ERROR:uncalled_function	focusable requires a widget Map tree
 import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
 import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
 import "aql:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port
