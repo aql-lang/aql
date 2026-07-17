@@ -193,50 +193,60 @@ recursion, and the transitive callee scan.)
 
 ## 5. Variadic loop-collect defs — `def xs (for 3 [1])`
 
-Refusal: "def `xs` consumes loop results (Stage 2 loops only feed the
-program residual)" — the VARIADIC-producer arm of lowerDynBind
-(eng/go/lower.go:186): the variadic sim slot has no single value to
-bind. (The sibling reason "dynamic-scope def `xs` of unpromoted computed
-value", lower.go:195, is the NON-variadic unpromoted-producer arm —
-including the zero-output-body loop — a DIFFERENT refusal that this
-section does not clear.)
+**LANDED 2026-07-17** (SplitLoopRegionBind + the splice-at-depth
+OpBindGlobal).
 
-PROBED 2026-07-16 (RunInterp, the authoritative runtime): the interpreter
-binds `xs` to the region's FIRST value (the stack-deepest — `def i 0 def
-xs (for 3 [def i (add i 1) i]) xs` → `[2 3 1]`: `xs = 1`, residual `[2
-3]`) and spills the remaining N−1 as residual. The empty-region case
-diverges: `def xs (for 0 [1]) 99` → `[]` (the interpreter FORWARD-COLLECTS
-the next token `99` as `xs`, so nothing spills), and `def xs (for 0 [1])
-xs` raises `undefined_word` — hence a static-trip≥1 gate is mandatory.
+Refusal was: "def `xs` consumes loop results (Stage 2 loops only feed the
+program residual)" — the VARIADIC-producer arm of lowerDynBind. The
+interpreter binds `xs` to the region's FIRST value (the pending forward
+collects the first-ARRIVED value — probe-pinned: `def xs (for 2 [7 8]) xs`
+binds 7) and spills the remaining N−1 as residual.
 
-**Mechanism designed and PROTOTYPED 2026-07-16 (splice-at-mark).** An
-`OpStackMark` opens the region before the loop; a from-mark `OpBindGlobal`
-binds `stack[mark]` (the first value) and SPLICES it out of the region
-bottom (`copy(stack[mark:], stack[mark+1:])`), leaving the rest as the
-residual; a `loopStaticallyNonEmpty` gate (all bounds concrete, the
-FOR_NEXT trip test true on the first iteration) guarantees a non-empty
-region so the splice never underflows. The VM/lowering side is correct.
+**As landed — no forward-collection change at all.** The doc's "deep,
+broad engine change" premise dissolved once the read path was understood
+(the stale-premise lesson, a fifth time): reads of the binding do not
+need the check pass's carrier model to be per-value faithful, because
+they can re-resolve the LIVE registry binding at run time
+(OpLookupDynScope) — the splice bind installs the real first value
+before any read executes. So the landing is three small seams:
 
-**BLOCKED — reclassified S → check-mode change.** A probe of the compile
-front-end shows the CHECKER does not model this shape as the interpreter
-does. It collapses the loop into a single variadic carrier and has `def`
-consume the WHOLE region: `def xs (for 3 [1])` records a check residual of
-LENGTH 0 (region fully consumed), and `def xs (for 3 [1]) xs` binds
-`xs = [:Integer]` — the ENTIRE region carrier, producer = the loop event —
-so the read re-surfaces the whole region. The runtime splice removes ONE
-value, so the read case would ship `[1 1]` where the interpreter yields
-`[1 1 1]` — a SILENT MISCOMPILE. There is no seam to detect the mismatch
-at lower time (the read "matches" the variadic sim slot spuriously).
+- **Check-mode half** (`SplitLoopRegionBind`, emit.go): a TOP-LEVEL def
+  whose value is a STATICALLY-COUNTED variadic loop region (RecordLoop
+  now stamps `eventInfo.regionN` = trips × per-iteration net when all
+  three bounds are concrete and trips ≥ 1) swaps the binding for a fresh
+  ELEMENT carrier; the region carrier itself returns to the check stack
+  as the N−1 REST residual — still the loop event's variadic out, so the
+  existing disposition owns it unchanged. The element typing is what
+  kills the silent-miscompile risk the blocker named: downstream
+  dispatch types against the element, not the region
+  (`def xs (for 3 [1]) xs add 1` → [1 1 2], pinned).
+- **Lowering half** (lowerDynBind + GlobalBindSpec.Splice): the bind
+  emits an OpBindGlobal in splice mode — bind `stack[top−(regionN−1)]`
+  and splice it out — the region's deepest value at its statically-known
+  depth. No marks needed (the from-mark prototype was for the
+  runtime-variable case the static gate excludes). Stacked regions
+  compose: each bind fires immediately after its loop, so the depth
+  spans only its own region (`def a (for 2 [1]) def b (for 2 [5])
+  a add b` → [1 5 6], pinned).
+- **Read path** (dynScopeRescue): a top-level arm admits reads of
+  split-bound names (they have no event/local home by construction),
+  lowering OpLookupDynScope; a dispatching binding (a region of fn
+  values) defers to the interpreter at run time — the existing
+  dyn-scope-read screens, sound by construction.
 
-Making §5 sound therefore requires a CHECK-MODE forward-collection change:
-a forward-collecting word consuming a variadic loop region must take ONE
-element (bind the first-value carrier) and leave N−1 as a variadic
-residual carrier, mirroring the interpreter's per-value collection. That
-is a deep, broad engine change (stepLiteral / autoEval / the def handler's
-value source), well beyond the original "S" lowering estimate, and it must
-be validated against the whole `compiled_fullcorpus` oracle before it can
-land. Until then the refusal STAYS — slow, not wrong. The splice-at-mark
-mechanism above is the ready lowering half for that future landing.
+Gates (each declining shape keeps the refusal, pinned): a DYNAMIC count
+(the split needs the static region size — the zzRefusingRow fixture
+family re-pointed here), fn-body defs (the root gate), and zero-trip
+loops (pruned; the def forward-collects the next token, which already
+compiled).
+
+Landing tests: `TestEdgeFindingLoopCollectDefCompiles` — the canonical
+[1 1 1], no-read [1 1], distinct-values [2 3 1], multi-value-body
+[8 7 8 7], typed downstream dispatch, stacked regions, double reads,
+const-resolved and range-form counts, the dynamic-count refusal, and
+the branch-arm read (error parity). The former refusing pins
+(zzRefusingRow, RunCompiledReason, TestGlobalBindEnvelope,
+TestEmitRefusals) flipped or re-pointed to the dynamic-count sibling.
 
 ## 6. Poly-decline arms (fn-predicate / gradual-Any overloads)
 
@@ -450,11 +460,11 @@ loop already is, per §5), say so; the remainder need the audit.
 Cheapest-first, each with the standard battery + fullcorpus
 0-divergence + census ratchets, one landing per commit:
 
-1. §5 peek-at-mark — **RECLASSIFIED S → check-mode change, BLOCKED** (see
-   §5: the checker binds the whole variadic region where the interpreter
-   binds one value; the lowering half is prototyped and ready, but the
-   sound landing needs a forward-collection change validated against the
-   full corpus). The TestGlobalBindEnvelope variadic pin STAYS red.
+1. §5 loop-collect defs — **LANDED 2026-07-17** (the S5 first-value
+   split: SplitLoopRegionBind + the splice-at-depth OpBindGlobal; the
+   feared check-mode forward-collection change was never needed — reads
+   re-resolve the live binding via OpLookupDynScope; see §5). The
+   TestGlobalBindEnvelope variadic pin flipped to compile parity.
 2. §6a zero-return poly arms — **LANDED 2026-07-16** (unitNetsZero gate);
    the declining-poly pin flipped, re-pointed to the `zpick` fixture.
 3. §2 deferred-token windows — **LANDED 2026-07-16** (the dynamic-operand
@@ -473,9 +483,9 @@ Cheapest-first, each with the standard battery + fullcorpus
    2026-07-16** (tryRecordDriftWindow — a STATIC OpCallDynamicMixed
    window, no marks needed; see §1). §7b multi-sig stamps — **LANDED
    2026-07-16** (per-sig refs; the matched sig's Impl IS the sig
-   table; see §7). Every schedulable item of §1–§7 is now landed;
-   only §5 (blocked on the check-mode forward-collection change) and
-   the §8 designed opt-out remain open.
+   table; see §7). Every item of §1–§7 is now landed — §5 included
+   (2026-07-17) — leaving only the §8 designed opt-out and the §9
+   inventory open.
 
 After all of §1–§7, **the enumerated refusal families are closed** —
 the remaining interpreter execution on any default path would be:

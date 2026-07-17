@@ -109,7 +109,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive TakeFragment should be nil")
 	}
 	e.RecordBranch(BranchRecord{})
-	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "it", Value{}, SrcPos{})
+	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "it", Value{}, 0, SrcPos{})
 	e.BeginLoopCarried()
 	e.EndLoopCarried()
 	e.NoteLoopCarried("n", Value{}, Value{})
@@ -426,13 +426,13 @@ func TestRecordDynApplyPendingConsume(t *testing.T) {
 func TestRecordLoopRefusals(t *testing.T) {
 	// body == nil.
 	es := NewEmitState()
-	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), nil, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), nil, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("nil loop body should refuse")
 	}
 	// range of unknown provenance (start unresolvable).
 	es = NewEmitState()
-	es.RecordLoop(carrierVal(TInteger), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(carrierVal(TInteger), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unresolvable range should refuse")
 	}
@@ -440,13 +440,13 @@ func TestRecordLoopRefusals(t *testing.T) {
 	es = NewEmitState()
 	start := NewCarrier(TInteger)
 	seedProduced(es, start, 1)
-	es.RecordLoop(start, NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(start, NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("computed loop start should refuse")
 	}
 	// iterator slot not registered (all-const range, empty body).
 	es = NewEmitState()
-	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unregistered iterator should refuse")
 	}

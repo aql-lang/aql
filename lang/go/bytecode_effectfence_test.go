@@ -84,16 +84,17 @@ func zzCheckEmit(a *AQL) {
 }
 
 // zzRefusingRow is an OFF-CORPUS refusing shape (a `def` consuming a
-// variadic loop region — REFUSAL-CLOSURE.0 §5, BLOCKED on a check-mode
-// forward-collection change, so it is the STABLE refusing fixture): it
-// compiles to a nil Program with no check error, driving the refusal arm,
-// and the interpreter runs it fine (binds xs to the region's first value and
-// spills the rest — `[1 1 1]`). Every CORPUS refusal has graduated (the each
-// variadic-if row was the last, 2026-07-15), and the deferred-token dispatch
-// class graduated 2026-07-16 (the §2 dynamic-operand rematch — its raw
-// flex-cell Reach shape compiles to DISPATCH_REMATCH now), so the fence pins
-// ride this §5 shape.
-const zzRefusingRow = `def xs (for 3 [1]) xs`
+// variadic loop region whose count is DYNAMIC — the S5 first-value split
+// needs the STATIC region size, so a runtime-only count keeps the refusal,
+// making this the stable refusing fixture): it compiles to a nil Program
+// with no check error, driving the refusal arm, and the interpreter runs it
+// fine (binds xs to the region's first value and spills the rest —
+// `[1 1 1]`). Every CORPUS refusal has graduated (the each variadic-if row
+// was the last, 2026-07-15); the deferred-token class graduated 2026-07-16
+// (the §2 rematch), and the statically-counted §5 shape graduated
+// 2026-07-17 (the S5 split), so the fence pins ride this dynamic-count
+// sibling.
+const zzRefusingRow = `def m {n: 3} def xs (for (m get "n") [1]) xs`
 
 // A genuine REFUSAL returns the compile_refused error (Stage J). The code is
 // a GUARANTEE: no observable effect escaped the check pass, so a caller's

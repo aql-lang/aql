@@ -863,6 +863,12 @@ type GlobalBindSpec struct {
 	// separate DROP). The fast path peeks the live value in place (Pop=false)
 	// and leaves it for its downstream consumers.
 	Pop bool
+	// Splice selects the S5 first-value loop-bind mode: bind the value
+	// SpliceFromTop entries below the stack top and remove it — the
+	// interpreter's pending-forward collection of a loop region's first
+	// value, at the region's statically-known depth (REFUSAL-CLOSURE S5).
+	Splice        bool
+	SpliceFromTop int
 }
 
 // ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names

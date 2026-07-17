@@ -1209,6 +1209,17 @@ func (vc *vmContext) bindDynScope(curReg *Registry, p *Program, arg int, stack [
 // interpreter). A slot a later check-time undef popped skips the write: the
 // interpreter would have discarded the binding too.
 func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
+	if gb.Splice {
+		// The S5 first-value loop bind: the region's first value sits at a
+		// static depth below the top — bind it and splice it out, exactly
+		// the interpreter's pending-forward collection from the region.
+		idx := len(stack) - 1 - gb.SpliceFromTop
+		if idx < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+			return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL splice underflow")
+		}
+		curReg.Defs.SetAt(gb.Name, gb.Depth, stack[idx])
+		return append(stack[:idx], stack[idx+1:]...), nil
+	}
 	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL underflow")
 	}

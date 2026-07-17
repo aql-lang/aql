@@ -179,6 +179,24 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	src := d.src
 	if needDyn || !fastGlobal {
 		switch {
+		case d.srcSeq >= 0 && lw.variadic[d.srcSeq] && d.spliceDepth >= 0 && needGlobal:
+			// (needDyn is irrelevant here: an S5 read resolves via
+			// OpLookupDynScope against the registry slot the splice bind
+			// SetAt-writes — registry-visible without an OpBindDynScope.)
+			// The S5 first-value loop bind: the bound value is the region's
+			// stack-DEEPEST entry, live at a STATIC depth below the region
+			// top (SplitLoopRegionBind gated on the static count). Bind it
+			// in place and splice it out — the interpreter's pending forward
+			// collects the first-arrived value and the rest spill. The sim's
+			// variadic marker stays: the region minus one is still the
+			// variadic residual only the program end absorbs.
+			gi := len(lw.p.GlobalBinds)
+			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
+				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
+			})
+			lw.emit(OpBindGlobal, gi, d.pos)
+			lw.note()
+			return ""
 		case d.srcSeq >= 0 && lw.variadic[d.srcSeq]:
 			// A def of a VARIADIC producer (a loop collect) has no single
 			// value to bind — the same Stage-2 boundary every other consumer
