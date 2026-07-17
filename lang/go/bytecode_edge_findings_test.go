@@ -514,9 +514,40 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 	mustCompileWithParity(t, `def n 3 def xs (for n [1]) xs`, "[1 1 1]")
 	// Range form.
 	mustCompileWithParity(t, `def xs (for [1 4] [i]) xs`, "[2 3 1]")
+	// A HETEROGENEOUS multi-value body: the split element carrier is typed
+	// from the region's FIRST-arrived value (Integer 7), NOT the loop
+	// carrier's child type (which mirrors the LAST value, String "x") — so
+	// the downstream `xs add 1` dispatches Integer, not String-concat (PR
+	// #278 review P1-a: compiled [x 7 x 71] vs interp [x 7 x 8]).
+	mustCompileWithParity(t, `def xs (for 2 [7 "x"]) xs add 1`, "[x 7 x 8]")
 
 	// Decline fences — each keeps the sound refusal with interpreter parity.
 	// A DYNAMIC count: the split needs the static region size.
+	mustRefuseWithParity(t,
+		`def m {n: 3} def xs (for (m get "n") [1]) xs`,
+		"consumes loop results")
+	// A FILTERED name (`_`/`$`/capitalised) records no dyn-bind event, so the
+	// split would drop a check-residual value with no splice to remove it at
+	// run time — SplitLoopRegionBind declines it, and the dead-`_` def then
+	// refuses soundly (PR #278 review P1-c: `def _ (for 3 [1])` compiled
+	// [1 1 1] vs interp [1 1]).
+	mustRefuseWithParity(t, `def _ (for 3 [1])`, "residual shape beyond Stage 1")
+	mustRefuseWithParity(t, `def _ (for 2 [7 8])`, "residual shape beyond Stage 1")
+	// A CONDITIONALLY-REACHED split (inside a branch arm) is declined by the
+	// NestedBodyDepth gate, so the branch's analysis-only binding never
+	// leaks: `if false [def xs …] [] xs` refuses and the interpreter's
+	// undefined_word stands (PR #278 review P1-b).
+	{
+		src := `if false [def xs (for 3 [1])] [] xs`
+		a, _ := New()
+		_, iErr := a.RunInterp(src)
+		b, _ := New()
+		_, cCompiled, cErr := b.RunCompiled(src)
+		if cCompiled || codeOf(iErr) != "undefined_word" || codeOf(cErr) != "compile_refused" {
+			t.Errorf("%q: want compiled-refusal + interp undefined_word, got compiled=%v cErr=[%s] iErr=[%s]",
+				src, cCompiled, codeOf(cErr), codeOf(iErr))
+		}
+	}
 	mustRefuseWithParity(t,
 		`def m {n: 3} def xs (for (m get "n") [1]) xs`,
 		"consumes loop results")

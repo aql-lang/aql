@@ -158,6 +158,12 @@ type eventFlags struct {
 	// iteration — the gate for the splice-at-depth def bind
 	// (REFUSAL-CLOSURE S5). 0 = not statically counted.
 	regionN int
+	// firstElemType is the type of the region's FIRST-arrived (stack-deepest)
+	// value — bodyStk[0].Parent. The S5 split binds that value, so the split
+	// element carrier must be typed from it, NOT the loop carrier's child
+	// type (which mirrors the LAST value — a heterogeneous body like
+	// `for 2 [7 "x"]` binds Integer 7 while the carrier renders String).
+	firstElemType *Type
 }
 
 type emitCall struct {
@@ -1370,7 +1376,7 @@ type pendingLoopBind struct {
 // loop event, so the existing variadic disposition owns it). Declines
 // (ok=false) outside a recording pass, outside the root scope, or for a
 // region without a static count — those shapes keep today's refusal.
-func (es *EmitState) SplitLoopRegionBind(v Value) (Value, bool) {
+func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
 	if !es.active() || es.suspendedNow() {
 		return Value{}, false
 	}
@@ -1389,14 +1395,22 @@ func (es *EmitState) SplitLoopRegionBind(v Value) (Value, bool) {
 		return Value{}, false
 	}
 	f := es.eventInfo[pr.seq]
-	if !f.variadicResult || f.regionN < 1 {
+	if !f.variadicResult || f.regionN < 1 || f.firstElemType == nil {
 		return Value{}, false
 	}
-	elemType := TAny
-	if ct, isChild := v.Data.(ChildTypeInfo); isChild && ct.Child.Parent != nil {
-		elemType = ct.Child.Parent
+	// Only split when RecordDynBind will actually EMIT the splice for this
+	// name: a filtered name (`_`/`$`-prefixed, capitalised, empty) records no
+	// dyn-bind event, so splitting would drop one check-residual value with
+	// no splice instruction to remove it at run time (`def _ (for 3 [1])`
+	// compiled [1 1 1] vs the interpreter's [1 1]).
+	if name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+		return Value{}, false
 	}
-	elem := NewCarrier(elemType)
+	// The split binds the region's FIRST-arrived value, so the element
+	// carrier takes THAT value's type (firstElemType, guaranteed non-nil by
+	// the gate above), not the loop carrier's child type — which mirrors the
+	// LAST value and mis-types a heterogeneous body.
+	elem := NewCarrier(f.firstElemType)
 	es.pendingLoopBind = &pendingLoopBind{seq: pr.seq, depth: f.regionN - 1}
 	return elem, true
 }
@@ -3620,6 +3634,9 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 		// STATIC region size the caller computed (0 when not static).
 		f.variadicResult = true
 		f.regionN = regionN
+		if len(bodyStk) > 0 && bodyStk[0].Parent != nil {
+			f.firstElemType = bodyStk[0].Parent
+		}
 	} else {
 		// A SIDE-EFFECT loop (body nets 0 per iteration — `for n [acc set …]`)
 		// leaves ZERO runtime values, deterministically: a zero-output event, NOT a
