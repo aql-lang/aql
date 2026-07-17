@@ -119,6 +119,17 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://p.bin") "hello" drop  IO.write (make Pathon "mem://p.bin") (convert Bytes "XY") {offset:1} drop  IO.read (make Pathon "mem://p.bin")	'hXYlo'	{offset} splices a positioned write
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://z.bin") (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
 #
+# §16  overlay filesystem — `context dot __sys dot fs set overlay true`
+#      switches the FileOps capability to a UNION: a writable in-memory
+#      upper over the host filesystem as a read-only lower. Reads fall
+#      through to real files, writes land only in memory, deletes are
+#      whiteouts — the partially-in-memory unit-test configuration. The
+#      rows below exercise the hermetic (upper-write) surface; the
+#      fall-through and whiteout behaviour over a REAL lower is pinned in
+#      lang/go/native/io_overlay_test.go and capabilities/overlay_test.go.
+import "aql:io"  context dot __sys dot fs set overlay true  IO.read (IO.write (make Pathon "mem://ov.txt") "shadowed")	'shadowed'	an overlay write lands in the mem upper and reads back
+import "aql:io"  context dot __sys dot fs set overlay true  IO.write (make Pathon "mem://ow.txt") "x" drop  remove (make Pathon "mem://ow.txt")	mem:/ow.txt	remove of an upper-only file behaves as usual under the overlay
+#
 # §7  folder — create a directory, returning its Pathon. IO.folder mutates the
 #     HOST filesystem via EffectiveFileOps: the in-memory-FS toggle does not
 #     engage through a spec row's context layering, and `make Pathon` collapses

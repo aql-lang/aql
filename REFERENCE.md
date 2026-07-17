@@ -2172,8 +2172,16 @@ modules keep plain names.
 > directory, `remove p {recursive, force}` deletes a path. The overload
 > registers only on import and coexists with the core table/collection
 > meanings (its Pathon argument is type-disjoint), so `list [1 2 3]` still
-> works. Every op routes through the swappable `FileOps` capability, so
-> `context.__sys.fs set mem true` runs them against an in-memory filesystem.
+> works. Every op routes through the swappable `FileOps` capability:
+> `context.__sys.fs set mem true` runs them against a fully in-memory
+> filesystem (a strict-fidelity model of the real one — hard links share
+> storage, symlinks resolve component-wise, permission bits enforce
+> euid-aware; a differential harness pins mem/real parity), and
+> `context.__sys.fs set overlay true` runs them against a UNION of a
+> writable in-memory upper over the host filesystem — reads fall through
+> to real files, writes land only in memory, deletes are whiteouts — the
+> partially-in-memory configuration for unit tests over real fixtures
+> ({mem} wins if both flags are set).
 
 
 ## Diagnostic reports

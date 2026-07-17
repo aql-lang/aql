@@ -11,15 +11,16 @@ import (
 // these names on eng.Registry; word handlers retrieve them through
 // the typed accessors in this file. aqleng itself never sees them.
 const (
-	CapFileOps    = "engine.fileops"     // active capabilities.FileOps
-	CapMemFileOps = "engine.fileops.mem" // lazily created in-memory FileOps
-	CapFormats    = "engine.formats"     // map[string]Format read/write registry
-	CapExtensions = "engine.extensions"  // map[string]string file-ext→format-name
-	CapSQLite     = "engine.sqlite"      // *SQLiteStore
-	CapPolicy     = "engine.policy"      // policy.Policy enforcing permissions
-	CapClock      = "engine.clock"       // capabilities.Clock (the time source)
-	CapLogSinks   = "engine.logsinks"    // *LogSinkRegistry (aql:log fan-out sinks)
-	CapDebugOps   = "engine.debugops"    // capabilities.DebugOps (interactive stepping)
+	CapFileOps        = "engine.fileops"         // active capabilities.FileOps
+	CapMemFileOps     = "engine.fileops.mem"     // lazily created in-memory FileOps
+	CapOverlayFileOps = "engine.fileops.overlay" // lazily created mem-over-host overlay
+	CapFormats        = "engine.formats"         // map[string]Format read/write registry
+	CapExtensions     = "engine.extensions"      // map[string]string file-ext→format-name
+	CapSQLite         = "engine.sqlite"          // *SQLiteStore
+	CapPolicy         = "engine.policy"          // policy.Policy enforcing permissions
+	CapClock          = "engine.clock"           // capabilities.Clock (the time source)
+	CapLogSinks       = "engine.logsinks"        // *LogSinkRegistry (aql:log fan-out sinks)
+	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
 )
 
 // EffectiveDebugOps returns the installed DebugOps capability, or (nil,
@@ -209,9 +210,20 @@ func SetHostSQLite(r *Registry, store *SQLiteStore) {
 }
 
 // EffectiveFileOps returns the fileops to use for the current
-// invocation. When __sys.fs.mem is set on the active context store the
-// in-memory variant is returned (and cached as a capability on first
-// use); otherwise the regular host fileops is returned.
+// invocation, switched by flags on the active context store's __sys.fs:
+//
+//   - {mem: true} — a fully in-memory FileOps (hermetic; nothing
+//     touches the host filesystem);
+//   - {overlay: true} — a UNION of a writable in-memory upper over the
+//     host fileops as a read-only lower (capabilities.OverlayFileOps):
+//     reads fall through to real files, every mutation lands in memory,
+//     and deletes are whiteouts — the partially-in-memory configuration
+//     unit tests use to exercise real fixtures without mutating them.
+//     {mem: true} wins when both flags are set (it is the stricter
+//     isolation).
+//
+// Each variant is cached as a capability on first use so state persists
+// across invocations; otherwise the regular host fileops is returned.
 //
 // Never returns nil: if the policy has uninstalled the fileops
 // capability, HostFileOps returns notInstalledFileOps so consumers
@@ -224,32 +236,11 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 	if r == nil {
 		return nil
 	}
-	store := r.Contexts.Top()
-	if store == nil {
+	fsStore := sysFsStore(r)
+	if fsStore == nil {
 		return HostFileOps(r)
 	}
-	sysVal, ok := store.Get("__sys")
-	if !ok {
-		return HostFileOps(r)
-	}
-	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
-	if !ok {
-		return HostFileOps(r)
-	}
-	fsVal, ok := sysStore.Get("fs")
-	if !ok {
-		return HostFileOps(r)
-	}
-	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
-	if !ok {
-		return HostFileOps(r)
-	}
-	memVal, ok := fsStore.Get("mem")
-	if !ok {
-		return HostFileOps(r)
-	}
-	asBool, _ := AsBoolean(memVal)
-	if memVal.Parent.ConformsTo(TBoolean) && asBool {
+	if fsFlag(fsStore, "mem") {
 		if mem, _, _ := eng.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
 			return mem
 		}
@@ -257,5 +248,49 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 		_ = r.Capabilities.Set(CapMemFileOps, mem)
 		return mem
 	}
+	if fsFlag(fsStore, "overlay") {
+		if ov, _, _ := eng.Cap[capabilities.FileOps](r, CapOverlayFileOps); ov != nil {
+			return ov
+		}
+		ov := capabilities.NewOverlay(capabilities.NewMem(), HostFileOps(r))
+		_ = r.Capabilities.Set(CapOverlayFileOps, ov)
+		return ov
+	}
 	return HostFileOps(r)
+}
+
+// sysFsStore walks the active context store to __sys.fs, or nil when any
+// hop is absent or not a store.
+func sysFsStore(r *Registry) *StoreInstanceInfo {
+	store := r.Contexts.Top()
+	if store == nil {
+		return nil
+	}
+	sysVal, ok := store.Get("__sys")
+	if !ok {
+		return nil
+	}
+	sysStore, ok := sysVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return nil
+	}
+	fsVal, ok := sysStore.Get("fs")
+	if !ok {
+		return nil
+	}
+	fsStore, ok := fsVal.Data.(*StoreInstanceInfo)
+	if !ok {
+		return nil
+	}
+	return fsStore
+}
+
+// fsFlag reads one boolean toggle off the __sys.fs store.
+func fsFlag(fsStore *StoreInstanceInfo, key string) bool {
+	v, ok := fsStore.Get(key)
+	if !ok {
+		return false
+	}
+	asBool, _ := AsBoolean(v)
+	return v.Parent.ConformsTo(TBoolean) && asBool
 }
