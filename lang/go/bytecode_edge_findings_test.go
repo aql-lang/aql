@@ -520,6 +520,17 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 	mustRefuseWithParity(t,
 		`def m {n: 3} def xs (for (m get "n") [1]) xs`,
 		"consumes loop results")
+	// A LOOP-CARRIED def (the bind inside another loop's body analysis):
+	// the fragment context owns its own depth accounting, so the split
+	// declines — without the NestedBodyDepth gate this MISCOMPILED
+	// ([5 0 5 0] vs [5 5 5 5]). The §9.2a loop-carried store item owns
+	// compiling these; until then the refusal is the sound state.
+	mustRefuseWithParity(t,
+		`for 2 [ def acc (for 2 [5]) acc ]`,
+		"consumes loop results")
+	mustRefuseWithParity(t,
+		`for 3 [ def acc (for 2 [1]) ]`,
+		"consumes loop results")
 
 	// Zero-trip loops keep their existing behavior: the region is pruned,
 	// the def forward-collects the NEXT token (compiles), and a read with

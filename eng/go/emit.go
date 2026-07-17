@@ -1369,7 +1369,14 @@ func (es *EmitState) SplitLoopRegionBind(v Value) (Value, bool) {
 	if !es.active() || es.suspendedNow() {
 		return Value{}, false
 	}
-	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 {
+	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
+		es.reg.Check.NestedBodyDepth != 0 {
+		// NestedBodyDepth: a def inside a BRANCH/LOOP/QUOTATION body analysis
+		// (AnalyseLoopBody / RunCarrierBodyWithDefs) is not the top-level
+		// straight-line bind the splice-at-depth lowering models — the
+		// fragment context owns its own depth accounting (probe-pinned: the
+		// loop-carried `for 2 [ def acc (for 2 [5]) acc ]` miscompiled
+		// [5 0 5 0] vs [5 5 5 5] without this gate).
 		return Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]
