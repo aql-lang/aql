@@ -6677,6 +6677,47 @@ func (e *Engine) stepPastOpenParen(val Value) {
 
 // stepCloseParen handles the ")" word. It resolves any pending forwards
 // inside the paren scope via implicit end, then collapses the sub-expression.
+// recordParenLeadingApply records a leading-dynamic fn-value apply bounded
+// by a paren (REFUSAL-CLOSURE §9.2e): the value at `first` IS the fn being
+// applied to the values after it — `((m get "f") x)`. Recorded as a guarded
+// OpCallDynMethod (the §3 arrival chassis): the VM applies the RUNTIME value
+// to the args exactly as the interpreter's paren auto-dispatch and DEFERS on
+// a non-callable value or a result-count mismatch (interpreter re-run —
+// never a wrong stack). The window collapses to the one modeled carrier, so
+// a trailing consumer (`add 1 (...)`) seats the apply's RESULT — the
+// paren-unaware reorder the old refusal guarded against cannot happen. Only
+// a CONTAINER MEMBER read models here (memberFnRead provenance); any other
+// leading dynamic keeps its existing paths, as the old refusal did. Returns
+// the possibly-shrunk closeIdx (args spliced out).
+func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeIdx int) int {
+	fnVal := e.tape.At(first)
+	if !es.memberFnRead(fnVal.ID) {
+		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+		return closeIdx
+	}
+	var argVals []Value
+	var argIdxs []int
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if isRecordableLiteral(e.tape.At(i)) && i != first {
+			argVals = append(argVals, e.tape.At(i))
+			argIdxs = append(argIdxs, i)
+		}
+	}
+	out := NewCarrier(TAny)
+	out.ID = GenerateID(IDPrefixForType(TAny))
+	out.pos = fnVal.pos
+	if es.RecordDynMethod(fnVal, argVals, []Value{out}, "(paren apply)", fnVal.Pos()) {
+		e.tape.Set(first, out)
+		for j := len(argIdxs) - 1; j >= 0; j-- {
+			e.tape.Remove(argIdxs[j])
+			closeIdx--
+		}
+	} else { //covergate:allow RecordDynMethod resolves fnVal (a member-read EVENT, gated above) and each argVal (an isRecordableLiteral — a concrete const or an event-backed carrier resolveOperand handles), so it cannot decline here — the belt keeps the sound refusal if a future window shape breaks that invariant (§compiler)
+		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+	}
+	return closeIdx
+}
+
 func (e *Engine) stepCloseParen() error {
 	closeIdx := e.pointer
 
@@ -6937,48 +6978,9 @@ func (e *Engine) stepCloseParen() error {
 				es.RegisterTrailingApply(last.ID, count-1)
 			}
 		case first >= 0 && count >= 2:
-			// LEADING dynamic apply (REFUSAL-CLOSURE §9.2e): the dynamic IS
-			// the fn being applied to the values after it, bounded by THIS
-			// paren — `((m get "f") x)`. Record it as a guarded
-			// OpCallDynMethod (the §3 arrival chassis): the VM applies the
-			// RUNTIME value to the args exactly as the interpreter's paren
-			// auto-dispatch and DEFERS on a non-callable value or a result-
-			// count mismatch (interpreter re-run — never a wrong stack). The
-			// window collapses to the one modeled carrier, so a trailing
-			// consumer (`add 1 (...)`) seats the apply's RESULT — the
-			// paren-unaware reorder the old refusal guarded against cannot
-			// happen. An unresolvable operand keeps the refusal.
-			fnVal := e.tape.At(first)
-			if !es.memberFnRead(fnVal.ID) {
-				// Only a CONTAINER MEMBER read (`(m get "f") x` — the §2/§3
-				// provenance tag) models here: its runtime value is the
-				// pinpointed fn the interpreter applies at this paren. Any
-				// other leading dynamic (a def-bound anon fn read `(mk 7)`,
-				// an opaque computed value) keeps its existing paths — the
-				// old refusal fired only for the member-read hazard too.
-				es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
-				break
-			}
-			var argVals []Value
-			var argIdxs []int
-			for i := openIdx + 1; i < closeIdx; i++ {
-				if isRecordableLiteral(e.tape.At(i)) && i != first {
-					argVals = append(argVals, e.tape.At(i))
-					argIdxs = append(argIdxs, i)
-				}
-			}
-			out := NewCarrier(TAny)
-			out.ID = GenerateID(IDPrefixForType(TAny))
-			out.pos = fnVal.pos
-			if es.RecordDynMethod(fnVal, argVals, []Value{out}, "(paren apply)", fnVal.Pos()) {
-				e.tape.Set(first, out)
-				for j := len(argIdxs) - 1; j >= 0; j-- {
-					e.tape.Remove(argIdxs[j])
-					closeIdx--
-				}
-			} else { //covergate:allow RecordDynMethod resolves fnVal (a member-read EVENT, gated above) and each argVal (an isRecordableLiteral — a concrete const or an event-backed carrier resolveOperand handles), so it cannot decline here — the belt keeps the sound refusal if a future window shape breaks that invariant (§compiler)
-				es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
-			}
+			// LEADING dynamic apply (REFUSAL-CLOSURE §9.2e) — extracted to
+			// recordParenLeadingApply for the stepCloseParen complexity cap.
+			closeIdx = e.recordParenLeadingApply(es, first, openIdx, closeIdx)
 		}
 	}
 
