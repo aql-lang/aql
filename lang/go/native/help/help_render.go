@@ -37,6 +37,7 @@ var moduleCatalog = []ModuleInfo{
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
+	{"sift", "Semi-structured text parsing (the awk tier): kv, blocks, columns, dsv, fixed, and pattern families behind the `parse` word, plus spec-map extensions."},
 	{"emitlang", "Emit data structures to strings behind the `emit` word: json, jsonic, csv, tsv, yaml, xml, toml, ini."},
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
 	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
