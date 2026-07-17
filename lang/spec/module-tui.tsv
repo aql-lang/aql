@@ -71,6 +71,25 @@ import "aql:tui"  Tui.viewport 5	ERROR:uncalled_function	viewport requires a wid
 import "aql:tui"  Tui.style 5 {}	ERROR:uncalled_function	style requires a base Map
 import "aql:tui"  Tui.edit 5 {}	ERROR:uncalled_function	edit requires an input widget Map
 import "aql:tui"  Tui.focusable 5	ERROR:uncalled_function	focusable requires a widget Map tree
+#
+# §7  standalone terminal utilities (design/TUI-UTILITIES.0.md) — pure,
+#     no backend, no policy scope; escape bytes stay out of this file
+#     (the strip round-trip and width laws pin them; Go tests pin the
+#     exact per-profile sequences)
+import "aql:tui"  Tui.colorize {} "hi"	'hi'	the attribute-less style is the identity — no stray escapes
+import "aql:tui"  Tui.strip-ansi (Tui.colorize {fg: "red" bold: true} "hi")	'hi'	strip-ansi round-trips colorize
+import "aql:tui"  (size (Tui.colorize {fg: "red"} "hi")) gt 2	true	a styled string carries its escape sequences
+import "aql:tui"  Tui.strip-ansi "plain"	'plain'	strip-ansi leaves clean text alone
+import "aql:tui"  Tui.text-width "hi"	2	text-width counts display cells
+import "aql:tui"  Tui.text-width "漢字"	4	CJK is double-width
+import "aql:tui"  Tui.text-width ""	0	the empty string is zero cells
+import "aql:tui"  Tui.text-width (Tui.colorize {fg: "red"} "hi")	2	escapes occupy no display cells
+import "aql:tui"  Tui.colorize 5 "hi"	ERROR:uncalled_function	colorize requires a style Map
+import "aql:tui"  Tui.colorize {} 5	ERROR:uncalled_function	colorize requires the text as a String
+import "aql:tui"  Tui.colorize {fg: 5} "hi"	ERROR:fg: must be a String	style field types are validated
+import "aql:tui"  Tui.colorize {} "hi" {profile: "grayscale"}	ERROR:profile: must be	an unknown color profile is refused
+import "aql:tui"  Tui.strip-ansi 5	ERROR:uncalled_function	strip-ansi requires a String
+import "aql:tui"  Tui.text-width 5	ERROR:uncalled_function	text-width requires a String
 import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
 import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
 import "aql:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port

@@ -356,3 +356,9 @@ necessary during implementation, recorded per the network plan's habit:
 - Whether `read-event` should gain an `{active: true}`-style
   mailbox-delivery mode for Tier-1 users once P3's pump exists
   (the net passive/active split, revisited for terminals).
+- ~~General terminal utilities usable outside the app framework~~ —
+  **landed post-plan** (user-directed): `Tui.colorize` /
+  `Tui.strip-ansi` / `Tui.text-width` on the module's pure no-backend
+  tier, with the placement investigation recorded in
+  [TUI-UTILITIES.0.md](TUI-UTILITIES.0.md) (a `term-util` extraction
+  stays the fallback if the surface outgrows terminal output).

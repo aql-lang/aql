@@ -26,5 +26,8 @@ func init() {
 		"style":      "Merge a style-override map over a base style map.",
 		"edit":       "Fold one key event into an input widget: the standard line-editing moves.",
 		"focusable":  "The id-carrying widgets of a tree, in document order.",
+		"colorize":   "Wrap text in a style map's ANSI sequence plus a reset; {profile: \"256\"|\"16\"|\"none\"} degrades like the renderer. Pure — no terminal needed.",
+		"strip-ansi": "Remove ANSI escape sequences from a string (round-trips colorize).",
+		"text-width": "The display width of text in terminal cells: escapes stripped, wide runes 2, combining marks 0.",
 	})
 }
