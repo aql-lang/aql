@@ -139,7 +139,46 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1 landed — status as of this commit; later phases append here)
+## 3b. Outcome (P1, P2 landed; later phases append here)
+
+### P2 — layout/render core
+
+**P2 landed in full** (`lang/go/tuikit`: `layout.go`, `render.go`,
+`width.go`, `color.go`, `diff.go` — pure Go, 100% covered, no engine or
+terminal involvement; goldens include CJK/emoji and combining-mark
+rows). Divergences and design points found necessary during
+implementation:
+
+- **The renderer consumes the ValueToAny-shaped `any` tree** — not a
+  bespoke Go widget-struct set. The layout engine's input is exactly
+  `native.ValueToAny`'s projection (maps/lists/strings/numbers, with a
+  numeric coercion helper spanning int/int64/float64/json.Number), which
+  is also exactly what P4's `aql attach` decodes off the wire — local
+  and remote rendering are literally one code path, and P3's module
+  glue is a single projection call.
+- **Hand-rolled wcwidth tables, no new dependency.** `RuneWidth`/
+  `StringWidth` cover the zero-width (combining/ZWJ/variation) and
+  East-Asian-wide + emoji ranges by table; full grapheme-cluster
+  segmentation (ZWJ sequences, flags) remains future precision work if
+  it bites. Wide-rune continuation cells are marked `Width: -1` so the
+  `Screen()`/`ScreenAt` projections keep "漢字" a contiguous substring
+  (P1's projection rendered spurious spaces there — corrected in the
+  same commit).
+- **Color degradation lives in tuikit** (`ParseColor` + `To256`/`To16`
+  cube/grey-ramp tables) so the P3 termback and any future backend
+  degrade identically; style DATA stays full-fidelity strings, exactly
+  as the RFC specifies.
+- **`Render` returns the cursor verdict** (`RenderResult.Cursor`, set
+  when exactly one `input` has `focus: true`) — computed during paint
+  since only layout knows the focused input's screen position; the P3
+  driver just consumes it. A focused input inside a `viewport` does not
+  place the cursor (its coordinates are virtual — recorded as the
+  documented behaviour).
+- **Viewport canvases are capped** (1024×4096 cells) so a runaway
+  `fit` cannot allocate unboundedly; text wrapping is character-level
+  in P2 (word-boundary wrap is polish).
+
+### P1 — seam + Tier 1 (as of the P1 commit)
 
 **P1 landed in full**: `tuikit` (100% covered), the nine words, the
 handle, the seam, the scope, all gates green. Divergences found

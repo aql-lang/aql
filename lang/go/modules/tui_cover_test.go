@@ -358,3 +358,37 @@ func TestTuiNoReturns(t *testing.T) {
 		t.Fatalf("tuiNoReturns = %v", got)
 	}
 }
+
+// --- no-panic discipline: type literals through every handler ---
+
+func TestTuiTypeLiteralNoPanic(t *testing.T) {
+	reg := tcReg(t)
+	vb := tuikit.NewVirtualBackend(2, 2)
+	if err := RegisterHostTui(reg, TuiSpec{Name: "v", Open: func() (tuikit.Backend, error) { return vb, nil }}); err != nil {
+		t.Fatal(err)
+	}
+	term, tvb := tcTerm(t, 2, 2)
+	// a Map TYPE LITERAL as the within: option map reads as "no options"
+	// (AsMap returns nil), so read-event blocks — queue an event first.
+	tvb.Inject(tuikit.Event{Tag: "key", Key: "x"})
+	lit := native.NewTypeLiteral(native.TMap)
+	noPanic := func(name string, run func()) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				t.Fatalf("%s panicked on a type literal: %v", name, rec)
+			}
+		}()
+		run()
+	}
+	noPanic("open opts", func() { _, _ = tuiOpenHandler([]native.Value{lit}, nil, nil, reg) })
+	noPanic("read-event within", func() { _, _ = tuiReadEventHandler([]native.Value{term, lit}, nil, nil, reg) })
+	noPanic("print-at style", func() {
+		_, _ = tuiPrintAtHandler([]native.Value{term, native.NewInteger(0), native.NewInteger(0), native.NewString("x"), lit}, nil, nil, reg)
+	})
+	for name, h := range map[string]native.Handler{
+		"close": tuiCloseHandler, "dims": tuiDimsHandler, "clear": tuiClearHandler,
+		"show": tuiShowHandler, "bell": tuiBellHandler,
+	} {
+		noPanic(name+" handle", func() { _, _ = h([]native.Value{lit}, nil, nil, reg) })
+	}
+}

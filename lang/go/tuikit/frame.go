@@ -13,7 +13,9 @@ type Style struct {
 }
 
 // Cell is one screen cell: a single grapheme plus its display width and
-// style. An empty Content renders as a blank.
+// style. An empty Content renders as a blank; Width -1 marks the
+// continuation cell shadowed by a wide rune in the cell to its left
+// (skipped when a frame is projected to row strings).
 type Cell struct {
 	Content string
 	Width   int8
@@ -67,16 +69,21 @@ func (f *Frame) Clone() *Frame {
 }
 
 // renderRows projects a frame to one string per row, using a space for
-// blank cells — the assertion surface tests golden-match against.
+// blank cells and skipping wide-rune continuation cells — the assertion
+// surface tests golden-match against ("漢字" stays a contiguous
+// substring even though it spans four columns).
 func renderRows(f *Frame) []string {
 	rows := make([]string, f.Rows)
 	for y := 0; y < f.Rows; y++ {
 		row := make([]byte, 0, f.Cols)
 		for x := 0; x < f.Cols; x++ {
 			c := f.Cells[y*f.Cols+x]
-			if c.Content == "" {
+			switch {
+			case c.Width < 0:
+				// continuation of the wide rune to the left
+			case c.Content == "":
 				row = append(row, ' ')
-			} else {
+			default:
 				row = append(row, c.Content...)
 			}
 		}
