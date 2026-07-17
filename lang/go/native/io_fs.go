@@ -312,6 +312,14 @@ func applyTouch(ops capabilities.FileOps, path string, opts Value, hasOpts bool)
 			return err
 		}
 	}
+	// {size} is applied BEFORE {mtime}/{atime}: truncate(2) itself updates
+	// the file's mtime (on the real filesystem and, faithfully, in mem), so
+	// an explicit {mtime} must land after the resize to win.
+	if size, ok := mapIntOpt(opts, "size"); ok {
+		if err := ops.Truncate(path, size); err != nil {
+			return err
+		}
+	}
 	mtime, hasM := mapIntOpt(opts, "mtime")
 	atime, hasA := mapIntOpt(opts, "atime")
 	if hasM || hasA {
@@ -323,11 +331,6 @@ func applyTouch(ops capabilities.FileOps, path string, opts Value, hasOpts bool)
 			at = mt
 		}
 		if err := ops.Chtimes(path, at, mt); err != nil {
-			return err
-		}
-	}
-	if size, ok := mapIntOpt(opts, "size"); ok {
-		if err := ops.Truncate(path, size); err != nil {
 			return err
 		}
 	}

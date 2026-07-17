@@ -678,3 +678,38 @@ func TestMapIntOpt(t *testing.T) {
 		t.Errorf("mapIntOpt = %d %v, want 7 true", v, ok)
 	}
 }
+
+// TestHardLinkSharesStorage pins the inode contract THROUGH the aql:io
+// words on the mem FS: after `link src dst {hard:true}`, writing via
+// either name is visible via the other, and removing the original name
+// keeps the content alive under the link — matching the real filesystem
+// (the divergence the strict-fidelity mem rework closed).
+func TestHardLinkSharesStorage(t *testing.T) {
+	r, mem := ioFSReg(t)
+	runAQL(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v1")})
+	runAQL(t, r, []Value{
+		NewWord("link"), pathV("t.txt"), pathV("hl"),
+		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
+	})
+	// Mutate via the ORIGINAL; the link sees it.
+	runAQL(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v2")})
+	res := runAQL(t, r, []Value{NewWord("read"), pathV("hl")})
+	if res[0].String() != "'v2'" {
+		t.Errorf("hard link stale after original write: %v", res[0])
+	}
+	// Mutate via the LINK; the original sees it.
+	runAQL(t, r, []Value{NewWord("write"), pathV("hl"), NewString("v3")})
+	res = runAQL(t, r, []Value{NewWord("read"), pathV("t.txt")})
+	if res[0].String() != "'v3'" {
+		t.Errorf("original stale after link write: %v", res[0])
+	}
+	// Remove the original; the content survives under the link.
+	runAQL(t, r, []Value{NewWord("remove"), pathV("t.txt")})
+	res = runAQL(t, r, []Value{NewWord("read"), pathV("hl")})
+	if res[0].String() != "'v3'" {
+		t.Errorf("content died with the original name: %v", res[0])
+	}
+	if _, err := mem.Stat("t.txt", false); err == nil {
+		t.Error("original name still present after remove")
+	}
+}

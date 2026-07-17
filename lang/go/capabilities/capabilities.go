@@ -333,8 +333,12 @@ func NewDefault() FileOps {
 }
 
 // Errors returned by MemFileOps for conditions with no os.Err* constant.
+// The messages mirror the kernel errno strings (ENOTDIR / EISDIR /
+// ENOTEMPTY / ELOOP) so an error-CLASS comparison against the real
+// filesystem — the differential parity harness's classify() — matches.
 var (
 	errMemNotDir       = errors.New("not a directory")
+	errMemIsDir        = errors.New("is a directory")
 	errMemNotEmpty     = errors.New("directory not empty")
 	errMemTooManyLinks = errors.New("too many levels of symbolic links")
 )
@@ -347,17 +351,37 @@ var (
 type memMeta struct {
 	Mode   os.FileMode
 	MTime  time.Time
+	ATime  time.Time
 	Target string
 }
 
-// MemFileOps is an in-memory implementation for testing. It models regular
-// files (Files), directories (Dirs), symlinks and metadata (Meta) well enough
-// for the full aql:io surface to be exercised hermetically.
+// MemFileOps is an in-memory implementation with REAL-FILESYSTEM fidelity:
+// the differential parity harness (differential_test.go) runs identical
+// operation sequences against OSFileOps and MemFileOps and asserts equal
+// results and error classes. The model covers regular files (Files),
+// directories (Dirs), symlinks and metadata (Meta), and hard links (Links —
+// alias name → canonical file path, sharing the canonical's bytes and
+// metadata exactly like names sharing an inode). Path resolution follows
+// symlinks component-wise with an ELOOP budget, an intermediate component
+// that is a regular file raises ENOTDIR, and permission bits are enforced
+// euid-aware (root bypasses checks, exactly as the kernel does — see
+// checkPerm). Documented fidelity exceptions: umask is not applied to
+// creation modes, access times are stored but not surfaced (FileInfo has no
+// ATime — true of the portable os API too), directory sizes are 0 (real
+// values are filesystem-dependent), and unrecorded ancestor directories are
+// treated as implicitly writable so tests may poke Files directly.
 type MemFileOps struct {
 	Files map[string][]byte
 	Dirs  map[string]bool     // tracked directories
-	Meta  map[string]*memMeta // per-path mode/mtime + symlink targets
+	Meta  map[string]*memMeta // per-path mode/mtime/atime + symlink targets
+	Links map[string]string   // hard-link alias name -> canonical file path
 	Cwd   string              // simulated working directory; defaults to "." if empty
+
+	// euidFn / nowFn are test seams for the effective uid (permission
+	// enforcement is skipped for root, mirroring the kernel) and the
+	// clock (mtime stamping). Nil means os.Geteuid / time.Now.
+	euidFn func() int
+	nowFn  func() time.Time
 }
 
 func NewMem() *MemFileOps {
@@ -365,51 +389,41 @@ func NewMem() *MemFileOps {
 		Files: make(map[string][]byte),
 		Dirs:  make(map[string]bool),
 		Meta:  make(map[string]*memMeta),
+		Links: make(map[string]string),
 	}
 }
 
-func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
-	// MemFileOps.ResolvePath never fails (both of its arms return a nil
-	// error), so there is no error to propagate here or in WriteFile /
-	// MkdirAll — see design/TEST-SEAMS.10.md on provably-dead guards.
-	resolved, _ := m.ResolvePath(path)
-	data, ok := m.Files[resolved]
-	if !ok {
-		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+func (m *MemFileOps) euid() int {
+	if m.euidFn != nil {
+		return m.euidFn()
 	}
-	return data, nil
+	return os.Geteuid()
 }
 
-func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
-	resolved, _ := m.ResolvePath(path) // never fails — see ReadFile
-	m.recordDir(filepath.Dir(resolved))
-	buf := make([]byte, len(data))
-	copy(buf, data)
-	m.Files[resolved] = buf
-	m.Meta[resolved] = &memMeta{Mode: perm & os.ModePerm}
-	return nil
-}
-
-// MkdirAll records a directory path and its parents. Idempotent.
-func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
-	resolved, _ := m.ResolvePath(path) // never fails — see ReadFile
-	m.recordDir(resolved)
-	m.Meta[resolved] = &memMeta{Mode: perm & os.ModePerm}
-	return nil
-}
-
-// recordDir records dir and every ancestor as a directory, stamping default
-// metadata where none exists. Root ("." / "/") is implicit and not recorded.
-func (m *MemFileOps) recordDir(dir string) {
-	// filepath.Dir's only POSIX fixed points are "/" and ".", both excluded
-	// by the loop condition, so this always terminates.
-	for dir != "." && dir != "/" && dir != "" {
-		m.Dirs[dir] = true
-		if m.Meta[dir] == nil {
-			m.Meta[dir] = &memMeta{Mode: 0o755}
-		}
-		dir = filepath.Dir(dir)
+func (m *MemFileOps) now() time.Time {
+	if m.nowFn != nil {
+		return m.nowFn()
 	}
+	return time.Now()
+}
+
+// canon maps a hard-link alias to its canonical file path (identity for
+// every non-alias path). Content and metadata live under the canonical
+// key, so aliases share them — the inode model.
+func (m *MemFileOps) canon(p string) string {
+	if c, ok := m.Links[p]; ok {
+		return c
+	}
+	return p
+}
+
+// isFileEntry reports whether p names a regular file (canonical or alias).
+func (m *MemFileOps) isFileEntry(p string) bool {
+	if _, ok := m.Files[p]; ok {
+		return true
+	}
+	_, ok := m.Links[p]
+	return ok
 }
 
 // modeOf / mtimeOf read a memMeta safely, defaulting when it is absent (a
@@ -430,14 +444,114 @@ func mtimeOf(meta *memMeta) time.Time {
 
 func isMemRoot(p string) bool { return p == "." || p == "/" }
 
+// resolve turns path into its final in-model location: lexical resolution
+// (ResolvePath), then a component walk that chases symlinks in every
+// intermediate component — and in the trailing component when
+// followTrailing is set — with a shared depth budget (ELOOP), erroring
+// ENOTDIR when an intermediate component is a regular file. Ops that act
+// on a link itself (Remove, Rename, Link's target, lstat) pass
+// followTrailing=false; ops with open(2) semantics (read/write/truncate/
+// chmod/chtimes/readdir/stat) pass true.
+func (m *MemFileOps) resolve(path string, followTrailing bool) (string, error) {
+	resolved, _ := m.ResolvePath(path) // MemFileOps.ResolvePath never fails
+	depth := 0
+	return m.resolveSteps(resolved, followTrailing, &depth, path)
+}
+
+func (m *MemFileOps) resolveSteps(resolved string, followTrailing bool, depth *int, orig string) (string, error) {
+	if isMemRoot(resolved) || resolved == "" {
+		return resolved, nil
+	}
+	sep := string(filepath.Separator)
+	acc := ""
+	rest := resolved
+	if strings.HasPrefix(resolved, sep) {
+		acc, rest = sep, strings.TrimPrefix(resolved, sep)
+	}
+	comps := strings.Split(rest, sep)
+	for i, comp := range comps {
+		p := filepath.Join(acc, comp)
+		last := i == len(comps)-1
+		// Chase symlinks at this component (skipping the trailing one
+		// when the op targets the link itself).
+		for {
+			meta := m.Meta[p]
+			if meta == nil || meta.Target == "" || (last && !followTrailing) {
+				break
+			}
+			*depth++
+			if *depth > 40 {
+				return "", &os.PathError{Op: "open", Path: orig, Err: errMemTooManyLinks}
+			}
+			t := meta.Target
+			if !filepath.IsAbs(t) {
+				t = filepath.Join(filepath.Dir(p), t)
+			}
+			rp, err := m.resolveSteps(filepath.Clean(t), true, depth, orig)
+			if err != nil {
+				return "", err
+			}
+			p = rp
+		}
+		if !last && m.isFileEntry(p) {
+			return "", &os.PathError{Op: "open", Path: orig, Err: errMemNotDir}
+		}
+		acc = p
+	}
+	return acc, nil
+}
+
+// checkPerm enforces an owner permission bit on an existing entry.
+// Root (euid 0) bypasses permission checks entirely, exactly as the
+// kernel does — so the model agrees with the real filesystem whether the
+// process runs privileged or not. Symlinks are always 0777 and absent
+// paths are left to the caller's not-exist error.
+func (m *MemFileOps) checkPerm(op, path, resolved string, bit os.FileMode) error {
+	if m.euid() == 0 {
+		return nil
+	}
+	info, ok := m.infoFor(resolved)
+	if !ok || info.Symlink {
+		return nil
+	}
+	if info.Mode&bit == 0 {
+		return &os.PathError{Op: op, Path: path, Err: os.ErrPermission}
+	}
+	return nil
+}
+
+// checkParentWrite enforces the write bit on the nearest RECORDED ancestor
+// directory for namespace mutations (create/remove/rename/link). Unrecorded
+// ancestors (implicit dirs) impose nothing — the model treats them as
+// writable so tests may poke Files directly without recording parents.
+func (m *MemFileOps) checkParentWrite(op, path, resolved string) error {
+	if m.euid() == 0 {
+		return nil
+	}
+	dir := filepath.Dir(resolved)
+	for !isMemRoot(dir) && dir != "" {
+		if m.Dirs[dir] {
+			if modeOf(m.Meta[dir], 0o755)&0o200 == 0 {
+				return &os.PathError{Op: op, Path: path, Err: os.ErrPermission}
+			}
+			return nil
+		}
+		dir = filepath.Dir(dir)
+	}
+	return nil
+}
+
 // infoFor builds the FileInfo for a resolved path, or ok=false if absent.
+// A hard-link alias reads the canonical entry's data/metadata but reports
+// its own base name; a symlink's Size is the target length (lstat fidelity).
 func (m *MemFileOps) infoFor(resolved string) (FileInfo, bool) {
 	name := filepath.Base(resolved)
 	if meta := m.Meta[resolved]; meta != nil && meta.Target != "" {
-		return FileInfo{Name: name, Mode: os.ModeSymlink | 0o777, ModTime: meta.MTime, Symlink: true, Target: meta.Target}, true
+		return FileInfo{Name: name, Size: int64(len(meta.Target)), Mode: os.ModeSymlink | 0o777, ModTime: meta.MTime, Symlink: true, Target: meta.Target}, true
 	}
-	if data, ok := m.Files[resolved]; ok {
-		meta := m.Meta[resolved]
+	if c := m.canon(resolved); m.isFileEntry(resolved) {
+		data := m.Files[c]
+		meta := m.Meta[c]
 		return FileInfo{Name: name, Size: int64(len(data)), Mode: modeOf(meta, 0o644), ModTime: mtimeOf(meta)}, true
 	}
 	if m.Dirs[resolved] {
@@ -447,40 +561,124 @@ func (m *MemFileOps) infoFor(resolved string) (FileInfo, bool) {
 	return FileInfo{}, false
 }
 
-// Stat returns metadata for path, dereferencing symlinks when follow is true.
-func (m *MemFileOps) Stat(path string, follow bool) (FileInfo, error) {
-	resolved, _ := m.ResolvePath(path)
-	return m.statResolved(resolved, path, follow, 0)
+func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return nil, err
+	}
+	if m.Dirs[final] {
+		return nil, &os.PathError{Op: "read", Path: path, Err: errMemIsDir}
+	}
+	data, ok := m.Files[m.canon(final)]
+	if !ok {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	if perr := m.checkPerm("open", path, final, 0o400); perr != nil {
+		return nil, perr
+	}
+	return data, nil
 }
 
-func (m *MemFileOps) statResolved(resolved, orig string, follow bool, depth int) (FileInfo, error) {
-	info, ok := m.infoFor(resolved)
-	if !ok {
-		return FileInfo{}, &os.PathError{Op: "stat", Path: orig, Err: os.ErrNotExist}
+func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
+	final, err := m.resolve(path, true) // writes THROUGH a trailing symlink, like open(2)
+	if err != nil {
+		return err
 	}
-	if info.Symlink && follow {
-		if depth > 40 {
-			return FileInfo{}, &os.PathError{Op: "stat", Path: orig, Err: errMemTooManyLinks}
+	if m.Dirs[final] {
+		return &os.PathError{Op: "open", Path: path, Err: errMemIsDir}
+	}
+	c := m.canon(final)
+	_, exists := m.Files[c]
+	if exists {
+		if perr := m.checkPerm("open", path, final, 0o200); perr != nil {
+			return perr
 		}
-		target := info.Target
-		if !filepath.IsAbs(target) {
-			target = filepath.Clean(filepath.Join(filepath.Dir(resolved), target))
+	} else if perr := m.checkParentWrite("open", path, final); perr != nil {
+		return perr
+	}
+	m.recordDir(filepath.Dir(final))
+	buf := make([]byte, len(data))
+	copy(buf, data)
+	m.Files[c] = buf
+	if exists {
+		// open(2) on an existing file keeps its mode; only mtime moves.
+		meta := m.Meta[c]
+		if meta == nil {
+			meta = &memMeta{Mode: 0o644}
+			m.Meta[c] = meta
 		}
-		return m.statResolved(target, orig, follow, depth+1)
+		meta.MTime = m.now()
+	} else {
+		m.Meta[c] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+	}
+	return nil
+}
+
+// MkdirAll records a directory path and its parents. Idempotent — an
+// existing directory keeps its mode, exactly like os.MkdirAll.
+func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return err
+	}
+	if m.isFileEntry(final) {
+		return &os.PathError{Op: "mkdir", Path: path, Err: errMemNotDir}
+	}
+	if m.Dirs[final] {
+		return nil
+	}
+	if perr := m.checkParentWrite("mkdir", path, final); perr != nil {
+		return perr
+	}
+	m.recordDir(final)
+	m.Meta[final] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+	return nil
+}
+
+// recordDir records dir and every ancestor as a directory, stamping default
+// metadata where none exists. Root ("." / "/") is implicit and not recorded.
+func (m *MemFileOps) recordDir(dir string) {
+	// filepath.Dir's only POSIX fixed points are "/" and ".", both excluded
+	// by the loop condition, so this always terminates.
+	for dir != "." && dir != "/" && dir != "" {
+		m.Dirs[dir] = true
+		if m.Meta[dir] == nil {
+			m.Meta[dir] = &memMeta{Mode: 0o755, MTime: m.now()}
+		}
+		dir = filepath.Dir(dir)
+	}
+}
+
+// Stat returns metadata for path, dereferencing symlinks when follow is true.
+func (m *MemFileOps) Stat(path string, follow bool) (FileInfo, error) {
+	final, err := m.resolve(path, follow)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	info, ok := m.infoFor(final)
+	if !ok {
+		return FileInfo{}, &os.PathError{Op: "stat", Path: path, Err: os.ErrNotExist}
 	}
 	return info, nil
 }
 
-// ReadDir lists the direct children of a directory, name-sorted.
+// ReadDir lists the direct children of a directory, name-sorted. A
+// symlink-to-directory path is followed, like os.ReadDir.
 func (m *MemFileOps) ReadDir(path string) ([]FileInfo, error) {
-	resolved, _ := m.ResolvePath(path)
-	if _, isFile := m.Files[resolved]; isFile {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return nil, err
+	}
+	if m.isFileEntry(final) {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: errMemNotDir}
 	}
 	children := map[string]FileInfo{}
-	m.collectChildren(resolved, children)
-	if len(children) == 0 && !m.Dirs[resolved] && !isMemRoot(resolved) {
+	m.collectChildren(final, children)
+	if len(children) == 0 && !m.Dirs[final] && !isMemRoot(final) {
 		return nil, &os.PathError{Op: "readdir", Path: path, Err: os.ErrNotExist}
+	}
+	if perr := m.checkPerm("readdir", path, final, 0o400); perr != nil {
+		return nil, perr
 	}
 	names := make([]string, 0, len(children))
 	for name := range children {
@@ -509,6 +707,9 @@ func (m *MemFileOps) collectChildren(dir string, out map[string]FileInfo) {
 	for p := range m.Dirs {
 		add(p)
 	}
+	for p := range m.Links {
+		add(p)
+	}
 	for p, meta := range m.Meta {
 		if meta.Target != "" {
 			add(p)
@@ -518,95 +719,188 @@ func (m *MemFileOps) collectChildren(dir string, out map[string]FileInfo) {
 
 // Remove deletes path (recursive removes a directory tree). Mirrors os:
 // RemoveAll (recursive) is idempotent on an absent path; os.Remove is not.
+// A symlink is removed itself (no follow); removing one hard-link name
+// keeps the shared content alive under the remaining names.
 func (m *MemFileOps) Remove(path string, recursive bool) error {
-	resolved, _ := m.ResolvePath(path)
-	info, ok := m.infoFor(resolved)
+	final, err := m.resolve(path, false)
+	if err != nil {
+		return err
+	}
+	info, ok := m.infoFor(final)
 	if !ok {
 		if recursive {
 			return nil
 		}
 		return &os.PathError{Op: "remove", Path: path, Err: os.ErrNotExist}
 	}
-	if info.IsDir {
+	if perr := m.checkParentWrite("remove", path, final); perr != nil {
+		return perr
+	}
+	switch {
+	case info.IsDir:
 		children := map[string]FileInfo{}
-		m.collectChildren(resolved, children)
+		m.collectChildren(final, children)
 		if len(children) > 0 && !recursive {
 			return &os.PathError{Op: "remove", Path: path, Err: errMemNotEmpty}
 		}
-		m.removeTree(resolved)
-		return nil
+		m.removeTree(final)
+	case info.Symlink:
+		delete(m.Meta, final)
+	default:
+		m.removeFileEntry(final)
 	}
-	delete(m.Files, resolved)
-	delete(m.Meta, resolved)
 	return nil
 }
 
-func (m *MemFileOps) removeTree(root string) {
-	prefix := root + string(filepath.Separator)
-	for p := range m.Files {
-		if p == root || strings.HasPrefix(p, prefix) {
-			delete(m.Files, p)
+// removeFileEntry unlinks ONE name of a regular file. Removing an alias
+// deletes just that name; removing the canonical name with aliases
+// remaining promotes the first alias (sorted, for determinism) to
+// canonical and repoints the rest — the content survives until its last
+// name goes, exactly like an inode's link count.
+func (m *MemFileOps) removeFileEntry(p string) {
+	if _, isAlias := m.Links[p]; isAlias {
+		delete(m.Links, p)
+		return
+	}
+	var aliases []string
+	for a, c := range m.Links {
+		if c == p {
+			aliases = append(aliases, a)
 		}
 	}
+	if len(aliases) > 0 {
+		sort.Strings(aliases)
+		a0 := aliases[0]
+		m.Files[a0] = m.Files[p]
+		if meta := m.Meta[p]; meta != nil {
+			m.Meta[a0] = meta
+		}
+		delete(m.Links, a0)
+		for _, a := range aliases[1:] {
+			m.Links[a] = a0
+		}
+	}
+	delete(m.Files, p)
+	delete(m.Meta, p)
+}
+
+// removeTree removes everything under root. Alias names inside the tree
+// are plain unlinks; canonical files inside the tree promote any alias
+// OUTSIDE the tree (their content survives under the surviving name).
+func (m *MemFileOps) removeTree(root string) {
+	prefix := root + string(filepath.Separator)
+	within := func(p string) bool { return p == root || strings.HasPrefix(p, prefix) }
+	for p := range m.Links {
+		if within(p) {
+			delete(m.Links, p)
+		}
+	}
+	var files []string
+	for p := range m.Files {
+		if within(p) {
+			files = append(files, p)
+		}
+	}
+	sort.Strings(files)
+	for _, p := range files {
+		m.removeFileEntry(p)
+	}
 	for p := range m.Dirs {
-		if p == root || strings.HasPrefix(p, prefix) {
+		if within(p) {
 			delete(m.Dirs, p)
 		}
 	}
 	for p := range m.Meta {
-		if p == root || strings.HasPrefix(p, prefix) {
+		if within(p) {
 			delete(m.Meta, p)
 		}
 	}
 }
 
-// Rename moves oldPath (and, for a directory, its whole subtree) to newPath.
+// Rename moves oldPath (and, for a directory, its whole subtree) to
+// newPath, applying the rename(2) destination rules: file over file
+// replaces; a directory may only replace an EMPTY directory (ENOTEMPTY
+// otherwise); renaming a directory over a file is ENOTDIR and a file over
+// a directory EISDIR. Neither trailing path is symlink-followed.
 func (m *MemFileOps) Rename(oldPath, newPath string) error {
-	oldResolved, _ := m.ResolvePath(oldPath)
-	newResolved, _ := m.ResolvePath(newPath)
-	if _, ok := m.infoFor(oldResolved); !ok {
+	oldFinal, err := m.resolve(oldPath, false)
+	if err != nil {
+		return err
+	}
+	newFinal, err := m.resolve(newPath, false)
+	if err != nil {
+		return err
+	}
+	srcInfo, ok := m.infoFor(oldFinal)
+	if !ok {
 		return &os.PathError{Op: "rename", Path: oldPath, Err: os.ErrNotExist}
 	}
-	m.recordDir(filepath.Dir(newResolved))
-	oldPrefix := oldResolved + string(filepath.Separator)
-	newPrefix := newResolved + string(filepath.Separator)
+	if perr := m.checkParentWrite("rename", oldPath, oldFinal); perr != nil {
+		return perr
+	}
+	if perr := m.checkParentWrite("rename", newPath, newFinal); perr != nil {
+		return perr
+	}
+	if dstInfo, exists := m.infoFor(newFinal); exists {
+		switch {
+		case srcInfo.IsDir && !dstInfo.IsDir:
+			return &os.PathError{Op: "rename", Path: newPath, Err: errMemNotDir}
+		case !srcInfo.IsDir && dstInfo.IsDir:
+			return &os.PathError{Op: "rename", Path: newPath, Err: errMemIsDir}
+		case srcInfo.IsDir && dstInfo.IsDir:
+			children := map[string]FileInfo{}
+			m.collectChildren(newFinal, children)
+			if len(children) > 0 {
+				return &os.PathError{Op: "rename", Path: newPath, Err: errMemNotEmpty}
+			}
+			m.removeTree(newFinal)
+		default: // file over file — replace (alias-correct unlink first)
+			m.removeFileEntry(newFinal)
+		}
+	}
+	m.recordDir(filepath.Dir(newFinal))
+	oldPrefix := oldFinal + string(filepath.Separator)
+	newPrefix := newFinal + string(filepath.Separator)
 	remap := func(p string) (string, bool) {
-		if p == oldResolved {
-			return newResolved, true
+		if p == oldFinal {
+			return newFinal, true
 		}
 		if strings.HasPrefix(p, oldPrefix) {
 			return newPrefix + p[len(oldPrefix):], true
 		}
 		return "", false
 	}
+	remapMapKeys := func(keys []string, move func(oldKey, newKey string)) {
+		for _, p := range keys {
+			if np, ok := remap(p); ok {
+				move(p, np)
+			}
+		}
+	}
 	fileKeys := make([]string, 0, len(m.Files))
 	for p := range m.Files {
 		fileKeys = append(fileKeys, p)
 	}
-	for _, p := range fileKeys {
-		if np, ok := remap(p); ok {
-			m.Files[np] = m.Files[p]
-			delete(m.Files, p)
-		}
-	}
+	remapMapKeys(fileKeys, func(o, n string) { m.Files[n] = m.Files[o]; delete(m.Files, o) })
 	dirKeys := make([]string, 0, len(m.Dirs))
 	for p := range m.Dirs {
 		dirKeys = append(dirKeys, p)
 	}
-	for _, p := range dirKeys {
-		if np, ok := remap(p); ok {
-			m.Dirs[np] = true
-			delete(m.Dirs, p)
-		}
-	}
+	remapMapKeys(dirKeys, func(o, n string) { m.Dirs[n] = true; delete(m.Dirs, o) })
 	metaKeys := make([]string, 0, len(m.Meta))
 	for p := range m.Meta {
 		metaKeys = append(metaKeys, p)
 	}
-	for _, p := range metaKeys {
-		if np, ok := remap(p); ok {
-			m.Meta[np] = m.Meta[p]
-			delete(m.Meta, p)
+	remapMapKeys(metaKeys, func(o, n string) { m.Meta[n] = m.Meta[o]; delete(m.Meta, o) })
+	linkKeys := make([]string, 0, len(m.Links))
+	for p := range m.Links {
+		linkKeys = append(linkKeys, p)
+	}
+	remapMapKeys(linkKeys, func(o, n string) { m.Links[n] = m.Links[o]; delete(m.Links, o) })
+	// Aliases pointing INTO the moved tree follow their canonical.
+	for a, c := range m.Links {
+		if nc, ok := remap(c); ok {
+			m.Links[a] = nc
 		}
 	}
 	return nil
@@ -615,51 +909,79 @@ func (m *MemFileOps) Rename(oldPath, newPath string) error {
 // Symlink creates a symbolic link at linkPath pointing at target (stored
 // verbatim). Errors if linkPath already exists.
 func (m *MemFileOps) Symlink(target, linkPath string) error {
-	linkResolved, _ := m.ResolvePath(linkPath)
-	if _, ok := m.infoFor(linkResolved); ok {
+	linkFinal, err := m.resolve(linkPath, false)
+	if err != nil {
+		return err
+	}
+	if _, ok := m.infoFor(linkFinal); ok {
 		return &os.PathError{Op: "symlink", Path: linkPath, Err: os.ErrExist}
 	}
-	m.recordDir(filepath.Dir(linkResolved))
-	m.Meta[linkResolved] = &memMeta{Mode: os.ModeSymlink | 0o777, Target: target}
+	if perr := m.checkParentWrite("symlink", linkPath, linkFinal); perr != nil {
+		return perr
+	}
+	m.recordDir(filepath.Dir(linkFinal))
+	m.Meta[linkFinal] = &memMeta{Mode: os.ModeSymlink | 0o777, MTime: m.now(), Target: target}
 	return nil
 }
 
-// Link creates a hard link at linkPath referring to an existing file target.
+// Link creates a hard link at linkPath referring to target. Like link(2),
+// the target is NOT symlink-followed: hard-linking a symlink clones the
+// link entry, and hard-linking a directory is refused (EPERM). A file
+// link records an alias to the canonical path, sharing bytes and metadata.
 func (m *MemFileOps) Link(target, linkPath string) error {
-	targetResolved, _ := m.ResolvePath(target)
-	data, ok := m.Files[targetResolved]
+	targetFinal, err := m.resolve(target, false)
+	if err != nil {
+		return err
+	}
+	linkFinal, err := m.resolve(linkPath, false)
+	if err != nil {
+		return err
+	}
+	info, ok := m.infoFor(targetFinal)
 	if !ok {
 		return &os.PathError{Op: "link", Path: target, Err: os.ErrNotExist}
 	}
-	linkResolved, _ := m.ResolvePath(linkPath)
-	if _, exists := m.infoFor(linkResolved); exists {
+	if _, exists := m.infoFor(linkFinal); exists {
 		return &os.PathError{Op: "link", Path: linkPath, Err: os.ErrExist}
 	}
-	m.recordDir(filepath.Dir(linkResolved))
-	buf := make([]byte, len(data))
-	copy(buf, data)
-	m.Files[linkResolved] = buf
-	m.Meta[linkResolved] = &memMeta{Mode: modeOf(m.Meta[targetResolved], 0o644)}
+	if perr := m.checkParentWrite("link", linkPath, linkFinal); perr != nil {
+		return perr
+	}
+	m.recordDir(filepath.Dir(linkFinal))
+	switch {
+	case info.IsDir:
+		return &os.PathError{Op: "link", Path: target, Err: os.ErrPermission}
+	case info.Symlink:
+		src := m.Meta[targetFinal]
+		m.Meta[linkFinal] = &memMeta{Mode: src.Mode, MTime: src.MTime, ATime: src.ATime, Target: src.Target}
+	default:
+		m.Links[linkFinal] = m.canon(targetFinal)
+	}
 	return nil
 }
 
-// metaForExisting returns the mutable metadata for an existing path.
+// metaForExisting returns the mutable metadata for an existing path
+// (through its canonical name, so hard links share it).
 func (m *MemFileOps) metaForExisting(resolved string) (*memMeta, bool) {
 	if _, ok := m.infoFor(resolved); !ok {
 		return nil, false
 	}
-	meta := m.Meta[resolved]
+	c := m.canon(resolved)
+	meta := m.Meta[c]
 	if meta == nil {
 		meta = &memMeta{}
-		m.Meta[resolved] = meta
+		m.Meta[c] = meta
 	}
 	return meta, true
 }
 
-// Chmod sets path's permission bits.
+// Chmod sets path's permission bits (symlink-followed, like chmod(2)).
 func (m *MemFileOps) Chmod(path string, mode os.FileMode) error {
-	resolved, _ := m.ResolvePath(path)
-	meta, ok := m.metaForExisting(resolved)
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return err
+	}
+	meta, ok := m.metaForExisting(final)
 	if !ok {
 		return &os.PathError{Op: "chmod", Path: path, Err: os.ErrNotExist}
 	}
@@ -667,33 +989,50 @@ func (m *MemFileOps) Chmod(path string, mode os.FileMode) error {
 	return nil
 }
 
-// Chtimes sets path's modification time (access time is not modelled).
+// Chtimes sets path's access and modification times (symlink-followed).
 func (m *MemFileOps) Chtimes(path string, atime, mtime time.Time) error {
-	resolved, _ := m.ResolvePath(path)
-	meta, ok := m.metaForExisting(resolved)
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return err
+	}
+	meta, ok := m.metaForExisting(final)
 	if !ok {
 		return &os.PathError{Op: "chtimes", Path: path, Err: os.ErrNotExist}
 	}
 	meta.MTime = mtime
+	meta.ATime = atime
 	return nil
 }
 
 // Truncate changes the size of the file at path (grows with zero bytes).
 func (m *MemFileOps) Truncate(path string, size int64) error {
-	resolved, _ := m.ResolvePath(path)
-	data, ok := m.Files[resolved]
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return err
+	}
+	if m.Dirs[final] {
+		return &os.PathError{Op: "truncate", Path: path, Err: errMemIsDir}
+	}
+	c := m.canon(final)
+	data, ok := m.Files[c]
 	if !ok {
 		return &os.PathError{Op: "truncate", Path: path, Err: os.ErrNotExist}
 	}
 	if size < 0 {
 		return &os.PathError{Op: "truncate", Path: path, Err: os.ErrInvalid}
 	}
+	if perr := m.checkPerm("truncate", path, final, 0o200); perr != nil {
+		return perr
+	}
 	if int64(len(data)) > size {
-		m.Files[resolved] = data[:size]
+		m.Files[c] = data[:size]
 	} else {
 		grown := make([]byte, size)
 		copy(grown, data)
-		m.Files[resolved] = grown
+		m.Files[c] = grown
+	}
+	if meta, ok := m.metaForExisting(final); ok {
+		meta.MTime = m.now()
 	}
 	return nil
 }
