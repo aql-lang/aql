@@ -8218,6 +8218,24 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
+		// A MULTI-overload user fn over a strict-disjunct operand (`g (h true)`
+		// where h returns `(Integer tor String)` and g has an Integer and a
+		// String arm): the operand is a runtime disjunct the checker cannot
+		// pin to one arm, but every same-arity arm sharing the committed
+		// return bakes to OpCallUserPoly, and the VM re-matches the concrete
+		// alternative at run time — the same §6b machinery the gradual-Any
+		// clusterC path uses, here reached through the disjunct partition
+		// (REFUSAL-CLOSURE §9.4 union-return poly). tryCompileUserPolyArms
+		// declines (keeping the refusal) for divergent-return or
+		// non-plain-param arm sets.
+		if es := e.registry.Check.Recorder(); es.active() {
+			sw := sigOrderArgs(args, nStack)
+			if plan := tryCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
+				e.spliceCheckResults(positions, out)
+				return nil
+			}
+		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)
 		return nil

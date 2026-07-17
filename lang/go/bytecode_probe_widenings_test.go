@@ -74,3 +74,23 @@ func TestProbeWideningBothComputedNonEventCond(t *testing.T) {
 	mustCompileWithParity(t,
 		`def f fn [[x:Integer] [Integer] [if (x lt 9) (x add 1) (x add 2)]] f 5`, "[6]")
 }
+
+// A multi-overload user fn over a STRICT-DISJUNCT operand (the S9.4 probe
+// sweep, union-return poly): `g (h true)` where h returns `(Integer tor
+// String)` and g has an Integer arm and a String arm — every same-arity arm
+// sharing the committed return bakes to OpCallUserPoly and the VM re-matches
+// the concrete alternative at run time (the §6b machinery reached through
+// the disjunct partition). Divergent-return arm sets keep the refusal.
+func TestProbeWideningUnionReturnPoly(t *testing.T) {
+	const mod = `def U (Integer tor String)
+def g fn [[a:Integer] [Integer] [a add 1] [a:String] [Integer] [0]]
+def h fn [[b:Boolean] [U] [if b [3] ['x']]]
+`
+	mustCompileWithParity(t, mod+`g (h true)`, "[4]")
+	mustCompileWithParity(t, mod+`g (h false)`, "[0]")
+	// DIVERGENT returns (Integer arm vs String arm) keep the refusal.
+	mustRefuseWithParity(t, `def U (Integer tor String)
+def g fn [[a:Integer] [Integer] [a add 1] [a:String] [String] ['s']]
+def h fn [[b:Boolean] [U] [if b [3] ['x']]]
+g (h true)`, "unmatched dispatch recovered")
+}
