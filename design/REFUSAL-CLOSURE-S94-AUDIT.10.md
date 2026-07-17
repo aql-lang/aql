@@ -35,11 +35,12 @@ site only fires on discarded isolated-analysis passes), emit.go:2848-family
 compiles; the site is narrower), the quoted-returned-fn review fence
 (working as designed).
 
-Remaining quick wins (probed mechanisms in the sweep result, unlanded):
-engine.go:8219-family union-RETURN poly (wire tryCompileUserPolyArms in the
-strict-disjunct branch), emit.go:2539 both-computed arms over a non-event
-cond (widen the RecordBranch gate + a lowerBothComputed cond-materialise
-arm), and engine.go:3161 multi-overload member arrival — ATTEMPTED and
+Quick-win landings (all committed on the tail branch):
+engine.go:8219-family union-RETURN poly LANDED (tryCompileUserPolyArms +
+RecordUserPolyCall wired into the strict-disjunct branch); emit.go:2539
+both-computed arms over a non-event cond LANDED (lowerBothComputedMatCond +
+the widened RecordBranch gate). The one reclassified item is
+engine.go:3161 multi-overload member arrival — ATTEMPTED and
 RECLASSIFIED DEEP: the probe's mechanism (widen tryMemberFnArrivalDispatch's
 single-sig gate) is misattributed — the dot fixture routes through the M2c
 tryShapedMethodDispatch whose statement-window scan declines on the trailing
