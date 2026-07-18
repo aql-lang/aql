@@ -98,9 +98,11 @@ striking.
 2. **Hot code loading is nearly free for AQL — surface it.** Roc built
    a whole compiler architecture to get dev-time hot reload next to
    optimized prod builds. AQL's interpreted/bytecode split *is* that
-   split, and no watch/reload machinery exists in `cmd/go` today. An
-   `aql serve --watch` (or per-request re-resolution of file modules
-   in the exec service) is a cheap, visible win.
+   split. `serve` and `exec` have no watch/reload today — but the CLI
+   already has a watcher precedent in `aql model --watch`
+   (`cmd/go/internal/model/model.go`), so an `aql serve --watch` (or
+   per-request re-resolution of file modules in the exec service) is
+   largely a reuse job and a cheap, visible win.
 3. **String-interpolation patterns.** Roc's
    `"/users/${id}/${page}"` match patterns are a good language idea
    with an unusually clean AQL landing: a template literal in *type
@@ -215,10 +217,14 @@ design.
 - **"No hidden allocations" ↔ "no hidden effects"** (capabilities +
   policy profiles; explicit allocator parameter ≈ embedder-provided
   `FileOps`).
-- **Arbitrary-width integers (`u7`) are subsumed by predicate
-  refinements**: `(Integer gte 0)`-style subset types are Ada-range /
-  `u7` semantics checked at every boundary — a more general
-  mechanism.
+- **Arbitrary-width integers (`u7`) rhyme with predicate
+  refinements**: a two-bound subset type (`(Integer gte 0)` composed
+  with an `lt 128` bound) expresses the *range-constraint intent* of
+  `u7` as an Ada-style range subtype, checked at every membership
+  boundary. It is not a substitute for the representation side —
+  fixed width, storage layout, wrapping/overflow arithmetic — which
+  is a different tool; that responsibility lives with the numeric
+  tower (R11).
 - `defer`/`errdefer` ↔ the `ensure`/`bracket` RFC
   (`design/RESOURCE-SAFETY.0.md`), whose named primary use case
   (undo-on-failure) *is* `errdefer`.
@@ -278,10 +284,16 @@ design.
   func-fields (`Equal`, `Format`, `Unify` per type-kind) plus the
   universal total order — AQL "derives" sortability/equality once,
   at the lattice level.
-- **Both rejected currying** — Roc for error-message quality, AQL
-  because signature arity drives forward collection (and curried
-  chains were literally a bytecode refusal class in
-  MISCOMPILE-HUNT-FINDINGS §E).
+- **Neither is curried-by-default** — Roc rejected auto-currying for
+  error-message quality; AQL calls are driven by fixed-arity
+  signatures (known arity is what makes forward collection
+  decidable). AQL does, however, *support* explicit currying:
+  chained `=>` lambdas curry right-associatively (REFERENCE.md,
+  the `make-adder` example), so this is a default-shape kinship,
+  not a shared prohibition. (The curried-chain entry in
+  MISCOMPILE-HUNT-FINDINGS §E is a bytecode *coverage* boundary —
+  such chains refuse compilation and fall back to the interpreter —
+  not a language-level rejection.)
 - Shared Elm-lineage "failures must be loud, diagnostics must
   explain" culture ↔ ERRORS.8, hint lines, `aql policy explain`
   blame chains.
@@ -377,11 +389,18 @@ language decisions. Young project: v1.1.1, first appeared 2024.
   platforms) to converge on host-boundary formalization, reinforcing
   R2.
 - **Multi-target parity is a differential-testing problem.** Faber
-  renders one HIR to many backends; AQL already lives this with the
-  Go engine, the wasm build, and the TS engine
-  (`design/TS-ENGINE-MICRON-PARITY.0.md`) — and AQL's answer, the
-  executable spec corpus as the parity oracle, is the right one.
-  Faber's docs don't say how backend parity is verified.
+  renders one HIR to many backends. AQL's version is narrower than
+  it first looks: the wasm playground is the *same* Go engine
+  compiled with `GOOS=js GOARCH=wasm` (`wpg/Makefile`), not an
+  independent backend, and the TS engine's cross-engine differential
+  (`test/go/engspec`) deliberately permits *gaps* — TS may raise
+  `undefined_word` where Go succeeds — with a documented backlog of
+  unported leaves (`design/TS-ENGINE-MICRON-PARITY.0.md`). So today
+  the corpus is a parity oracle for the overlapping subset only.
+  The direction — an executable corpus as the cross-backend oracle —
+  is still the right one, and is exactly what Faber's docs don't
+  claim to have; closing the permitted-gap backlog is the price of
+  claiming it fully.
 
 ### 5.2 Ideas
 
@@ -461,7 +480,7 @@ decision.
 | R3 | **Editions** layered on the executable spec: per-module language edition in `aql.json`; spec rows stamped; `fmt`/`check` migrate | Rust (editions) + Zig/Roc (churn cost as cautionary) | spec + tooling | medium |
 | R4 | **`aql explain <error-code>`** rendered from the live registry, completing `policy explain` | Faber (`explain SEM001`) + Rust (`--explain`) | cmd/go, small new surface | small |
 | R5 | **Machine-readable docs surface**: `describe --json` + generated `llms.txt`-style index + agent-skills manifest | Faber | describe + docs/registry | small |
-| R6 | **`aql serve --watch`** / per-request file-module re-resolution (dev hot reload; bytecode stays the prod lane) | Roc rewrite (hot loading) | cmd serve/exec | small–medium |
+| R6 | **`aql serve --watch`** / per-request file-module re-resolution (dev hot reload; bytecode stays the prod lane) | Roc rewrite (hot loading) | cmd serve/exec, reusing the `aql model --watch` watcher | small |
 | R7 | **String-template patterns** as capture-binding refinement types unified with dispatch | Roc (match interpolation) | types + matcher | large |
 | R8 | **Content-addressed compiled-module cache** (explicitly gated on the MODULE-CACHE singleton-semantics decision) | article (zero-parse) | MODULE-CACHE.0 + bytecode | medium |
 | R9 | **Failure-only cleanup** (`errdefer` role) made first-class in the `ensure`/`bracket` RFC | Zig | RESOURCE-SAFETY.0 | folds into RFC |
