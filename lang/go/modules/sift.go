@@ -1,13 +1,10 @@
 package modules
 
 import (
+	_ "embed"
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -15,348 +12,91 @@ import (
 // the parsing stack (design/SIFT.0.md). Between StringUtil / read {fmt:'lines'}
 // (primitives) and parse json / aql:parse (rigid formats / grammars), sift
 // parses the loose line- and field-oriented text Unix tools and /proc files
-// emit. It is a PURE module — string in, value out, no capabilities — whose
-// parsers are ordinary parselang kinds and whose extension mechanism is a
-// declarative spec-map (a parser expressed as data).
+// emit.
 //
-// Six format families (kv, blocks, columns, dsv, fixed, pattern) register as
-// parse kinds and read formats via the parselang/read bridge; a spec-map binds
-// a family + options (or wraps a fn, family:'fn') under a name; the seven Sift
-// words (define / parse / kinds / families / spec / detect / check) drive them.
+// sift is WRITTEN IN AQL (siftSource below, embedded from sift.aql), following
+// the aql:repl / aql:test hybrid pattern: the module body is parsed once and
+// run in a fresh sub-registry that collects its `export "Sift" {…}`. The six
+// format families (kv, blocks, columns, dsv, fixed, pattern), the spec engine,
+// the coercion vocabulary, and the seven Sift words are all AQL — the loader
+// below is the only Go.
+//
+// Surface (v1, design decision "Pure AQL, Sift.* surface"): every kind is
+// reached through the Sift namespace — `Sift.parse <kind> <src>`,
+// `Sift.define`, `Sift.kinds`, etc. A module body runs in a discarded
+// sub-registry, so it cannot register a global `parse <kind>` macro kind the
+// importing program would see (that needs the parent registry, which only the
+// Go loader holds); the namespaced surface is the coherent pure-AQL form.
 
-// sift family atoms.
-const (
-	famKV      = "kv"
-	famBlocks  = "blocks"
-	famColumns = "columns"
-	famDSV     = "dsv"
-	famFixed   = "fixed"
-	famPattern = "pattern"
-	famFn      = "fn"
+//go:embed sift.aql
+var siftSource string
+
+var (
+	siftParseOnce sync.Once
+	siftParsed    []native.Value
+	siftParseErr  error
 )
 
-// siftFamilies is the ordered list of the six format families, surfaced by
-// Sift.families and used to validate a spec's family atom.
-var siftFamilies = []string{famKV, famBlocks, famColumns, famDSV, famFixed, famPattern}
-
-// capSiftHost is the per-registry capability slot holding sift's own state:
-// the registered spec catalog (for Sift.spec / Sift.kinds introspection) and
-// the detection table, plus a guard so re-import is idempotent (families are
-// registered into the shared parselang host state exactly once per registry).
-const capSiftHost = "engine.sift.host"
-
-type siftHostState struct {
-	mu         sync.Mutex
-	registered bool                 // builtin families installed into parselang state
-	specs      map[string]*siftSpec // name → registered spec (families + presets + user)
-	order      []string             // registration order, for Sift.kinds
-	pathDetect map[string]string    // path glob → kind
-	cmdDetect  map[string]string    // argv0 basename → kind
-}
-
-func siftHostStateFor(r *native.Registry) *siftHostState {
-	if s, ok, _ := eng.Cap[*siftHostState](r, capSiftHost); ok && s != nil {
-		return s
+// BuildSiftModule loads the AQL-implemented aql:sift module: it parses the
+// embedded sift.aql once, runs it in a fresh sub-registry that inherits the
+// parser + module resolver (so the body's own `import`s resolve), and collects
+// the `export "Sift" {…}` map. Mirrors BuildReplModule.
+func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
+	if parent.ParseFunc == nil {
+		return native.ModuleDesc{}, fmt.Errorf("sift: parser not configured")
 	}
-	s := &siftHostState{
-		specs:      map[string]*siftSpec{},
-		pathDetect: map[string]string{},
-		cmdDetect:  map[string]string{},
+	siftParseOnce.Do(func() {
+		siftParsed, siftParseErr = parent.ParseFunc(siftSource)
+	})
+	if siftParseErr != nil {
+		return native.ModuleDesc{}, fmt.Errorf("sift: parse preamble: %w", siftParseErr)
 	}
-	_ = r.Capabilities.Set(capSiftHost, s)
-	return s
-}
 
-// siftSpec is a parser expressed as data (design/SIFT.0.md §6). A family spec
-// names one of the six families plus its baked options; a fn spec (family:'fn')
-// wraps a user function. detect metadata and doc are optional.
-type siftSpec struct {
-	name    string       // registered kind name; "" for an inline spec
-	family  string       // one of siftFamilies, or famFn
-	opts    native.Value // baked family options (a Map), or None
-	fn      native.Value // the [source opts] fn, for family=='fn'
-	pathPat []string     // detect: path globs
-	cmdArgv []string     // detect: cmd.argv (canonical invocation)
-	cmdName []string     // detect: cmd.match (argv0 basenames)
-	doc     string       // one-line describe doc
-
-	installIdent string // source-call identity (compiled-path idempotency)
-	fromCheck    bool   // installed during the check pass; one VM re-run is idempotent
-}
-
-// ---------------------------------------------------------------------------
-// Shared preprocessing (§5.1): skip / chop / comment / strict.
-// ---------------------------------------------------------------------------
-
-type siftOpts struct {
-	m native.Value // the merged options Map (or None)
-}
-
-func (o siftOpts) get(key string) (native.Value, bool) {
-	m, _ := native.AsMap(o.m)
-	if m == nil {
-		return native.Value{}, false
-	}
-	return m.Get(key)
-}
-
-// str reads an enumerated / literal String or Atom option, def when absent.
-func (o siftOpts) str(key, def string) (string, error) {
-	v, ok := o.get(key)
-	if !ok {
-		return def, nil
-	}
-	if v.Parent.ConformsTo(native.TAtom) {
-		a, err := v.AsConcreteAtom()
-		if err != nil {
-			return "", fmt.Errorf("opts.%s: %w", key, err)
-		}
-		return a, nil
-	}
-	s, err := v.AsConcreteString()
+	modReg, err := newDefaultRegistry()
 	if err != nil {
-		return "", fmt.Errorf("opts.%s must be a string or atom: %w", key, err)
+		return native.ModuleDesc{}, fmt.Errorf("sift: init: %w", err)
 	}
-	return s, nil
-}
-
-func (o siftOpts) boolean(key string, def bool) (bool, error) {
-	v, ok := o.get(key)
-	if !ok {
-		return def, nil
-	}
-	b, err := v.AsConcreteBoolean()
-	if err != nil {
-		return false, fmt.Errorf("opts.%s must be a boolean: %w", key, err)
-	}
-	return b, nil
-}
-
-func (o siftOpts) integer(key string, def int64) (int64, error) {
-	v, ok := o.get(key)
-	if !ok {
-		return def, nil
-	}
-	n, err := v.AsConcreteInteger()
-	if err != nil {
-		return 0, fmt.Errorf("opts.%s must be an integer: %w", key, err)
-	}
-	return n, nil
-}
-
-// submap reads an option whose value is a Map (e.g. types), or nil.
-func (o siftOpts) submap(key string) native.ReadMap {
-	v, ok := o.get(key)
-	if !ok {
-		return nil
-	}
-	m, _ := native.AsMap(v)
-	return m
-}
-
-// preprocess applies skip / chop / comment to the raw source, returning the
-// surviving physical lines. strict is read separately by each family.
-func (o siftOpts) preprocess(src string) ([]string, error) {
-	skip, err := o.integer("skip", 0)
-	if err != nil {
-		return nil, err
-	}
-	chop, err := o.integer("chop", 0)
-	if err != nil {
-		return nil, err
-	}
-	comment, err := o.str("comment", "")
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(src, "\n")
-	// Drop a single trailing empty line (the final newline of a text file) so
-	// row counts match intuition; interior blanks are preserved for blocks.
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	if skip < 0 || chop < 0 {
-		return nil, fmt.Errorf("skip and chop must be non-negative")
-	}
-	if int(skip) < len(lines) {
-		lines = lines[skip:]
+	modReg.Output = parent.Output
+	modReg.ErrOutput = parent.ErrOutput
+	modReg.Input = parent.Input
+	modReg.Effects = parent.Effects
+	modReg.InheritObserveHooks(parent)
+	modReg.ParseFunc = parent.ParseFunc
+	modReg.BaseDir = parent.BaseDir
+	modReg.Modules.InheritConfig(parent.Modules)
+	if modReg.Modules.InitFunc != nil {
+		modReg.Modules.InitFunc(modReg)
 	} else {
-		lines = nil
+		native.Register(modReg)
 	}
-	if int(chop) < len(lines) {
-		lines = lines[:len(lines)-int(chop)]
-	} else {
-		lines = nil
-	}
-	if comment != "" {
-		kept := lines[:0:0]
-		for _, ln := range lines {
-			if strings.HasPrefix(strings.TrimLeft(ln, " \t"), comment) {
-				continue
-			}
-			kept = append(kept, ln)
-		}
-		lines = kept
-	}
-	return lines, nil
-}
 
-func (o siftOpts) strict() (string, error) {
-	s, err := o.str("strict", "error")
-	if err != nil {
-		return "", err
-	}
-	if s != "error" && s != "skip" {
-		return "", fmt.Errorf("opts.strict must be 'error' or 'skip', got %q", s)
-	}
-	return s, nil
-}
+	// Collect `export "Sift" {…}` from the preamble (the aql:test-style local
+	// exporter; see modules/test.go for why RunModuleBody cannot be reused).
+	exports := map[string]*native.OrderedMap{}
+	modReg.Defs.Delete("export")
+	modReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "export",
+		Signatures: []native.Signature{{
+			Args: []*native.Type{native.TString, native.TMap},
+			Impl: native.Go(func(eargs []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				name, _ := eargs[0].AsConcreteString()
+				return resolveExport(modReg, exports, name, eargs[1])
+			}),
+			Returns: []*native.Type{}, BarrierPos: -1,
+		}},
+	})
 
-// ---------------------------------------------------------------------------
-// Coercion vocabulary (§5.4).
-// ---------------------------------------------------------------------------
-
-var siftSizeRe = regexp.MustCompile(`^\s*([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]*)\s*$`)
-
-var siftSizeUnits = map[string]int64{
-	"": 1, "b": 1,
-	"k": 1 << 10, "kb": 1 << 10, "kib": 1 << 10,
-	"m": 1 << 20, "mb": 1 << 20, "mib": 1 << 20,
-	"g": 1 << 30, "gb": 1 << 30, "gib": 1 << 30,
-	"t": 1 << 40, "tb": 1 << 40, "tib": 1 << 40,
-	"p": 1 << 50, "pb": 1 << 50, "pib": 1 << 50,
-}
-
-// coerce applies a type atom to a raw cell string, returning the typed Value.
-// An empty cell under a non-string type yields None; a conversion failure
-// returns an error (the caller decides skip-vs-raise per strict).
-func coerce(vtype, cell string) (native.Value, error) {
-	if vtype == "" || vtype == "string" {
-		return native.NewString(cell), nil
+	tokens := append([]native.Value(nil), siftParsed...)
+	sub := native.New(modReg)
+	restoreAtt := modReg.SetInterpAttribution("module-load")
+	_, runErr := sub.Run(tokens)
+	restoreAtt()
+	if runErr != nil {
+		return native.ModuleDesc{}, fmt.Errorf("sift: run preamble: %w", runErr)
 	}
-	trimmed := strings.TrimSpace(cell)
-	if trimmed == "" {
-		return native.NewNone(), nil
-	}
-	switch vtype {
-	case "integer":
-		n, err := strconv.ParseInt(trimmed, 10, 64)
-		if err != nil {
-			return native.Value{}, fmt.Errorf("not an integer: %q", cell)
-		}
-		return native.NewInteger(n), nil
-	case "float":
-		f, err := strconv.ParseFloat(trimmed, 64)
-		if err != nil {
-			return native.Value{}, fmt.Errorf("not a float: %q", cell)
-		}
-		return native.NewFloat(f), nil
-	case "boolean":
-		switch strings.ToLower(trimmed) {
-		case "true", "yes", "on", "1":
-			return native.NewBoolean(true), nil
-		case "false", "no", "off", "0":
-			return native.NewBoolean(false), nil
-		}
-		return native.Value{}, fmt.Errorf("not a boolean: %q", cell)
-	case "percent":
-		f, err := strconv.ParseFloat(strings.TrimSuffix(trimmed, "%"), 64)
-		if err != nil {
-			return native.Value{}, fmt.Errorf("not a percentage: %q", cell)
-		}
-		return native.NewFloat(f), nil
-	case "size":
-		g := siftSizeRe.FindStringSubmatch(trimmed)
-		if g == nil {
-			return native.Value{}, fmt.Errorf("not a size: %q", cell)
-		}
-		mult, ok := siftSizeUnits[strings.ToLower(g[2])]
-		if !ok {
-			return native.Value{}, fmt.Errorf("unknown size unit in %q", cell)
-		}
-		f, err := strconv.ParseFloat(g[1], 64)
-		if err != nil {
-			return native.Value{}, fmt.Errorf("not a size: %q", cell)
-		}
-		return native.NewInteger(int64(f * float64(mult))), nil
-	case "auto":
-		if n, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return native.NewInteger(n), nil
-		}
-		if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
-			return native.NewFloat(f), nil
-		}
-		switch strings.ToLower(trimmed) {
-		case "true":
-			return native.NewBoolean(true), nil
-		case "false":
-			return native.NewBoolean(false), nil
-		}
-		return native.NewString(cell), nil
-	default:
-		return native.Value{}, fmt.Errorf("unknown type %q", vtype)
-	}
-}
 
-// isKnownType reports whether atom names a coercion type (for spec validation).
-func isKnownType(t string) bool {
-	switch t {
-	case "string", "integer", "float", "boolean", "percent", "size", "auto":
-		return true
-	}
-	return false
-}
-
-// typeLiteralFor maps a coercion type to the lattice type literal for a Table
-// record schema; untyped/string columns stay TString (the csv precedent).
-func typeLiteralFor(t string) native.Value {
-	switch t {
-	case "integer", "size":
-		return native.NewTypeLiteral(native.TInteger)
-	case "float", "percent":
-		return native.NewTypeLiteral(native.TFloat)
-	case "boolean":
-		return native.NewTypeLiteral(native.TBoolean)
-	default:
-		return native.NewTypeLiteral(native.TString)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Name normalization (§5.3).
-// ---------------------------------------------------------------------------
-
-var siftWordBoundaryRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-var siftCamelRe = regexp.MustCompile(`([a-z])([A-Z])`)
-
-// normalizeName lowercases and kebab-cases a raw key/header, prefixing f- when
-// it would start with a digit. Deterministic; the caller de-duplicates.
-func normalizeName(raw string) string {
-	s := siftCamelRe.ReplaceAllString(raw, "$1-$2")
-	s = siftWordBoundaryRe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	s = strings.ToLower(s)
-	if s == "" {
-		return s
-	}
-	if s[0] >= '0' && s[0] <= '9' {
-		s = "f-" + s
-	}
-	return s
-}
-
-// applyNames normalizes (or keeps) a name per the names option, de-duplicating
-// collisions with -2, -3, … against the already-seen set.
-func applyNames(raw, mode string, seen map[string]int) string {
-	name := raw
-	if mode == "normalize" {
-		name = normalizeName(raw)
-	}
-	if n, clash := seen[name]; clash {
-		seen[name] = n + 1
-		name = fmt.Sprintf("%s-%d", name, n+1)
-	} else {
-		seen[name] = 1
-	}
-	return name
+	return native.ModuleDesc{
+		ID:      parent.Modules.NextID(),
+		Exports: exports,
+	}, nil
 }

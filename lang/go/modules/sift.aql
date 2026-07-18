@@ -1,0 +1,885 @@
+# ============================================================================
+# aql:sift — the semi-structured-text tier of the parsing stack, in AQL.
+#
+# design/SIFT.0.md. Between StringUtil / read {fmt:'lines'} (primitives) and
+# parse json / aql:parse (rigid formats / grammars), sift parses the loose
+# line- and field-oriented text Unix tools and /proc files emit.
+#
+# Six format families — kv, blocks, columns, dsv, fixed, pattern — plus a
+# spec-map (a parser expressed as data) and the seven Sift words that drive
+# them. v1 surface is the Sift namespace only (Sift.parse / define / kinds /
+# families / spec / detect / check): a module body runs in a discarded
+# sub-registry and so cannot register a global `parse <kind>` the importing
+# program would see.
+#
+# Tables are represented as a List of row Maps (pure AQL has no schema-carrying
+# Table value); every sift consumer uses size / dot / get, for which a
+# list-of-maps is behaviourally identical.
+# ============================================================================
+
+import "aql:string-util"   # split / trim / indexof / lower / normalize
+import "aql:array-util"    # transpose (zip) / member
+import "aql:minilang"      # mini re — positional RE2 matching
+
+# ----------------------------------------------------------------------------
+# Module state — the kind catalog and detection tables. A `flex` map is
+# reference-semantic: `set` mutates in place, so a Sift.define on one line is
+# visible to a Sift.parse on the next (both run in this same sub-registry).
+# ----------------------------------------------------------------------------
+def sift-catalog (flex {})        # name(String) -> spec Map
+def sift-path-detect (flex {})    # path glob -> kind name
+def sift-cmd-detect (flex {})     # argv0 basename -> kind name
+
+# The six families, in order (Sift.families).
+def sift-families-list [kv/q blocks/q columns/q dsv/q fixed/q pattern/q]
+
+# Membership sets (map-as-set; `get` yields None when absent).
+def sift-family-set {kv:true blocks:true columns:true dsv:true fixed:true pattern:true}
+def sift-type-set {string:true integer:true float:true boolean:true percent:true size:true auto:true}
+def sift-repeat-set {last:true first:true error:true list:true}
+def sift-spec-keys {family:true opts:true fields:true detect:true doc:true fn:true}
+
+# The per-line coercion skip sentinel (strict:'skip' drops a bad cell). Kept
+# distinct from None, which is a legitimate coerced value (empty typed cell).
+def sift-skip (quote sift__skip__)
+
+def sift-known-type fn [[t:String] [Boolean] [ ((sift-type-set get t) is None) not ]]
+def sift-known-family fn [[f:String] [Boolean] [ ((sift-family-set get f) is None) not ]]
+
+# ----------------------------------------------------------------------------
+# Name normalization (design/SIFT.0.md §5.3): kebab-case, splitting camelCase
+# only at a lowercase→uppercase boundary (so eth0 stays eth0, 1K stays 1k),
+# collapse non-alphanumerics to a single dash, lowercase, and prefix f- when
+# the result would start with a digit. A char-fold, then split/join on '-' to
+# collapse and trim the dashes.
+# ----------------------------------------------------------------------------
+def sift-is-alnum fn [[c:String] [Boolean] [ (c mini re `^[A-Za-z0-9]$`).ok ]]
+def sift-is-lower fn [[c:String] [Boolean] [ (c mini re `^[a-z]$`).ok ]]
+def sift-is-upper fn [[c:String] [Boolean] [ (c mini re `^[A-Z]$`).ok ]]
+
+def sift-norm-step fn [[c:String acc:Map] [Map] [
+  def out acc.out
+  def out2 (if (sift-is-alnum c)
+    [ if ((sift-is-lower acc.prev) and (sift-is-upper c)) [join "" [out "-" c]] [join "" [out c]] ]
+    [ join "" [out "-"] ])
+  acc set (quote out) out2 set (quote prev) c
+]]
+
+def sift-normalize-name fn [[raw:String] [String] [
+  def chars (StringUtil.split "" raw)
+  def built (fold [sift-norm-step] chars ({} set (quote out) "" set (quote prev) ""))
+  def collapsed (join "-" (StringUtil.split "-" built.out))
+  def low (StringUtil.lower collapsed)
+  if (low eq "") [low] [
+    if ((low mini re `^[0-9]`).ok) [join "" ["f-" low]] [low]
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# Coercion vocabulary (design/SIFT.0.md §5.4). An empty (trimmed) cell under a
+# non-string type is None; a genuine conversion failure raises sift_type_error.
+# ----------------------------------------------------------------------------
+def sift-size-units {
+  b:1
+  k:1024 kb:1024 kib:1024
+  m:1048576 mb:1048576 mib:1048576
+  g:1073741824 gb:1073741824 gib:1073741824
+  t:1099511627776 tb:1099511627776 tib:1099511627776
+  p:1125899906842624 pb:1125899906842624 pib:1125899906842624
+}
+def sift-size-unit fn [[u:String] [Any] [ if (u eq "") [1] [sift-size-units get u] ]]
+
+def sift-float-shaped fn [[s:String] [Boolean] [
+  (s mini re `^[+-]?([0-9]*[.])?[0-9]+([eE][+-]?[0-9]+)?$`).ok
+]]
+
+def sift-to-size fn [[t:String cell:String] [Any] [
+  def m (t mini re `^\s*([0-9]+([.][0-9]+)?)\s*([a-zA-Z]*)\s*$`)
+  if (m.ok not) [ raise sift_type_error (join "" ["not a size: " cell]) ] [
+    def num (m.fst.g get 0)
+    def mult (sift-size-unit (StringUtil.lower (m.fst.g get 2)))
+    if (mult is None) [ raise sift_type_error (join "" ["unknown size unit in " cell]) ]
+      [ convert Integer (mul (convert Float num) mult) ]
+  ]
+]]
+
+def sift-to-auto fn [[t:String] [Any] [
+  if ((t mini re `^[+-]?[0-9]+$`).ok) [ convert Integer t ] [
+  if (sift-float-shaped t) [ convert Float t ] [
+  if (t eq "true") [true] [
+  if (t eq "false") [false] [
+    t ]]]]
+]]
+
+# coerce a non-empty trimmed cell under a (validated) type.
+def sift-coerce-val fn [[vtype:String t:String cell:String] [Any] [
+  if (vtype eq "integer")
+    [ if ((t mini re `^[+-]?[0-9]+$`).ok) [convert Integer t] [raise sift_type_error (join "" ["not an integer: " cell])] ] [
+  if (vtype eq "float")
+    [ if (sift-float-shaped t) [convert Float t] [raise sift_type_error (join "" ["not a float: " cell])] ] [
+  if (vtype eq "boolean")
+    [ sift-to-bool t cell ] [
+  if (vtype eq "percent")
+    [ def s (if ((t mini re `%$`).ok) [slice 0 ((size t) sub 1) t] [t])
+      if (sift-float-shaped s) [convert Float s] [raise sift_type_error (join "" ["not a percentage: " cell])] ] [
+  if (vtype eq "size")
+    [ sift-to-size t cell ] [
+  if (vtype eq "auto")
+    [ sift-to-auto t ] [
+    raise sift_type_error (join "" ["unknown type: " vtype]) ]]]]]]
+]]
+
+def sift-bool-true {true:1 yes:1 on:1}
+def sift-bool-false {false:1 no:1 off:1}
+def sift-truthy fn [[s:String] [Boolean] [ if (((sift-bool-true get s) is None) not) [true] [s eq "1"] ]]
+def sift-falsy fn [[s:String] [Boolean] [ if (((sift-bool-false get s) is None) not) [true] [s eq "0"] ]]
+def sift-to-bool fn [[t:String cell:String] [Any] [
+  def low (StringUtil.lower t)
+  if (sift-truthy low) [true] [
+  if (sift-falsy low) [false] [
+    raise sift_type_error (join "" ["not a boolean: " cell]) ]]
+]]
+
+# coerce, returning None for an empty typed cell and cell verbatim for string.
+# NB the `def r (…)  r` bind-then-return: a bare complex-fn call in tail
+# position inside a fold step body loses its result (a deeply-nested tail-call
+# frame interaction), so results that flow through a fold are bound first.
+def sift-coerce fn [[vtype:String cell:String] [Any] [
+  if (vtype eq "string") [cell] [
+    def t (StringUtil.trim cell)
+    def r (if (t eq "") [None] [ sift-coerce-val vtype t cell ])
+    r
+  ]
+]]
+
+# coerce under strict: 'error' propagates the raise, 'skip' yields the skip
+# sentinel so the caller drops the row/cell.
+def sift-coerce-strict fn [[vtype:String cell:String strict:String] [Any] [
+  def r (if (strict eq "skip")
+    [ do [sift-coerce vtype cell] error [sift-skip] ]
+    [ sift-coerce vtype cell ])
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# Option readers. Values may be strings or atoms; integers/booleans as written.
+# ----------------------------------------------------------------------------
+def sift-opt-str fn [[opts:Map key:String dflt:String] [String] [
+  def v (opts get key)
+  if (v is None) [dflt] [convert String v]
+]]
+def sift-opt-int fn [[opts:Map key:String dflt:Integer] [Integer] [
+  def v (opts get key)
+  if (v is None) [dflt] [v]
+]]
+def sift-opt-bool fn [[opts:Map key:String dflt:Boolean] [Boolean] [
+  def v (opts get key)
+  if (v is None) [dflt] [v]
+]]
+
+def sift-strict fn [[opts:Map] [String] [
+  def s (sift-opt-str opts "strict" "error")
+  if ((s eq "error") or (s eq "skip")) [s] [ raise sift_spec_error (join "" ["opts.strict must be 'error' or 'skip', got " s]) ]
+]]
+
+# validate + read a vtype option.
+def sift-vtype fn [[opts:Map] [String] [
+  def vt (sift-opt-str opts "vtype" "string")
+  if (sift-known-type vt) [vt] [ raise sift_spec_error (join "" ["unknown vtype: " vt]) ]
+]]
+
+# the `types` option: a name->type Map, each validated. None -> empty map.
+def sift-types fn [[opts:Map] [Map] [
+  def tm (opts get "types")
+  if (tm is None) [{}] [
+    def step fn [[k:String acc:Map] [Map] [
+      def t (convert String (tm get k))
+      if (sift-known-type t) [acc set (k) t] [ raise sift_spec_error (join "" ["types." k ": unknown type " t]) ]
+    ]]
+    fold [step] (keys tm) {}
+  ]
+]]
+
+# the coercion type for a column: its `types` entry, else the default.
+def sift-col-type fn [[types:Map col:String dflt:String] [String] [
+  def t (types get col)
+  if (t is None) [dflt] [t]
+]]
+
+def sift-unquote fn [[s:String] [String] [
+  if ((size s) gte 2) [
+    def a (slice 0 1 s)
+    def b (slice ((size s) sub 1) (size s) s)
+    if (((a eq `"`) and (b eq `"`)) or ((a eq `'`) and (b eq `'`)))
+      [ slice 1 ((size s) sub 1) s ] [s]
+  ] [s]
+]]
+
+# resolve the `fields` option: a List yields names; a Map yields ordered names
+# plus per-field types folded into `types`. Returns {names given types}.
+def sift-resolve-fields fn [[opts:Map types:Map] [Map] [
+  def fv (opts get "fields")
+  if (fv is None) [ {} set (quote names) [] set (quote given) false set (quote types) types ] [
+    if (fv is List) [ {} set (quote names) fv set (quote given) true set (quote types) types ] [
+      # a Map: names in key order; a String/Atom value or {type:..} sets a type
+      def step fn [[k:String acc:Map] [Map] [
+        def val (fv get k)
+        def t2 (if (val is Map)
+          [ def tv (val get "type")  if (tv is None) [acc.types] [sift-add-type acc.types k (convert String tv)] ]
+          [ sift-add-type acc.types k (convert String val) ])
+        acc set (quote names) (push k acc.names) set (quote types) t2
+      ]]
+      fold [step] (keys fv) ({} set (quote names) [] set (quote types) types)
+        set (quote given) true
+    ]
+  ]
+]]
+
+def sift-add-type fn [[types:Map k:String t:String] [Map] [
+  if (sift-known-type t) [types set (k) t] [ raise sift_spec_error (join "" ["fields." k ": unknown type " t]) ]
+]]
+
+# ----------------------------------------------------------------------------
+# Preprocessing (design/SIFT.0.md §5.1): drop a single trailing empty line,
+# then apply skip / chop / comment.
+# ----------------------------------------------------------------------------
+def sift-lines fn [[src:String] [List] [
+  def raw (StringUtil.split "\n" src {keepEmpty:true})
+  if (((size raw) gt 0) and ((raw get ((size raw) sub 1)) eq ""))
+    [ take ((size raw) sub 1) raw ] [raw]
+]]
+
+def sift-starts-with fn [[prefix:String s:String] [Boolean] [ (StringUtil.indexof prefix s) eq 0 ]]
+
+def sift-preprocess fn [[src:String opts:Map] [List] [
+  def lines0 (sift-lines src)
+  def skip (sift-opt-int opts "skip" 0)
+  def chop (sift-opt-int opts "chop" 0)
+  def comment (sift-opt-str opts "comment" "")
+  if ((skip lt 0) or (chop lt 0)) [ raise sift_spec_error "skip and chop must be non-negative" ] [
+    def a (if (skip lt (size lines0)) [shed skip lines0] [[]])
+    def b (if (chop lt (size a)) [take ((size a) sub chop) a] [[]])
+    if (comment eq "") [b] [
+      filter ([p:Any] => [ (sift-starts-with comment (StringUtil.trim p.value)) not ]) b
+    ]
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# Field splitting on whitespace runs.
+# ----------------------------------------------------------------------------
+def sift-fields fn [[s:String] [List] [ StringUtil.split " " (StringUtil.normalize (StringUtil.trim s) {collapseWs:true}) ]]
+
+# split into at most n whitespace fields, the last greedy.
+def sift-split-n fn [[s:String n:Integer] [List] [
+  def parts (sift-fields s)
+  if (n lte 0) [parts] [
+    if ((size parts) lte n) [parts]
+      [ push (join " " (shed (n sub 1) parts)) (take (n sub 1) parts) ]
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# kv family — key/value lines -> Map (design/SIFT.0.md §5). line base is unused for
+# line numbers (the spec suite matches error codes, not positions).
+# ----------------------------------------------------------------------------
+def sift-kv-store fn [[acc:Map k:String v:Any repeat:String] [Map] [
+  def exists (acc has k)
+  if (repeat eq "list")
+    [ if exists [acc set (k) (push v (acc get k))] [acc set (k) [v]] ] [
+  if (repeat eq "first")
+    [ if exists [acc] [acc set (k) v] ] [
+  if (repeat eq "error")
+    [ if exists [raise sift_parse_error (join "" ["duplicate key: " k])] [acc set (k) v] ] [
+  if (repeat eq "last")
+    [ acc set (k) v ] [
+    raise sift_spec_error "opts.repeat must be 'last', 'first', 'error', or 'list'" ]]]]
+]]
+
+def sift-kv-lines fn [[lines:List opts:Map sep:String] [Map] [
+  def trim (sift-opt-bool opts "trim" true)
+  def unq (sift-opt-bool opts "unquote" false)
+  def names (sift-opt-str opts "names" "keep")
+  def repeat (sift-opt-str opts "repeat" "last")
+  def vtype (sift-vtype opts)
+  def types (sift-types opts)
+  def strict (sift-strict opts)
+  if (((sift-repeat-set get repeat) is None)) [ raise sift_spec_error (join "" ["opts.repeat must be one of last/first/error/list, got " repeat]) ] [
+    def step fn [[line:String acc:Map] [Map] [
+      def t (StringUtil.trim line)
+      if (t eq "") [acc] [
+        def idx (StringUtil.indexof sep line)
+        if (idx lt 0)
+          [ if (strict eq "skip") [acc] [raise sift_parse_error (join "" ["no separator: " line])] ]
+          [ def rawk (slice 0 idx line)
+            def rawv (slice (idx add (size sep)) (size line) line)
+            def k0 (if trim [StringUtil.trim rawk] [rawk])
+            def v0 (if trim [StringUtil.trim rawv] [rawv])
+            def v1 (if unq [sift-unquote v0] [v0])
+            def k (if (names eq "normalize") [sift-normalize-name k0] [k0])
+            def vt (sift-col-type types k vtype)
+            def cv (sift-coerce-strict vt v1 strict)
+            if (cv eq sift-skip) [acc] [ sift-kv-store acc k cv repeat ] ]
+      ]
+    ]]
+    fold [step] lines {}
+  ]
+]]
+
+def sift-fam-kv fn [[src:String opts:Map] [Map] [
+  def lines (sift-preprocess src opts)
+  def sep (sift-opt-str opts "sep" ":")
+  sift-kv-lines lines opts sep
+]]
+
+# ----------------------------------------------------------------------------
+# blocks family — blank/indent-separated kv blocks -> List of Maps (or a table
+# = List of Maps with unified columns, absent field -> None).
+# ----------------------------------------------------------------------------
+def sift-group-blank fn [[lines:List] [List] [
+  def step fn [[line:List acc:Map] [List] [
+    if ((StringUtil.trim line) eq "")
+      [ if ((size acc.cur) gt 0) [acc set (quote blocks) (push acc.cur acc.blocks) set (quote cur) []] [acc] ]
+      [ acc set (quote cur) (push line acc.cur) ]
+  ]]
+  def st (fold [step] lines ({} set (quote blocks) [] set (quote cur) []))
+  if ((size st.cur) gt 0) [push st.cur st.blocks] [st.blocks]
+]]
+
+def sift-group-indent fn [[lines:List] [List] [
+  def step fn [[line:List acc:Map] [List] [
+    if ((StringUtil.trim line) eq "") [acc] [
+      def unindented ((line mini re `^[^ \t]`).ok)
+      def acc2 (if (unindented and ((size acc.cur) gt 0))
+        [ acc set (quote blocks) (push acc.cur acc.blocks) set (quote cur) [] ] [acc])
+      acc2 set (quote cur) (push line acc2.cur)
+    ]
+  ]]
+  def st (fold [step] lines ({} set (quote blocks) [] set (quote cur) []))
+  if ((size st.cur) gt 0) [push st.cur st.blocks] [st.blocks]
+]]
+
+def sift-fam-blocks fn [[src:String opts:Map] [Any] [
+  def lines (sift-preprocess src opts)
+  def sep (sift-opt-str opts "sep" "blank")
+  def blocks (if (sep eq "blank") [sift-group-blank lines] [
+              if (sep eq "indent") [sift-group-indent lines] [
+                raise sift_spec_error "opts.sep must be 'blank' or 'indent'" ]])
+  def kvsep (sift-opt-str opts "kvsep" ":")
+  def table (sift-opt-bool opts "table" false)
+  def parse-block fn [[b:List acc:List] [List] [ push (sift-kv-lines b opts kvsep) acc ]]
+  def maps (fold [parse-block] blocks [])
+  if (table not) [maps] [ sift-blocks-table maps ]
+]]
+
+# unify block maps into rows with a shared column set (first-seen order).
+def sift-blocks-table fn [[maps:List] [List] [
+  def collect fn [[m:Map acc:List] [List] [
+    def add-col fn [[k:String cols:List] [List] [ if (ArrayUtil.member [k] cols) [cols] [push k cols] ]]
+    fold [add-col] (keys m) acc
+  ]]
+  def cols (fold [collect] maps [])
+  def torow fn [[m:Map acc:List] [List] [
+    def cell fn [[c:String row:Map] [Map] [ if (m has c) [row set (c) (m get c)] [row set (c) None] ]]
+    push (fold [cell] cols {}) acc
+  ]]
+  fold [torow] maps []
+]]
+
+# ----------------------------------------------------------------------------
+# Shared row builder for the tabular families — coerce each cell (strict
+# 'error') under its column type, pad missing cells with "".
+# ----------------------------------------------------------------------------
+def sift-row fn [[cols:List cells:List types:Map] [Map] [
+  def idxs (iota (size cols))
+  def step fn [[j:Integer acc:Map] [Map] [
+    def col (cols get j)
+    def cell (if (j lt (size cells)) [cells get j] [""])
+    def vt (sift-col-type types col "string")
+    acc set (col) (sift-coerce vt cell)
+  ]]
+  fold [step] idxs {}
+]]
+
+# auto column names c1..cN.
+def sift-auto-cols fn [[n:Integer] [List] [
+  each [ ([i:Integer] => [join "" ["c" (convert String (i add 1))]]) ] (iota n)
+]]
+
+# ----------------------------------------------------------------------------
+# columns family — whitespace table with header -> List of row Maps.
+# ----------------------------------------------------------------------------
+def sift-fam-columns fn [[src:String opts:Map] [List] [
+  def lines (sift-preprocess src opts)
+  def header (sift-opt-bool opts "header" true)
+  def name-mode (sift-opt-str opts "names" "normalize")
+  def label (sift-opt-str opts "label" "")
+  def types0 (sift-types opts)
+  def rf (sift-resolve-fields opts types0)
+  def types rf.types
+  def given rf.given
+  if given [
+    def cols rf.names
+    def body (if (header and ((size lines) gt 0)) [shed 1 lines] [lines])
+    sift-columns-rows cols body types label
+  ] [
+    if (header not) [ raise sift_spec_error "columns: header:false requires fields" ] [
+      if ((size lines) eq 0) [[]] [
+        def cols (sift-dedup (each [ ([h:String] => [sift-apply-name h name-mode]) ] (sift-fields (lines get 0))))
+        sift-columns-rows cols (shed 1 lines) types label
+      ]
+    ]
+  ]
+]]
+
+def sift-apply-name fn [[raw:String mode:String] [String] [ if (mode eq "normalize") [sift-normalize-name raw] [raw] ]]
+
+# de-duplicate names, appending -2, -3, … on collision.
+def sift-dedup fn [[names:List] [List] [
+  def step fn [[name:String acc:Map] [Map] [
+    def seen acc.seen
+    def n (seen get name)
+    if (n is None)
+      [ acc set (quote seen) (seen set (name) 1) set (quote out) (push name acc.out) ]
+      [ acc set (quote seen) (seen set (name) (n add 1)) set (quote out) (push (join "" [name "-" (convert String (n add 1))]) acc.out) ]
+  ]]
+  (fold [step] names ({} set (quote seen) {} set (quote out) [])).out
+]]
+
+def sift-columns-rows fn [[cols:List body:List types:Map label:String] [List] [
+  def labeled (label neq "")
+  def step fn [[line:String acc:List] [List] [
+    if ((StringUtil.trim line) eq "") [acc] [
+      if labeled [
+        def toks (sift-fields line)
+        def lbl (if ((size toks) gt 0) [sift-strip-colon (toks get 0)] [""])
+        def rest (if ((size toks) gt 0) [shed 1 toks] [toks])
+        def row0 ({} set (label) lbl)
+        push (sift-row-into row0 cols rest types) acc
+      ] [
+        push (sift-row cols (sift-split-n line (size cols)) types) acc
+      ]
+    ]
+  ]]
+  fold [step] body []
+]]
+
+def sift-strip-colon fn [[s:String] [String] [ if ((s mini re `:$`).ok) [slice 0 ((size s) sub 1) s] [s] ]]
+
+# like sift-row but merging onto an existing row (label case).
+def sift-row-into fn [[row0:Map cols:List cells:List types:Map] [Map] [
+  def idxs (iota (size cols))
+  def step fn [[j:Integer acc:Map] [Map] [
+    def col (cols get j)
+    def cell (if (j lt (size cells)) [cells get j] [""])
+    acc set (col) (sift-coerce (sift-col-type types col "string") cell)
+  ]]
+  fold [step] idxs row0
+]]
+
+# ----------------------------------------------------------------------------
+# dsv family — delimited rows, no header -> List of row Maps.
+# ----------------------------------------------------------------------------
+def sift-fam-dsv fn [[src:String opts:Map] [List] [
+  def lines (sift-preprocess src opts)
+  def sep (sift-opt-str opts "sep" "ws")
+  def limit (sift-opt-int opts "limit" 0)
+  def types0 (sift-types opts)
+  def rf (sift-resolve-fields opts types0)
+  def types rf.types
+  def cols0 (if rf.given [rf.names] [None])
+  def splitline fn [[ln:String] [List] [
+    if (sep eq "ws") [sift-split-n ln limit]
+      [ if (limit gt 0) [sift-split-lit-n ln sep limit] [StringUtil.split sep ln {keepEmpty:true}] ]
+  ]]
+  def step fn [[line:String acc:Map] [Map] [
+    if ((StringUtil.trim line) eq "") [acc] [
+      def cells (splitline line)
+      def cols (if (acc.cols is None) [if (cols0 is None) [sift-auto-cols (size cells)] [cols0]] [acc.cols])
+      acc set (quote cols) cols set (quote rows) (push (sift-row cols cells types) acc.rows)
+    ]
+  ]]
+  (fold [step] lines ({} set (quote cols) cols0 set (quote rows) [])).rows
+]]
+
+# split on a literal separator into at most n parts, the last greedy.
+def sift-split-lit-n fn [[s:String sep:String n:Integer] [List] [
+  def parts (StringUtil.split sep s {keepEmpty:true})
+  if ((size parts) lte n) [parts]
+    [ push (join sep (shed (n sub 1) parts)) (take (n sub 1) parts) ]
+]]
+
+# ----------------------------------------------------------------------------
+# fixed family — fixed-width columns -> List of row Maps.
+# ----------------------------------------------------------------------------
+def sift-fixed-spans fn [[opts:Map] [List] [
+  def has-cols ((opts get "cols") is None not)
+  def has-widths ((opts get "widths") is None not)
+  if (has-cols and has-widths) [ raise sift_spec_error "fixed: give exactly one of cols or widths" ] [
+    if has-cols [
+      each [ ([p:Any] => [ {} set (quote s) (p.value get 0) set (quote e) (p.value get 1) ]) ] (opts get "cols")
+    ] [
+      if has-widths [
+        def step fn [[w:Integer acc:Map] [Map] [
+          acc set (quote pos) (acc.pos add w) set (quote spans) (push ({} set (quote s) acc.pos set (quote e) (acc.pos add w)) acc.spans)
+        ]]
+        (fold [step] (opts get "widths") ({} set (quote pos) 0 set (quote spans) [])).spans
+      ] [ raise sift_spec_error "fixed: one of cols or widths is required" ]
+    ]
+  ]
+]]
+
+def sift-slice-span fn [[line:String s:Integer e:Integer] [String] [
+  def n (size line)
+  if ((s lt 0) or (s gt n)) [""] [
+    def e2 (if ((e lt 0) or (e gt n)) [n] [e])
+    if (e2 lt s) [""] [slice s e2 line]
+  ]
+]]
+
+def sift-fam-fixed fn [[src:String opts:Map] [List] [
+  def lines (sift-preprocess src opts)
+  def trim (sift-opt-bool opts "trim" true)
+  def types0 (sift-types opts)
+  def spans (sift-fixed-spans opts)
+  def rf (sift-resolve-fields opts types0)
+  def types rf.types
+  def cols (if rf.given [rf.names] [sift-auto-cols (size spans)])
+  if ((size cols) neq (size spans)) [ raise sift_spec_error "fixed: fields count must match column spans" ] [
+    def step fn [[line:String acc:List] [List] [
+      if ((StringUtil.trim line) eq "") [acc] [
+        def cells (each [ ([sp:Any] => [ def raw (sift-slice-span line sp.value.s sp.value.e)  if trim [StringUtil.trim raw] [raw] ]) ] spans)
+        push (sift-row cols cells types) acc
+      ]
+    ]]
+    fold [step] lines []
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# pattern family — RE2 with named groups (design/SIFT.0.md §5.2). mini re is
+# positional, so the group names are extracted from the regex source (a global
+# scan that skips escaped chars and character classes) and zipped onto the
+# positional submatches; a non-participating optional group is None.
+# ----------------------------------------------------------------------------
+# Returns the ordered capturing-group names ("" for an unnamed group).
+def sift-group-names fn [[re:String] [List] [
+  def toks ((re mini re `\\.|\[(?:\\.|[^\]])*\]|\(\?P<[A-Za-z_][A-Za-z0-9_]*>|\(\?|\(` {}).ms)
+  def step fn [[tok:Map acc:List] [List] [
+    def m tok.m
+    def head (slice 0 1 m)
+    if ((head eq "\\") or (head eq "[")) [acc] [           # escaped char / class: skip
+      if ((slice 0 4 m) eq `(?P<`) [ push (slice 4 ((size m) sub 1) m) acc ] [   # named
+        if ((slice 0 2 m) eq `(?`) [acc] [                # non-capturing: skip
+          push "" acc ]]                                  # unnamed capturing
+    ]
+  ]]
+  fold [step] toks []
+]]
+
+def sift-pattern-row fn [[names:List groups:List cols:List types:Map vtype:String strict:String] [Any] [
+  def idxs (iota (size names))
+  def step fn [[i:Integer acc:Map] [Map] [
+    def nm (names get i)
+    if (nm eq "") [acc] [
+      def col (cols get i)
+      def raw (groups get i)
+      if (raw is None) [acc set (col) None] [               # non-participating group
+        def cv (sift-coerce-strict (sift-col-type types col vtype) raw strict)
+        if (cv eq sift-skip) [acc set (quote __skip) true] [acc set (col) cv] ]
+    ]
+  ]]
+  fold [step] idxs {}
+]]
+
+def sift-fam-pattern fn [[src:String opts:Map] [Any] [
+  def re-src (sift-opt-str opts "re" "")
+  if (re-src eq "") [ raise sift_spec_error "pattern: opts.re is required" ] [
+    def names (sift-group-names re-src)
+    def named (size (filter ([p:Any] => [p.value neq ""]) names))
+    if (named eq 0) [ raise sift_spec_error "pattern: re must have at least one named group" ] [
+      def name-mode (sift-opt-str opts "names" "normalize")
+      def vtype (sift-vtype opts)
+      def types (sift-types opts)
+      def per (sift-opt-str opts "per" "source")
+      def strict (sift-strict opts)
+      def lines (sift-preprocess src opts)
+      def cols (each [ ([nm:String] => [ if (nm eq "") [""] [sift-apply-name nm name-mode] ]) ] names)
+      sift-pattern-run re-src lines cols names types vtype per strict
+    ]
+  ]
+]]
+
+def sift-pattern-match fn [[re:String text:String] [Any] [
+  def r (text mini re re {})
+  if (r.ok not) [None] [r.fst.g]
+]]
+
+def sift-pattern-run fn [[re:String lines:List cols:List names:List types:Map vtype:String per:String strict:String] [Any] [
+  if (per eq "source") [
+    def groups (sift-pattern-match re (join "\n" lines))
+    if (groups is None)
+      [ if (strict eq "skip") [None] [raise sift_parse_error "pattern: no match in source"] ]
+      [ def row (sift-pattern-row names groups cols types vtype strict)
+        if ((row get "__skip") is None not) [None] [row] ]
+  ] [
+    if (per neq "line") [ raise sift_spec_error "opts.per must be 'source' or 'line'" ] [
+      def step fn [[line:String acc:List] [List] [
+        def groups (sift-pattern-match re line)
+        if (groups is None)
+          [ if (strict eq "skip") [acc] [raise sift_parse_error "pattern: no match on line"] ]
+          [ def row (sift-pattern-row names groups cols types vtype strict)
+            if ((row get "__skip") is None not) [acc] [push row acc] ]
+      ]]
+      fold [step] lines []
+    ]
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# Family dispatch.
+# ----------------------------------------------------------------------------
+def sift-run-family fn [[family:String src:String opts:Map] [Any] [
+  if (family eq "kv") [sift-fam-kv src opts] [
+  if (family eq "blocks") [sift-fam-blocks src opts] [
+  if (family eq "columns") [sift-fam-columns src opts] [
+  if (family eq "dsv") [sift-fam-dsv src opts] [
+  if (family eq "fixed") [sift-fam-fixed src opts] [
+  if (family eq "pattern") [sift-fam-pattern src opts] [
+    raise sift_spec_error (join "" ["unknown family: " family]) ]]]]]]
+]]
+
+# ----------------------------------------------------------------------------
+# Spec engine — validate a spec map (parser-as-data), run it over a source.
+# ----------------------------------------------------------------------------
+# validate a spec value into a normalized spec Map {family opts fn? detect? doc?}
+# or raise sift_spec_error. A Function value is sugar for {family:'fn' fn:v}.
+def sift-spec-from fn [[v:Any] [Map] [
+  if (v is Function) [ sift-validate-fn v  {} set (quote family) fn/q set (quote fn) v set (quote opts) None ] [
+    if (v is Map) [ sift-spec-from-map v ] [
+      raise sift_spec_error "spec must be a map or a function" ]
+  ]
+]]
+
+def sift-spec-from-map fn [[m:Map] [Map] [
+  def badkey fn [[k:String acc:Any] [Any] [ if ((sift-spec-keys get k) is None) [raise sift_spec_error (join "" ["unknown spec key: " k])] [acc] ]]
+  fold [badkey] (keys m) None
+  def fam-v (m get "family")
+  if (fam-v is None) [ raise sift_spec_error "spec is missing 'family'" ] [
+    def family (convert String fam-v)
+    if ((family neq "fn") and (sift-known-family family not)) [ raise sift_spec_error (join "" ["unknown family: " family]) ] [
+      def opts0 (m get "opts")
+      def opts1 (if (opts0 is None) [None] [ if (opts0 is Map) [opts0] [raise sift_spec_error "opts must be a map"] ])
+      def opts2 (sift-fold-fields m opts1)
+      def bse ({} set (quote family) (convert Atom family) set (quote opts) opts2)
+      def with-fn (if (family eq "fn") [sift-spec-add-fn m bse] [bse])
+      def with-detect (sift-read-detect m with-fn)
+      def dv (m get "doc")
+      if (dv is None) [with-detect] [with-detect set (quote doc) (convert String dv)]
+    ]
+  ]
+]]
+
+# fold a top-level `fields` onto opts.fields (clashing with opts.fields errors).
+def sift-fold-fields fn [[m:Map opts:Any] [Any] [
+  def fv (m get "fields")
+  if (fv is None) [opts] [
+    def om (if (opts is Map) [opts] [{}])
+    if ((om get "fields") is None not) [ raise sift_spec_error "fields given both top-level and in opts" ]
+      [ om set (quote fields) fv ]
+  ]
+]]
+
+def sift-spec-add-fn fn [[m:Map bse:Map] [Map] [
+  def fn-v (m get "fn")
+  if (fn-v is None) [ raise sift_spec_error "family:'fn' spec is missing 'fn'" ]
+    [ sift-validate-fn fn-v  bse set (quote fn) fn-v ]
+]]
+
+# an fn parser must accept [source opts:Map …].
+def sift-validate-fn fn [[v:Any] [Any] [
+  if (v is Function) [None] [ raise sift_spec_error "fn: expected a function value" ]
+]]
+
+def sift-read-detect fn [[m:Map spec:Map] [Map] [
+  def dv (m get "detect")
+  if (dv is None) [spec] [
+    if (dv is Map not) [ raise sift_spec_error "detect must be a map" ] [
+      def pv (dv get "path")
+      def s1 (if (pv is None) [spec] [ if (pv is List) [spec set (quote path) pv] [raise sift_spec_error "detect.path must be a list"] ])
+      def cv (dv get "cmd")
+      if (cv is None) [s1] [ sift-read-cmd cv s1 ]
+    ]
+  ]
+]]
+
+def sift-read-cmd fn [[cv:Any spec:Map] [Map] [
+  if (cv is Map not) [ raise sift_spec_error "detect.cmd must be a map" ] [
+    def mv (cv get "match")
+    def s1 (if (mv is None) [spec] [ if (mv is List) [spec set (quote cmd) mv] [raise sift_spec_error "detect.cmd.match must be a list"] ])
+    def av (cv get "argv")
+    if (av is None) [s1] [ if (av is List) [s1 set (quote argv) av] [raise sift_spec_error "detect.cmd.argv must be a list"] ]
+  ]
+]]
+
+# merge call-site opts over the spec's baked opts (call site wins).
+def sift-merge-opts fn [[baked:Any overlay:Any] [Map] [
+  def b (if (baked is Map) [baked] [{}])
+  def c (if (overlay is Map) [overlay] [{}])
+  def step fn [[k:String acc:Map] [Map] [ acc set (k) (c get k) ]]
+  fold [step] (keys c) b
+]]
+
+# run a normalized spec over the source with call-site opts.
+def sift-run-spec fn [[spec:Map src:String overlay:Any] [Any] [
+  def merged (sift-merge-opts spec.opts overlay)
+  def family (convert String spec.family)
+  if (family eq "fn") [ sift-call-fn spec.fn src merged ]
+    [ sift-run-family family src merged ]
+]]
+
+def sift-call-fn fn [[f:Any src:String opts:Map] [Any] [ f src opts ]]
+
+# ----------------------------------------------------------------------------
+# Detection.
+# ----------------------------------------------------------------------------
+def sift-basename fn [[p:String] [String] [
+  def parts (StringUtil.split "/" p {keepEmpty:true})
+  parts get ((size parts) sub 1)
+]]
+
+def sift-glob-match fn [[pattern:String s:String] [Boolean] [
+  if ((pattern mini re `[*]$`).ok)
+    [ def pre (slice 0 ((size pattern) sub 1) pattern)
+      (StringUtil.indexof pre s) eq 0 ]
+    [ pattern eq s ]
+]]
+
+# ----------------------------------------------------------------------------
+# The seven Sift words.
+# ----------------------------------------------------------------------------
+# validate a spec, returning [] or [{code detail}] (no raise) — the check word.
+def sift-issues fn [[v:Any] [List] [
+  do [ sift-spec-from v  [] ]
+  error [ ([e:Any] => [ [ {} set (quote code) e.code set (quote detail) e.message ] ]) ]
+]]
+
+# parse: kind name | inline spec | fn, with optional call-site opts.
+def sift-w-parse fn [
+  [kind:Any opts:Map source:String] [Any] [ sift-parse-do kind opts source ]
+  [kind:Any source:String] [Any] [ sift-parse-do kind None source ]
+  [kind:Any source:Map] [Any] [ sift-parse-do kind None (sift-source source) ]
+]
+
+def sift-parse-do fn [[kind:Any overlay:Any src:String] [Any] [
+  def spec (sift-resolve-kind kind)
+  sift-run-spec spec src overlay
+]]
+
+# resolve Sift.parse's first arg to a normalized spec.
+def sift-resolve-kind fn [[v:Any] [Map] [
+  if (v is Map) [ sift-spec-from v ] [
+    if (v is Function) [ sift-spec-from v ] [
+      def name (convert String v)
+      def spec (sift-catalog get name)
+      if (spec is None) [ raise sift_unknown_kind (join "" ["no such kind: " name]) ] [spec]
+    ]
+  ]
+]]
+
+# resolve a {src:…} source map to its String.
+def sift-source fn [[v:Any] [String] [
+  if (v is String) [v] [
+    def s (v get "src")
+    if (s is None) [ raise sift_bad_source "parse: source map must have a 'src' String field" ] [convert String s]
+  ]
+]]
+
+def sift-w-define fn [[name:Atom/q spec:Any] [] [
+  def nm (convert String name)
+  if ((nm mini re `^[A-Z]`).ok) [ raise sift_bad_name "define: parser name must be lowercase (capitalised names are types)" ] [
+    if (sift-known-family nm) [ raise sift_kind_exists (join "" ["a name that collides with a family is rejected: " nm]) ] [
+      if (sift-catalog has nm) [ raise sift_kind_exists (join "" ["parser " nm " is already registered"]) ] [
+        def spec (sift-spec-from spec)
+        sift-check-detect nm spec
+        sift-catalog set (nm) (spec set (quote name) (convert Atom nm))
+        sift-install-detect nm spec
+        None
+      ]
+    ]
+  ]
+]]
+
+# reject a detect claim already owned by another kind.
+def sift-check-detect fn [[name:String spec:Map] [Any] [
+  def paths (spec get "path")
+  def pstep fn [[p:String acc:Any] [Any] [
+    def owner (sift-path-detect get p)
+    if ((owner is None not) and (owner neq name)) [raise sift_detect_conflict (join "" ["path " p " already claimed by " owner])] [acc] ]]
+  if (paths is None) [None] [fold [pstep] paths None]
+  def cmds (spec get "cmd")
+  def cstep fn [[c:String acc:Any] [Any] [
+    def owner (sift-cmd-detect get c)
+    if ((owner is None not) and (owner neq name)) [raise sift_detect_conflict (join "" ["command " c " already claimed by " owner])] [acc] ]]
+  if (cmds is None) [None] [fold [cstep] cmds None]
+]]
+
+def sift-install-detect fn [[name:String spec:Map] [Any] [
+  def paths (spec get "path")
+  if (paths is None) [None] [each [ ([p:String] => [sift-path-detect set (p) name]) ] paths]
+  def cmds (spec get "cmd")
+  if (cmds is None) [None] [each [ ([c:String] => [sift-cmd-detect set (c) name]) ] cmds]
+  None
+]]
+
+def sift-w-kinds fn [[] [List] [ each [convert Atom] (keys sift-catalog) ]]
+
+def sift-w-families fn [[] [List] [ sift-families-list ]]
+
+# spec: the registered spec map for a kind (fn kinds elide fn:).
+def sift-w-spec fn [[name:Atom/q] [Map] [
+  def nm (convert String name)
+  def spec (sift-catalog get nm)
+  if (spec is None) [ raise sift_unknown_kind (join "" ["no such kind: " nm]) ] [ sift-spec-project spec ]
+]]
+
+def sift-spec-project fn [[spec:Map] [Map] [
+  def bse ({} set (quote name) (spec get "name") set (quote family) (spec get "family"))
+  def o (spec get "opts")
+  def b1 (if (o is Map) [bse set (quote opts) o] [bse])
+  def d (spec get "doc")
+  if (d is None) [b1] [b1 set (quote doc) d]
+]]
+
+def sift-w-detect fn [[arg:Any] [Any] [
+  if (arg is List) [
+    if ((size arg) eq 0) [None] [
+      def bse (sift-basename (convert String (arg get 0)))
+      def k (sift-cmd-detect get bse)
+      if (k is None) [None] [convert Atom k]
+    ]
+  ] [
+    def path (convert String arg)
+    def globs (keys sift-path-detect)
+    def step fn [[g:String acc:Any] [Any] [ if (acc is None not) [acc] [ if (sift-glob-match g path) [convert Atom (sift-path-detect get g)] [None] ] ]]
+    fold [step] globs None
+  ]
+]]
+
+def sift-w-check fn [[spec:Any] [List] [ sift-issues spec ]]
+
+# ----------------------------------------------------------------------------
+# Seed the six families as catalog kinds (degenerate specs — all options come
+# from the call site), in order.
+# ----------------------------------------------------------------------------
+each [ ([f:Atom] => [ sift-catalog set (convert String f) ({} set (quote name) f set (quote family) f set (quote opts) None) ]) ] sift-families-list
+
+export "Sift" {
+  parse:    sift-w-parse/r
+  define:   sift-w-define/r
+  kinds:    sift-w-kinds/r
+  families: sift-w-families/r
+  spec:     sift-w-spec/r
+  detect:   sift-w-detect/r
+  check:    sift-w-check/r
+}
