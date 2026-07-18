@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2266,6 +2266,25 @@ modules keep plain names.
 > mounted filesystem is not watchable, and the `{mem}`/`{overlay}` context
 > toggles still take precedence. `IO.unmount` restores the previous
 > filesystem.
+>
+> **Mounting a ZIP archive.** `IO.mount` also accepts a **Pathon**: a
+> `.zip` path (or any path with `{zip:true}`) mounts the archive as a
+> read-only filesystem, read through the effective FileOps — so an archive
+> staged in `{mem}` is itself mountable, and policy gates the read. Every
+> mutation on a mounted archive refuses read-only; directory entries the
+> zip omits are synthesised, and a read-only `IO.open` handle supports
+> `IO.seek`/positioned reads. `{writable:true}` layers the archive as the
+> read-only lower of a fresh in-memory overlay — a copy-on-write "editable
+> zip" whose edits live only in memory (the archive on disk never changes):
+>
+> ```
+> import "aql:io"
+> IO.mount (make Pathon "bundle.zip")        # read-only
+> IO.read (make Pathon "manifest.json")      # served from the archive
+> IO.unmount
+> IO.mount (make Pathon "bundle.zip") {writable:true}
+> IO.write (make Pathon "scratch.txt") "x" drop   # lands in the mem upper
+> ```
 >
 > `list` and `remove` are different: rather than a namespaced `IO.list` /
 > `IO.remove`, importing `aql:io` **extends the core `list` / `remove`

@@ -28,7 +28,7 @@ func init() {
 		"mmap":     "Map a file's bytes into a Mmap region; {offset, length, writable}. read/write/flush/close drive it.",
 		"watch":    "Run a body per change event on a path ({recursive match} opts); returns a Watcher.",
 		"unwatch":  "Stop a Watcher, closing its event stream.",
-		"mount":    "Install a map of AQL handler fns as the filesystem (the FileOps bridge).",
+		"mount":    "Install a filesystem: a handler-fn map (the FileOps bridge), or a .zip archive Pathon (read-only, {writable:true} for copy-on-write).",
 		"unmount":  "Restore the filesystem that was active before mount.",
 	})
 }

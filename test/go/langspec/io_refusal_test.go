@@ -77,6 +77,9 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		// P6: watch {recursive match} + coalesced overflow event
 		`import "aql:io"  IO.watch (make Pathon "d") [drop]`,
 		`import "aql:io"  IO.watch (make Pathon "d") [drop] {recursive:true match:"*.txt"}`,
+		// P7: zip-archive-as-filesystem (the Pathon form of mount)
+		`import "aql:io"  IO.mount (make Pathon "a.zip")`,
+		`import "aql:io"  IO.mount (make Pathon "a.zip") {zip:true writable:true}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

@@ -343,13 +343,21 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			},
 		},
 		{
-			// mount installs a map of AQL Function handlers as the host
-			// filesystem (the AQL→FileOps bridge); unmount restores the
-			// previous one. See io_mount.go for the handler contract.
+			// mount installs a filesystem as the host FileOps; unmount
+			// restores the previous one. A handler MAP is the AQL→FileOps
+			// bridge; a Pathon (a ".zip" path or {zip:true}) mounts a
+			// read-only ZIP archive, or a copy-on-write overlay over it with
+			// {writable:true}. See io_mount.go for both contracts.
 			Name: "mount",
 			Signatures: []Signature{
 				{Args: []*Type{TMap}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					return doMountWord(a, r)
+				}), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountZipWord(a, r, a[1])
+				}), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountZipWord(a, r, Value{})
 				}), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},

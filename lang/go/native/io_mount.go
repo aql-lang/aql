@@ -487,6 +487,48 @@ func doMountWord(args []Value, r *Registry) ([]Value, error) {
 	return nil, nil
 }
 
+// doMountZipWord implements the Pathon form of IO.mount: it reads a ZIP
+// archive (engaged by a ".zip" path or an explicit {zip:true}) through the
+// EFFECTIVE FileOps — so an archive staged in the mem backend is mountable,
+// and policy gates the read — and installs a read-only ZipFileOps as the
+// host filesystem. {writable:true} layers the archive as the read-only lower
+// of a fresh in-memory overlay, giving copy-on-write edits that live only in
+// memory. IO.unmount restores the previous FileOps, exactly like a handler
+// mount.
+func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
+	target := extractPath(args[0])
+	zipIntent := strings.HasSuffix(strings.ToLower(target), ".zip")
+	writable := false
+	if IsConcrete(opts) {
+		if mapBoolOpt(opts, "zip", false) {
+			zipIntent = true
+		}
+		writable = mapBoolOpt(opts, "writable", false)
+	}
+	if !zipIntent {
+		return nil, r.AqlErrorHint("mount_error",
+			fmt.Sprintf("mount: %q is not a .zip archive", target), "mount",
+			"pass a .zip path or {zip:true} to mount an archive, or a handler map to mount an AQL filesystem")
+	}
+	data, err := EffectiveFileOps(r).ReadFile(target)
+	if err != nil {
+		return nil, r.AqlError("mount_error", fmt.Sprintf("mount: %v", err), "mount")
+	}
+	zfs, err := capabilities.NewZip(data)
+	if err != nil {
+		return nil, r.AqlError("mount_error", fmt.Sprintf("mount: not a valid zip archive: %v", err), "mount")
+	}
+	var ops capabilities.FileOps = zfs
+	if writable {
+		ops = capabilities.NewOverlay(capabilities.NewMem(), zfs)
+	}
+	prevOps, hadOps, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
+	prev := &mountedPrev{ops: prevOps, hadOps: hadOps}
+	_ = r.Capabilities.Set(mountPrevKey, prev)
+	SetHostFileOps(r, ops)
+	return nil, nil
+}
+
 // doUnmountWord implements IO.unmount: restore the FileOps saved by the
 // most recent mount.
 func doUnmountWord(_ []Value, r *Registry) ([]Value, error) {

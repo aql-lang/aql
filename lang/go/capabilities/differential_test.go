@@ -54,6 +54,8 @@ func classify(err error) string {
 	}
 	msg := err.Error()
 	switch {
+	case strings.Contains(msg, "read-only"):
+		return "read-only"
 	case strings.Contains(msg, "not empty"):
 		return "not-empty"
 	case strings.Contains(msg, "not a directory"):
@@ -524,6 +526,7 @@ func TestDifferentialErrClassTable(t *testing.T) {
 		"not-a-directory": errMemNotDir,
 		"is-a-directory":  errMemIsDir,
 		"too-many-links":  errMemTooManyLinks,
+		"read-only":       errReadOnlyFS,
 		"other:boom":      errors.New("boom"),
 	}
 	for want, err := range cases {

@@ -244,6 +244,18 @@ import "aql:io"  IO.mount {write: ([p:Pathon d:Any] => [none])}	ERROR:mount	a mo
 import "aql:io"  IO.mount {read: 42}	ERROR:mount	every mounted handler must be a Function
 import "aql:io"  IO.unmount	ERROR:unmount	unmount with nothing mounted is refused
 #
+# §18z  zip-as-filesystem — the Pathon form of `IO.mount`: a ".zip" path (or
+#       any path with {zip:true}) mounts a read-only ZIP archive, read through
+#       the effective FileOps; {writable:true} wraps it as the read-only lower
+#       of a fresh in-memory overlay (copy-on-write edits, memory-only). Every
+#       mutation on a bare archive refuses read-only. A ZIP archive is binary
+#       (with per-entry CRCs) and cannot be spelled as a TSV literal, so the
+#       positive read/list/stat/open path and the read-only refusal are pinned
+#       with real archives in lang/go/capabilities/zipfs_test.go and
+#       lang/go/native/io_mount_zip_test.go; the deterministic spec surface is
+#       the intent-required refusal below.
+import "aql:io"  IO.mount (make Pathon "plain.txt")	ERROR:mount	a Pathon mount needs a .zip path or {zip:true} — a bare non-archive path is refused
+#
 # §17  watch — subscribe to change events on a Pathon: `IO.watch p [body]`
 #      runs the body once per event (PUSH style, like TimeUtil.interval)
 #      with the {op path} record on the stack, and returns a Watcher
