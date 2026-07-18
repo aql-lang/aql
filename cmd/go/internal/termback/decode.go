@@ -10,13 +10,14 @@ import (
 )
 
 // decodeInput turns the raw-mode byte stream into tuikit events. It
-// runs until read error/EOF and closes the channel on exit; a Close on
-// the backend flips `closed` so late events are dropped rather than
+// runs until read error/EOF; the CALLER closes the channel after it
+// returns (the backend does so under its event latch, so the resize
+// watcher's concurrent sends can never hit a closed channel). A Close
+// on the backend flips `closed` so late events are dropped rather than
 // delivered to a restored terminal. A lone ESC is delivered as the esc
 // key when no continuation byte is already buffered (modern terminals
 // send CSI sequences atomically; there is no ESC timeout).
 func decodeInput(br *bufio.Reader, events chan<- tuikit.Event, closed *atomic.Bool) {
-	defer close(events)
 	deliver := func(ev tuikit.Event) bool {
 		if closed.Load() {
 			return false

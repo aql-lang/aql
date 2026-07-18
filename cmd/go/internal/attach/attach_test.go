@@ -415,3 +415,31 @@ func TestAttachSeamDefaults(t *testing.T) {
 		t.Fatal("malformed-address dial succeeded")
 	}
 }
+
+// A local resize re-geometries subsequent frame renders (review
+// finding: the client used the Open-time dimensions forever, clipping
+// resized sessions until reconnect).
+func TestAttachResizeUpdatesRenderGeometry(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(10, 3)
+	err := runSession(t, vb, nil, func(s *wireEnd) {
+		acceptHello(t, s)
+		s.send(t, map[string]any{"tag": "frame", "tree": map[string]any{"w": "text", "text": "a"}})
+		// the viewer grows; the server hears about it…
+		vb.Inject(tuikit.Event{Tag: "resize", Cols: 30, Rows: 6})
+		if rs := s.recv(t); rs["tag"] != "resize" || rs["cols"] != float64(30) {
+			t.Errorf("resize upstream = %v", rs)
+		}
+		// …and the NEXT frame lays out at the new size
+		s.send(t, map[string]any{"tag": "frame", "tree": map[string]any{"w": "text", "text": "b"}})
+		s.send(t, map[string]any{"tag": "quit"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vb.Presents() != 2 {
+		t.Fatalf("presents = %d", vb.Presents())
+	}
+	if last := vb.Screen(); len(last) != 6 || len([]rune(last[0])) != 30 {
+		t.Fatalf("post-resize frame = %dx%d rows, want 30x6", len([]rune(last[0])), len(last))
+	}
+}

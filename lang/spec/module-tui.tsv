@@ -77,6 +77,7 @@ import "aql:tui"  Tui.viewport 5	ERROR:uncalled_function	viewport requires a wid
 import "aql:tui"  Tui.style 5 {}	ERROR:uncalled_function	style requires a base Map
 import "aql:tui"  Tui.edit 5 {}	ERROR:uncalled_function	edit requires an input widget Map
 import "aql:tui"  Tui.focusable 5	ERROR:uncalled_function	focusable requires a widget Map tree
+import "aql:tui"  Tui.text "ok" {w: "viewport"}	ERROR:w is reserved	the options overlay cannot override the widget kind
 #
 # §7  standalone terminal utilities (design/TUI-UTILITIES.0.md) — pure,
 #     no backend, no policy scope; escape bytes stay out of this file

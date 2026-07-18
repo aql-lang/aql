@@ -451,3 +451,42 @@ func TestRenderSmallHelpers(t *testing.T) {
 		t.Errorf("nil cell = %q", got)
 	}
 }
+
+// An out-of-range cursor over a short list must clamp, not panic
+// (review finding: cursor 10 over one item in a 10-row window drove
+// the scroll offset negative and indexed below zero).
+func TestScrollCursorBeyondShortList(t *testing.T) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			t.Fatalf("render panicked: %v", rec)
+		}
+	}()
+	for _, tree := range []map[string]any{
+		{"w": "list-view", "items": []any{"only"}, "cursor": 10},
+		{"w": "table", "columns": []any{map[string]any{"title": "c"}},
+			"rows": []any{[]any{"only"}}, "cursor": 10},
+	} {
+		res, err := Render(tree, 20, 10)
+		if err != nil {
+			t.Fatalf("%v render = %v", tree["w"], err)
+		}
+		joined := ""
+		for y := 0; y < res.Frame.Rows; y++ {
+			for x := 0; x < res.Frame.Cols; x++ {
+				if c, ok := res.Frame.At(x, y); ok {
+					joined += c.Content
+				}
+			}
+		}
+		if !strings.Contains(joined, "onl") { // table columns may truncate
+			t.Fatalf("%v clamped frame lost its row: %q", tree["w"], joined)
+		}
+	}
+	// the pure helper's clamp arms
+	if got := scrollOffset(10, 1, 10); got != 0 {
+		t.Fatalf("scrollOffset(10,1,10) = %d, want 0", got)
+	}
+	if got := scrollOffset(5, 100, 3); got != 3 {
+		t.Fatalf("scrollOffset(5,100,3) = %d, want 3", got)
+	}
+}

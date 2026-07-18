@@ -280,7 +280,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	d := &tuiDriver{
 		reg: r, app: app, proc: proc,
 		events: hub.events,
-		paint:  tuiWirePaint(hub),
+		paint:  tuiWirePaint(r, hub),
 		// finish releases only the LISTENER: the goodbye below still
 		// writes the quit line to live viewers on every exit path
 		finish: func() { _ = ln.Close() },
@@ -299,11 +299,17 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 // tuiWirePaint is the remote half of the renderer seam: the view tree
 // is NOT laid out here — it goes down the wire whole (§6.2) and each
-// attach client renders it locally at its own size. Losing the last
-// viewer of a non-reattach session is the graceful §6.3
+// attach client renders it locally at its own size. The tree is still
+// VALIDATED here (a throwaway render at the session's dims): a bad
+// view raises bad_widget at the serving app, exactly like Tui.run,
+// instead of a layout failure disconnecting every client. Losing the
+// last viewer of a non-reattach session is the graceful §6.3
 // disconnect-quit.
-func tuiWirePaint(hub *tuiViewerHub) func(native.Value, int, int) error {
-	return func(tree native.Value, _, _ int) error {
+func tuiWirePaint(r *native.Registry, hub *tuiViewerHub) func(native.Value, int, int) error {
+	return func(tree native.Value, cols, rows int) error {
+		if _, rErr := tuikit.Render(native.ValueToAny(tree), cols, rows); rErr != nil {
+			return r.AqlError("bad_widget", "serve: "+rErr.Error(), "serve")
+		}
 		data, mErr := json.Marshal(jsonReady(native.ValueToAny(tree)))
 		if mErr != nil { //covergate:allow json.Marshal cannot fail on the jsonReady-projected tree shapes the renderer accepts; kept as the io seam's defensive twin (§modules)
 			return mErr

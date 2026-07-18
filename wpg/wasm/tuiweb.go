@@ -24,6 +24,8 @@ import (
 // webBackend implements tuikit.Backend on the playground page. One
 // instance per Tui.open/run; the LAST opened instance owns the
 // aqlTuiKey/aqlTuiResize input hooks (a playground shows one app).
+// mu serializes event sends with Close: a JS input callback must never
+// send on a channel the app goroutine is concurrently closing.
 type webBackend struct {
 	events chan tuikit.Event
 	cols   int
@@ -71,11 +73,14 @@ func (w *webBackend) Open(opts tuikit.OpenOpts) (tuikit.Info, error) {
 }
 
 func (w *webBackend) Close() error {
+	w.mu.Lock()
 	if w.closed.Swap(true) {
+		w.mu.Unlock()
 		return nil
 	}
-	callHook("aqlTuiClose")
 	close(w.events)
+	w.mu.Unlock()
+	callHook("aqlTuiClose")
 	return nil
 }
 
@@ -109,12 +114,19 @@ func (w *webBackend) Bell() error {
 }
 
 // deliver feeds one event to the CURRENT backend, shedding on overflow
-// (the run loop coalesces anyway).
+// (the run loop coalesces anyway). The closed re-check happens under
+// the same mutex Close holds while closing the channel, so a late JS
+// callback drops its event instead of panicking on a closed send.
 func webDeliver(ev tuikit.Event) {
 	webCurrentMu.Lock()
 	w := webCurrent
 	webCurrentMu.Unlock()
-	if w == nil || w.closed.Load() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed.Load() {
 		return
 	}
 	select {

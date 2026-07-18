@@ -27,6 +27,10 @@ func buildWidget(kind string, fields []string, values []native.Value, opts nativ
 			return nil, r.AqlError("tui_error", word+": options must be a Map", word)
 		}
 		for _, k := range om.Keys() {
+			if k == "w" {
+				return nil, r.AqlError("tui_error",
+					word+": w is reserved (the constructor sets the widget kind)", word)
+			}
 			v, _ := om.Get(k)
 			m.Set(k, v)
 		}

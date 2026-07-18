@@ -117,6 +117,11 @@ func attach(addr, token string) error {
 			if !evOK {
 				return nil // local terminal gone
 			}
+			if ev.Tag == "resize" && ev.Cols > 0 && ev.Rows > 0 {
+				// later frames lay out at the NEW local geometry; the
+				// event still goes upstream so the app can react too
+				info.Cols, info.Rows = ev.Cols, ev.Rows
+			}
 			if err := writeLine(eventWire(ev)); err != nil {
 				return err
 			}

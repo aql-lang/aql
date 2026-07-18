@@ -376,23 +376,41 @@ func TestTuiWirePaintHub(t *testing.T) {
 	if _, ok := hub.admit(server); !ok {
 		t.Fatal("first admit refused")
 	}
-	paint := tuiWirePaint(hub)
-	if err := paint(native.NewString("x"), 4, 2); err != nil {
+	reg, rErr := native.DefaultRegistry()
+	if rErr != nil {
+		t.Fatal(rErr)
+	}
+	paint := tuiWirePaint(reg, hub)
+	// a tree the layout core rejects raises bad_widget HERE, at the
+	// serving app, before any viewer sees a byte of it
+	if err := paint(native.NewString("x"), 4, 2); err == nil || !strings.Contains(err.Error(), "bad_widget") {
+		t.Fatalf("invalid tree = %v, want bad_widget", err)
+	}
+	if err := paint(wireTextTree("x"), 4, 2); err != nil {
 		t.Fatal(err)
 	}
-	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":1,\"tree\":\"x\"}" {
+	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":1,\"tree\":{\"text\":\"x\",\"w\":\"text\"}}" {
 		t.Fatalf("first frame = %s", got)
 	}
 	// the identical tree is suppressed; the next change is seq 2
-	if err := paint(native.NewString("x"), 4, 2); err != nil {
+	if err := paint(wireTextTree("x"), 4, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := paint(native.NewString("y"), 4, 2); err != nil {
+	if err := paint(wireTextTree("y"), 4, 2); err != nil {
 		t.Fatal(err)
 	}
-	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":2,\"tree\":\"y\"}" {
+	if got := <-lines; got != "{\"tag\":\"frame\",\"seq\":2,\"tree\":{\"text\":\"y\",\"w\":\"text\"}}" {
 		t.Fatalf("post-suppression frame = %s", got)
 	}
+}
+
+// wireTextTree builds the minimal valid widget tree the wire paint's
+// validation admits.
+func wireTextTree(s string) native.Value {
+	m := native.NewOrderedMap()
+	m.Set("w", native.NewString("text"))
+	m.Set("text", native.NewString(s))
+	return native.NewMap(m)
 }
 
 // Losing viewers mid-write: the deadline drops a stuck viewer; a
@@ -411,7 +429,11 @@ func TestTuiWirePaintViewerLoss(t *testing.T) {
 	if _, ok := hub.admit(s1); !ok {
 		t.Fatal("admit refused")
 	}
-	if err := tuiWirePaint(hub)(native.NewString("z"), 4, 2); !errors.Is(err, errTuiViewerGone) {
+	reg, rErr := native.DefaultRegistry()
+	if rErr != nil {
+		t.Fatal(rErr)
+	}
+	if err := tuiWirePaint(reg, hub)(wireTextTree("z"), 4, 2); !errors.Is(err, errTuiViewerGone) {
 		t.Fatalf("stuck last viewer = %v", err)
 	}
 
@@ -422,12 +444,12 @@ func TestTuiWirePaintViewerLoss(t *testing.T) {
 	if _, ok := hub2.admit(s2); !ok {
 		t.Fatal("admit refused")
 	}
-	paint2 := tuiWirePaint(hub2)
-	if err := paint2(native.NewString("z"), 4, 2); err != nil {
+	paint2 := tuiWirePaint(reg, hub2)
+	if err := paint2(wireTextTree("z"), 4, 2); err != nil {
 		t.Fatalf("reattach stuck viewer = %v", err)
 	}
 	// headless paints keep storing; the title sticks too
-	if err := paint2(native.NewString("w"), 4, 2); err != nil {
+	if err := paint2(wireTextTree("w"), 4, 2); err != nil {
 		t.Fatalf("headless paint = %v", err)
 	}
 	hub2.setTitle("back")
@@ -451,7 +473,7 @@ func TestTuiWirePaintViewerLoss(t *testing.T) {
 		t.Fatalf("replayed title = %s", got)
 	}
 	hub2.replay(0) // an unknown id replays nothing: the no-op arm
-	if got := <-lines3; !strings.Contains(got, "\"tree\":\"w\"") {
+	if got := <-lines3; !strings.Contains(got, "\"tree\":{\"text\":\"w\"") {
 		t.Fatalf("replayed frame = %s", got)
 	}
 	// a stuck viewer is dropped by a title broadcast as well: nobody
@@ -589,6 +611,59 @@ func TestTuiServeAppErrorPropagates(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not propagate the app error")
+	}
+}
+
+// A view whose tree the layout core rejects fails AT THE SERVING APP:
+// serve raises bad_widget exactly like Tui.run would, and the viewer
+// gets the graceful quit line — not a mid-frame disconnect (client-side
+// layout is about geometry freedom, never about skipping validation).
+func TestTuiServeBadViewRaisesServerSide(t *testing.T) {
+	oldBound := tuiServeBound
+	t.Cleanup(func() { tuiServeBound = oldBound })
+	bound := make(chan net.Addr, 1)
+	tuiServeBound = func(a net.Addr) { bound <- a }
+	errs := make(chan error, 1)
+	go func() {
+		reg, rErr := native.DefaultRegistry()
+		if rErr != nil {
+			errs <- rErr
+			return
+		}
+		_, sErr := runTuiStepsOn(t, reg, []string{
+			`import "aql:tui"`,
+			`def app {init: 0
+			  update: ([s:Any e:Map] => [ if (e.tag eq "key") [ Tui.quit s ] [ s ] ])
+			  view: ([s:Any] => [ {w: "zeppelin"} ])}`,
+			`Tui.serve {tcp: 0 token: "s3cret"} app`,
+		})
+		errs <- sErr
+	}()
+	var addr net.Addr
+	select {
+	case addr = <-bound:
+	case err := <-errs:
+		t.Fatalf("serve failed before binding: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve never bound")
+	}
+	c := dialWire(t, addr)
+	defer c.conn.Close()
+	c.send(t, map[string]any{"tag": "attach", "token": "s3cret", "cols": 8, "rows": 2, "proto": 1})
+	if msg := c.recv(t); msg["tag"] != "accept" {
+		t.Fatalf("handshake = %v", msg)
+	}
+	select {
+	case sErr := <-errs:
+		if sErr == nil || !strings.Contains(sErr.Error(), "bad_widget") {
+			t.Fatalf("serve error = %v, want bad_widget", sErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve did not refuse the bad view")
+	}
+	// the viewer's last line is the graceful goodbye, not a dead socket
+	if msg := c.recv(t); msg["tag"] != "quit" {
+		t.Fatalf("viewer finale = %v, want quit", msg)
 	}
 }
 
@@ -823,7 +898,22 @@ func TestTuiServeReattach(t *testing.T) {
 	}
 	a.conn.Close() // the app stays alive, headless
 
-	b := attachViewer(t, addr)
+	// the hub learns of the detach from its reader's EOF, so an instant
+	// re-attach can race it into a busy deny — retry like a real client
+	var b *wireClient
+	for i := 0; ; i++ {
+		b = dialWire(t, addr)
+		b.send(t, map[string]any{"tag": "attach", "token": "s3cret", "cols": 10, "rows": 3, "proto": 1})
+		msg := b.recv(t)
+		if msg["tag"] == "accept" {
+			break
+		}
+		b.conn.Close()
+		if msg["tag"] != "deny" || msg["why"] != "busy" || i > 40 {
+			t.Fatalf("reattach handshake = %v", msg)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 	defer b.conn.Close()
 	// the resumed viewer replays the title and the CURRENT frame
 	if msg := b.recvUntil(t, "title"); msg["text"] != "served" {

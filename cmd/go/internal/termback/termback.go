@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/term"
 
@@ -31,7 +32,25 @@ var (
 	getSize    = term.GetSize
 	ttyIn      = func() (io.Reader, int) { return os.Stdin, int(os.Stdin.Fd()) }
 	ttyOut     = func() (io.Writer, int) { return os.Stdout, int(os.Stdout.Fd()) }
+	// resizeSignal yields a channel that ticks when the terminal size
+	// changes (SIGWINCH on unix; nil where unsupported). stop ends the
+	// underlying notification.
+	resizeSignal = platformResizeSignal
+	// interruptRead unblocks a decoder blocked in Read during Close so
+	// teardown never eats the NEXT keystroke typed after the app exits.
+	// Best-effort: a deadline poke on real files, a no-op elsewhere.
+	interruptRead = func(in io.Reader) {
+		if f, ok := in.(*os.File); ok {
+			_ = f.SetReadDeadline(time.Now())
+		}
+	}
 )
+
+// ttyBusy is the process-wide single-owner latch: one raw-mode
+// takeover of the process TTY at a time. A second concurrent Open —
+// two `Tui.open {}` calls, or an open racing a running app — fails
+// loudly instead of stacking raw modes and competing input decoders.
+var ttyBusy atomic.Bool
 
 // Spec is what the CLI registers on every registry it builds
 // (buildrt / the REPL): the words resolve it at dispatch time.
@@ -46,13 +65,22 @@ type Backend struct {
 	out   io.Writer
 	outFD int
 
-	mu       sync.Mutex
-	rawState *term.State
-	prev     *tuikit.Frame
-	events   chan tuikit.Event
-	open     bool
-	closed   atomic.Bool
-	mouse    bool
+	mu        sync.Mutex
+	rawState  *term.State
+	prev      *tuikit.Frame
+	events    chan tuikit.Event
+	open      bool
+	closed    atomic.Bool
+	mouse     bool
+	stopWinch chan struct{}
+
+	// evMu serializes the resize watcher's sends with the decoder-exit
+	// close of the events channel; evClosed is the under-lock latch.
+	evMu     sync.Mutex
+	evClosed bool
+	// sizeFn is the getSize seam captured at Open: the watcher runs in
+	// the background, so it must never read the swappable package var.
+	sizeFn func(int) (int, int, error)
 }
 
 // New builds a backend over the process TTY (seam-resolved).
@@ -84,14 +112,19 @@ func (b *Backend) Open(opts tuikit.OpenOpts) (tuikit.Info, error) {
 	if !isTerminal(b.outFD) {
 		return tuikit.Info{}, errors.New("not_a_tty: stdout is not a terminal")
 	}
+	if !ttyBusy.CompareAndSwap(false, true) {
+		return tuikit.Info{}, errors.New("terminal is already owned by another open (close it first)")
+	}
 	state, err := makeRaw(b.inFD)
 	if err != nil {
+		ttyBusy.Store(false)
 		return tuikit.Info{}, fmt.Errorf("raw mode: %w", err)
 	}
 	b.rawState = state
 	cols, rows, err := getSize(b.outFD)
 	if err != nil {
 		_ = restore(b.inFD, b.rawState)
+		ttyBusy.Store(false)
 		return tuikit.Info{}, fmt.Errorf("terminal size: %w", err)
 	}
 	var setup strings.Builder
@@ -105,18 +138,55 @@ func (b *Backend) Open(opts tuikit.OpenOpts) (tuikit.Info, error) {
 	}
 	if _, err := io.WriteString(b.out, setup.String()); err != nil {
 		_ = restore(b.inFD, b.rawState)
+		ttyBusy.Store(false)
 		return tuikit.Info{}, err
 	}
 	b.events = make(chan tuikit.Event, 64)
 	b.open = true
-	go decodeInput(bufio.NewReader(b.in), b.events, &b.closed)
+	b.stopWinch = make(chan struct{})
+	go func() {
+		decodeInput(bufio.NewReader(b.in), b.events, &b.closed)
+		b.evMu.Lock()
+		b.evClosed = true
+		close(b.events)
+		b.evMu.Unlock()
+	}()
+	b.sizeFn = getSize
+	if winch := resizeSignal(b.stopWinch); winch != nil {
+		go b.watchResize(winch)
+	}
 	return tuikit.Info{Cols: cols, Rows: rows}, nil
 }
 
+// watchResize turns size-change ticks into resize events so real-TTY
+// apps hear window resizes exactly like virtual/remote ones do. Sends
+// go through the event latch: once the decoder has exited and closed
+// the channel, a late tick is dropped instead of panicking.
+func (b *Backend) watchResize(winch <-chan struct{}) {
+	for range winch {
+		if b.closed.Load() {
+			return
+		}
+		cols, rows, err := b.sizeFn(b.outFD)
+		if err != nil {
+			continue
+		}
+		b.evMu.Lock()
+		if !b.evClosed {
+			select {
+			case b.events <- tuikit.Event{Tag: "resize", Cols: cols, Rows: rows}:
+			default:
+			}
+		}
+		b.evMu.Unlock()
+	}
+}
+
 // Close implements tuikit.Backend: restore everything; idempotent. The
-// decoder goroutine ends on its next read (EOF or one more byte); the
-// events channel is closed by the decoder's defer, not here, so a
-// blocked reader never races a close.
+// decoder goroutine ends on its next read (EOF, one more byte, or the
+// interruptRead deadline poke); its wrapper then closes the events
+// channel under the event latch, so neither a blocked reader nor a
+// concurrent resize tick ever races the close.
 func (b *Backend) Close() error {
 	if b.closed.Swap(true) {
 		return nil
@@ -134,6 +204,9 @@ func (b *Backend) Close() error {
 	_, wErr := io.WriteString(b.out, teardown.String())
 	rErr := restore(b.inFD, b.rawState)
 	b.open = false
+	close(b.stopWinch)
+	interruptRead(b.in)
+	ttyBusy.Store(false)
 	if wErr != nil {
 		return wErr
 	}
@@ -177,7 +250,10 @@ func (b *Backend) Present(f *tuikit.Frame) error {
 			if cell.Content == "" {
 				out.WriteString(" ")
 			} else {
-				out.WriteString(cell.Content)
+				// cell content is PRINTABLE text only: C0/DEL controls
+				// smuggled through widget data must not reach the TTY
+				// (cursor moves, OSCs) and desynchronize the diff
+				out.WriteString(sanitizeCell(cell.Content))
 			}
 		}
 		out.WriteString(tuikit.SGRReset)
@@ -187,6 +263,27 @@ func (b *Backend) Present(f *tuikit.Frame) error {
 	}
 	b.prev = f.Clone()
 	return nil
+}
+
+// sanitizeCell replaces C0 control runes and DEL with spaces; styling
+// stays on the Style/SGR path, never inside cell content.
+func sanitizeCell(s string) string {
+	clean := true
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // SetCursor implements tuikit.Backend.

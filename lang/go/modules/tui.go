@@ -501,13 +501,31 @@ func tuiPrintAtHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 			return nil, err
 		}
 	}
-	// Stage P1 paints rune-per-cell (width 1); grapheme clustering and
-	// wide-rune widths arrive with the P2 layout core (TUI.0.md §10).
+	// Cells carry real terminal widths (same idiom as render.go's
+	// drawText): wide runes take two columns with a Width -1
+	// continuation cell, combining marks join the previous cell.
 	ts.mu.Lock()
-	x := int(x64)
+	x, y := int(x64), int(y64)
+	start := x
 	for _, rn := range text {
-		ts.grid.Set(x, int(y64), tuikit.Cell{Content: string(rn), Width: 1, Style: st})
-		x++
+		w := tuikit.RuneWidth(rn)
+		if w == 0 {
+			if x-1 >= start {
+				if c, ok := ts.grid.At(x-1, y); ok && c.Content != "" {
+					c.Content += string(rn)
+					ts.grid.Set(x-1, y, c)
+				}
+			}
+			continue
+		}
+		if x+w > ts.grid.Cols {
+			break
+		}
+		ts.grid.Set(x, y, tuikit.Cell{Content: string(rn), Width: int8(w), Style: st})
+		if w == 2 {
+			ts.grid.Set(x+1, y, tuikit.Cell{Content: "", Width: -1, Style: st})
+		}
+		x += w
 	}
 	ts.mu.Unlock()
 	return nil, nil

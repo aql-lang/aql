@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"io"
+	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
-
-	"io"
+	"time"
 
 	"golang.org/x/term"
 
@@ -34,6 +36,7 @@ func swapSeams(t *testing.T, in *bytes.Buffer, out *bytes.Buffer) (*int, *int) {
 	t.Cleanup(func() {
 		isTerminal, makeRaw, restore, getSize = oldIsTerm, oldRaw, oldRestore, oldSize
 		ttyIn, ttyOut = oldIn, oldOut
+		ttyBusy.Store(false) // release the single-owner latch between tests
 	})
 	raws, restores := 0, 0
 	isTerminal = func(int) bool { return true }
@@ -256,6 +259,7 @@ func decodeAll(t *testing.T, input string) []tuikit.Event {
 	ch := make(chan tuikit.Event, 64)
 	var closed atomic.Bool
 	decodeInput(bufio.NewReader(strings.NewReader(input)), ch, &closed)
+	close(ch) // the backend's decoder wrapper owns this in production
 	var out []tuikit.Event
 	for ev := range ch {
 		out = append(out, ev)
@@ -356,7 +360,220 @@ func TestDecodeDropsAndErrors(t *testing.T) {
 	var closed atomic.Bool
 	closed.Store(true)
 	decodeInput(bufio.NewReader(strings.NewReader("abc")), ch, &closed)
+	close(ch)
 	if _, ok := <-ch; ok {
 		t.Error("closed decoder delivered an event")
+	}
+}
+
+// The single-owner latch: a second Open while the TTY is taken fails
+// loudly; Close (and a failed Open) release it (review finding: two
+// Tui.open calls stacked raw modes with competing decoders).
+func TestSingleOwnerLatch(t *testing.T) {
+	// each backend gets its own buffers: a closed backend's decoder may
+	// still be draining its input when the next one opens
+	fresh := func() *Backend {
+		swapSeams(t, &bytes.Buffer{}, &bytes.Buffer{})
+		return New()
+	}
+	a := fresh()
+	if _, err := a.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	b := fresh()
+	if _, err := b.Open(tuikit.OpenOpts{}); err == nil ||
+		!strings.Contains(err.Error(), "already owned") {
+		t.Fatalf("second open = %v", err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	c := fresh()
+	if _, err := c.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatalf("open after close = %v", err)
+	}
+	_ = c.Close()
+	// a failed open never leaves the latch held
+	failRaw := fresh()
+	oldRaw := makeRaw
+	makeRaw = func(int) (*term.State, error) { return nil, errors.New("raw refused") }
+	if _, err := failRaw.Open(tuikit.OpenOpts{}); err == nil {
+		t.Fatal("raw failure accepted")
+	}
+	makeRaw = oldRaw
+	d := fresh()
+	if _, err := d.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatalf("open after failed open = %v", err)
+	}
+	_ = d.Close()
+}
+
+// The resize watcher: seam-fed ticks become resize events; Close ends
+// the watcher via the stop channel (review finding: no SIGWINCH path
+// existed, so real TTY apps never heard window resizes).
+func TestResizeWatcher(t *testing.T) {
+	in, out := &bytes.Buffer{}, &bytes.Buffer{}
+	swapSeams(t, in, out)
+	// park the decoder on a blocking input: an instant EOF would close
+	// the events channel and drop the watcher's event under the latch
+	blocker := &blockingReader{unblock: make(chan struct{})}
+	oldIn := ttyIn
+	ttyIn = func() (io.Reader, int) { return blocker, 0 }
+	oldInterrupt := interruptRead
+	interruptRead = func(r io.Reader) {
+		if br, ok := r.(*blockingReader); ok {
+			br.Interrupt()
+		}
+	}
+	t.Cleanup(func() { ttyIn = oldIn; interruptRead = oldInterrupt })
+	ticks := make(chan struct{}, 2)
+	oldSignal := resizeSignal
+	var gotStop <-chan struct{}
+	resizeSignal = func(stop <-chan struct{}) <-chan struct{} {
+		gotStop = stop
+		return ticks
+	}
+	t.Cleanup(func() { resizeSignal = oldSignal })
+
+	// the watcher captures the size seam at Open, so the fake goes in
+	// first: call 1 feeds Open itself, call 2 is the transient skip
+	// arm, call 3 is the resize the watcher reports
+	calls := 0
+	oldSize := getSize
+	getSize = func(int) (int, int, error) {
+		calls++
+		switch calls {
+		case 1:
+			return 80, 24, nil
+		case 2:
+			return 0, 0, errors.New("transient") // the skip arm
+		default:
+			return 33, 9, nil
+		}
+	}
+	t.Cleanup(func() { getSize = oldSize })
+	b := New()
+	if _, err := b.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	ticks <- struct{}{} // swallowed by the transient size failure
+	ticks <- struct{}{}
+	select {
+	case ev := <-b.Events():
+		if ev.Tag != "resize" || ev.Cols != 33 || ev.Rows != 9 {
+			t.Fatalf("resize event = %+v", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no resize event from the watcher")
+	}
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gotStop:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not signal the watcher stop channel")
+	}
+	close(ticks) // the watcher range ends
+
+	// a tick landing after Close exits through the closed check (run
+	// synchronously so the arm is deterministic)
+	dead := New()
+	dead.closed.Store(true)
+	tick2 := make(chan struct{}, 1)
+	tick2 <- struct{}{}
+	dead.watchResize(tick2)
+}
+
+// interruptRead unblocks a decoder stuck in Read at Close, so the next
+// keystroke after a session is not consumed by a stale goroutine.
+func TestCloseInterruptsBlockedReader(t *testing.T) {
+	blocker := &blockingReader{unblock: make(chan struct{})}
+	oldIn := ttyIn
+	ttyIn = func() (io.Reader, int) { return blocker, 0 }
+	inBuf, out := &bytes.Buffer{}, &bytes.Buffer{}
+	swapSeams(t, inBuf, out)
+	ttyIn = func() (io.Reader, int) { return blocker, 0 } // after swapSeams reset
+	oldInterrupt := interruptRead
+	interruptRead = func(in io.Reader) {
+		if br, ok := in.(*blockingReader); ok {
+			br.Interrupt()
+		}
+	}
+	t.Cleanup(func() { ttyIn = oldIn; interruptRead = oldInterrupt })
+
+	b := New()
+	if _, err := b.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	events := b.Events()
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// the decoder exits promptly (channel closes) without another byte
+	select {
+	case _, ok := <-events:
+		if ok {
+			t.Fatal("unexpected event from an interrupted decoder")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("decoder stayed blocked after Close")
+	}
+	// the default interruptRead tolerates non-file readers (no panic)
+	oldInterrupt(inBuf)
+	// and pokes a real file's read deadline (a pipe stands in for the tty)
+	pr, pw, pErr := os.Pipe()
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	oldInterrupt(pr)
+	_ = pr.Close()
+	_ = pw.Close()
+}
+
+// blockingReader blocks Read until interrupted, then errors.
+type blockingReader struct {
+	unblock chan struct{}
+	once    sync.Once
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	<-r.unblock
+	return 0, errors.New("interrupted")
+}
+
+func (r *blockingReader) Interrupt() { r.once.Do(func() { close(r.unblock) }) }
+
+// Control bytes in cell content never reach the TTY raw (review
+// finding: ESC/OSC smuggled through widget text desynchronizes the
+// diff and can inject terminal commands).
+func TestPresentSanitizesControlBytes(t *testing.T) {
+	in, out := &bytes.Buffer{}, &bytes.Buffer{}
+	swapSeams(t, in, out)
+	b := New()
+	if _, err := b.Open(tuikit.OpenOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	out.Reset()
+	f := tuikit.NewFrame(10, 4)
+	f.Set(0, 0, tuikit.Cell{Content: "\x1b", Width: 1})
+	f.Set(1, 0, tuikit.Cell{Content: "\x07", Width: 1})
+	f.Set(2, 0, tuikit.Cell{Content: "x", Width: 1})
+	if err := b.Present(f); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Contains(got, "\x1b]") || strings.Contains(got, "\x07") {
+		t.Fatalf("control bytes leaked to the tty: %q", got)
+	}
+	if !strings.Contains(got, "x") {
+		t.Fatalf("printable content lost: %q", got)
+	}
+	if s := sanitizeCell("clean"); s != "clean" {
+		t.Fatalf("clean fast path = %q", s)
+	}
+	if s := sanitizeCell("a\x1bb\x7f"); s != "a b " {
+		t.Fatalf("sanitize = %q", s)
 	}
 }

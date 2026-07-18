@@ -494,7 +494,10 @@ func itemLabel(it any) (string, error) {
 	return "", fmt.Errorf("bad widget: list-view items must be Strings or {label: …} Maps")
 }
 
-// scrollOffset keeps the cursor row visible in a window of h rows.
+// scrollOffset keeps the cursor row visible in a window of h rows. An
+// out-of-range cursor (beyond the item count, or a count smaller than
+// the window) clamps to a non-negative offset — bad app state paints
+// from the top rather than indexing below zero.
 func scrollOffset(cursor, count, h int) int {
 	if h <= 0 || cursor < h {
 		return 0
@@ -502,6 +505,9 @@ func scrollOffset(cursor, count, h int) int {
 	off := cursor - h + 1
 	if max := count - h; off > max {
 		off = max
+	}
+	if off < 0 {
+		off = 0
 	}
 	return off
 }

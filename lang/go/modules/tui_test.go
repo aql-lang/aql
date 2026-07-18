@@ -133,6 +133,54 @@ func TestTuiPrintAtStyleOnCells(t *testing.T) {
 	}
 }
 
+// print-at paints real terminal widths (the drawText contract): a wide
+// rune spans two cells with a Width -1 continuation, a combining mark
+// joins the previous cell's grapheme, and a wide rune that would split
+// at the right edge is dropped whole.
+func TestTuiPrintAtWideRunes(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(6, 3)
+	_, err := runTuiSteps(t, vb, []string{
+		`import "aql:tui"`,
+		`def t (Tui.open {})`,
+		"Tui.print-at t 0 0 \"日éx\"",
+		`Tui.print-at t 5 1 "日"`,
+		"Tui.print-at t 0 2 \"́y日́\"",
+		`Tui.show t`,
+		`Tui.close t`,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	wide, _ := vb.CellAt(0, 0)
+	cont, _ := vb.CellAt(1, 0)
+	joined, _ := vb.CellAt(2, 0)
+	tail, _ := vb.CellAt(3, 0)
+	if wide.Content != "日" || wide.Width != 2 {
+		t.Fatalf("wide cell = %+v", wide)
+	}
+	if cont.Width != -1 {
+		t.Fatalf("continuation cell = %+v", cont)
+	}
+	if joined.Content != "é" || joined.Width != 1 {
+		t.Fatalf("combining mark did not join: %+v", joined)
+	}
+	if tail.Content != "x" {
+		t.Fatalf("tail cell = %+v", tail)
+	}
+	// the wide rune at x=5 cannot fit in a 6-col grid — dropped whole
+	if c, _ := vb.CellAt(5, 1); c.Content != "" {
+		t.Fatalf("split wide rune leaked: %+v", c)
+	}
+	// a mark opening the run is dropped; a mark after a continuation
+	// cell (no grapheme to join) is dropped too
+	if c, _ := vb.CellAt(0, 2); c.Content != "y" {
+		t.Fatalf("run-opening mark mishandled: %+v", c)
+	}
+	if c, _ := vb.CellAt(2, 2); c.Content != "" || c.Width != -1 {
+		t.Fatalf("post-wide continuation = %+v", c)
+	}
+}
+
 // Without an import the namespace is unbound; with no backend registered
 // the words raise the first-class no_backend error.
 func TestTuiNoBackendRegistered(t *testing.T) {
