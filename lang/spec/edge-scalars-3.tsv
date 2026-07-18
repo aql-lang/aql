@@ -154,6 +154,15 @@ convert Boolean 'false'	true	the text 'false' is not parsed — a non-empty Stri
 convert Boolean 'no'	true	ANY non-empty text is true — even 'no'
 convert Boolean 0	false	numeric zero converts to false
 convert Boolean 3.5	true	non-zero Float converts to true
+convert Boolean {truthy:true} 'yes'	true	truthy option: a YAML boolean token parses
+convert Boolean {truthy:true} 'no'	false	…and 'no' parses to false
+convert Boolean {truthy:true} 'Off'	false	…YAML tokens are matched case-insensitively
+convert Boolean {truthy:true} '  on  '	true	…surrounding whitespace is trimmed
+convert Boolean {truthy:true} 'maybe'	true	a non-token string falls back to presence coercion (non-empty → true)
+convert Boolean {truthy:true} ''	false	…and the empty string falls back to false
+convert Boolean {truthy:true} 0	false	truthy leaves a non-String source to ordinary coercion
+convert Boolean {truthy:false} 'false'	true	truthy:false is plain presence coercion — 'false' is non-empty → true
+convert String {truthy:true} 42	'42'	truthy is inert for a non-Boolean target
 convert Integer 3.99	3	Float → Integer truncates toward zero
 convert Integer -3.99	-3	…for negatives too
 convert String 3.5	'3.5'	Float → String

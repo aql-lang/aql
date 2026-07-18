@@ -1964,6 +1964,19 @@ converts back through validation.
 > `convert`: a `:Number` record field accepts a numeric **string** and
 > coerces it (`make Point ["1" "2"]` returns `{x:1 y:2}`).
 
+> **`convert Boolean` is presence coercion; `{truthy: true}` opts into
+> YAML parsing.** By default `convert Boolean` (like `if`-truthiness)
+> judges only presence — empty String / `0` / `none` / empty collection
+> are false, everything else is true, so `convert Boolean "false"` is
+> **true**. Pass the options map `{truthy: true}` to parse a String
+> YAML-style first: `yes`/`no`/`true`/`false`/`on`/`off` (case-
+> insensitive, surrounding whitespace trimmed) map to their booleans,
+> e.g. `convert Boolean {truthy: true} "no"` returns `false`. Any string
+> that is **not** a recognised token falls back to presence coercion
+> (`convert Boolean {truthy: true} "maybe"` returns `true`), and a
+> non-String source is coerced normally — `truthy` never raises. The
+> option is inert for any non-Boolean target.
+
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
 `def Counter class {count: 0}`, `def Inventory refine Table

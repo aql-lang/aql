@@ -5,8 +5,19 @@ func init() {
 		Word:    "convert",
 		Summary: "Convert a value to a different type.",
 		Description: "Converts the first argument to the target type. Supports integer, float, " +
-			"string, boolean conversions. An optional third argument provides settings " +
-			"like base for numeric conversions.",
+			"string, boolean conversions. An optional options Map provides settings: " +
+			"`base` (radix for numeric conversions, e.g. {base:'hex'}) and `truthy` " +
+			"(when true, `convert Boolean` parses a String YAML-style — " +
+			"yes/no/true/false/on/off, case-insensitive — falling back to presence " +
+			"coercion for any other string). Boolean conversion is otherwise pure " +
+			"presence coercion: empty String / 0 / none / empty collection are false, " +
+			"everything else is true.",
+		Examples: []string{
+			`convert Integer "42"                 ;# 42`,
+			`convert Integer {base:'hex'} "ff"    ;# 255`,
+			`convert Boolean {truthy:true} "no"   ;# false (YAML token)`,
+			`convert Boolean {truthy:true} "meh"  ;# true  (not a token, non-empty)`,
+		},
 	})
 
 	register(&Entry{

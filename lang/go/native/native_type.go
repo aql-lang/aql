@@ -1022,11 +1022,45 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 // ---- convert ----
 
 // convertOptsPattern returns the Options pattern for the 3-arg
-// `convert` variant: {base?: String|None}.
+// `convert` variant: {base?: String|None, truthy?: Boolean}.
 func convertOptsPattern() Value {
 	baseOpts := NewOrderedMap()
 	baseOpts.Set("base", NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)}))
+	// Boolean|None (not bare Boolean) so the field is OPTIONAL: a bare
+	// type literal has no options-default and would make the key
+	// required (unify_options.go::optionsDefault), breaking every 3-arg
+	// call that omits truthy. Absent → None → handler reads false.
+	baseOpts.Set("truthy", NewDisjunct([]Value{NewTypeLiteral(TBoolean), NewTypeLiteral(TNone)}))
 	return NewOptionsType(baseOpts)
+}
+
+// yamlTruthy maps a string to a boolean using the YAML 1.1 boolean
+// token set (matched case-insensitively, surrounding whitespace
+// trimmed). It reports whether the string was a recognised token; a
+// caller that gets ok=false falls back to presence coercion.
+func yamlTruthy(s string) (val bool, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "y", "yes", "true", "on":
+		return true, true
+	case "n", "no", "false", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+// coerceBooleanTruthy is the `convert Boolean {truthy: true} <src>`
+// rule: a String is first matched against the YAML boolean tokens
+// (yamlTruthy); anything not a recognised token — and any non-String
+// source — falls back to the ordinary presence coercion (CoerceBoolean).
+// It never raises.
+func coerceBooleanTruthy(src Value) bool {
+	if src.Parent.ConformsTo(TString) {
+		if val, ok := yamlTruthy(ValToString(src)); ok {
+			return val
+		}
+	}
+	return CoerceBoolean(src)
 }
 
 // convertTo performs the actual scalar-type conversion.
@@ -1334,13 +1368,24 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 
 	base := ""
+	truthy := false
 	if opts.Data != nil {
 		m, _ := AsMap(opts)
 		if m != nil {
 			if bv, ok := m.Get("base"); ok {
 				base = ValToString(bv)
 			}
+			if tv, ok := m.Get("truthy"); ok {
+				truthy, _ = AsBoolean(tv)
+			}
 		}
+	}
+
+	// `truthy: true` turns a Boolean conversion into a YAML-style parse
+	// (yes/no/true/false/on/off, then presence fallback). It only applies
+	// to a Boolean target; for any other target it is inert.
+	if truthy && ValueType(targetType).ConformsTo(TBoolean) {
+		return []Value{NewBoolean(coerceBooleanTruthy(src))}, nil
 	}
 
 	result, err := convertTo(src, ValueType(targetType), base)
