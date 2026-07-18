@@ -108,6 +108,59 @@ func optionsDefault(v Value) (Value, bool) {
 	return Value{}, false
 }
 
+// FillConcreteOptionDefaults returns m with every schema field that is
+// (a) ABSENT from the concrete options map and (b) declares a genuine
+// CONCRETE default value materialized into it, so the receiving handler
+// or fn param sees a complete map instead of re-deriving defaults. Only
+// concrete defaults are injected: a required (bare type-literal) field
+// carries no default and stays absent (dispatch already rejected the
+// call if it was mandatory), and an optional `T tor None` field's
+// default is None — "unset", not a value — so it is left absent too.
+//
+// Existing keys keep their order and values (the caller's value always
+// wins); injected defaults are appended in schema order. A fresh map is
+// built only when something is actually filled, so the common
+// nothing-to-add case returns m untouched (no alloc, no aliasing).
+// Returns m unchanged when pattern is not an Options type or m is not a
+// plain concrete map (AsMap returns nil for a type literal, carrier, or
+// structural map subtype).
+func FillConcreteOptionDefaults(pattern, m Value) Value {
+	if !IsOptionsType(pattern) {
+		return m
+	}
+	pot, perr := AsOptionsType(pattern)
+	if perr != nil || pot.Fields == nil {
+		return m
+	}
+	cur, err := AsMap(m)
+	if err != nil || cur == nil {
+		return m
+	}
+	var filled *OrderedMap
+	for _, key := range pot.Fields.Keys() {
+		if _, present := cur.Get(key); present {
+			continue
+		}
+		fieldSchema, _ := pot.Fields.Get(key)
+		def, dok := optionsDefault(fieldSchema)
+		if !dok || !IsConcrete(def) {
+			continue // required field, or None/unset default — leave absent
+		}
+		if filled == nil {
+			filled = NewOrderedMap()
+			for _, k := range cur.Keys() {
+				v, _ := cur.Get(k)
+				filled.Set(k, v)
+			}
+		}
+		filled.Set(key, def)
+	}
+	if filled == nil {
+		return m
+	}
+	return NewMap(filled)
+}
+
 // unifyOptionsField applies Options unification rules for a single
 // field when the key IS present in the concrete map.
 //   - Concrete Options value: accept cVal if same parent type (cVal wins)

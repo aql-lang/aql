@@ -147,3 +147,78 @@ func TestW8OptionsBaseType(t *testing.T) {
 		t.Fatalf("default arm should return the value's Parent, got %v", got)
 	}
 }
+
+// TestW8FillConcreteOptionDefaults covers every branch of the
+// materialize-concrete-defaults helper wired into execMatch.
+func TestW8FillConcreteOptionDefaults(t *testing.T) {
+	mapOf := func(pairs ...Value) Value {
+		m := NewOrderedMap()
+		for i := 0; i+1 < len(pairs); i += 2 {
+			k, _ := AsString(pairs[i])
+			m.Set(k, pairs[i+1])
+		}
+		return NewMap(m)
+	}
+	get := func(v Value, key string) (Value, bool) {
+		m, err := AsMap(v)
+		if err != nil || m == nil {
+			return Value{}, false
+		}
+		return m.Get(key)
+	}
+	concreteOpts := w8opts(NewString("x"), NewInteger(1), NewString("y"), NewInteger(2))
+
+	// 1. Non-Options pattern → returned unchanged.
+	if out := FillConcreteOptionDefaults(NewInteger(0), mapOf(NewString("x"), NewInteger(9))); out.String() != mapOf(NewString("x"), NewInteger(9)).String() {
+		t.Errorf("non-Options pattern should pass m through, got %s", out)
+	}
+	// 2. Options pattern with nil Fields → unchanged.
+	if out := FillConcreteOptionDefaults(NewOptionsType(nil), mapOf(NewString("x"), NewInteger(9))); out.String() != mapOf(NewString("x"), NewInteger(9)).String() {
+		t.Errorf("nil-Fields Options should pass m through, got %s", out)
+	}
+	// 3. m is not a plain map (AsMap nil) → unchanged.
+	if out := FillConcreteOptionDefaults(concreteOpts, NewInteger(5)); out.String() != "5" {
+		t.Errorf("non-map m should pass through, got %s", out)
+	}
+	// 4. One concrete default absent → materialized.
+	out := FillConcreteOptionDefaults(concreteOpts, mapOf(NewString("x"), NewInteger(10)))
+	if xv, ok := get(out, "x"); !ok {
+		t.Error("x should remain present")
+	} else if n, _ := AsInteger(xv); n != 10 {
+		t.Errorf("x = %d, want 10 (caller value wins)", n)
+	}
+	if yv, ok := get(out, "y"); !ok {
+		t.Error("y default should be materialized")
+	} else if n, _ := AsInteger(yv); n != 2 {
+		t.Errorf("y = %d, want 2 (concrete default)", n)
+	}
+	// 5. All absent → every default materialized (covers filled-init once
+	// then reuse on the second fill).
+	out = FillConcreteOptionDefaults(concreteOpts, mapOf())
+	if xv, ok := get(out, "x"); !ok {
+		t.Error("x default should be materialized")
+	} else if n, _ := AsInteger(xv); n != 1 {
+		t.Errorf("x = %d, want 1", n)
+	}
+	if _, ok := get(out, "y"); !ok {
+		t.Error("y default should be materialized")
+	}
+	// 6. All present → returned unchanged (filled stays nil).
+	full := mapOf(NewString("x"), NewInteger(10), NewString("y"), NewInteger(20))
+	if out := FillConcreteOptionDefaults(concreteOpts, full); out.String() != full.String() {
+		t.Errorf("all-present should pass through, got %s", out)
+	}
+	// 7. Optional-only (T tor None) field → NOT materialized (no concrete
+	// default), and a required bare type-literal field → NOT materialized.
+	optOpts := w8opts(
+		NewString("a"), NewDisjunct([]Value{NewTypeLiteral(TBoolean), NewTypeLiteral(TNone)}),
+		NewString("b"), NewTypeLiteral(TString),
+	)
+	out = FillConcreteOptionDefaults(optOpts, mapOf())
+	if _, ok := get(out, "a"); ok {
+		t.Error("None-union field must NOT be materialized")
+	}
+	if _, ok := get(out, "b"); ok {
+		t.Error("required type-literal field must NOT be materialized")
+	}
+}

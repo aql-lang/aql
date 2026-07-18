@@ -28,11 +28,14 @@ def opts (make Options {x:1 y:2}) def f fn [[m:opts] [Map] [m]] f {x:10 y:20}	{x
 # Concrete defaults — wrong type Rejects
 def opts (make Options {x:1}) def f fn [[m:opts] [Map] [m]] f {x:"hi"}	ERROR:signature_error
 
-# Concrete defaults — absent field uses default (match succeeds)
-def opts (make Options {x:1 y:2}) def f fn [[m:opts] [Map] [m]] f {x:10}	{x:10}
+# Concrete defaults — absent field is MATERIALIZED into the received map
+def opts (make Options {x:1 y:2}) def f fn [[m:opts] [Map] [m]] f {x:10}	{x:10 y:2}
 
-# Concrete defaults — all absent uses all defaults (match succeeds)
-def opts (make Options {x:1 y:2}) def f fn [[m:opts] [Map] [m]] f {}	{}
+# Concrete defaults — all absent → every default materialized
+def opts (make Options {x:1 y:2}) def f fn [[m:opts] [Map] [m]] f {}	{x:1 y:2}
+
+# Optional-only (T tor None) field has no concrete default → NOT materialized
+def opts (make Options {x:1 y:(Integer tor None)}) def f fn [[m:opts] [Map] [m]] f {x:10}	{x:10}
 
 # --- Options with disjunct fields ---
 
@@ -105,8 +108,9 @@ def opts (make Options {x:Integer y:42}) def f fn [[m:opts] [Map] [m]] f {x:1 y:
 # Mix — concrete default field accepts any value of same type
 def opts (make Options {x:Integer y:42}) def f fn [[m:opts] [Map] [m]] f {x:1 y:99}	{x:1 y:99}
 
-# Mix — concrete default field absent uses default (match succeeds)
-def opts (make Options {x:Integer y:42}) def f fn [[m:opts] [Map] [m]] f {x:1}	{x:1}
+# Mix — concrete default field absent → default materialized (x:Integer is a
+# required type-literal field, present here; y:42 is the concrete default)
+def opts (make Options {x:Integer y:42}) def f fn [[m:opts] [Map] [m]] f {x:1}	{x:1 y:42}
 
 # --- Nested Options scenarios ---
 
