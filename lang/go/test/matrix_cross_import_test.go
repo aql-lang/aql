@@ -168,3 +168,27 @@ def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
 		t.Fatalf("integer against Matrix param: err = %v, want no_signature", err)
 	}
 }
+
+// TestMatrixDottedReturnTypeNoPhantom pins the fix for a DOTTED return type.
+// A fn declaring `[MatrixUtil.Matrix]` as its RETURN type (a Reach reaching a
+// module-exported type) was mis-classified by OutputSigIsConcreteReturns as a
+// concrete return-BY-VALUE — the resolved Matrix type literal got SPLICED
+// onto the body, so the fn left two values (its result plus the phantom
+// literal) and every call raised "expected 1 return value(s), got 2". The
+// plain-word type-name case was already handled; IsSigTypeValue now also
+// recognises the dotted (Reach) form. Regression: the fn returns its matrix.
+func TestMatrixDottedReturnTypeNoPhantom(t *testing.T) {
+	// A fn whose return type is the dotted MatrixUtil.Matrix, returning the
+	// param unchanged — no wrapper involved, so this isolates the return-type
+	// splice (the stats cov-matrix false positive's root).
+	wantOne(t, `
+import "aql:matrix-util"
+def id fn [ [m:MatrixUtil.Matrix] [MatrixUtil.Matrix] [ m ] ]
+(id (make MatrixUtil.Matrix [[1.0 2.0][3.0 4.0]]))`, "Matrix(2x2)")
+
+	// A wrapper-produced Matrix carrier through the dotted return type.
+	wantOne(t, `
+import "aql:matrix-util"
+def tr fn [ [m:MatrixUtil.Matrix] [MatrixUtil.Matrix] [ MatrixUtil.transpose m ] ]
+(tr (make MatrixUtil.Matrix [[1.0 2.0][3.0 4.0]]))`, "Matrix(2x2)")
+}
