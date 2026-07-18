@@ -493,7 +493,11 @@ WORD pad
   [Scalar/Number/Integer Any] barrier=2 returns=[Scalar/String]
   [Any] barrier=1 returns=[Scalar/String]
 WORD parse
+  [Type/Function Node/Map Any] barrier=3 runcheck returns=[Any]
+  [Word/__FN Node/Map Any] barrier=3 runcheck returns=[Any]
   [Scalar/Atom Node/Map Any] barrier=3 runcheck quote={0} returns=[Any]
+  [Type/Function Any] barrier=2 runcheck returns=[Any]
+  [Word/__FN Any] barrier=2 runcheck returns=[Any]
   [Scalar/Atom Any] barrier=2 runcheck quote={0} returns=[Any]
   [Scalar/String] barrier=1 returns=[Any] +returnsfn
 WORD pathof

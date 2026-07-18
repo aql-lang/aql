@@ -100,3 +100,25 @@ import "aql:parselang"  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a 
 import "aql:parselang"  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
 import "aql:parselang"  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value cannot be generated
 import "aql:parselang"  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a relative reference to a missing sibling is a loud error
+#
+# §10  a ParseLang VALUE as the parser — `parse <fn> <opts?> <source>`. The
+#      first operand may BE the parser: a Function (or a word bound to one)
+#      whose every signature starts with the standard [source opts] prefix —
+#      the same contract ParseLang.register enforces. The call expands to the
+#      direct fn call `<fn> <source> <opts> end` with no kind lookup, so a
+#      parser works without being registered under a kind name. A registered
+#      kind wins a name collision. (A parser COMPUTED by a runtime call —
+#      `parse (mk) 'x'` — works interpreted but the compiled path currently
+#      refuses its operand provenance, so that form is pinned in
+#      lang/go/test/parselang_host_test.go rather than as a row here.)
+import "aql:parselang"  (parse (ParseLang.parse_json) '{"b":7}') get 'b'	7	a module-exported parser used as a ParseLang value
+import "aql:parselang"  def myp fn [[source:String opts:Map] [Map] [parse json source]]  (parse myp '{"a":42}') get 'a'	42	a word bound to a parser fn is the value form spelled by name
+import "aql:parselang"  parse (fn [[source:String opts:Map] [Any] [opts get 'k']]) {k:9} 'ignored'	9	3-arg form: the opts map reaches an anonymous parser fn
+import "aql:parselang"  def json fn [[source:String opts:Map] [Any] ['shadowed']]  (parse json '{"a":1}') get 'a'	1	a registered kind wins over a same-named binding
+#
+# §10  value-form negatives — the [source opts] prefix contract is enforced
+import "aql:parselang"  parse (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:parse_bad_signature	a non-parser fn is rejected (too few params)
+import "aql:parselang"  parse (fn [[a:Integer b:Map] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the source param must be String or Any
+import "aql:parselang"  parse (fn [[source:String b:Integer] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the opts param must be a Map
+import "aql:parselang"  def myp 42  parse myp 'x'	ERROR:parse_unknown_lang	a non-fn binding is not a parser — unknown kind unchanged
+import "aql:parselang"  parse (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a parser value

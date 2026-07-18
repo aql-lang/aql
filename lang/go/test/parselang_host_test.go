@@ -87,6 +87,27 @@ func TestParseLangHostHandlerType(t *testing.T) {
 	}
 }
 
+// TestParseLangValueComputed pins the computed ParseLang-value form of the
+// core `parse` word — the parser fn produced by a runtime call: `parse (mk)
+// 'hi'`. It lives here rather than as a module-parselang.tsv §10 row because
+// the compiled path currently refuses a computed parser operand (operand
+// provenance) while the interpreter runs it fine.
+func TestParseLangValueComputed(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	got, err := a.Run(`import "aql:parselang"
+		def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]
+		parse (mk) 'hi'`)
+	if err != nil {
+		t.Fatalf("computed ParseLang value: %v", err)
+	}
+	if len(got) != 1 || got[0] != "hi" {
+		t.Fatalf("computed ParseLang value = %v, want [hi]", got)
+	}
+}
+
 // TestParseLangHostCalcAST pins the AST a `parse calc` call produces — every
 // operator, and the operand fields — via field access on the returned node.
 func TestParseLangHostCalcAST(t *testing.T) {

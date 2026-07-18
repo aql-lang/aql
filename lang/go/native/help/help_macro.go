@@ -85,17 +85,22 @@ func init() {
 
 	register(&Entry{
 		Word:    "parse",
-		Summary: "Call a named parser: parse <kind> <opts?> <source>.",
+		Summary: "Call a parser: parse <kind|fn> <opts?> <source>.",
 		Description: "The sibling of `mini`: expands to the standard call " +
 			"`ParseLang.parse_<kind> <source> <opts> end` at the call site. The `source` is the " +
 			"required LAST argument — a String or a {src:…} Source map — and `opts` is the optional " +
 			"middle one. A parser returns whatever the language yields (an AST, a transduction, …), " +
 			"typed Any. Parsers live in the aql:parselang module (import it first; ParseLang.kinds " +
 			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
-			"An unknown kind is an expansion-time error.",
+			"An unknown kind is an expansion-time error. The first argument may instead BE the parser " +
+			"— a ParseLang value: a fn (or a word bound to one) whose every signature starts with the " +
+			"standard [source:String opts:Map] prefix — called directly with no kind lookup, so a " +
+			"parser works without being registered under a kind name.",
 		Examples: []string{
 			`import "aql:parselang"  parse calc 'x + y'        ;# => the parser's AST`,
 			`import "aql:parselang"  parse calc {src:'x + y'}  ;# a {src:…} source map`,
+			`import "aql:parselang"  parse (ParseLang.parse_json) '{"a":1}'  ;# a ParseLang value as the parser`,
+			`import "aql:parselang"  def myp fn [[source:String opts:Map] [Any] [...]]  parse myp 'x'  ;# a bound parser fn`,
 		},
 	})
 

@@ -197,6 +197,13 @@ var macroNatives = []NativeFunc{
 		// against the imported `ParseLang` namespace at expansion time —
 		// unknown kinds fail loudly here. A parser returns Any (an AST, a
 		// transduction, …, per the language).
+		//
+		// The first operand may instead BE the parser — a ParseLang value,
+		// i.e. a Function carrying the standard [source opts] signature
+		// prefix (sigs 3-4, and the bare-name fallback in parseHandler for a
+		// word bound to one): `parse <fn> <opts?> <source>` expands to the
+		// direct call `<fn> <source> <opts> end` with no kind lookup, so a
+		// parser can be used without registering it under a kind name.
 		Signatures: []Signature{
 			{
 				Args:      []*Type{TAtom, TMap, TAny},
@@ -209,6 +216,29 @@ var macroNatives = []NativeFunc{
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(parseHandler, RunInCheck()),
 				Returns:   []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TMap, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			// A def'd fn or a module export (e.g. `(ParseLang.parse_json)`)
+			// is a TFnDef value, a separate family from an anonymous fn's
+			// TFunction — both spell the same ParseLang-value form.
+			{
+				Args:    []*Type{TFnDef, TMap, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
 	},
@@ -628,7 +658,14 @@ func miniKindRegistered(r *Registry, target string) bool {
 // `source` is the required LAST surface arg, `opts` the optional middle one
 // (2-arg form normalizes to {}). source/opts are spliced as collected — they
 // may be carriers in check mode; only the kind must be concrete.
+//
+// A Function first operand is the ParseLang-VALUE form instead: the operand
+// IS the parser (no kind lookup), and the call expands to the direct fn call
+// — see parseFnExpand.
 func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+		return parseFnExpand(args[0], args, r)
+	}
 	kind, err := args[0].AsConcreteAtom()
 	if err != nil {
 		return nil, r.AqlErrorHint("parse_error",
@@ -640,6 +677,30 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// Resolve the kind against the imported ParseLang namespace NOW —
 	// unknown kinds are expansion-time errors at the call site.
 	if !parseKindRegistered(r, target) {
+		// A bare word BOUND to a Function is the ParseLang-value form spelled
+		// by name (`def myp (fn …)  parse myp '…'`) — mirror emit's
+		// bound-variable reconstruction. A registered kind wins a collision
+		// (checked above); an unbound name or a non-Function binding keeps
+		// the unknown-kind handling below, so `parse nope 'x'` still raises
+		// parse_unknown_lang unchanged.
+		if top, ok := r.Defs.Top(kind); ok &&
+			(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			// The /q-captured word bypassed stepWord's use tracking, so an
+			// only-used-as-a-parser fn would be falsely flagged unused_def.
+			r.Check.RecordUse(kind)
+			if _, isFn := top.Data.(FnDefInfo); isFn {
+				return parseFnExpand(top, args, r)
+			}
+			if r.Check.IsActive() && !IsConcrete(top) {
+				// A Function-typed carrier binding (a fn param, a computed
+				// parser) under analysis: the parser is real at run time but
+				// not expandable here — degrade like the other macro paths.
+				macroDegradedAdvisory(r, "parse", "the parser fn bound to "+kind+" is not a concrete value under analysis", args[0].Pos())
+				return []Value{NewDynamicCarrier(TAny)}, nil
+			}
+			// A non-concrete non-carrier Function binding (the bare Function
+			// type literal): not a parser — fall through to unknown-kind.
+		}
 		if r.Check.IsActive() && parseKindDeferred(r, kind) {
 			// A Parse.register kind (aql:parse): its grammar is built by Parse
 			// builder words whose result is NOT a concrete value during analysis,
@@ -684,22 +745,78 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
 	}
 
-	// Surface: parse <kind> <opts?> <source>. source is the required last
-	// arg; opts is optional. Map surface→emission to the standard parser
-	// call shape [source opts].
-	var opts, source Value
-	if len(args) == 3 {
-		opts = args[1]
-		source = args[2]
-	} else {
-		opts = NewMap(NewOrderedMap())
-		source = args[1]
-	}
+	source, opts := parseSurfaceOperands(args)
 	toks := []Value{
 		NewWord("ParseLang"), NewWord("dot"), NewWord(target),
 		source, opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// parseSurfaceOperands maps the parse surface [kind|fn, opts?, source] to the
+// standard parser call shape: source is the required LAST operand, opts the
+// optional MIDDLE one (2-arg form normalizes to {}).
+func parseSurfaceOperands(args []Value) (source, opts Value) {
+	if len(args) == 3 {
+		return args[2], args[1]
+	}
+	return args[1], NewMap(NewOrderedMap())
+}
+
+// parseFnExpand expands the ParseLang-VALUE form `parse <fn> <opts?>
+// <source>` into the direct call `<fn> <source> <opts> end`, spliced at the
+// call site — the token sequence the deferred dispatch replays for a
+// resolved kind, with the fn value supplied by the caller instead of the
+// ParseLang namespace. fn is the parser operand (args[0], or the value a
+// bare word resolved to); it must be a concrete Function whose every
+// signature opens with the standard [source opts] prefix — the same contract
+// ParseLang.register enforces — so a wrong-shaped fn fails loudly here
+// rather than silently mis-collecting its operands. A Function-typed carrier
+// under analysis (a computed parser) degrades to a dynamic value, exactly
+// like the other not-statically-expandable macro paths.
+func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		if r.Check.IsActive() && !IsConcrete(fn) {
+			macroDegradedAdvisory(r, "parse", "the parser fn is not a concrete value under analysis", args[0].Pos())
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		// A fn-family value whose payload is not an FnDefInfo — defensive: the
+		// sig matcher never delivers one from surface syntax (a bare `Function`
+		// type literal is parented at Type and refuses every parse sig), so
+		// only a crafted or corrupted function value lands here.
+		return nil, r.AqlErrorHint("parse_error",
+			"parse: the parser is not a usable function value", "parse",
+			"pass a parser fn: parse (fn [[source:String opts:Map] [Any] [...]]) 'x'")
+	}
+	if why := ParseLangFnSigWhy(fnDef); why != "" {
+		return nil, r.AqlErrorHint("parse_bad_signature",
+			"parse: "+why, "parse",
+			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
+	}
+	source, opts := parseSurfaceOperands(args)
+	toks := []Value{fn, source, opts, NewEnd()}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// ParseLangFnSigWhy reports why fnDef cannot serve as a parser (a ParseLang)
+// — every signature must open with the STANDARD parser prefix
+// [source:(String|Any) opts:Map …] — or "" when it conforms. It is the single
+// contract shared by the `parse` macro's fn-operand form (parseFnExpand) and
+// aql:parselang's ParseLang.register validation (modules/parselang.go), so
+// both surfaces enforce byte-identical requirements.
+func ParseLangFnSigWhy(fnDef FnDefInfo) string {
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 {
+			return "every signature must start [source:String opts:Map …]"
+		}
+		p0 := sig.Params[0].Type
+		if p0 == nil || !(p0.ConformsTo(TString) || p0.Equal(TAny)) ||
+			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(TMap) {
+			return "every signature must start [source:String opts:Map …]"
+		}
+	}
+	return ""
 }
 
 // parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
@@ -796,16 +913,8 @@ func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
 	if !ok || sig == nil {
 		return Value{}, false
 	}
-	// Same surface→call mapping as the registered-kind expansion below:
-	// source is the required LAST arg, opts the optional middle one.
-	var opts, source Value
-	if len(args) == 3 {
-		opts = args[1]
-		source = args[2]
-	} else {
-		opts = NewMap(NewOrderedMap())
-		source = args[1]
-	}
+	// Same surface→call mapping as the registered-kind expansion.
+	source, opts := parseSurfaceOperands(args)
 	outs := []Value{NewDynamicCarrier(TAny)}
 	rec.RecordCall("parselang-deferred-dispatch", sig,
 		[]Value{args[0], source, opts}, outs, args[0].Pos(), true, false)

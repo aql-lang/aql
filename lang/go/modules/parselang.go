@@ -25,7 +25,11 @@ import (
 // (`{}` when the caller gave none). The core `parse` word expands
 // `parse <kind> <opts?> <source>` to `ParseLang.parse_<kind> <source> <opts>
 // end` — note `source` is the required LAST surface argument (a String or a
-// `{src:…}` Source map) while `opts` is the optional middle one.
+// `{src:…}` Source map) while `opts` is the optional middle one. The first
+// surface argument may instead BE the parser — a fn value (or a word bound
+// to one) carrying the standard prefix — which `parse` calls directly with
+// no kind lookup (the ParseLang-value form; see native_macro.go
+// parseFnExpand).
 //
 // Out-of-band exports (no `parse_` prefix — never reachable via `parse`):
 //
@@ -519,21 +523,12 @@ func parseRegisterValidate(args []native.Value, r *native.Registry) (string, err
 	if !ok || len(fnDef.Signatures) == 0 {
 		return "", r.AqlError("parse_bad_signature", "register: expected a function value", "register")
 	}
-	for _, sig := range fnDef.Signatures {
-		if len(sig.Params) < 2 {
-			return "", r.AqlErrorHint("parse_bad_signature",
-				"register: every signature must start [source:String opts:Map …]",
-				"register",
-				"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
-		}
-		p0 := sig.Params[0].Type
-		if p0 == nil || !(p0.ConformsTo(native.TString) || p0.Equal(native.TAny)) ||
-			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
-			return "", r.AqlErrorHint("parse_bad_signature",
-				"register: every signature must start [source:String opts:Map …]",
-				"register",
-				"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
-		}
+	// The standard-prefix contract is shared with the `parse` macro's
+	// fn-operand form (native.ParseLangFnSigWhy) so both surfaces enforce
+	// byte-identical requirements.
+	if why := native.ParseLangFnSigWhy(fnDef); why != "" {
+		return "", r.AqlErrorHint("parse_bad_signature", "register: "+why, "register",
+			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
 	}
 	return "parse_" + name, nil
 }
