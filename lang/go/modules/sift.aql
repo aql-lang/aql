@@ -65,9 +65,16 @@ def sift-norm-step fn [[c:String acc:Map] [Map] [
   acc set (quote out) out2 set (quote prev) c
 ]]
 
+# Drive sift-norm-step over the chars by index. A recursive walk compiles to
+# bytecode where a higher-order `fold` body (a user-fn callback over a runtime
+# list) does not; every list walk in this module uses this shape.
+def sift-norm-drive fn [[cs:List i:Integer acc:Map] [Map] [
+  if (i gte (size cs)) [acc] [ def r (sift-norm-drive cs (i add 1) (sift-norm-step (cs get i) acc))  r ]
+]]
+
 def sift-normalize-name fn [[raw:String] [String] [
   def chars (StringUtil.split "" raw)
-  def built (fold [sift-norm-step] chars ({} set (quote out) "" set (quote prev) ""))
+  def built (sift-norm-drive chars 0 ({} set (quote out) "" set (quote prev) ""))
   def collapsed (join "-" (StringUtil.split "-" built.out))
   def low (StringUtil.lower collapsed)
   if (low eq "") [low] [
@@ -192,11 +199,15 @@ def sift-vtype fn [[opts:Map] [String] [
 def sift-types fn [[opts:Map] [Map] [
   def tm (opts get "types")
   if (tm is None) [{}] [
-    def step fn [[k:String acc:Map] [Map] [
-      def t (convert String (tm get k))
-      if (sift-known-type t) [acc set (k) t] [ raise sift_spec_error (join "" ["types." k ": unknown type " t]) ]
+    def loop fn [[ks:List i:Integer acc:Map] [Map] [
+      if (i gte (size ks)) [acc] [
+        def k (ks get i)
+        def t (convert String (tm get k))
+        def nacc (if (sift-known-type t) [acc set (k) t] [ raise sift_spec_error (join "" ["types." k ": unknown type " t]) ])
+        loop ks (i add 1) nacc
+      ]
     ]]
-    fold [step] (keys tm) {}
+    loop (keys tm) 0 {}
   ]
 ]]
 
@@ -222,14 +233,18 @@ def sift-resolve-fields fn [[opts:Map types:Map] [Map] [
   if (fv is None) [ {} set (quote names) [] set (quote given) false set (quote types) types ] [
     if (fv is List) [ {} set (quote names) fv set (quote given) true set (quote types) types ] [
       # a Map: names in key order; a String/Atom value or {type:..} sets a type
-      def step fn [[k:String acc:Map] [Map] [
-        def val (fv get k)
-        def t2 (if (val is Map)
-          [ def tv (val get "type")  if (tv is None) [acc.types] [sift-add-type acc.types k (convert String tv)] ]
-          [ sift-add-type acc.types k (convert String val) ])
-        acc set (quote names) (push k acc.names) set (quote types) t2
+      def loop fn [[ks:List i:Integer acc:Map] [Map] [
+        if (i gte (size ks)) [acc] [
+          def k (ks get i)
+          def val (fv get k)
+          def t2 (if (val is Map)
+            [ def tv (val get "type")  if (tv is None) [acc.types] [sift-add-type acc.types k (convert String tv)] ]
+            [ sift-add-type acc.types k (convert String val) ])
+          def nacc (acc set (quote names) (push k acc.names) set (quote types) t2)
+          loop ks (i add 1) nacc
+        ]
       ]]
-      fold [step] (keys fv) ({} set (quote names) [] set (quote types) types)
+      (loop (keys fv) 0 ({} set (quote names) [] set (quote types) types))
         set (quote given) true
     ]
   ]
@@ -305,25 +320,28 @@ def sift-kv-lines fn [[lines:List opts:Map sep:String] [Map] [
   def types (sift-types opts)
   def strict (sift-strict opts)
   if (((sift-repeat-set get repeat) is None)) [ raise sift_spec_error (join "" ["opts.repeat must be one of last/first/error/list, got " repeat]) ] [
-    def step fn [[line:String acc:Map] [Map] [
-      def t (StringUtil.trim line)
-      if (t eq "") [acc] [
-        def idx (StringUtil.indexof sep line)
-        if (idx lt 0)
-          [ if (strict eq "skip") [acc] [raise sift_parse_error (join "" ["no separator: " line])] ]
-          [ def rawk (slice 0 idx line)
-            def rawv (slice (idx add (size sep)) (size line) line)
-            def k0 (if trim [StringUtil.trim rawk] [rawk])
-            def v0 (if trim [StringUtil.trim rawv] [rawv])
-            def v1 (if unq [sift-unquote v0] [v0])
-            def k (if (names eq "normalize") [sift-normalize-name k0] [k0])
-            def vt (sift-col-type types k vtype)
-            def cv (sift-coerce-strict vt v1 strict)
-            def stored (if (cv eq sift-skip) [acc] [ sift-kv-store acc k cv repeat ])
-            stored ]
+    def loop fn [[items:List i:Integer acc:Map] [Map] [
+      if (i gte (size items)) [acc] [
+        def line (items get i)
+        def t (StringUtil.trim line)
+        def nacc (if (t eq "") [acc] [
+          def idx (StringUtil.indexof sep line)
+          if (idx lt 0)
+            [ if (strict eq "skip") [acc] [raise sift_parse_error (join "" ["no separator: " line])] ]
+            [ def rawk (slice 0 idx line)
+              def rawv (slice (idx add (size sep)) (size line) line)
+              def k0 (if trim [StringUtil.trim rawk] [rawk])
+              def v0 (if trim [StringUtil.trim rawv] [rawv])
+              def v1 (if unq [sift-unquote v0] [v0])
+              def k (if (names eq "normalize") [sift-normalize-name k0] [k0])
+              def vt (sift-col-type types k vtype)
+              def cv (sift-coerce-strict vt v1 strict)
+              if (cv eq sift-skip) [acc] [ sift-kv-store acc k cv repeat ] ]
+        ])
+        loop items (i add 1) nacc
       ]
     ]]
-    fold [step] lines {}
+    loop lines 0 {}
   ]
 ]]
 
@@ -668,8 +686,15 @@ def sift-spec-from fn [[v:Any] [Map] [
 ]]
 
 def sift-spec-from-map fn [[m:Map] [Map] [
-  def badkey fn [[k:String acc:Any] [Any] [ if ((sift-spec-keys get k) is None) [raise sift_spec_error (join "" ["unknown spec key: " k])] [acc] ]]
-  def _checked (fold [badkey] (keys m) None)
+  def check-keys fn [[ks:List i:Integer] [Any] [
+    if (i gte (size ks)) [none] [
+      def k (ks get i)
+      if ((sift-spec-keys get k) is None)
+        [raise sift_spec_error (join "" ["unknown spec key: " k])]
+        [ def r (check-keys ks (i add 1))  r ]
+    ]
+  ]]
+  def _checked (check-keys (keys m) 0)
   def fam-v (m get "family")
   if (fam-v is None) [ raise sift_spec_error "spec is missing 'family'" ] [
     def family (convert String fam-v)
@@ -720,8 +745,14 @@ def sift-read-cmd fn [[cv:Any spec:Map] [Map] [
 def sift-merge-opts fn [[baked:Any overlay:Any] [Map] [
   def b (if (baked is Map) [baked] [{}])
   def c (if (overlay is Map) [overlay] [{}])
-  def step fn [[k:String acc:Map] [Map] [ acc set (k) (c get k) ]]
-  fold [step] (keys c) b
+  def loop fn [[ks:List i:Integer acc:Map] [Map] [
+    if (i gte (size ks)) [acc] [
+      def k (ks get i)
+      def nacc (acc set (k) (c get k))
+      def r (loop ks (i add 1) nacc)  r
+    ]
+  ]]
+  loop (keys c) 0 b
 ]]
 
 # run a normalized spec over the source with call-site opts.
