@@ -317,7 +317,7 @@ func TestEngineReadBasic(t *testing.T) {
 	mem.Files["test.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("test.txt")})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("test.txt")})
 	_as16, _ := AsString(result[0])
 	if len(result) != 1 || _as16 != "hello world" {
 		t.Errorf("read 'test.txt' = %v, want 'hello world'", result)
@@ -336,7 +336,7 @@ func TestEngineReadWithOpts(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.txt"), NewMap(opts)})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.txt"), NewMap(opts)})
 	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Errorf("read with lines fmt = %v, want list", result)
 	}
@@ -359,7 +359,7 @@ func TestEngineReadJSON(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("data.json"), NewMap(opts)})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.json"), NewMap(opts)})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Errorf("read json = %v, want map", result)
 	}
@@ -374,7 +374,7 @@ func TestEngineReadNotFound(t *testing.T) {
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
-	err = runAQLError(t, r, []Value{NewWord("read"), NewString("nope.txt")})
+	err = runAQLError(t, r, []Value{NewWord("read"), pathV("nope.txt")})
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -392,7 +392,7 @@ func TestEngineReadUnknownFormat(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("nonesuch"))
-	err = runAQLError(t, r, []Value{NewWord("read"), NewString("test.txt"), NewMap(opts)})
+	err = runAQLError(t, r, []Value{NewWord("read"), pathV("test.txt"), NewMap(opts)})
 	if err == nil {
 		t.Error("expected error for unknown format")
 	}
@@ -407,9 +407,8 @@ func TestEngineWriteBasic(t *testing.T) {
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("write"), NewString("out.txt"), NewString("hello")})
-	_as17, _ := AsString(result[0])
-	if len(result) != 1 || _as17 != "out.txt" {
+	result := runAQL(t, r, []Value{NewWord("write"), pathV("out.txt"), NewString("hello")})
+	if len(result) != 1 || !IsPathon(result[0]) || result[0].String() != "out.txt" {
 		t.Errorf("write result = %v, want 'out.txt'", result)
 	}
 	if string(mem.Files["out.txt"]) != "hello" {
@@ -428,7 +427,7 @@ func TestEngineWriteWithOpts(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("nl", NewString("crlf"))
-	result := runAQL(t, r, []Value{NewWord("write"), NewString("out.txt"), NewString("a\nb"), NewMap(opts)})
+	result := runAQL(t, r, []Value{NewWord("write"), pathV("out.txt"), NewString("a\nb"), NewMap(opts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -449,7 +448,7 @@ func TestEngineWriteAppend(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
-	runAQL(t, r, []Value{NewWord("write"), NewString("log.txt"), NewString("second\n"), NewMap(opts)})
+	runAQL(t, r, []Value{NewWord("write"), pathV("log.txt"), NewString("second\n"), NewMap(opts)})
 	if string(mem.Files["log.txt"]) != "first\nsecond\n" {
 		t.Errorf("file content = %q, want %q", mem.Files["log.txt"], "first\nsecond\n")
 	}
@@ -466,7 +465,7 @@ func TestEngineWriteAppendNewFile(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
-	runAQL(t, r, []Value{NewWord("write"), NewString("new.txt"), NewString("data"), NewMap(opts)})
+	runAQL(t, r, []Value{NewWord("write"), pathV("new.txt"), NewString("data"), NewMap(opts)})
 	if string(mem.Files["new.txt"]) != "data" {
 		t.Errorf("file content = %q, want %q", mem.Files["new.txt"], "data")
 	}
@@ -488,7 +487,7 @@ func TestEngineWriteAnyOpts(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
 	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
-	runAQL(t, r, []Value{NewMap(opts), NewMap(m), NewString("out.json"), NewWord("write")})
+	runAQL(t, r, []Value{NewMap(opts), NewMap(m), pathV("out.json"), NewWord("write")})
 	content := string(mem.Files["out.json"])
 	if content == "" {
 		t.Errorf("file was not written")
@@ -506,7 +505,7 @@ func TestEngineReadLineEndings(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	// Default nl:"lf" normalizes \r\n to \n
-	result := runAQL(t, r, []Value{NewWord("read"), NewString("crlf.txt")})
+	result := runAQL(t, r, []Value{NewWord("read"), pathV("crlf.txt")})
 	_as18, _ := AsString(result[0])
 	if _as18 != "a\nb\nc" {
 		_as19, _ := AsString(result[0])
@@ -516,7 +515,7 @@ func TestEngineReadLineEndings(t *testing.T) {
 	// nl:"raw" preserves original
 	opts := NewOrderedMap()
 	opts.Set("nl", NewString("raw"))
-	result = runAQL(t, r, []Value{NewWord("read"), NewString("crlf.txt"), NewMap(opts)})
+	result = runAQL(t, r, []Value{NewWord("read"), pathV("crlf.txt"), NewMap(opts)})
 	_as20, _ := AsString(result[0])
 	if _as20 != "a\r\nb\r\nc" {
 		_as21, _ := AsString(result[0])

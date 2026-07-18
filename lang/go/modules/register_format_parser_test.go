@@ -79,7 +79,7 @@ func TestModuleBodyInheritsHostFormats(t *testing.T) {
 	mem.Files["x.uc"] = []byte("hi")
 	native.SetHostFileOps(r, mem)
 
-	src := `import module [ import "aql:io" export "R" {v: (IO.read "x.uc")} ] R.v`
+	src := `import module [ import "aql:io" export "R" {v: (IO.read (make Pathon "x.uc"))} ] R.v`
 	tokens, err := parser.Parse(src)
 	if err != nil {
 		t.Fatal(err)

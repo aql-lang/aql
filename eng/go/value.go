@@ -728,6 +728,21 @@ type FnDefInfo struct {
 	// module import for the export transplant. Empty for every ordinary
 	// fn / native registration.
 	Extends string
+	// AllowBuiltinAnchor waives the requireUserTypedSigs safety rule for
+	// this extension clone: its added signatures may anchor on BUILTIN
+	// argument types (kernel or aql:-module) with no user-minted type.
+	// The rule normally refuses such tuples on a core word because a
+	// third-party module extending `add` with `[Integer Integer]` would
+	// change what core means for every importer and would break the day
+	// core claims that tuple. This flag is a FIRST-PARTY opt-in, set only
+	// by NewWordExtensionAnchored, which native module BUILDERS call: aql
+	// modules ship and version WITH the kernel, so the forward-compat
+	// rationale doesn't apply — aql:io deliberately extends the core
+	// `list`/`remove` words with Pathon-anchored signatures (Pathon is a
+	// kernel builtin), which the rule would otherwise refuse. Never set on
+	// a def-merge clone or a source-authored extension; a hand-built host
+	// clone that sets it is asserting the same first-party guarantee.
+	AllowBuiltinAnchor bool
 }
 
 // CapturedBinding is one lexically-captured name in a closure. The

@@ -916,16 +916,15 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 
 	// write "test.txt" "hello world"
 	result := runAQL(t, r, []Value{
-		NewWord("write"), NewString("test.txt"), NewString("hello world"),
+		NewWord("write"), pathV("test.txt"), NewString("hello world"),
 	})
-	_as31, _ := AsString(result[0])
-	if len(result) != 1 || _as31 != "test.txt" {
+	if len(result) != 1 || !IsPathon(result[0]) || result[0].String() != "test.txt" {
 		t.Errorf("write should return path, got %v", result)
 	}
 
 	// read "test.txt"
 	result = runAQL(t, r, []Value{
-		NewWord("read"), NewString("test.txt"),
+		NewWord("read"), pathV("test.txt"),
 	})
 	_as32, _ := AsString(result[0])
 	if len(result) != 1 || _as32 != "hello world" {
@@ -941,19 +940,19 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 
 	// write "test.txt" "hello"
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("test.txt"), NewString("hello"),
+		NewWord("write"), pathV("test.txt"), NewString("hello"),
 	})
 
 	// write "test.txt" " world" {mode:"append"}
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("test.txt"), NewString(" world"), NewMap(opts),
+		NewWord("write"), pathV("test.txt"), NewString(" world"), NewMap(opts),
 	})
 
 	// read back
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("test.txt"),
+		NewWord("read"), pathV("test.txt"),
 	})
 	_as33, _ := AsString(result[0])
 	if len(result) != 1 || _as33 != "hello world" {
@@ -973,12 +972,12 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("data.json"), NewMap(m), NewMap(opts),
+		NewWord("write"), pathV("data.json"), NewMap(m), NewMap(opts),
 	})
 
 	// Read it back
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.json"),
+		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.json should return map, got %v", result)
@@ -999,11 +998,11 @@ func TestIntegFileIOWriteStdout(t *testing.T) {
 
 	// write to stdout
 	result := runAQL(t, r, []Value{
-		NewWord("write"), NewString("<stdout>"), NewString("printed text"),
+		NewWord("write"), NewAtom("stdout"), NewString("printed text"),
 	})
-	_as35, _ := AsString(result[0])
-	if len(result) != 1 || _as35 != "<stdout>" {
-		t.Errorf("write stdout should return path, got %v", result)
+	a35, _ := result[0].AsConcreteAtom()
+	if len(result) != 1 || a35 != "stdout" {
+		t.Errorf("write stdout should return the stdout handle, got %v", result)
 	}
 	if buf.String() != "printed text" {
 		t.Errorf("stdout output = %q, want 'printed text'", buf.String())
@@ -1017,11 +1016,11 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 	r.ErrOutput = &buf
 
 	result := runAQL(t, r, []Value{
-		NewWord("write"), NewString("<stderr>"), NewString("error text"),
+		NewWord("write"), NewAtom("stderr"), NewString("error text"),
 	})
-	_as36, _ := AsString(result[0])
-	if len(result) != 1 || _as36 != "<stderr>" {
-		t.Errorf("write stderr should return path, got %v", result)
+	a36, _ := result[0].AsConcreteAtom()
+	if len(result) != 1 || a36 != "stderr" {
+		t.Errorf("write stderr should return the stderr handle, got %v", result)
 	}
 	if buf.String() != "error text" {
 		t.Errorf("stderr output = %q, want 'error text'", buf.String())
@@ -1039,7 +1038,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.txt"), NewMap(opts),
+		NewWord("read"), pathV("data.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.txt with fmt:json should return map, got %v", result)
@@ -1054,7 +1053,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 
 	_ = mem.WriteFile("data.json", []byte(`{"b":2}`), 0644)
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.json"),
+		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read data.json should auto-detect json, got %v", result)
@@ -1071,7 +1070,7 @@ func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 	opts.Set("fmt", NewString("text"))
 	opts.Set("nl", NewString("lf"))
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("output.txt"), NewString("line1\nline2"), NewMap(opts),
+		NewWord("write"), pathV("output.txt"), NewString("line1\nline2"), NewMap(opts),
 	})
 
 	data, _ := mem.ReadFile("output.txt")
@@ -1092,7 +1091,7 @@ func TestIntegCSVReadWrite(t *testing.T) {
 	_ = mem.WriteFile("people.csv", []byte(csvContent), 0644)
 
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("people.csv"),
+		NewWord("read"), pathV("people.csv"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("read csv should return 1 value, got %d", len(result))
@@ -1113,7 +1112,7 @@ func TestIntegTSVRead(t *testing.T) {
 	_ = mem.WriteFile("data.tsv", []byte(tsvContent), 0644)
 
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.tsv"),
+		NewWord("read"), pathV("data.tsv"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("read tsv should return 1 value, got %d", len(result))
@@ -1132,7 +1131,7 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("csv"))
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.txt"), NewMap(opts),
+		NewWord("read"), pathV("data.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Fatalf("read with csv fmt should return table, got %v", result)
@@ -1451,7 +1450,7 @@ func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("list.json"), list, NewMap(opts),
+		NewWord("write"), pathV("list.json"), list, NewMap(opts),
 	})
 
 	data, err := mem.ReadFile("list.json")
@@ -1473,7 +1472,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("lines.txt"), NewMap(opts),
+		NewWord("read"), pathV("lines.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TList) {
 		t.Fatalf("read lines should return list, got %v", result)
@@ -1530,7 +1529,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 
 	_ = mem.WriteFile("data.jsonic", []byte(`{x: 1, y: 2}`), 0644)
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.jsonic"),
+		NewWord("read"), pathV("data.jsonic"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("read jsonic should return map, got %v", result)
@@ -1547,7 +1546,7 @@ func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
 	runAQL(t, r, []Value{
-		NewWord("write"), NewString("new.txt"), NewString("fresh"), NewMap(opts),
+		NewWord("write"), pathV("new.txt"), NewString("fresh"), NewMap(opts),
 	})
 
 	data, _ := mem.ReadFile("new.txt")

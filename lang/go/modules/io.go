@@ -38,13 +38,49 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// signatures, and is exported as a type literal so `x is IO.StreamKind`
 	// works after import.
 	streamKind := native.MintStreamKind(subReg)
-	ioNatives := native.IOModuleNativeFuncs(streamKind)
+	// FileType — the kind field of a stat record (file/dir/symlink/other) —
+	// is owned by this module too: minted per import into the sub-registry
+	// and exported as a type literal so `x is IO.FileType` works.
+	fileType := native.MintFileType(subReg)
+	// Watcher — the live filesystem-subscription resource IO.watch
+	// returns — is minted per import too, and exported as a type literal
+	// so `w is IO.Watcher` works.
+	watcherType := native.MintWatcherType(subReg)
+	// File — a stateful open-file handle IO.open returns — is minted per
+	// import too, and exported so `f is IO.File` works. Distinct from
+	// FileType (the stat-record atom enum).
+	fileHandleType := native.MintFileHandleType(subReg)
+	// Lock and Mmap — advisory-lock and memory-map resources IO.lock /
+	// IO.mmap return — are minted per import too.
+	lockType := native.MintLockType(subReg)
+	mmapType := native.MintMmapType(subReg)
+	ioNatives := native.IOModuleNativeFuncs(native.IOModuleTypes{
+		StreamKind: streamKind,
+		FileType:   fileType,
+		Watcher:    watcherType,
+		File:       fileHandleType,
+		Lock:       lockType,
+		Mmap:       mmapType,
+	})
 	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
 	}
 
 	exports := delegatingExports(ioNatives, subReg)
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
+	exports.Set("FileType", native.NewTypeLiteral(fileType))
+	exports.Set("Watcher", native.NewTypeLiteral(watcherType))
+	exports.Set("File", native.NewTypeLiteral(fileHandleType))
+	exports.Set("Lock", native.NewTypeLiteral(lockType))
+	exports.Set("Mmap", native.NewTypeLiteral(mmapType))
+
+	// list / remove are exported as WORD EXTENSIONS, not namespaced FnDef
+	// wrappers: import transplants a Pathon overload onto the importer's bare
+	// `list` / `remove` (design/OPEN-WORDS.0.md). transplantWordExtensions
+	// picks these out of the export map by IsWordExtension.
+	for _, ext := range native.IOWordExtensions(fileType) {
+		exports.Set(ext.Extends, native.NewFnDef(ext))
+	}
 
 	return moduleDesc(parent, "IO", subReg, exports), nil
 }

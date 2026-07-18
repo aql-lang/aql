@@ -2709,8 +2709,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.txt") "hi"`, "[mem:/b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write (make Pathon "mem://a.txt") "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)

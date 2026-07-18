@@ -42,7 +42,7 @@ func TestListAllFromCSV(t *testing.T) {
 
 	result, err := runNativeWithFiles(t, map[string]string{
 		"people.csv": csv,
-	}, `read "people.csv" list`)
+	}, `read (make Pathon "people.csv") list`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestListFilterFromCSV(t *testing.T) {
 
 	result, err := runNativeWithFiles(t, map[string]string{
 		"people.csv": csv,
-	}, `read "people.csv" list {city:"London"}`)
+	}, `read (make Pathon "people.csv") list {city:"London"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestListFilterNoMatches(t *testing.T) {
 
 	result, err := runNativeWithFiles(t, map[string]string{
 		"data.csv": csv,
-	}, `read "data.csv" list {name:"Nobody"}`)
+	}, `read (make Pathon "data.csv") list {name:"Nobody"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestListFilterMultipleFields(t *testing.T) {
 
 	result, err := runNativeWithFiles(t, map[string]string{
 		"data.csv": csv,
-	}, `read "data.csv" list {age:"30" city:"London"}`)
+	}, `read (make Pathon "data.csv") list {age:"30" city:"London"}`)
 	if err != nil {
 		t.Fatal(err)
 	}

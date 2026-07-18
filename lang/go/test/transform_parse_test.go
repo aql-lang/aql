@@ -64,7 +64,7 @@ func TestDefTransformWithLoad(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n"
 	bt := string(rune(96)) // backtick character
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo load {id:"1"} StructUtil.transform {greeting:"` + bt + `name` + bt + `"}`,
 	})
 	if err != nil {

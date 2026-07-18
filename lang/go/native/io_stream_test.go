@@ -16,7 +16,7 @@ func ioRegistry(t *testing.T) (*Registry, *Type) {
 		t.Fatal(err)
 	}
 	sk := MintStreamKind(r)
-	for _, n := range IOModuleNativeFuncs(sk) {
+	for _, n := range IOModuleNativeFuncs(IOModuleTypes{StreamKind: sk, FileType: MintFileType(r), Watcher: MintWatcherType(r), File: MintFileHandleType(r), Lock: MintLockType(r), Mmap: MintMmapType(r)}) {
 		r.RegisterNativeFunc(n)
 	}
 	return r, sk
@@ -104,17 +104,17 @@ func TestWriteNonStringNoOptsMap(t *testing.T) {
 			setupMemFS(t, r)
 
 			// write path value  (no opts map)
-			toks := append([]Value{NewWord("write"), NewString(tc.path)}, tc.write...)
+			toks := append([]Value{NewWord("write"), pathV(tc.path)}, tc.write...)
 			wres := runAQL(t, r, toks)
 			if len(wres) != 1 {
 				t.Fatalf("write returned %d values, want 1 (the path)", len(wres))
 			}
-			if got, _ := AsString(wres[0]); got != tc.path {
-				t.Fatalf("write returned %q, want the path %q", got, tc.path)
+			if !IsPathon(wres[0]) {
+				t.Fatalf("write returned %v, want the Pathon target", wres[0])
 			}
 
 			// read it back
-			rres := runAQL(t, r, []Value{NewWord("read"), NewString(tc.path)})
+			rres := runAQL(t, r, []Value{NewWord("read"), pathV(tc.path)})
 			if len(rres) != 1 {
 				t.Fatalf("read returned %d values, want 1", len(rres))
 			}

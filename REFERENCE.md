@@ -2150,7 +2150,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2164,6 +2164,160 @@ modules keep plain names.
 > sibling structures. For a single-field edit, use the copy-returning
 > `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
+
+> **`aql:io` filesystem surface.** File I/O is **Pathon-only**: every
+> target is a `Scalar/Micron/Pathon` built with `make Pathon "…"` — a bare
+> string is refused, so a file target is type-distinct from an arbitrary
+> string and from a stream handle, and one polymorphic verb dispatches on
+> the argument's type. A word that returns its target returns that Pathon,
+> so `IO.read (IO.write p x)` threads through. Beyond `read`/`write`, the
+> module covers the full batch API, each word collapsing several operations
+> via options: `IO.stat p {follow, resolve, xattr}` returns a FileInfo record
+> (`name`/`path`/`type`/`size`/`mode`/`mtime`/`owner`/`group` — ownership is
+> the uid/gid or -1 where unknowable; `{xattr:true}` attaches an `xattr`
+> sub-map of extended attributes, host-namespaced `user.<name>` on Linux —
+> where `type` is an `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or
+> `none` when absent; `IO.touch` additionally sets `{owner group}` (chown —
+> root-only for real id changes) and `{xattr:{k:v}}`;
+> `IO.move src dst`, `IO.copy src dst {recursive}`, `IO.link src dst
+> {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
+> do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes
+> verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O,
+> plus explicit text encodings — `{enc: 'utf8'|'utf16le'|'utf16be'|'latin1'}`
+> (utf16 writes a BOM and strips a matching one on read; latin1 is strict —
+> a rune outside ISO 8859-1 refuses to encode; there is no BOM sniffing and
+> an unknown enc is a hard error). `copy`/`move` take `{overwrite:false}` to
+> refuse an existing destination (a best-effort pre-check, like Java's
+> `StandardCopyOption`, not an atomic guarantee). `write {atomic:true}`
+> stages the bytes in a temp file in the target's own directory and renames
+> it into place, so a concurrent reader never observes a half-written file
+> (it cannot combine with a positioned `{offset}`).
+>
+> **Temp files & disk info.** `IO.temp {dir, in, prefix, suffix}` creates a
+> unique file (a directory with `{dir:true}`) under `{in:Pathon}` (the
+> system temp root by default), named `{prefix}…{suffix}`, and returns its
+> Pathon — the file is `0600`, the directory `0700`, and an absent `{in}`
+> errors (the `os.CreateTemp` contract). `IO.space p` reports the volume
+> holding a path as `{total free available bsize type}` (byte counts, the
+> block size, and a filesystem-type name — the in-memory FS reports a
+> synthetic 1 GiB `mem` volume).
+>
+> **Stateful file handles.** `IO.open p {mode, create, exclusive,
+> truncate, perm}` returns an `IO.File` handle over a path — `{mode:
+> 'read'|'write'|'append'|'rw'}` picks the base access (write is
+> create+truncate, append is create+append, rw is read+write), refined by
+> `{create}`, `{exclusive}` (O_EXCL — fail if it exists), `{truncate}`, and
+> `{perm}`. `read`/`write` gain File overloads: `read f {length, offset,
+> enc}` reads from the cursor (or positioned with `{offset}`, `'bytes'`
+> returning `Bytes`), and `write f data {offset}` writes at the cursor (or
+> positioned) and returns the handle for threading. `IO.seek f n {from:
+> 'start'|'current'|'end'}` moves the cursor and returns the new offset;
+> `IO.flush f` syncs; and `IO.close` releases the handle — polymorphic over
+> a `File` or a `Watcher` (the twin of `IO.unwatch`). A handle shares its
+> backend's store, so on the OS and in-memory filesystems a handle write is
+> visible to a stateless read before close; an `IO.mount` handle buffers and
+> flushes on sync/close (writes are not visible until then). Unclosed
+> handles are not finalized automatically (Java's posture) — pair every
+> `open` with a `close`. Separately, `write p data {exclusive:true}` is the
+> stateless O_EXCL create: it makes a new file and refuses an existing one
+> with no check-then-write race (it cannot combine with append or a
+> positioned `{offset}`).
+>
+> **Advisory locks & memory-mapped files.** `IO.lock p {shared, block}`
+> takes an advisory lock — exclusive by default, `{shared:true}` for a read
+> lock; `{block:false}` returns `none` on contention rather than waiting.
+> `IO.unlock l` (or the polymorphic `IO.close`) releases it. On the OS
+> backend the lock is a crash-safe `flock`; the in-memory model is a
+> canonical-path reader/writer table (stricter than `flock` — a same-process
+> re-lock blocks). `IO.mmap p {offset, length, writable}` maps a file's
+> bytes into an `IO.Mmap` region: `read region {offset, length, enc}` COPIES
+> bytes out (so a later close can never invalidate the value), `write region
+> bytes {offset}` splices into the mapping in place (it cannot grow — the
+> write must fit), `IO.flush` makes writes durable, and `IO.close` unmaps.
+> The mount bridge refuses both (a lock over a value-based filesystem locks
+> nothing). The portable mmap contract promises no live sharing — `flush` is
+> what makes a writable region's changes durable.
+>
+> **Watching.** `IO.watch p [body]` subscribes to change events on a
+> Pathon — a file, or a directory's direct children (non-recursive,
+> inotify semantics) — and runs the body once per event, push style
+> (like `TimeUtil.interval` runs its callback per tick), with the event
+> record `{op: create/write/remove/rename/chmod atom, path: Pathon}` on
+> the stack. It returns an `IO.Watcher` handle; `IO.unwatch w` stops it.
+> A third options map tunes the subscription: `{recursive:true}` watches
+> the whole subtree (the OS side auto-adds newly created subdirectories;
+> the mem side matches by path prefix), and `{match:"*.txt"}` filters
+> events by a path glob (word-side, the same `policy.Glob` vocabulary as
+> `list {match}`). When a slow consumer overruns the buffer, drops are
+> coalesced into a single `{op: overflow, path: <root>}` marker that
+> always bypasses the `{match}` filter — a missed event is never hidden.
+> The backend follows the effective FileOps: fsnotify (inotify/FSEvents/
+> kqueue) on the real filesystem, a synchronous in-memory event source
+> under `{mem}`, and the merged union of both layers under `{overlay}` —
+> so watch behaviour is part of the same real/mem parity surface as every
+> other io word.
+>
+> **Mounting an AQL-implemented filesystem.** `IO.mount {read: fn, …}`
+> installs a map of AQL handler functions as the host filesystem — every
+> io word then routes through them, so AQL code can expose any backing
+> (a flex map, a table, a service) as a filesystem:
+>
+> ```
+> import "aql:io"
+> def files (flex {})
+> IO.mount {
+>   read:  (p:Pathon => [files get `${p}`])
+>   write: ([p:Pathon data:Any] => [files set `${p}` data drop])
+> }
+> IO.write (make Pathon "notes/a.txt") "hello" drop
+> IO.read (make Pathon "notes/a.txt")        # returns 'hello'
+> ```
+>
+> Core handlers: `read` (required; return a String/Bytes, or `none` for
+> absent), `write`, `stat` (return a `{name size mode mtime type target}`
+> map or `none`), `list` (names or stat maps), `remove` (`[p opts]`).
+> Optional: `mkdir`, `rename`, `symlink`, `link`, `chmod`, `chtimes`,
+> `truncate`, `resolve`. An operation with no handler refuses cleanly, a
+> mounted filesystem is not watchable, and the `{mem}`/`{overlay}` context
+> toggles still take precedence. `IO.unmount` restores the previous
+> filesystem.
+>
+> **Mounting a ZIP archive.** `IO.mount` also accepts a **Pathon**: a
+> `.zip` path (or any path with `{zip:true}`) mounts the archive as a
+> read-only filesystem, read through the effective FileOps — so an archive
+> staged in `{mem}` is itself mountable, and policy gates the read. Every
+> mutation on a mounted archive refuses read-only; directory entries the
+> zip omits are synthesised, and a read-only `IO.open` handle supports
+> `IO.seek`/positioned reads. `{writable:true}` layers the archive as the
+> read-only lower of a fresh in-memory overlay — a copy-on-write "editable
+> zip" whose edits live only in memory (the archive on disk never changes):
+>
+> ```
+> import "aql:io"
+> IO.mount (make Pathon "bundle.zip")        # read-only
+> IO.read (make Pathon "manifest.json")      # served from the archive
+> IO.unmount
+> IO.mount (make Pathon "bundle.zip") {writable:true}
+> IO.write (make Pathon "scratch.txt") "x" drop   # lands in the mem upper
+> ```
+>
+> `list` and `remove` are different: rather than a namespaced `IO.list` /
+> `IO.remove`, importing `aql:io` **extends the core `list` / `remove`
+> words** with a Pathon overload (design/OPEN-WORDS.0.md), so the BARE words
+> gain filesystem behaviour — `list p {detail, recursive, match}` enumerates a
+> directory, `remove p {recursive, force}` deletes a path. The overload
+> registers only on import and coexists with the core table/collection
+> meanings (its Pathon argument is type-disjoint), so `list [1 2 3]` still
+> works. Every op routes through the swappable `FileOps` capability:
+> `context.__sys.fs set mem true` runs them against a fully in-memory
+> filesystem (a strict-fidelity model of the real one — hard links share
+> storage, symlinks resolve component-wise, permission bits enforce
+> euid-aware; a differential harness pins mem/real parity), and
+> `context.__sys.fs set overlay true` runs them against a UNION of a
+> writable in-memory upper over the host filesystem — reads fall through
+> to real files, writes land only in memory, deletes are whiteouts — the
+> partially-in-memory configuration for unit tests over real fixtures
+> ({mem} wins if both flags are set).
 
 
 ## Diagnostic reports

@@ -309,7 +309,7 @@ value is on the stack — inspect it with `.` or `drop` it and supply
 a default:
 
 ```
-do [read "missing.json"] error [
+do [IO.read (make Pathon "missing.json")] error [
   drop
   print "file missing, using default"
   {x:0, y:0}
@@ -379,28 +379,35 @@ i cancel                               # stop the loop
 
 ## Read and write files
 
-```
-read "data.json"                       # auto-detects JSON
-read "data.csv" {fmt: 'csv}            # explicit format
-read "data.csv" {fmt: 'csv, header: true}
+File I/O is in the `aql:io` module and is **Pathon-only** — every target is
+a `Pathon` built with `make Pathon "…"`, never a bare string.
 
-write "out.txt" "hello"
-write "out.json" {x:1}
-write "out.tsv" [[1,2],[3,4]] {fmt: 'tsv}
+```
+import "aql:io"
+IO.read (make Pathon "data.json")                # auto-detects JSON
+IO.read (make Pathon "data.csv") {fmt: 'csv}     # explicit format
+IO.read (make Pathon "data.csv") {fmt: 'csv, header: true}
+
+IO.write (make Pathon "out.txt") "hello"
+IO.write (make Pathon "out.json") {x:1}
+IO.write (make Pathon "out.tsv") [[1,2],[3,4]] {fmt: 'tsv}
 ```
 
-Supported formats: `json`, `csv`, `tsv`, `jsonic`, `text`.
+Supported formats: `json`, `csv`, `tsv`, `jsonic`, `text`. Importing
+`aql:io` also extends the core `list`/`remove` words with a Pathon
+overload, plus `IO.stat`/`IO.move`/`IO.copy`/`IO.link`/`IO.touch`.
 
 
 ## Read from stdin and write to stdout
 
-Special paths `stdin`, `stdout`, `stderr` work with `read` and
-`write`:
+The stream handles `IO.stdin`, `IO.stdout`, `IO.stderr` are `StreamKind`
+atoms (not Pathons) and work with `IO.read` and `IO.write`:
 
 ```
-read stdin                             # read once until EOF
-write stdout "hello\n"
-write stderr "error\n"
+import "aql:io"
+IO.read IO.stdin                       # read once until EOF
+IO.write IO.stdout "hello\n"
+IO.write IO.stderr "error\n"
 ```
 
 
