@@ -2157,9 +2157,13 @@ modules keep plain names.
 > the argument's type. A word that returns its target returns that Pathon,
 > so `IO.read (IO.write p x)` threads through. Beyond `read`/`write`, the
 > module covers the full batch API, each word collapsing several operations
-> via options: `IO.stat p {follow, resolve}` returns a FileInfo record
-> (`name`/`path`/`type`/`size`/`mode`/`mtime`, where `type` is an
-> `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or `none` when absent;
+> via options: `IO.stat p {follow, resolve, xattr}` returns a FileInfo record
+> (`name`/`path`/`type`/`size`/`mode`/`mtime`/`owner`/`group` — ownership is
+> the uid/gid or -1 where unknowable; `{xattr:true}` attaches an `xattr`
+> sub-map of extended attributes, host-namespaced `user.<name>` on Linux —
+> where `type` is an `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or
+> `none` when absent; `IO.touch` additionally sets `{owner group}` (chown —
+> root-only for real id changes) and `{xattr:{k:v}}`;
 > `IO.move src dst`, `IO.copy src dst {recursive}`, `IO.link src dst
 > {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
 > do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes

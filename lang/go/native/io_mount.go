@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 	"unicode/utf8"
 
@@ -124,8 +125,20 @@ func (a *aqlFileOps) MkdirAll(path string, _ os.FileMode) error {
 }
 
 // statFromMap projects a handler's stat-shaped map onto FileInfo.
+// Ownership defaults to the -1 "cannot know" sentinel; a handler may
+// supply integer `owner` / `group` fields to report it.
 func statFromMap(path string, m ReadMap) capabilities.FileInfo {
-	fi := capabilities.FileInfo{Name: filepath.Base(path)}
+	fi := capabilities.FileInfo{Name: filepath.Base(path), UID: -1, GID: -1}
+	if v, ok := m.Get("owner"); ok {
+		if n, nerr := v.AsConcreteInteger(); nerr == nil {
+			fi.UID = int(n)
+		}
+	}
+	if v, ok := m.Get("group"); ok {
+		if n, nerr := v.AsConcreteInteger(); nerr == nil {
+			fi.GID = int(n)
+		}
+	}
 	if v, ok := m.Get("name"); ok {
 		if s, serr := v.AsConcreteString(); serr == nil {
 			fi.Name = s
@@ -194,7 +207,7 @@ func (a *aqlFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
 	for i := 0; i < lst.Len(); i++ {
 		entry := lst.Get(i)
 		if s, serr := entry.AsConcreteString(); serr == nil {
-			out = append(out, capabilities.FileInfo{Name: s})
+			out = append(out, capabilities.FileInfo{Name: s, UID: -1, GID: -1})
 			continue
 		}
 		if m, merr := RequireConcreteMap(entry, "list"); merr == nil {
@@ -241,6 +254,77 @@ func (a *aqlFileOps) Chtimes(path string, atime, mtime time.Time) error {
 
 func (a *aqlFileOps) Truncate(path string, size int64) error {
 	_, err := a.call("truncate", []Value{NewPathonFromString(path), NewInteger(size)})
+	return err
+}
+
+// Chown bridges to an optional `chown ([p uid gid])` handler (the follow
+// flag is not forwarded — a mounted filesystem models no symlink-deref
+// distinction unless its own handlers do). Absent handler: clean refusal.
+func (a *aqlFileOps) Chown(path string, uid, gid int, _ bool) error {
+	_, err := a.call("chown", []Value{NewPathonFromString(path), NewInteger(int64(uid)), NewInteger(int64(gid))})
+	return err
+}
+
+// XattrGet bridges to an optional `xattr-get ([p name])` handler; a none
+// result is the absent-attribute convention.
+func (a *aqlFileOps) XattrGet(path, name string) ([]byte, error) {
+	res, err := a.call("xattr-get", []Value{NewPathonFromString(path), NewString(name)})
+	if err != nil {
+		return nil, err
+	}
+	if isNoneResult(res) {
+		return nil, &os.PathError{Op: "xattr-get", Path: path, Err: errors.New("attribute not found")}
+	}
+	if b, ok := AsBytesValue(res); ok {
+		return b, nil
+	}
+	s, serr := res.AsConcreteString()
+	if serr != nil {
+		return nil, &os.PathError{Op: "xattr-get", Path: path,
+			Err: fmt.Errorf("mounted xattr-get handler returned %s (want String, Bytes, or none)", res.Parent)}
+	}
+	return []byte(s), nil
+}
+
+// XattrSet bridges to an optional `xattr-set ([p name value])` handler
+// (the value arrives as a String when valid UTF-8, Bytes otherwise —
+// the same convention as the bridged write payload).
+func (a *aqlFileOps) XattrSet(path, name string, value []byte) error {
+	var payload Value
+	if utf8.Valid(value) {
+		payload = NewString(string(value))
+	} else {
+		payload = NewBytesValue(value)
+	}
+	_, err := a.call("xattr-set", []Value{NewPathonFromString(path), NewString(name), payload})
+	return err
+}
+
+// XattrList bridges to an optional `xattr-list ([p])` handler returning a
+// list of name strings (sorted here so backends need not bother).
+func (a *aqlFileOps) XattrList(path string) ([]string, error) {
+	res, err := a.call("xattr-list", []Value{NewPathonFromString(path)})
+	if err != nil {
+		return nil, err
+	}
+	lst, lerr := RequireConcreteList(res, "xattr-list")
+	if lerr != nil {
+		return nil, &os.PathError{Op: "xattr-list", Path: path,
+			Err: fmt.Errorf("mounted xattr-list handler returned %s (want a list of names)", res.Parent)}
+	}
+	names := make([]string, 0, lst.Len())
+	for i := 0; i < lst.Len(); i++ {
+		if s, serr := lst.Get(i).AsConcreteString(); serr == nil {
+			names = append(names, s)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// XattrRemove bridges to an optional `xattr-remove ([p name])` handler.
+func (a *aqlFileOps) XattrRemove(path, name string) error {
+	_, err := a.call("xattr-remove", []Value{NewPathonFromString(path), NewString(name)})
 	return err
 }
 

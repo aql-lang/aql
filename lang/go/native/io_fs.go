@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/policy"
@@ -53,10 +55,81 @@ func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Valu
 	om.Set("size", NewInteger(fi.Size))
 	om.Set("mode", NewInteger(int64(fi.Mode.Perm())))
 	om.Set("mtime", NewInteger(mtimeUnix(fi.ModTime)))
+	// owner / group are the uid/gid, or -1 where the backend cannot know
+	// them (Windows, a mounted filesystem without owner fields).
+	om.Set("owner", NewInteger(int64(fi.UID)))
+	om.Set("group", NewInteger(int64(fi.GID)))
 	if fi.Symlink {
 		om.Set("target", NewString(fi.Target))
 	}
 	return NewMap(om)
+}
+
+// xattrValue renders one attribute payload: a String when the bytes are
+// valid UTF-8, Bytes otherwise — the mount read-payload convention.
+func xattrValue(v []byte) Value {
+	if utf8.Valid(v) {
+		return NewString(string(v))
+	}
+	return NewBytesValue(v)
+}
+
+// aqlToHostXattr / hostToAqlXattr map plain AQL attribute names onto the
+// host's namespace: Linux user xattrs live in the mandatory `user.`
+// namespace, Darwin uses flat names (capabilities.XattrNamespacePrefix).
+// The word layer owns this mapping, so AQL programs spell `note` on every
+// platform. hostToAqlXattr additionally reports whether the host name IS
+// ours — attributes outside the namespace (security.selinux and friends)
+// are not displayable or settable through the io words and are skipped.
+func aqlToHostXattr(name string) string {
+	return capabilities.XattrNamespacePrefix + name
+}
+
+func hostToAqlXattr(host string) (string, bool) {
+	return stripXattrNS(capabilities.XattrNamespacePrefix, host)
+}
+
+// stripXattrNS is hostToAqlXattr's platform-independent core, split out
+// so BOTH prefix regimes (Linux's "user." and the flat "" of Darwin and
+// the fallback platforms) are testable on any build.
+func stripXattrNS(prefix, host string) (string, bool) {
+	if prefix == "" {
+		return host, true
+	}
+	if rest, ok := strings.CutPrefix(host, prefix); ok {
+		return rest, true
+	}
+	return "", false
+}
+
+// attachXattrs adds the {xattr:{…}} sub-map to a stat record. A backend
+// that does not support xattrs (the non-unix OS arm, an unextended
+// mount) surfaces its refusal as the stat error rather than a silent
+// empty map — absence of support and absence of attributes must not
+// look alike.
+func attachXattrs(r *Registry, om Value, path string) error {
+	names, err := EffectiveFileOps(r).XattrList(path)
+	if err != nil {
+		return err
+	}
+	xs := NewOrderedMap()
+	for _, host := range names {
+		name, ours := hostToAqlXattr(host)
+		if !ours {
+			continue
+		}
+		v, gerr := EffectiveFileOps(r).XattrGet(path, host)
+		if gerr != nil {
+			return gerr
+		}
+		xs.Set(name, xattrValue(v))
+	}
+	// om is always the freshly built concrete map from buildStatRecord, so
+	// AsMutableMap cannot fail — the blank error is the provably-dead-guard
+	// idiom (design/TEST-SEAMS.10.md).
+	m, _ := AsMutableMap(om)
+	m.Set("xattr", NewMap(xs))
+	return nil
 }
 
 // statHandler implements IO.stat. It returns a stat record, or `none` when
@@ -65,10 +138,11 @@ func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Valu
 // (dereference a symlink; {follow:false} for lstat); {resolve:true} sets
 // .path to the absolute resolved form.
 func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Value, error) {
-	follow, resolve := true, false
+	follow, resolve, xattr := true, false, false
 	if hasOpts {
 		follow = mapBoolOpt(args[1], "follow", true)
 		resolve = mapBoolOpt(args[1], "resolve", false)
+		xattr = mapBoolOpt(args[1], "xattr", false)
 	}
 	path := extractPath(args[0])
 	fi, err := EffectiveFileOps(r).Stat(path, follow)
@@ -84,7 +158,13 @@ func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 			displayPath = rp
 		}
 	}
-	return []Value{buildStatRecord(fi, displayPath, fileType)}, nil
+	rec := buildStatRecord(fi, displayPath, fileType)
+	if xattr {
+		if xerr := attachXattrs(r, rec, path); xerr != nil {
+			return nil, r.AqlError("stat_error", fmt.Sprintf("stat: %v", xerr), "stat")
+		}
+	}
+	return []Value{rec}, nil
 }
 
 // listEntry pairs a directory entry's metadata with its path relative to the
@@ -377,7 +457,61 @@ func applyTouch(ops capabilities.FileOps, path string, opts Value, hasOpts bool)
 			return err
 		}
 	}
+	// {owner} / {group} re-own the entry (an omitted id stays unchanged —
+	// the chown -1 convention); {xattr:{k:v}} sets extended attributes.
+	owner, hasO := mapIntOpt(opts, "owner")
+	group, hasG := mapIntOpt(opts, "group")
+	if hasO || hasG {
+		uid, gid := -1, -1
+		if hasO {
+			uid = int(owner)
+		}
+		if hasG {
+			gid = int(group)
+		}
+		if err := ops.Chown(path, uid, gid, true); err != nil {
+			return err
+		}
+	}
+	if xm, ok := mapMapOpt(opts, "xattr"); ok {
+		for _, name := range xm.Keys() {
+			v, _ := xm.Get(name)
+			var payload []byte
+			if b, isB := AsBytesValue(v); isB {
+				payload = b
+			} else {
+				s, serr := v.AsConcreteString()
+				if serr != nil {
+					return fmt.Errorf("touch: xattr %q value must be a String or Bytes, got %s", name, v.Parent)
+				}
+				payload = []byte(s)
+			}
+			if err := ops.XattrSet(path, aqlToHostXattr(name), payload); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
+}
+
+// mapMapOpt reads one map-valued key from an options map, reporting presence.
+func mapMapOpt(opts Value, key string) (ReadMap, bool) {
+	if !opts.Parent.Equal(TMap) || !IsConcrete(opts) {
+		return nil, false
+	}
+	m, _ := AsMap(opts)
+	if m == nil {
+		return nil, false
+	}
+	v, ok := m.Get(key)
+	if !ok {
+		return nil, false
+	}
+	inner, err := AsMap(v)
+	if err != nil || inner == nil {
+		return nil, false
+	}
+	return inner, true
 }
 
 // doTouchWord implements IO.touch (the chmod/utimes/truncate/touch setter).

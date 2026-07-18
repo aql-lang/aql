@@ -27,6 +27,11 @@ func (w9ExtStub) Link(string, string) error                       { return fmt.E
 func (w9ExtStub) Chmod(string, os.FileMode) error                 { return fmt.Errorf("no") }
 func (w9ExtStub) Chtimes(string, time.Time, time.Time) error      { return fmt.Errorf("no") }
 func (w9ExtStub) Truncate(string, int64) error                    { return fmt.Errorf("no") }
+func (w9ExtStub) Chown(string, int, int, bool) error              { return fmt.Errorf("no") }
+func (w9ExtStub) XattrGet(string, string) ([]byte, error)         { return nil, fmt.Errorf("no") }
+func (w9ExtStub) XattrSet(string, string, []byte) error           { return fmt.Errorf("no") }
+func (w9ExtStub) XattrList(string) ([]string, error)              { return nil, fmt.Errorf("no") }
+func (w9ExtStub) XattrRemove(string, string) error                { return fmt.Errorf("no") }
 func (w9ExtStub) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, fmt.Errorf("no")
 }

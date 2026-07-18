@@ -117,7 +117,20 @@ func (o *OverlayFileOps) copyUp(path string) error {
 	if err := o.Upper.WriteFile(path, data, fi.Mode.Perm()); err != nil {
 		return err
 	}
-	// Preserve the lower timestamps on the fresh copy.
+	// Preserve the lower metadata on the fresh copy: timestamps strictly;
+	// ownership and xattrs BEST-EFFORT (kernel overlayfs copies these with
+	// privilege — an unprivileged upper may refuse chown with EPERM, and
+	// that must not fail the mutation that triggered the copy-up).
+	if fi.UID != -1 || fi.GID != -1 {
+		_ = o.Upper.Chown(path, fi.UID, fi.GID, true)
+	}
+	if names, xerr := o.Lower.XattrList(path); xerr == nil {
+		for _, name := range names {
+			if v, gerr := o.Lower.XattrGet(path, name); gerr == nil {
+				_ = o.Upper.XattrSet(path, name, v)
+			}
+		}
+	}
 	return o.Upper.Chtimes(path, fi.ModTime, fi.ModTime)
 }
 
@@ -371,6 +384,51 @@ func (o *OverlayFileOps) Chtimes(path string, atime, mtime time.Time) error {
 
 func (o *OverlayFileOps) Truncate(path string, size int64) error {
 	return o.mutateInUpper(path, "truncate", func(p string) error { return o.Upper.Truncate(p, size) })
+}
+
+// Chown re-owns in the upper (copy-up first — the union mutation rule).
+func (o *OverlayFileOps) Chown(path string, uid, gid int, follow bool) error {
+	return o.mutateInUpper(path, "chown", func(p string) error { return o.Upper.Chown(p, uid, gid, follow) })
+}
+
+// readSideXattr is the shared upper-first-else-whiteout-checked-lower
+// routing for the xattr READ pair.
+func (o *OverlayFileOps) readSideXattr(path, op string) (FileOps, string, error) {
+	path, err := o.deref(path)
+	if err != nil {
+		return nil, "", err
+	}
+	if o.inUpper(path) {
+		return o.Upper, path, nil
+	}
+	if o.hidden(o.resolve(path)) {
+		return nil, "", &os.PathError{Op: op, Path: path, Err: os.ErrNotExist}
+	}
+	return o.Lower, path, nil
+}
+
+func (o *OverlayFileOps) XattrGet(path, name string) ([]byte, error) {
+	side, p, err := o.readSideXattr(path, "xattr-get")
+	if err != nil {
+		return nil, err
+	}
+	return side.XattrGet(p, name)
+}
+
+func (o *OverlayFileOps) XattrSet(path, name string, value []byte) error {
+	return o.mutateInUpper(path, "xattr-set", func(p string) error { return o.Upper.XattrSet(p, name, value) })
+}
+
+func (o *OverlayFileOps) XattrList(path string) ([]string, error) {
+	side, p, err := o.readSideXattr(path, "xattr-list")
+	if err != nil {
+		return nil, err
+	}
+	return side.XattrList(p)
+}
+
+func (o *OverlayFileOps) XattrRemove(path, name string) error {
+	return o.mutateInUpper(path, "xattr-remove", func(p string) error { return o.Upper.XattrRemove(p, name) })
 }
 
 func (o *OverlayFileOps) ResolvePath(path string) (string, error) {

@@ -1,4 +1,4 @@
-go 1.24.7
+go 1.25.0
 
 // Development workspace. Sibling modules build from in-tree source here.
 // Before the first tagged release the module go.mods still carry local
@@ -6,11 +6,11 @@ go 1.24.7
 // those and pins real versions, after which this workspace is what lets the
 // clean, replace-free go.mods still build locally.
 use (
+	./calc/go
+	./cmd/go
 	./eng/go
 	./lang/go
-	./cmd/go
-	./calc/go
-	./wpg
 	./test/go
 	./test/solardemo
+	./wpg
 )

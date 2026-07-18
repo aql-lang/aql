@@ -86,6 +86,13 @@ type FileInfo struct {
 	IsDir   bool        // true for directories
 	Symlink bool        // true when the entry itself is a symlink (lstat view)
 	Target  string      // symlink target, when Symlink
+	// UID / GID are the owning user and group ids, or -1 where the
+	// backend cannot know them (Windows, a mounted AQL filesystem whose
+	// stat handler omits them). Construct FileInfo values through a path
+	// that sets them explicitly — the Go zero value 0 is root's uid, so
+	// an accidental zero is a real (wrong) owner, not "unset".
+	UID int
+	GID int
 }
 
 // FileOps defines the file operations that AQL's io words use. The
@@ -123,6 +130,20 @@ type FileOps interface {
 	Chtimes(path string, atime, mtime time.Time) error
 	// Truncate changes the size of the file at path.
 	Truncate(path string, size int64) error
+	// Chown changes path's owning user and group. A -1 uid or gid leaves
+	// that id unchanged (the chown(2) convention). When follow is false a
+	// symlink itself is re-owned (lchown); otherwise its target is.
+	Chown(path string, uid, gid int, follow bool) error
+	// XattrGet reads one extended attribute. Absent attributes error with
+	// the platform's not-found class (ENODATA / ENOATTR shaped).
+	XattrGet(path, name string) ([]byte, error)
+	// XattrSet writes one extended attribute (create or replace).
+	XattrSet(path, name string, value []byte) error
+	// XattrList returns the names of path's extended attributes, sorted.
+	XattrList(path string) ([]string, error)
+	// XattrRemove deletes one extended attribute. Removing an absent
+	// attribute errors like XattrGet.
+	XattrRemove(path, name string) error
 	// Watch subscribes to change events for path — a file, or a
 	// directory's direct children (non-recursive, inotify semantics).
 	// Returns the event stream and a stop function that releases the
@@ -193,7 +214,10 @@ func (o *OSFileOps) ResolvePath(path string) (string, error) {
 }
 
 // osFileInfo projects an os.FileInfo onto the host-agnostic FileInfo.
+// Ownership comes from the platform arm (xattr_unix.go / xattr_other.go)
+// — -1/-1 where the host cannot know it.
 func osFileInfo(fi os.FileInfo) FileInfo {
+	uid, gid := osFileOwner(fi)
 	return FileInfo{
 		Name:    fi.Name(),
 		Size:    fi.Size(),
@@ -201,6 +225,8 @@ func osFileInfo(fi os.FileInfo) FileInfo {
 		ModTime: fi.ModTime(),
 		IsDir:   fi.IsDir(),
 		Symlink: fi.Mode()&os.ModeSymlink != 0,
+		UID:     uid,
+		GID:     gid,
 	}
 }
 
@@ -333,6 +359,54 @@ func (o *OSFileOps) Truncate(path string, size int64) error {
 	return os.Truncate(resolved, size)
 }
 
+// Chown changes path's owning user and group (lchown when follow=false).
+func (o *OSFileOps) Chown(path string, uid, gid int, follow bool) error {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	if follow {
+		return os.Chown(resolved, uid, gid)
+	}
+	return os.Lchown(resolved, uid, gid)
+}
+
+// XattrGet reads one extended attribute (platform impl in xattr_*.go).
+func (o *OSFileOps) XattrGet(path, name string) ([]byte, error) {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+	return osXattrGet(resolved, name)
+}
+
+// XattrSet writes one extended attribute.
+func (o *OSFileOps) XattrSet(path, name string, value []byte) error {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	return osXattrSet(resolved, name, value)
+}
+
+// XattrList returns the sorted names of path's extended attributes.
+func (o *OSFileOps) XattrList(path string) ([]string, error) {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+	return osXattrList(resolved)
+}
+
+// XattrRemove deletes one extended attribute.
+func (o *OSFileOps) XattrRemove(path, name string) error {
+	resolved, err := o.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+	return osXattrRemove(resolved, name)
+}
+
 // NewDefault returns the default OS-backed file operations.
 func NewDefault() FileOps {
 	return &OSFileOps{}
@@ -359,6 +433,18 @@ type memMeta struct {
 	MTime  time.Time
 	ATime  time.Time
 	Target string
+	// UID/GID record ownership; OwnerSet distinguishes them from the Go
+	// zero (uid 0 is root — a REAL id, so a bare zero must not be read
+	// as "unset"; the no-zero-value-overload rule). Fresh metadata is
+	// stamped with the creating identity (stampOwner); a meta-less or
+	// unstamped entry (a test poking Files directly) defaults to the
+	// CURRENT euid/egid at read time via ownerOf.
+	UID      int
+	GID      int
+	OwnerSet bool
+	// Xattrs holds extended attributes. It lives on the CANONICAL path's
+	// meta, so hard links share attributes — inode fidelity.
+	Xattrs map[string][]byte
 }
 
 // MemFileOps is an in-memory implementation with REAL-FILESYSTEM fidelity:
@@ -383,10 +469,12 @@ type MemFileOps struct {
 	Links map[string]string   // hard-link alias name -> canonical file path
 	Cwd   string              // simulated working directory; defaults to "." if empty
 
-	// euidFn / nowFn are test seams for the effective uid (permission
-	// enforcement is skipped for root, mirroring the kernel) and the
-	// clock (mtime stamping). Nil means os.Geteuid / time.Now.
+	// euidFn / egidFn / nowFn are test seams for the effective uid
+	// (permission enforcement is skipped for root, mirroring the
+	// kernel), the effective gid (ownership stamping), and the clock
+	// (mtime stamping). Nil means os.Geteuid / os.Getegid / time.Now.
 	euidFn func() int
+	egidFn func() int
 	nowFn  func() time.Time
 
 	// watchers holds the live Watch subscriptions; every successful
@@ -410,11 +498,46 @@ func (m *MemFileOps) euid() int {
 	return os.Geteuid()
 }
 
+func (m *MemFileOps) egid() int {
+	if m.egidFn != nil {
+		return m.egidFn()
+	}
+	return os.Getegid()
+}
+
+// SetIdentity installs test seams for the effective uid / gid consulted
+// by permission enforcement and ownership stamping (nil restores the
+// real process identity). Exported so cross-package tests — the io word
+// tests in particular — can exercise euid-dependent behaviour (chown
+// refusals, permission denials) hermetically regardless of the identity
+// the test process really runs under.
+func (m *MemFileOps) SetIdentity(euid, egid func() int) {
+	m.euidFn, m.egidFn = euid, egid
+}
+
 func (m *MemFileOps) now() time.Time {
 	if m.nowFn != nil {
 		return m.nowFn()
 	}
 	return time.Now()
+}
+
+// stampOwner records the creating identity on fresh metadata — the mem
+// mirror of the kernel assigning a new inode's owner from the process
+// credentials. Returns meta for the inline construction idiom.
+func (m *MemFileOps) stampOwner(meta *memMeta) *memMeta {
+	meta.UID, meta.GID, meta.OwnerSet = m.euid(), m.egid(), true
+	return meta
+}
+
+// ownerOf reads an entry's ownership, defaulting an unstamped or absent
+// meta (a test poking Files directly) to the CURRENT identity — the same
+// convention as modeOf's mode defaulting.
+func (m *MemFileOps) ownerOf(meta *memMeta) (uid, gid int) {
+	if meta != nil && meta.OwnerSet {
+		return meta.UID, meta.GID
+	}
+	return m.euid(), m.egid()
 }
 
 // canon maps a hard-link alias to its canonical file path (identity for
@@ -557,16 +680,19 @@ func (m *MemFileOps) checkParentWrite(op, path, resolved string) error {
 func (m *MemFileOps) infoFor(resolved string) (FileInfo, bool) {
 	name := filepath.Base(resolved)
 	if meta := m.Meta[resolved]; meta != nil && meta.Target != "" {
-		return FileInfo{Name: name, Size: int64(len(meta.Target)), Mode: os.ModeSymlink | 0o777, ModTime: meta.MTime, Symlink: true, Target: meta.Target}, true
+		uid, gid := m.ownerOf(meta)
+		return FileInfo{Name: name, Size: int64(len(meta.Target)), Mode: os.ModeSymlink | 0o777, ModTime: meta.MTime, Symlink: true, Target: meta.Target, UID: uid, GID: gid}, true
 	}
 	if c := m.canon(resolved); m.isFileEntry(resolved) {
 		data := m.Files[c]
 		meta := m.Meta[c]
-		return FileInfo{Name: name, Size: int64(len(data)), Mode: modeOf(meta, 0o644), ModTime: mtimeOf(meta)}, true
+		uid, gid := m.ownerOf(meta)
+		return FileInfo{Name: name, Size: int64(len(data)), Mode: modeOf(meta, 0o644), ModTime: mtimeOf(meta), UID: uid, GID: gid}, true
 	}
 	if m.Dirs[resolved] {
 		meta := m.Meta[resolved]
-		return FileInfo{Name: name, Mode: os.ModeDir | (modeOf(meta, 0o755) & os.ModePerm), ModTime: mtimeOf(meta), IsDir: true}, true
+		uid, gid := m.ownerOf(meta)
+		return FileInfo{Name: name, Mode: os.ModeDir | (modeOf(meta, 0o755) & os.ModePerm), ModTime: mtimeOf(meta), IsDir: true, UID: uid, GID: gid}, true
 	}
 	return FileInfo{}, false
 }
@@ -614,13 +740,13 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 		// open(2) on an existing file keeps its mode; only mtime moves.
 		meta := m.Meta[c]
 		if meta == nil {
-			meta = &memMeta{Mode: 0o644}
+			meta = m.stampOwner(&memMeta{Mode: 0o644})
 			m.Meta[c] = meta
 		}
 		meta.MTime = m.now()
 		m.emit("write", final)
 	} else {
-		m.Meta[c] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+		m.Meta[c] = m.stampOwner(&memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()})
 		m.emit("create", final)
 	}
 	return nil
@@ -643,7 +769,7 @@ func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
 		return perr
 	}
 	m.recordDir(final)
-	m.Meta[final] = &memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()}
+	m.Meta[final] = m.stampOwner(&memMeta{Mode: perm & os.ModePerm, MTime: m.now(), ATime: m.now()})
 	m.emit("create", final)
 	return nil
 }
@@ -656,7 +782,7 @@ func (m *MemFileOps) recordDir(dir string) {
 	for dir != "." && dir != "/" && dir != "" {
 		m.Dirs[dir] = true
 		if m.Meta[dir] == nil {
-			m.Meta[dir] = &memMeta{Mode: 0o755, MTime: m.now()}
+			m.Meta[dir] = m.stampOwner(&memMeta{Mode: 0o755, MTime: m.now()})
 		}
 		dir = filepath.Dir(dir)
 	}
@@ -938,7 +1064,7 @@ func (m *MemFileOps) Symlink(target, linkPath string) error {
 		return perr
 	}
 	m.recordDir(filepath.Dir(linkFinal))
-	m.Meta[linkFinal] = &memMeta{Mode: os.ModeSymlink | 0o777, MTime: m.now(), Target: target}
+	m.Meta[linkFinal] = m.stampOwner(&memMeta{Mode: os.ModeSymlink | 0o777, MTime: m.now(), Target: target})
 	m.emit("create", linkFinal)
 	return nil
 }
@@ -972,7 +1098,7 @@ func (m *MemFileOps) Link(target, linkPath string) error {
 		return &os.PathError{Op: "link", Path: target, Err: os.ErrPermission}
 	case info.Symlink:
 		src := m.Meta[targetFinal]
-		m.Meta[linkFinal] = &memMeta{Mode: src.Mode, MTime: src.MTime, ATime: src.ATime, Target: src.Target}
+		m.Meta[linkFinal] = &memMeta{Mode: src.Mode, MTime: src.MTime, ATime: src.ATime, Target: src.Target, UID: src.UID, GID: src.GID, OwnerSet: src.OwnerSet, Xattrs: src.Xattrs}
 	default:
 		m.Links[linkFinal] = m.canon(targetFinal)
 	}
@@ -1057,6 +1183,137 @@ func (m *MemFileOps) Truncate(path string, size int64) error {
 		meta.MTime = m.now()
 	}
 	m.emit("write", final)
+	return nil
+}
+
+// Chown changes an entry's ownership (lchown when follow=false). The
+// kernel rule, faithfully: root re-owns freely; for anyone else an
+// actual id change is EPERM (the "owner may hand off to a group they
+// belong to" carve-out is NOT modeled — a documented fidelity
+// exception), and the -1/-1 no-op succeeds against any accessible path.
+func (m *MemFileOps) Chown(path string, uid, gid int, follow bool) error {
+	final, err := m.resolve(path, follow)
+	if err != nil {
+		return err
+	}
+	meta, ok := m.metaForExisting(final)
+	if !ok {
+		return &os.PathError{Op: "chown", Path: path, Err: os.ErrNotExist}
+	}
+	if uid == -1 && gid == -1 {
+		return nil
+	}
+	if m.euid() != 0 {
+		return &os.PathError{Op: "chown", Path: path, Err: os.ErrPermission}
+	}
+	// Stamp before the partial update so a -1 arm keeps the CURRENT
+	// default identity rather than adopting a later reader's.
+	if !meta.OwnerSet {
+		m.stampOwner(meta)
+	}
+	if uid != -1 {
+		meta.UID = uid
+	}
+	if gid != -1 {
+		meta.GID = gid
+	}
+	m.emit("chmod", final)
+	return nil
+}
+
+// xattrsForWrite returns the mutable attribute map for an existing path,
+// enforcing the write bit (the kernel's rule for user.* mutation).
+func (m *MemFileOps) xattrsForWrite(op, path string) (map[string][]byte, string, error) {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return nil, "", err
+	}
+	meta, ok := m.metaForExisting(final)
+	if !ok {
+		return nil, "", &os.PathError{Op: op, Path: path, Err: os.ErrNotExist}
+	}
+	if perr := m.checkPerm(op, path, final, 0o200); perr != nil {
+		return nil, "", perr
+	}
+	if meta.Xattrs == nil {
+		meta.Xattrs = map[string][]byte{}
+	}
+	return meta.Xattrs, final, nil
+}
+
+// xattrsForRead returns the attribute map (possibly nil) for an existing
+// path, enforcing the read bit.
+func (m *MemFileOps) xattrsForRead(op, path string) (map[string][]byte, error) {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return nil, err
+	}
+	meta, ok := m.metaForExisting(final)
+	if !ok {
+		return nil, &os.PathError{Op: op, Path: path, Err: os.ErrNotExist}
+	}
+	if perr := m.checkPerm(op, path, final, 0o400); perr != nil {
+		return nil, perr
+	}
+	return meta.Xattrs, nil
+}
+
+// XattrGet reads one extended attribute; an absent one errors with the
+// PLATFORM's not-found errno (errXattrAbsent) so mem and OS classify
+// identically under the parity harness.
+func (m *MemFileOps) XattrGet(path, name string) ([]byte, error) {
+	xs, err := m.xattrsForRead("xattr-get", path)
+	if err != nil {
+		return nil, err
+	}
+	v, ok := xs[name]
+	if !ok {
+		return nil, &os.PathError{Op: "xattr-get", Path: path, Err: errXattrAbsent}
+	}
+	out := make([]byte, len(v))
+	copy(out, v)
+	return out, nil
+}
+
+// XattrSet writes one extended attribute (create or replace).
+func (m *MemFileOps) XattrSet(path, name string, value []byte) error {
+	xs, final, err := m.xattrsForWrite("xattr-set", path)
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, len(value))
+	copy(buf, value)
+	xs[name] = buf
+	m.emit("chmod", final)
+	return nil
+}
+
+// XattrList returns the sorted attribute names.
+func (m *MemFileOps) XattrList(path string) ([]string, error) {
+	xs, err := m.xattrsForRead("xattr-list", path)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(xs))
+	for name := range xs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// XattrRemove deletes one extended attribute; removing an absent one
+// errors like XattrGet.
+func (m *MemFileOps) XattrRemove(path, name string) error {
+	xs, final, err := m.xattrsForWrite("xattr-remove", path)
+	if err != nil {
+		return err
+	}
+	if _, ok := xs[name]; !ok {
+		return &os.PathError{Op: "xattr-remove", Path: path, Err: errXattrAbsent}
+	}
+	delete(xs, name)
+	m.emit("chmod", final)
 	return nil
 }
 

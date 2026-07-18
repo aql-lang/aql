@@ -72,6 +72,19 @@ import "aql:io"  context dot __sys dot fs set mem true  file/q is IO.FileType	tr
 import "aql:io"  context dot __sys dot fs set mem true  "file" is IO.FileType	false	the STRING "file" is not a FileType
 import "aql:io"  context dot __sys dot fs set mem true  IO.stat (make Pathon "mem://ghost.txt")	None	stat of an absent path is none
 #
+# §8a  ownership + extended attributes — stat records carry integer
+#      owner/group (the creating identity; -1 where the backend cannot
+#      know); {xattr:true} attaches an xattr sub-map; touch {owner group}
+#      re-owns (chown semantics) and touch {xattr:{k:v}} sets attributes.
+#      Owner VALUES are environment-dependent (the process identity), so
+#      the rows assert shape, not numbers.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://ow.txt") "x" drop  (IO.stat (make Pathon "mem://ow.txt")).owner is Integer	true	stat records carry an integer owner id
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://ow.txt") "x" drop  (IO.stat (make Pathon "mem://ow.txt")).group gte -1	true	and an integer group id (-1 = unknowable)
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch (make Pathon "mem://xa.txt") {xattr:{note:'hi'}} drop  ((IO.stat (make Pathon "mem://xa.txt") {xattr:true}).xattr).note	'hi'	touch {xattr} sets an attribute; stat {xattr:true} reads it back
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch (make Pathon "mem://xa2.txt") drop  (IO.stat (make Pathon "mem://xa2.txt") {xattr:true}).xattr	{}	a file with no attributes reads an empty xattr map
+import "aql:io"  context dot __sys dot fs set mem true  IO.stat (make Pathon "mem://ghost.txt") {xattr:true}	None	{xattr:true} on an absent path is still none
+import "aql:io"  context dot __sys dot fs set mem true  IO.touch (make Pathon "mem://xb.txt") {xattr:{bad:[1 2]}}	ERROR:touch	an xattr value must be a String or Bytes
+#
 # §9  list — the CORE `list` word, EXTENDED by aql:io with a Pathon overload:
 #     `list p` enumerates a directory's entries (names, or records with
 #     {detail:true}); {recursive:true} walks the tree. It is a BARE word

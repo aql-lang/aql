@@ -63,6 +63,26 @@ func (notInstalledFileOps) Chtimes(path string, atime, mtime time.Time) error {
 	return capabilityNotInstalled("fileops", "chmod", path)
 }
 
+func (notInstalledFileOps) Chown(path string, uid, gid int, follow bool) error {
+	return capabilityNotInstalled("fileops", "chown", path)
+}
+
+func (notInstalledFileOps) XattrGet(path, name string) ([]byte, error) {
+	return nil, capabilityNotInstalled("fileops", "xattr-get", path)
+}
+
+func (notInstalledFileOps) XattrSet(path, name string, value []byte) error {
+	return capabilityNotInstalled("fileops", "xattr-set", path)
+}
+
+func (notInstalledFileOps) XattrList(path string) ([]string, error) {
+	return nil, capabilityNotInstalled("fileops", "xattr-list", path)
+}
+
+func (notInstalledFileOps) XattrRemove(path, name string) error {
+	return capabilityNotInstalled("fileops", "xattr-remove", path)
+}
+
 func (notInstalledFileOps) Truncate(path string, size int64) error {
 	return capabilityNotInstalled("fileops", "write", path)
 }

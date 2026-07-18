@@ -286,7 +286,16 @@ func TestModelWave4NewHandlerRejections(t *testing.T) {
 // model_io arms of the inline-source scratch setup.
 type failOpsWave4 struct{ failMkdir bool }
 
-func (f *failOpsWave4) ReadFile(string) ([]byte, error) { return nil, errors.New("read refused") }
+func (f *failOpsWave4) ReadFile(string) ([]byte, error)    { return nil, errors.New("read refused") }
+func (f *failOpsWave4) Chown(string, int, int, bool) error { return errors.New("chown refused") }
+func (f *failOpsWave4) XattrGet(string, string) ([]byte, error) {
+	return nil, errors.New("xattr refused")
+}
+func (f *failOpsWave4) XattrSet(string, string, []byte) error { return errors.New("xattr refused") }
+func (f *failOpsWave4) XattrList(string) ([]string, error) {
+	return nil, errors.New("xattr refused")
+}
+func (f *failOpsWave4) XattrRemove(string, string) error { return errors.New("xattr refused") }
 func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, errors.New("watch refused")
 }

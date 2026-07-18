@@ -107,4 +107,19 @@ func TestNotInstalledFileOpsNewMethods(t *testing.T) {
 	if err := ops.Truncate("x", 0); err == nil {
 		t.Error("truncate stub should error")
 	}
+	if err := ops.Chown("x", -1, -1, true); err == nil {
+		t.Error("chown stub should error")
+	}
+	if _, err := ops.XattrGet("x", "a"); err == nil {
+		t.Error("xattr-get stub should error")
+	}
+	if err := ops.XattrSet("x", "a", nil); err == nil {
+		t.Error("xattr-set stub should error")
+	}
+	if _, err := ops.XattrList("x"); err == nil {
+		t.Error("xattr-list stub should error")
+	}
+	if err := ops.XattrRemove("x", "a"); err == nil {
+		t.Error("xattr-remove stub should error")
+	}
 }

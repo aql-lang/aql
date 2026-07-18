@@ -132,6 +132,48 @@ func (p *permissionedFileOps) Truncate(path string, size int64) error {
 	return p.inner.Truncate(path, size)
 }
 
+// Chown gates on fileops.chmod{path} — a write-like metadata mutation,
+// same class as Chmod/Chtimes, so existing policy profiles keep their
+// meaning without a new op name.
+func (p *permissionedFileOps) Chown(path string, uid, gid int, follow bool) error {
+	if err := p.policy.Check("fileops", "chmod", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.Chown(path, uid, gid, follow)
+}
+
+// XattrGet gates on fileops.stat{path} (read-like metadata).
+func (p *permissionedFileOps) XattrGet(path, name string) ([]byte, error) {
+	if err := p.policy.Check("fileops", "stat", policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.XattrGet(path, name)
+}
+
+// XattrSet gates on fileops.chmod{path} (write-like metadata).
+func (p *permissionedFileOps) XattrSet(path, name string, value []byte) error {
+	if err := p.policy.Check("fileops", "chmod", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.XattrSet(path, name, value)
+}
+
+// XattrList gates on fileops.stat{path} (read-like metadata).
+func (p *permissionedFileOps) XattrList(path string) ([]string, error) {
+	if err := p.policy.Check("fileops", "stat", policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.XattrList(path)
+}
+
+// XattrRemove gates on fileops.chmod{path} (write-like metadata).
+func (p *permissionedFileOps) XattrRemove(path, name string) error {
+	if err := p.policy.Check("fileops", "chmod", policy.Args{"path": path}); err != nil {
+		return err
+	}
+	return p.inner.XattrRemove(path, name)
+}
+
 // ResolvePath is pure path manipulation — no I/O, no policy check.
 // Resolution must succeed even for paths that read/write would
 // later deny, so consumers can compute the canonical form before

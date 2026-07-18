@@ -45,6 +45,10 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  IO.move (make Pathon "a") (make Pathon "b") {overwrite:false}`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'utf16le'}`,
 		`import "aql:io"  IO.write (make Pathon "d") "x" {enc:'latin1'}`,
+		// P2 option forms: ownership + extended attributes
+		`import "aql:io"  IO.stat (make Pathon "d") {xattr:true}`,
+		`import "aql:io"  IO.touch (make Pathon "d") {owner:1 group:1}`,
+		`import "aql:io"  IO.touch (make Pathon "d") {xattr:{note:'x'}}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

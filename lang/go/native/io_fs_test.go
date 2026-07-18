@@ -552,6 +552,28 @@ type failAtOps struct {
 	*capabilities.MemFileOps
 	failReadFile, failWriteFile, failMkdir, failReadDir, failSymlink string
 	failStat, failChmod, failChtimes, failTruncate                   string
+	failXattrGet, failXattrList, failXattrSet                        string
+}
+
+func (f *failAtOps) XattrList(p string) ([]string, error) {
+	if f.failXattrList != "" && strings.Contains(p, f.failXattrList) {
+		return nil, fmt.Errorf("xattr-list boom")
+	}
+	return f.MemFileOps.XattrList(p)
+}
+
+func (f *failAtOps) XattrSet(p, name string, v []byte) error {
+	if f.failXattrSet != "" && strings.Contains(p, f.failXattrSet) {
+		return fmt.Errorf("xattr-set boom")
+	}
+	return f.MemFileOps.XattrSet(p, name, v)
+}
+
+func (f *failAtOps) XattrGet(p, name string) ([]byte, error) {
+	if f.failXattrGet != "" && strings.Contains(p, f.failXattrGet) {
+		return nil, fmt.Errorf("xattr-get boom")
+	}
+	return f.MemFileOps.XattrGet(p, name)
 }
 
 func (f *failAtOps) Stat(p string, follow bool) (capabilities.FileInfo, error) {
