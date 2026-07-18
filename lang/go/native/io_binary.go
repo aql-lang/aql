@@ -2,6 +2,14 @@ package native
 
 import "fmt"
 
+// maxPositionedWriteSize caps a positioned write's resulting file size. A
+// positioned splice materialises the whole file in memory (read-modify-
+// write), so a huge offset is a mistake, not a real file. The cap also
+// keeps offset+len below the int64-overflow and Go make-slice ceilings, so
+// the growth arithmetic in writeAtOffset can never wrap negative or panic
+// with "makeslice: len out of range".
+const maxPositionedWriteSize = int64(1) << 40 // 1 TiB
+
 // io_binary.go adds binary and positioned I/O to the aql:io read/write words,
 // using the Scalar/Bytes type (NewBytesValue/AsBytesValue). Binary/positioned
 // forms are file-oriented: read gains {enc:'bytes'} (whole-file bytes) and
@@ -87,6 +95,14 @@ func tryBinaryRead(r *Registry, path, enc string, opts Value) (result []Value, h
 // writeAtOffset splices data into the file at path starting at offset,
 // growing the file with zero bytes as needed.
 func writeAtOffset(r *Registry, path string, data []byte, offset int64) error {
+	// Reject an offset whose resulting size would exceed the positioned-write
+	// cap, before any arithmetic or allocation. The cap sits far below both
+	// the int64-overflow point and Go's make-slice ceiling, so `end` can
+	// never wrap negative (which would skip the growth branch and then panic
+	// on existing[offset:]) nor blow makeslice with "len out of range".
+	if offset > maxPositionedWriteSize-int64(len(data)) {
+		return fmt.Errorf("offset %d + %d bytes exceeds the maximum positioned-write size", offset, len(data))
+	}
 	ops := EffectiveFileOps(r)
 	existing, _ := ops.ReadFile(path) // absent → treated as empty
 	end := offset + int64(len(data))

@@ -2,11 +2,42 @@ package capabilities
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
+
+// TestOverlayWhiteoutConcurrency exercises concurrent whiteout mutation and
+// reads so `go test -race` catches a regression of the wmu guard (the
+// PR-review fix): IO.watch runs its callback on a fork while the main program
+// keeps doing I/O, and without the lock the shared whiteouts map is a fatal
+// "concurrent map read and map write".
+func TestOverlayWhiteoutConcurrency(t *testing.T) {
+	o, _, _ := overlayPair(func(l *MemFileOps) {
+		for i := 0; i < 16; i++ {
+			if err := l.WriteFile(fmt.Sprintf("f%d.txt", i), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	var wg sync.WaitGroup
+	for g := 0; g < 4; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 16; i++ {
+				p := fmt.Sprintf("f%d.txt", i)
+				_ = o.Remove(p, false)                 // setWhiteout
+				_ = o.WriteFile(p, []byte("y"), 0o644) // clearWhiteout
+				_, _ = o.ReadDir(".")                  // isWhiteout
+			}
+		}()
+	}
+	wg.Wait()
+}
 
 // overlayPair builds the canonical unit-test shape: a writable MEM upper
 // over a read-only-treated MEM lower seeded by the caller. Returned lower
@@ -272,6 +303,42 @@ func TestOverlayRename(t *testing.T) {
 	}
 	if err := o.Rename("low.txt", "z"); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("rename whited-out = %v", err)
+	}
+
+	// Renaming a MIXED directory (children in BOTH layers) carries the
+	// lower-only children along and keeps upper modifications — the PR-review
+	// fix. Without merging the lower subtree up first, the old-name whiteout
+	// would drop mix/low.txt.
+	o2, _, _ := overlayPair(func(l *MemFileOps) {
+		if err := l.WriteFile("mix/low.txt", []byte("L"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := l.WriteFile("mix/both.txt", []byte("lowver"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	// Upper writes make `mix` exist in both layers: a new child, and one that
+	// SHADOWS a lower child (which the merge must not clobber).
+	if err := o2.WriteFile("mix/up.txt", []byte("U"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := o2.WriteFile("mix/both.txt", []byte("upver"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := o2.Rename("mix", "mixed"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := o2.ReadFile("mixed/low.txt"); err != nil || string(b) != "L" {
+		t.Errorf("mixed rename lost the lower-only child: %q (%v)", b, err)
+	}
+	if b, err := o2.ReadFile("mixed/up.txt"); err != nil || string(b) != "U" {
+		t.Errorf("mixed rename lost the upper child: %q (%v)", b, err)
+	}
+	if b, err := o2.ReadFile("mixed/both.txt"); err != nil || string(b) != "upver" {
+		t.Errorf("mixed rename clobbered the upper modification: %q (%v), want upver", b, err)
+	}
+	if _, err := o2.ReadDir("mix"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("old mixed dir still visible after rename: %v", err)
 	}
 }
 

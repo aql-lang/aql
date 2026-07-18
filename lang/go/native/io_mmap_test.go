@@ -98,6 +98,29 @@ func TestMmapWriteRefusals(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("close"), w})
 }
 
+// TestMmapUseAfterClose pins the PR-review fix: reading, writing, or
+// flushing a Mmap region AFTER IO.close must refuse cleanly rather than
+// touch the unmapped bytes (a use-after-free / SIGSEGV on the OS backend).
+func TestMmapUseAfterClose(t *testing.T) {
+	r, mem := ioFSReg(t)
+	if err := mem.WriteFile("m.bin", []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := mmapVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("writable", NewBoolean(true)) })
+	runAQL(t, r, []Value{NewWord("close"), w})
+	if err := runAQLError(t, r, []Value{NewWord("read"), w}); err == nil {
+		t.Error("read after close must refuse (no use-after-free)")
+	}
+	if err := runAQLError(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("x"))}); err == nil {
+		t.Error("write after close must refuse")
+	}
+	if err := runAQLError(t, r, []Value{NewWord("flush"), w}); err == nil {
+		t.Error("flush after close must refuse")
+	}
+	// close is idempotent (the memoised close-error path).
+	runAQL(t, r, []Value{NewWord("close"), w})
+}
+
 func TestMmapHandlerGuards(t *testing.T) {
 	r, mem := ioFSReg(t)
 	_ = mem.WriteFile("m.bin", []byte("data"), 0o644)

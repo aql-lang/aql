@@ -449,14 +449,34 @@ func (a *aqlFileOps) Mmap(path string, _ int64, _ int, _ bool) (capabilities.Mma
 
 var _ capabilities.FileOps = (*aqlFileOps)(nil)
 
-// mountPrevKey is the capability slot holding the FileOps that was
-// active before IO.mount, so IO.unmount can restore it exactly.
+// mountPrevKey is the capability slot holding the STACK of FileOps that
+// were active before each IO.mount, so nested mounts unwind in LIFO order —
+// `mount A; mount B; unmount; unmount` restores B→A→original exactly.
 const mountPrevKey = "engine.fileops.mountprev"
 
-// mountedPrev is the typed wrapper for the saved slot.
+// mountedPrev captures one pre-mount FileOps slot (nil/absent when nothing
+// was installed before that mount).
 type mountedPrev struct {
-	ops    capabilities.FileOps // the pre-mount FileOps (nil if the slot was empty)
+	ops    capabilities.FileOps
 	hadOps bool
+}
+
+// mountStack is the LIFO of saved predecessors, one per live mount.
+type mountStack struct {
+	entries []mountedPrev
+}
+
+// pushMountPrev records the CURRENT host FileOps on the mount stack before a
+// new backend is installed, so IO.unmount can restore it — supporting nested
+// mounts rather than clobbering a single saved slot.
+func pushMountPrev(r *Registry) {
+	prevOps, hadOps, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
+	stack, ok, _ := eng.Cap[*mountStack](r, mountPrevKey)
+	if !ok || stack == nil {
+		stack = &mountStack{}
+		_ = r.Capabilities.Set(mountPrevKey, stack)
+	}
+	stack.entries = append(stack.entries, mountedPrev{ops: prevOps, hadOps: hadOps})
 }
 
 // doMountWord implements IO.mount: validate the handler map, save the
@@ -480,9 +500,7 @@ func doMountWord(args []Value, r *Registry) ([]Value, error) {
 		return nil, r.AqlErrorHint("mount_error", "mount: a mounted filesystem needs at least a `read` handler", "mount",
 			"supply {read: ([p] => [...]), ...}; unhandled operations refuse cleanly")
 	}
-	prevOps, hadOps, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
-	prev := &mountedPrev{ops: prevOps, hadOps: hadOps}
-	_ = r.Capabilities.Set(mountPrevKey, prev)
+	pushMountPrev(r)
 	SetHostFileOps(r, &aqlFileOps{r: r, handlers: handlers})
 	return nil, nil
 }
@@ -522,25 +540,34 @@ func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
 	if writable {
 		ops = capabilities.NewOverlay(capabilities.NewMem(), zfs)
 	}
-	prevOps, hadOps, _ := eng.Cap[capabilities.FileOps](r, CapFileOps)
-	prev := &mountedPrev{ops: prevOps, hadOps: hadOps}
-	_ = r.Capabilities.Set(mountPrevKey, prev)
+	pushMountPrev(r)
 	SetHostFileOps(r, ops)
 	return nil, nil
 }
 
-// doUnmountWord implements IO.unmount: restore the FileOps saved by the
-// most recent mount.
+// doUnmountWord implements IO.unmount: pop the most recent mount's saved
+// predecessor off the stack and restore it. The restore goes back through
+// the SetHostFileOps rewire path (not a bare slot Set) so the JsonicFormat
+// multisource resolver follows the restored backend — otherwise a later
+// host-backed `.jsonic` include would still resolve through the unmounted
+// filesystem.
 func doUnmountWord(_ []Value, r *Registry) ([]Value, error) {
-	prev, ok, _ := eng.Cap[*mountedPrev](r, mountPrevKey)
-	if !ok || prev == nil {
+	stack, ok, _ := eng.Cap[*mountStack](r, mountPrevKey)
+	if !ok || stack == nil || len(stack.entries) == 0 {
 		return nil, r.AqlError("unmount_error", "unmount: no mounted filesystem to unmount", "unmount")
 	}
+	prev := stack.entries[len(stack.entries)-1]
+	stack.entries = stack.entries[:len(stack.entries)-1]
 	if prev.hadOps && prev.ops != nil {
 		_ = r.Capabilities.Set(CapFileOps, prev.ops)
 	} else {
 		_, _ = r.Capabilities.Delete(CapFileOps)
 	}
-	_, _ = r.Capabilities.Delete(mountPrevKey)
+	// Rewire the jsonic resolver to whatever is now effective (the restored
+	// backend, or the not-installed stub when the slot was emptied).
+	rewireFileOpsResolver(r, HostFileOps(r))
+	if len(stack.entries) == 0 {
+		_, _ = r.Capabilities.Delete(mountPrevKey)
+	}
 	return nil, nil
 }

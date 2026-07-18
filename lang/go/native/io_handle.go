@@ -174,7 +174,7 @@ func doFlushWord(args []Value, r *Registry) ([]Value, error) {
 		return []Value{args[0]}, nil
 	}
 	if mi, ok := asMmapInfo(args[0]); ok {
-		if err := mi.region.Flush(); err != nil {
+		if err := mi.flush(); err != nil {
 			return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
 		}
 		return []Value{args[0]}, nil

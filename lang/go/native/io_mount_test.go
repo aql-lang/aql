@@ -11,6 +11,81 @@ import (
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
+// TestNestedMountUnwindsLIFO pins the PR-review fix: nested mounts unwind in
+// LIFO order rather than clobbering a single saved slot, so the first
+// unmount reveals the earlier mount and the last restores the original.
+func TestNestedMountUnwindsLIFO(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	run := func(src string) error {
+		vals, perr := parser.Parse(src)
+		if perr != nil {
+			t.Fatalf("parse %q: %v", src, perr)
+		}
+		_, rerr := NewTop(r).Run(vals)
+		return rerr
+	}
+	if err := run(`mount {read: (p:Pathon => ["A"])}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(`mount {read: (p:Pathon => ["B"])}`); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := HostFileOps(r).ReadFile("x"); string(b) != "B" {
+		t.Errorf("top of the mount stack = %q, want B", b)
+	}
+	if err := run(`unmount`); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := HostFileOps(r).ReadFile("x"); string(b) != "A" {
+		t.Errorf("after one unmount = %q, want A (the earlier mount, not lost)", b)
+	}
+	if err := run(`unmount`); err != nil {
+		t.Fatal(err)
+	}
+	// The stack is empty; a further unmount errors.
+	if err := run(`unmount`); err == nil {
+		t.Error("unmount with an empty mount stack should error")
+	}
+}
+
+// TestUnmountRewiresJsonicResolver pins the PR-review fix: IO.unmount restores
+// the previous FileOps THROUGH the resolver-rewire path, so a later jsonic
+// include resolves against the restored backend rather than the unmounted one.
+func TestUnmountRewiresJsonicResolver(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	SetHostFormats(r, map[string]Format{"jsonic": &JsonicFormat{}})
+	// Base backend A holds the include; a "mounted" backend B does not.
+	memA := capabilities.NewMem()
+	if err := memA.WriteFile("inc.jsonic", []byte(`{v:1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	SetHostFileOps(r, memA)
+	pushMountPrev(r)
+	SetHostFileOps(r, capabilities.NewMem())
+	if _, err := doUnmountWord(nil, r); err != nil {
+		t.Fatal(err)
+	}
+	// After unmount the include must resolve — through A, the restored backend.
+	jf, _ := HostFormats(r)["jsonic"].(*JsonicFormat)
+	res, derr := jf.Decode(`{@"inc.jsonic", w:2}`)
+	if derr != nil {
+		t.Fatalf("include did not resolve after unmount (resolver not rewired): %v", derr)
+	}
+	m, _ := AsMap(res[0])
+	if v, ok := m.Get("v"); !ok {
+		t.Errorf("resolved map missing the included key: %v", res[0])
+	} else if iv, _ := AsInteger(v); iv != 1 {
+		t.Errorf("included v = %v, want 1", v)
+	}
+}
+
 // mountFixture builds a registry with the io words and runs an AQL
 // program that mounts a handler set, returning the registry.
 func mountFixture(t *testing.T, src string) *Registry {

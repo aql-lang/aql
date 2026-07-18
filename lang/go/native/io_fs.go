@@ -313,6 +313,16 @@ func doCopy(r *Registry, src, dst string, recursive bool) error {
 	}
 	switch {
 	case fi.Symlink:
+		// Overwrite parity with the file case (WriteFile truncates an existing
+		// file): the {overwrite:false} guard already ran in doCopyWord, so an
+		// existing destination is replaced rather than triggering EEXIST from
+		// Symlink. Removing an existing non-empty directory still refuses, the
+		// same as writing a file over a directory.
+		if _, sErr := ops.Stat(dst, false); sErr == nil {
+			if rmErr := ops.Remove(dst, false); rmErr != nil {
+				return rmErr
+			}
+		}
 		return ops.Symlink(fi.Target, dst)
 	case fi.IsDir:
 		if !recursive {

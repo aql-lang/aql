@@ -522,6 +522,23 @@ func TestCopyWord(t *testing.T) {
 	if li, err := mem.Stat("link2", false); err != nil || !li.Symlink || li.Target != "src.txt" {
 		t.Errorf("copied symlink = %+v (%v)", li, err)
 	}
+	// copying a symlink onto an EXISTING destination REPLACES it (overwrite
+	// parity with the file case — a bare Symlink would EEXIST): PR-review fix.
+	if err := mem.WriteFile("occupied.txt", []byte("old"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runAQL(t, r, []Value{NewWord("copy"), pathV("link"), pathV("occupied.txt")})
+	if li, err := mem.Stat("occupied.txt", false); err != nil || !li.Symlink || li.Target != "src.txt" {
+		t.Errorf("symlink copy did not overwrite = %+v (%v)", li, err)
+	}
+	// Overwriting a NON-EMPTY directory with a symlink still refuses (the
+	// Remove fails), the same as writing a file over a directory.
+	if err := mem.WriteFile("busydir/keep.txt", []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runAQLError(t, r, []Value{NewWord("copy"), pathV("link"), pathV("busydir")}); err == nil {
+		t.Error("symlink copy over a non-empty dir should refuse")
+	}
 	// copying a directory needs {recursive}.
 	if err := mem.WriteFile("tree/a.txt", []byte("1"), 0644); err != nil {
 		t.Fatal(err)

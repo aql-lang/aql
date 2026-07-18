@@ -145,6 +145,15 @@ func SetHostFileOps(r *Registry, ops capabilities.FileOps) {
 		ops = NewPermissionedFileOps(ops, pol)
 	}
 	_ = r.Capabilities.Set(CapFileOps, ops)
+	rewireFileOpsResolver(r, ops)
+}
+
+// rewireFileOpsResolver points the jsonic multisource resolver at ops so a
+// `.jsonic` include (`@"other.jsonic"`) resolves through the currently
+// effective filesystem. Shared by SetHostFileOps (install) and IO.unmount
+// (restore) so a restored backend never leaves the resolver on the
+// unmounted filesystem.
+func rewireFileOpsResolver(r *Registry, ops capabilities.FileOps) {
 	if formats := HostFormats(r); formats != nil {
 		if jf, ok := formats["jsonic"].(*JsonicFormat); ok {
 			jf.Resolver = MakeFileOpsResolver(ops)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -34,7 +35,32 @@ type OverlayFileOps struct {
 	// whiteouts records union-deleted paths (resolved through Upper's
 	// ResolvePath, which the overlay uses as its path authority). A
 	// whiteout hides the lower entry AND any lower subtree below it.
+	// wmu guards it: IO.watch runs its callback on a concurrent registry
+	// fork while the main program keeps doing I/O, so both sides can touch
+	// the map at once — without the lock that is Go's fatal "concurrent map
+	// read and map write". Every access goes through the helpers below.
+	wmu       sync.Mutex
 	whiteouts map[string]bool
+}
+
+// isWhiteout / setWhiteout / clearWhiteout are the only ways whiteouts is
+// touched, each under wmu, so concurrent overlay users never race the map.
+func (o *OverlayFileOps) isWhiteout(p string) bool {
+	o.wmu.Lock()
+	defer o.wmu.Unlock()
+	return o.whiteouts[p]
+}
+
+func (o *OverlayFileOps) setWhiteout(p string) {
+	o.wmu.Lock()
+	defer o.wmu.Unlock()
+	o.whiteouts[p] = true
+}
+
+func (o *OverlayFileOps) clearWhiteout(p string) {
+	o.wmu.Lock()
+	defer o.wmu.Unlock()
+	delete(o.whiteouts, p)
 }
 
 // NewOverlay builds an overlay of upper (writable) over lower (read-only).
@@ -83,7 +109,7 @@ func (o *OverlayFileOps) resolve(path string) string {
 func (o *OverlayFileOps) hidden(resolved string) bool {
 	p := resolved
 	for {
-		if o.whiteouts[p] {
+		if o.isWhiteout(p) {
 			return true
 		}
 		parent := filepath.Dir(p)
@@ -160,7 +186,7 @@ func (o *OverlayFileOps) WriteFile(path string, data []byte, perm os.FileMode) e
 	if err := o.Upper.WriteFile(path, data, perm); err != nil {
 		return err
 	}
-	delete(o.whiteouts, o.resolve(path))
+	o.clearWhiteout(o.resolve(path))
 	return nil
 }
 
@@ -168,7 +194,7 @@ func (o *OverlayFileOps) MkdirAll(path string, perm os.FileMode) error {
 	if err := o.Upper.MkdirAll(path, perm); err != nil {
 		return err
 	}
-	delete(o.whiteouts, o.resolve(path))
+	o.clearWhiteout(o.resolve(path))
 	return nil
 }
 
@@ -210,7 +236,7 @@ func (o *OverlayFileOps) ReadDir(path string) ([]FileInfo, error) {
 	}
 	merged := map[string]FileInfo{}
 	for _, fi := range lowerInfos {
-		if !o.whiteouts[filepath.Join(resolved, fi.Name)] {
+		if !o.isWhiteout(filepath.Join(resolved, fi.Name)) {
 			merged[fi.Name] = fi
 		}
 	}
@@ -259,48 +285,60 @@ func (o *OverlayFileOps) Remove(path string, recursive bool) error {
 		}
 	}
 	if lowerVisible {
-		o.whiteouts[resolved] = true
+		o.setWhiteout(resolved)
 	}
 	return nil
 }
 
 func (o *OverlayFileOps) Rename(oldPath, newPath string) error {
-	// Union rename = copy-up the source into the upper (if it only lived
-	// below), rename there, and white-out the old lower name.
-	if !o.inUpper(oldPath) {
-		if o.hidden(o.resolve(oldPath)) {
-			return &os.PathError{Op: "rename", Path: oldPath, Err: os.ErrNotExist}
-		}
-		fi, err := o.Lower.Stat(oldPath, false)
-		if err != nil {
-			return &os.PathError{Op: "rename", Path: oldPath, Err: os.ErrNotExist}
-		}
-		if fi.IsDir {
-			if err := o.copyUpTree(oldPath); err != nil {
-				return err
+	// Union rename = materialise the source's VISIBLE lower content into the
+	// upper, rename there, and white-out the old lower name. A DIRECTORY that
+	// lives in both layers must still copy its lower subtree up (merge-safe,
+	// so upper modifications win) — otherwise the old-name whiteout below
+	// would drop the lower-only children that the move should have carried.
+	oldResolved := o.resolve(oldPath)
+	inUpper := o.inUpper(oldPath)
+	lowerVisible := false
+	if !o.hidden(oldResolved) {
+		if lfi, lerr := o.Lower.Stat(oldPath, false); lerr == nil {
+			lowerVisible = true
+			if lfi.IsDir {
+				if err := o.copyUpTree(oldPath); err != nil {
+					return err
+				}
+			} else if !inUpper {
+				if err := o.copyUp(oldPath); err != nil {
+					return err
+				}
 			}
-		} else if err := o.copyUp(oldPath); err != nil {
-			return err
 		}
+	}
+	if !inUpper && !lowerVisible {
+		return &os.PathError{Op: "rename", Path: oldPath, Err: os.ErrNotExist}
 	}
 	if err := o.Upper.Rename(oldPath, newPath); err != nil {
 		return err
 	}
-	oldResolved, newResolved := o.resolve(oldPath), o.resolve(newPath)
 	if _, err := o.Lower.Stat(oldPath, false); err == nil {
-		o.whiteouts[oldResolved] = true
+		o.setWhiteout(oldResolved)
 	}
-	delete(o.whiteouts, newResolved)
+	o.clearWhiteout(o.resolve(newPath))
 	return nil
 }
 
-// copyUpTree materialises a whole lower directory tree into the upper.
+// copyUpTree materialises a lower directory subtree into the upper. It is
+// MERGE-SAFE: a leaf the upper already shadows is left untouched, so calling
+// it on a directory that exists in both layers fills in only the lower-only
+// entries and never clobbers an upper modification.
 func (o *OverlayFileOps) copyUpTree(path string) error {
 	fi, err := o.Lower.Stat(path, true)
 	if err != nil {
 		return err
 	}
 	if !fi.IsDir {
+		if o.inUpper(path) {
+			return nil // an upper entry already shadows this lower leaf
+		}
 		return o.copyUp(path)
 	}
 	if err := o.Upper.MkdirAll(path, fi.Mode.Perm()); err != nil {
@@ -311,7 +349,7 @@ func (o *OverlayFileOps) copyUpTree(path string) error {
 		return err
 	}
 	for _, child := range infos {
-		if o.whiteouts[filepath.Join(o.resolve(path), child.Name)] {
+		if o.isWhiteout(filepath.Join(o.resolve(path), child.Name)) {
 			continue
 		}
 		if err := o.copyUpTree(filepath.Join(path, child.Name)); err != nil {
@@ -330,7 +368,7 @@ func (o *OverlayFileOps) Symlink(target, linkPath string) error {
 	if err := o.Upper.Symlink(target, linkPath); err != nil {
 		return err
 	}
-	delete(o.whiteouts, o.resolve(linkPath))
+	o.clearWhiteout(o.resolve(linkPath))
 	return nil
 }
 
@@ -350,7 +388,7 @@ func (o *OverlayFileOps) Link(target, linkPath string) error {
 	if err := o.Upper.Link(target, linkPath); err != nil {
 		return err
 	}
-	delete(o.whiteouts, o.resolve(linkPath))
+	o.clearWhiteout(o.resolve(linkPath))
 	return nil
 }
 
@@ -440,7 +478,7 @@ func (o *OverlayFileOps) TempFile(dir, pattern string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	delete(o.whiteouts, o.resolve(path))
+	o.clearWhiteout(o.resolve(path))
 	return path, nil
 }
 
@@ -449,7 +487,7 @@ func (o *OverlayFileOps) TempDir(dir, pattern string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	delete(o.whiteouts, o.resolve(path))
+	o.clearWhiteout(o.resolve(path))
 	return path, nil
 }
 
@@ -500,7 +538,7 @@ func (o *OverlayFileOps) Open(path string, opts OpenOpts) (FileHandle, error) {
 	if err != nil {
 		return nil, err
 	}
-	delete(o.whiteouts, o.resolve(path))
+	o.clearWhiteout(o.resolve(path))
 	return h, nil
 }
 

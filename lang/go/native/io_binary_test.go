@@ -105,6 +105,15 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	}); err == nil {
 		t.Error("expected error on a negative offset write")
 	}
+	// A huge non-negative offset is rejected before the growth arithmetic —
+	// otherwise it would overflow `end` and panic on existing[offset:]
+	// (PR-review fix). 1<<62 is far past the positioned-write cap.
+	if err := runAQLError(t, r, []Value{
+		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("x")),
+		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(int64(1)<<62)) }),
+	}); err == nil {
+		t.Error("expected error on an oversize offset write (no overflow panic)")
+	}
 }
 
 // TestBinaryStreamGuards exercises the stream-refusal branches directly: a

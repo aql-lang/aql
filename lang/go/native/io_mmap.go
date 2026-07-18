@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -14,20 +15,85 @@ import (
 // use-after-free), `write region bytes {offset}` splices INTO the mapping
 // in place, IO.flush syncs, and the polymorphic IO.close unmaps.
 
-// MmapInfo is the payload behind a Mmap handle: a live mapped region,
-// closed exactly once.
+// errMmapClosed is returned by any region operation attempted after the
+// handle was closed — the mapping is unmapped, so touching its bytes would
+// be a use-after-free (a SIGSEGV on the OS backend). All region access is
+// serialised through mi.mu so a concurrent close (e.g. from an IO.watch
+// callback fork) can never unmap the bytes mid-copy.
+var errMmapClosed = errors.New("this Mmap region is closed")
+
+// errMmapNoFit is returned when a positioned write would exceed the mapping
+// (an mmap cannot grow).
+var errMmapNoFit = errors.New("does not fit the mapped region (an mmap cannot grow)")
+
+// MmapInfo is the payload behind a Mmap handle: a live mapped region whose
+// access is guarded by mu and closed exactly once.
 type MmapInfo struct {
 	ID       string
 	Path     string
 	Writable bool
+	mu       sync.Mutex
 	region   capabilities.MmapRegion
-	once     sync.Once
+	closed   bool
 	closeErr error
 }
 
+// Close unmaps the region exactly once (idempotent) and reports the release
+// error, if any.
 func (mi *MmapInfo) Close() error {
-	mi.once.Do(func() { mi.closeErr = mi.region.Close() })
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	if mi.closed {
+		return mi.closeErr
+	}
+	mi.closed = true
+	mi.closeErr = mi.region.Close()
 	return mi.closeErr
+}
+
+// read copies [offset, offset+length) out of the mapping under the lock,
+// refusing a closed region. The COPY happens while mu is held so a
+// concurrent Close cannot unmap the bytes mid-copy.
+func (mi *MmapInfo) read(offset, length int) ([]byte, error) {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	if mi.closed {
+		return nil, errMmapClosed
+	}
+	buf := mi.region.Bytes()
+	lo, hi, err := regionSlice(offset, length, len(buf))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, hi-lo) // COPY out of the mapping (munmap-safe)
+	copy(out, buf[lo:hi])
+	return out, nil
+}
+
+// write splices data into the mapping at offset under the lock, refusing a
+// closed region and a window that does not fit.
+func (mi *MmapInfo) write(data []byte, offset int) error {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	if mi.closed {
+		return errMmapClosed
+	}
+	buf := mi.region.Bytes()
+	if offset < 0 || offset+len(data) > len(buf) {
+		return errMmapNoFit
+	}
+	copy(buf[offset:], data)
+	return nil
+}
+
+// flush syncs the region under the lock, refusing a closed region.
+func (mi *MmapInfo) flush() error {
+	mi.mu.Lock()
+	defer mi.mu.Unlock()
+	if mi.closed {
+		return errMmapClosed
+	}
+	return mi.region.Flush()
 }
 
 // mmapFormatBehavior renders a Mmap as "Mmap(id,path)".
@@ -94,7 +160,6 @@ func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 	if !ok {
 		return nil, r.AqlError("read_error", fmt.Sprintf("read: not a Mmap region (got %s)", args[0].Parent), "read")
 	}
-	buf := mi.region.Bytes()
 	enc := "utf8"
 	offset, length := 0, -1
 	if len(args) > 1 {
@@ -108,12 +173,10 @@ func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 			length = int(l)
 		}
 	}
-	lo, hi, werr := regionSlice(offset, length, len(buf))
+	out, werr := mi.read(offset, length)
 	if werr != nil {
 		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", werr), "read")
 	}
-	out := make([]byte, hi-lo) // COPY out of the mapping (munmap-safe)
-	copy(out, buf[lo:hi])
 	if enc == "bytes" || enc == "binary" {
 		return []Value{NewBytesValue(out)}, nil
 	}
@@ -145,12 +208,10 @@ func writeMmapWord(args []Value, r *Registry) ([]Value, error) {
 			offset = int(o)
 		}
 	}
-	buf := mi.region.Bytes()
-	if offset < 0 || offset+len(data) > len(buf) {
-		return nil, r.AqlError("write_error", "write: does not fit the mapped region (an mmap cannot grow)", "write")
-	}
 	r.NoteEffect()
-	copy(buf[offset:], data)
+	if err := mi.write(data, offset); err != nil {
+		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+	}
 	return []Value{args[0]}, nil
 }
 
