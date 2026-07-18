@@ -98,7 +98,7 @@ func TestMountedAqlFilesystemFullSurface(t *testing.T) {
 	if err := ops.Chmod("a.txt", 0o600); !errors.Is(err, errMountUnsupported) {
 		t.Errorf("unhandled chmod = %v", err)
 	}
-	if _, _, err := ops.Watch("a.txt"); !errors.Is(err, errMountUnsupported) {
+	if _, _, err := ops.Watch("a.txt", capabilities.WatchOpts{}); !errors.Is(err, errMountUnsupported) {
 		t.Errorf("watch on a mount = %v", err)
 	}
 	// ResolvePath with no resolve handler is lexical.

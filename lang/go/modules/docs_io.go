@@ -26,7 +26,7 @@ func init() {
 		"lock":     "Take an advisory lock on a path; {shared} for a read lock, {block:false} returns none on contention.",
 		"unlock":   "Release an advisory Lock.",
 		"mmap":     "Map a file's bytes into a Mmap region; {offset, length, writable}. read/write/flush/close drive it.",
-		"watch":    "Run a body per change event on a path; returns a Watcher.",
+		"watch":    "Run a body per change event on a path ({recursive match} opts); returns a Watcher.",
 		"unwatch":  "Stop a Watcher, closing its event stream.",
 		"mount":    "Install a map of AQL handler fns as the filesystem (the FileOps bridge).",
 		"unmount":  "Restore the filesystem that was active before mount.",

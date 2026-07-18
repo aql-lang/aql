@@ -2229,6 +2229,13 @@ modules keep plain names.
 > (like `TimeUtil.interval` runs its callback per tick), with the event
 > record `{op: create/write/remove/rename/chmod atom, path: Pathon}` on
 > the stack. It returns an `IO.Watcher` handle; `IO.unwatch w` stops it.
+> A third options map tunes the subscription: `{recursive:true}` watches
+> the whole subtree (the OS side auto-adds newly created subdirectories;
+> the mem side matches by path prefix), and `{match:"*.txt"}` filters
+> events by a path glob (word-side, the same `policy.Glob` vocabulary as
+> `list {match}`). When a slow consumer overruns the buffer, drops are
+> coalesced into a single `{op: overflow, path: <root>}` marker that
+> always bypasses the `{match}` filter — a missed event is never hidden.
 > The backend follows the effective FileOps: fsnotify (inotify/FSEvents/
 > kqueue) on the real filesystem, a synchronous in-memory event source
 > under `{mem}`, and the merged union of both layers under `{overlay}` —

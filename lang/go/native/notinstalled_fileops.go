@@ -117,7 +117,7 @@ func capabilityNotInstalled(scope, op, path string) error {
 }
 
 // compile-time interface check.
-func (notInstalledFileOps) Watch(path string) (<-chan capabilities.WatchEvent, func() error, error) {
+func (notInstalledFileOps) Watch(path string, _ capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, capabilityNotInstalled("fileops", "watch", path)
 }
 

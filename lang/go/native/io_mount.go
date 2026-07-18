@@ -417,7 +417,7 @@ func (a *aqlFileOps) Statfs(path string) (capabilities.FsInfo, error) {
 	return fs, nil
 }
 
-func (a *aqlFileOps) Watch(path string) (<-chan capabilities.WatchEvent, func() error, error) {
+func (a *aqlFileOps) Watch(path string, _ capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
 	// AQL has no event source to bridge — a mounted filesystem is not
 	// watchable. (A future mount contract could accept an emit callback.)
 	return nil, nil, &os.PathError{Op: "watch", Path: path, Err: errMountUnsupported}

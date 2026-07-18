@@ -74,6 +74,9 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  IO.write (IO.mmap (make Pathon "d") {writable:true}) (convert Bytes "x") {offset:0}`,
 		`import "aql:io"  IO.flush (IO.mmap (make Pathon "d") {writable:true})`,
 		`import "aql:io"  IO.close (IO.mmap (make Pathon "d"))`,
+		// P6: watch {recursive match} + coalesced overflow event
+		`import "aql:io"  IO.watch (make Pathon "d") [drop]`,
+		`import "aql:io"  IO.watch (make Pathon "d") [drop] {recursive:true match:"*.txt"}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

@@ -131,7 +131,7 @@ func TestPermissionedFileOpsGatesWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	ops := HostFileOps(r)
-	_, _, err = ops.Watch("/tmp/foo")
+	_, _, err = ops.Watch("/tmp/foo", capabilities.WatchOpts{})
 	var d *policy.Denied
 	if !errors.As(err, &d) {
 		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
@@ -149,7 +149,7 @@ func TestPermissionedFileOpsAllowsWatchThrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	wrapped := NewPermissionedFileOps(mem, loadPolicy(t, "trusted"))
-	ch, stop, err := wrapped.Watch("d")
+	ch, stop, err := wrapped.Watch("d", capabilities.WatchOpts{})
 	if err != nil {
 		t.Fatalf("allow-all watch: %v", err)
 	}

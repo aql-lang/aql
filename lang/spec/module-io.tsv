@@ -247,13 +247,18 @@ import "aql:io"  IO.unmount	ERROR:unmount	unmount with nothing mounted is refuse
 # §17  watch — subscribe to change events on a Pathon: `IO.watch p [body]`
 #      runs the body once per event (PUSH style, like TimeUtil.interval)
 #      with the {op path} record on the stack, and returns a Watcher
-#      handle; `IO.unwatch w` stops it. Event DELIVERY is asynchronous
-#      (a concurrent fork), so the deterministic spec surface is the
-#      handle's identity and the error cases — delivery order/content is
-#      pinned in lang/go/native/io_watch_test.go and
-#      capabilities/watch_test.go (mem, fsnotify, and overlay backends).
+#      handle; `IO.unwatch w` stops it. A third `{recursive match}` options
+#      map watches the whole subtree ({recursive:true}) and/or filters events
+#      by a path glob ({match:"*.txt"}); the coalesced {op:overflow} marker a
+#      slow consumer gets always bypasses the filter. Event DELIVERY is
+#      asynchronous (a concurrent fork), so the deterministic spec surface is
+#      the handle's identity and the error cases — delivery order/content and
+#      the {recursive}/{match}/overflow behaviour are pinned in
+#      lang/go/native/io_watch_test.go and capabilities/watch_test.go (mem,
+#      fsnotify, and overlay backends).
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  typeof (IO.watch (make Pathon "mem://w.txt") [drop])	Watcher	watch returns a Watcher handle
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  (IO.watch (make Pathon "mem://w.txt") [drop]) is IO.Watcher	true	the handle inhabits the exported IO.Watcher type
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://d/w.txt") "x" drop  typeof (IO.watch (make Pathon "mem://d") [drop] {recursive:true match:"*.txt"})	Watcher	watch accepts a {recursive match} options map and still returns a Watcher
 import "aql:io"  context dot __sys dot fs set mem true  IO.watch (make Pathon "mem://ghost") [drop]	ERROR:watch	watching an absent path errors (fsnotify parity)
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  IO.unwatch (IO.watch (make Pathon "mem://w.txt") [drop])		unwatch stops the watcher, leaving no value
 import "aql:io"  context dot __sys dot fs set mem true  IO.unwatch 42	ERROR:signature	unwatch of a non-Watcher is refused statically — its sole signature takes a Watcher

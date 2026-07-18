@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // watchReg builds a registry with the io words, a mem FS, and a `snoop`
@@ -110,6 +112,55 @@ func TestWatchWordDeliversEvents(t *testing.T) {
 	runAQL(t, r, []Value{NewWord("unwatch"), res[0]})
 }
 
+// TestWatchWordOptsFilter covers the option-bearing watch: {recursive:true}
+// is threaded to the backend and {match:"*.txt"} filters events word-side —
+// a non-matching write is dropped, so only .txt records reach the callback.
+func TestWatchWordOptsFilter(t *testing.T) {
+	r, snapshot := watchReg(t)
+	runAQL(t, r, []Value{NewWord("folder"), pathV("d")})
+	body := NewList([]Value{NewWord("snoop")})
+	body.Quoted = true
+	opts := NewOrderedMap()
+	opts.Set("recursive", NewBoolean(true))
+	opts.Set("match", NewString("*.txt"))
+	res := runAQL(t, r, []Value{NewWord("watch"), pathV("d"), body, NewMap(opts)})
+	if len(res) != 1 {
+		t.Fatalf("watch returned %d values", len(res))
+	}
+	// A matching write fires; a non-matching one is filtered; the following
+	// match fires — awaitSnoop(2) proves the .log did not count.
+	runAQL(t, r, []Value{NewWord("write"), pathV("d/keep.txt"), NewString("x")})
+	awaitSnoop(t, snapshot, 1)
+	runAQL(t, r, []Value{NewWord("write"), pathV("d/skip.log"), NewString("y")})
+	runAQL(t, r, []Value{NewWord("write"), pathV("d/again.txt"), NewString("z")})
+	evs := awaitSnoop(t, snapshot, 2)
+	for _, ev := range evs {
+		m, _ := AsMap(ev)
+		p, _ := m.Get("path")
+		if !strings.HasSuffix(p.String(), ".txt") {
+			t.Errorf("a non-.txt event slipped through {match}: %v", p)
+		}
+	}
+	runAQL(t, r, []Value{NewWord("unwatch"), res[0]})
+}
+
+// TestWatchRel covers watchRel's relative-path computation and every
+// fallback: the root itself (rel "."), a path outside the root (rel ".."),
+// and an unrelatable mixed absolute/relative pair (Rel error).
+func TestWatchRel(t *testing.T) {
+	cases := []struct{ root, ev, want string }{
+		{"d", "d/sub/x.txt", "sub/x.txt"},
+		{"d", "d", "d"},       // rel "." → base name
+		{"d", "other/x", "x"}, // rel "../other/x" → base name
+		{"d", "/abs/x", "x"},  // Rel error (mixed abs/rel) → base name
+	}
+	for _, c := range cases {
+		if got := watchRel(c.root, c.ev); got != c.want {
+			t.Errorf("watchRel(%q,%q) = %q, want %q", c.root, c.ev, got, c.want)
+		}
+	}
+}
+
 func TestWatchWordErrors(t *testing.T) {
 	r, _ := watchReg(t)
 	body := NewList([]Value{NewWord("snoop")})
@@ -119,7 +170,7 @@ func TestWatchWordErrors(t *testing.T) {
 		t.Error("expected watch of an absent path to error")
 	}
 	// A non-concrete body list is refused.
-	if _, err := doWatchWord([]Value{pathV("d"), NewTypeLiteral(TList)}, r, MintWatcherType(r)); err == nil {
+	if _, err := doWatchWord([]Value{pathV("d"), NewTypeLiteral(TList)}, r, MintWatcherType(r), Value{}); err == nil {
 		t.Error("expected a type-literal body to be refused")
 	}
 	// unwatch of a non-Watcher is a clean error.
@@ -177,7 +228,7 @@ func TestWatchCoverageArms(t *testing.T) {
 		t.Errorf("failing stop through unwatch = %v", err)
 	}
 	// The not-installed stub refuses Watch.
-	if _, _, err := (notInstalledFileOps{}).Watch("p"); err == nil {
+	if _, _, err := (notInstalledFileOps{}).Watch("p", capabilities.WatchOpts{}); err == nil {
 		t.Error("not-installed Watch must refuse")
 	}
 }

@@ -96,9 +96,13 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		}
 	}
 	// watchImpl closes over watcherType so each import's watch handles
-	// carry its own Watcher identity.
+	// carry its own Watcher identity. watchOptsImpl threads the {recursive
+	// match} options map (the third arg) through to the same handler.
 	watchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-		return doWatchWord(a, r, watcherType)
+		return doWatchWord(a, r, watcherType, Value{})
+	}
+	watchOptsImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doWatchWord(a, r, watcherType, a[2])
 	}
 	unwatchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		return doUnwatchWord(a, r)
@@ -250,11 +254,15 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			},
 		},
 		{
-			// watch subscribes to change events on a Pathon (a file, or a
-			// directory's direct children) and runs the body once per event
-			// with the {op, path} record on the stack. Returns a Watcher.
+			// watch subscribes to change events on a Pathon (a file, a
+			// directory's direct children, or — with {recursive:true} — the
+			// whole subtree) and runs the body once per event with the {op,
+			// path} record on the stack. {match:"glob"} filters events by
+			// path; the coalesced overflow marker always gets through.
+			// Returns a Watcher.
 			Name: "watch",
 			Signatures: []Signature{
+				{Args: []*Type{TPathon, TList, TMap}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(watchOptsImpl), Returns: []*Type{watcherType}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(watchImpl), Returns: []*Type{watcherType}, BarrierPos: -1},
 			},
 		},

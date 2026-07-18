@@ -306,7 +306,7 @@ func (f *failOpsWave4) TempDir(string, string) (string, error) {
 func (f *failOpsWave4) Statfs(string) (capabilities.FsInfo, error) {
 	return capabilities.FsInfo{}, errors.New("statfs refused")
 }
-func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
+func (f *failOpsWave4) Watch(string, capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, errors.New("watch refused")
 }
 func (f *failOpsWave4) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {

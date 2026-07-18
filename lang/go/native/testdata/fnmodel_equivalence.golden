@@ -801,6 +801,7 @@ WORD walk
   [Type/Function Any] barrier=2 returns=[Any]
   [Any] barrier=1 returns=[Node/List]
 WORD watch
+  [Scalar/Micron/Pathon Node/List Node/Map] barrier=3 noeval={1} returns=[Ideal/Watcher]
   [Scalar/Micron/Pathon Node/List] barrier=2 noeval={1} returns=[Ideal/Watcher]
 WORD whereis
   [Scalar/String] barrier=1 returns=[Any]

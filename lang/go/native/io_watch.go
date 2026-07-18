@@ -2,9 +2,13 @@ package native
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // io_watch.go — the aql:io filesystem watcher: `IO.watch path [body]`
@@ -90,12 +94,26 @@ func watchEventValue(op, path string) Value {
 	return NewMap(om)
 }
 
+// watchRel returns evPath relative to the watch root for glob matching
+// (so {match:"**/*.txt"} spans components under {recursive}); it falls back
+// to the base name when evPath is the root itself or lies outside it.
+func watchRel(root, evPath string) string {
+	rel, err := filepath.Rel(root, evPath)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return filepath.Base(evPath)
+	}
+	return rel
+}
+
 // doWatchWord implements IO.watch: subscribe via the effective FileOps,
 // then pump events into per-event body runs on a concurrent fork. The
 // body list is captured unevaluated (NoEvalArgs); each run gets the
 // event record pushed beneath it, so `[.path print]`-style bodies read
-// the event off the stack.
-func doWatchWord(args []Value, r *Registry, watcherType *Type) ([]Value, error) {
+// the event off the stack. opts (when concrete) supplies {recursive:true}
+// (subtree watch, passed to the backend) and {match:"glob"} (a word-layer
+// filter on each event's path relative to the root; the coalesced overflow
+// marker always bypasses the filter so a drop is never hidden).
+func doWatchWord(args []Value, r *Registry, watcherType *Type, opts Value) ([]Value, error) {
 	path := extractPath(args[0])
 	body := args[1]
 	if !IsConcrete(body) {
@@ -105,7 +123,13 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type) ([]Value, error) 
 	tokens := make([]Value, bodyList.Len())
 	copy(tokens, bodyList.Slice())
 
-	ch, stop, err := EffectiveFileOps(r).Watch(path)
+	recursive, match, hasMatch := false, "", false
+	if IsConcrete(opts) {
+		recursive = mapBoolOpt(opts, "recursive", false)
+		match, hasMatch = mapStrOpt(opts, "match")
+	}
+
+	ch, stop, err := EffectiveFileOps(r).Watch(path, capabilities.WatchOpts{Recursive: recursive})
 	if err != nil {
 		return nil, r.AqlError("watch_error", fmt.Sprintf("watch: %v", err), "watch")
 	}
@@ -117,6 +141,9 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type) ([]Value, error) 
 	go func() {
 		defer close(info.done)
 		for ev := range ch {
+			if hasMatch && ev.Op != watchOverflowOp && !policy.Glob(match, watchRel(path, ev.Path)) {
+				continue
+			}
 			input := make([]Value, 0, len(tokens)+1)
 			input = append(input, watchEventValue(ev.Op, ev.Path))
 			input = append(input, tokens...)
@@ -128,6 +155,10 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type) ([]Value, error) 
 	}()
 	return []Value{eng.NewValueRaw(watcherType, ExtensionPayload{Body: info})}, nil
 }
+
+// watchOverflowOp names the coalesced buffer-overflow marker event — it must
+// never be glob-filtered, so a slow consumer always learns it missed events.
+const watchOverflowOp = "overflow"
 
 // doUnwatchWord implements IO.unwatch: stop the watcher (idempotent).
 func doUnwatchWord(args []Value, r *Registry) ([]Value, error) {

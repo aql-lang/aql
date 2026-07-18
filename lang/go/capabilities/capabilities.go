@@ -216,11 +216,12 @@ type FileOps interface {
 	// Statfs reports the filesystem holding path (which must exist).
 	Statfs(path string) (FsInfo, error)
 	// Watch subscribes to change events for path — a file, or a
-	// directory's direct children (non-recursive, inotify semantics).
-	// Returns the event stream and a stop function that releases the
-	// watch and closes the stream. Watching an absent path errors.
-	// See WatchEvent (watch.go) for the shared op vocabulary.
-	Watch(path string) (<-chan WatchEvent, func() error, error)
+	// directory's children (its direct children under inotify semantics,
+	// or the whole subtree when opts.Recursive is set). Returns the event
+	// stream and a stop function that releases the watch and closes the
+	// stream. Watching an absent path errors. See WatchEvent and WatchOpts
+	// (watch.go) for the shared op vocabulary and options.
+	Watch(path string, opts WatchOpts) (<-chan WatchEvent, func() error, error)
 	// Open acquires a stateful file handle per OpenOpts (read/write/
 	// append/create/exclusive/truncate). The caller must Close it.
 	Open(path string, opts OpenOpts) (FileHandle, error)

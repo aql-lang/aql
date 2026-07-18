@@ -2,6 +2,7 @@ package capabilities
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,7 +52,7 @@ func TestMemWatchEvents(t *testing.T) {
 	if err := m.MkdirAll("d", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ch, stop, err := m.Watch("d")
+	ch, stop, err := m.Watch("d", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +151,7 @@ func TestMemWatchFileTarget(t *testing.T) {
 	if err := m.WriteFile("f.txt", []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ch, stop, err := m.Watch("f.txt")
+	ch, stop, err := m.Watch("f.txt", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +163,7 @@ func TestMemWatchFileTarget(t *testing.T) {
 		t.Errorf("file-target event = %+v", ev)
 	}
 	// Watching an ABSENT path errors (fsnotify parity).
-	if _, _, err := m.Watch("ghost"); !errors.Is(err, os.ErrNotExist) {
+	if _, _, err := m.Watch("ghost", WatchOpts{}); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("watch of absent path = %v", err)
 	}
 	// A slow consumer drops events past the buffer rather than blocking.
@@ -176,7 +177,7 @@ func TestMemWatchFileTarget(t *testing.T) {
 func TestOSWatchEvents(t *testing.T) {
 	root := t.TempDir()
 	o := &OSFileOps{}
-	ch, stop, err := o.Watch(root)
+	ch, stop, err := o.Watch(root, WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +213,7 @@ func TestOSWatchEvents(t *testing.T) {
 
 func TestOSWatchAbsentErrors(t *testing.T) {
 	o := &OSFileOps{}
-	if _, _, err := o.Watch(filepath.Join(t.TempDir(), "ghost")); err == nil {
+	if _, _, err := o.Watch(filepath.Join(t.TempDir(), "ghost"), WatchOpts{}); err == nil {
 		t.Error("expected watching an absent path to error")
 	}
 }
@@ -226,7 +227,7 @@ func TestOverlayWatchSeesUnionMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := NewOverlay(NewMem(), lower)
-	ch, stop, err := o.Watch("d")
+	ch, stop, err := o.Watch("d", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,12 +246,12 @@ func TestOverlayWatchSeesUnionMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Watching an absent union path errors.
-	if _, _, err := o.Watch("nowhere"); !errors.Is(err, os.ErrNotExist) {
+	if _, _, err := o.Watch("nowhere", WatchOpts{}); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("overlay watch of absent path = %v", err)
 	}
 	// Watching a lower-only FILE materialises it into the upper first.
 	o2 := NewOverlay(NewMem(), lower)
-	ch2, stop2, err := o2.Watch("d/base.txt")
+	ch2, stop2, err := o2.Watch("d/base.txt", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,37 +262,132 @@ func TestOverlayWatchSeesUnionMutations(t *testing.T) {
 	_ = stop2()
 }
 
+// recordingAdder is a watchAdder that records every auto-added path; err
+// lets a test assert the pump swallows a failing Add.
+type recordingAdder struct {
+	added []string
+	err   error
+}
+
+func (r *recordingAdder) Add(name string) error {
+	r.added = append(r.added, name)
+	return r.err
+}
+
 // TestPumpFsnotify drives the fsnotify adapter deterministically with a
-// synthetic source: op lowering, the empty-mask skip, drop-on-full, and
-// close-on-source-close.
+// synthetic source: op lowering, the empty-mask skip, and close-on-
+// source-close (non-recursive, no overflow).
 func TestPumpFsnotify(t *testing.T) {
-	src := make(chan fsnotify.Event, watchBufferSize*2+16)
+	src := make(chan fsnotify.Event, 16)
 	out := make(chan WatchEvent, watchBufferSize)
-	// One of each op, an empty mask (skipped), then a burst that overflows.
+	// One of each op, plus an empty mask (skipped).
 	src <- fsnotify.Event{Name: "a", Op: fsnotify.Create}
 	src <- fsnotify.Event{Name: "a", Op: fsnotify.Write}
 	src <- fsnotify.Event{Name: "a", Op: fsnotify.Remove}
 	src <- fsnotify.Event{Name: "a", Op: fsnotify.Rename}
 	src <- fsnotify.Event{Name: "a", Op: fsnotify.Chmod}
 	src <- fsnotify.Event{Name: "a", Op: 0} // empty mask: skipped
-	for i := 0; i < watchBufferSize+8; i++ {
-		src <- fsnotify.Event{Name: "burst", Op: fsnotify.Write}
-	}
 	close(src)
-	pumpFsnotify(src, out) // synchronous: source is pre-closed
+	pumpFsnotify(src, &recordingAdder{}, out, "root", false) // synchronous: source is pre-closed
 
 	var got []string
 	for ev := range out {
 		got = append(got, ev.Op)
 	}
 	want := []string{"create", "write", "remove", "rename", "chmod"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
 	for i, op := range want {
 		if got[i] != op {
 			t.Fatalf("event[%d] = %q, want %q (all: %v)", i, got[i], op, got)
 		}
 	}
-	if len(got) > watchBufferSize {
-		t.Errorf("overflow not dropped: %d events for a %d buffer", len(got), watchBufferSize)
+}
+
+// TestPumpFsnotifyRecursiveAutoAdd covers the chokidar-style auto-add: a
+// created directory is registered with the adder, a created file and a
+// vanished path are not, and a non-create op is ignored — driven through
+// real os.Stat on a temp tree so no fake FileInfo is needed.
+func TestPumpFsnotifyRecursiveAutoAdd(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "sub")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "f.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(root, "gone")
+
+	src := make(chan fsnotify.Event, 8)
+	out := make(chan WatchEvent, watchBufferSize)
+	adder := &recordingAdder{err: errors.New("add error is swallowed")}
+	src <- fsnotify.Event{Name: dir, Op: fsnotify.Create}  // directory: auto-added
+	src <- fsnotify.Event{Name: file, Op: fsnotify.Create} // file: not added
+	src <- fsnotify.Event{Name: gone, Op: fsnotify.Create} // stat errors: not added
+	src <- fsnotify.Event{Name: dir, Op: fsnotify.Write}   // non-create: ignored
+	close(src)
+	pumpFsnotify(src, adder, out, root, true)
+	for range out { // drain
+	}
+	if len(adder.added) != 1 || adder.added[0] != dir {
+		t.Errorf("auto-added = %v, want [%s]", adder.added, dir)
+	}
+}
+
+// TestWatchOverflowCoalescing exercises every arm of the sendWatch /
+// flushOverflow overflow-coalescing helpers with a tiny buffer.
+func TestWatchOverflowCoalescing(t *testing.T) {
+	out := make(chan WatchEvent, 2)
+	overflow := false
+	sendWatch(out, WatchEvent{Op: "write", Path: "a"}, "root", &overflow)
+	sendWatch(out, WatchEvent{Op: "write", Path: "b"}, "root", &overflow)
+	if overflow {
+		t.Fatal("buffer not full yet: overflow should be false")
+	}
+	sendWatch(out, WatchEvent{Op: "write", Path: "c"}, "root", &overflow) // dropped, sets flag
+	if !overflow {
+		t.Fatal("a full buffer must set the overflow flag")
+	}
+	sendWatch(out, WatchEvent{Op: "write", Path: "d"}, "root", &overflow) // marker can't flush; stays set
+	if !overflow {
+		t.Fatal("still full: overflow must stay set")
+	}
+	<-out                                                                 // free one slot (removes "a")
+	sendWatch(out, WatchEvent{Op: "write", Path: "e"}, "root", &overflow) // marker flushes; "e" then drops
+	// Buffer now holds "b" then the coalesced overflow marker, in order.
+	if first := <-out; first.Path != "b" {
+		t.Errorf("first drained = %+v, want b", first)
+	}
+	if second := <-out; second.Op != watchOpOverflow || second.Path != "root" {
+		t.Errorf("second drained = %+v, want overflow(root)", second)
+	}
+	// With room for BOTH the marker and the event, overflow clears fully.
+	overflow = true
+	sendWatch(out, WatchEvent{Op: "write", Path: "f"}, "root", &overflow)
+	if overflow {
+		t.Error("with room for marker and event, overflow should clear")
+	}
+	if a := <-out; a.Op != watchOpOverflow {
+		t.Errorf("expected the marker first, got %+v", a)
+	}
+	if b := <-out; b.Path != "f" {
+		t.Errorf("expected f after the marker, got %+v", b)
+	}
+	// flushOverflow delivers a pending marker when there is room...
+	overflow = true
+	flushOverflow(out, "root", overflow)
+	if ev := <-out; ev.Op != watchOpOverflow {
+		t.Errorf("flushOverflow emitted %+v, want overflow", ev)
+	}
+	// ...and is a no-op when nothing overflowed.
+	flushOverflow(out, "root", false)
+	select {
+	case ev := <-out:
+		t.Errorf("flushOverflow(false) emitted %+v, want nothing", ev)
+	default:
 	}
 }
 
@@ -315,10 +411,84 @@ func TestForwardWatchEventsDropOnFull(t *testing.T) {
 	in <- WatchEvent{Op: "write", Path: "a"}
 	in <- WatchEvent{Op: "write", Path: "b"} // dropped: out is full
 	close(in)
-	forwardWatchEvents(in, out, done)
+	forwardWatchEvents(in, out, "root", done)
 	<-done
 	if len(out) != 1 {
 		t.Errorf("out holds %d events, want 1 (second dropped)", len(out))
+	}
+}
+
+// TestMemWatchRecursive covers the {recursive} subtree matching: a
+// descendant many levels down is delivered, while a sibling that merely
+// shares a name prefix is not.
+func TestMemWatchRecursive(t *testing.T) {
+	m := NewMem()
+	if err := m.MkdirAll("d/sub", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ch, stop, err := m.Watch("d", WatchOpts{Recursive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stop() }()
+	// A grandchild write is delivered under {recursive}.
+	if err := m.WriteFile("d/sub/deep.txt", []byte("q"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ev := recvEvent(t, ch); ev.Op != "create" || ev.Path != "d/sub/deep.txt" {
+		t.Errorf("recursive grandchild = %+v", ev)
+	}
+	// A prefix-sharing sibling ("dd.txt" is not under "d/") is skipped, so
+	// the next delivery is the direct child that follows it.
+	if err := m.WriteFile("dd.txt", []byte("z"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.WriteFile("d/top.txt", []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ev := recvEvent(t, ch); ev.Op != "create" || ev.Path != "d/top.txt" {
+		t.Errorf("expected d/top.txt (sibling dd.txt skipped), got %+v", ev)
+	}
+}
+
+// TestOSWatchRecursive covers the recursive WalkDir add and chokidar auto-
+// add against a real fsnotify watcher: a file created in a subdirectory that
+// existed at watch time surfaces, proving the subtree was registered.
+func TestOSWatchRecursive(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// An existing file exercises the WalkDir callback's non-directory arm.
+	if err := os.WriteFile(filepath.Join(root, "top.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := &OSFileOps{}
+	ch, stop, err := o.Watch(root, WatchOpts{Recursive: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deep := filepath.Join(root, "sub", "deep.txt")
+	if err := o.WriteFile(deep, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	drainUntil(t, ch, "create", "deep.txt")
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestOSWatchRecursiveWalkError covers the WalkDir failure arm: an error
+// from the walk (here, a callback invoked with a non-nil err via the seam)
+// closes the watcher and propagates.
+func TestOSWatchRecursiveWalkError(t *testing.T) {
+	orig := watchWalkDir
+	watchWalkDir = func(root string, fn fs.WalkDirFunc) error {
+		return fn(root, nil, errors.New("walk entry boom"))
+	}
+	defer func() { watchWalkDir = orig }()
+	if _, _, err := (&OSFileOps{}).Watch(t.TempDir(), WatchOpts{Recursive: true}); err == nil {
+		t.Error("expected the WalkDir failure to propagate")
 	}
 }
 
@@ -327,7 +497,7 @@ func TestOSWatchConstructorError(t *testing.T) {
 	orig := newFsnotifyWatcher
 	newFsnotifyWatcher = func() (*fsnotify.Watcher, error) { return nil, errors.New("no fds") }
 	defer func() { newFsnotifyWatcher = orig }()
-	if _, _, err := (&OSFileOps{}).Watch(t.TempDir()); err == nil {
+	if _, _, err := (&OSFileOps{}).Watch(t.TempDir(), WatchOpts{}); err == nil {
 		t.Error("expected the constructor failure to propagate")
 	}
 }
@@ -342,7 +512,7 @@ func TestDrainWatchErrors(t *testing.T) {
 
 func TestOSWatchResolveError(t *testing.T) {
 	o := &OSFileOps{getwd: func() (string, error) { return "", errors.New("getwd boom") }}
-	if _, _, err := o.Watch("relative.txt"); err == nil {
+	if _, _, err := o.Watch("relative.txt", WatchOpts{}); err == nil {
 		t.Error("expected the ResolvePath failure to propagate")
 	}
 }
@@ -352,7 +522,7 @@ func TestMemWatchResolveError(t *testing.T) {
 	if err := m.WriteFile("plain", []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := m.Watch("plain/under"); !errors.Is(err, errMemNotDir) {
+	if _, _, err := m.Watch("plain/under", WatchOpts{}); !errors.Is(err, errMemNotDir) {
 		t.Errorf("watch through a file = %v, want ENOTDIR", err)
 	}
 }
@@ -365,11 +535,11 @@ type watchFailOps struct {
 	stopErr   error
 }
 
-func (w *watchFailOps) Watch(path string) (<-chan WatchEvent, func() error, error) {
+func (w *watchFailOps) Watch(path string, opts WatchOpts) (<-chan WatchEvent, func() error, error) {
 	if w.failWatch {
 		return nil, nil, errors.New("watch boom")
 	}
-	ch, stop, err := w.MemFileOps.Watch(path)
+	ch, stop, err := w.MemFileOps.Watch(path, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -388,7 +558,7 @@ func TestOverlayWatchErrorArms(t *testing.T) {
 	if err := o.Symlink("a", "b"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := o.Watch("a"); !errors.Is(err, errMemTooManyLinks) {
+	if _, _, err := o.Watch("a", WatchOpts{}); !errors.Is(err, errMemTooManyLinks) {
 		t.Errorf("watch cycle = %v", err)
 	}
 	// Materialise failures: dir MkdirAll and file copy-up.
@@ -400,16 +570,16 @@ func TestOverlayWatchErrorArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	o2 := NewOverlay(&overlayFailOps{MemFileOps: NewMem(), failMkdir: true}, lower)
-	if _, _, err := o2.Watch("d"); err == nil {
+	if _, _, err := o2.Watch("d", WatchOpts{}); err == nil {
 		t.Error("expected the upper MkdirAll failure to propagate")
 	}
 	o3 := NewOverlay(&overlayFailOps{MemFileOps: NewMem(), failWrite: true}, lower)
-	if _, _, err := o3.Watch("f"); err == nil {
+	if _, _, err := o3.Watch("f", WatchOpts{}); err == nil {
 		t.Error("expected the copy-up failure to propagate")
 	}
 	// The upper's own Watch failure propagates.
 	o4 := NewOverlay(&watchFailOps{MemFileOps: NewMem(), failWatch: true}, lower)
-	if _, _, err := o4.Watch("d"); err == nil {
+	if _, _, err := o4.Watch("d", WatchOpts{}); err == nil {
 		t.Error("expected the upper Watch failure to propagate")
 	}
 	// An upper-only path (absent below): the lower Watch fails and the
@@ -418,7 +588,7 @@ func TestOverlayWatchErrorArms(t *testing.T) {
 	if err := o5.WriteFile("up/only.txt", []byte("u"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ch, stop, err := o5.Watch("up")
+	ch, stop, err := o5.Watch("up", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +605,7 @@ func TestOverlayWatchErrorArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	o6 := NewOverlay(upper6, lower)
-	_, stop6, err := o6.Watch("d")
+	_, stop6, err := o6.Watch("d", WatchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
