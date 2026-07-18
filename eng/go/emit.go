@@ -1001,21 +1001,6 @@ func (es *EmitState) forkForProbe() *EmitState {
 	return p
 }
 
-// topOpenRec returns the innermost open recording unit's fnUnitRec, or nil when
-// no unit is open or the recorded index is out of range. The single home for
-// the openUnitRecs-top lookup its callers (inClosureUnit / inStoredRefUnit)
-// share.
-func (es *EmitState) topOpenRec() *fnUnitRec {
-	if es == nil || len(es.openUnitRecs) == 0 {
-		return nil
-	}
-	rec := es.openUnitRecs[len(es.openUnitRecs)-1]
-	if rec < 0 || rec >= len(es.fnRecs) {
-		return nil
-	}
-	return es.fnRecs[rec]
-}
-
 // inClosureUnit reports whether the innermost OPEN fn unit is a CLOSURE body
 // (a higher-order word's each/do$body unit — compileClosureBody stamps
 // rec.closure before running the body analysis, so the flag is visible to
@@ -1026,25 +1011,14 @@ func (es *EmitState) topOpenRec() *fnUnitRec {
 // runs through InvokeBody — so the projection must decline and let the
 // dispatch fall to RecordCall's context-dependent-word refusal.
 func (es *EmitState) inClosureUnit() bool {
-	rec := es.topOpenRec()
-	return rec != nil && rec.closure
-}
-
-// inStoredRefUnit reports whether the innermost open recording unit is a
-// STORED-REF body (Test.check-prop's gen / property, a spawn body — the
-// storedRefUnit fnRec flag). Such a body compiles with its params as CARRIERS
-// (compileStoredParamBody), and a carrier receiver makes signature dispatch of
-// a competing-arity window ambiguous: `(lst Sort.quick Sort.by-number)` with
-// `lst` a List CARRIER resolved to `by-number` (its Any/Any params greedily
-// matched the carrier + the `Sort.quick` fn-value) where the interpreter, over
-// the CONCRETE list, dispatches `Sort.quick`. Used to decline a fn-value
-// argument to a dispatch in this context — the sole shape whose carrier-param
-// re-match can pick the wrong target and miscompile (`cmp: cannot order List
-// and Function`). A regular fn body (not stored-ref) dispatches the identical
-// source correctly and is untouched.
-func (es *EmitState) inStoredRefUnit() bool {
-	rec := es.topOpenRec()
-	return rec != nil && rec.storedRefUnit
+	if es == nil || len(es.openUnitRecs) == 0 {
+		return false
+	}
+	rec := es.openUnitRecs[len(es.openUnitRecs)-1]
+	if rec < 0 || rec >= len(es.fnRecs) {
+		return false
+	}
+	return es.fnRecs[rec].closure
 }
 
 func (es *EmitState) active() bool {
@@ -2100,7 +2074,23 @@ func (es *EmitState) compileStoredParamBody(bodyList Value, params []FnParam) (V
 		if t == nil {
 			t = TAny
 		}
-		inputs[i] = NewCarrier(t)
+		// GRADUAL (dynamic) input carriers, not strict NewCarrier ones. A
+		// stored-param body's input is the value the handler feeds per invoke —
+		// a check-prop generator result, a spawn arg — dispatched over its
+		// RUNTIME type, exactly the gradual contract. A STRICT Any carrier falls
+		// to `v.Is(t)` in sigTypeMatches (Any does not conform to List), so a
+		// comparator-taking dispatch over the param — `(lst Sort.quick
+		// Sort.by-number)` with `lst` the untyped generated list — failed to
+		// commit `Sort.quick` (its `lst:List` slot rejected the strict Any) and
+		// the trailing comparator `Sort.by-number` dispatched instead, inverting
+		// the call to `cmp(lst, quick-fn)` (`cmp: cannot order List and
+		// Function`). ParamInputCarrier(TAny) is a DYNAMIC carrier: the not-
+		// disjoint rule matches List optimistically, `Sort.quick` commits, and
+		// the body compiles the SAME dispatch the interpreter runs — full
+		// compilation, not a fallback. Mirrors the storedGradualDepth branch's
+		// ParamInputCarrier generalisation (core_helpers), now unconditional for
+		// every stored-param body since the input is always runtime-typed.
+		inputs[i] = ParamInputCarrier(t)
 		names[i] = p.Name
 	}
 	r := es.reg
@@ -3454,22 +3444,6 @@ func (es *EmitState) SetUnitDecl(unit int, decl DeclSite) {
 func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
 	if !es.active() || unit < 0 {
 		return
-	}
-	// A fn-VALUE argument to a dispatch inside a STORED-REF body (check-prop
-	// gen/property, spawn body) declines: the body's params are carriers, and a
-	// carrier receiver can re-match this window to the WRONG target (the
-	// comparator `Sort.by-number` instead of the sort `Sort.quick`), silently
-	// miscompiling to `cmp: cannot order List and Function`. The interpreter,
-	// over the concrete generated value, dispatches correctly, so declining
-	// falls back to it (byte-identical, slow-not-wrong). A regular fn body
-	// compiles the same shape correctly and is untouched (inStoredRefUnit gates).
-	if es.inStoredRefUnit() {
-		for _, a := range args {
-			if isFnValueResidual(a) {
-				es.MarkUncompilable("stored-ref body: fn-value argument to a dispatch (carrier-param re-match may pick the wrong target)")
-				return
-			}
-		}
 	}
 	rec := es.fnRecs[unit]
 	ops := make([]emitOperand, len(args), len(args)+len(rec.caps))

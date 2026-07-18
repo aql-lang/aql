@@ -1,25 +1,25 @@
 package lang
 
-// Check-prop property-body Function-argument miscompile pin (the third voxgig-
-// surfaced main-era regression, sibling of the check-prop GENERATOR miscompile).
+// Check-prop property-body comparator-dispatch pin (the third voxgig-surfaced
+// main-era regression, sibling of the check-prop GENERATOR miscompile).
 //
-// `Test.check-prop`'s gen / property bodies compile as STORED-PARAM units
-// (compileStoredParamBody, since 853dcaa4) — their params bind as CARRIERS. A
-// carrier receiver makes signature dispatch of a competing-arity window
-// ambiguous: the sort library's `(lst Sort.quick Sort.by-number)` — dispatch
-// the comparator-taking sort `Sort.quick` over the generated list `lst`, passing
-// the comparator fn `Sort.by-number` — re-matched to `Sort.by-number` (its
-// Any/Any params greedily bound the `lst` carrier + the `Sort.quick` fn-VALUE)
-// where the interpreter, over the CONCRETE list, dispatches `Sort.quick`. The
-// compiled unit inverted the call — `cmp(lst, quick-fn)` — raising
-// `cmp: cannot order List and Function` under `--compile` while the interpreter
-// passed. A silent-fallback contract violation (sort_prop_test, 3 of 7 props).
+// `Test.check-prop`'s gen/property bodies compile as STORED-PARAM units
+// (compileStoredParamBody, since 853dcaa4). Their inputs — the per-invoke
+// generated value — are dispatched over their RUNTIME type, the gradual
+// contract. Compiling them with a STRICT Any carrier fell to `v.Is(t)` in
+// sigTypeMatches (Any does not conform to List), so a comparator-taking
+// dispatch over the untyped generated list — the sort suite's `(lst Sort.quick
+// Sort.by-number)` — failed to commit `Sort.quick` (its `lst:List` slot
+// rejected the strict Any) and the trailing comparator `Sort.by-number`
+// dispatched instead, inverting the call to `cmp(lst, quick-fn)`
+// (`cmp: cannot order List and Function`) under `--compile` while the
+// interpreter passed — a silent-fallback contract violation (sort_prop_test,
+// 3 of 7 props).
 //
-// RecordUserCall now DECLINES a fn-VALUE argument to a dispatch inside a stored-
-// ref body (inStoredRefUnit): the body falls back to the interpreter, which
-// dispatches over the concrete generated value byte-identically. A regular fn
-// body compiles the identical source correctly (concrete-enough operands) and is
-// untouched — TestCheckPropFnArgRegularFnBodyStillCompiles pins that side.
+// The fix makes stored-param inputs GRADUAL (ParamInputCarrier): the not-
+// disjoint rule matches List optimistically, `Sort.quick` commits, and the body
+// compiles the SAME dispatch the interpreter runs — FULL COMPILATION, not a
+// fallback.
 
 import (
 	"fmt"
@@ -28,12 +28,11 @@ import (
 )
 
 // The miniature of the sort_prop_test shape: a check-prop property body that
-// dispatches a comparator-taking sort (params comparator-FIRST, applying the
+// dispatches a comparator-taking sort (comparator-FIRST param, applying the
 // comparator via `(a b comp)` inside a nested each — the quick-go shape) over
-// the generated list, passing a module comparator fn as the argument. Before
-// the fix the compiled property returned ok:false (cmp List/Function); it must
-// now agree with the interpreter (compile == interpret, both ok:true).
-func TestCheckPropStoredBodyFnArgDispatchMatchesInterp(t *testing.T) {
+// the generated list, passing a module comparator fn as the argument. It must
+// FULLY compile (no interpreter island) AND agree with the interpreter.
+func TestCheckPropStoredBodyComparatorDispatchCompiles(t *testing.T) {
 	src := `import "aql:test" end
 import module [
   def by-number fn [[b:Any a:Any] [Integer] [(a cmp b)]]
@@ -52,33 +51,28 @@ Test.check-prop "sort-dispatch"
   [ var [[lst] (lst S.srt S.by-number) drop true ] ]
   25 1 0
 end`
+	// Full compilation: no refusal, no fallback island.
 	a, _ := New()
-	want, werr := a.RunInterp(src)
+	prog, reason, _, cerr := a.CompileCheck(src)
+	if cerr != nil || reason != "" || prog == nil {
+		t.Fatalf("expected full compilation, got refusal: reason=%q err=%v", reason, cerr)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Errorf("expected a full lowering, got an interpreter island:\n%s", prog.Disassemble())
+	}
+	// compile == interpret, and the property actually HOLDS on both surfaces
+	// (a shared ok:false would match yet still be the miscompile).
 	b, _ := New()
 	got, _, gerr := b.RunCompiled(src)
+	c, _ := New()
+	want, werr := c.RunInterp(src)
 	if (werr == nil) != (gerr == nil) {
-		t.Fatalf("error disagreement (compile != interpret):\n  interp:   %v\n  compiled: %v", werr, gerr)
+		t.Fatalf("error disagreement:\n  interp:   %v\n  compiled: %v", werr, gerr)
 	}
 	if werr == nil && fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("SILENT MISCOMPILE (compile != interpret):\n  interp:   %v\n  compiled: %v", want, got)
 	}
-	// The property must actually PASS on both surfaces — a shared `ok:false`
-	// would match yet still be the bug (the miscompile fails the property).
 	if !strings.Contains(fmt.Sprint(want), "true") {
 		t.Fatalf("expected the property to hold under the interpreter, got %v", want)
 	}
-}
-
-// The sibling safety property: the SAME module-fn dispatch with a fn-value
-// argument, in a REGULAR fn body (NOT a stored-ref unit), must never miscompile
-// — the decline is scoped to stored-ref bodies (inStoredRefUnit), so a regular
-// body compiles or soundly falls back, but always agrees with the interpreter.
-func TestCheckPropFnArgRegularFnBodyMatchesInterp(t *testing.T) {
-	stage1aSound(t, `import module [
-  def by-number fn [[b:Any a:Any] [Integer] [(a cmp b)]]
-  def srt fn [[comp:Function lst:List] [List] [ lst comp sortby ]]
-  export "S" {by-number: by-number/r, srt: srt/r}
-] end
-def run fn [[xs:List] [List] [(xs S.srt S.by-number)]]
-([3 1 2] run) end`)
 }
