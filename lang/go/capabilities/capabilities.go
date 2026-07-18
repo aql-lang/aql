@@ -10,10 +10,12 @@ package capabilities
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -109,16 +111,47 @@ type FsInfo struct {
 	Type       string // filesystem type name ("ext4", "tmpfs", "mem", …)
 }
 
+// OpenOpts controls how Open acquires a stateful file handle. The zero
+// value is a read-only open of an existing file. Write/Append/Create/
+// Truncate/Exclusive map onto the os.OpenFile flags (O_WRONLY|O_APPEND|
+// O_CREATE|O_TRUNC|O_EXCL); Read alongside Write yields O_RDWR. Perm is
+// the creation mode when Create is set (0 defaults to 0644).
+type OpenOpts struct {
+	Read      bool
+	Write     bool
+	Append    bool
+	Create    bool
+	Exclusive bool // with Create: fail if the path already exists (O_EXCL)
+	Truncate  bool
+	Perm      os.FileMode
+}
+
+// FileHandle is a stateful open file: a byte cursor plus positioned and
+// whole-stream I/O. The OS backend returns *os.File verbatim (it already
+// satisfies this interface); the mem backend indexes its maps per call so
+// a handle's writes are visible to a stateless read before Close.
+type FileHandle interface {
+	io.Reader
+	io.Writer
+	io.Seeker
+	io.Closer
+	ReadAt(p []byte, off int64) (int, error)
+	WriteAt(p []byte, off int64) (int, error)
+	Truncate(size int64) error
+	Sync() error
+	Name() string
+}
+
 // FileOps defines the file operations that AQL's io words use. The
 // default implementation delegates to the os package. Replace with a
 // custom implementation for testing or sandboxing.
 //
-// The interface intentionally covers the batch/stateless filesystem
-// surface (no open file handles): read/write/append, directory
-// create/list, stat, remove, rename, links, and metadata mutation.
-// `copy` is deliberately absent — it is composed in the handler layer
-// from Stat/ReadFile/WriteFile/ReadDir/MkdirAll. Append is likewise
-// composed (read-then-write) in the handler, so it needs no method here.
+// The interface covers the batch/stateless filesystem surface
+// (read/write/append, directory create/list, stat, remove, rename,
+// links, metadata mutation) plus Open, a stateful file handle. `copy` is
+// deliberately absent — it is composed in the handler layer from
+// Stat/ReadFile/WriteFile/ReadDir/MkdirAll. Append is likewise composed
+// (read-then-write) in the handler, so it needs no method here.
 type FileOps interface {
 	ReadFile(path string) ([]byte, error)
 	WriteFile(path string, data []byte, perm os.FileMode) error
@@ -172,6 +205,9 @@ type FileOps interface {
 	// watch and closes the stream. Watching an absent path errors.
 	// See WatchEvent (watch.go) for the shared op vocabulary.
 	Watch(path string) (<-chan WatchEvent, func() error, error)
+	// Open acquires a stateful file handle per OpenOpts (read/write/
+	// append/create/exclusive/truncate). The caller must Close it.
+	Open(path string, opts OpenOpts) (FileHandle, error)
 	ResolvePath(path string) (string, error)
 }
 
@@ -485,6 +521,14 @@ type memMeta struct {
 // values are filesystem-dependent), and unrecorded ancestor directories are
 // treated as implicitly writable so tests may poke Files directly.
 type MemFileOps struct {
+	// mu guards every map below. It is held by all public methods and by
+	// live file handles (handles.go), so a handle used from a watch
+	// callback goroutine never races a stateless op on the main thread.
+	// emit sends non-blocking (watch.go), so holding mu across a mutation
+	// + its event fan-out cannot deadlock. TempFile/TempDir hold mu and
+	// call the *Locked cores directly (WriteFile/MkdirAll re-lock).
+	mu sync.Mutex
+
 	Files map[string][]byte
 	Dirs  map[string]bool     // tracked directories
 	Meta  map[string]*memMeta // per-path mode/mtime/atime + symlink targets
@@ -538,6 +582,8 @@ func (m *MemFileOps) egid() int {
 // refusals, permission denials) hermetically regardless of the identity
 // the test process really runs under.
 func (m *MemFileOps) SetIdentity(euid, egid func() int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.euidFn, m.egidFn = euid, egid
 }
 
@@ -724,6 +770,8 @@ func (m *MemFileOps) infoFor(resolved string) (FileInfo, bool) {
 }
 
 func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return nil, err
@@ -742,6 +790,14 @@ func (m *MemFileOps) ReadFile(path string) ([]byte, error) {
 }
 
 func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeFileLocked(path, data, perm)
+}
+
+// writeFileLocked is WriteFile's body without the lock, so lock-holding
+// callers (TempFile) can reuse it without re-entering the mutex.
+func (m *MemFileOps) writeFileLocked(path string, data []byte, perm os.FileMode) error {
 	final, err := m.resolve(path, true) // writes THROUGH a trailing symlink, like open(2)
 	if err != nil {
 		return err
@@ -781,6 +837,14 @@ func (m *MemFileOps) WriteFile(path string, data []byte, perm os.FileMode) error
 // MkdirAll records a directory path and its parents. Idempotent — an
 // existing directory keeps its mode, exactly like os.MkdirAll.
 func (m *MemFileOps) MkdirAll(path string, perm os.FileMode) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mkdirAllLocked(path, perm)
+}
+
+// mkdirAllLocked is MkdirAll's body without the lock, for lock-holding
+// callers (TempDir).
+func (m *MemFileOps) mkdirAllLocked(path string, perm os.FileMode) error {
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return err
@@ -816,6 +880,8 @@ func (m *MemFileOps) recordDir(dir string) {
 
 // Stat returns metadata for path, dereferencing symlinks when follow is true.
 func (m *MemFileOps) Stat(path string, follow bool) (FileInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, follow)
 	if err != nil {
 		return FileInfo{}, err
@@ -830,6 +896,8 @@ func (m *MemFileOps) Stat(path string, follow bool) (FileInfo, error) {
 // ReadDir lists the direct children of a directory, name-sorted. A
 // symlink-to-directory path is followed, like os.ReadDir.
 func (m *MemFileOps) ReadDir(path string) ([]FileInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return nil, err
@@ -887,6 +955,8 @@ func (m *MemFileOps) collectChildren(dir string, out map[string]FileInfo) {
 // A symlink is removed itself (no follow); removing one hard-link name
 // keeps the shared content alive under the remaining names.
 func (m *MemFileOps) Remove(path string, recursive bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, false)
 	if err != nil {
 		return err
@@ -991,6 +1061,8 @@ func (m *MemFileOps) removeTree(root string) {
 // otherwise); renaming a directory over a file is ENOTDIR and a file over
 // a directory EISDIR. Neither trailing path is symlink-followed.
 func (m *MemFileOps) Rename(oldPath, newPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	oldFinal, err := m.resolve(oldPath, false)
 	if err != nil {
 		return err
@@ -1079,6 +1151,8 @@ func (m *MemFileOps) Rename(oldPath, newPath string) error {
 // Symlink creates a symbolic link at linkPath pointing at target (stored
 // verbatim). Errors if linkPath already exists.
 func (m *MemFileOps) Symlink(target, linkPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	linkFinal, err := m.resolve(linkPath, false)
 	if err != nil {
 		return err
@@ -1100,6 +1174,8 @@ func (m *MemFileOps) Symlink(target, linkPath string) error {
 // link entry, and hard-linking a directory is refused (EPERM). A file
 // link records an alias to the canonical path, sharing bytes and metadata.
 func (m *MemFileOps) Link(target, linkPath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	targetFinal, err := m.resolve(target, false)
 	if err != nil {
 		return err
@@ -1149,6 +1225,8 @@ func (m *MemFileOps) metaForExisting(resolved string) (*memMeta, bool) {
 
 // Chmod sets path's permission bits (symlink-followed, like chmod(2)).
 func (m *MemFileOps) Chmod(path string, mode os.FileMode) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return err
@@ -1164,6 +1242,8 @@ func (m *MemFileOps) Chmod(path string, mode os.FileMode) error {
 
 // Chtimes sets path's access and modification times (symlink-followed).
 func (m *MemFileOps) Chtimes(path string, atime, mtime time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return err
@@ -1180,6 +1260,8 @@ func (m *MemFileOps) Chtimes(path string, atime, mtime time.Time) error {
 
 // Truncate changes the size of the file at path (grows with zero bytes).
 func (m *MemFileOps) Truncate(path string, size int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return err
@@ -1218,6 +1300,8 @@ func (m *MemFileOps) Truncate(path string, size int64) error {
 // belong to" carve-out is NOT modeled — a documented fidelity
 // exception), and the -1/-1 no-op succeeds against any accessible path.
 func (m *MemFileOps) Chown(path string, uid, gid int, follow bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, follow)
 	if err != nil {
 		return err
@@ -1288,6 +1372,8 @@ func (m *MemFileOps) xattrsForRead(op, path string) (map[string][]byte, error) {
 // PLATFORM's not-found errno (errXattrAbsent) so mem and OS classify
 // identically under the parity harness.
 func (m *MemFileOps) XattrGet(path, name string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	xs, err := m.xattrsForRead("xattr-get", path)
 	if err != nil {
 		return nil, err
@@ -1303,6 +1389,8 @@ func (m *MemFileOps) XattrGet(path, name string) ([]byte, error) {
 
 // XattrSet writes one extended attribute (create or replace).
 func (m *MemFileOps) XattrSet(path, name string, value []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	xs, final, err := m.xattrsForWrite("xattr-set", path)
 	if err != nil {
 		return err
@@ -1316,6 +1404,8 @@ func (m *MemFileOps) XattrSet(path, name string, value []byte) error {
 
 // XattrList returns the sorted attribute names.
 func (m *MemFileOps) XattrList(path string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	xs, err := m.xattrsForRead("xattr-list", path)
 	if err != nil {
 		return nil, err
@@ -1331,6 +1421,8 @@ func (m *MemFileOps) XattrList(path string) ([]string, error) {
 // XattrRemove deletes one extended attribute; removing an absent one
 // errors like XattrGet.
 func (m *MemFileOps) XattrRemove(path, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	xs, final, err := m.xattrsForWrite("xattr-remove", path)
 	if err != nil {
 		return err
@@ -1384,11 +1476,13 @@ func (m *MemFileOps) tempName(dir, pattern string) (string, error) {
 // TempFile creates a unique file (0600) under dir, per the
 // os.CreateTemp pattern contract.
 func (m *MemFileOps) TempFile(dir, pattern string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	path, err := m.tempName(dir, pattern)
 	if err != nil {
 		return "", err
 	}
-	if err := m.WriteFile(path, []byte{}, 0o600); err != nil {
+	if err := m.writeFileLocked(path, []byte{}, 0o600); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -1396,11 +1490,13 @@ func (m *MemFileOps) TempFile(dir, pattern string) (string, error) {
 
 // TempDir creates a unique directory (0700) under dir.
 func (m *MemFileOps) TempDir(dir, pattern string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	path, err := m.tempName(dir, pattern)
 	if err != nil {
 		return "", err
 	}
-	if err := m.MkdirAll(path, 0o700); err != nil {
+	if err := m.mkdirAllLocked(path, 0o700); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -1411,6 +1507,8 @@ func (m *MemFileOps) TempDir(dir, pattern string) (string, error) {
 // exist (statfs(2) semantics); the mem root ("." / "/" and the temp
 // root's ancestors) always does.
 func (m *MemFileOps) Statfs(path string) (FsInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return FsInfo{}, err

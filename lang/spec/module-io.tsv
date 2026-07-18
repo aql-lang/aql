@@ -184,6 +184,30 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.txt") "old" drop  IO.write (make Pathon "mem://a.txt") "new" {atomic:true} drop  IO.read (make Pathon "mem://a.txt")	'new'	an atomic write replaces the file's contents in one step
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.bin") (convert Bytes "z") {atomic:true offset:0}	ERROR:write	{atomic} cannot combine with {offset}
 #
+# §22  file handles — IO.open acquires a stateful File handle on a Pathon;
+#      IO.seek/IO.flush/IO.close drive it, and read/write gain File
+#      overloads (read f {length offset enc}; write f data {offset} → f).
+#      The options map is {mode:read|write|append|rw, create, exclusive,
+#      truncate, perm}. A handle shares the mem backing store, so a handle
+#      write is visible to a stateless read before close.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  (IO.open (make Pathon "mem://k")) is IO.File	true	IO.open returns a File handle
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  typeof (IO.open (make Pathon "mem://k"))	File	the handle inhabits the File type
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  def f (IO.open (make Pathon "mem://h.txt") {mode:'write'})  IO.write f "hello" drop  IO.close f  IO.read (make Pathon "mem://h.txt")	'hello'	a handle write-then-close round-trips
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://s.txt") "abcdef" drop  def f (IO.open (make Pathon "mem://s.txt"))  IO.seek f 2 drop  IO.read f {length:3}	'cde'	seek then a bounded read slices the file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://v.txt") "seed" drop  def f (IO.open (make Pathon "mem://v.txt") {mode:'write'})  IO.write f "live" drop  IO.read (make Pathon "mem://v.txt")	'live'	a handle write is visible to a stateless read before close
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://fl.txt") "seed" drop  def f (IO.open (make Pathon "mem://fl.txt") {mode:'write'})  IO.write f "synced" drop  IO.flush f drop  IO.close f  IO.read (make Pathon "mem://fl.txt")	'synced'	IO.flush syncs a handle to its backend
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.close (IO.open (make Pathon "mem://k"))		close releases a File handle, leaving no value
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.open (make Pathon "mem://ghost")	ERROR:open	opening an absent file read-only errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.open (make Pathon "mem://k") {mode:'bogus'}	ERROR:open	an unknown open mode errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.seek 42 0	ERROR:signature	seek of a non-File is refused — its sigs take a File handle
+#
+# §23  exclusive write — write {exclusive:true} creates the path with
+#      O_EXCL (a true atomic create, no TOCTOU): it fails if the path
+#      already exists and cannot combine with append or a positioned
+#      {offset}.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.write (make Pathon "mem://new.txt") "fresh" {exclusive:true} drop  IO.read (make Pathon "mem://new.txt")	'fresh'	{exclusive:true} creates a new file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "pre" drop  IO.write (make Pathon "mem://e.txt") "x" {exclusive:true}	ERROR:write	{exclusive:true} refuses an existing file
+#
 # §18  mount — the AQL→FileOps bridge: `IO.mount {read: fn …}` installs a
 #      filesystem IMPLEMENTED IN AQL as the host FileOps, so every io word
 #      routes through the supplied handler fns (read/write/stat/list/remove,

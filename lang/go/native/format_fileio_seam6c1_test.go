@@ -250,12 +250,12 @@ func TestDoReadSQLiteArms(t *testing.T) {
 func TestDoWriteStdoutError(t *testing.T) {
 	r := seam5Reg(t)
 	r.Output = failingWriter{}
-	if _, err := doWrite(r, pathStdout, "content", "utf8", "text", "write", "lf", false); err == nil ||
+	if _, err := doWrite(r, pathStdout, "content", "utf8", "text", "write", "lf", false, false); err == nil ||
 		!strings.Contains(err.Error(), "stdout broke") {
 		t.Fatalf("expected stdout write error, got %v", err)
 	}
 	// Positive pair: stderr writes still succeed with a healthy writer.
-	out, err := doWrite(r, pathStderr, "content", "utf8", "text", "write", "lf", false)
+	out, err := doWrite(r, pathStderr, "content", "utf8", "text", "write", "lf", false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

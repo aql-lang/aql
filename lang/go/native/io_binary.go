@@ -107,6 +107,7 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 	data, _ := AsBytesValue(args[1])
 	mode := "write"
 	atomic := false
+	exclusive := false
 	var offset int64
 	hasOffset := false
 	if hasOpts {
@@ -115,10 +116,14 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 		}
 		offset, hasOffset = mapIntOpt(args[2], "offset")
 		atomic = mapBoolOpt(args[2], "atomic", false)
+		exclusive = mapBoolOpt(args[2], "exclusive", false)
 	}
 	if hasOffset {
 		if atomic {
 			return nil, r.AqlError("write_error", "write: {atomic} cannot combine with {offset} (a positioned splice is inherently in-place)", "write")
+		}
+		if exclusive {
+			return nil, r.AqlError("write_error", "write: {exclusive} cannot combine with {offset} (an exclusive create starts empty)", "write")
 		}
 		if offset < 0 {
 			return nil, r.AqlError("write_error", "write: negative offset", "write")
@@ -134,7 +139,7 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 	// Plain and append writes reuse doWrite (which also handles the stdio
 	// streams). nl="raw" means no newline rewriting; doWrite writes the
 	// content bytes verbatim, so a Go string over raw bytes round-trips.
-	if _, err := doWrite(r, path, string(data), "utf8", "text", mode, "raw", atomic); err != nil {
+	if _, err := doWrite(r, path, string(data), "utf8", "text", mode, "raw", atomic, exclusive); err != nil {
 		return nil, err
 	}
 	return []Value{returnPath(args[0])}, nil

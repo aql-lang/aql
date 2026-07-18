@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2186,6 +2186,27 @@ modules keep plain names.
 > holding a path as `{total free available bsize type}` (byte counts, the
 > block size, and a filesystem-type name — the in-memory FS reports a
 > synthetic 1 GiB `mem` volume).
+>
+> **Stateful file handles.** `IO.open p {mode, create, exclusive,
+> truncate, perm}` returns an `IO.File` handle over a path — `{mode:
+> 'read'|'write'|'append'|'rw'}` picks the base access (write is
+> create+truncate, append is create+append, rw is read+write), refined by
+> `{create}`, `{exclusive}` (O_EXCL — fail if it exists), `{truncate}`, and
+> `{perm}`. `read`/`write` gain File overloads: `read f {length, offset,
+> enc}` reads from the cursor (or positioned with `{offset}`, `'bytes'`
+> returning `Bytes`), and `write f data {offset}` writes at the cursor (or
+> positioned) and returns the handle for threading. `IO.seek f n {from:
+> 'start'|'current'|'end'}` moves the cursor and returns the new offset;
+> `IO.flush f` syncs; and `IO.close` releases the handle — polymorphic over
+> a `File` or a `Watcher` (the twin of `IO.unwatch`). A handle shares its
+> backend's store, so on the OS and in-memory filesystems a handle write is
+> visible to a stateless read before close; an `IO.mount` handle buffers and
+> flushes on sync/close (writes are not visible until then). Unclosed
+> handles are not finalized automatically (Java's posture) — pair every
+> `open` with a `close`. Separately, `write p data {exclusive:true}` is the
+> stateless O_EXCL create: it makes a new file and refuses an existing one
+> with no check-then-write race (it cannot combine with append or a
+> positioned `{offset}`).
 >
 > **Watching.** `IO.watch p [body]` subscribes to change events on a
 > Pathon — a file, or a directory's direct children (non-recursive,

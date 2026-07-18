@@ -57,7 +57,22 @@ import "github.com/aql-lang/aql/eng/go"
 //	unwatch   stop a Watcher, closing its event stream
 //	mount     install a map of AQL handler fns as the filesystem
 //	unmount   restore the filesystem that was active before mount
-func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
+//
+// IOModuleTypes bundles the per-import module-minted types the io words
+// close over: StreamKind (stdin/stdout/stderr handle tag), FileType (the
+// file/dir/symlink/other stat-record atom enum), Watcher (a live watch
+// subscription), and File (a stateful open-file handle). P5 will add Lock
+// and Mmap here. Bundling them keeps IOModuleNativeFuncs' signature stable
+// as the resource surface grows.
+type IOModuleTypes struct {
+	StreamKind *Type
+	FileType   *Type
+	Watcher    *Type
+	File       *Type
+}
+
+func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
+	streamKind, fileType, watcherType, handleType := t.StreamKind, t.FileType, t.Watcher, t.File
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
@@ -85,6 +100,27 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 	unwatchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		return doUnwatchWord(a, r)
 	}
+	// openImpl closes over handleType so each import stamps its own File
+	// identity; seek/flush/close/read-handle/write-handle reach the handle
+	// payload structurally, so they need no type.
+	openImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doOpenWord(a, r, handleType)
+	}
+	seekImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doSeekWord(a, r)
+	}
+	flushImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doFlushWord(a, r)
+	}
+	closeImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doCloseWord(a, r)
+	}
+	readHandleImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return readHandleWord(a, r)
+	}
+	writeHandleImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return writeHandleWord(a, r)
+	}
 	return []NativeFunc{
 		{
 			Name: "printstr",
@@ -101,6 +137,9 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 				{Args: []*Type{TPathon}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				// File-handle reads: {offset}/{length}/{enc} slice the handle.
+				{Args: []*Type{handleType, TMap}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{handleType}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, TPathon}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, streamKind}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
@@ -125,6 +164,10 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 				{Args: []*Type{streamKind, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString}, Impl: Go(writeHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				// File-handle writes return the handle (for threading); a Bytes
+				// payload writes verbatim, {offset} positions the write.
+				{Args: []*Type{handleType, TAny, TMap}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{handleType, TAny}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
 			},
 		},
 		streamHandle("stdin"),
@@ -195,6 +238,45 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 			Name: "unwatch",
 			Signatures: []Signature{
 				{Args: []*Type{watcherType}, Impl: Go(unwatchImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// open acquires a stateful File handle on a Pathon. The options
+			// map carries {mode:read|write|append|rw, create, exclusive,
+			// truncate, perm}; the default is a read-only open.
+			Name: "open",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+			},
+		},
+		{
+			// seek moves a File handle's cursor to n, relative to
+			// {from:start|current|end} (default start), and returns the new
+			// absolute offset.
+			Name: "seek",
+			Signatures: []Signature{
+				{Args: []*Type{handleType, TInteger, TMap}, Impl: Go(seekImpl), Returns: []*Type{TInteger}, BarrierPos: -1},
+				{Args: []*Type{handleType, TInteger}, Impl: Go(seekImpl), Returns: []*Type{TInteger}, BarrierPos: -1},
+			},
+		},
+		{
+			// flush syncs a File handle to its backend, returning the handle.
+			Name: "flush",
+			Signatures: []Signature{
+				{Args: []*Type{handleType}, Impl: Go(flushImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+			},
+		},
+		{
+			// close releases a resource handle — a File or a Watcher (the
+			// polymorphic twin of IO.unwatch). Two TYPED sigs (not one TAny)
+			// keep dispatch unambiguous under forward collection and give a
+			// static type error for a non-resource; the handler type-switches
+			// over both. P5 adds Lock/Mmap sigs here.
+			Name: "close",
+			Signatures: []Signature{
+				{Args: []*Type{handleType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{watcherType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
 			},
 		},
 		{

@@ -458,6 +458,51 @@ func (o *OverlayFileOps) Statfs(path string) (FsInfo, error) {
 	return o.Upper.Statfs(path)
 }
 
+// Open routes by intent: a read-only open reads upper-else-lower (like
+// ReadFile, honouring whiteouts); any write intent (write/append/create/
+// truncate) materialises the path in the upper first — a lower-only file
+// is copied up so an append sees its bytes — then opens the upper and
+// clears any whiteout. All mutations land in the upper, consistent with
+// the rest of the union.
+func (o *OverlayFileOps) Open(path string, opts OpenOpts) (FileHandle, error) {
+	path, err := o.deref(path)
+	if err != nil {
+		return nil, err
+	}
+	writeIntent := opts.Write || opts.Append || opts.Create || opts.Truncate
+	if !writeIntent {
+		if o.inUpper(path) {
+			return o.Upper.Open(path, opts)
+		}
+		if o.hidden(o.resolve(path)) {
+			return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+		}
+		return o.Lower.Open(path, opts)
+	}
+	lowerVisible := !o.inUpper(path) && !o.hidden(o.resolve(path))
+	if lowerVisible {
+		_, serr := o.Lower.Stat(path, false)
+		lowerVisible = serr == nil
+	}
+	// An exclusive create must fail on UNION existence BEFORE any copy-up,
+	// so a refused O_EXCL open leaves the upper untouched (a failed open
+	// must have no side effect — mem/OS parity).
+	if opts.Create && opts.Exclusive && (o.inUpper(path) || lowerVisible) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrExist}
+	}
+	if lowerVisible {
+		if cerr := o.copyUp(path); cerr != nil {
+			return nil, cerr
+		}
+	}
+	h, err := o.Upper.Open(path, opts)
+	if err != nil {
+		return nil, err
+	}
+	delete(o.whiteouts, o.resolve(path))
+	return h, nil
+}
+
 func (o *OverlayFileOps) ResolvePath(path string) (string, error) {
 	return o.Upper.ResolvePath(path)
 }

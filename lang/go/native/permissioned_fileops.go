@@ -217,4 +217,18 @@ func (p *permissionedFileOps) Watch(path string) (<-chan capabilities.WatchEvent
 	return p.inner.Watch(path)
 }
 
+// Open gates by intent: a read-only handle is "read", any write intent
+// (write/append/create/truncate) is "write" — the same two names the
+// stateless read/write ops use, so existing profiles keep their meaning.
+func (p *permissionedFileOps) Open(path string, opts capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	op := "read"
+	if opts.Write || opts.Append || opts.Create || opts.Truncate {
+		op = "write"
+	}
+	if err := p.policy.Check("fileops", op, policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.Open(path, opts)
+}
+
 var _ capabilities.FileOps = (*permissionedFileOps)(nil)

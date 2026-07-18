@@ -308,6 +308,9 @@ func (f *failOpsWave4) Statfs(string) (capabilities.FsInfo, error) {
 func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, errors.New("watch refused")
 }
+func (f *failOpsWave4) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, errors.New("open refused")
+}
 func (f *failOpsWave4) WriteFile(string, []byte, os.FileMode) error {
 	return errors.New("write refused")
 }

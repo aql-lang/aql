@@ -55,6 +55,15 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  IO.temp {in:(make Pathon "d")}`,
 		`import "aql:io"  IO.space (make Pathon "d")`,
 		`import "aql:io"  IO.write (make Pathon "d") "x" {atomic:true}`,
+		// P4: stateful File handles + {exclusive}
+		`import "aql:io"  IO.open (make Pathon "d")`,
+		`import "aql:io"  IO.open (make Pathon "d") {mode:'write' create:true exclusive:true truncate:true perm:0o600}`,
+		`import "aql:io"  IO.seek (IO.open (make Pathon "d")) 4 {from:'start'}`,
+		`import "aql:io"  IO.flush (IO.open (make Pathon "d") {mode:'write'})`,
+		`import "aql:io"  IO.close (IO.open (make Pathon "d"))`,
+		`import "aql:io"  IO.read (IO.open (make Pathon "d")) {length:3 offset:0 enc:'bytes'}`,
+		`import "aql:io"  IO.write (IO.open (make Pathon "d") {mode:'write'}) "x" {offset:0}`,
+		`import "aql:io"  IO.write (make Pathon "d") "x" {exclusive:true}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

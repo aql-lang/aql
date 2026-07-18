@@ -116,6 +116,8 @@ type memWatcher struct {
 // the same shape as the OS side: non-recursive, absent paths error, and
 // slow consumers drop events past the buffer.
 func (m *MemFileOps) Watch(path string) (<-chan WatchEvent, func() error, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	final, err := m.resolve(path, true)
 	if err != nil {
 		return nil, nil, err
@@ -126,6 +128,8 @@ func (m *MemFileOps) Watch(path string) (<-chan WatchEvent, func() error, error)
 	w := &memWatcher{root: final, ch: make(chan WatchEvent, watchBufferSize)}
 	m.watchers = append(m.watchers, w)
 	stop := func() error {
+		m.mu.Lock()
+		defer m.mu.Unlock()
 		for i, cur := range m.watchers {
 			if cur == w {
 				m.watchers = append(m.watchers[:i], m.watchers[i+1:]...)

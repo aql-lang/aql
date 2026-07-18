@@ -40,6 +40,9 @@ func (w9ExtStub) Statfs(string) (capabilities.FsInfo, error) {
 func (w9ExtStub) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, fmt.Errorf("no")
 }
+func (w9ExtStub) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, fmt.Errorf("no")
+}
 
 // Seam-9 coverage (W9_nativeC) for natives.go: reach / folder / cancel
 // handler error and edge arms, driven directly with crafted args and an

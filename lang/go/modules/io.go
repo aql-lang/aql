@@ -46,7 +46,16 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// returns — is minted per import too, and exported as a type literal
 	// so `w is IO.Watcher` works.
 	watcherType := native.MintWatcherType(subReg)
-	ioNatives := native.IOModuleNativeFuncs(streamKind, fileType, watcherType)
+	// File — a stateful open-file handle IO.open returns — is minted per
+	// import too, and exported so `f is IO.File` works. Distinct from
+	// FileType (the stat-record atom enum).
+	fileHandleType := native.MintFileHandleType(subReg)
+	ioNatives := native.IOModuleNativeFuncs(native.IOModuleTypes{
+		StreamKind: streamKind,
+		FileType:   fileType,
+		Watcher:    watcherType,
+		File:       fileHandleType,
+	})
 	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
 	}
@@ -55,6 +64,7 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 	exports.Set("FileType", native.NewTypeLiteral(fileType))
 	exports.Set("Watcher", native.NewTypeLiteral(watcherType))
+	exports.Set("File", native.NewTypeLiteral(fileHandleType))
 
 	// list / remove are exported as WORD EXTENSIONS, not namespaced FnDef
 	// wrappers: import transplants a Pathon overload onto the importer's bare

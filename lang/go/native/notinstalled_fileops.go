@@ -120,4 +120,8 @@ func (notInstalledFileOps) Watch(path string) (<-chan capabilities.WatchEvent, f
 	return nil, nil, capabilityNotInstalled("fileops", "watch", path)
 }
 
+func (notInstalledFileOps) Open(path string, _ capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, capabilityNotInstalled("fileops", "open", path)
+}
+
 var _ capabilities.FileOps = notInstalledFileOps{}

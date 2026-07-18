@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -283,8 +284,12 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 	return result, nil
 }
 
-func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic bool) ([]Value, error) {
+func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool) ([]Value, error) {
 	content = applyNL(content, nl)
+
+	if exclusive && (atomic || mode == "append") {
+		return nil, r.AqlError("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write")
+	}
 
 	// Handle stdout/stderr special paths.
 	if path == pathStdout || path == pathStderr {
@@ -324,6 +329,20 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic bo
 	// the silent re-run. Noted on the ATTEMPT: an OS WriteFile can create
 	// or truncate the target before failing, so even the error path may
 	// already have mutated the filesystem.
+	// {exclusive} opens with O_EXCL BEFORE noting an effect: a refusal
+	// (the path already exists) mutates nothing, so it stays a clean
+	// re-runnable write_error rather than tripping the compiled effect
+	// fence. writeExclusive notes the effect only once the create lands.
+	if exclusive {
+		if err := writeExclusive(r, path, data); err != nil {
+			// An AqlError (not a bare fmt.Errorf) so the compiled runtime
+			// treats the refusal as intentional and does not attempt a
+			// fallback — which a prior statement's effect would block,
+			// surfacing as a spurious internal_error (compiled_fullcorpus).
+			return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+		}
+		return []Value{NewString(path)}, nil
+	}
 	r.NoteEffect()
 	if atomic {
 		if err := writeAtomic(r, path, data); err != nil {
@@ -336,6 +355,23 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic bo
 	}
 
 	return []Value{NewString(path)}, nil
+}
+
+// writeExclusive is the {exclusive:true} write path: it creates path with
+// O_EXCL — a true atomic create that fails if the path already exists,
+// with no check-then-write TOCTOU — writes the data, and closes.
+func writeExclusive(r *Registry, path string, data []byte) error {
+	h, err := EffectiveFileOps(r).Open(path, capabilities.OpenOpts{Write: true, Create: true, Exclusive: true})
+	if err != nil {
+		return err // EEXIST (or a gate refusal): nothing was created
+	}
+	r.NoteEffect() // the file now exists — an observable effect
+	_, werr := h.Write(data)
+	cerr := h.Close()
+	if werr != nil {
+		return werr
+	}
+	return cerr
 }
 
 // writeAtomic is the {atomic:true} write path: the bytes land in a temp

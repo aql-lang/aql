@@ -81,6 +81,9 @@ WORD class
   [Node/Map] barrier=1 runcheck returns=[Type]
 WORD clone
   [Any] barrier=1 +returnsfn
+WORD close
+  [Ideal/Watcher] barrier=1
+  [Ideal/File] barrier=1
 WORD cmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer] +returnsfn
 WORD codequote
@@ -260,6 +263,8 @@ WORD flatten
   [Node/List] barrier=1 returns=[Node/List]
 WORD flex
   [Node] barrier=1 returns=[Node] +returnsfn
+WORD flush
+  [Ideal/File] barrier=1 returns=[Ideal/File]
 WORD fn
   [Any Any Node/List] barrier=3 runcheck noeval={0,1,2} returns=[Type/Function]
   [Node/List] barrier=1 runcheck noeval={0} returns=[Type/Function]
@@ -489,6 +494,9 @@ WORD now
   [] barrier=0 returns=[Scalar/Time/Instant]
 WORD of
   [Node/List Any] barrier=1 runcheck typearg={1} returns=[Type]
+WORD open
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Ideal/File]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Ideal/File]
 WORD or
   [Scalar/Boolean Scalar/Boolean] barrier=1 returns=[Scalar/Boolean]
   [Any Any] barrier=1 +returnsfn
@@ -544,10 +552,12 @@ WORD range
 WORD reach
   [Any Node/List] barrier=2 noeval={1} returns=[Ideal/Reach]
 WORD read
+  [Ideal/File Node/Map] barrier=2 returns=[Any]
   [Node/Map Scalar/Atom/StreamKind] barrier=2 returns=[Any]
   [Node/Map Scalar/Micron/Pathon] barrier=2 returns=[Any]
   [Scalar/Atom/StreamKind Node/Map] barrier=2 returns=[Any]
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
+  [Ideal/File] barrier=1 returns=[Any]
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD rebind
@@ -593,6 +603,9 @@ WORD scan
   [Type/Function Node/Map] barrier=2 returns=[Node/Map]
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD seek
+  [Ideal/File Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/Number/Integer]
+  [Ideal/File Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]
 WORD selector
   [Node/Map Any] barrier=2 returns=[Any]
 WORD self
@@ -786,12 +799,14 @@ WORD word
 WORD wrap
   [Any Ideal/Service] barrier=2
 WORD write
+  [Ideal/File Any Node/Map] barrier=3 returns=[Ideal/File]
   [Scalar/Atom/StreamKind Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Micron/Pathon Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
+  [Ideal/File Any] barrier=2 returns=[Ideal/File]
   [Scalar/Atom/StreamKind Scalar/Bytes] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Any] barrier=2 returns=[Scalar/Atom/StreamKind]
