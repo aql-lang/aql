@@ -806,11 +806,11 @@ func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
 	}
 }
 
-// parseHandler builds the ParseLangSpec handler that runs the constructed
-// parser over a source string and converts the result. It binds g.r for the
-// duration of the parse (so callbacks dispatch AQL fns) and surfaces the
-// first callback error as a parse error.
-func (g *parseGrammar) parseHandler(kind string) native.Handler {
+// parseHandler builds the ParseLang (the ParseLangSpec handler) that runs
+// the constructed parser over a source string and converts the result. It
+// binds g.r for the duration of the parse (so callbacks dispatch AQL fns)
+// and surfaces the first callback error as a parse error.
+func (g *parseGrammar) parseHandler(kind string) ParseLang {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework

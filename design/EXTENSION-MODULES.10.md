@@ -49,7 +49,8 @@ Each extensible module owns a registry of named handlers with five parts,
 all already demonstrated by parselang/emitlang:
 
 1. **A `Spec` struct** — the registration envelope. parselang's is
-   `ParseLangSpec{Name string; Returns []*native.Type; Handler native.Handler}`
+   `ParseLangSpec{Name string; Returns []*native.Type; Handler ParseLang}`
+   (`ParseLang` is the exported named type of a parse_<lang> function)
    (`parselang.go:147`). Name is a **lowercase, unprefixed** kind atom;
    the framework adds the word prefix (`parse_`, `emit_`, …).
 2. **A `RegisterHostX(reg *native.Registry, spec XSpec) error`** entry

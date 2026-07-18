@@ -175,6 +175,22 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, nil
 }
 
+// ParseLang is the type of a parse_<lang> parser function — the Go
+// implementation behind one registered `parse <kind>` word. It is the
+// STANDARD parser signature (see the module comment above) in handler form:
+// the framework resolves the source (String or {src:…}) BEFORE the function
+// runs, so args[0] is the resolved source String and args[1] the opts Map
+// (`{}` when the caller gave none); the ctx/stack slots are unused by the
+// parse framing. The function returns the parse result — typically one
+// value (an AST, a transduction, …) matching the declared Returns types —
+// or a raised parse error.
+//
+// Every Go-implemented parser carries this type: the built-in kinds
+// (tabnasParseHandler, aontuParserSpec), the read-format bridge
+// (formatParseHandler), the Parse-builder bridge (parseGrammar.parseHandler),
+// and host parsers supplied via ParseLangSpec.Handler.
+type ParseLang func(args []native.Value, ctx map[string]native.Value, stack []native.Value, r *native.Registry) ([]native.Value, error)
+
 // ParseLangSpec describes a Go-implemented parser for the host registration
 // API (RegisterHostParser). The standard [source:String opts:Map] prefix is
 // supplied automatically and the source is RESOLVED to a String before the
@@ -185,9 +201,9 @@ type ParseLangSpec struct {
 	Name string
 	// Returns are the parser's output types (nil → [Any]).
 	Returns []*native.Type
-	// Handler implements the parser. Required. Receives the resolved source
-	// String and the opts Map.
-	Handler native.Handler
+	// Handler implements the parser (a ParseLang). Required. Receives the
+	// resolved source String and the opts Map.
+	Handler ParseLang
 	// Pure declares the handler a PURE function of (source, opts): no
 	// registry mutation, no I/O, deterministic output. A pure parser's
 	// result over a fully-concrete source + opts is folded at CHECK time
@@ -287,10 +303,10 @@ func RegisterFormatParser(reg *native.Registry, name string, f native.Format, ex
 	return native.RegisterFormat(reg, name, f, exts...)
 }
 
-// formatParseHandler adapts a read Format into a parse handler: it decodes
+// formatParseHandler adapts a read Format into a ParseLang: it decodes
 // the resolved source (forwarding opts when the format is opts-aware) and
 // returns the first decoded value.
-func formatParseHandler(name string, f native.Format) native.Handler {
+func formatParseHandler(name string, f native.Format) ParseLang {
 	target := "parse_" + name
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
@@ -359,13 +375,17 @@ func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec
 // when the source and opts operands are fully concrete data, it runs the
 // real handler (a pure function of its inputs) and surfaces the CONCRETE
 // parse result, so a literal-source `parse json '{"a":1}'` types field
-// reads precisely instead of ending dynamic(Any). Anything non-concrete —
+// reads precisely instead of ending dynamic(Any). shell is the
+// source-RESOLVING wrapper installHostParser builds around the kind's
+// ParseLang — NOT the bare ParseLang itself: at fold time args[0] may still
+// be a literal {src:…} map (parseFoldableValue admits concrete maps), and
+// the shell performs the same resolution the runtime path does. Anything non-concrete —
 // a computed source, a carrier-bearing opts map — falls back to the
 // declared-Returns dynamic carriers, exactly what declaredReturnCarriers
 // would have produced (declared Any rides dynamic). A handler ERROR also
 // falls back, silently: the raise is the runtime's job (and may be caught
 // by an enclosing `do`), so the check pass must not flag it here.
-func pureParseFoldReturns(returns []*native.Type, handler native.Handler) native.ReturnsFunc {
+func pureParseFoldReturns(returns []*native.Type, shell native.Handler) native.ReturnsFunc {
 	return func(args []native.Value, r *native.Registry) []native.Value {
 		fallback := make([]native.Value, len(returns))
 		for i, t := range returns {
@@ -378,7 +398,7 @@ func pureParseFoldReturns(returns []*native.Type, handler native.Handler) native
 		if len(args) != 2 || !parseFoldableValue(args[0]) || !parseFoldableValue(args[1]) {
 			return fallback
 		}
-		out, err := handler(args, nil, nil, r)
+		out, err := shell(args, nil, nil, r)
 		if err != nil || len(out) != len(returns) {
 			return fallback
 		}
@@ -677,10 +697,10 @@ func aontuParserSpec() ParseLangSpec {
 	}
 }
 
-// tabnasParseHandler builds the parser native for one tabnas kind: it runs
+// tabnasParseHandler builds the ParseLang for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
 // result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
-func tabnasParseHandler(kind string, parse native.TabnasParser, convert func(any) native.Value) native.Handler {
+func tabnasParseHandler(kind string, parse native.TabnasParser, convert func(any) native.Value) ParseLang {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework

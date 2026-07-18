@@ -630,10 +630,17 @@ func (a *AQL) RegisterMiniLang(spec MiniLangSpec) error {
 	return modules.RegisterHostMiniLang(a.registry, spec)
 }
 
+// ParseLang is the type of a parse_<lang> parser function — the handler
+// form of the standard parser signature. The framework resolves the source
+// before the function runs, so it receives args[0]=source (a String) and
+// args[1]=opts; it returns the parse result. Handlers passed to
+// RegisterParser (ParseLangSpec.Handler) carry this type.
+type ParseLang = modules.ParseLang
+
 // ParseLangSpec describes a Go-implemented parser for RegisterParser. The
 // standard [source:String opts:Map] prefix is supplied automatically and the
 // source is resolved to a String before the handler runs; declare only the
-// Returns and the Handler.
+// Returns and the Handler (a ParseLang).
 type ParseLangSpec = modules.ParseLangSpec
 
 // RegisterParser installs a Go-implemented parser on the instance — the

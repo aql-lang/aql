@@ -56,6 +56,37 @@ func newCalcParserInstance(t *testing.T) *lang.AQL {
 	return a
 }
 
+// Compile-time pin: a host parser's Handler carries the exported ParseLang
+// type, and the lang alias is identical to the modules definition — this
+// assignment fails to compile if either export drifts.
+var _ lang.ParseLang = calcParserSpec().Handler
+
+// TestParseLangHostHandlerType pins the exported ParseLang handler type at
+// runtime: a ParseLang is directly invocable with the framework's
+// post-resolution argument shape (args[0]=source String, args[1]=opts Map).
+func TestParseLangHostHandlerType(t *testing.T) {
+	p := calcParserSpec().Handler
+	if p == nil {
+		t.Fatal("calc parser handler: expected a non-nil ParseLang")
+	}
+	r, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	out, perr := p([]native.Value{
+		native.NewString("x + y"), native.NewMap(native.NewOrderedMap()),
+	}, nil, nil, r)
+	if perr != nil || len(out) != 1 {
+		t.Fatalf("ParseLang direct call: out=%v err=%v", out, perr)
+	}
+	// The same contract still rejects bad input when called directly.
+	if _, perr = p([]native.Value{
+		native.NewString("nope"), native.NewMap(native.NewOrderedMap()),
+	}, nil, nil, r); perr == nil {
+		t.Error("ParseLang direct call: a malformed source should error")
+	}
+}
+
 // TestParseLangHostCalcAST pins the AST a `parse calc` call produces — every
 // operator, and the operand fields — via field access on the returned node.
 func TestParseLangHostCalcAST(t *testing.T) {
