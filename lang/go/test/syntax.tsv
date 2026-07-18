@@ -762,9 +762,9 @@ false convert String	'false'
 1 convert Boolean	true
 0 convert Boolean	false
 
-# String to boolean
+# String to boolean: presence, not content — only "" is false
 "true" convert Boolean	true
-"false" convert Boolean	false
+"false" convert Boolean	true
 "" convert Boolean	false
 "anything" convert Boolean	true
 
@@ -784,11 +784,11 @@ make String -5	'-5'
 make Number "99"	99
 make Number "-5"	-5
 
-# make scalar: to boolean
+# make scalar: to boolean (presence, not content — only "" / 0 are false)
 make Boolean 1	true
 make Boolean 0	false
 make Boolean "true"	true
-make Boolean "false"	false
+make Boolean "false"	true
 
 # make scalar: to atom
 make Atom 42	42

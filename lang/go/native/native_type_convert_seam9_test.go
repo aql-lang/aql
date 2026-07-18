@@ -74,7 +74,8 @@ func TestW9ConvertToIntegerFloatOverflow(t *testing.T) {
 }
 
 func TestW9ConvertToBooleanDefaultArm(t *testing.T) {
-	// A non-Boolean/Number/String source hits the CoerceBoolean default.
+	// convert Boolean is pure CoerceBoolean coercion; a non-empty Atom
+	// source coerces to a Boolean (true) by presence.
 	out, err := convertTo(NewAtom("x"), TBoolean, "")
 	if err != nil {
 		t.Fatalf("convert Atom to Boolean: %v", err)

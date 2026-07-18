@@ -20,9 +20,10 @@ false convert Boolean	false
 1.5 convert Boolean	true
 0.0 convert Boolean	false
 
-# Strings: "true"/"false" parse literally; otherwise non-empty is true.
+# Strings: coercion by presence, not content — only "" is false, so
+# "false" and "true" are both non-empty and coerce to true.
 "true" convert Boolean	true
-"false" convert Boolean	false
+"false" convert Boolean	true
 "" convert Boolean	false
 "hello" convert Boolean	true
 " " convert Boolean	true

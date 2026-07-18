@@ -1143,30 +1143,15 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		return NewInteger(n), nil
 
 	case targetType.ConformsTo(TBoolean):
-		// Explicit conversion PARSES a String's content (mirroring make's
-		// MakeConvert): "true"/"false" map to the booleans, every other
-		// non-empty string is truthy. This is deliberately distinct from
-		// `if`-truthiness (CoerceBoolean), where a String is judged only by
-		// emptiness and "false" is truthy (WAT-AUDIT.5.md §E) — `convert
-		// Boolean` reads the text, `if` reads presence.
-		switch {
-		case src.Parent.ConformsTo(TBoolean):
-			return src, nil
-		case src.Parent.ConformsTo(TNumber):
-			n, _ := AsNumber(src)
-			return NewBoolean(n != 0), nil
-		case src.Parent.ConformsTo(TString):
-			switch ValToString(src) {
-			case "true":
-				return NewBoolean(true), nil
-			case "false":
-				return NewBoolean(false), nil
-			default:
-				return NewBoolean(ValToString(src) != ""), nil
-			}
-		default:
-			return NewBoolean(CoerceBoolean(src)), nil
-		}
+		// Boolean is a COERCION, not a parse — it is exactly the
+		// truthiness rule words like `if` apply (CoerceBoolean): a value
+		// is false iff it is absent/empty (empty String, 0, none, empty
+		// collection) and true otherwise. String CONTENT is never
+		// inspected, so "false" and "true" are ordinary non-empty strings
+		// and both coerce to true. Turning the literal words "true" /
+		// "false" into booleans is a separate parse operation that lives
+		// elsewhere, not here.
+		return NewBoolean(CoerceBoolean(src)), nil
 
 	case targetType.Equal(TAtom):
 		return NewAtom(ValToString(src)), nil

@@ -148,9 +148,10 @@ convert Float '1_0.5'	10.5	underscore separators are allowed in Float strings
 convert Float 'nan'	nan	the special literals parse from strings
 convert Float '-inf'	-inf	…including the negative infinity
 convert Float '1e3'	1000.0	scientific notation parses to a Float
-convert Boolean 'TRUE'	true	boolean parsing is case-insensitive
-convert Boolean ''	false	the empty string converts to false
-convert Boolean 'no'	true	…but ANY other non-false text is true — even 'no'
+convert Boolean 'TRUE'	true	Boolean is coercion by presence — content is not parsed
+convert Boolean ''	false	the empty string is the only false String
+convert Boolean 'false'	true	the text 'false' is not parsed — a non-empty String is true
+convert Boolean 'no'	true	ANY non-empty text is true — even 'no'
 convert Boolean 0	false	numeric zero converts to false
 convert Boolean 3.5	true	non-zero Float converts to true
 convert Integer 3.99	3	Float → Integer truncates toward zero

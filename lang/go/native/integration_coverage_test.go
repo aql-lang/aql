@@ -613,13 +613,14 @@ func TestIntegConvertToBoolean(t *testing.T) {
 		t.Errorf("'true' convert Boolean = %v, want true", result)
 	}
 
-	// string "false" to boolean
+	// string "false" to boolean: coercion by presence, not content —
+	// a non-empty String is true, so the text "false" is true.
 	result = runAQL(t, r, []Value{
 		NewString("false"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as16, _ := AsBoolean(result[0])
-	if len(result) != 1 || _as16 {
-		t.Errorf("'false' convert Boolean = %v, want false", result)
+	if len(result) != 1 || !_as16 {
+		t.Errorf("'false' convert Boolean = %v, want true", result)
 	}
 
 	// non-empty string to boolean (truthy)

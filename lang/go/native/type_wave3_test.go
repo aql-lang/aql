@@ -312,7 +312,7 @@ func TestW3ConvertScalarEdges(t *testing.T) {
 	w3TypeWant(t, `convert Integer "12"`, `12`) // string parse
 	w3TypeErr(t, `convert Integer "x"`, "cannot convert")
 	w3TypeWant(t, `convert Boolean 'true'`, `true`)
-	w3TypeWant(t, `convert Boolean 'false'`, `false`)
+	w3TypeWant(t, `convert Boolean 'false'`, `true`) // content not parsed — non-empty String is true
 	w3TypeWant(t, `convert Boolean 'other'`, `true`)
 	w3TypeWant(t, `convert Boolean 0`, `false`)
 	w3TypeWant(t, `convert Atom 'zed'`, `zed/q`)

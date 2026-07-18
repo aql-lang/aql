@@ -1581,14 +1581,16 @@ For `if`, the canonical form is all-forward `if cond [then] [else]`
 expects. See
 **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 
-`if` coerces its condition to a boolean (the same rule as `convert
-boolean`). The values that count as **false** are: `false`, `0` (and
-`0.0`), `none`, the empty list `[]`/empty map `{}`, the empty string
-`""`, and — as a special case — the exact string `"false"`.
-**Everything else is true**, including non-empty strings that look
-falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
-`"false"` is special). A condition that produces *no* value at all
-(e.g. an empty block `[]` as the condition) is an error, not a false.
+`if` coerces its condition to a boolean — the exact same rule as
+`convert Boolean` and `make Boolean`. Coercion is by **presence, not
+content**: the values that count as **false** are `false`, `0` (and
+`0.0`), `none`, the empty list `[]`/empty map `{}`, and the empty
+string `""`. **Everything else is true**, including non-empty strings
+that look falsy: `"false"`, `"FALSE"`, `"0"`, and `"no"` are all
+truthy — a String's characters are never inspected. (Parsing the words
+`"true"`/`"false"` into booleans is a separate operation, not part of
+coercion.) A condition that produces *no* value at all (e.g. an empty
+block `[]` as the condition) is an error, not a false.
 
 #### `for` forms
 
