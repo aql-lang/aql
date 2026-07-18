@@ -270,6 +270,191 @@ func TestSiftErrorArms(t *testing.T) {
 	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'dsv' fields:['a'] opts:{fields:['b']}} "x"`, "sift_spec_error")
 }
 
+// TestSiftOptionTypeErrors fires the wrong-typed-option error arm of every
+// family option reader (str/boolean/integer/strict/typesMap/resolveFields).
+func TestSiftOptionTypeErrors(t *testing.T) {
+	bad := []string{
+		// kv
+		`{family:'kv' opts:{sep:1}}`,
+		`{family:'kv' opts:{trim:1}}`,
+		`{family:'kv' opts:{unquote:1}}`,
+		`{family:'kv' opts:{names:1}}`,
+		`{family:'kv' opts:{repeat:1}}`,
+		`{family:'kv' opts:{vtype:1}}`,
+		`{family:'kv' opts:{strict:1}}`,
+		`{family:'kv' opts:{skip:'x'}}`,
+		`{family:'kv' opts:{chop:'x'}}`,
+		`{family:'kv' opts:{comment:1}}`,
+		// blocks
+		`{family:'blocks' opts:{sep:1}}`,
+		`{family:'blocks' opts:{kvsep:1}}`,
+		`{family:'blocks' opts:{table:1}}`,
+		// columns
+		`{family:'columns' opts:{header:1}}`,
+		`{family:'columns' opts:{names:1}}`,
+		`{family:'columns' opts:{label:1}}`,
+		// dsv
+		`{family:'dsv' opts:{sep:1}}`,
+		`{family:'dsv' opts:{limit:'x'}}`,
+		// fixed
+		`{family:'fixed' opts:{trim:1 widths:[1]}}`,
+		`{family:'fixed' opts:{cols:[[0 'x']]}}`,
+		`{family:'fixed' opts:{cols:[[0]]}}`,
+		// pattern
+		`{family:'pattern' opts:{re:1}}`,
+		`{family:'pattern' opts:{re:'(?P<a>x)' per:1}}`,
+		`{family:'pattern' opts:{re:'(?P<a>x)' names:1}}`,
+		`{family:'pattern' opts:{re:'(?P<a>x)' vtype:'nope'}}`,
+		`{family:'pattern' opts:{re:'(?P<a>x)' strict:1}}`,
+		// typesMap / resolveFields
+		`{family:'dsv' opts:{types:{c1:1}}}`,
+		`{family:'columns' opts:{fields:5}}`,
+		`{family:'columns' opts:{fields:{a:'nope'}}}`,
+		`{family:'columns' opts:{fields:{a:{type:'nope'}}}}`,
+	}
+	for _, spec := range bad {
+		assertSiftErr(t, `import "aql:sift" Sift.parse `+spec+` "a:1"`, "sift_spec_error")
+	}
+}
+
+// TestSiftPureHelpers covers the small pure helpers directly.
+func TestSiftPureHelpers(t *testing.T) {
+	if siftUnquote("x") != "x" || siftUnquote("'a'") != "a" || siftUnquote(`"a"`) != "a" || siftUnquote("'") != "'" {
+		t.Error("siftUnquote")
+	}
+	if got := siftSplitN("a b c", 0); len(got) != 3 {
+		t.Errorf("siftSplitN(0) = %v", got)
+	}
+	if got := siftSplitN("a b c", 2); len(got) != 2 || got[1] != "b c" {
+		t.Errorf("siftSplitN(2) = %v", got)
+	}
+	if fixedSlice("abc", 5, 6) != "" || fixedSlice("abc", 2, 1) != "" || fixedSlice("abc", 0, 2) != "ab" {
+		t.Error("fixedSlice bounds")
+	}
+	if !matchGlob("/a/*", "/a/b") || matchGlob("/a/*", "/x") || !matchGlob("/a", "/a") || matchGlob("/a", "/b") {
+		t.Error("matchGlob")
+	}
+	if lastSlash("abc") != -1 || lastSlash("a/b") != 1 {
+		t.Error("lastSlash")
+	}
+	// specToValue with neither opts nor doc.
+	sv := specToValue(&siftSpec{name: "x", family: famKV, opts: native.NewNone()})
+	if sv.String() != "{name:x family:kv}" {
+		t.Errorf("specToValue bare = %s", sv.String())
+	}
+}
+
+// TestSiftCallFnErrors covers callSiftFn's non-single-result and error arms and
+// the str atom branch.
+func TestSiftCallFnErrors(t *testing.T) {
+	// A fn returning no value → callSiftFn's single-result guard fires.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fn' fn:(fn [[s:String o:Map] [] []])} "x"`, "sift_parse_error")
+	// A fn that raises → the raise propagates.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fn' fn:(fn [[s:String o:Map] [Any] [raise boom "x"]])} "x"`, "boom")
+	// str atom branch: an option value that is an Atom.
+	assertSift(t, `import "aql:sift" (Sift.parse {family:'kv' opts:{sep:':' names:normalize/q}} "MemTotal: 4") dot mem-total`, "'4'")
+}
+
+// TestSiftDefineCheckMode drives siftDefineReturns (the check-mode install) and
+// its skip/error arms directly.
+func TestSiftDefineCheckMode(t *testing.T) {
+	r := siftRegistry(t)
+	st := siftHostStateFor(r)
+	restore := r.Check.Begin()
+	defer restore()
+	spec := native.NewOrderedMap()
+	spec.Set("family", native.NewAtom("kv"))
+	name := native.NewAtom("ckmode")
+	// A concrete name + concrete spec installs during check.
+	if got := siftDefineReturns(st)([]native.Value{name, native.NewMap(spec)}, r); got != nil {
+		t.Errorf("ReturnsFn should return nil, got %v", got)
+	}
+	if _, ok := st.specs["ckmode"]; !ok {
+		t.Error("check-mode install did not register the kind")
+	}
+	// A non-concrete arg short-circuits (returns nil, installs nothing).
+	if got := siftDefineReturns(st)([]native.Value{native.NewCarrier(native.TAtom)}, r); got != nil {
+		t.Error("short arg should return nil")
+	}
+	// An install error is surfaced as a check diagnostic (name collides).
+	kv := native.NewAtom("kv")
+	_ = siftDefineReturns(st)([]native.Value{kv, native.NewMap(spec)}, r)
+}
+
+// TestSiftFamilyBranches hits the per-row branches of columns/dsv/fixed/pattern
+// (blank lines, coercion failures, empty body, greedy limit, bad widths).
+func TestSiftFamilyBranches(t *testing.T) {
+	// columns: header-only input → empty table (len(body)==0).
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'columns'} "H1 H2")`, "0")
+	// columns: a blank line in the body is skipped.
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'columns'} "H\n\n1\n2")`, "2")
+	// columns: a coercion failure in a typed column raises.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'columns' opts:{types:{h:'integer'}}} "h\nx"`, "sift_type_error")
+	// columns: label mode with a typed remaining column.
+	assertSift(t, `import "aql:sift" ((Sift.parse {family:'columns' opts:{label:'k' types:{u:'integer'}}} "u\nMem: 9") get 0) get 'u'`, "9")
+	// dsv: blank line skipped; literal-sep greedy limit; coercion failure.
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'dsv' opts:{sep:':'}} "a\n\nb")`, "2")
+	assertSift(t, `import "aql:sift" ((Sift.parse {family:'dsv' opts:{sep:':' limit:2}} "a:b:c") get 0) get 'c2'`, "'b:c'")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'dsv' opts:{sep:':' types:{c1:'integer'}}} "x"`, "sift_type_error")
+	// fixed: blank line skipped; coercion failure; widths not a list.
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'fixed' opts:{widths:[1]}} "a\n\nb")`, "2")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fixed' opts:{widths:[1] types:{c1:'integer'}}} "x"`, "sift_type_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fixed' opts:{widths:5}} "x"`, "sift_spec_error")
+	// pattern: per:'line' coercion failure; a blank/non-matching line under strict:'error'.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'pattern' opts:{re:'(?P<n>\\S+)' per:'line' types:{n:'integer'}}} "x"`, "sift_type_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'pattern' opts:{re:'(?P<n>\\d+)' per:'line'}} "a\n5"`, "sift_parse_error")
+	// resolveFields: the extended {type re} field form.
+	assertSift(t, `import "aql:sift" ((Sift.parse {family:'dsv' opts:{sep:':' fields:{n:{type:'integer'}}}} "5") get 0) get 'n'`, "5")
+	// readDetect: an argv whose basename is not in the table → None.
+	assertSift(t, `import "aql:sift" Sift.detect ["nosuch" "x"]`, "none")
+	// installKind: a fn kind's parse via the parselang macro (RegisterHostParser path).
+	assertSift(t, `import "aql:sift" import "aql:parselang" Sift.define byname {family:'kv' opts:{sep:'='}} end  parse byname "a=1"`, "{a:'1'}")
+}
+
+// TestSiftCoverageArms sweeps the remaining reachable error/edge arms.
+func TestSiftCoverageArms(t *testing.T) {
+	// preprocess: trailing newline drop, skip>=len, chop>=len, interior blank.
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'dsv' opts:{sep:':'}} "a\nb\n")`, "2")
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'dsv' opts:{sep:':' skip:9}} "a\nb")`, "0")
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'dsv' opts:{sep:':' chop:9}} "a\nb")`, "0")
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'kv' opts:{sep:':'}} "a:1\n\nb:2")`, "2")
+	// blocks: sep read error.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'blocks' opts:{sep:1}} "a:1"`, "sift_spec_error")
+	// columns: names/label read errors, empty body, interior blank, label coercion failure.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'columns' opts:{names:1}} "a"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'columns' opts:{label:1}} "a"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'columns' opts:{label:'k' types:{u:'integer'}}} "u\nMem: x"`, "sift_type_error")
+	// fixed: trim read error, other option errors.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fixed' opts:{trim:1 widths:[1]}} "a"`, "sift_spec_error")
+	// pattern: names/vtype/per read errors already covered; per:'line' coercion + strict:'skip' skip arms.
+	assertSift(t, `import "aql:sift" size (Sift.parse {family:'pattern' opts:{re:'(?P<n>\\d+)' per:'line' types:{n:'integer'} strict:'skip'}} "5\nx")`, "1")
+	assertSift(t, `import "aql:sift" (Sift.parse {family:'pattern' opts:{re:'(?P<n>\\S+)' types:{n:'integer'} strict:'skip'}} "x")`, "none")
+	// specFromValue: missing family, opts-not-map, fn-key-missing, bad-fn, doc, detect cmd shapes, argv.
+	assertSiftErr(t, `import "aql:sift" Sift.parse {opts:{sep:':'}} "a:1"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'kv' opts:5} "a:1"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fn'} "x"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fn' fn:5} "x"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'fn' fn:(fn [[s:String o:Integer] [Any] [s]])} "x"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.parse (fn [[bad:Integer] [Any] [bad]]) "x"`, "sift_spec_error")
+	assertSiftErr(t, `import "aql:sift" Sift.define d {family:'kv' detect:{cmd:5}} end`, "sift_spec_error")
+	assertSift(t, `import "aql:sift" Sift.define dc {family:'kv' detect:{cmd:{match:["z"] argv:["z" "-a"]}} doc:"d"} end  (Sift.spec dc) dot family`, "kv")
+	// fields sugar onto empty opts (cloneOrdered nil path).
+	assertSift(t, `import "aql:sift" ((Sift.parse {family:'dsv' fields:['a']} "x") get 0) get 'a'`, "'x'")
+	// builtinParserKind collision on define.
+	assertSiftErr(t, `import "aql:sift" Sift.define json {family:'kv'}`, "sift_kind_exists")
+	// checkDetectConflicts: two kinds claiming one command basename.
+	assertSiftErr(t, `import "aql:sift" Sift.define e1 {family:'kv' detect:{cmd:{match:["dup"]}}} end  Sift.define e2 {family:'kv' detect:{cmd:{match:["dup"]}}}`, "sift_detect_conflict")
+	// siftDefineInstall: a bad spec surfaces its spec error.
+	assertSiftErr(t, `import "aql:sift" Sift.define ok {family:'nope'} end`, "sift_spec_error")
+	// siftParseHandler: a bad source ({file:…}).
+	assertSiftErr(t, `import "aql:sift" Sift.parse {family:'kv'} {file:"x"}`, "parse_file_unsupported")
+	// siftResolveSpec: a fn value passed directly to Sift.parse.
+	assertSift(t, `import "aql:sift" Sift.parse (fn [[s:String o:Map] [String] [s]]) "hi"`, "'hi'")
+	// specToValue: a kind WITH opts and doc round-trips through Sift.spec.
+	assertSift(t, `import "aql:sift" Sift.define sd {family:'kv' opts:{sep:'='} doc:"the doc"} end  (Sift.spec sd) dot doc`, "'the doc'")
+	assertSift(t, `import "aql:sift" Sift.define so {family:'kv' opts:{sep:'='}} end  ((Sift.spec so) dot opts) dot sep`, "'='")
+}
+
 func TestSiftMisc(t *testing.T) {
 	// fields sugar (top-level) folds onto opts and drives dsv naming.
 	assertSift(t, `import "aql:sift" ((Sift.parse {family:'dsv' fields:['u' 'p'] opts:{sep:':'}} "a:b") get 0) get 'u'`, "'a'")

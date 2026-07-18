@@ -789,9 +789,12 @@ func famParsePattern(src string, o siftOpts, r *native.Registry) (native.Value, 
 			}
 			return native.Value{}, r.AqlError("sift_parse_error", "pattern: no match in source", "sift")
 		}
-		row, _, cerr := buildRow(m, 0)
+		row, skipped, cerr := buildRow(m, 0)
 		if cerr != nil {
 			return native.Value{}, cerr
+		}
+		if skipped {
+			return native.NewNone(), nil
 		}
 		return native.NewMap(row), nil
 	}

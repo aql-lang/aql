@@ -72,11 +72,13 @@ func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
 		Signatures: []native.Signature{
 			{Args: []*native.Type{native.TAny, native.TMap, native.TString}, Returns: []*native.Type{native.TAny}, BarrierPos: -1, Impl: native.Go(siftParseHandler(st))},
 			{Args: []*native.Type{native.TAny, native.TString}, Returns: []*native.Type{native.TAny}, BarrierPos: -1, Impl: native.Go(siftParseHandler(st))},
+			{Args: []*native.Type{native.TAny, native.TMap}, Returns: []*native.Type{native.TAny}, BarrierPos: -1, Impl: native.Go(siftParseHandler(st))},
 		},
 	})
 	exports.Set("parse", wrapMiniFnDef("sift-parse", [][]native.FnParam{
 		{{Type: native.TAny}, {Type: native.TMap}, {Type: native.TString}},
 		{{Type: native.TAny}, {Type: native.TString}},
+		{{Type: native.TAny}, {Type: native.TMap}},
 	}, []*native.Type{native.TAny}, nil, subReg))
 
 	// ---- kinds ----------------------------------------------------------
