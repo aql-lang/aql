@@ -153,10 +153,22 @@ func FillConcreteOptionDefaults(pattern, m Value) Value {
 				filled.Set(k, v)
 			}
 		}
-		filled.Set(key, def)
+		// FreshenDefault deep-copies a shared-mutable default (flex / Store
+		// / Array / instance) so each call gets its OWN copy — injecting the
+		// schema's exact Value would let one caller's `set` leak into later
+		// calls and into the schema itself. Immutable defaults pass through
+		// unchanged (no copy).
+		filled.Set(key, FreshenDefault(def))
 	}
 	if filled == nil {
 		return m
+	}
+	// Preserve the caller map's flavor. A FlexMap is accepted at an Options
+	// slot; rebuilding it as a plain Map would silently drop mutability, so
+	// downstream `set` would copy instead of mutating in place. Plain Map
+	// and FlexMap share the MapPayload shape — only the Parent tag differs.
+	if m.Parent.ConformsTo(TFlexMap) {
+		return NewFlexMap(filled)
 	}
 	return NewMap(filled)
 }

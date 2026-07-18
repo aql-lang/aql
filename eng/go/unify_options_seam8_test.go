@@ -222,3 +222,61 @@ func TestW8FillConcreteOptionDefaults(t *testing.T) {
 		t.Error("required type-literal field must NOT be materialized")
 	}
 }
+
+// TestW8FillDefaultsMutableIsolation (PR #284 P1): a mutable concrete
+// default must be freshened per call — one caller's mutation must not
+// leak into a later call or into the schema's stored default.
+func TestW8FillDefaultsMutableIsolation(t *testing.T) {
+	flexDefault := NewFlexMap(NewOrderedMap())
+	schema := w8opts(NewString("m"), flexDefault)
+
+	out1 := FillConcreteOptionDefaults(schema, NewMap(NewOrderedMap()))
+	out2 := FillConcreteOptionDefaults(schema, NewMap(NewOrderedMap()))
+
+	get := func(v Value, key string) Value {
+		m, _ := AsMap(v)
+		got, _ := m.Get(key)
+		return got
+	}
+	// Mutate the flex default the FIRST call received (in-place, like `set`).
+	m1, err := AsMutableMap(get(out1, "m"))
+	if err != nil || m1 == nil {
+		t.Fatalf("out1.m is not a concrete map: %v", err)
+	}
+	m1.Set("leaked", NewInteger(1))
+
+	// The second call's default and the schema's stored default must be
+	// unaffected (distinct copies).
+	if m2, _ := AsMutableMap(get(out2, "m")); m2 == nil || m2.Len() != 0 {
+		t.Errorf("out2.m leaked the mutation: len=%d, want 0", m2.Len())
+	}
+	if ms, _ := AsMutableMap(flexDefault); ms == nil || ms.Len() != 0 {
+		t.Errorf("schema default leaked the mutation: len=%d, want 0", ms.Len())
+	}
+}
+
+// TestW8FillDefaultsPreservesFlexMap (PR #284 P2): filling a default into
+// a FlexMap argument must return a FlexMap, not a plain Map, so downstream
+// `set` keeps in-place mutation.
+func TestW8FillDefaultsPreservesFlexMap(t *testing.T) {
+	schema := w8opts(NewString("x"), NewInteger(1))
+
+	// Plain-Map input → plain Map result.
+	plain := FillConcreteOptionDefaults(schema, NewMap(NewOrderedMap()))
+	if plain.Parent.ConformsTo(TFlexMap) {
+		t.Error("plain Map input must not become a FlexMap")
+	}
+	// FlexMap input → FlexMap result (flavor preserved through the fill).
+	flexOut := FillConcreteOptionDefaults(schema, NewFlexMap(NewOrderedMap()))
+	if !flexOut.Parent.ConformsTo(TFlexMap) {
+		t.Errorf("FlexMap input lost its flavor: parent=%s", flexOut.Parent)
+	}
+	// The default was still materialized.
+	if m, _ := AsMap(flexOut); m == nil {
+		t.Fatal("flex result is not a concrete map")
+	} else if xv, ok := m.Get("x"); !ok {
+		t.Error("x default not materialized into the flex result")
+	} else if n, _ := AsInteger(xv); n != 1 {
+		t.Errorf("x = %d, want 1", n)
+	}
+}
