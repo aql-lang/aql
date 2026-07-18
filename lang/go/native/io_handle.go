@@ -163,16 +163,23 @@ func doSeekWord(args []Value, r *Registry) ([]Value, error) {
 	return []Value{NewInteger(off)}, nil
 }
 
-// doFlushWord implements IO.flush f → f: Sync the handle to its backend.
+// doFlushWord implements IO.flush → the argument: sync a File handle to
+// its backend, or flush a writable Mmap region's changes (polymorphic,
+// like IO.close).
 func doFlushWord(args []Value, r *Registry) ([]Value, error) {
-	fh, ok := asFileHandle(args[0])
-	if !ok {
-		return nil, r.AqlError("flush_error", fmt.Sprintf("flush: not a File handle (got %s)", args[0].Parent), "flush")
+	if fh, ok := asFileHandle(args[0]); ok {
+		if err := fh.h.Sync(); err != nil {
+			return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
+		}
+		return []Value{args[0]}, nil
 	}
-	if err := fh.h.Sync(); err != nil {
-		return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
+	if mi, ok := asMmapInfo(args[0]); ok {
+		if err := mi.region.Flush(); err != nil {
+			return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
+		}
+		return []Value{args[0]}, nil
 	}
-	return []Value{args[0]}, nil
+	return nil, r.AqlError("flush_error", fmt.Sprintf("flush: not a File or Mmap handle (got %s)", args[0].Parent), "flush")
 }
 
 // readHandleWord reads from a File handle: {offset} positions the read

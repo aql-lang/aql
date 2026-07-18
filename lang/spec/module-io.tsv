@@ -208,6 +208,27 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.seek 42 0	ERROR:signa
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.write (make Pathon "mem://new.txt") "fresh" {exclusive:true} drop  IO.read (make Pathon "mem://new.txt")	'fresh'	{exclusive:true} creates a new file
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "pre" drop  IO.write (make Pathon "mem://e.txt") "x" {exclusive:true}	ERROR:write	{exclusive:true} refuses an existing file
 #
+# §24  advisory locks — IO.lock takes an advisory lock on a Pathon
+#      ({shared:true} for a read lock); {block:false} returns `none` on
+#      contention instead of waiting. IO.unlock (and the polymorphic
+#      IO.close) release it. The mem model is a canonical-path
+#      reader/writer table.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "d" drop  (IO.lock (make Pathon "mem://f")) is IO.Lock	true	IO.lock returns a Lock handle
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "d" drop  def l (IO.lock (make Pathon "mem://f"))  IO.unlock l		unlock releases the lock, leaving no value
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "d" drop  def h (IO.lock (make Pathon "mem://f"))  IO.lock (make Pathon "mem://f") {block:false}	None	a non-blocking lock on a held file returns none
+import "aql:io"  context dot __sys dot fs set mem true  IO.lock (make Pathon "mem://ghost")	ERROR:lock	locking an absent path errors
+#
+# §25  memory-mapped files — IO.mmap maps a file's bytes into a Mmap
+#      region; read COPIES bytes out ({offset length enc} window it), a
+#      writable region write splices IN place, and IO.flush/IO.close sync
+#      and unmap. The mem model is a copy flushed back.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "hello" drop  (IO.mmap (make Pathon "mem://m")) is IO.Mmap	true	IO.mmap returns a Mmap region
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "hello" drop  IO.read (IO.mmap (make Pathon "mem://m"))	'hello'	a Mmap region reads the file's bytes
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "hello" drop  IO.read (IO.mmap (make Pathon "mem://m") {offset:1 length:3})	'ell'	{offset length} window the mapping
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "AAAAA" drop  def m (IO.mmap (make Pathon "mem://m") {writable:true})  IO.write m (convert Bytes "BB") drop  IO.flush m drop  IO.close m  IO.read (make Pathon "mem://m")	'BBAAA'	a writable region splices in place and flushes back
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "x" drop  IO.write (IO.mmap (make Pathon "mem://m")) (convert Bytes "z")	ERROR:write	a read-only region refuses a write
+import "aql:io"  context dot __sys dot fs set mem true  IO.mmap (make Pathon "mem://ghost")	ERROR:mmap	mapping an absent path errors
+#
 # §18  mount — the AQL→FileOps bridge: `IO.mount {read: fn …}` installs a
 #      filesystem IMPLEMENTED IN AQL as the host FileOps, so every io word
 #      routes through the supplied handler fns (read/write/stat/list/remove,

@@ -64,6 +64,16 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  IO.read (IO.open (make Pathon "d")) {length:3 offset:0 enc:'bytes'}`,
 		`import "aql:io"  IO.write (IO.open (make Pathon "d") {mode:'write'}) "x" {offset:0}`,
 		`import "aql:io"  IO.write (make Pathon "d") "x" {exclusive:true}`,
+		// P5: advisory locks + memory-mapped files
+		`import "aql:io"  IO.lock (make Pathon "d")`,
+		`import "aql:io"  IO.lock (make Pathon "d") {shared:true block:false}`,
+		`import "aql:io"  IO.unlock (IO.lock (make Pathon "d"))`,
+		`import "aql:io"  IO.mmap (make Pathon "d")`,
+		`import "aql:io"  IO.mmap (make Pathon "d") {offset:0 length:8 writable:true}`,
+		`import "aql:io"  IO.read (IO.mmap (make Pathon "d")) {offset:0 length:3 enc:'bytes'}`,
+		`import "aql:io"  IO.write (IO.mmap (make Pathon "d") {writable:true}) (convert Bytes "x") {offset:0}`,
+		`import "aql:io"  IO.flush (IO.mmap (make Pathon "d") {writable:true})`,
+		`import "aql:io"  IO.close (IO.mmap (make Pathon "d"))`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

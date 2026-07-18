@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -41,6 +42,10 @@ func (w9ExtStub) Watch(string) (<-chan capabilities.WatchEvent, func() error, er
 	return nil, nil, fmt.Errorf("no")
 }
 func (w9ExtStub) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, fmt.Errorf("no")
+}
+func (w9ExtStub) Lock(string, bool, bool) (io.Closer, error) { return nil, fmt.Errorf("no") }
+func (w9ExtStub) Mmap(string, int64, int, bool) (capabilities.MmapRegion, error) {
 	return nil, fmt.Errorf("no")
 }
 

@@ -16,7 +16,7 @@ func ioRegistry(t *testing.T) (*Registry, *Type) {
 		t.Fatal(err)
 	}
 	sk := MintStreamKind(r)
-	for _, n := range IOModuleNativeFuncs(IOModuleTypes{StreamKind: sk, FileType: MintFileType(r), Watcher: MintWatcherType(r), File: MintFileHandleType(r)}) {
+	for _, n := range IOModuleNativeFuncs(IOModuleTypes{StreamKind: sk, FileType: MintFileType(r), Watcher: MintWatcherType(r), File: MintFileHandleType(r), Lock: MintLockType(r), Mmap: MintMmapType(r)}) {
 		r.RegisterNativeFunc(n)
 	}
 	return r, sk

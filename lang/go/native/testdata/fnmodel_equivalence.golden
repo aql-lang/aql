@@ -83,6 +83,8 @@ WORD clone
   [Any] barrier=1 +returnsfn
 WORD close
   [Ideal/Watcher] barrier=1
+  [Ideal/Mmap] barrier=1
+  [Ideal/Lock] barrier=1
   [Ideal/File] barrier=1
 WORD cmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer] +returnsfn
@@ -264,6 +266,7 @@ WORD flatten
 WORD flex
   [Node] barrier=1 returns=[Node] +returnsfn
 WORD flush
+  [Ideal/Mmap] barrier=1 returns=[Ideal/Mmap]
   [Ideal/File] barrier=1 returns=[Ideal/File]
 WORD fn
   [Any Any Node/List] barrier=3 runcheck noeval={0,1,2} returns=[Type/Function]
@@ -429,6 +432,9 @@ WORD load
   [Node/Map Node/List] barrier=2 returns=[Node/Map]
   [Ideal/Resource/Entity] barrier=1 returns=[Any]
   [Node/Map] barrier=1 returns=[Any]
+WORD lock
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD lower
   [Scalar/String] barrier=1 returns=[Scalar/String]
   [Scalar/Atom] barrier=1 returns=[Scalar/String]
@@ -459,6 +465,9 @@ WORD merge
 WORD mini
   [Scalar/Atom Scalar/String Node/Map] barrier=3 runcheck quote={0} returns=[Any]
   [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0} returns=[Any]
+WORD mmap
+  [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Ideal/Mmap]
+  [Scalar/Micron/Pathon] barrier=1 returns=[Ideal/Mmap]
 WORD mod
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn
 WORD module
@@ -552,11 +561,13 @@ WORD range
 WORD reach
   [Any Node/List] barrier=2 noeval={1} returns=[Ideal/Reach]
 WORD read
+  [Ideal/Mmap Node/Map] barrier=2 returns=[Any]
   [Ideal/File Node/Map] barrier=2 returns=[Any]
   [Node/Map Scalar/Atom/StreamKind] barrier=2 returns=[Any]
   [Node/Map Scalar/Micron/Pathon] barrier=2 returns=[Any]
   [Scalar/Atom/StreamKind Node/Map] barrier=2 returns=[Any]
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Any]
+  [Ideal/Mmap] barrier=1 returns=[Any]
   [Ideal/File] barrier=1 returns=[Any]
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
@@ -741,6 +752,8 @@ WORD undef
   [Scalar/Atom] barrier=1 runcheck quote={0}
 WORD unify
   [Any Any] barrier=2 returns=[Any Scalar/Boolean] +returnsfn
+WORD unlock
+  [Ideal/Lock] barrier=1
 WORD unmount
   [] barrier=0
 WORD unpack
@@ -799,6 +812,7 @@ WORD word
 WORD wrap
   [Any Ideal/Service] barrier=2
 WORD write
+  [Ideal/Mmap Any Node/Map] barrier=3 returns=[Ideal/Mmap]
   [Ideal/File Any Node/Map] barrier=3 returns=[Ideal/File]
   [Scalar/Atom/StreamKind Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String Node/Map] barrier=3 returns=[Scalar/Atom/StreamKind]
@@ -806,6 +820,7 @@ WORD write
   [Scalar/Micron/Pathon Scalar/Bytes Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/String Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Any Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
+  [Ideal/Mmap Any] barrier=2 returns=[Ideal/Mmap]
   [Ideal/File Any] barrier=2 returns=[Ideal/File]
   [Scalar/Atom/StreamKind Scalar/Bytes] barrier=2 returns=[Scalar/Atom/StreamKind]
   [Scalar/Atom/StreamKind Scalar/String] barrier=2 returns=[Scalar/Atom/StreamKind]

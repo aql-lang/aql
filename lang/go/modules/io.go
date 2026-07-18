@@ -50,11 +50,17 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// import too, and exported so `f is IO.File` works. Distinct from
 	// FileType (the stat-record atom enum).
 	fileHandleType := native.MintFileHandleType(subReg)
+	// Lock and Mmap — advisory-lock and memory-map resources IO.lock /
+	// IO.mmap return — are minted per import too.
+	lockType := native.MintLockType(subReg)
+	mmapType := native.MintMmapType(subReg)
 	ioNatives := native.IOModuleNativeFuncs(native.IOModuleTypes{
 		StreamKind: streamKind,
 		FileType:   fileType,
 		Watcher:    watcherType,
 		File:       fileHandleType,
+		Lock:       lockType,
+		Mmap:       mmapType,
 	})
 	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
@@ -65,6 +71,8 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("FileType", native.NewTypeLiteral(fileType))
 	exports.Set("Watcher", native.NewTypeLiteral(watcherType))
 	exports.Set("File", native.NewTypeLiteral(fileHandleType))
+	exports.Set("Lock", native.NewTypeLiteral(lockType))
+	exports.Set("Mmap", native.NewTypeLiteral(mmapType))
 
 	// list / remove are exported as WORD EXTENSIONS, not namespaced FnDef
 	// wrappers: import transplants a Pathon overload onto the importer's bare

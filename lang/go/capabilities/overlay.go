@@ -1,6 +1,7 @@
 package capabilities
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -501,6 +502,54 @@ func (o *OverlayFileOps) Open(path string, opts OpenOpts) (FileHandle, error) {
 	}
 	delete(o.whiteouts, o.resolve(path))
 	return h, nil
+}
+
+// Lock copies a lower-only file up, then locks the UPPER — so every
+// holder (reader or writer) contends on the same layer, and a lock is
+// consistent with where mutations land.
+func (o *OverlayFileOps) Lock(path string, shared, block bool) (io.Closer, error) {
+	path, err := o.deref(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.copyUpIfLowerOnly(path); err != nil {
+		return nil, err
+	}
+	return o.Upper.Lock(path, shared, block)
+}
+
+// Mmap of a writable region copies up then maps the UPPER; a read-only
+// region maps upper-else-lower (honouring whiteouts).
+func (o *OverlayFileOps) Mmap(path string, offset int64, length int, writable bool) (MmapRegion, error) {
+	path, err := o.deref(path)
+	if err != nil {
+		return nil, err
+	}
+	if writable {
+		if err := o.copyUpIfLowerOnly(path); err != nil {
+			return nil, err
+		}
+		return o.Upper.Mmap(path, offset, length, true)
+	}
+	if o.inUpper(path) {
+		return o.Upper.Mmap(path, offset, length, false)
+	}
+	if o.hidden(o.resolve(path)) {
+		return nil, &os.PathError{Op: "mmap", Path: path, Err: os.ErrNotExist}
+	}
+	return o.Lower.Mmap(path, offset, length, false)
+}
+
+// copyUpIfLowerOnly materialises a lower-only, non-whited-out file into
+// the upper (a no-op if it is already upper or absent).
+func (o *OverlayFileOps) copyUpIfLowerOnly(path string) error {
+	if o.inUpper(path) || o.hidden(o.resolve(path)) {
+		return nil
+	}
+	if _, serr := o.Lower.Stat(path, false); serr != nil {
+		return nil
+	}
+	return o.copyUp(path)
 }
 
 func (o *OverlayFileOps) ResolvePath(path string) (string, error) {

@@ -10,17 +10,25 @@ import "fmt"
 // both resource types and a non-resource value is refused cleanly.
 func doCloseWord(args []Value, r *Registry) ([]Value, error) {
 	if fh, ok := asFileHandle(args[0]); ok {
-		if err := fh.Close(); err != nil {
-			return nil, r.AqlError("close_error", fmt.Sprintf("close: %v", err), "close")
-		}
-		return nil, nil
+		return closeResult(r, fh.Close())
 	}
 	if wi, ok := asWatcherInfo(args[0]); ok {
-		if err := wi.Stop(); err != nil {
-			return nil, r.AqlError("close_error", fmt.Sprintf("close: %v", err), "close")
-		}
-		return nil, nil
+		return closeResult(r, wi.Stop())
+	}
+	if li, ok := asLockInfo(args[0]); ok {
+		return closeResult(r, li.Release())
+	}
+	if mi, ok := asMmapInfo(args[0]); ok {
+		return closeResult(r, mi.Close())
 	}
 	return nil, r.AqlError("close_error",
 		fmt.Sprintf("close: not a closable handle (got %s)", args[0].Parent), "close")
+}
+
+// closeResult maps a resource's close error onto the close word's result.
+func closeResult(r *Registry, err error) ([]Value, error) {
+	if err != nil {
+		return nil, r.AqlError("close_error", fmt.Sprintf("close: %v", err), "close")
+	}
+	return nil, nil
 }

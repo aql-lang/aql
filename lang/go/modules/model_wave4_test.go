@@ -2,6 +2,7 @@ package modules
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,6 +311,12 @@ func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() err
 }
 func (f *failOpsWave4) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
 	return nil, errors.New("open refused")
+}
+func (f *failOpsWave4) Lock(string, bool, bool) (io.Closer, error) {
+	return nil, errors.New("lock refused")
+}
+func (f *failOpsWave4) Mmap(string, int64, int, bool) (capabilities.MmapRegion, error) {
+	return nil, errors.New("mmap refused")
 }
 func (f *failOpsWave4) WriteFile(string, []byte, os.FileMode) error {
 	return errors.New("write refused")

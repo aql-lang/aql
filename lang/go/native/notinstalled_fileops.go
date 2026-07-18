@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -122,6 +123,14 @@ func (notInstalledFileOps) Watch(path string) (<-chan capabilities.WatchEvent, f
 
 func (notInstalledFileOps) Open(path string, _ capabilities.OpenOpts) (capabilities.FileHandle, error) {
 	return nil, capabilityNotInstalled("fileops", "open", path)
+}
+
+func (notInstalledFileOps) Lock(path string, _, _ bool) (io.Closer, error) {
+	return nil, capabilityNotInstalled("fileops", "lock", path)
+}
+
+func (notInstalledFileOps) Mmap(path string, _ int64, _ int, _ bool) (capabilities.MmapRegion, error) {
+	return nil, capabilityNotInstalled("fileops", "mmap", path)
 }
 
 var _ capabilities.FileOps = notInstalledFileOps{}

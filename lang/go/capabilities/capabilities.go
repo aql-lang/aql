@@ -142,6 +142,22 @@ type FileHandle interface {
 	Name() string
 }
 
+// ErrLockBusy is returned by Lock with block=false when the advisory
+// lock is already held by another holder (the non-blocking contention
+// signal — mapped to a `none` result at the word layer).
+var ErrLockBusy = errors.New("file lock is held")
+
+// MmapRegion is a memory-mapped view of a file's bytes. Bytes returns the
+// mapped slice (the caller must COPY before letting it escape a Close —
+// after Close the memory is unmapped); Flush writes pending changes back;
+// Close unmaps. The portable contract promises no live sharing between a
+// region and stateless reads — Flush is what makes writes durable.
+type MmapRegion interface {
+	Bytes() []byte
+	Flush() error
+	Close() error
+}
+
 // FileOps defines the file operations that AQL's io words use. The
 // default implementation delegates to the os package. Replace with a
 // custom implementation for testing or sandboxing.
@@ -208,6 +224,13 @@ type FileOps interface {
 	// Open acquires a stateful file handle per OpenOpts (read/write/
 	// append/create/exclusive/truncate). The caller must Close it.
 	Open(path string, opts OpenOpts) (FileHandle, error)
+	// Lock takes an advisory lock on path: shared (read) vs exclusive
+	// (write), blocking vs non-blocking. A non-blocking call on a held
+	// lock returns ErrLockBusy. The returned Closer releases it.
+	Lock(path string, shared, block bool) (io.Closer, error)
+	// Mmap maps [offset, offset+length) of path into memory. writable
+	// permits writes (durable on Flush/Close). The caller must Close it.
+	Mmap(path string, offset int64, length int, writable bool) (MmapRegion, error)
 	ResolvePath(path string) (string, error)
 }
 
@@ -550,15 +573,25 @@ type MemFileOps struct {
 	// tempSeq numbers TempFile/TempDir tokens — deterministic uniqueness
 	// (the parity harness compares temp-name shape, never tokens).
 	tempSeq int
+
+	// lockMu / lockCond / fileLocks model advisory locks (locks.go): a
+	// canonical-path reader/writer table with a condition variable, kept
+	// SEPARATE from mu so a blocking Lock never entangles the map guard.
+	lockMu    sync.Mutex
+	lockCond  *sync.Cond
+	fileLocks map[string]*memLockState
 }
 
 func NewMem() *MemFileOps {
-	return &MemFileOps{
-		Files: make(map[string][]byte),
-		Dirs:  make(map[string]bool),
-		Meta:  make(map[string]*memMeta),
-		Links: make(map[string]string),
+	m := &MemFileOps{
+		Files:     make(map[string][]byte),
+		Dirs:      make(map[string]bool),
+		Meta:      make(map[string]*memMeta),
+		Links:     make(map[string]string),
+		fileLocks: make(map[string]*memLockState),
 	}
+	m.lockCond = sync.NewCond(&m.lockMu)
+	return m
 }
 
 func (m *MemFileOps) euid() int {

@@ -3,6 +3,7 @@ package native
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -433,6 +434,17 @@ func (a *aqlFileOps) ResolvePath(path string) (string, error) {
 		}
 	}
 	return filepath.Clean(path), nil
+}
+
+// Lock and Mmap REFUSE cleanly on a mount: an advisory lock that locks
+// nothing (or a mapping over a value-based backend with no fd) is worse
+// than an honest refusal.
+func (a *aqlFileOps) Lock(path string, _, _ bool) (io.Closer, error) {
+	return nil, &os.PathError{Op: "lock", Path: path, Err: errMountUnsupported}
+}
+
+func (a *aqlFileOps) Mmap(path string, _ int64, _ int, _ bool) (capabilities.MmapRegion, error) {
+	return nil, &os.PathError{Op: "mmap", Path: path, Err: errMountUnsupported}
 }
 
 var _ capabilities.FileOps = (*aqlFileOps)(nil)

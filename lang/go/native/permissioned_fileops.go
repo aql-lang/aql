@@ -1,6 +1,7 @@
 package native
 
 import (
+	"io"
 	"os"
 	"time"
 
@@ -229,6 +230,26 @@ func (p *permissionedFileOps) Open(path string, opts capabilities.OpenOpts) (cap
 		return nil, err
 	}
 	return p.inner.Open(path, opts)
+}
+
+// Lock gates on fileops.write (an advisory lock guards a mutation).
+func (p *permissionedFileOps) Lock(path string, shared, block bool) (io.Closer, error) {
+	if err := p.policy.Check("fileops", "write", policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.Lock(path, shared, block)
+}
+
+// Mmap gates by intent: a writable mapping is "write", read-only "read".
+func (p *permissionedFileOps) Mmap(path string, offset int64, length int, writable bool) (capabilities.MmapRegion, error) {
+	op := "read"
+	if writable {
+		op = "write"
+	}
+	if err := p.policy.Check("fileops", op, policy.Args{"path": path}); err != nil {
+		return nil, err
+	}
+	return p.inner.Mmap(path, offset, length, writable)
 }
 
 var _ capabilities.FileOps = (*permissionedFileOps)(nil)

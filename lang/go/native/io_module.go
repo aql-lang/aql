@@ -69,10 +69,13 @@ type IOModuleTypes struct {
 	FileType   *Type
 	Watcher    *Type
 	File       *Type
+	Lock       *Type
+	Mmap       *Type
 }
 
 func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 	streamKind, fileType, watcherType, handleType := t.StreamKind, t.FileType, t.Watcher, t.File
+	lockType, mmapType := t.Lock, t.Mmap
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
@@ -121,6 +124,21 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 	writeHandleImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		return writeHandleWord(a, r)
 	}
+	lockImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doLockWord(a, r, lockType)
+	}
+	unlockImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doUnlockWord(a, r)
+	}
+	mmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doMmapWord(a, r, mmapType)
+	}
+	readMmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return readMmapWord(a, r)
+	}
+	writeMmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return writeMmapWord(a, r)
+	}
 	return []NativeFunc{
 		{
 			Name: "printstr",
@@ -140,6 +158,9 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 				// File-handle reads: {offset}/{length}/{enc} slice the handle.
 				{Args: []*Type{handleType, TMap}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{handleType}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				// Mmap-region reads: {offset}/{length}/{enc} window the map.
+				{Args: []*Type{mmapType, TMap}, Impl: Go(readMmapImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(readMmapImpl), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, TPathon}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, streamKind}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
@@ -168,6 +189,10 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 				// payload writes verbatim, {offset} positions the write.
 				{Args: []*Type{handleType, TAny, TMap}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
 				{Args: []*Type{handleType, TAny}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				// Mmap-region writes splice into the map in place ({offset}),
+				// returning the region.
+				{Args: []*Type{mmapType, TAny, TMap}, Impl: Go(writeMmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+				{Args: []*Type{mmapType, TAny}, Impl: Go(writeMmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
 			},
 		},
 		streamHandle("stdin"),
@@ -261,22 +286,52 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			},
 		},
 		{
-			// flush syncs a File handle to its backend, returning the handle.
+			// flush syncs a File handle to its backend or flushes a writable
+			// Mmap region's changes, returning the handle (polymorphic).
 			Name: "flush",
 			Signatures: []Signature{
 				{Args: []*Type{handleType}, Impl: Go(flushImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(flushImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
 			},
 		},
 		{
-			// close releases a resource handle — a File or a Watcher (the
-			// polymorphic twin of IO.unwatch). Two TYPED sigs (not one TAny)
-			// keep dispatch unambiguous under forward collection and give a
-			// static type error for a non-resource; the handler type-switches
-			// over both. P5 adds Lock/Mmap sigs here.
+			// close releases a resource handle — a File, Watcher, Lock, or
+			// Mmap. TYPED sigs (not one TAny) keep dispatch unambiguous under
+			// forward collection and give a static type error for a
+			// non-resource; the handler type-switches over all four.
 			Name: "close",
 			Signatures: []Signature{
 				{Args: []*Type{handleType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
 				{Args: []*Type{watcherType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{lockType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// lock takes an advisory lock on a Pathon — {shared:true} for a
+			// read lock, {block:false} to return `none` on contention instead
+			// of waiting. Returns a Lock (or none).
+			Name: "lock",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
+			// unlock releases an advisory Lock (the Lock-specific twin of the
+			// polymorphic close).
+			Name: "unlock",
+			Signatures: []Signature{
+				{Args: []*Type{lockType}, Impl: Go(unlockImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// mmap maps a file's bytes into a Mmap region; {offset, length,
+			// writable} shape the mapping. read/write/flush/close drive it.
+			Name: "mmap",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(mmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(mmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
 			},
 		},
 		{
