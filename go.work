@@ -1,4 +1,4 @@
-go 1.25.0
+go 1.24.7
 
 // Development workspace. Sibling modules build from in-tree source here.
 // Before the first tagged release the module go.mods still carry local
