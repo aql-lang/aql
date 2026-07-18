@@ -3330,6 +3330,16 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		match.Args[i].Eval = false
 		match.Args[i].Undefined = false
+		// Materialize concrete Options defaults into the map the handler /
+		// fn param will receive: a field whose schema declares a real
+		// default value, omitted by the caller, is filled in so the
+		// consumer sees a complete map (quality DX — no re-deriving
+		// defaults). Optional `T tor None` fields carry no concrete value
+		// and stay absent. No-op unless this slot's pattern is an Options
+		// type and the arg is a plain concrete map.
+		if pat, ok := sigPattern(match.Sig, i); ok {
+			match.Args[i] = FillConcreteOptionDefaults(pat, match.Args[i])
+		}
 	}
 	// Arg evaluation done — the dispatched word's handler is the
 	// intended consumer of any suspended gen spec.

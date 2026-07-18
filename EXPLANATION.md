@@ -619,6 +619,26 @@ always optional and the option-less call still works. Options keys
 are atoms (`'all`, `'insensitive`, `'last`), not strings, so
 typos surface at type-check time.
 
+An options schema is an `Options` type (`make Options {…}`), and a
+field may declare a **concrete default**. When the caller omits such a
+field, dispatch **materializes** the default into the map the handler
+or `fn` param receives — so the receiver always sees a complete map
+and never re-derives defaults:
+
+<!-- aql-test: skip -->
+```
+def opts (make Options {x:1 y:2})
+def f fn [[m:opts] [Map] [m]]
+f {x:10}                          # → {x:10 y:2}   (y's default filled in)
+f {}                              # → {x:1 y:2}
+```
+
+Only genuine concrete defaults are materialized. A field declared
+`T tor None` (optional, no real default) stays absent when omitted —
+its "default" is `None`, i.e. *unset* — and a bare type-literal field
+(`{x:Integer}`) is required, so omitting it is a signature error, not a
+default.
+
 
 ## Parallel execution model
 

@@ -74,7 +74,8 @@ func TestW9ConvertToIntegerFloatOverflow(t *testing.T) {
 }
 
 func TestW9ConvertToBooleanDefaultArm(t *testing.T) {
-	// A non-Boolean/Number/String source hits the CoerceBoolean default.
+	// convert Boolean is pure CoerceBoolean coercion; a non-empty Atom
+	// source coerces to a Boolean (true) by presence.
 	out, err := convertTo(NewAtom("x"), TBoolean, "")
 	if err != nil {
 		t.Fatalf("convert Atom to Boolean: %v", err)
@@ -190,5 +191,81 @@ func TestW9Convert3HandlerConcreteFirstArg(t *testing.T) {
 	opts := NewMap(NewOrderedMap())
 	if _, err := convert3Handler([]Value{NewInteger(5), opts, NewInteger(6)}, nil, nil, r); err == nil {
 		t.Fatal("convert3: concrete first arg (not a type literal) must error")
+	}
+}
+
+// --- convert Boolean {truthy: true} — YAML-style parse, then fallback ---
+
+func TestW9YamlTruthyTokens(t *testing.T) {
+	for _, s := range []string{"y", "yes", "true", "on", "YES", "On", "  true  "} {
+		if v, ok := yamlTruthy(s); !ok || !v {
+			t.Errorf("yamlTruthy(%q) = (%v,%v), want (true,true)", s, v, ok)
+		}
+	}
+	for _, s := range []string{"n", "no", "false", "off", "NO", "Off", "  off  "} {
+		if v, ok := yamlTruthy(s); !ok || v {
+			t.Errorf("yamlTruthy(%q) = (%v,%v), want (false,true)", s, v, ok)
+		}
+	}
+	// Negative: not a YAML boolean token → ok=false (caller falls back).
+	for _, s := range []string{"maybe", "", "2", "yep", "0"} {
+		if _, ok := yamlTruthy(s); ok {
+			t.Errorf("yamlTruthy(%q) ok = true, want false (not a token)", s)
+		}
+	}
+}
+
+func TestW9CoerceBooleanTruthy(t *testing.T) {
+	cases := []struct {
+		in   Value
+		want bool
+		why  string
+	}{
+		{NewString("yes"), true, "YAML true token"},
+		{NewString("no"), false, "YAML false token"},
+		{NewString("OFF"), false, "case-insensitive false token"},
+		{NewString("maybe"), true, "non-token String falls back to presence (non-empty)"},
+		{NewString(""), false, "empty String falls back to false"},
+		{NewInteger(1), true, "non-String source uses ordinary coercion"},
+		{NewInteger(0), false, "zero is false via ordinary coercion"},
+		{NewBoolean(false), false, "a Boolean source passes through"},
+	}
+	for _, c := range cases {
+		if got := coerceBooleanTruthy(c.in); got != c.want {
+			t.Errorf("coerceBooleanTruthy(%s) = %v, want %v (%s)", c.in.String(), got, c.want, c.why)
+		}
+	}
+}
+
+func TestW9Convert3HandlerTruthy(t *testing.T) {
+	r := seam5Reg(t)
+	optsTruthy := func(b bool) Value {
+		m := NewOrderedMap()
+		m.Set("truthy", NewBoolean(b))
+		return NewMap(m)
+	}
+	// truthy:true + Boolean target: YAML token 'no' → false.
+	out, err := convert3Handler([]Value{NewTypeLiteral(TBoolean), optsTruthy(true), NewString("no")}, nil, nil, r)
+	if err != nil {
+		t.Fatalf("convert3 truthy 'no': %v", err)
+	}
+	if b, _ := AsBoolean(out[0]); b {
+		t.Errorf("convert Boolean {truthy:true} 'no' = %v, want false", out[0])
+	}
+	// truthy:true + Boolean target: non-token 'maybe' → presence fallback → true.
+	out, err = convert3Handler([]Value{NewTypeLiteral(TBoolean), optsTruthy(true), NewString("maybe")}, nil, nil, r)
+	if err != nil {
+		t.Fatalf("convert3 truthy 'maybe': %v", err)
+	}
+	if b, _ := AsBoolean(out[0]); !b {
+		t.Errorf("convert Boolean {truthy:true} 'maybe' = %v, want true", out[0])
+	}
+	// truthy:true but a NON-Boolean target: the option is inert (falls to convertTo).
+	out, err = convert3Handler([]Value{NewTypeLiteral(TString), optsTruthy(true), NewString("no")}, nil, nil, r)
+	if err != nil {
+		t.Fatalf("convert3 truthy String target: %v", err)
+	}
+	if s := ValToString(out[0]); s != "no" {
+		t.Errorf("convert String {truthy:true} 'no' = %q, want \"no\"", s)
 	}
 }

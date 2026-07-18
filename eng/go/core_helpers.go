@@ -1667,10 +1667,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	r.Defs.Set(name, stack)
 }
 
-// CoerceBoolean converts any value to a boolean using the same rules
-// as `convert boolean`: booleans pass through, numbers are non-zero,
-// none is false, lists/maps are non-empty, "true"/"false" parse
-// literally, all other values are non-empty.
+// CoerceBoolean converts any value to a boolean by presence, not by
+// parsing content — the same rule `convert Boolean` and `make Boolean`
+// apply: booleans pass through, numbers are non-zero, none is false,
+// lists/maps are non-empty, and a String is false only when empty (its
+// characters are never inspected, so "false" and "true" both coerce to
+// true). The sole content check is the tail carve-out below: a non-String
+// value that RENDERS as "false" is an unresolved boolean literal reaching
+// truthiness as a Word/Atom (a bare `false` clause, a quoted `false`
+// atom) and keeps its boolean reading.
 func CoerceBoolean(v Value) bool {
 	switch {
 	case ValueType(v).ConformsTo(TBoolean):

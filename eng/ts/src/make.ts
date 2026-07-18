@@ -4,6 +4,7 @@
 // Boolean, Atom. Class / Options overloads are added by a later
 // increment.
 import { formatFloat } from './canon.ts'
+import { coerceBoolean } from './coretype.ts'
 import { AqlError } from './error.ts'
 import {
   AqlType,
@@ -150,15 +151,12 @@ export function makeConvert(src: Value, targetType: AqlType): Value {
     return newInteger(BigInt(Math.trunc(f)))
   }
   if (targetType.matches(TBoolean)) {
-    if (src.vType.matches(TBoolean)) return src
-    if (src.vType.matches(TNumber)) {
-      const n = src.vType.matches(TInteger) ? Number(src.asInteger()) : src.asFloat()
-      return newBoolean(n !== 0)
-    }
-    const text = valToString(src)
-    if (text === 'true') return newBoolean(true)
-    if (text === 'false') return newBoolean(false)
-    return newBoolean(text !== '')
+    // Boolean is a COERCION, not a parse — identical to coerceBoolean and
+    // to the `convert`/`if` rule: false iff absent/empty (empty String, 0,
+    // none, empty collection), true otherwise. String CONTENT is never
+    // inspected, so "false"/"true" are ordinary non-empty strings that both
+    // coerce to true. Parsing the literal words is a separate operation.
+    return newBoolean(coerceBoolean(src))
   }
   if (targetType.equal(TAtom)) {
     return newAtom(valToString(src))

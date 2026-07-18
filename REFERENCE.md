@@ -1581,14 +1581,16 @@ For `if`, the canonical form is all-forward `if cond [then] [else]`
 expects. See
 **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 
-`if` coerces its condition to a boolean (the same rule as `convert
-boolean`). The values that count as **false** are: `false`, `0` (and
-`0.0`), `none`, the empty list `[]`/empty map `{}`, the empty string
-`""`, and — as a special case — the exact string `"false"`.
-**Everything else is true**, including non-empty strings that look
-falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
-`"false"` is special). A condition that produces *no* value at all
-(e.g. an empty block `[]` as the condition) is an error, not a false.
+`if` coerces its condition to a boolean — the exact same rule as
+`convert Boolean` and `make Boolean`. Coercion is by **presence, not
+content**: the values that count as **false** are `false`, `0` (and
+`0.0`), `none`, the empty list `[]`/empty map `{}`, and the empty
+string `""`. **Everything else is true**, including non-empty strings
+that look falsy: `"false"`, `"FALSE"`, `"0"`, and `"no"` are all
+truthy — a String's characters are never inspected. (Parsing the words
+`"true"`/`"false"` into booleans is a separate operation, not part of
+coercion.) A condition that produces *no* value at all (e.g. an empty
+block `[]` as the condition) is an error, not a false.
 
 #### `for` forms
 
@@ -1961,6 +1963,19 @@ converts back through validation.
 > from `aql:math-util`). Note `make` is more permissive than
 > `convert`: a `:Number` record field accepts a numeric **string** and
 > coerces it (`make Point ["1" "2"]` returns `{x:1 y:2}`).
+
+> **`convert Boolean` is presence coercion; `{truthy: true}` opts into
+> YAML parsing.** By default `convert Boolean` (like `if`-truthiness)
+> judges only presence — empty String / `0` / `none` / empty collection
+> are false, everything else is true, so `convert Boolean "false"` is
+> **true**. Pass the options map `{truthy: true}` to parse a String
+> YAML-style first: `yes`/`no`/`true`/`false`/`on`/`off` (case-
+> insensitive, surrounding whitespace trimmed) map to their booleans,
+> e.g. `convert Boolean {truthy: true} "no"` returns `false`. Any string
+> that is **not** a recognised token falls back to presence coercion
+> (`convert Boolean {truthy: true} "maybe"` returns `true`), and a
+> non-String source is coerced normally — `truthy` never raises. The
+> option is inert for any non-Boolean target.
 
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,

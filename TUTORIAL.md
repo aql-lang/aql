@@ -415,12 +415,12 @@ aql> if (5 gt 3) ["yes"] ["no"]      # returns 'yes'
 aql> 0 if ["truthy"] ["falsy"]       # returns 'falsy'
 ```
 
-The condition is coerced to a boolean. Falsey values are `false`,
-`0`, `none`, the empty list/map/string, and — watch out — the *exact*
-string `"false"`. Every other non-empty string is **true**, so
-`"FALSE"`, `"0"`, and `"no"` all take the then-branch. When in doubt,
-compare explicitly (`x eq 0`, `s eq ""`) rather than relying on string
-truthiness.
+The condition is coerced to a boolean by **presence, not content**.
+Falsey values are `false`, `0`, `none`, and the empty list/map/string.
+Every non-empty string is **true**, so `"false"`, `"FALSE"`, `"0"`,
+and `"no"` all take the then-branch — a String's characters are never
+inspected. When in doubt, compare explicitly (`x eq 0`, `s eq ""`)
+rather than relying on string truthiness.
 
 `for` iterates over a numeric range, pushing the counter into the
 body each step:
