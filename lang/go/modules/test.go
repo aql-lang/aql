@@ -141,6 +141,9 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	for _, n := range testNatives(parent) {
 		modReg.RegisterNativeFunc(n)
 	}
+	for _, n := range coverNatives(parent) {
+		modReg.RegisterNativeFunc(n)
+	}
 
 	// Run the preamble. We reuse RunModuleBody's machinery via a
 	// minimal local exporter (we cannot use RunModuleBody itself —
@@ -1570,6 +1573,10 @@ export "Test" {
   report:     test-report/r
   reset:      test-reset/r
   fail-count: test-fail-count/r
+
+  # line coverage of a module-under-test
+  cover:      test-cover/r
+  coverage:   test-coverage/r
 
   # spec runner
   run-spec:     run-spec/r

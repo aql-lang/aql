@@ -1248,6 +1248,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		val := e.tape.At(e.pointer)
 
+		// Line-coverage seam (coverage.go): record the executing token's source
+		// row when a coverage run has armed the hook AND this registry is a
+		// tagged coverage target. Inert (one atomic load) otherwise.
+		e.registry.noteCoverage(val.Pos())
+
 		if e.trace != nil {
 			snapshot := e.tape.Snapshot()
 			note := e.traceNote

@@ -61,6 +61,12 @@ func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.Input = parent.Input
 	modReg.Effects = parent.Effects
 	modReg.InheritObserveHooks(parent)
+	// Tag sift's sub-registry as a coverage target (coverage.go): sift's fn
+	// bodies run on this registry, so a coverage run attributes their executed
+	// rows to "aql:sift". Inert unless a coverage hook is armed. Registering the
+	// source lets aql:test build the coverage denominator (all executable rows).
+	modReg.SetCoverID("aql:sift")
+	parent.RegisterCoverSource("aql:sift", siftSource)
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.Modules.InheritConfig(parent.Modules)

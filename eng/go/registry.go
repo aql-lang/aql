@@ -65,6 +65,15 @@ type Registry struct {
 	// InheritObserveHooks. Inert (one atomic load) unless a test arms them.
 	interpHook *interpEntryHook
 	bailHook   *bailHook
+	// coverHook is the arm-able AQL-source line-coverage seam (coverage.go),
+	// powering aql:test's coverage feature. Pointer-shared into forks and
+	// inherited by module sub-registries via InheritObserveHooks; inert (one
+	// atomic load) unless a coverage run arms it. coverID tags a registry as a
+	// coverage target (a module-under-test's sub-registry) — only a tagged
+	// registry emits, so recorded rows are unambiguously that module's.
+	coverHook    *coverHook
+	coverID      string
+	coverSources *coverSources
 	// interpAttribution is the C4 attribution context: a SANCTIONED
 	// interpreter re-run (the compiled-mode fallback arms) stamps its tag
 	// here for the duration, so every interpreter entry the re-run produces
@@ -1105,6 +1114,8 @@ func NewRegistry() (*Registry, error) {
 		Effects:      &EffectLedger{},
 		interpHook:   &interpEntryHook{},
 		bailHook:     &bailHook{},
+		coverHook:    &coverHook{},
+		coverSources: &coverSources{},
 		SDKCache:     make(map[string]any),
 		// StepBudget uses -1 as the "unset, use the project default"
 		// sentinel. The Go zero (0) is honored as "abort on the first

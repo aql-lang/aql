@@ -20,6 +20,8 @@ func init() {
 		"summary":        "Tally results into a total/passed/failed map.",
 		"fail-count":     "Return the number of failed cases in the active run.",
 		"reset":          "Clear the active run's accumulated results.",
+		"cover":          "Run a body with line coverage recorded for the modules it exercises.",
+		"coverage":       "Report covered/total/percent/uncovered rows for a covered module id.",
 		// Assert namespace
 		"equal":     "Assert that two values are equal.",
 		"not-equal": "Assert that two values differ.",
