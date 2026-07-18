@@ -1,4 +1,4 @@
-.PHONY: serve wasm test vet fmt clean
+.PHONY: serve wasm test vet fmt clean e2e
 
 # wpg (github.com/aql-lang/aql/wpg) — the AQL web playground.
 #
@@ -70,6 +70,12 @@ wasm:
 
 test:
 	go test ./...
+
+# Browser e2e for the aql:tui playground backend. Opt-in: needs the
+# bundle (make wasm), node, playwright, and a chromium. See
+# e2e/tui-e2e.js for the env overrides.
+e2e:
+	node e2e/tui-e2e.js
 
 vet:
 	go vet ./...

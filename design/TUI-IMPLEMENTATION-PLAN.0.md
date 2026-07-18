@@ -139,7 +139,47 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   keystroke-storm benchmark (the render-on-change check), retro notes
   into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
 
-## 3b. Outcome (P1–P6 landed — the plan and its follow-ups are complete)
+## 3b. Outcome (P1–P7 landed — plan, follow-ups, and closures complete)
+
+### P7 — closing the open items (user-directed)
+
+**P7 closed every remaining open item**, each by its own honest means:
+
+- **§11.7 CLOSED (implemented).** The ratified-but-never-implemented
+  `alt-screen:` reservation landed: `true` accepted (the default
+  takeover), `false` → `unsupported` until the inline tier, wrong
+  types → the standard option error; across `open`/`run`/`serve`.
+  Implementing it EXPOSED a latent P1 dispatch defect: `Tui.open`'s
+  zero-arg overload dispatched eagerly, so a following options map
+  NEVER bound — open's options (mouse/title) had never worked through
+  the engine, invisible because the direct-handler tests exercised
+  them and the TSV's no-backend rows couldn't distinguish arities. A
+  zero-arg sig beside a map-taking sig is an unshippable pair under
+  current dispatch (an engine-level lookahead fix was prototyped and
+  reverted — it helps the interpreter path but not the VM path, and
+  dispatch surgery exceeds this closure's blast radius). `open` is now
+  single-signature: `Tui.open {}` is the canonical spelling. The
+  handle-anchored optional-map pairs (`read-event t {within}`,
+  `Net.accept l {within}`) are unaffected — verified live.
+- **§11.5 CLOSED (measured).** `BenchmarkTuiWireBytes`: 2.6 KB/frame
+  at 50 rows, 9.6 KB at 200, 47 KB at 1000. With suppression zeroing
+  idle frames, even the pathological case is ~0.9 MB/s under a
+  sustained storm. Full-tree-per-changed-frame stands; no diff
+  protocol without demonstrated need.
+- **Image protocols CLOSED (design reserved, tier deferred).** RFC
+  §11.8 records the additive negotiation (handshake `caps` list,
+  proto stays 1; `{w: "image"}` shape reserved by the renderer's
+  loud unknown-widget rejection; render-side degradation via `alt:`).
+- **The playground browser backend LANDED.** `wpg/wasm/tuiweb.go`
+  implements `tuikit.Backend` on the page: frames render as styled
+  HTML rows (`<pre>`+spans — a DOM renderer, not xterm.js: the Frame
+  is already a laid-out cell grid, so a vendored terminal emulator
+  would only re-parse escapes we never emit), keydown events feed
+  back through page-exposed hooks, and `aqlEvalAsync` runs blocking
+  programs on a goroutine so the browser loop keeps delivering keys.
+  Verified end to end by `wpg/e2e/tui-e2e.js` (make e2e): a live
+  counter app opens the panel, counts real ArrowUp presses, and
+  returns its final state to the REPL on `q`.
 
 ### P6 — the follow-ups stage (user-directed, post-plan)
 
@@ -395,22 +435,16 @@ first slice of the frame-delta question); the Tier-1 active input mode
 terminals). Landed earlier post-plan: the standalone terminal
 utilities ([TUI-UTILITIES.0.md](TUI-UTILITIES.0.md)).
 
-**Still open, deliberately:**
+**Closed by P7** (see §3b): the frame-delta question (measured — full
+tree stands), the playground browser backend (landed, e2e-verified),
+image protocols (design reserved in RFC §11.8, tier deferred), and the
+§11.7 alt-screen reservation (implemented, exposing and fixing the
+latent open-options dispatch defect).
 
-- **Full tree-diff / cell-mode wire encodings** — suppression zeroes
-  the steady-state cost; per-frame diffing only pays once a single
-  CHANGING tree is big enough to hurt, and no measured app is there
-  yet (§11.5 keeps the trigger question with the storm benchmark as
-  the instrument). The §6.2 envelope admits the extension without a
-  protocol break.
-- **The xterm.js `Backend` for the wasm playground (wpg)** — a
-  project-sized effort (wasm↔JS event/frame bridging, browser render
-  loop, playground UI work), not a module increment; the `Backend`
-  seam is the intended attachment point when it happens.
-- **Image/graphics protocols (sixel/kitty)** — niche, and needs a
-  backend capability-negotiation story first; nothing in the widget
-  vocabulary reserves against it.
-- **The rest of RFC §9's later tiers** (inline non-alt-screen widgets
-  + focus manager, reactivity sugar, layout dialect, theming,
-  `Stream`-fed widgets pending `aql:stream`, Windows VT parity) —
-  each a tier of its own, sequenced on demand.
+**Remaining, and why they are future TIERS rather than open items:**
+RFC §9's later tiers — inline non-alt-screen widgets + a focus manager
+(gated on the reserved `alt-screen: false` landing a real design),
+reactivity sugar, the layout dialect, theming, `Stream`-fed widgets
+(gated on `aql:stream` existing), Windows VT parity (needs Windows CI)
+— each is a deliberate product decision to sequence on demand, not an
+unresolved question of this effort.

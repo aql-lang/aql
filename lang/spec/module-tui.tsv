@@ -32,9 +32,15 @@ Tui.open {}	ERROR:undefined_word	`Tui` is unbound without `import`
 import "aql:tui"  canon Tui.Terminal	'Terminal'	Terminal is the terminal-handle type literal
 import "aql:tui"  5 is Tui.Terminal	false	a non-handle value is not a Terminal
 #
-# §4  no backend registered → the first-class no_backend error (both arities)
+# §4  no backend registered → the first-class no_backend error. `open`
+#     takes its options map ALWAYS (`Tui.open {}` for defaults): a
+#     zero-arg overload would dispatch eagerly and silently swallow a
+#     following options map (the P7 dispatch finding), so the bare
+#     spelling is not a call.
 import "aql:tui"  Tui.open {}	ERROR:no terminal backend registered	open with options requires a registered backend
-import "aql:tui"  Tui.open	ERROR:no terminal backend registered	zero-arg open requires a registered backend
+import "aql:tui"  Tui.open {alt-screen: true}	ERROR:no terminal backend registered	alt-screen: true is the accepted spelling of the default takeover
+import "aql:tui"  Tui.open {alt-screen: false}	ERROR:reserved but not yet implemented	the §11.7 inline-tier reservation refuses loudly
+import "aql:tui"  Tui.open {alt-screen: 5}	ERROR:alt-screen: must be a Boolean	the reserved key is type-checked like every option
 #
 # §5  wrong-handle rejections — a live run needs a backend, so each word
 #     pins its dispatch contract instead (module-fn unmatched call)

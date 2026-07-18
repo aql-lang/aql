@@ -115,7 +115,7 @@ func TestTuiPrintAtStyleOnCells(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 1)
 	_, err := runTuiSteps(t, vb, []string{
 		`import "aql:tui"`,
-		`def t (Tui.open)`,
+		`def t (Tui.open {})`,
 		`Tui.print-at t 0 0 "x" {fg: "red" bg: "#202030" bold: true italic: true underline: true reverse: true}`,
 		`Tui.show t`,
 		`Tui.close t`,
@@ -151,7 +151,7 @@ func TestTuiClosedAndRegistrationContracts(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(2, 2)
 	_, err := runTuiSteps(t, vb, []string{
 		`import "aql:tui"`,
-		`def t (Tui.open)`,
+		`def t (Tui.open {})`,
 		`Tui.close t`,
 		`Tui.dims t`,
 	})
@@ -179,7 +179,7 @@ func TestTuiTerminalTypeExportAndGuard(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(2, 2)
 	out, err := runTuiSteps(t, vb, []string{
 		`import "aql:tui"`,
-		`def t (Tui.open)`,
+		`def t (Tui.open {})`,
 		`def ok (t is Tui.Terminal)`,
 		`Tui.close t`,
 		`convert String ok`,

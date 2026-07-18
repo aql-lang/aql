@@ -60,6 +60,9 @@ func tuiRunOpts(cfg native.ReadMap, word string, r *native.Registry) (tuikit.Ope
 	if err != nil {
 		return opts, false, r.AqlError("tui_error", word+": "+err.Error(), word)
 	}
+	if err := tuiAltScreenReserved(cfg, word, r); err != nil {
+		return opts, false, err
+	}
 	mode, err := tuiOptString(cfg, "ctrl-c")
 	if err != nil {
 		return opts, false, r.AqlError("tui_error", word+": "+err.Error(), word)

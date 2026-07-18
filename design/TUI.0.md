@@ -770,9 +770,14 @@ trivial-delegation wrappers, **inner sigs `BarrierPos:-1`**) · row in the
   and a runtime focus manager to power them; watch/computed reactivity
   sugar (Textual-style) over the same render loop; a VID-style layout
   dialect via `aql:minilang`/`aql:parselang`; theming/stylesheets;
-  tree-diff and cell-mode wire encodings (unchanged-frame suppression
-  landed as the first slice; full diffing awaits §11.5 evidence); an
-  xterm.js `Backend` for the wasm playground;
+  tree-diff and cell-mode wire encodings (CLOSED by measurement —
+  §11.5); the playground browser `Backend` (LANDED — `wpg/wasm/tuiweb.go`
+  renders frames as styled HTML rows in the page and feeds keydown
+  events back, verified end to end by `wpg/e2e/tui-e2e.js` driving a
+  live app under headless chromium; a DOM renderer rather than
+  xterm.js, deliberately — the tuikit `Frame` is already a laid-out
+  cell grid, so `<pre>`+spans needs no vendored terminal emulator and
+  no escape-sequence round trip);
   `Stream`-fed widgets (log followers) pending `aql:stream`; Windows
   mouse/VT-input parity (raw mode works via `x/term`; declared best-effort
   in v1); image/graphics protocols (sixel/kitty).
@@ -844,20 +849,51 @@ best-effort, mouse gated off (§9).
    (Leaning: yes — `edit` covers line editing; multi-line editing is a
    later widget, not a v1 blocker. IME composition is explicitly out of
    scope for v1.)
-5. **Frame delta encoding trigger.** At what tree size / update rate does
-   full-tree-per-render actually hurt, and does tree-diff or cell-mode win
-   then? (Leaning: measure with the storm benchmark; the §6.2 envelope
-   admits both extensions without a version bump beyond `proto`. First
-   slice landed: an unchanged tree is not re-sent at all — the
-   render-on-change wire rule — which zeroes the steady-state cost;
-   full diffing still awaits evidence of a tree big enough to hurt.)
+5. **Frame delta encoding trigger — RESOLVED (measured, closed).**
+   `BenchmarkTuiWireBytes` (modules) marshals the graduated todo app's
+   page shape at scaled list sizes: **2.6 KB/frame at 50 rows, 9.6 KB
+   at 200, 47 KB at 1000** (~16/40/148 µs to marshal). With
+   unchanged-frame suppression zeroing every idle frame (landed), the
+   worst CHANGING case — a pathological 1000-row tree under a
+   sustained ~20-frame/s storm — is ~0.9 MB/s: fine on a LAN, only
+   borderline on a slow WAN link, and unreachable by realistic apps
+   (≤200-row pages at human input rates are tens of KB/s). Verdict:
+   full-tree-per-changed-frame STANDS; a diff/cell-mode encoding buys
+   nothing until an app demonstrably sustains huge trees at storm
+   rates, and the §6.2 envelope admits the extension without a
+   version bump if one ever does.
 6. **Color capability negotiation over the wire.** The local backend
    degrades truecolor to the terminal's profile (§3.3); should `attach`
    report its profile in the handshake so the server could pre-degrade?
    (Leaning: no — degradation is a render-side concern; keep style data
    full-fidelity on the wire, degrade at the painting client.)
-7. **`alt-screen: false` inline mode.** The inline-widget tier (§9) will
-   want the runtime without the alt-screen takeover. Reserve the option in
-   `Tui.open`/`Tui.run` now, or add it with that tier? (Leaning: reserve
-   the option key now, reject it with `tui_error unsupported` until the
-   tier lands — cheaper than a breaking opts change later.)
+7. **`alt-screen: false` inline mode — RESOLVED (reserved, landed).**
+   The `alt-screen:` key is accepted in `Tui.open`/`Tui.run`/`Tui.serve`
+   configs: `true` is the implemented takeover (the default), `false`
+   raises `unsupported` until the inline tier lands, and non-Booleans
+   get the standard option error. Implementing the reservation exposed
+   a LATENT dispatch defect: `open`'s zero-arg overload dispatched
+   eagerly and a following options map never bound (open's options —
+   mouse, title — had NEVER worked through the engine; only the
+   direct-handler tests saw them). A zero-arg sig beside a map-taking
+   sig is an unshippable pair under current dispatch, so `open` is now
+   single-signature: **`Tui.open {}` is the canonical spelling** (the
+   bare word is not a call), matching how every other options-taking
+   word already reads. Handle-anchored optional-map pairs
+   (`read-event t {within}`-style) are unaffected — verified.
+
+8. **Image/graphics protocols (sixel/kitty) — design reserved, tier
+   deferred.** The negotiation story, recorded so nothing ships that
+   fights it later: (a) capability advertisement rides the EXISTING
+   handshake additively — the attach hello may carry
+   `caps: ["sixel", "kitty", …]` (absent = none) and the accept reply
+   echoes the server-permitted subset; proto stays 1 (unknown fields
+   are already ignored by both ends). Local backends advertise the
+   same way via a `Caps []string` field on `tuikit.Info` when the tier
+   lands. (b) The widget shape is reserved as `{w: "image", src:
+   Bytes|String, fit: …}` — the renderer's unknown-widget rejection
+   already refuses it loudly today, which IS the reservation. (c)
+   Degradation is render-side, like color (§3.3/§11.6): a backend
+   without the cap renders the image widget's `alt:` text. Deferred
+   because the demand is niche and every piece above is additive;
+   nothing in the landed surface forecloses it.

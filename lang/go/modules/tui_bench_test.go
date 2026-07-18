@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -78,4 +80,42 @@ func BenchmarkTuiKeystrokeStorm(b *testing.B) {
 		b.Fatalf("renders = %d for %d keystrokes — coalescing is off", renders, b.N)
 	}
 	b.ReportMetric(float64(renders)/float64(b.N), "renders/keystroke")
+}
+
+// BenchmarkTuiWireBytes answers RFC §11.5's trigger question with
+// numbers: how many bytes does one full-tree frame cost on the §6.2
+// wire at realistic app sizes? Trees are the graduated todo app's
+// shape (a box+list-view+status page) scaled by list length. The
+// unchanged-frame suppression (P6) makes an IDLE session cost zero
+// regardless of these numbers — this measures the CHANGING case.
+func BenchmarkTuiWireBytes(b *testing.B) {
+	for _, rows := range []int{50, 200, 1000} {
+		b.Run(fmt.Sprintf("rows-%d", rows), func(b *testing.B) {
+			items := make([]any, rows)
+			for i := range items {
+				items[i] = fmt.Sprintf("[ ] todo item number %d with realistic text", i)
+			}
+			tree := map[string]any{
+				"w": "rows",
+				"children": []any{
+					map[string]any{"w": "box", "title": "new todo", "border": "round", "size": 3,
+						"child": map[string]any{"w": "input", "value": "milk", "cursor": 4, "placeholder": "", "focus": true}},
+					map[string]any{"w": "box", "title": "todos", "border": "round", "size": map[string]any{"flex": 1},
+						"child": map[string]any{"w": "list-view", "items": items, "cursor": rows / 2}},
+					map[string]any{"w": "text", "text": "up/down move · space toggle · q quit", "size": 1},
+				},
+			}
+			var bytesPerFrame int
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				data, err := json.Marshal(tree)
+				if err != nil {
+					b.Fatal(err)
+				}
+				bytesPerFrame = len(data)
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(bytesPerFrame), "bytes/frame")
+		})
+	}
 }

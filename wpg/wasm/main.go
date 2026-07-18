@@ -8,10 +8,13 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 	"syscall/js"
 
 	"github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/aql-lang/aql/lang/go/tuikit"
 )
 
 func main() {
@@ -22,29 +25,56 @@ func main() {
 	}
 	instance.SetFileOps(lang.NewMemFileOps())
 
+	// aql:tui renders into the page (tuiweb.go): the playground IS a
+	// terminal-shaped surface, so full-screen apps run in the browser.
+	if err := modules.RegisterHostTui(instance.NativeRegistry(), modules.TuiSpec{
+		Name: "web",
+		Open: func() (tuikit.Backend, error) { return newWebBackend(), nil },
+	}); err != nil {
+		js.Global().Get("console").Call("error", "aql tui backend: "+err.Error())
+	}
+	installTuiInput()
+
+	var evalMu sync.Mutex
 	var outBuf bytes.Buffer
 	instance.SetOutput(&outBuf)
 
-	js.Global().Set("aqlEval", js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) < 1 {
-			return map[string]any{"error": "missing code argument"}
-		}
-		code := args[0].String()
-
+	runCode := func(code string) map[string]any {
+		evalMu.Lock()
+		defer evalMu.Unlock()
 		outBuf.Reset()
 		result, err := instance.RunInterp(code) // recorded Stage-J opt-out (plan Phase 2): the playground stays on the tree-walker
-
 		printed := outBuf.String()
-
 		if err != nil {
 			return map[string]any{"error": err.Error(), "output": printed}
 		}
-
 		parts := make([]string, len(result))
 		for i, v := range result {
 			parts[i] = fmt.Sprintf("%v", v)
 		}
 		return map[string]any{"result": strings.Join(parts, " "), "output": printed}
+	}
+
+	js.Global().Set("aqlEval", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) < 1 {
+			return map[string]any{"error": "missing code argument"}
+		}
+		return runCode(args[0].String())
+	}))
+
+	// aqlEvalAsync(code, callback) runs on a goroutine so a BLOCKING
+	// program — a Tui.run session — leaves the browser event loop free
+	// to deliver key events; the callback receives the same result map.
+	js.Global().Set("aqlEvalAsync", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if len(args) < 2 {
+			return map[string]any{"error": "missing code or callback argument"}
+		}
+		code := args[0].String()
+		cb := args[1]
+		go func() {
+			cb.Invoke(js.ValueOf(runCode(code)))
+		}()
+		return nil
 	}))
 
 	js.Global().Set("aqlFmt", js.FuncOf(func(this js.Value, args []js.Value) any {

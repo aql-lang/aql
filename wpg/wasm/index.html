@@ -230,6 +230,13 @@
     #history-search { font-size: 16px; }
     .history-item { padding: 10px 12px; }
   }
+#tui-view { margin: 12px 0; border: 1px solid #2a3138; border-radius: 6px;
+  background: #101418; overflow: auto; }
+#tui-titlebar { display: flex; justify-content: space-between; padding: 4px 10px;
+  font: 12px/1.4 var(--mono, monospace); color: #8a949e;
+  border-bottom: 1px solid #2a3138; }
+#tui-screen { margin: 0; padding: 8px 10px; font: 14px/1.25 var(--mono, monospace);
+  color: #e6e6e6; white-space: pre; outline: none; min-height: 8em; }
 </style>
 </head>
 <body>
@@ -255,6 +262,12 @@
       <button id="history-btn" class="btn btn-secondary" disabled>History</button>
     </div>
   </div>
+</div>
+
+<div id="tui-view" hidden>
+  <div id="tui-titlebar"><span id="tui-title">aql:tui</span>
+    <span id="tui-hint">keys go to the app &middot; Ctrl-\ force-quits</span></div>
+  <pre id="tui-screen" tabindex="0"></pre>
 </div>
 
 <div id="history-view">
@@ -579,25 +592,76 @@
       : formatted;
   }
 
+  function showResult(res) {
+    if (res.output) {
+      var out = res.output.trimEnd();
+      addLine('line-result', fmtDisplay(out), fmtCode(out));
+    }
+    if (res.error) {
+      addLine('line-error', '  error: ' + res.error, res.error);
+    } else if (res.result) {
+      var r = res.result;
+      addLine('line-result', fmtDisplay(r), fmtCode(r));
+    }
+  }
+
   function evaluate(code) {
     var display = fmtDisplay(code);
     addLine('line-input', '>> ' + display, fmtCode(code));
     try {
-      var res = aqlEval(code);
-      if (res.output) {
-        var out = res.output.trimEnd();
-        addLine('line-result', fmtDisplay(out), fmtCode(out));
-      }
-      if (res.error) {
-        addLine('line-error', '  error: ' + res.error, res.error);
-      } else if (res.result) {
-        var r = res.result;
-        addLine('line-result', fmtDisplay(r), fmtCode(r));
+      if (typeof aqlEvalAsync === 'function') {
+        // async keeps the browser loop free while a Tui.run session
+        // blocks the engine goroutine (keys must keep flowing)
+        aqlEvalAsync(code, showResult);
+      } else {
+        showResult(aqlEval(code));
       }
     } catch(e) {
       addLine('line-error', '  error: ' + e.message, e.message);
     }
   }
+
+  // --- aql:tui browser terminal (the wasm webBackend's JS half) ---
+  var tuiView = document.getElementById('tui-view');
+  var tuiScreen = document.getElementById('tui-screen');
+  var tuiTitle = document.getElementById('tui-title');
+  window.aqlTuiOpen = function(title) {
+    tuiView.hidden = false;
+    if (title) tuiTitle.textContent = title;
+    tuiScreen.focus();
+    return {cols: 80, rows: 24};
+  };
+  window.aqlTuiFrame = function(html) { tuiScreen.innerHTML = html; };
+  window.aqlTuiTitle = function(t) { tuiTitle.textContent = t; };
+  window.aqlTuiClose = function() {
+    tuiView.hidden = true;
+    tuiScreen.innerHTML = '';
+    tuiTitle.textContent = 'aql:tui';
+    input.focus();
+  };
+  window.aqlTuiCursor = function(x, y, visible) { /* cursor is drawn by focused inputs */ };
+  window.aqlTuiBell = function() {
+    tuiView.style.borderColor = '#e5e510';
+    setTimeout(function() { tuiView.style.borderColor = ''; }, 150);
+  };
+  var tuiKeyNames = {
+    'Enter': 'enter', 'Backspace': 'backspace', 'Delete': 'delete',
+    'Tab': 'tab', 'Escape': 'esc', 'ArrowUp': 'up', 'ArrowDown': 'down',
+    'ArrowLeft': 'left', 'ArrowRight': 'right', 'Home': 'home', 'End': 'end',
+    ' ': 'space'
+  };
+  tuiScreen.addEventListener('keydown', function(e) {
+    if (typeof aqlTuiKey !== 'function') return;
+    var key = tuiKeyNames[e.key];
+    var ch = '';
+    if (!key) {
+      if (e.key.length !== 1) return; // modifier-only or unmapped
+      key = e.key;
+      ch = e.ctrlKey || e.altKey ? '' : e.key;
+    }
+    e.preventDefault();
+    aqlTuiKey(key, ch, e.ctrlKey, e.altKey, e.shiftKey);
+  });
 
   input.addEventListener('input', function() {
     scheduleSnapshot();

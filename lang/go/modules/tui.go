@@ -209,6 +209,25 @@ func checkTuiPolicy(r *native.Registry, op string) error {
 	return pol.Check("terminal", op, args)
 }
 
+// tuiAltScreenReserved enforces the §11.7 reservation: `alt-screen:`
+// is an accepted option KEY today so the inline tier can land without
+// a breaking opts change, but only the current behaviour (true, the
+// alt-screen takeover) is implemented — false is refused loudly.
+func tuiAltScreenReserved(mp native.ReadMap, word string, r *native.Registry) error {
+	v, ok := mp.Get("alt-screen")
+	if !ok {
+		return nil
+	}
+	b, err := v.AsConcreteBoolean()
+	if err != nil {
+		return r.AqlError("tui_error", word+": alt-screen: must be a Boolean", word)
+	}
+	if !b {
+		return r.AqlError("unsupported", word+": alt-screen: false (the inline tier) is reserved but not yet implemented — see TUI.0.md §9", word)
+	}
+	return nil
+}
+
 // mapTuiErr converts a backend failure into the `terminal` error code —
 // the transport analog of mapNetErr's vocabulary.
 func mapTuiErr(r *native.Registry, word string, err error) error {
@@ -341,6 +360,9 @@ func tuiOpenHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 		}
 		if err != nil {
 			return nil, r.AqlError("tui_error", "open: "+err.Error(), "open")
+		}
+		if err := tuiAltScreenReserved(mp, "open", r); err != nil {
+			return nil, err
 		}
 	}
 	backend, info, err := acquireTuiBackend(r, "open", opts)
@@ -562,7 +584,6 @@ func tuiTier1Natives() []native.NativeFunc {
 	return []native.NativeFunc{
 		{Name: "open", Signatures: []native.Signature{
 			{Args: T(native.TMap), Impl: native.Go(tuiOpenHandler), Returns: T(TTerminal), BarrierPos: -1},
-			{Args: T(), Impl: native.Go(tuiOpenHandler), Returns: T(TTerminal), BarrierPos: 0},
 		}},
 		{Name: "close", Signatures: []native.Signature{
 			{Args: T(TTerminal), Impl: native.Go(tuiCloseHandler), Returns: T(),

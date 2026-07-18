@@ -484,3 +484,37 @@ func TestTuiDeliverEvents(t *testing.T) {
 		t.Fatalf("closed-terminal delivery = %v", dErr)
 	}
 }
+
+// The §11.7 reservation: alt-screen: is an accepted KEY (true = the
+// implemented takeover), false is loudly unsupported until the inline
+// tier lands, and non-Booleans are the usual option error.
+func TestTuiAltScreenReservation(t *testing.T) {
+	// open: the reservation gates before backend acquisition
+	reg := tcReg(t)
+	for _, c := range []struct{ src, want string }{
+		{`Tui.open {alt-screen: false}`, "reserved but not yet implemented"},
+		{`Tui.open {alt-screen: 5}`, "alt-screen: must be a Boolean"},
+	} {
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`, c.src})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s = %v, want %q", c.src, err, c.want)
+		}
+	}
+	_ = reg
+	// run: same gate through the app config; alt-screen: true is the
+	// accepted spelling of today's behaviour
+	base := `update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])`
+	_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+		`Tui.run {alt-screen: false  ` + base + `}`})
+	if err == nil || !strings.Contains(err.Error(), "reserved but not yet implemented") {
+		t.Fatalf("run alt-screen false = %v", err)
+	}
+	vb := tuikit.NewVirtualBackend(4, 2)
+	vb.Inject(tuikit.Event{Tag: "key", Key: "c", Char: "c", Mods: []string{"ctrl"}})
+	reg2 := trcRegWithBackend(t, vb)
+	out, rErr := runTuiStepsOn(t, reg2, []string{`import "aql:tui"`,
+		`Tui.run {alt-screen: true  ` + base + `}`})
+	if rErr != nil || len(out) == 0 {
+		t.Fatalf("run alt-screen true = %v", rErr)
+	}
+}
