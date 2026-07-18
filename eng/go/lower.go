@@ -1171,6 +1171,25 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			}
 		})
 	}
+	// storeSource marks a producer whose result is the SOURCE of a loop-carried
+	// def rebind (an evStore — `def acc (nodes measure)` inside a for-arm, acc
+	// pre-declared and carried). lowerStore seats such a source directly OFF THE
+	// SIM TOP (OpStoreLocal pops it into the carried slot): the rebind's producing
+	// dispatch immediately precedes the store, so the value is already on top and
+	// needs no frame local. Promoting it to a value-def local instead would strand
+	// the store looking for its source on the sim (it is now in a slot), forcing
+	// the load-from-slot store path and — more to the point — an unnecessary local.
+	// So the single-use valueDef promotion below EXEMPTS a plain store source (the
+	// `def acc (nodes measure)` loop-carried rebind). A store source that is ALSO
+	// captured / cross-fragment / dyn-env still promotes via the explicit triggers
+	// (the capture or cross-fragment read genuinely needs the slot; the store then
+	// loads it) — only the general single-use trigger backs off.
+	storeSource := map[int]bool{}
+	for _, ev := range allEvents {
+		if ev.kind == evStore && ev.store.src.kind == opEvent {
+			storeSource[ev.store.src.idx] = true
+		}
+	}
 	for _, ev := range allEvents {
 		// A fragment's residual event (an `if` arm / loop body result) PRODUCED INSIDE
 		// the fragment must stay on that fragment's simulated stack for the arm-result
@@ -1264,11 +1283,26 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// unlike the uncounted harness/accumulation feed the single-use exclusion
 		// above guards — so the store never diverges. Gated on valueDef, keeping
 		// anonymous single-use harness feeds on the Stage-3 stack layout.
+		// A NAMED user-call value-def (`def x (f …)`, marked valueDef via
+		// MarkValueDef) promotes to a frame slot even when read ONCE: storing
+		// once and re-pushing per reference IS the interpreter's
+		// def-evaluates-once semantics, and a single-use def left LOOSE on the
+		// sim cannot be seated once another computed operand is pushed above it
+		// (`def a (nd g) … a b add c add` — the chained add's operands are "not
+		// adjacent"). This mirrors the native-op value-def, which already
+		// promotes unconditionally on valueDef below; the ANONYMOUS single-use
+		// harness/accumulation feed (NOT a valueDef) stays on the Stage-3
+		// layout, unaffected. EXCEPT a plain loop-carried store source
+		// (storeSource): lowerStore seats it off the sim top, so promoting it
+		// would strand the store and mint a needless local — the explicit
+		// dyn-env / captured / fragment triggers above still promote a store
+		// source that ALSO needs the slot for a capture or cross-fragment read.
 		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 ||
 			(es.dynEnv && es.eventInfo[ev.seq].valueDef) ||
 			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
 			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
-			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef))
+			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
+			(es.eventInfo[ev.seq].valueDef && !es.eventInfo[ev.seq].variadicResult && !storeSource[ev.seq]))
 		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
 		// drops its result for a USER call too, not only a native. The interpreter
 		// binds the result to that name OFF the residual stack (the binding is the
