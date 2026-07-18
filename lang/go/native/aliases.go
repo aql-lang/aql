@@ -450,6 +450,7 @@ var (
 	ApplyGuardNarrowing       = eng.ApplyGuardNarrowing
 	ApplyComplementNarrowing  = eng.ApplyComplementNarrowing
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
+	RunCarrierCondBody        = eng.RunCarrierCondBody
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
 	RunPooled                 = eng.RunPooled

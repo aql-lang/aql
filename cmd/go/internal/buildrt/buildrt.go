@@ -25,6 +25,9 @@ import (
 	"strings"
 
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/modules"
+
+	"github.com/aql-lang/aql/cmd/go/internal/termback"
 )
 
 // CompileMode selects which execution engine Eval/Main drives: the
@@ -52,6 +55,15 @@ const (
 // drive the init-error arms of Eval and Main — lang.New only fails on
 // registry construction errors that no Options value can provoke.
 var langNew = lang.New
+
+// registerTerminalBackend wires the real-TTY tuikit backend onto the
+// runtime's registry so `import "aql:tui"` words reach the terminal
+// (design/TUI-IMPLEMENTATION-PLAN.0.md P3). Registration is cheap and
+// pre-import-safe; failure means a backend is already registered on
+// this registry, which is exactly the state we want.
+func registerTerminalBackend(a *lang.AQL) {
+	_ = modules.RegisterHostTui(a.NativeRegistry(), termback.Spec())
+}
 
 // Eval runs source under Options o with the engine selected by mode, then
 // writes the residual stack (carriers joined by spaces) to w. This is the body
@@ -83,6 +95,7 @@ func EvalReport(w, report, warn io.Writer, source string, o lang.Options, mode C
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
 	}
+	registerTerminalBackend(a)
 	runErr := runAndPrint(w, warn, a, source, mode, color)
 	if report != nil {
 		PrintStampReport(report, a.StampReport())
@@ -232,6 +245,7 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "init error: %s\n", err)
 		return 1
 	}
+	registerTerminalBackend(a)
 
 	if len(cfg.Files) > 0 {
 		mem := lang.NewMemFileOps()

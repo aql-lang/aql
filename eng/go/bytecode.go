@@ -3,6 +3,7 @@ package eng
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // Bytecode Program model — Stage 1 of design/aql-bytecode-plan.0.md.
@@ -558,6 +559,19 @@ type UserPolyRef struct {
 	SigIdx []int
 	Units  []int
 	Impls  []SigImpl
+	// Sigs, when non-empty, is the STORED dispatch table (REFUSAL-CLOSURE.0
+	// §6b): the arm signatures frozen at record time, for a BODY-LOCAL
+	// multi-overload fn whose binding is popped before the VM runs — a live
+	// name Lookup could never resolve it, so the runtime re-match runs over
+	// this frozen subset instead (matchUserPoly's stored mode). Freezing is
+	// faithful because a body-local fn's construction is source-determined
+	// and per-call identical (captures and conditional redefinitions refuse
+	// upstream, and a same-named local in ANY other fn refuses the freeze —
+	// the dynamic-scope mutation gate in tryCompileUserPolyArms), so the
+	// frozen table IS the table the interpreter's dispatch sees at the same
+	// program point. Empty = the live-Lookup mode with its index/Impl drift
+	// guard (module-scope words, where a later rebind must defer).
+	Sigs []Signature
 }
 
 // ClosureInShape tags HOW a higher-order word must present each per-invocation
@@ -665,6 +679,28 @@ type CompiledFnRef struct {
 	// interpreter. nil = compile-time ref, no validation (nil is the
 	// unambiguous unset for a map).
 	depSnap map[string]depSnapEntry
+	// restamp is the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): a DETACHED
+	// ref whose depSnap went stale re-compiles against the LIVE bindings at
+	// invoke time (CompiledFnRef.jitRestamp) instead of degrading
+	// permanently to CallAQL. Allocated by StampDetachedFn only — a
+	// compile-time ref re-poisons via NotifyNameRebound and never re-stamps
+	// (nil box → the interpreter, as before). A POINTER field keeps the
+	// struct copyable while the box's mutex serialises concurrent invokers
+	// of the same shared sig.
+	restamp *restampBox
+}
+
+// restampBox carries a detached ref's stamp inputs and its current
+// re-stamped twin (see CompiledFnRef.restamp). tries caps the TOTAL
+// re-compiles per ref so a hot rebinding loop cannot pay a compile per
+// invoke — once exhausted, the seam stays on CallAQL (slow, not wrong).
+type restampBox struct {
+	mu     sync.Mutex
+	fd     FnDefInfo
+	sigIdx int // which own sig this ref compiled (REFUSAL-CLOSURE §7b: per-sig refs)
+	pos    SrcPos
+	tries  int
+	cur    *CompiledFnRef
 }
 
 // depSnapEntry is one dep's binding state at stamp time (see depSnap).
@@ -827,6 +863,12 @@ type GlobalBindSpec struct {
 	// separate DROP). The fast path peeks the live value in place (Pop=false)
 	// and leaves it for its downstream consumers.
 	Pop bool
+	// Splice selects the S5 first-value loop-bind mode: bind the value
+	// SpliceFromTop entries below the stack top and remove it — the
+	// interpreter's pending-forward collection of a loop region's first
+	// value, at the region's statically-known depth (REFUSAL-CLOSURE S5).
+	Splice        bool
+	SpliceFromTop int
 }
 
 // ConstLocalRef backs OpPushConstFreshLocal (see the opcode doc): ConstIdx names

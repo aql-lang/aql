@@ -83,15 +83,18 @@ func zzCheckEmit(a *AQL) {
 	})
 }
 
-// zzRefusingRow is an OFF-CORPUS refusing shape (a raw flex-cell Reach in
-// the failed dispatch window — the definiteness screen's deferred-token
-// decline, pinned in TestUnmatchedDispatchTrapNegatives): it compiles to a
-// nil Program with no check error, driving the refusal arm, and the
-// interpreter raises its canonical signature_error at run time. Every CORPUS
-// refusal has graduated (the each variadic-if row was the last, 2026-07-15),
-// so the fence pins ride this off-corpus shape until the deferred-token
-// class graduates too.
-const zzRefusingRow = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
+// zzRefusingRow is an OFF-CORPUS refusing shape (a `def` consuming a
+// variadic loop region whose count is DYNAMIC — the S5 first-value split
+// needs the STATIC region size, so a runtime-only count keeps the refusal,
+// making this the stable refusing fixture): it compiles to a nil Program
+// with no check error, driving the refusal arm, and the interpreter runs it
+// fine (binds xs to the region's first value and spills the rest —
+// `[1 1 1]`). Every CORPUS refusal has graduated (the each variadic-if row
+// was the last, 2026-07-15); the deferred-token class graduated 2026-07-16
+// (the §2 rematch), and the statically-counted §5 shape graduated
+// 2026-07-17 (the S5 split), so the fence pins ride this dynamic-count
+// sibling.
+const zzRefusingRow = `def m {n: 3} def xs (for (m get "n") [1]) xs`
 
 // A genuine REFUSAL returns the compile_refused error (Stage J). The code is
 // a GUARANTEE: no observable effect escaped the check pass, so a caller's
@@ -106,7 +109,7 @@ func TestRefusalReturnsCompileRefused(t *testing.T) {
 	if codeOf(err) != "compile_refused" {
 		t.Fatalf("refusal: err=[%s] %v (got=%v compiled=%v); want compile_refused (Stage J: no silent re-run)", codeOf(err), err, got, compiled)
 	}
-	if !strings.Contains(err.Error(), "unmatched dispatch recovered at f") {
+	if !strings.Contains(err.Error(), "consumes loop results") {
 		t.Errorf("refusal error should carry the reason, got: %v", err)
 	}
 	if out.String() != "" {
@@ -355,19 +358,22 @@ func TestForeignErrorBailWithoutEffectFallsBack(t *testing.T) {
 
 // The hatch twin: AQL_COMPILE_FALLBACK=1 restores the pre-Stage-J silent
 // interpreter fallback for one release — the refused row then runs
-// interpreted and raises its canonical runtime error.
+// interpreted and yields its canonical interpreter result.
 func TestRefusalHatchRestoresFallback(t *testing.T) {
 	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	a := mustNew(t)
 	var out bytes.Buffer
 	a.SetOutput(&out)
 
-	_, compiled, err := a.RunCompiled(zzRefusingRow)
+	got, compiled, err := a.RunCompiled(zzRefusingRow)
 	if compiled {
 		t.Error("hatched refusal: ran compiled; want the interpreter fallback")
 	}
-	if err == nil || codeOf(err) != "signature_error" {
-		t.Errorf("hatched refusal: err=[%s] %v; want the interpreter's canonical signature_error", codeOf(err), err)
+	if err != nil {
+		t.Errorf("hatched refusal: err=%v; want the silent interpreter fallback", err)
+	}
+	if fmt.Sprint(got) != "[1 1 1]" {
+		t.Errorf("hatched refusal: got %v, want [1 1 1] from the fallback", got)
 	}
 	if out.String() != "" {
 		t.Errorf("hatched refusal: unexpected output %q", out.String())

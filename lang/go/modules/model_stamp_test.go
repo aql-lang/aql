@@ -82,10 +82,12 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 	// act is constructed in WORD context inside mk's body, so it CAPTURES the
 	// enclosing param flag. Post the capture-slot landing (plan Phase 6.3)
 	// captures per se stamp; THIS capture is a runtime-minted param value
-	// with no compile identity, so the closure compile declines on that
-	// narrower gate and the interpreter runs the body with the capture
-	// intact — the captured false must flip the build's ok flag with NO
-	// action error.
+	// with no compile identity, which used to decline on the identity gate —
+	// since the §7a landing (2026-07-16) the detached compile mints an
+	// identity on a clone of the frozen captured slice, so the action STAMPS
+	// and the VM run binds the capture from the ref: the captured false must
+	// flip the build's ok flag with NO action error, exactly as the
+	// interpreter ran it before the landing.
 	out := mcovRun(t, r, mw4Imp+
 		`def mk fn [[flag:Boolean] [Map] [ def act ([mod:Any] => [flag]) {src:'a: 1', actions:{gen: act/r}} ]]
 		 def m (Model.new (mk false)) def res (Model.run m) (res get 'ok') ((res get 'errs') size)`)
@@ -96,11 +98,8 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 		t.Fatalf("captured-flag action ok = %v (%v), want false", out[len(out)-2], err)
 	}
 	ev := modelStampEvent(t, r, "act")
-	if ev.Stamped {
-		t.Error("a capturing action must decline the stamp")
-	}
-	if !strings.Contains(ev.Reason, "closure captures a runtime-minted value") {
-		t.Errorf("decline reason = %q, want the runtime-minted-capture decline", ev.Reason)
+	if !ev.Stamped {
+		t.Errorf("a capturing action must stamp post-§7a, got reason %q", ev.Reason)
 	}
 }
 

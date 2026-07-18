@@ -257,16 +257,77 @@ call {cmd: "inc"} svc`
 	}
 }
 
-// A multi-overload handler is not a single stored unit — precheck declines, so
-// it is left un-stamped and falls back to the interpreter.
-func TestStoredFnMultiOverloadNotStamped(t *testing.T) {
+// A multi-overload handler stamps EVERY own sig to its own unit
+// (REFUSAL-CLOSURE §7b): the invoke seam dispatches through MatchFnSig, so
+// the matched sig's own Impl ref is the sig table — each overload runs its
+// unit on the VM, and a declining sibling would interpret independently.
+func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 	a := registerStash(t)
 	prog, reason, _, err := a.CompileCheck(
 		`stash {a: 1} (fn [[x:Integer] [Integer] [x add 1] [s:String] [String] [s]])`)
 	if err != nil || prog == nil {
 		t.Fatalf("compile: reason=%q err=%v", reason, err)
 	}
-	if sig := firstStampedHandler(prog); sig != nil {
-		t.Fatal("a multi-overload handler must NOT be stamped as a single unit")
+	stamped := 0
+	for _, c := range prog.Consts {
+		fd, ok := c.Data.(eng.FnDefInfo)
+		if !ok {
+			continue
+		}
+		for i := range fd.Signatures {
+			if fd.Signatures[i].CompiledRef() != nil {
+				stamped++
+			}
+		}
+	}
+	if stamped != 2 {
+		t.Fatalf("both overloads must carry their own refs (§7b), got %d stamped", stamped)
+	}
+
+	// A handler where ONE sig declines (a flow sentinel) still stamps the
+	// other — per-sig, fail-safe.
+	prog2, reason2, _, err2 := a.CompileCheck(
+		`stash {a: 1} (fn [[x:Integer] [Integer] [x add 1] [s:String] [String] [break s]])`)
+	if err2 != nil || prog2 == nil {
+		t.Fatalf("compile: reason=%q err=%v", reason2, err2)
+	}
+	stamped2 := 0
+	for _, c := range prog2.Consts {
+		fd, ok := c.Data.(eng.FnDefInfo)
+		if !ok {
+			continue
+		}
+		for i := range fd.Signatures {
+			if fd.Signatures[i].CompiledRef() != nil {
+				stamped2++
+			}
+		}
+	}
+	if stamped2 != 1 {
+		t.Fatalf("exactly the sentinel-free overload must stamp, got %d", stamped2)
+	}
+
+	// The SAME def-bound handler stored twice compiles its units once —
+	// the second store site sees the stamped impl and skips (first stamp
+	// wins), so the shared value never carries duplicate refs.
+	prog3, reason3, _, err3 := a.CompileCheck(
+		`def f (fn [[x:Integer] [Integer] [x add 1]]) (stash {a: 1} f/r) (stash {b: 2} f/r)`)
+	if err3 != nil || prog3 == nil {
+		t.Fatalf("compile: reason=%q err=%v", reason3, err3)
+	}
+	refs := map[*eng.CompiledFnRef]bool{}
+	for _, c := range prog3.Consts {
+		fd, ok := c.Data.(eng.FnDefInfo)
+		if !ok {
+			continue
+		}
+		for i := range fd.Signatures {
+			if ref := fd.Signatures[i].CompiledRef(); ref != nil {
+				refs[ref] = true
+			}
+		}
+	}
+	if len(refs) != 1 {
+		t.Fatalf("a twice-stored handler must carry exactly ONE ref, got %d", len(refs))
 	}
 }

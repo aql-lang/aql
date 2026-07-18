@@ -854,14 +854,16 @@ func TestEmitRefusals(t *testing.T) {
 		src        string
 		wantReason string
 	}{
-		// A loop RESULT read inside a branch arm: Stage-2 loops are variadic and
-		// only feed the program residual, so the list `xs` cannot be consumed by a
-		// branch fragment. Refuses cleanly rather than miscompiling. (The enclosing
-		// COMPUTED-value read — `def y (expr) … if … y …`, top-level OR in a fn
-		// body — now compiles via per-unit value-def-locals; see
-		// TestEnclosingReadInBranchCompiles. And `word [1 add 2]` now compiles by
-		// inline expansion — see TestWordSpliceCompilesNative.)
-		{`def xs (for 3 [i]) if (xs.0 gt 0) [xs] [[9]]`, "consumes loop results"},
+		// A loop-collect def with a DYNAMIC count: the S5 first-value split
+		// needs the static region size, so the refusal stands. (The
+		// statically-counted sibling — including its read inside a branch
+		// arm — graduated 2026-07-17 with the S5 split: the read resolves
+		// the live binding via OpLookupDynScope, so branch fragments consume
+		// it like any dynamic-scope read; error-parity pinned in
+		// TestEdgeFindingLoopCollectDefCompiles. The enclosing COMPUTED-value
+		// read — `def y (expr) … if … y …` — compiles via per-unit
+		// value-def-locals; see TestEnclosingReadInBranchCompiles.)
+		{`def m {n: 3} def xs (for (m get "n") [1]) if (xs.0 gt 0) [xs] [[9]]`, "consumes loop results"},
 	}
 	for _, c := range cases {
 		got, reason := compile(t, c.src)

@@ -153,6 +153,17 @@ type eventFlags struct {
 	// RecordLoop), mirroring lowerArms' merge-variadic accounting; over-marking is
 	// sound (refuses more), under-marking is not.
 	variadicResult bool
+	// regionN is the loop region's STATIC size (trips x per-iteration net)
+	// when every bound is a concrete integer and the loop runs at least one
+	// iteration — the gate for the splice-at-depth def bind
+	// (REFUSAL-CLOSURE S5). 0 = not statically counted.
+	regionN int
+	// firstElemType is the type of the region's FIRST-arrived (stack-deepest)
+	// value — bodyStk[0].Parent. The S5 split binds that value, so the split
+	// element carrier must be typed from it, NOT the loop carrier's child
+	// type (which mirrors the LAST value — a heterogeneous body like
+	// `for 2 [7 "x"]` binds Integer 7 while the carrier renders String).
+	firstElemType *Type
 }
 
 type emitCall struct {
@@ -167,6 +178,7 @@ type emitCall struct {
 	makeList        bool             // assemble len(ops) operands into a list (OpMakeList) instead of dispatching a word
 	dynApply        int              // >0: apply the TOP operand (a runtime fn value) to the `dynApply` trailing args below it (OpCallDynTrailTop) — a paren-bounded trailing fn-value apply recorded as an EVENT so it seats like any computed result
 	dynApplyUnquote bool             // the dynApply event came through the `apply` WORD (a consumed pendingApply): lower to OpCallDynApplyTop, which unquotes like applyHandler (Stage M2a)
+	dynMixed        bool             // forward-drift window (REFUSAL-CLOSURE §1): island the len(ops) laid-out window [residual(s), dynamic value, word const, forward literal] verbatim via OpCallDynamicMixed — the island's own dispatch performs the interpreter's forward collection over the LIVE top value
 	makeMap         bool             // assemble len(ops) value operands into a map (OpMakeMap) with mapKeys
 	mapKeys         []string
 	mapImpl         bool // the source map's Implicit flag
@@ -345,6 +357,9 @@ type emitUserPolySpec struct {
 	sigIdx []int
 	units  []int
 	impls  []SigImpl
+	// sigs is the frozen dispatch table for a body-local word (REFUSAL-
+	// CLOSURE.0 §6b) — see UserPolyRef.Sigs. Nil for the live-Lookup mode.
+	sigs []Signature
 }
 
 // emitFallback is a recorded interpreter-island fallback (Stage 5): a
@@ -403,6 +418,10 @@ type emitEvent struct {
 // otherwise the event lowers to nothing.
 type emitDynBind struct {
 	name string
+	// spliceDepth >= 0 marks the S5 first-value loop bind: the bound value
+	// sits spliceDepth entries below the region top at bind time, and the
+	// lowering emits the splice-at-depth OpBindGlobal (-1 = a normal bind).
+	spliceDepth int
 	// src carries a LOCAL operand when the bound value is a live frame slot
 	// (a param re-bound by `def` — resolved via the unit's localByID at
 	// record time, a pure read). An EVENT-produced value rides srcSeq as a
@@ -486,6 +505,13 @@ type EmitState struct {
 	Compilable bool
 	Reason     string
 
+	// pendingLoopBind carries a SplitLoopRegionBind verdict to the
+	// RecordDynBind of the same installAndRecordDef call (S5).
+	pendingLoopBind *pendingLoopBind
+	// loopSplitBinds names the S5 first-value loop binds, so dynScopeRescue
+	// admits their top-level reads.
+	loopSplitBinds map[string]bool
+
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
 	// buildFnBodyReturnsFn generalises an Any arg into an Any param as a
@@ -559,6 +585,16 @@ type EmitState struct {
 	// holding genuinely-0-param fn values (noteFnRiskFields /
 	// instanceFnFieldRisk — the carrier-receiver auto-dispatch hazard).
 	fnRiskFields map[string]map[string]bool
+	// fnMemberFields is fnRiskFields' any-arity VALUE-carrying sibling
+	// (the instance-field fn-read fix): constructed-instance value ID →
+	// field key → the fn member VALUE from the concrete construction map.
+	// Consulted at the get-family tag site (instanceFnMember) so a read
+	// through the instance CARRIER — whose payload inspection sees only the
+	// schema — still tags noteMemberFnRead: the §3 arrival model then
+	// compiles the landing with parity, and every shape it declines gets
+	// refuseStrandedMemberFn's sound refusal instead of the pre-existing
+	// stranded-apply miscompile (`o.f 21 eq 42` → fn-as-data + eq(21,42)).
+	fnMemberFields map[string]map[string]Value
 	// memberFnReads holds the value IDs of get-family reads that surfaced a
 	// FUNCTION-valued container member (readsFnMember). The read's static type is
 	// dynamic(Any), so downstream code cannot see it is a fn; this side table
@@ -566,7 +602,7 @@ type EmitState struct {
 	// value and refuse a mid-expression auto-apply
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Over-approximate + append-only like
 	// fnRiskFields — a stale entry only ever over-refuses (sound).
-	memberFnReads map[string]bool
+	memberFnReads map[string]Value
 
 	// shapedReads mirrors CheckState.MethodShapes annotations (by read-out
 	// value ID) so the get-family read guards can exempt a read whose
@@ -1316,6 +1352,64 @@ func (es *EmitState) MarkValueDef(v Value) {
 	}
 }
 
+// pendingLoopBind carries a SplitLoopRegionBind verdict to the immediately
+// following RecordDynBind (both fire inside one installAndRecordDef call —
+// the def word's handler): the bound name takes the loop's FIRST value via
+// the splice-at-depth OpBindGlobal (REFUSAL-CLOSURE S5).
+type pendingLoopBind struct {
+	seq   int // the producing loop event
+	depth int // values above the first at bind time = regionN-1
+}
+
+// SplitLoopRegionBind implements the check-mode half of REFUSAL-CLOSURE S5:
+// a TOP-LEVEL def whose value is a STATICALLY-COUNTED variadic loop region
+// binds the region's FIRST value (the interpreter's pending-forward collects
+// the first-arrived value; the rest spill as residual — probe-pinned:
+// `def xs (for 3 [1]) xs` yields [1 1 1] with xs=1). Returns the ELEMENT
+// carrier the binding should take; the caller keeps the region carrier
+// itself on the check stack as the N-1 REST residual (still produced by the
+// loop event, so the existing variadic disposition owns it). Declines
+// (ok=false) outside a recording pass, outside the root scope, or for a
+// region without a static count — those shapes keep today's refusal.
+func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
+	if !es.active() || es.suspendedNow() {
+		return Value{}, false
+	}
+	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
+		es.reg.Check.NestedBodyDepth != 0 {
+		// NestedBodyDepth: a def inside a BRANCH/LOOP/QUOTATION body analysis
+		// (AnalyseLoopBody / RunCarrierBodyWithDefs) is not the top-level
+		// straight-line bind the splice-at-depth lowering models — the
+		// fragment context owns its own depth accounting (probe-pinned: the
+		// loop-carried `for 2 [ def acc (for 2 [5]) acc ]` miscompiled
+		// [5 0 5 0] vs [5 5 5 5] without this gate).
+		return Value{}, false
+	}
+	pr, ok := es.producedBy[v.ID]
+	if !ok || pr.idx != 0 {
+		return Value{}, false
+	}
+	f := es.eventInfo[pr.seq]
+	if !f.variadicResult || f.regionN < 1 || f.firstElemType == nil {
+		return Value{}, false
+	}
+	// Only split when RecordDynBind will actually EMIT the splice for this
+	// name: a filtered name (`_`/`$`-prefixed, capitalised, empty) records no
+	// dyn-bind event, so splitting would drop one check-residual value with
+	// no splice instruction to remove it at run time (`def _ (for 3 [1])`
+	// compiled [1 1 1] vs the interpreter's [1 1]).
+	if name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+		return Value{}, false
+	}
+	// The split binds the region's FIRST-arrived value, so the element
+	// carrier takes THAT value's type (firstElemType, guaranteed non-nil by
+	// the gate above), not the loop carrier's child type — which mirrors the
+	// LAST value and mis-types a heterogeneous body.
+	elem := NewCarrier(f.firstElemType)
+	es.pendingLoopBind = &pendingLoopBind{seq: pr.seq, depth: f.regionN - 1}
+	return elem, true
+}
+
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RememberOriginal saved).
@@ -1718,20 +1812,20 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 // CompileStoresFn word stashes for later invocation — a serve-raw connection
 // handler) to its own fn unit, so the native word can run it on the VM via
 // RunUnit instead of CallAQL. Returns the unit index and true, or (0, false)
-// when the body refuses (a refusal-class word, a flow sentinel, no single own
-// sig) — the caller then bakes only the plain const and the handler falls back
-// to the interpreter, per-body and sound. Mirrors tryReturnedClosure's
+// when the body refuses (a refusal-class word, a flow sentinel, an ineligible
+// sig) — the caller then bakes only the plain const and that overload falls
+// back to the interpreter, per-sig and sound. Mirrors tryReturnedClosure's
 // probe-then-real compile, but bodyOut 0 (count-agnostic): a stored handler is
 // invoked for effect and its residual, like CallAQL's, is the caller's to use
 // or discard.
-func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
+func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (int, bool) {
 	if es == nil || es.reg == nil {
 		return 0, false
 	}
-	lam, ok := storedFnUnitEligible(fd)
-	if !ok {
+	if sigIdx < 0 || sigIdx >= len(fd.Signatures) || !storedSigEligible(&fd.Signatures[sigIdx]) {
 		return 0, false
 	}
+	lam := &fd.Signatures[sigIdx]
 	inputs, paramNames := fnValueInputs(lam.Params)
 	r := es.reg
 	// PROBE in a throwaway state so a refusing body leaves THIS program
@@ -1769,25 +1863,37 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, pos SrcPos) (int, bool) {
 	return unit, true
 }
 
-// storedFnUnitEligible reports whether fd is the SHAPE a stored-fn unit
-// compile accepts — exactly one own (non-fallback) signature carrying a
-// non-empty body with no flow-control sentinel — returning that signature.
-// Shared by the compile-time store-fn bake (compileStoredFnUnit) and the
-// runtime detached stamp (StampDetachedFn) so the two gates cannot drift.
-// Capture-freedom is the CALLER's gate (recordCallOperands / StampFnValue):
-// it is a property of the storing context, not of the unit shape.
-func storedFnUnitEligible(fd FnDefInfo) (*Signature, bool) {
-	own := 0
+// storedSigEligible reports whether ONE signature of a stored fn value is a
+// stampable unit shape: an own (non-fallback) AQL body, non-empty and free
+// of flow-control sentinels. Every own sig stamps INDEPENDENTLY
+// (REFUSAL-CLOSURE §7b): the callback seam dispatches through MatchFnSig
+// first, so the matched sig's own Impl ref IS the "sig table" — an
+// unstamped sibling simply interprets via CallAQL, per-sig and fail-safe.
+// Shared by the compile-time store-fn bake and the runtime detached stamp
+// so the two gates cannot drift. Capture-freedom is the CALLER's gate
+// (recordCallOperands / StampFnValue): it is a property of the storing
+// context, not of the unit shape.
+func storedSigEligible(sig *Signature) bool {
+	if sig.Fallback {
+		return false
+	}
+	if _, isAQL := sig.Impl.(*AQLImpl); !isAQL {
+		return false
+	}
+	return len(sig.body()) > 0 && !bodyToksHaveSentinel(sig.body())
+}
+
+// firstStampableSig returns fd's first stampable own AQL sig — the
+// single-sig entry the predicate-type constructor and the module-load
+// sweep use (their values are single-overload by construction); multi-sig
+// values stamp per sig through the callers' own loops.
+func firstStampableSig(fd FnDefInfo) (int, bool) {
 	for i := range fd.Signatures {
-		if !fd.Signatures[i].Fallback {
-			own++
+		if storedSigEligible(&fd.Signatures[i]) {
+			return i, true
 		}
 	}
-	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
-		return nil, false
-	}
-	return lam, true
+	return -1, false
 }
 
 // compileStoredBody compiles a NoEvalArgs CODE-BODY list (spawn's process body) to
@@ -1959,15 +2065,6 @@ func (es *EmitState) storedHandlerDeps(body []Value) map[string]bool {
 		}
 	})
 	return deps
-}
-
-// storedFnDeps is storedHandlerDeps for a stored fn VALUE: it reads the module
-// deps from the fn's single own-sig body.
-func (es *EmitState) storedFnDeps(fd FnDefInfo) map[string]bool {
-	if lam, ok := fd.FirstOwnSig(); ok {
-		return es.storedHandlerDeps(lam.body())
-	}
-	return nil
 }
 
 // NotifyNameRebound poisons any already-created stored-handler / spawn ref whose
@@ -3290,7 +3387,7 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 // recorder). Captures are gated empty by the recorder, so no hidden trailing
 // operands ride here. An operand of unknown provenance marks the program
 // uncompilable, exactly as RecordUserCall does.
-func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, args, outs []Value, pos SrcPos) {
+func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos) {
 	if !es.active() {
 		return
 	}
@@ -3305,7 +3402,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 	}
 	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{
 		unit: -1, ops: ops, nout: len(outs), pos: pos,
-		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls},
+		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls, sigs: sigs},
 	}})
 	es.SiteCounts[SiteDynamic]++
 	for i := range outs {
@@ -3418,7 +3515,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
 // dispatch's result carrier — registered so the dispatch isn't
 // re-recorded, and marked VARIADIC at lowering, so only the program
 // residual may absorb the accumulation.
-func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, pos SrcPos) {
+func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos) {
 	if !es.active() {
 		return
 	}
@@ -3523,8 +3620,14 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 	if lp.hasBodyOut {
 		// A value-producing loop leaves a runtime-variable count (one per-iteration
 		// value, N unknown at compile time) — variadic, like lowerLoop marks
-		// lw.variadic. Only the program residual absorbs it.
+		// lw.variadic. Only the program residual absorbs it — except the S5
+		// first-value def bind, whose splice-at-depth lowering needs the exact
+		// STATIC region size the caller computed (0 when not static).
 		f.variadicResult = true
+		f.regionN = regionN
+		if len(bodyStk) > 0 && bodyStk[0].Parent != nil {
+			f.firstElemType = bodyStk[0].Parent
+		}
 	} else {
 		// A SIDE-EFFECT loop (body nets 0 per iteration — `for n [acc set …]`)
 		// leaves ZERO runtime values, deterministically: a zero-output event, NOT a
@@ -4257,9 +4360,22 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// handler falls back to the interpreter, per-body and sound.
 		if sig.CompileEffect.Has(CompileStoresFn) {
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
-				if unit, cOK := es.compileStoredFnUnit(fd, a.Pos()); cOK {
-					ref := &CompiledFnRef{Unit: unit, depNames: es.storedFnDeps(fd)}
-					if stampCompiledRef(fd, ref) {
+				// EVERY stampable own sig gets its own unit + ref
+				// (REFUSAL-CLOSURE §7b): the callback seam dispatches via
+				// MatchFnSig, so the matched sig's Impl ref is the sig table.
+				// A sig whose body refuses stays un-stamped and interprets —
+				// per-sig and sound.
+				for si := range fd.Signatures {
+					if !storedSigEligible(&fd.Signatures[si]) {
+						continue
+					}
+					aImpl := fd.Signatures[si].Impl.(*AQLImpl)
+					if aImpl.Compiled != nil {
+						continue // first stamp wins
+					}
+					if unit, cOK := es.compileStoredFnUnit(fd, si, a.Pos()); cOK {
+						ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].body())}
+						aImpl.Compiled = ref
 						es.storedFnRefs = append(es.storedFnRefs, ref)
 					}
 				}
@@ -4486,6 +4602,7 @@ func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
 		return
 	}
 	var risky map[string]bool
+	var members map[string]Value
 	for _, a := range args {
 		mp, ok := a.Data.(MapPayload)
 		if !ok || a.Carrier || mp.M == nil {
@@ -4498,6 +4615,25 @@ func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
 					risky = map[string]bool{}
 				}
 				risky[k] = true
+			}
+			// The any-arity sibling: EVERY fn-valued field is remembered
+			// with its VALUE, so a later read through the instance carrier
+			// can tag the member-fn landing (see fnMemberFields).
+			if _, isFn := mv.Data.(FnDefInfo); isFn {
+				if members == nil {
+					members = map[string]Value{}
+				}
+				members[k] = mv
+			}
+		}
+	}
+	if members != nil {
+		if es.fnMemberFields == nil {
+			es.fnMemberFields = map[string]map[string]Value{}
+		}
+		for _, o := range outs {
+			if o.ID != "" {
+				es.fnMemberFields[o.ID] = members
 			}
 		}
 	}
@@ -4535,6 +4671,30 @@ func (es *EmitState) instanceFnFieldRisk(args []Value) bool {
 		return true
 	}
 	return false
+}
+
+// instanceFnMember consults fnMemberFields for a get-family dispatch whose
+// receiver is (a carrier of) a tracked constructed instance with a CONCRETE
+// key: it returns that field's fn member value so the read result can be
+// tagged (noteMemberFnRead) exactly like a concrete-container member read.
+// An unresolvable key reports nothing — the fnRiskFields guard already owns
+// the conservative refusal for those.
+func (es *EmitState) instanceFnMember(args []Value) (Value, bool) {
+	if len(es.fnMemberFields) == 0 {
+		return Value{}, false
+	}
+	for _, a := range args {
+		members := es.fnMemberFields[a.ID]
+		if members == nil {
+			continue
+		}
+		if key, ok := concreteMapKey(args); ok {
+			if mv, hit := members[key]; hit {
+				return mv, true
+			}
+		}
+	}
+	return Value{}, false
 }
 
 // zeroArgFnOut is the OUT-side backstop to the receiver heuristic: when a
@@ -4645,9 +4805,24 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
 		root, depth = true, es.reg.Defs.Depth(name)
 	}
+	spliceDepth := -1
+	if plb := es.pendingLoopBind; plb != nil {
+		// The S5 first-value bind (SplitLoopRegionBind latched it in the same
+		// installAndRecordDef call): the bound value is the loop region's
+		// first value, live at a static depth inside the region — no operand
+		// home, the splice-at-depth lowering owns it. Track the name so
+		// dynScopeRescue admits its TOP-LEVEL reads (the runtime binding is
+		// installed by the splice bind before any read executes).
+		srcSeq, spliceDepth = plb.seq, plb.depth
+		es.pendingLoopBind = nil
+		if es.loopSplitBinds == nil {
+			es.loopSplitBinds = map[string]bool{}
+		}
+		es.loopSplitBinds[name] = true
+	}
 	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
-		root: root, depth: depth,
+		root: root, depth: depth, spliceDepth: spliceDepth,
 	}})
 }
 
@@ -4661,7 +4836,7 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 // reading fn, so a plain typo still refuses. The name joins dynScopeNames so
 // Finalize installs the OpBindDynScope twin in every binding unit.
 func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
-	if es.reg == nil || len(es.units) <= 1 {
+	if es.reg == nil {
 		return emitOperand{}, false
 	}
 	name := v.DynFrom()
@@ -4669,6 +4844,19 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 		name = es.defReads[v.ID]
 	}
 	if name == "" {
+		return emitOperand{}, false
+	}
+	if len(es.units) <= 1 {
+		// Top level: only an S5 first-value loop bind reads through the
+		// registry here (its value has no event/local home by construction;
+		// the splice bind installed the runtime binding before any read).
+		if es.loopSplitBinds[name] {
+			if es.dynScopeNames == nil {
+				es.dynScopeNames = map[string]bool{}
+			}
+			es.dynScopeNames[name] = true
+			return dynScopeOperand(es.intern(NewString(name))), true
+		}
 		return emitOperand{}, false
 	}
 	c := es.reg.Check
@@ -4730,21 +4918,47 @@ func (es *EmitState) shapedReadOut(outs []Value) bool {
 }
 
 // noteMemberFnRead records that the value with id came from a get-family read
-// of a fn-valued container member. Lazily-inits the side table; nil-safe and
-// active-gated (a suspended / uncompilable pass records nothing).
-func (es *EmitState) noteMemberFnRead(id string) {
+// of a fn-valued container member, along with the MEMBER value itself when the
+// read resolved it uniquely (a concrete container + concrete key —
+// readFnMemberValue); a zero member records the tag alone (a computed-key scan
+// knows a fn member exists somewhere but not which). Lazily-inits the side
+// table; nil-safe and active-gated (a suspended / uncompilable pass records
+// nothing).
+func (es *EmitState) noteMemberFnRead(id string, member Value) {
 	if !es.active() || id == "" {
 		return
 	}
 	if es.memberFnReads == nil {
-		es.memberFnReads = map[string]bool{}
+		es.memberFnReads = map[string]Value{}
 	}
-	es.memberFnReads[id] = true
+	es.memberFnReads[id] = member
 }
 
 // memberFnRead reports whether id was tagged by noteMemberFnRead.
 func (es *EmitState) memberFnRead(id string) bool {
-	return es != nil && es.memberFnReads != nil && es.memberFnReads[id]
+	if es == nil || es.memberFnReads == nil {
+		return false
+	}
+	_, ok := es.memberFnReads[id]
+	return ok
+}
+
+// memberFnReadValue returns the uniquely-resolved member FN value tagged for
+// id (REFUSAL-CLOSURE.0 §3 — the arrival-apply model needs the member's
+// signature to claim its window). ok=false for an untagged id or a tag whose
+// read could not pinpoint the member.
+func (es *EmitState) memberFnReadValue(id string) (Value, bool) {
+	if es == nil || es.memberFnReads == nil {
+		return Value{}, false
+	}
+	m, ok := es.memberFnReads[id]
+	if !ok {
+		return Value{}, false
+	}
+	if _, isFn := m.Data.(FnDefInfo); !isFn {
+		return Value{}, false
+	}
+	return m, true
 }
 
 // readsFnMember reports whether a get-family dispatch surfaces a FUNCTION-valued
@@ -4810,6 +5024,45 @@ func readsFnMember(args []Value) bool {
 		}
 	}
 	return false
+}
+
+// readFnMemberValue is readsFnMember's value-returning sibling (REFUSAL-
+// CLOSURE.0 §3): when the get-family dispatch resolves a UNIQUE fn member —
+// a concrete container with a concrete key/index — it returns that member so
+// the arrival-apply model can claim its signature's window. A computed-key
+// scan (readsFnMember's every-member walk) cannot pinpoint one member, so it
+// reports ok=false and the read carries the bool tag alone (the model then
+// declines and today's refusal paths stand).
+func readFnMemberValue(args []Value) (Value, bool) {
+	isFn := func(v Value) bool { _, ok := v.Data.(FnDefInfo); return ok }
+	for _, a := range args {
+		if a.Carrier {
+			continue
+		}
+		switch d := a.Data.(type) {
+		case ListPayload:
+			if idx, ok := concreteIntKey(args); ok {
+				if idx >= 0 && idx < int64(len(d.Elems)) && isFn(d.Elems[idx]) {
+					return d.Elems[idx], true
+				}
+			}
+		case MapPayload:
+			if d.M == nil {
+				continue
+			}
+			if key, ok := concreteMapKey(args); ok {
+				if mv, hit := d.M.Get(key); hit && isFn(mv) {
+					return mv, true
+				}
+			}
+		}
+		// Class-instance receivers never reach this payload walk: the make
+		// result is a CARRIER at the read site (schema only), so instance
+		// members ride the construction-time fnMemberFields note instead
+		// (instanceFnMember at the tag site) — the fix for the formerly
+		// pre-existing `o.f 21 eq 42` stranded-apply miscompile.
+	}
+	return Value{}, false
 }
 
 func containerFnAutoDispatchRisk(args []Value) bool {
@@ -6580,6 +6833,13 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 		}
 		lit, okLit := es.materialise(rv)
 		if !okLit {
+			// An S5 first-value loop bind's READ has no event/local home by
+			// construction — it re-resolves the live registry binding the
+			// splice bind installed (dynScopeRescue's top-level arm).
+			if op, okDyn := es.dynScopeRescue(rv); okDyn {
+				ops = append(ops, op)
+				continue
+			}
 			return nil, "residual value of unknown provenance"
 		}
 		if !isInertConst(lit) {

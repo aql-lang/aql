@@ -11,14 +11,14 @@ import (
 // construct, so the performance cost is not a surprise. A compiled program, and
 // the interpreter (-no-compile) mode, print no warning.
 func TestExecuteCompileRefusalWarning(t *testing.T) {
-	// A program the compiler refuses to lower (an off-corpus shape — a raw
-	// flex-cell Reach in the failed dispatch window, the definiteness
-	// screen's deferred-token decline; every corpus refusal has graduated).
-	// It also errors at runtime, but the warning fires on the REFUSAL,
-	// before the error — so -no-check (skip the pre-flight that would
-	// reject it) lets the run reach the compile-try fallback. Exit is
-	// non-zero (the runtime error), which is expected here.
-	refuses := "def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a"
+	// A program the compiler refuses to lower (an off-corpus shape — a `def`
+	// consuming a variadic loop region with a DYNAMIC count; the S5 split
+	// needs the static region size, so this is the stable refusing fixture
+	// now that the statically-counted sibling graduated 2026-07-17). The
+	// interpreter runs it fine, so the warning is the only stderr trace.
+	// -no-check skips the pre-flight so the run reaches the compile-try
+	// fallback.
+	refuses := `def m {n: 3} def xs (for (m get "n") [1]) xs`
 	const wantWarn = "warning: bytecode compilation refused"
 
 	var stdout, stderr strings.Builder
@@ -26,7 +26,7 @@ func TestExecuteCompileRefusalWarning(t *testing.T) {
 	if !strings.Contains(stderr.String(), wantWarn) {
 		t.Fatalf("expected a refusal warning, got stderr: %q", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "unmatched dispatch") {
+	if !strings.Contains(stderr.String(), "consumes loop results") {
 		t.Fatalf("refusal warning should name the offending construct, got: %q", stderr.String())
 	}
 
