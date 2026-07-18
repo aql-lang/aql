@@ -2,7 +2,7 @@ package modules
 
 func init() {
 	registerDocs("aql:sift", map[string]string{
-		"define":   "Register a spec-map (or fn) as a named parse kind: define NAME SPEC.",
+		"define":   "Register a spec-map as a named parse kind: define NAME SPEC.",
 		"parse":    "Parse a source with an inline spec-map or a registered kind name.",
 		"kinds":    "List the atoms of every sift-registered kind (families, presets, user defines).",
 		"families": "List the six format-family atoms: kv, blocks, columns, dsv, fixed, pattern.",

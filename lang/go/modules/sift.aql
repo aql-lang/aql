@@ -37,7 +37,7 @@ def sift-families-list [kv/q blocks/q columns/q dsv/q fixed/q pattern/q]
 def sift-family-set {kv:true blocks:true columns:true dsv:true fixed:true pattern:true}
 def sift-type-set {string:true integer:true float:true boolean:true percent:true size:true auto:true}
 def sift-repeat-set {last:true first:true error:true list:true}
-def sift-spec-keys {family:true opts:true fields:true detect:true doc:true fn:true}
+def sift-spec-keys {family:true opts:true fields:true detect:true doc:true}
 
 # The per-line coercion skip sentinel (strict:'skip' drops a bad cell). Kept
 # distinct from None, which is a legitimate coerced value (empty typed cell).
@@ -147,7 +147,7 @@ def sift-to-bool fn [[t:String cell:String] [Any] [
 def sift-coerce fn [[vtype:String cell:String] [Any] [
   if (vtype eq "string") [cell] [
     def t (StringUtil.trim cell)
-    def r (if (t eq "") [None] [ sift-coerce-val vtype t cell ])
+    def r (if (t eq "") [none] [ sift-coerce-val vtype t cell ])
     r
   ]
 ]]
@@ -284,7 +284,7 @@ def sift-split-n fn [[s:String n:Integer] [List] [
 # line numbers (the spec suite matches error codes, not positions).
 # ----------------------------------------------------------------------------
 def sift-kv-store fn [[acc:Map k:String v:Any repeat:String] [Map] [
-  def exists (acc has k)
+  def exists (acc has (k))
   if (repeat eq "list")
     [ if exists [acc set (k) (push v (acc get k))] [acc set (k) [v]] ] [
   if (repeat eq "first")
@@ -319,7 +319,8 @@ def sift-kv-lines fn [[lines:List opts:Map sep:String] [Map] [
             def k (if (names eq "normalize") [sift-normalize-name k0] [k0])
             def vt (sift-col-type types k vtype)
             def cv (sift-coerce-strict vt v1 strict)
-            if (cv eq sift-skip) [acc] [ sift-kv-store acc k cv repeat ] ]
+            def stored (if (cv eq sift-skip) [acc] [ sift-kv-store acc k cv repeat ])
+            stored ]
       ]
     ]]
     fold [step] lines {}
@@ -337,7 +338,7 @@ def sift-fam-kv fn [[src:String opts:Map] [Map] [
 # = List of Maps with unified columns, absent field -> None).
 # ----------------------------------------------------------------------------
 def sift-group-blank fn [[lines:List] [List] [
-  def step fn [[line:List acc:Map] [List] [
+  def step fn [[line:String acc:Map] [Map] [
     if ((StringUtil.trim line) eq "")
       [ if ((size acc.cur) gt 0) [acc set (quote blocks) (push acc.cur acc.blocks) set (quote cur) []] [acc] ]
       [ acc set (quote cur) (push line acc.cur) ]
@@ -347,7 +348,7 @@ def sift-group-blank fn [[lines:List] [List] [
 ]]
 
 def sift-group-indent fn [[lines:List] [List] [
-  def step fn [[line:List acc:Map] [List] [
+  def step fn [[line:String acc:Map] [Map] [
     if ((StringUtil.trim line) eq "") [acc] [
       def unindented ((line mini re `^[^ \t]`).ok)
       def acc2 (if (unindented and ((size acc.cur) gt 0))
@@ -359,12 +360,18 @@ def sift-group-indent fn [[lines:List] [List] [
   if ((size st.cur) gt 0) [push st.cur st.blocks] [st.blocks]
 ]]
 
+# select the block grouping — a helper with a declared [List] return so
+# callers see a clean List (not the if/else Disjunct the checker keeps).
+def sift-blocks-of fn [[sep:String lines:List] [List] [
+  if (sep eq "blank") [sift-group-blank lines] [
+  if (sep eq "indent") [sift-group-indent lines] [
+    raise sift_spec_error "opts.sep must be 'blank' or 'indent'" ]]
+]]
+
 def sift-fam-blocks fn [[src:String opts:Map] [Any] [
   def lines (sift-preprocess src opts)
   def sep (sift-opt-str opts "sep" "blank")
-  def blocks (if (sep eq "blank") [sift-group-blank lines] [
-              if (sep eq "indent") [sift-group-indent lines] [
-                raise sift_spec_error "opts.sep must be 'blank' or 'indent'" ]])
+  def blocks (sift-blocks-of sep lines)
   def kvsep (sift-opt-str opts "kvsep" ":")
   def table (sift-opt-bool opts "table" false)
   def parse-block fn [[b:List acc:List] [List] [ push (sift-kv-lines b opts kvsep) acc ]]
@@ -380,7 +387,7 @@ def sift-blocks-table fn [[maps:List] [List] [
   ]]
   def cols (fold [collect] maps [])
   def torow fn [[m:Map acc:List] [List] [
-    def cell fn [[c:String row:Map] [Map] [ if (m has c) [row set (c) (m get c)] [row set (c) None] ]]
+    def cell fn [[c:String row:Map] [Map] [ if (m has (c)) [row set (c) (m get c)] [row set (c) None] ]]
     push (fold [cell] cols {}) acc
   ]]
   fold [torow] maps []
@@ -517,7 +524,7 @@ def sift-fixed-spans fn [[opts:Map] [List] [
   def has-widths ((opts get "widths") is None not)
   if (has-cols and has-widths) [ raise sift_spec_error "fixed: give exactly one of cols or widths" ] [
     if has-cols [
-      each [ ([p:Any] => [ {} set (quote s) (p.value get 0) set (quote e) (p.value get 1) ]) ] (opts get "cols")
+      each [ ([p:Any] => [ {} set (quote s) (p get 0) set (quote e) (p get 1) ]) ] (opts get "cols")
     ] [
       if has-widths [
         def step fn [[w:Integer acc:Map] [Map] [
@@ -548,7 +555,7 @@ def sift-fam-fixed fn [[src:String opts:Map] [List] [
   if ((size cols) neq (size spans)) [ raise sift_spec_error "fixed: fields count must match column spans" ] [
     def step fn [[line:String acc:List] [List] [
       if ((StringUtil.trim line) eq "") [acc] [
-        def cells (each [ ([sp:Any] => [ def raw (sift-slice-span line sp.value.s sp.value.e)  if trim [StringUtil.trim raw] [raw] ]) ] spans)
+        def cells (each [ ([sp:Any] => [ def raw (sift-slice-span line sp.s sp.e)  if trim [StringUtil.trim raw] [raw] ]) ] spans)
         push (sift-row cols cells types) acc
       ]
     ]]
@@ -584,7 +591,7 @@ def sift-pattern-row fn [[names:List groups:List cols:List types:Map vtype:Strin
     if (nm eq "") [acc] [
       def col (cols get i)
       def raw (groups get i)
-      if (raw is None) [acc set (col) None] [               # non-participating group
+      if (raw is None) [acc set (col) none] [               # non-participating group
         def cv (sift-coerce-strict (sift-col-type types col vtype) raw strict)
         if (cv eq sift-skip) [acc set (quote __skip) true] [acc set (col) cv] ]
     ]
@@ -612,16 +619,16 @@ def sift-fam-pattern fn [[src:String opts:Map] [Any] [
 
 def sift-pattern-match fn [[re:String text:String] [Any] [
   def r (text mini re re {})
-  if (r.ok not) [None] [r.fst.g]
+  if (r.ok not) [none] [r.fst.g]
 ]]
 
 def sift-pattern-run fn [[re:String lines:List cols:List names:List types:Map vtype:String per:String strict:String] [Any] [
   if (per eq "source") [
     def groups (sift-pattern-match re (join "\n" lines))
     if (groups is None)
-      [ if (strict eq "skip") [None] [raise sift_parse_error "pattern: no match in source"] ]
+      [ if (strict eq "skip") [none] [raise sift_parse_error "pattern: no match in source"] ]
       [ def row (sift-pattern-row names groups cols types vtype strict)
-        if ((row get "__skip") is None not) [None] [row] ]
+        if ((row get "__skip") is None not) [none] [row] ]
   ] [
     if (per neq "line") [ raise sift_spec_error "opts.per must be 'source' or 'line'" ] [
       def step fn [[line:String acc:List] [List] [
@@ -652,28 +659,26 @@ def sift-run-family fn [[family:String src:String opts:Map] [Any] [
 # ----------------------------------------------------------------------------
 # Spec engine — validate a spec map (parser-as-data), run it over a source.
 # ----------------------------------------------------------------------------
-# validate a spec value into a normalized spec Map {family opts fn? detect? doc?}
-# or raise sift_spec_error. A Function value is sugar for {family:'fn' fn:v}.
+# validate a spec value into a normalized spec Map {family opts detect? doc?}
+# or raise sift_spec_error. (family:'fn' — the fn escape hatch of §16 — is
+# deferred to a follow-up: passing an AQL fn value as data across the module
+# boundary hits the strict-forward-barrier + fn-value auto-invoke rules.)
 def sift-spec-from fn [[v:Any] [Map] [
-  if (v is Function) [ sift-validate-fn v  {} set (quote family) fn/q set (quote fn) v set (quote opts) None ] [
-    if (v is Map) [ sift-spec-from-map v ] [
-      raise sift_spec_error "spec must be a map or a function" ]
-  ]
+  if (v is Map) [ def r (sift-spec-from-map v)  r ] [ raise sift_spec_error "spec must be a map" ]
 ]]
 
 def sift-spec-from-map fn [[m:Map] [Map] [
   def badkey fn [[k:String acc:Any] [Any] [ if ((sift-spec-keys get k) is None) [raise sift_spec_error (join "" ["unknown spec key: " k])] [acc] ]]
-  fold [badkey] (keys m) None
+  def _checked (fold [badkey] (keys m) None)
   def fam-v (m get "family")
   if (fam-v is None) [ raise sift_spec_error "spec is missing 'family'" ] [
     def family (convert String fam-v)
-    if ((family neq "fn") and (sift-known-family family not)) [ raise sift_spec_error (join "" ["unknown family: " family]) ] [
+    if (sift-known-family family not) [ raise sift_spec_error (join "" ["unknown family: " family]) ] [
       def opts0 (m get "opts")
       def opts1 (if (opts0 is None) [None] [ if (opts0 is Map) [opts0] [raise sift_spec_error "opts must be a map"] ])
       def opts2 (sift-fold-fields m opts1)
       def bse ({} set (quote family) (convert Atom family) set (quote opts) opts2)
-      def with-fn (if (family eq "fn") [sift-spec-add-fn m bse] [bse])
-      def with-detect (sift-read-detect m with-fn)
+      def with-detect (sift-read-detect m bse)
       def dv (m get "doc")
       if (dv is None) [with-detect] [with-detect set (quote doc) (convert String dv)]
     ]
@@ -688,17 +693,6 @@ def sift-fold-fields fn [[m:Map opts:Any] [Any] [
     if ((om get "fields") is None not) [ raise sift_spec_error "fields given both top-level and in opts" ]
       [ om set (quote fields) fv ]
   ]
-]]
-
-def sift-spec-add-fn fn [[m:Map bse:Map] [Map] [
-  def fn-v (m get "fn")
-  if (fn-v is None) [ raise sift_spec_error "family:'fn' spec is missing 'fn'" ]
-    [ sift-validate-fn fn-v  bse set (quote fn) fn-v ]
-]]
-
-# an fn parser must accept [source opts:Map …].
-def sift-validate-fn fn [[v:Any] [Any] [
-  if (v is Function) [None] [ raise sift_spec_error "fn: expected a function value" ]
 ]]
 
 def sift-read-detect fn [[m:Map spec:Map] [Map] [
@@ -734,11 +728,9 @@ def sift-merge-opts fn [[baked:Any overlay:Any] [Map] [
 def sift-run-spec fn [[spec:Map src:String overlay:Any] [Any] [
   def merged (sift-merge-opts spec.opts overlay)
   def family (convert String spec.family)
-  if (family eq "fn") [ sift-call-fn spec.fn src merged ]
-    [ sift-run-family family src merged ]
+  def r (sift-run-family family src merged)
+  r
 ]]
-
-def sift-call-fn fn [[f:Any src:String opts:Map] [Any] [ f src opts ]]
 
 # ----------------------------------------------------------------------------
 # Detection.
@@ -759,9 +751,12 @@ def sift-glob-match fn [[pattern:String s:String] [Boolean] [
 # The seven Sift words.
 # ----------------------------------------------------------------------------
 # validate a spec, returning [] or [{code detail}] (no raise) — the check word.
+def sift-issue-of fn [[e:Any] [List] [
+  def issue ({} set (quote code) e.code set (quote detail) e.message)
+  [issue]
+]]
 def sift-issues fn [[v:Any] [List] [
-  do [ sift-spec-from v  [] ]
-  error [ ([e:Any] => [ [ {} set (quote code) e.code set (quote detail) e.message ] ]) ]
+  do [ def _v (sift-spec-from v)  [] ] error [sift-issue-of]
 ]]
 
 # parse: kind name | inline spec | fn, with optional call-site opts.
@@ -773,17 +768,16 @@ def sift-w-parse fn [
 
 def sift-parse-do fn [[kind:Any overlay:Any src:String] [Any] [
   def spec (sift-resolve-kind kind)
-  sift-run-spec spec src overlay
+  def r (sift-run-spec spec src overlay)
+  r
 ]]
 
 # resolve Sift.parse's first arg to a normalized spec.
 def sift-resolve-kind fn [[v:Any] [Map] [
-  if (v is Map) [ sift-spec-from v ] [
-    if (v is Function) [ sift-spec-from v ] [
-      def name (convert String v)
-      def spec (sift-catalog get name)
-      if (spec is None) [ raise sift_unknown_kind (join "" ["no such kind: " name]) ] [spec]
-    ]
+  if (v is Map) [ def r (v sift-spec-from)  r ] [
+    def name (join "" [v])     # stringify a String/Atom kind name (join accepts
+    def spec (sift-catalog get name)   # Any, so the checker's widened v is fine)
+    if (spec is None) [ raise sift_unknown_kind (join "" ["no such kind: " name]) ] [spec]
   ]
 ]]
 
@@ -799,12 +793,11 @@ def sift-w-define fn [[name:Atom/q spec:Any] [] [
   def nm (convert String name)
   if ((nm mini re `^[A-Z]`).ok) [ raise sift_bad_name "define: parser name must be lowercase (capitalised names are types)" ] [
     if (sift-known-family nm) [ raise sift_kind_exists (join "" ["a name that collides with a family is rejected: " nm]) ] [
-      if (sift-catalog has nm) [ raise sift_kind_exists (join "" ["parser " nm " is already registered"]) ] [
-        def spec (sift-spec-from spec)
-        sift-check-detect nm spec
-        sift-catalog set (nm) (spec set (quote name) (convert Atom nm))
-        sift-install-detect nm spec
-        None
+      if (sift-catalog has (nm)) [ raise sift_kind_exists (join "" ["parser " nm " is already registered"]) ] [
+        def nspec (spec sift-spec-from)     # stack form: a fn value passes as data
+        def _c (sift-check-detect nm nspec)
+        def _s (sift-catalog set (nm) (nspec set (quote name) (convert Atom nm)))
+        def _i (sift-install-detect nm nspec)
       ]
     ]
   ]
@@ -816,19 +809,20 @@ def sift-check-detect fn [[name:String spec:Map] [Any] [
   def pstep fn [[p:String acc:Any] [Any] [
     def owner (sift-path-detect get p)
     if ((owner is None not) and (owner neq name)) [raise sift_detect_conflict (join "" ["path " p " already claimed by " owner])] [acc] ]]
-  if (paths is None) [None] [fold [pstep] paths None]
+  def _p (if (paths is None) [None] [fold [pstep] paths None])
   def cmds (spec get "cmd")
   def cstep fn [[c:String acc:Any] [Any] [
     def owner (sift-cmd-detect get c)
     if ((owner is None not) and (owner neq name)) [raise sift_detect_conflict (join "" ["command " c " already claimed by " owner])] [acc] ]]
-  if (cmds is None) [None] [fold [cstep] cmds None]
+  def _c (if (cmds is None) [None] [fold [cstep] cmds None])
+  None
 ]]
 
 def sift-install-detect fn [[name:String spec:Map] [Any] [
   def paths (spec get "path")
-  if (paths is None) [None] [each [ ([p:String] => [sift-path-detect set (p) name]) ] paths]
+  def _p (if (paths is None) [None] [each [ ([p:String] => [sift-path-detect set (p) name]) ] paths])
   def cmds (spec get "cmd")
-  if (cmds is None) [None] [each [ ([c:String] => [sift-cmd-detect set (c) name]) ] cmds]
+  def _c (if (cmds is None) [None] [each [ ([c:String] => [sift-cmd-detect set (c) name]) ] cmds])
   None
 ]]
 
@@ -853,16 +847,16 @@ def sift-spec-project fn [[spec:Map] [Map] [
 
 def sift-w-detect fn [[arg:Any] [Any] [
   if (arg is List) [
-    if ((size arg) eq 0) [None] [
-      def bse (sift-basename (convert String (arg get 0)))
+    if ((size arg) eq 0) [none] [
+      def bse (sift-basename (join "" [(arg get 0)]))
       def k (sift-cmd-detect get bse)
-      if (k is None) [None] [convert Atom k]
+      if (k is None) [none] [convert Atom k]
     ]
   ] [
-    def path (convert String arg)
+    def path (join "" [arg])
     def globs (keys sift-path-detect)
-    def step fn [[g:String acc:Any] [Any] [ if (acc is None not) [acc] [ if (sift-glob-match g path) [convert Atom (sift-path-detect get g)] [None] ] ]]
-    fold [step] globs None
+    def step fn [[g:String acc:Any] [Any] [ if (acc is None not) [acc] [ if (sift-glob-match g path) [convert Atom (sift-path-detect get g)] [none] ] ]]
+    fold [step] globs none
   ]
 ]]
 

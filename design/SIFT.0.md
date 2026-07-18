@@ -1,10 +1,11 @@
 # SIFT — `aql:sift`, semi-structured text parsing (the awk tier)
 
-**Status:** PROPOSAL (2026-07-16). Nothing here is landed. This note is a
-design record in the house style of `MICRON-FORMATS.0.md`: it distinguishes,
-throughout, what is **verified in the code today** from what is **proposed**.
-The executable spec, when this lands, will be `lang/spec/module-sift.tsv`;
-the canonical word docs will come from `aql describe`.
+**Status:** LANDED (2026-07-18) — implemented in AQL; see **§0 Landed state**
+for what shipped and the deltas from this record. Originally written as a
+PROPOSAL (2026-07-16) in the house style of `MICRON-FORMATS.0.md`,
+distinguishing throughout what was **verified in the code** from what was
+**proposed**. The executable spec is `lang/spec/module-sift.tsv`; the
+canonical word docs come from `aql describe`.
 
 Grounding was done against the tree at the time of writing:
 `lang/go/modules/parselang.go`, `lang/go/modules/register_common.go`,
@@ -19,6 +20,44 @@ and `design/EXTENSION-MODULES.10.md` / `design/STREAM-WORDS.0.md` /
 `aql:exec`, the capability-gated module that *produces* command output;
 this module *parses* it. The two compose (§13 example 7) but neither
 depends on the other.
+
+---
+
+## 0. Landed state (2026-07-18) — implemented in AQL
+
+`aql:sift` has landed as a **core module written in AQL**
+(`lang/go/modules/sift.aql`), embedded via `go:embed` and run as a module
+body by a ~90-line Go loader (`sift.go`) — the same pattern `aql:repl` and
+`aql:test` already use. The executable spec is
+[`lang/spec/module-sift.tsv`](../lang/spec/module-sift.tsv) (~85 rows, green
+in both TCO modes). The six families (§5), the coercion vocabulary (§5.4),
+name normalization (§5.3), the spec-map engine (§6), and the seven `Sift`
+words (§7) are all implemented. Deltas from this design record, all forced
+by the pure-AQL implementation choice:
+
+- **Surface is the `Sift.*` namespace only — not the global `parse <kind>`
+  macro (§7/§8).** An imported module's body runs in a *discarded
+  sub-registry*, so it cannot register a `parse <kind>` (or a
+  `read {fmt:…}`) the importing program would see — that state is
+  per-registry and only the Go loader holds the parent. The design assumed
+  parselang-kind registration throughout; the coherent pure-AQL form is
+  `Sift.parse kv "…"`, `Sift.define`, etc. This also settles the "parse-kind
+  only for v1" scope decision: the `read {fmt:'…'}` / `{fmt:'auto'}` bridge
+  (§8) and the eager preset catalog (§9) are **deferred**.
+- **Tables are a `List` of row `Map`s, not a schema-carrying `Table`.** Pure
+  AQL has no reachable `TableData` constructor; a list-of-maps is
+  behaviourally identical for every sift consumer (`size` / `dot` / `get`),
+  and cells are coerced to real typed values.
+- **`family:'fn'` (the §16 escape hatch) is deferred.** Passing an AQL fn
+  *value* as data across the module boundary collides with the
+  strict-forward-barrier and fn-value auto-invoke rules; the spec engine
+  rejects `family:'fn'` with `sift_spec_error` for now.
+- **`pattern` builds named groups on top of positional `mini re`** (the
+  group names are scanned out of the regex source and zipped onto the
+  positional submatches), since AQL's regex surface is positional-only.
+
+The rest of this note is the original PROPOSAL, preserved as the design
+rationale; read it in light of the deltas above.
 
 ---
 
