@@ -1053,6 +1053,40 @@ func (es *EmitState) fragResultStaysOnSim(seq int, refs map[int]int, fragResult,
 // referenced once — the program residual is not in seatable event*-literal*
 // order (an event sits above a literal), so every residual event becomes a
 // local and the reconciliation re-pushes the whole residual in exact order.
+// computeLeaverPrefix indexes each top-level event by its position and builds a
+// prefix-sum of VALUE-LEAVING events (a call / branch / loop / fallback residual
+// — one that leaves a value the next op sees on top). buried marking reads
+// leaverPrefix[j]-leaverPrefix[i+1] to test whether a leaver fired strictly
+// between a producer at i and a reference at j.
+func computeLeaverPrefix(events []emitEvent) (map[int]int, []int) {
+	producerIndex := make(map[int]int, len(events))
+	leaverPrefix := make([]int, len(events)+1)
+	for i := range events {
+		producerIndex[events[i].seq] = i
+		leaves := 0
+		switch events[i].kind {
+		case evCall, evBranch, evLoop, evCallUser, evFallback:
+			leaves = 1
+		}
+		leaverPrefix[i+1] = leaverPrefix[i] + leaves
+	}
+	return producerIndex, leaverPrefix
+}
+
+// collectStoreSourceSeqs returns the set of event seqs whose result is the
+// on-top SOURCE of a loop-carried store (evStore). Those are re-pushed natively
+// by lowerStore, so buried promotion must skip them (see the call site).
+func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
+	storeSrc := map[int]bool{}
+	all, _, _ := collectPromotableEvents(events)
+	for _, ae := range all {
+		if ae.kind == evStore && ae.store.src.kind == opEvent && ae.store.src.resIdx == 0 {
+			storeSrc[ae.store.src.idx] = true
+		}
+	}
+	return storeSrc
+}
+
 func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
@@ -1074,10 +1108,62 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		}
 		forceOrder = merged
 	}
+	// A producer consumed MID-BODY as an operand of a later event needs a frame
+	// slot when it is BURIED — an intervening event pushed a value on top of it,
+	// so the single-consume simulated stack cannot seat it as an arg. Two triggers:
+	//
+	//   - TOP-LEVEL (forEachOperand): buried iff a VALUE-LEAVING event (a call /
+	//     branch / loop / fallback residual — one that leaves a value the next op
+	//     sees on top) fired strictly between the producer and its reference,
+	//     tracked by producerIndex + leaverPrefix over the linear event stream. An
+	//     in-order single use (no intervening leaver — `def y (…) y mul 2`, where
+	//     the BIND_GLOBAL passes y through to the immediately-following mul) is NOT
+	//     buried and keeps its cheaper stack lowering.
+	//   - FRAGMENT (forEachFragmentOperand): a reference reaching UP OUT of a
+	//     branch / loop arm cannot see the parent stack at all, so any such use is
+	//     treated as buried (the arm's own linear order is not modelled here).
+	//
+	// A VARIADIC-returning producer is EXCLUDED from both: at runtime it may leave
+	// 0 values (an empty if-arm, `maybe = if … [x] []`), so a STORE_LOCAL would
+	// UNDERFLOW the VM — it must stay on the stack and refuse at layout if
+	// unseatable, a sound interpreter fallback (the mk -1 crash, aql-lang/aql#261).
+	// `buried` is taken from the operand scans only, before the residual `extra`
+	// refs fold in below, so a RESIDUAL-only producer (a `def r (loop …) r`
+	// bind-then-return tail) is never buried and its tail call survives
+	// markTailCalls (which needs the call's result to reach the RET directly).
+	producerIndex, leaverPrefix := computeLeaverPrefix(events)
+	// Buried promotion is scoped to the whole-program / module-load compile
+	// (storedGradualDepth == 0), where it is validated and the sift module's own
+	// fns compile. A DETACHED stamp (StampDetachedFn's isolated fork,
+	// storedGradualDepth > 0) recompiles a runtime-constructed fn value under the
+	// gradual-Any nesting modality; it keeps its established lowering rather than
+	// having this promotion newly seat a value there. A body the promotion would
+	// have seated instead declines (compileStoredFnUnit, or Finalize on a nested
+	// sub-unit) — a sound per-body interpreter fallback.
+	buryOK := es.storedGradualDepth == 0
+	buried := map[int]bool{}
+	// A producer whose result is the SOURCE of a loop-carried store (evStore)
+	// must NOT be buried-promoted: lowerStore re-pushes that source natively from
+	// the sim top (the loop-carried-store path — an event source that sits on the
+	// sim top when the store lowers), so promoting it to a frame local only
+	// diverts it to the operand path. Buried promotion exists for a value consumed
+	// as a CALL / BRANCH arg, not a store source (`for … [if … [def acc (fn …)]]`
+	// — the store source is the `fn` call, on top, natively re-pushed). storeSrc
+	// stays nil off the whole-program path (a nil-map read is false).
+	var storeSrc map[int]bool
+	if buryOK {
+		storeSrc = collectStoreSourceSeqs(events)
+	}
 	for i := range events {
 		forEachOperand(&events[i], func(op emitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
+				if es.eventInfo[op.idx].variadicResult {
+					return
+				}
+				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
+					buried[op.idx] = true
+				}
 			}
 		})
 		// A reference inside a body fragment crosses the fragment's scope floor:
@@ -1088,6 +1174,9 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 				fragRef[op.idx] = true
+				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
+					buried[op.idx] = true
+				}
 			}
 		})
 	}
@@ -1108,6 +1197,18 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			es.MarkUncompilable("for: side-effect loop result is consumed (Stage 3)")
 		}
 	}
+	// `buried` (computed above) is the promote trigger for a value consumed
+	// mid-body under an intervening event: a producer (user call OR branch
+	// merge) whose result an INTERVENING def pushed off the single-consume
+	// stack top, so the operand layout cannot seat it as an arg to a later
+	// call ("result operand not on top" / "fn args not adjacent"). Storing it
+	// in a frame slot re-pushes freely, exactly as the native value-def and
+	// refs>=2 triggers already do — the interpreter's def-evaluates-once
+	// semantics make it sound. It is taken from the OPERAND scan only, before
+	// the residual `extra` refs fold in below, so a RESIDUAL-only producer (a
+	// `def r (loop …) r` bind-then-return tail) is never buried and its tail
+	// call survives markTailCalls (which runs after this pass and requires the
+	// call's result to reach the RET directly).
 	for _, seq := range extra {
 		refs[seq]++
 	}
@@ -1159,7 +1260,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
 		// program-residual-only value the dead-drop must not touch.
 		if ev.kind == evBranch {
-			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, forceOrder, promoted, dead)
+			promoted, dead = es.planBranchPromotion(ev, unit, refs, buried, fragRef, fragInternal, forceOrder, promoted, dead)
 			continue
 		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
@@ -1225,7 +1326,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// unlike the uncounted harness/accumulation feed the single-use exclusion
 		// above guards — so the store never diverges. Gated on valueDef, keeping
 		// anonymous single-use harness feeds on the Stage-3 stack layout.
-		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 ||
+		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 || buried[ev.seq] ||
 			(es.dynEnv && es.eventInfo[ev.seq].valueDef) ||
 			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
 			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
@@ -1504,7 +1605,7 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 // is consumed by the first use (bucket's `bcount set bi ((bcount get bi) add
 // 1)`). Gated to a SINGLE-value merge so the store seats exactly one value —
 // a multi-value / variadic merge is refused at the store hook.
-func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
+func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, buried, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
 	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
 		if dead == nil {
 			dead = map[int]bool{}
@@ -1513,7 +1614,7 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 		return promoted, dead
 	}
 	if branchSingleValue(ev.br) && (es.eventInfo[ev.seq].valueDef || forceOrder[ev.seq]) &&
-		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
+		(refs[ev.seq] >= 2 || buried[ev.seq] || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
 		if promoted == nil {
 			promoted = map[int]int{}
 		}

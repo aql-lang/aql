@@ -96,9 +96,20 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 	}
 	es.storedFnRefs = append(es.storedFnRefs, ref)
 	prog, _, ok := es.Finalize(nil)
-	if !ok || prog == nil || ref.Prog == nil { //covergate:allow detached-stamp Finalize belt: after a successful probe-then-real compileStoredFnUnit es.Compilable is true, Finalize of an empty top-level frame with nil residual cannot refuse, and the just-appended ref cannot be poisoned (no def/undef runs between append and Finalize) — unreachable without a bytecode-level fault (§compiler)
-		// Finalize refused (the real compile marked the state uncompilable)
-		// or left the ref unstamped — the value stays plain and interprets.
+	if !ok || prog == nil || ref.Prog == nil {
+		// REACHABLE, sound per-body fallback. compileStoredFnUnit's probe/real
+		// passes only RECORD this body's events (and any nested fn as a
+		// sub-unit); they do not LOWER the recorded units. Finalize does — its
+		// per-unit lowering loop (emit.go, "fn <name>: " + reason) can refuse a
+		// SUB-UNIT that the outer body's compile accepted. A runtime-constructed
+		// fn whose body defines a nested fn that consumes a loop result (Stage-2
+		// boundary: "consumes loop results") is the concrete case — the outer
+		// compileStoredFnUnit returns ok, then Finalize declines on the inner
+		// unit. This is the same "the real pass CAN decline after a clean probe"
+		// shape compileStoredParamBody documents; the value stays plain and
+		// interprets, byte-identically. (Graduated from //covergate:allow: the
+		// variation sweep's module-body transform over a sift row reaches it —
+		// design/COVERAGE-ALLOWLIST.10.md graduation.)
 		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
 		return nil, false
 	}

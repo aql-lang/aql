@@ -327,7 +327,7 @@ def sift-kv-lines fn [[lines:List opts:Map sep:String] [Map] [
   if (((sift-repeat-set get repeat) is None)) [ raise sift_spec_error (join "" ["opts.repeat must be one of last/first/error/list, got " repeat]) ] [
     def loop fn [[items:List i:Integer acc:Map] [Map] [
       if (i gte (size items)) [acc] [
-        def line (items get i)
+        def line (convert String (items get i))
         def t (StringUtil.trim line)
         def nacc (if (t eq "") [acc] [
           def idx (StringUtil.indexof sep line)
@@ -530,8 +530,8 @@ def sift-columns-rows fn [[cols:List body:List types:Map label:String] [List] [
         if labeled [
           def toks (sift-fields line)
           def lbl (if ((size toks) gt 0) [sift-strip-colon (toks get 0)] [""])
-          def rest (if ((size toks) gt 0) [shed 1 toks] [toks])
           def row0 ({} set (label) lbl)
+          def rest (if ((size toks) gt 0) [shed 1 toks] [toks])
           push (sift-row-into row0 cols rest types) acc
         ] [
           push (sift-row cols (sift-split-n line (size cols)) types) acc
@@ -945,6 +945,15 @@ def sift-source fn [[v:Any] [String] [
   ]
 ]]
 
+# Register a kind into the catalog. The flex `set` is the fn RESIDUAL (not a
+# dead value-def): a dead-result DIRECT native mutation is dropped by the
+# compiler's dead-code elision (it cannot see the in-place side effect), so the
+# write must ride as a user-fn call's residual — the same shape sift-install-
+# detect already uses for the detection tables — to survive into compiled code.
+def sift-store-kind fn [[nm:String nspec:Map] [Any] [
+  sift-catalog set (nm) (nspec set (quote name) (convert Atom nm))
+]]
+
 def sift-w-define fn [[name:Atom/q spec:Any] [] [
   def nm (convert String name)
   if ((nm mini re `^[A-Z]` {}).ok) [ raise sift_bad_name "define: parser name must be lowercase (capitalised names are types)" ] [
@@ -952,7 +961,7 @@ def sift-w-define fn [[name:Atom/q spec:Any] [] [
       if (sift-catalog has (nm)) [ raise sift_kind_exists (join "" ["parser " nm " is already registered"]) ] [
         def nspec (spec sift-spec-from)     # stack form: a fn value passes as data
         def _c (sift-check-detect nm nspec)
-        def _s (sift-catalog set (nm) (nspec set (quote name) (convert Atom nm)))
+        def _s (sift-store-kind nm nspec)
         def _i (sift-install-detect nm nspec)
       ]
     ]
