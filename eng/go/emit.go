@@ -3267,13 +3267,9 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 			// is a CONCRETE const — not a carrier and not preceded by args — so it still
 			// compiles; only an unapplied dynamic apply refuses. (Lowering the trailing
 			// apply via OpCallDynamicTrailing in a closure body is the follow-on feature.)
-			if dynTrail == 0 && rec.closure {
-				for i, v := range bodyStk {
-					if isFnTypedCarrier(v) || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
-						es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
-						return
-					}
-				}
+			if dynTrail == 0 && rec.closure && closureResidualHasUnappliedFn(bodyStk) {
+				es.MarkUncompilable("closure " + name + ": unapplied fn-value in body residual (dynamic apply not lowered)")
+				return
 			}
 			// A TOP-TAKING closure's driving handler reads only the top of the body
 			// residual (each / fold / scan / filter — CallableSpec.BodyResultTop), so
@@ -7665,6 +7661,33 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []Value) (int, bool) {
 func isFnTypedCarrier(v Value) bool {
 	return v.Carrier && v.Parent != nil &&
 		(v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+}
+
+// closureResidualHasUnappliedFn reports whether a closure body's residual
+// leaves an fn value the driving handler (BodyResultTop / BodyOutResidual)
+// would map UNAPPLIED — the off-corpus comparator-each MISCOMPILE (`[1 2]
+// each [(x x comp)]` → interp [0,0] vs compiled [fn,fn]). Three shapes
+// refuse, mirroring resolveDynamicApply's main-residual fn-carrier /
+// fn-precedes-args refusals:
+//   - a Function-TYPED carrier anywhere (isFnTypedCarrier);
+//   - a DYNAMIC value whose static type does not EXCLUDE Function (an
+//     Any-typed member read — `r.string charset 8`, where `r` is a Map param
+//     and the member is a fn only at runtime) that PRECEDES args: it
+//     auto-applies in the interpreter but this unit leaves it unapplied
+//     (the `r.<gen> args` → trailing-arg check-prop miscompile), which
+//     isFnTypedCarrier misses because Any does not conform DOWN to Function;
+//   - a concrete fn value not in the sole position (isFnValueresidual).
+//
+// A SOLE inert fn-reference body (`each [cmp/r]`) is a concrete const — not a
+// carrier, not preceded by args — so it still compiles.
+func closureResidualHasUnappliedFn(bodyStk []Value) bool {
+	for i, v := range bodyStk {
+		dynMaybeFn := v.Dynamic && (sigTypeMatches(v, TFunction) || sigTypeMatches(v, TFnDef)) && i+1 < len(bodyStk)
+		if isFnTypedCarrier(v) || dynMaybeFn || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
+			return true
+		}
+	}
+	return false
 }
 
 // isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
