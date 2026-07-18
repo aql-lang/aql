@@ -22,7 +22,7 @@ import (
 // move secrets *out of* an OS-keychain or 1Password vault to a
 // different OS.
 //
-// On-disk envelope (self-describing, per ADR-004):
+// On-disk envelope (self-describing, per ADR-009):
 //
 //	"AQLX" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag
 //
