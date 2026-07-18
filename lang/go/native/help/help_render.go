@@ -24,6 +24,7 @@ var moduleCatalog = []ModuleInfo{
 	{"time-util", "Dates, durations, timezones, clocks, timers, and intervals."},
 	{"matrix-util", "Tensors, matrices, and vectors with linear algebra."},
 	{"bin-util", "Bitwise and byte-buffer helpers: masks, rotates, hashes."},
+	{"tui", "Terminal UIs: raw-terminal drawing and input events behind a host-injected backend."},
 	{"type-util", "Type introspection and construction utilities."},
 	{"vm", "Low-level virtual-machine primitives."},
 	{"report", "Tabular reporting and formatting."},

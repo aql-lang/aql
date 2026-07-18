@@ -13,6 +13,14 @@ import (
 // sub-registry. The big bag of helpers (loadFileModule,
 // installExports, resolveBareModule, etc.) lives below.
 
+// ModuleInheritedCaps lists host-capability slots that module
+// sub-registries inherit by POINTER from their importing parent. A
+// host seam (RegisterHostX) appends its key via init() so file/inline
+// module bodies resolve the same host backends as the top level; the
+// snapshot is taken at import time, so such seams must be registered
+// BEFORE the importing program runs (embedders register at startup).
+var ModuleInheritedCaps []string
+
 // RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
 func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
@@ -60,6 +68,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if ok {
 		if err := modReg.Capabilities.Set(CapMemFileOps, mem); err != nil {
 			return ModuleDesc{}, err
+		}
+	}
+	// Host seams that opted in (ModuleInheritedCaps) ride into the module
+	// sub-registry by POINTER, so a module body resolves the same host
+	// backends as the top level (e.g. the aql:tui terminal backend).
+	for _, capName := range ModuleInheritedCaps {
+		if v, capOK, capErr := parent.Capabilities.Get(capName); capErr == nil && capOK {
+			_ = modReg.Capabilities.Set(capName, v)
 		}
 	}
 	// Overlay the parent's host-registered formats and extension mappings
