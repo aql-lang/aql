@@ -167,7 +167,10 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// in the completion plan).
 	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:  {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding", failsWith: "residual shape beyond Stage 1"},
 	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`: {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input", failsWith: "residual shape beyond Stage 1"},
-	docMod + `do [M 3] error [dot code]`:                                       {why: "plan Phase 5 (L-DO part 2): a module-export VALUE in the variadic region is not event-produced, so the mark-window probe declines and the residual materialise arm refuses", failsWith: "residual value not statically materialisable"},
+	// GRADUATED 2026-07-17 (§9.1): the `do [M 3] error [dot code]` row
+	// compiles — an identity-less dyn-body out (the module-export instance)
+	// now mints a fresh ID at the record, restoring its tape placement and
+	// event linkage, so the mark-window island owns the region as usual.
 	// GRADUATED 2026-07-14 (the mark-window island, L-DO part 2b): the
 	// error-over-the-variadic-region rows — do [(M.boom 5) "x"] / the [Any]
 	// user-fn twin / the branch-arm nesting / the StructUtil.parse chained

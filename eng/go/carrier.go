@@ -1652,7 +1652,15 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	seen := make(map[string]bool, len(outs))
 	for i := range outs {
 		_, prior := es.producedBy[outs[i].ID]
-		if (prior || seen[outs[i].ID]) && !argIDs[outs[i].ID] {
+		// An IDENTITY-LESS registry-instance out (a module-export instance
+		// minted outside any check pass — `do [M 3]`, §9.1) gets a fresh ID
+		// too: without one the engine's tape tracking cannot place it (the
+		// region inverted around it) and producedBy cannot link it to this
+		// event. NARROW to ExtensionPayload instances — scalar outs elided
+		// by the mode-gated ID discipline must STAY elided (a blanket mint
+		// miscompiled the each-body value-def promotion).
+		_, isExt := outs[i].Data.(ExtensionPayload)
+		if (outs[i].ID == "" && isExt) || ((prior || seen[outs[i].ID]) && !argIDs[outs[i].ID]) {
 			outs[i].ID = GenerateID(IDPrefixForType(outs[i].Parent))
 		}
 		seen[outs[i].ID] = true

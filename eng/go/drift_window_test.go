@@ -80,3 +80,28 @@ func TestDriftWindowUnresolvableOperandDeclines(t *testing.T) {
 		t.Error("an unresolvable window operand must decline the window")
 	}
 }
+
+// residualReadStable's no-name arm: a value never noted as a def read (or a
+// reg-less state) is never a stable residual re-push candidate.
+func TestResidualReadStableNoName(t *testing.T) {
+	if (&EmitState{}).residualReadStable(Value{}) {
+		t.Error("a value with no def-read note must not be stable")
+	}
+}
+
+// RecordSpliceDyn's decline arms (§9.2b): an inactive state and an
+// unresolvable payload both leave the refusal standing.
+func TestRecordSpliceDynDeclines(t *testing.T) {
+	if (&EmitState{}).RecordSpliceDyn(Value{}, SrcPos{}) {
+		t.Error("an inactive EmitState must decline")
+	}
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es := r.Check.Emit.(*EmitState)
+	es.bindRegistry(r)
+	orphan := NewCarrier(TList) // no event, no local, no const home
+	if es.RecordSpliceDyn(orphan, SrcPos{}) {
+		t.Error("an unresolvable payload must decline")
+	}
+}

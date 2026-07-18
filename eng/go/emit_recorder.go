@@ -102,6 +102,7 @@ type EmitRecorder interface {
 	RecordBranch(b BranchRecord)
 	RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos)
 	SplitLoopRegionBind(name string, v Value) (Value, bool)
+	RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool
 	BeginLoopCarried()
 	EndLoopCarried()
 	NoteLoopCarried(name string, joined, pre Value)
@@ -210,6 +211,8 @@ func (inactiveEmit) ConsumeLoopArm() bool                            { return fa
 func (inactiveEmit) TakeFragment() *EmitFragment                     { return nil }
 func (inactiveEmit) RecordBranch(BranchRecord)                       {}
 func (inactiveEmit) SplitLoopRegionBind(string, Value) (Value, bool) { return Value{}, false }
+
+func (inactiveEmit) RecordInterpXml(XmlTmpl, []Value, Value, SrcPos) bool { return false }
 
 func (inactiveEmit) RecordLoop(Value, Value, Value, *EmitFragment, []Value, string, Value, int, SrcPos) {
 }

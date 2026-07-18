@@ -1431,6 +1431,32 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if stack, err = vmInterp(p, stack, in.Arg, curDebug, pc); err != nil {
 				return nil, err
 			}
+		case OpSpliceDyn:
+			// Spread a runtime splice payload (§9.2b): a DATA payload
+			// contributes spliceExpand's values verbatim; a code-bearing or
+			// fn-valued one defers — the marker re-step dispatches against
+			// the live stack, which only the interpreter owns.
+			if len(stack) < 1 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+				return nil, vmErrAt(curDebug, pc, "SPLICE_DYN underflow")
+			}
+			payload := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			elems := spliceExpand(payload)
+			for _, el := range elems {
+				if IsWord(el) || IsParenExpr(el) || IsReach(el) || IsInterpString(el) || IsSplice(el) ||
+					IsForward(el) || IsOpenParen(el) || IsCloseParen(el) || isAppliableFn(el) {
+					return nil, vmDefer(vc.r, curDebug, pc, "vm:splice-active-payload",
+						"splice of a code-bearing payload; deferring to the interpreter")
+				}
+			}
+			stack = append(stack, elems...)
+		case OpInterpXml:
+			// Assemble an interpolated XML element from its computed holes
+			// (`<p>${x}</p>`, §9.2c) — the tree twin of OpInterp.
+			var err error
+			if stack, err = vmInterpXml(p, stack, in.Arg, curDebug, pc); err != nil {
+				return nil, err
+			}
 		case OpTrap:
 			// A check-mode-suppressed runtime error compiled in place: raise the
 			// byte-identical AQL error (the interpreter errors at this same point),
@@ -2223,6 +2249,24 @@ func vmInterp(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]V
 		}
 	}
 	return append(stack[:len(stack)-n], NewString(sb.String())), nil
+}
+
+// vmInterpXml executes OpInterpXml: pop the template's holes (deepest = hole
+// 0, the traversal order buildXmlFromTmpl evaluates in) and rebuild the
+// element via rebuildXmlFromTmpl — byte-identical to the interpreter's build
+// over the same hole values.
+func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]Value, error) {
+	spec := &p.XmlInterps[arg]
+	n := spec.NHoles
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, "INTERP_XML stack underflow")
+	}
+	holes := stack[len(stack)-n:]
+	out, used := rebuildXmlFromTmpl(spec.Tmpl, holes)
+	if used != n { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(debug, pc, "INTERP_XML hole count mismatch")
+	}
+	return append(stack[:len(stack)-n], out), nil
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

@@ -164,6 +164,10 @@ type eventFlags struct {
 	// type (which mirrors the LAST value — a heterogeneous body like
 	// `for 2 [7 "x"]` binds Integer 7 while the carrier renders String).
 	firstElemType *Type
+	// spliceDyn marks an OpSpliceDyn event (§9.2b): its payload's provenance
+	// was reassigned to this event, so a re-read of the payload after the
+	// spread must decline (resolveResidualOperands).
+	spliceDyn bool
 }
 
 type emitCall struct {
@@ -184,7 +188,9 @@ type emitCall struct {
 	mapImpl         bool // the source map's Implicit flag
 	interp          bool // assemble len(ops) hole operands into a template string (OpInterp) per interpSegs
 	interpSegs      []InterpSeg
-	diverges        bool // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
+	xmlTmpl         *XmlTmpl // assemble len(ops) hole operands into an XML element (OpInterpXml, §9.2c)
+	spliceDyn       bool     // spread the ONE laid-out payload operand at run time (OpSpliceDyn, §9.2b)
+	diverges        bool     // the word ALWAYS raises (CompileDiverges, e.g. raise): control never returns past this call
 	// typedBind, when non-nil, marks this event as a typed value-def's runtime
 	// validate/reparent step (OpBindTyped over the single operand) instead of a
 	// word dispatch — recorded by RecordTypedBind from the def handler's
@@ -511,6 +517,9 @@ type EmitState struct {
 	// loopSplitBinds names the S5 first-value loop binds, so dynScopeRescue
 	// admits their top-level reads.
 	loopSplitBinds map[string]bool
+	// defReadGens snapshots each def-read's binding generation
+	// (residualReadStable — the end-of-program re-push soundness gate).
+	defReadGens map[string]int64
 
 	// storedGradualDepth marks a DETACHED stamp compile (StampDetachedFn
 	// sets it on the fork's private EmitState). While non-zero,
@@ -1734,11 +1743,19 @@ func fnValueInputs(params []FnParam) (inputs []Value, names []string) {
 }
 
 func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool) {
-	if es == nil || es.reg == nil || v.Carrier || v.Dynamic {
+	if es == nil || es.reg == nil || v.Carrier || v.Dynamic || v.Quoted {
+		// A QUOTED fn value is DATA the interpreter keeps unapplied; lowering
+		// it to an opClosure drops the Quoted flag, so the VM would
+		// auto-apply it (`[quote (fn …)]` returned then applied — PR #279
+		// review: compiled [3] vs interp [fn (Integer) 2]). Keep it inert.
 		return emitOperand{}, false
 	}
 	fd, ok := v.Data.(FnDefInfo)
-	if !ok || !fd.Anonymous {
+	// An ANONYMOUS lambda (=>/afn) or a NAMELESS verbose `fn` construction
+	// (REFUSAL-CLOSURE §9.2d — the curried factory's inner fn) both model as
+	// returned closures; a NAMED fn value carries registry dispatch and
+	// recursion semantics this model does not own, so it declines.
+	if !ok || (!fd.Anonymous && fd.Name != "") {
 		return emitOperand{}, false
 	}
 	// Resolve the lambda's captures in the ENCLOSING (factory body) scope, the
@@ -4359,6 +4376,19 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// way. A body that refuses to compile leaves the const un-stamped and the
 		// handler falls back to the interpreter, per-body and sound.
 		if sig.CompileEffect.Has(CompileStoresFn) {
+			// A CAPTURING handler at a STRICT store slot (service/add — the
+			// native validates + dispatches the handler as an FnDefInfo)
+			// cannot stamp and would fall through to a bare OpPushClosure
+			// the native rejects: refuse so the interpreter owns it (the
+			// factory-body service-handler miscompile §9.2e's paren-apply
+			// unmasked). A non-strict store word (Patrun) invokes a stored
+			// closure fine and is untouched.
+			if sig.CompileEffect.Has(CompileFnHandlerStrict) {
+				if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) > 0 {
+					es.MarkUncompilable("capturing handler stored at " + word + " (validated as a function value)")
+					return nil, false
+				}
+			}
 			if fd, isFn := a.Data.(FnDefInfo); isFn && IsConcrete(a) && len(fd.Captured) == 0 {
 				// EVERY stampable own sig gets its own unit + ref
 				// (REFUSAL-CLOSURE §7b): the callback seam dispatches via
@@ -4765,6 +4795,29 @@ func (es *EmitState) NoteDefRead(id, name string) {
 		es.defReads = map[string]string{}
 	}
 	es.defReads[id] = name
+	// Snapshot the binding's generation at the read: a RESIDUAL re-push of
+	// this read (resolveResidualOperands) executes at PROGRAM END, so it is
+	// sound only while no later rebind moved the binding (residualReadStable).
+	if es.reg != nil {
+		if es.defReadGens == nil {
+			es.defReadGens = map[string]int64{}
+		}
+		es.defReadGens[id] = es.reg.Defs.Gen(name)
+	}
+}
+
+// residualReadStable reports whether a def-read value's binding is UNCHANGED
+// since the read (same DefTable generation): the end-of-program
+// OpLookupDynScope re-push then resolves the same value the read saw. A
+// consumer-position rescue needs no such gate (its op executes at the read's
+// own position); only the residual disposition calls this.
+func (es *EmitState) residualReadStable(v Value) bool {
+	name := es.defReads[v.ID]
+	if name == "" || es.reg == nil {
+		return false
+	}
+	gen, ok := es.defReadGens[v.ID]
+	return ok && es.reg.Defs.Gen(name) == gen
 }
 
 // RecordDynBind records a value-def site (name + the bound value's operand)
@@ -4850,6 +4903,9 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 		// Top level: only an S5 first-value loop bind reads through the
 		// registry here (its value has no event/local home by construction;
 		// the splice bind installed the runtime binding before any read).
+		// Widening this arm to every def-read name poisons dynScopeNames
+		// for defs whose bind then cannot lower (probe-pinned: the quoted
+		// interp-body def refused "unknown provenance").
 		if es.loopSplitBinds[name] {
 			if es.dynScopeNames == nil {
 				es.dynScopeNames = map[string]bool{}
@@ -5394,8 +5450,22 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 // loop — no top-frame restriction. Returns false, leaving es untouched (the
 // caller then marks the program uncompilable and it falls back), when a hole has
 // no compiled home or did not produce exactly one value.
+// interpHoleStringifiesUnstably reports whether any interpolation hole is a
+// FUNCTION value: compiled code produces a ClosurePayload whose ValToString
+// renders VM internals (`Function({1 [1] 0})`), while the interpreter renders
+// the source-level `fn (Integer)` — so a fn-valued hole must decline (fall
+// back) rather than expose the VM representation (PR #279 review).
+func interpHoleStringifiesUnstably(holeVals []Value) bool {
+	for _, h := range holeVals {
+		if h.Parent != nil && (h.Parent.ConformsTo(TFunction) || h.Parent.ConformsTo(TFnDef)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 {
+	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
@@ -5423,6 +5493,70 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 		interp: true, interpSegs: segs,
 	}})
 	es.setProduced(out, seq)
+	return true
+}
+
+// RecordInterpXml is RecordInterp's XML twin (REFUSAL-CLOSURE §9.2c): the
+// template skeleton rides in Program.XmlInterps and OpInterpXml pops the
+// hole VALUES in traversal order (buildXmlFromTmpl's attrs-then-children
+// depth-first walk — the same order the hole dispatches recorded their
+// events). Returns false, leaving es untouched, when a hole has no
+// compiled home — the caller then refuses and the program falls back.
+func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool {
+	if !es.active() || len(holeVals) == 0 || interpHoleStringifiesUnstably(holeVals) {
+		return false
+	}
+	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
+	// it deepest-first as hole 0, so reverse exactly like RecordInterp.
+	ops := make([]emitOperand, len(holeVals))
+	for k := range holeVals {
+		op, ok := es.resolveOperand(holeVals[k])
+		if !ok {
+			return false
+		}
+		ops[len(holeVals)-1-k] = op
+	}
+	es.SiteCounts[SiteMono]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "__interpxml", ops: ops, nout: 1, pos: pos,
+		xmlTmpl: &tmpl,
+	}})
+	es.setProduced(out, seq)
+	return true
+}
+
+// RecordSpliceDyn records a splice marker's spread over a COMPUTED payload
+// (REFUSAL-CLOSURE §9.2b): the payload rides as the one operand, the VM
+// spreads or defers (OpSpliceDyn), and the result is VARIADIC — the runtime
+// count is the payload's own — so only the program residual absorbs it. The
+// The spread result gets a FRESH carrier (distinct provenance) so it never
+// clobbers the payload def's own producer.
+func (es *EmitState) RecordSpliceDyn(payload Value, pos SrcPos) bool {
+	if !es.active() {
+		return false
+	}
+	if len(es.units) != 1 || (es.reg != nil && es.reg.Check.NestedBodyDepth != 0) {
+		// TOP-FRAME straight-line only: inside a closure unit or a
+		// branch/loop body analysis the variadic spread has no residual
+		// home (probe-pinned: `do [word xs]` closure-compiled the spread
+		// as [7 [7 8]] vs the interpreter's [7 8]) — declining leaves the
+		// dyn-body backstop / the refusal, both parity-faithful.
+		return false
+	}
+	op, ok := es.resolveOperand(payload)
+	if !ok {
+		return false
+	}
+	es.SiteCounts[SiteDynamic]++
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+		word: "__splicedyn", ops: []emitOperand{op}, nout: 1, pos: pos,
+		spliceDyn: true,
+	}})
+	f := es.eventInfo[seq]
+	f.variadicResult = true
+	f.spliceDyn = true
+	es.eventInfo[seq] = f
+	es.setProduced(payload, seq)
 	return true
 }
 
@@ -6805,6 +6939,21 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 // loop result is allowed here (the program residual may absorb it), unlike a
 // fn body. A non-empty reason refuses the program.
 func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]emitOperand, string) {
+	// A dynamic splice (§9.2b) reassigns its payload's provenance to the
+	// spread event, so a re-read of the payload def AFTER the splice
+	// (`def xs (range 1 3) def d word xs d xs`) surfaces the SAME payload
+	// value twice in the residual — the spread and the re-read. The re-read
+	// would resolve to the variadic spread instead of the original list, so
+	// decline (PR #279 review): the interpreter owns the re-read shape.
+	seenSplice := map[string]bool{}
+	for _, rv := range residual {
+		if pr, ok := es.producedBy[rv.ID]; ok && es.eventInfo[pr.seq].spliceDyn {
+			if seenSplice[rv.ID] {
+				return nil, "splice payload re-read after the spread (Stage 2)"
+			}
+			seenSplice[rv.ID] = true
+		}
+	}
 	ops := make([]emitOperand, 0, len(residual))
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {
@@ -6836,7 +6985,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 			// An S5 first-value loop bind's READ has no event/local home by
 			// construction — it re-resolves the live registry binding the
 			// splice bind installed (dynScopeRescue's top-level arm).
-			if op, okDyn := es.dynScopeRescue(rv); okDyn {
+			if op, okDyn := es.dynScopeRescue(rv); okDyn && es.residualReadStable(rv) {
 				ops = append(ops, op)
 				continue
 			}

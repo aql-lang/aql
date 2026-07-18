@@ -41,6 +41,9 @@ func TestCatchVariadicLatch(t *testing.T) {
 	}
 	// The inactive recorder accepts the call as a no-op.
 	theInactiveEmit.SetCatchVariadic(true)
+	if theInactiveEmit.RecordInterpXml(XmlTmpl{}, nil, Value{}, SrcPos{}) {
+		t.Fatal("the inactive recorder must decline RecordInterpXml")
+	}
 }
 
 // The GENERIC RecordCall fall-through consumes the latch too (the closure

@@ -83,10 +83,9 @@ func TestMarkWindowDoCatchCompiles(t *testing.T) {
 
 // TestMarkWindowDeclinesKeepParity — the shapes the window rightly declines:
 // a PROMOTED def read (`def msg (…) msg` — the def popped the result to a
-// frame slot, so it is not live in the window) and a module-export VALUE in
-// the region (not event-produced, so the residual materialise arm refuses).
-// Their ledger rows stay in frontier-do-catch.tsv; this pin fires when a
-// later widening graduates them.
+// frame slot, so it is not live in the window). Its ledger row stays in
+// frontier-do-catch.tsv; this pin fires when a later widening graduates it.
+// (The module-export-in-region sibling graduated 2026-07-17 — §9.1.)
 func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
 	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
@@ -95,9 +94,11 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	mwRefusedWithParity(t,
 		mwDocMod+`def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
 		"residual shape beyond Stage 1 (call result above a literal)")
-	mwRefusedWithParity(t,
-		mwDocMod+`do [M 3] error [dot code]`,
-		"residual value not statically materialisable")
+	// GRADUATED 2026-07-17 (§9.1): the module-export-in-region row compiles —
+	// the identity-less ExtensionPayload out mints an ID at the dyn-body
+	// record, restoring its event linkage, so the mark window owns the
+	// region. Pinned by its frontier spec row (frontier-do-catch.tsv:18), whose
+	// ledger entry graduated.
 	// The 0-arg-lambda wrap: the do-catch runs inside a FN UNIT, whose finish
 	// seats its residual through the RET reconciliation — the program-level
 	// window arms on the variadic CALL event but the lowered stack is the

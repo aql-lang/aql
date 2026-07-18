@@ -122,6 +122,7 @@ func TestSeam7RunUnderflowArms(t *testing.T) {
 		{"make-list", &Program{Code: []Instr{{Op: OpMakeList, Arg: 2}}}, "MAKE_LIST stack underflow"},
 		{"make-map", &Program{Code: []Instr{{Op: OpMakeMap, Arg: 0}}, MakeMaps: []MakeMapSpec{{Keys: []string{"a"}}}}, "MAKE_MAP stack underflow"},
 		{"interp", &Program{Code: []Instr{{Op: OpInterp, Arg: 0}}, Interps: []InterpSpec{{NHoles: 1, Segs: []InterpSeg{{Hole: true}}}}}, "INTERP stack underflow"},
+		{"interp-xml", &Program{Code: []Instr{{Op: OpInterpXml, Arg: 0}}, XmlInterps: []XmlInterpSpec{{NHoles: 1, Tmpl: XmlTmpl{Tag: "p"}}}}, "INTERP_XML stack underflow"},
 		{"push-closure", &Program{Code: []Instr{{Op: OpPushClosure, Arg: 0}}, Fns: []CompiledFn{{Name: "c", NCaptures: 2}}}, "PUSH_CLOSURE capture underflow"},
 		{"for-setup", &Program{Code: []Instr{{Op: OpForSetup, Arg: 0}}}, "FOR_SETUP underflow"},
 		{"for-next", &Program{Code: []Instr{{Op: OpForNext, Arg: 0}}}, "FOR_NEXT without a loop"},
