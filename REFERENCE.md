@@ -2135,7 +2135,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events), `mount`/`unmount` (AQL-implemented filesystems), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2173,7 +2173,19 @@ modules keep plain names.
 > a rune outside ISO 8859-1 refuses to encode; there is no BOM sniffing and
 > an unknown enc is a hard error). `copy`/`move` take `{overwrite:false}` to
 > refuse an existing destination (a best-effort pre-check, like Java's
-> `StandardCopyOption`, not an atomic guarantee).
+> `StandardCopyOption`, not an atomic guarantee). `write {atomic:true}`
+> stages the bytes in a temp file in the target's own directory and renames
+> it into place, so a concurrent reader never observes a half-written file
+> (it cannot combine with a positioned `{offset}`).
+>
+> **Temp files & disk info.** `IO.temp {dir, in, prefix, suffix}` creates a
+> unique file (a directory with `{dir:true}`) under `{in:Pathon}` (the
+> system temp root by default), named `{prefix}…{suffix}`, and returns its
+> Pathon — the file is `0600`, the directory `0700`, and an absent `{in}`
+> errors (the `os.CreateTemp` contract). `IO.space p` reports the volume
+> holding a path as `{total free available bsize type}` (byte counts, the
+> block size, and a filesystem-type name — the in-memory FS reports a
+> synthetic 1 GiB `mem` volume).
 >
 > **Watching.** `IO.watch p [body]` subscribes to change events on a
 > Pathon — a file, or a directory's direct children (non-recursive,

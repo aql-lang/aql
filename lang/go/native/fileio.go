@@ -132,6 +132,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool, 
 		delete(raw, "fmt")
 		delete(raw, "mode")
 		delete(raw, "nl")
+		delete(raw, "atomic")
 		if len(raw) > 0 {
 			parserOpts = raw
 		}
@@ -282,7 +283,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 	return result, nil
 }
 
-func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value, error) {
+func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic bool) ([]Value, error) {
 	content = applyNL(content, nl)
 
 	// Handle stdout/stderr special paths.
@@ -324,9 +325,39 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 	// or truncate the target before failing, so even the error path may
 	// already have mutated the filesystem.
 	r.NoteEffect()
+	if atomic {
+		if err := writeAtomic(r, path, data); err != nil {
+			return nil, fmt.Errorf("write: %w", err)
+		}
+		return []Value{NewString(path)}, nil
+	}
 	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
 
 	return []Value{NewString(path)}, nil
+}
+
+// writeAtomic is the {atomic:true} write path: the bytes land in a temp
+// file IN THE TARGET'S DIRECTORY (rename atomicity holds only within one
+// filesystem — the global tmp root may be a different mount), then a
+// rename replaces the target in one step. A failure removes the temp
+// (best-effort) rather than stranding it — in particular a backend
+// without rename (a minimal mount) refuses CLEANLY.
+func writeAtomic(r *Registry, path string, data []byte) error {
+	ops := EffectiveFileOps(r)
+	dir := filepath.Dir(path)
+	tmp, err := ops.TempFile(dir, ".aql-atomic-*")
+	if err != nil {
+		return fmt.Errorf("atomic: %w", err)
+	}
+	if err := ops.WriteFile(tmp, data, 0o644); err != nil {
+		_ = ops.Remove(tmp, false)
+		return fmt.Errorf("atomic: %w", err)
+	}
+	if err := ops.Rename(tmp, path); err != nil {
+		_ = ops.Remove(tmp, false)
+		return fmt.Errorf("atomic: %w", err)
+	}
+	return nil
 }

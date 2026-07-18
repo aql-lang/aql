@@ -83,6 +83,18 @@ func (notInstalledFileOps) XattrRemove(path, name string) error {
 	return capabilityNotInstalled("fileops", "xattr-remove", path)
 }
 
+func (notInstalledFileOps) TempFile(dir, pattern string) (string, error) {
+	return "", capabilityNotInstalled("fileops", "temp", dir)
+}
+
+func (notInstalledFileOps) TempDir(dir, pattern string) (string, error) {
+	return "", capabilityNotInstalled("fileops", "temp", dir)
+}
+
+func (notInstalledFileOps) Statfs(path string) (capabilities.FsInfo, error) {
+	return capabilities.FsInfo{}, capabilityNotInstalled("fileops", "statfs", path)
+}
+
 func (notInstalledFileOps) Truncate(path string, size int64) error {
 	return capabilityNotInstalled("fileops", "write", path)
 }

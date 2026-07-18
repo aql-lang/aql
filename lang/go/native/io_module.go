@@ -217,6 +217,27 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 			},
 		},
 		{
+			// temp creates a unique temp file (or directory with {dir:true}),
+			// optionally inside {in:Pathon} named {prefix}…{suffix}, and
+			// returns its Pathon. The options map is REQUIRED ({} for the
+			// defaults): a 0-arg sig on a module word would fire eagerly on
+			// the dot-access value path before forward collection, stranding
+			// the options (the execFnDefLiteral data-vs-call gate).
+			Name: "temp",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(tempOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// space reports the volume holding a Pathon: {total free
+			// available bsize type}. Numbers are backend-defined (the mem
+			// filesystem reports a synthetic volume).
+			Name: "space",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
 			// touch creates a Pathon if absent and applies metadata options
 			// {mode, mtime, atime, size} (folding chmod/utimes/truncate).
 			// Returns the path.

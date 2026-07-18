@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -51,6 +52,8 @@ var errMountUnsupported = errors.New("operation not supported by the mounted fil
 type aqlFileOps struct {
 	r        *Registry
 	handlers *OrderedMap
+	// tempSeq numbers the temp-emulation tokens (deterministic, like mem).
+	tempSeq int
 }
 
 // call dispatches one operation to its handler, returning the LAST value
@@ -326,6 +329,91 @@ func (a *aqlFileOps) XattrList(path string) ([]string, error) {
 func (a *aqlFileOps) XattrRemove(path, name string) error {
 	_, err := a.call("xattr-remove", []Value{NewPathonFromString(path), NewString(name)})
 	return err
+}
+
+// TempFile bridges to an optional `temp ([dir pattern] → Pathon|String)`
+// handler; absent that, a DEFAULT EMULATION generates a counter name and
+// routes through the bridged write — mount's minimum contract already
+// covers file creation, so temp needs no mandatory handler.
+func (a *aqlFileOps) TempFile(dir, pattern string) (string, error) {
+	if _, ok := a.handlers.Get("temp"); ok {
+		res, err := a.call("temp", []Value{NewPathonFromString(dir), NewString(pattern)})
+		if err != nil {
+			return "", err
+		}
+		return extractPath(res), nil
+	}
+	path := a.tempEmulatedName(dir, pattern)
+	if err := a.WriteFile(path, []byte{}, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// TempDir is the directory twin: the optional handler, else the counter
+// name routed through the bridged mkdir.
+func (a *aqlFileOps) TempDir(dir, pattern string) (string, error) {
+	if _, ok := a.handlers.Get("temp"); ok {
+		res, err := a.call("temp", []Value{NewPathonFromString(dir), NewString(pattern), NewBoolean(true)})
+		if err != nil {
+			return "", err
+		}
+		return extractPath(res), nil
+	}
+	path := a.tempEmulatedName(dir, pattern)
+	if err := a.MkdirAll(path, 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// tempEmulatedName builds the emulation's unique name (counter token per
+// the os.CreateTemp pattern contract; "" dir → "/tmp").
+func (a *aqlFileOps) tempEmulatedName(dir, pattern string) string {
+	if dir == "" {
+		dir = "/tmp"
+	}
+	a.tempSeq++
+	token := fmt.Sprintf("%d", a.tempSeq)
+	name := pattern + token
+	if i := strings.LastIndexByte(pattern, '*'); i >= 0 {
+		name = pattern[:i] + token + pattern[i+1:]
+	}
+	return filepath.Join(dir, name)
+}
+
+// Statfs bridges to an optional `statfs ([p] → {total free available
+// bsize type}|none)` handler. none (or an absent handler) refuses.
+func (a *aqlFileOps) Statfs(path string) (capabilities.FsInfo, error) {
+	res, err := a.call("statfs", []Value{NewPathonFromString(path)})
+	if err != nil {
+		return capabilities.FsInfo{}, err
+	}
+	if isNoneResult(res) {
+		return capabilities.FsInfo{}, &os.PathError{Op: "statfs", Path: path, Err: os.ErrNotExist}
+	}
+	m, merr := RequireConcreteMap(res, "statfs")
+	if merr != nil {
+		return capabilities.FsInfo{}, &os.PathError{Op: "statfs", Path: path,
+			Err: fmt.Errorf("mounted statfs handler returned %s (want a map or none)", res.Parent)}
+	}
+	fs := capabilities.FsInfo{Type: "mount"}
+	if n, ok := MapFieldInteger(m, "total"); ok {
+		fs.TotalBytes = uint64(n)
+	}
+	if n, ok := MapFieldInteger(m, "free"); ok {
+		fs.FreeBytes = uint64(n)
+	}
+	if n, ok := MapFieldInteger(m, "available"); ok {
+		fs.AvailBytes = uint64(n)
+	}
+	if n, ok := MapFieldInteger(m, "bsize"); ok {
+		fs.BlockSize = n
+	}
+	if s, ok := MapFieldString(m, "type"); ok {
+		fs.Type = s
+	}
+	return fs, nil
 }
 
 func (a *aqlFileOps) Watch(path string) (<-chan capabilities.WatchEvent, func() error, error) {

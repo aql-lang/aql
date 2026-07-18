@@ -157,6 +157,33 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "x" {enc:'bogus'}	ERROR:write	an unknown write encoding is a hard error
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "x" drop  IO.read (make Pathon "mem://e.txt") {enc:'bogus'}	ERROR:read	an unknown read encoding is a hard error
 #
+# §19  temp — IO.temp creates a unique file (default) or directory
+#      ({dir:true}) under {in:Pathon} (default the temp root), named
+#      {prefix}…{suffix}; it returns the created Pathon. The name carries
+#      a backend token (a deterministic counter in mem, a random token on
+#      a real volume), so the rows assert shape/type, never the token.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  (IO.temp {}) is Pathon	true	IO.temp returns a Pathon
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  (IO.stat (IO.temp {})).type	file/q	the default form creates a file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  (IO.stat (IO.temp {dir:true})).type	dir/q	{dir:true} creates a directory instead
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  def d (IO.temp {dir:true})  IO.write (make Pathon `${d}/f.txt`) "deep" drop  IO.read (make Pathon `${d}/f.txt`)	'deep'	a temp directory is a real, writable directory
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.temp {in:(make Pathon "mem://ghostdir")}	ERROR:temp	temp in an absent directory errors (os.CreateTemp fidelity)
+#
+# §20  space — IO.space reports the volume holding a Pathon as a map
+#      {total free available bsize type}. Numbers are backend-defined
+#      (the mem filesystem reports a synthetic 1 GiB volume); the rows
+#      assert the shape and the usage invariant, not the raw values.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "12345" drop  (IO.space (make Pathon "mem://f")).type	'mem'	space reports the volume type
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "12345" drop  (IO.space (make Pathon "mem://f")).total	1073741824	the synthetic mem volume is 1 GiB
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://f") "12345" drop  def s (IO.space (make Pathon "mem://f"))  (s.available) lte (s.total)	true	available space never exceeds total
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k") "x" drop  IO.space (make Pathon "mem://ghost")	ERROR:space	space on an absent path errors
+#
+# §21  atomic write — write {atomic:true} stages the bytes in a temp file
+#      in the TARGET'S directory then renames it into place, so a reader
+#      never observes a half-written file. It cannot combine with a
+#      positioned {offset} (a splice is inherently in-place).
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.txt") "old" drop  IO.write (make Pathon "mem://a.txt") "new" {atomic:true} drop  IO.read (make Pathon "mem://a.txt")	'new'	an atomic write replaces the file's contents in one step
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.bin") (convert Bytes "z") {atomic:true offset:0}	ERROR:write	{atomic} cannot combine with {offset}
+#
 # §18  mount — the AQL→FileOps bridge: `IO.mount {read: fn …}` installs a
 #      filesystem IMPLEMENTED IN AQL as the host FileOps, so every io word
 #      routes through the supplied handler fns (read/write/stat/list/remove,

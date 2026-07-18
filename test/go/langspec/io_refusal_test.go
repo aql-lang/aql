@@ -49,6 +49,12 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  IO.stat (make Pathon "d") {xattr:true}`,
 		`import "aql:io"  IO.touch (make Pathon "d") {owner:1 group:1}`,
 		`import "aql:io"  IO.touch (make Pathon "d") {xattr:{note:'x'}}`,
+		// P3: temp files/dirs, disk info, atomic write
+		`import "aql:io"  IO.temp {}`,
+		`import "aql:io"  IO.temp {dir:true prefix:"log-" suffix:".txt"}`,
+		`import "aql:io"  IO.temp {in:(make Pathon "d")}`,
+		`import "aql:io"  IO.space (make Pathon "d")`,
+		`import "aql:io"  IO.write (make Pathon "d") "x" {atomic:true}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

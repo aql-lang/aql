@@ -3,7 +3,7 @@ package modules
 func init() {
 	registerDocs("aql:io", map[string]string{
 		"read":     "Read a file; {enc} decodes utf8/bytes/utf16le/utf16be/latin1.",
-		"write":    "Write to a file, returning its path; {enc} encodes, {mode:'append'} appends.",
+		"write":    "Write to a file, returning its path; {enc} encodes, {mode:'append'} appends, {atomic:true} replaces via a temp+rename.",
 		"printstr": "Write formatted text to output, leaving no value.",
 		"stdin":    "Standard-input handle.",
 		"stdout":   "Standard-output handle.",
@@ -17,6 +17,8 @@ func init() {
 		"copy":     "Copy a path to a destination; {recursive} copies a tree, {overwrite:false} refuses an existing one.",
 		"link":     "Link dst to src: a symlink by default, a hard link with {hard}.",
 		"touch":    "Create a path if absent and set {mode}/{mtime}/{atime}/{size}/{owner}/{group}/{xattr}.",
+		"temp":     "Create a unique temp file (or {dir:true} directory) under {in}, named {prefix}…{suffix}; returns its path.",
+		"space":    "Report the volume holding a path as {total free available bsize type}.",
 		"watch":    "Run a body per change event on a path; returns a Watcher.",
 		"unwatch":  "Stop a Watcher, closing its event stream.",
 		"mount":    "Install a map of AQL handler fns as the filesystem (the FileOps bridge).",

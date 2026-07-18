@@ -431,6 +431,33 @@ func (o *OverlayFileOps) XattrRemove(path, name string) error {
 	return o.mutateInUpper(path, "xattr-remove", func(p string) error { return o.Upper.XattrRemove(p, name) })
 }
 
+// TempFile / TempDir create in the UPPER (all mutations land there) and
+// unhide the result — a whiteout at a previously-deleted path must not
+// mask the fresh entry.
+func (o *OverlayFileOps) TempFile(dir, pattern string) (string, error) {
+	path, err := o.Upper.TempFile(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	delete(o.whiteouts, o.resolve(path))
+	return path, nil
+}
+
+func (o *OverlayFileOps) TempDir(dir, pattern string) (string, error) {
+	path, err := o.Upper.TempDir(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	delete(o.whiteouts, o.resolve(path))
+	return path, nil
+}
+
+// Statfs reports the UPPER's volume — that is where union writes land,
+// so its capacity is the one that constrains the caller.
+func (o *OverlayFileOps) Statfs(path string) (FsInfo, error) {
+	return o.Upper.Statfs(path)
+}
+
 func (o *OverlayFileOps) ResolvePath(path string) (string, error) {
 	return o.Upper.ResolvePath(path)
 }

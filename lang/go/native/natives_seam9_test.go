@@ -32,6 +32,11 @@ func (w9ExtStub) XattrGet(string, string) ([]byte, error)         { return nil, 
 func (w9ExtStub) XattrSet(string, string, []byte) error           { return fmt.Errorf("no") }
 func (w9ExtStub) XattrList(string) ([]string, error)              { return nil, fmt.Errorf("no") }
 func (w9ExtStub) XattrRemove(string, string) error                { return fmt.Errorf("no") }
+func (w9ExtStub) TempFile(string, string) (string, error)         { return "", fmt.Errorf("no") }
+func (w9ExtStub) TempDir(string, string) (string, error)          { return "", fmt.Errorf("no") }
+func (w9ExtStub) Statfs(string) (capabilities.FsInfo, error) {
+	return capabilities.FsInfo{}, fmt.Errorf("no")
+}
 func (w9ExtStub) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, fmt.Errorf("no")
 }

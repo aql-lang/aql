@@ -9,6 +9,7 @@ package capabilities
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -95,6 +96,19 @@ type FileInfo struct {
 	GID int
 }
 
+// FsInfo is the host-agnostic Statfs result — the volume/disk view
+// (Java FileStore / C# DriveInfo parity). Values are BACKEND-DEFINED:
+// the OS reports the real filesystem, MemFileOps a synthetic fixed-size
+// volume — consumers must treat the numbers as advisory shape, and the
+// parity harness compares shape, never values.
+type FsInfo struct {
+	TotalBytes uint64 // volume capacity
+	FreeBytes  uint64 // free space (superuser view)
+	AvailBytes uint64 // space available to this process (≤ FreeBytes)
+	BlockSize  int64  // allocation block size
+	Type       string // filesystem type name ("ext4", "tmpfs", "mem", …)
+}
+
 // FileOps defines the file operations that AQL's io words use. The
 // default implementation delegates to the os package. Replace with a
 // custom implementation for testing or sandboxing.
@@ -144,6 +158,14 @@ type FileOps interface {
 	// XattrRemove deletes one extended attribute. Removing an absent
 	// attribute errors like XattrGet.
 	XattrRemove(path, name string) error
+	// TempFile creates a new unique file and returns its path. dir "" means
+	// the backend's temp root; a "*" in pattern is replaced by a unique
+	// token, otherwise the token is appended (the os.CreateTemp contract).
+	TempFile(dir, pattern string) (string, error)
+	// TempDir creates a new unique directory, same contract as TempFile.
+	TempDir(dir, pattern string) (string, error)
+	// Statfs reports the filesystem holding path (which must exist).
+	Statfs(path string) (FsInfo, error)
 	// Watch subscribes to change events for path — a file, or a
 	// directory's direct children (non-recursive, inotify semantics).
 	// Returns the event stream and a stop function that releases the
@@ -480,6 +502,10 @@ type MemFileOps struct {
 	// watchers holds the live Watch subscriptions; every successful
 	// mutation fans an event out through emit (watch.go).
 	watchers []*memWatcher
+
+	// tempSeq numbers TempFile/TempDir tokens — deterministic uniqueness
+	// (the parity harness compares temp-name shape, never tokens).
+	tempSeq int
 }
 
 func NewMem() *MemFileOps {
@@ -1315,6 +1341,90 @@ func (m *MemFileOps) XattrRemove(path, name string) error {
 	delete(xs, name)
 	m.emit("chmod", final)
 	return nil
+}
+
+// memTempRoot is the synthetic temp root MemFileOps uses when a temp
+// call passes dir "" — the mem twin of os.TempDir.
+const memTempRoot = "/tmp"
+
+// tempName resolves one unique name for the os.CreateTemp pattern
+// contract: a "*" is replaced by a deterministic per-instance counter
+// token, otherwise the token is appended. Deterministic on purpose —
+// the parity harness compares SHAPE (prefix/suffix/containment), never
+// the random token itself.
+func (m *MemFileOps) tempName(dir, pattern string) (string, error) {
+	if dir == "" {
+		dir = memTempRoot
+	}
+	resolved, _ := m.ResolvePath(dir) // never fails — see ReadFile
+	// os.CreateTemp/MkdirTemp raise ENOENT for an absent parent — mirror
+	// that (the temp root itself is implicit, like "." and "/").
+	if fi, ok := m.infoFor(resolved); resolved != filepath.Clean(memTempRoot) && !isMemRoot(resolved) {
+		if !ok {
+			return "", &os.PathError{Op: "createtemp", Path: dir, Err: os.ErrNotExist}
+		}
+		if !fi.IsDir {
+			return "", &os.PathError{Op: "createtemp", Path: dir, Err: errMemNotDir}
+		}
+	}
+	for {
+		m.tempSeq++
+		token := fmt.Sprintf("%d", m.tempSeq)
+		name := pattern + token
+		if i := strings.LastIndexByte(pattern, '*'); i >= 0 {
+			name = pattern[:i] + token + pattern[i+1:]
+		}
+		candidate := filepath.Join(resolved, name)
+		if _, exists := m.infoFor(candidate); !exists {
+			return candidate, nil
+		}
+	}
+}
+
+// TempFile creates a unique file (0600) under dir, per the
+// os.CreateTemp pattern contract.
+func (m *MemFileOps) TempFile(dir, pattern string) (string, error) {
+	path, err := m.tempName(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	if err := m.WriteFile(path, []byte{}, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// TempDir creates a unique directory (0700) under dir.
+func (m *MemFileOps) TempDir(dir, pattern string) (string, error) {
+	path, err := m.tempName(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	if err := m.MkdirAll(path, 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// Statfs reports a SYNTHETIC fixed-size volume: 1 GiB total, usage the
+// sum of file contents, a 4096 block size, type "mem". The path must
+// exist (statfs(2) semantics); the mem root ("." / "/" and the temp
+// root's ancestors) always does.
+func (m *MemFileOps) Statfs(path string) (FsInfo, error) {
+	final, err := m.resolve(path, true)
+	if err != nil {
+		return FsInfo{}, err
+	}
+	if _, ok := m.infoFor(final); !ok && !isMemRoot(final) {
+		return FsInfo{}, &os.PathError{Op: "statfs", Path: path, Err: os.ErrNotExist}
+	}
+	const total = uint64(1) << 30
+	var used uint64
+	for _, data := range m.Files {
+		used += uint64(len(data))
+	}
+	free := total - min(used, total)
+	return FsInfo{TotalBytes: total, FreeBytes: free, AvailBytes: free, BlockSize: 4096, Type: "mem"}, nil
 }
 
 func (m *MemFileOps) ResolvePath(path string) (string, error) {

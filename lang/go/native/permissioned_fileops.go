@@ -174,6 +174,31 @@ func (p *permissionedFileOps) XattrRemove(path, name string) error {
 	return p.inner.XattrRemove(path, name)
 }
 
+// TempFile / TempDir gate on fileops.write{path} (they create entries).
+// The gate argument is the DIRECTORY the entry lands in ("" = the
+// backend temp root, gated as that literal token).
+func (p *permissionedFileOps) TempFile(dir, pattern string) (string, error) {
+	if err := p.policy.Check("fileops", "write", policy.Args{"path": dir}); err != nil {
+		return "", err
+	}
+	return p.inner.TempFile(dir, pattern)
+}
+
+func (p *permissionedFileOps) TempDir(dir, pattern string) (string, error) {
+	if err := p.policy.Check("fileops", "write", policy.Args{"path": dir}); err != nil {
+		return "", err
+	}
+	return p.inner.TempDir(dir, pattern)
+}
+
+// Statfs gates on fileops.stat{path} (read-like metadata).
+func (p *permissionedFileOps) Statfs(path string) (capabilities.FsInfo, error) {
+	if err := p.policy.Check("fileops", "stat", policy.Args{"path": path}); err != nil {
+		return capabilities.FsInfo{}, err
+	}
+	return p.inner.Statfs(path)
+}
+
 // ResolvePath is pure path manipulation — no I/O, no policy check.
 // Resolution must succeed even for paths that read/write would
 // later deny, so consumers can compute the canonical form before

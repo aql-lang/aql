@@ -553,6 +553,21 @@ type failAtOps struct {
 	failReadFile, failWriteFile, failMkdir, failReadDir, failSymlink string
 	failStat, failChmod, failChtimes, failTruncate                   string
 	failXattrGet, failXattrList, failXattrSet                        string
+	failTempFile, failRename                                         string
+}
+
+func (f *failAtOps) TempFile(dir, pattern string) (string, error) {
+	if f.failTempFile != "" && strings.Contains(dir, f.failTempFile) {
+		return "", fmt.Errorf("tempfile boom")
+	}
+	return f.MemFileOps.TempFile(dir, pattern)
+}
+
+func (f *failAtOps) Rename(oldPath, newPath string) error {
+	if f.failRename != "" && strings.Contains(newPath, f.failRename) {
+		return fmt.Errorf("rename boom")
+	}
+	return f.MemFileOps.Rename(oldPath, newPath)
 }
 
 func (f *failAtOps) XattrList(p string) ([]string, error) {

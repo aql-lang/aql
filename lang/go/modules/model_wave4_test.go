@@ -296,6 +296,15 @@ func (f *failOpsWave4) XattrList(string) ([]string, error) {
 	return nil, errors.New("xattr refused")
 }
 func (f *failOpsWave4) XattrRemove(string, string) error { return errors.New("xattr refused") }
+func (f *failOpsWave4) TempFile(string, string) (string, error) {
+	return "", errors.New("temp refused")
+}
+func (f *failOpsWave4) TempDir(string, string) (string, error) {
+	return "", errors.New("temp refused")
+}
+func (f *failOpsWave4) Statfs(string) (capabilities.FsInfo, error) {
+	return capabilities.FsInfo{}, errors.New("statfs refused")
+}
 func (f *failOpsWave4) Watch(string) (<-chan capabilities.WatchEvent, func() error, error) {
 	return nil, nil, errors.New("watch refused")
 }

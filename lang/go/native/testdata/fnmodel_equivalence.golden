@@ -646,6 +646,8 @@ WORD slice
 WORD sort
   [Node/Map] barrier=1 returns=[Node/Map]
   [Node/List] barrier=1 returns=[Node/List]
+WORD space
+  [Scalar/Micron/Pathon] barrier=1 returns=[Any]
 WORD spawn
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Ideal/Pid]
   [Node/List] barrier=1 noeval={0} returns=[Ideal/Pid]
@@ -688,6 +690,8 @@ WORD tany
   [Node/List] barrier=1 returns=[Any] +returnsfn
 WORD tcmp
   [Any Any] barrier=2 returns=[Scalar/Number/Integer]
+WORD temp
+  [Node/Map] barrier=1 returns=[Scalar/Micron/Pathon]
 WORD teq
   [Any Any] barrier=1 returns=[Scalar/Boolean]
 WORD timeout
