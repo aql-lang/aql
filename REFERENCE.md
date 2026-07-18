@@ -2163,7 +2163,13 @@ modules keep plain names.
 > `IO.move src dst`, `IO.copy src dst {recursive}`, `IO.link src dst
 > {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
 > do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes
-> verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O.
+> verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O,
+> plus explicit text encodings — `{enc: 'utf8'|'utf16le'|'utf16be'|'latin1'}`
+> (utf16 writes a BOM and strips a matching one on read; latin1 is strict —
+> a rune outside ISO 8859-1 refuses to encode; there is no BOM sniffing and
+> an unknown enc is a hard error). `copy`/`move` take `{overwrite:false}` to
+> refuse an existing destination (a best-effort pre-check, like Java's
+> `StandardCopyOption`, not an atomic guarantee).
 >
 > **Watching.** `IO.watch p [body]` subscribes to change events on a
 > Pathon — a file, or a directory's direct children (non-recursive,
@@ -2205,7 +2211,7 @@ modules keep plain names.
 > `list` and `remove` are different: rather than a namespaced `IO.list` /
 > `IO.remove`, importing `aql:io` **extends the core `list` / `remove`
 > words** with a Pathon overload (design/OPEN-WORDS.0.md), so the BARE words
-> gain filesystem behaviour — `list p {detail, recursive}` enumerates a
+> gain filesystem behaviour — `list p {detail, recursive, match}` enumerates a
 > directory, `remove p {recursive, force}` deletes a path. The overload
 > registers only on import and coexists with the core table/collection
 > meanings (its Pathon argument is type-disjoint), so `list [1 2 3]` still

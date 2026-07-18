@@ -91,13 +91,25 @@ import "aql:io"  context dot __sys dot fs set mem true  remove (make Pathon "mem
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://k.txt") "x" drop  remove (make Pathon "mem://ghost.txt") {force:true}	mem:/ghost.txt	{force:true} makes an absent removal a no-op
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://R2/a.txt") "x" drop  IO.remove (make Pathon "mem://R2/a.txt")	mem:/R2/a.txt	the same handler is also reachable namespaced as IO.remove
 #
+# §9a  list {match} — a glob filter over the entry's relative path.
+#      policy.Glob vocabulary: `*`/`?` stop at `/`, `**` spans components;
+#      character classes are NOT special ( `[ab]` is the literal text ).
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://G/a.txt") "x" drop  IO.write (make Pathon "mem://G/b.log") "y" drop  list (make Pathon "mem://G") {match:"*.txt"}	['a.txt']	{match} keeps only glob-matching entries
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://G2/s/c.txt") "x" drop  list (make Pathon "mem://G2") {recursive:true match:"**.txt"}	['s/c.txt']	`**` spans path components under {recursive}
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://G3/a.txt") "x" drop  list (make Pathon "mem://G3") {match:"[a].txt"}	[]	character classes are literal text, not glob syntax
+#
 # §11  move — rename/move a Pathon, returning the destination Pathon.
+#      {overwrite:false} refuses an existing destination.
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m.txt") "x" drop  IO.move (make Pathon "mem://m.txt") (make Pathon "mem://m2.txt")	mem:/m2.txt	move returns the destination
 import "aql:io"  context dot __sys dot fs set mem true  IO.move (make Pathon "mem://ghost.txt") (make Pathon "mem://z.txt")	ERROR:move	moving an absent path errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://mo.txt") "1" drop  IO.write (make Pathon "mem://mo2.txt") "2" drop  IO.move (make Pathon "mem://mo.txt") (make Pathon "mem://mo2.txt") {overwrite:false}	ERROR:move	{overwrite:false} refuses an existing move destination
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://mv.txt") "1" drop  IO.move (make Pathon "mem://mv.txt") (make Pathon "mem://mv2.txt") {overwrite:false}	mem:/mv2.txt	{overwrite:false} allows an absent destination
 #
-# §12  copy — copy a Pathon to a destination. {recursive:true} copies a tree.
+# §12  copy — copy a Pathon to a destination. {recursive:true} copies a tree;
+#      {overwrite:false} refuses an existing destination.
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://c.txt") "hi" drop  IO.copy (make Pathon "mem://c.txt") (make Pathon "mem://c2.txt") drop  IO.read (make Pathon "mem://c2.txt")	'hi'	copy duplicates a file's contents
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://cd/a.txt") "x" drop  IO.copy (make Pathon "mem://cd") (make Pathon "mem://cd2")	ERROR:copy	copying a directory without {recursive} errors
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://co.txt") "1" drop  IO.write (make Pathon "mem://co2.txt") "2" drop  IO.copy (make Pathon "mem://co.txt") (make Pathon "mem://co2.txt") {overwrite:false}	ERROR:copy	{overwrite:false} refuses an existing copy destination
 #
 # §13  link — create a link at dst referring to src: a symlink by default,
 #      a hard link with {hard:true}. Returns the link Pathon.
@@ -118,6 +130,19 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.bin") (convert Bytes "hi") drop  IO.read (make Pathon "mem://b.bin")	'hi'	writing Bytes stores the raw bytes
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://p.bin") "hello" drop  IO.write (make Pathon "mem://p.bin") (convert Bytes "XY") {offset:1} drop  IO.read (make Pathon "mem://p.bin")	'hXYlo'	{offset} splices a positioned write
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://z.bin") (convert Bytes "a") {offset:-1}	ERROR:write	a negative write offset errors
+#
+# §16  text encodings — {enc} is EXPLICIT ONLY (default utf8, no BOM
+#      sniffing): utf16le / utf16be write a BOM and strip a matching one on
+#      read; latin1 is strict (a rune outside ISO 8859-1 refuses to encode);
+#      an unknown enc is a hard error on both read and write.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://u.txt") "hi" {enc:'utf16le'} drop  IO.read (make Pathon "mem://u.txt") {enc:'utf16le'}	'hi'	utf16le round-trips through write and read
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://u.txt") "hi" {enc:'utf16le'} drop  IO.read (make Pathon "mem://u.txt") {enc:'bytes'}	Bytes<ff fe 68 00 69 00>	utf16le writes a little-endian BOM then LE code units
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://u.txt") "hi" {enc:'utf16be'} drop  IO.read (make Pathon "mem://u.txt") {enc:'bytes'}	Bytes<fe ff 00 68 00 69>	utf16be writes a big-endian BOM then BE code units
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://l.txt") "hé" {enc:'latin1'} drop  IO.read (make Pathon "mem://l.txt") {enc:'bytes'}	Bytes<68 e9>	latin1 maps into single bytes
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://l.txt") "hé" {enc:'latin1'} drop  IO.read (make Pathon "mem://l.txt") {enc:'latin1'}	'hé'	latin1 round-trips
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://l.txt") "€" {enc:'latin1'}	ERROR:write	a rune outside ISO 8859-1 refuses to encode (strict, no substitution)
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "x" {enc:'bogus'}	ERROR:write	an unknown write encoding is a hard error
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://e.txt") "x" drop  IO.read (make Pathon "mem://e.txt") {enc:'bogus'}	ERROR:read	an unknown read encoding is a hard error
 #
 # §18  mount — the AQL→FileOps bridge: `IO.mount {read: fn …}` installs a
 #      filesystem IMPLEMENTED IN AQL as the host FileOps, so every io word

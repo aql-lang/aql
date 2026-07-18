@@ -232,7 +232,13 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 		}
 	}
 
-	content := applyNL(string(data), nl)
+	// Decode BEFORE newline normalization: a utf16 CRLF is `\r\x00\n\x00`
+	// on the wire, so applyNL over the raw bytes would corrupt the stream.
+	text, err := decodeEnc(data, enc)
+	if err != nil {
+		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+	}
+	content := applyNL(text, nl)
 
 	f, ok := HostFormats(r)[format]
 	if !ok {
@@ -293,13 +299,23 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string) ([]Value,
 		return []Value{NewString(path)}, nil
 	}
 
-	data := []byte(content)
-
+	// Append merges at the TEXT level — decode the existing bytes, then
+	// re-encode the concatenation once. For utf8 the decode is a
+	// pass-through so this is the historical byte-append; for utf16 a
+	// byte-append would splice a second BOM into the middle of the file.
 	if mode == "append" {
-		existing, err := EffectiveFileOps(r).ReadFile(path)
-		if err == nil {
-			data = append(existing, data...)
+		if existing, rerr := EffectiveFileOps(r).ReadFile(path); rerr == nil {
+			prev, derr := decodeEnc(existing, enc)
+			if derr != nil {
+				return nil, r.AqlError("write_error", fmt.Sprintf("write: append: %v", derr), "write")
+			}
+			content = prev + content
 		}
+	}
+
+	data, encErr := encodeEnc(content, enc)
+	if encErr != nil {
+		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", encErr), "write")
 	}
 
 	// C1 effect fence (eng effects.go): a filesystem write is an observable

@@ -156,8 +156,10 @@ func IOModuleNativeFuncs(streamKind, fileType, watcherType *Type) []NativeFunc {
 		},
 		{
 			// move renames/moves src to dst (both Pathon), returning dst.
+			// {overwrite:false} refuses an existing destination.
 			Name: "move",
 			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(moveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 			},
 		},

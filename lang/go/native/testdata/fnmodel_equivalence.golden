@@ -461,6 +461,7 @@ WORD module
 WORD mount
   [Node/Map] barrier=1
 WORD move
+  [Scalar/Micron/Pathon Scalar/Micron/Pathon Node/Map] barrier=3 returns=[Scalar/Micron/Pathon]
   [Scalar/Micron/Pathon Scalar/Micron/Pathon] barrier=2 returns=[Scalar/Micron/Pathon]
 WORD mul
   [Scalar/Number Scalar/Number] barrier=2 +returnsfn

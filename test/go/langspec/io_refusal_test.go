@@ -38,6 +38,13 @@ func TestIOSurfaceCompilesNoRefusal(t *testing.T) {
 		`import "aql:io"  remove (make Pathon "f") {recursive:true}`,
 		`import "aql:io"  remove (make Pathon "f") {force:true}`,
 		`import "aql:io"  context dot __sys dot fs set mem true  remove (make Pathon "mem://g") {force:true}`,
+		// P1 option forms: glob filter, overwrite refusal, text encodings
+		`import "aql:io"  list (make Pathon "d") {match:"*.txt"}`,
+		`import "aql:io"  list (make Pathon "d") {recursive:true match:"**.txt"}`,
+		`import "aql:io"  IO.copy (make Pathon "a") (make Pathon "b") {overwrite:false}`,
+		`import "aql:io"  IO.move (make Pathon "a") (make Pathon "b") {overwrite:false}`,
+		`import "aql:io"  IO.read (make Pathon "d") {enc:'utf16le'}`,
+		`import "aql:io"  IO.write (make Pathon "d") "x" {enc:'latin1'}`,
 		// namespaced IO words, all Pathon-only
 		`import "aql:io"  IO.read (make Pathon "d")`,
 		`import "aql:io"  IO.read (make Pathon "d") {enc:'bytes'}`,

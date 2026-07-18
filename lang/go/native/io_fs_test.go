@@ -185,6 +185,128 @@ func TestListNamesDetailRecursive(t *testing.T) {
 	}
 }
 
+func TestListMatchFilter(t *testing.T) {
+	r, mem := ioFSReg(t)
+	for _, p := range []string{"m/a.txt", "m/b.log", "m/sub/c.txt", "m/[ab].txt"} {
+		if err := mem.WriteFile(p, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(v Value) []string {
+		lst, _ := AsList(v)
+		out := make([]string, 0, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			s, _ := AsString(lst.Get(i))
+			out = append(out, s)
+		}
+		return out
+	}
+
+	// Shallow `*` filter: only direct .txt children ( `*` stops at `/` ).
+	res := runAQL(t, r, []Value{
+		NewWord("list"), pathV("m"),
+		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("*.txt")) }),
+	})
+	got := names(res[0])
+	if len(got) != 2 || got[0] != "[ab].txt" || got[1] != "a.txt" {
+		t.Errorf("shallow match = %v, want [[ab].txt a.txt]", got)
+	}
+
+	// Recursive `**` spans components.
+	res = runAQL(t, r, []Value{
+		NewWord("list"), pathV("m"),
+		wrapMap(func(om *OrderedMap) {
+			om.Set("recursive", NewBoolean(true))
+			om.Set("match", NewString("**.txt"))
+		}),
+	})
+	if got := names(res[0]); len(got) != 3 {
+		t.Errorf("recursive ** match = %v, want 3 entries incl sub/c.txt", got)
+	}
+
+	// Character classes are NOT special: `[ab].txt` matches only the
+	// literal name, never a.txt / b.txt.
+	res = runAQL(t, r, []Value{
+		NewWord("list"), pathV("m"),
+		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("[ab].txt")) }),
+	})
+	if got := names(res[0]); len(got) != 1 || got[0] != "[ab].txt" {
+		t.Errorf("char-class-literal match = %v, want exactly [[ab].txt]", got)
+	}
+
+	// A match that filters everything yields an empty list, not an error.
+	res = runAQL(t, r, []Value{
+		NewWord("list"), pathV("m"),
+		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("*.nope")) }),
+	})
+	if got := names(res[0]); len(got) != 0 {
+		t.Errorf("no-hit match = %v, want empty", got)
+	}
+}
+
+func TestCopyMoveOverwriteOption(t *testing.T) {
+	r, mem := ioFSReg(t)
+	seed := func(p, body string) {
+		t.Helper()
+		if err := mem.WriteFile(p, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("src.txt", "new")
+	seed("dst.txt", "old")
+
+	// {overwrite:false} refuses an existing destination for copy and move.
+	if err := runAQLError(t, r, []Value{
+		NewWord("copy"), pathV("src.txt"), pathV("dst.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
+	}); err == nil {
+		t.Error("copy {overwrite:false} onto existing dst should error")
+	}
+	if err := runAQLError(t, r, []Value{
+		NewWord("move"), pathV("src.txt"), pathV("dst.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
+	}); err == nil {
+		t.Error("move {overwrite:false} onto existing dst should error")
+	}
+	if body, _ := mem.ReadFile("dst.txt"); string(body) != "old" {
+		t.Errorf("refused overwrite still mutated dst: %q", body)
+	}
+
+	// An absent destination is fine under {overwrite:false}.
+	runAQL(t, r, []Value{
+		NewWord("copy"), pathV("src.txt"), pathV("fresh.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
+	})
+	if body, _ := mem.ReadFile("fresh.txt"); string(body) != "new" {
+		t.Errorf("copy to absent dst = %q", body)
+	}
+	runAQL(t, r, []Value{
+		NewWord("move"), pathV("fresh.txt"), pathV("moved.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
+	})
+	if _, err := mem.Stat("moved.txt", false); err != nil {
+		t.Error("move to absent dst did not happen")
+	}
+
+	// Explicit {overwrite:true} (and the default) still replaces.
+	runAQL(t, r, []Value{
+		NewWord("copy"), pathV("src.txt"), pathV("dst.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(true)) }),
+	})
+	if body, _ := mem.ReadFile("dst.txt"); string(body) != "new" {
+		t.Errorf("explicit overwrite copy = %q, want new", body)
+	}
+	// Move opts form with default overwrite replaces too.
+	seed("again.txt", "v2")
+	runAQL(t, r, []Value{
+		NewWord("move"), pathV("again.txt"), pathV("dst.txt"),
+		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(false)) }),
+	})
+	if body, _ := mem.ReadFile("dst.txt"); string(body) != "v2" {
+		t.Errorf("default-overwrite move = %q, want v2", body)
+	}
+}
+
 func TestListErrors(t *testing.T) {
 	r, mem := ioFSReg(t)
 	if err := mem.WriteFile("f.txt", []byte("x"), 0644); err != nil {

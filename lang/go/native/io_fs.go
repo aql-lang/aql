@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // io_fs.go holds the aql:io filesystem-structure words — stat, list, remove,
@@ -121,12 +122,17 @@ func collectEntries(r *Registry, root, prefix string, recursive bool) ([]listEnt
 
 // listHandler implements IO.list (readdir/walk). It returns a List of name
 // strings, or of stat records with {detail:true}; {recursive:true} walks the
-// whole subtree.
+// whole subtree; {match:"*.txt"} keeps only entries whose relPath matches the
+// glob (policy.Glob vocabulary: `*`/`?` stop at `/`, `**` spans components —
+// so a recursive walk filters with `**/x.txt` shapes; character classes are
+// NOT special, `[ab]` matches only the literal text `[ab]`).
 func listHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Value, error) {
 	detail, recursive := false, false
+	match, hasMatch := "", false
 	if hasOpts {
 		detail = mapBoolOpt(args[1], "detail", false)
 		recursive = mapBoolOpt(args[1], "recursive", false)
+		match, hasMatch = mapStrOpt(args[1], "match")
 	}
 	path := extractPath(args[0])
 	entries, err := collectEntries(r, path, "", recursive)
@@ -135,6 +141,9 @@ func listHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 	}
 	items := make([]Value, 0, len(entries))
 	for _, e := range entries {
+		if hasMatch && !policy.Glob(match, e.relPath) {
+			continue
+		}
 		if detail {
 			items = append(items, buildStatRecord(e.info, e.relPath, fileType))
 		} else {
@@ -172,15 +181,46 @@ func ioRemoveOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	return doRemoveWord(args, r, true)
 }
 
-// moveHandler implements IO.move (rename/move). Returns the destination.
-func moveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+// refuseOverwrite is the shared {overwrite:false} guard for copy and move:
+// when the option is present-and-false and the destination exists, refuse
+// with an exists-class error. This is a handler-layer check (rename(2) has
+// no portable no-replace flag), so it is best-effort against a concurrent
+// creator — the TOCTOU window is documented, matching Java's
+// StandardCopyOption posture rather than an atomicity promise.
+func refuseOverwrite(r *Registry, opts Value, dst, word string) error {
+	if mapBoolOpt(opts, "overwrite", true) {
+		return nil
+	}
+	if _, err := EffectiveFileOps(r).Stat(dst, false); err == nil {
+		return r.AqlError(word+"_error",
+			fmt.Sprintf("%s: destination %q already exists (overwrite is false)", word, dst), word)
+	}
+	return nil
+}
+
+// doMoveWord implements IO.move (rename/move); {overwrite:false} refuses an
+// existing destination. Returns the destination.
+func doMoveWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	src := extractPath(args[0])
 	dst := extractPath(args[1])
+	if hasOpts {
+		if err := refuseOverwrite(r, args[2], dst, "move"); err != nil {
+			return nil, err
+		}
+	}
 	r.NoteEffect()
 	if err := EffectiveFileOps(r).Rename(src, dst); err != nil {
 		return nil, r.AqlError("move_error", fmt.Sprintf("move: %v", err), "move")
 	}
 	return []Value{returnPath(args[1])}, nil
+}
+
+func moveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doMoveWord(args, r, false)
+}
+
+func moveOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return doMoveWord(args, r, true)
 }
 
 // doCopy copies src to dst: a symlink is recreated, a directory is copied
@@ -226,14 +266,17 @@ func copyTree(r *Registry, src, dst string) error {
 	return nil
 }
 
-// doCopyWord implements IO.copy. {recursive:true} copies a directory tree.
-// Returns the destination.
+// doCopyWord implements IO.copy. {recursive:true} copies a directory tree;
+// {overwrite:false} refuses an existing destination. Returns the destination.
 func doCopyWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	src := extractPath(args[0])
 	dst := extractPath(args[1])
 	recursive := false
 	if hasOpts {
 		recursive = mapBoolOpt(args[2], "recursive", false)
+		if err := refuseOverwrite(r, args[2], dst, "copy"); err != nil {
+			return nil, err
+		}
 	}
 	r.NoteEffect()
 	if err := doCopy(r, src, dst, recursive); err != nil {
