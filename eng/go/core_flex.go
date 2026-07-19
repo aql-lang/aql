@@ -24,9 +24,10 @@ import "fmt"
 //
 // Map/list-family values whose payload is not a readable container
 // (record/options/table type bodies, bare child-type constraints) are
-// an error: flexing a type body is meaningless. A typed list/map that
-// carries concrete elements alongside its constraint flexes to a plain
-// flex node — the child constraint is dropped (documented limitation).
+// an error: flexing a type body is meaningless. A concrete {:T}/[:T]
+// container KEEPS its element tag (Value.elem) through the flex — flex only
+// toggles mutability, it never drops the element-type contract — so a typed
+// flex node enforces writes just like its immutable form.
 func FlexDeepCopy(v Value) (Value, error) {
 	if v.Parent.ConformsTo(TMap) && IsConcrete(v) {
 		m, err := AsMap(v)
@@ -42,7 +43,11 @@ func FlexDeepCopy(v Value) (Value, error) {
 			}
 			om.Set(k, fv)
 		}
-		return WithPos(NewFlexMap(om), v), nil
+		out := WithPos(NewFlexMap(om), v)
+		if elem, ok := v.ElemConstraint(); ok { // flex only toggles mutability — keep {:T}
+			out.SetElemConstraint(elem)
+		}
+		return out, nil
 	}
 	if v.Parent.ConformsTo(TList) && IsConcrete(v) {
 		lst, err := AsList(v)
@@ -57,7 +62,11 @@ func FlexDeepCopy(v Value) (Value, error) {
 			}
 			elems[i] = fv
 		}
-		return WithPos(NewFlexList(elems), v), nil
+		out := WithPos(NewFlexList(elems), v)
+		if elem, ok := v.ElemConstraint(); ok { // keep [:T] through flex
+			out.SetElemConstraint(elem)
+		}
+		return out, nil
 	}
 	if v.Parent.ConformsTo(TXml) && IsConcrete(v) {
 		tag, attr, cren, ok := xmlParts(v)
@@ -125,7 +134,11 @@ func NodeDeepCopy(v Value) (Value, error) {
 			}
 			om.Set(k, nv)
 		}
-		return WithPos(NewMap(om), v), nil
+		out := WithPos(NewMap(om), v)
+		if elem, ok := v.ElemConstraint(); ok { // node only toggles mutability — keep {:T}
+			out.SetElemConstraint(elem)
+		}
+		return out, nil
 	}
 	if v.Parent.ConformsTo(TList) && IsConcrete(v) {
 		lst, err := AsList(v)
@@ -140,7 +153,11 @@ func NodeDeepCopy(v Value) (Value, error) {
 			}
 			elems[i] = nv
 		}
-		return WithPos(NewList(elems), v), nil
+		out := WithPos(NewList(elems), v)
+		if elem, ok := v.ElemConstraint(); ok { // keep [:T] through un-flex
+			out.SetElemConstraint(elem)
+		}
+		return out, nil
 	}
 	if v.Parent.ConformsTo(TXml) && IsConcrete(v) {
 		tag, attr, cren, ok := xmlParts(v)

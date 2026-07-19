@@ -5,14 +5,37 @@ import "github.com/aql-lang/aql/eng/go"
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
 //
+// plainListGrowReturns is the check-mode mirror for an immutable-list grow
+// (push / unshift over a plain [:T] list): args are [value, list]. It flags a
+// provably non-conforming top-level grow (d2CheckWrite) and retains the source
+// list's tag on the residual (a both-fields typed carrier) so a chained write
+// stays enforced — the plain grows otherwise had no ReturnsFn (#10, Codex round
+// 10), unlike their FlexList counterparts (flexGrowReturns).
+func plainListGrowReturns(word string) func([]Value, *Registry) []Value {
+	return func(args []Value, r *Registry) []Value {
+		res := NewCarrier(TList)
+		if len(args) == 2 {
+			d2CheckWrite(r, args[1], args[0], word, args[0].Pos())
+			res = d2TypedListResidual(args[1])
+		}
+		return []Value{res}
+	}
+}
+
 // push appends a single element to the end of a list, returning a new list.
 //
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
 func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	// A typed list ([:T]) enforces + recursively re-tags the grown element —
+	// the immutable grow must uphold the same element invariant `set` does.
+	tagged, terr := d2AdoptTyped(r, args[1], args[0], "push")
+	if terr != nil {
+		return nil, terr
+	}
 	// The copy-returning column stays ENTIRELY immutable: an element
 	// with flex inside is snapshot to its plain shape (AdoptIntoNode).
-	newElem, aerr := eng.AdoptIntoNode(args[0])
+	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("push_error", aerr.Error(), "push")
 	}
@@ -27,7 +50,7 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	copy(result, list)
 	result[len(list)] = newElem
 
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // pop removes the last element from a list, returning the new list
@@ -46,7 +69,7 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 	copy(newList, list[:len(list)-1])
 	popped := list[len(list)-1]
 
-	return []Value{NewList(newList), popped}, nil
+	return []Value{d2RetainElem(NewList(newList), args[0]), popped}, nil
 }
 
 // unshift prepends a single element to the beginning of a list, returning a new list.
@@ -54,9 +77,14 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
 func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	// A typed list ([:T]) enforces + recursively re-tags the grown element.
+	tagged, terr := d2AdoptTyped(r, args[1], args[0], "unshift")
+	if terr != nil {
+		return nil, terr
+	}
 	// Entirely-immutable invariant for the copy-returning column: see
 	// pushHandler.
-	newElem, aerr := eng.AdoptIntoNode(args[0])
+	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
 	}
@@ -69,7 +97,7 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	result[0] = newElem
 	copy(result[1:], list)
 
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // shift removes the first element from a list, returning the new list
@@ -88,7 +116,7 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 	newList := make([]Value, len(list)-1)
 	copy(newList, list[1:])
 
-	return []Value{NewList(newList), shifted}, nil
+	return []Value{d2RetainElem(NewList(newList), args[0]), shifted}, nil
 }
 
 // ---- FlexList variants: mutate IN PLACE through the pointer-backed
@@ -101,9 +129,14 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, r.AqlError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "push")
+	if werr != nil {
+		return nil, werr
+	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("push_error", aerr.Error(), "push")
 	}
@@ -129,8 +162,13 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	if err != nil {
 		return nil, r.AqlError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "unshift")
+	if werr != nil {
+		return nil, werr
+	}
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
 	}

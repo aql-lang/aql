@@ -1838,6 +1838,10 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// identify enclosing-fn-local bindings.
 	r.PushFnBaseline(r.Defs.Snapshot())
 
+	// Retag typed-container args so the args stack (args.N) and unnamed body
+	// pushes carry the {:T}/[:T] tag too, not just the named binding — a body
+	// write via args.N must enforce the same contract (Codex round 4).
+	args = RetagTypedContainerArgs(sig.Params, args)
 	// Push args list onto the args stack.
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
@@ -1872,7 +1876,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
-			InstallFrameBinding(r, p.Name, arg)
+			InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])

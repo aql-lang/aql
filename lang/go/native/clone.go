@@ -29,5 +29,21 @@ func cloneReturnsFn(args []Value, _ *Registry) []Value {
 	if len(args) == 0 {
 		return []Value{NewDynamicCarrier(TAny)}
 	}
-	return []Value{NewCarrier(args[0].Parent)}
+	// CloneValue preserves a {:T}/[:T] tag at runtime, so the check residual must
+	// too (#8, Codex round 8). A plain list/map clone uses the both-fields typed
+	// residual (read narrowing + chained-write enforcement); a flex/other kind
+	// keeps its exact Parent with the elem pointer (d2RetainElem) so flex-ness and
+	// the write-check survive. An untagged source keeps the bare carrier.
+	src := args[0]
+	if _, ok := src.ElemConstraint(); ok {
+		switch {
+		case src.Parent.Equal(TList):
+			return []Value{d2TypedListResidual(src)}
+		case src.Parent.Equal(TMap):
+			return []Value{d2TypedMapResidual(src)}
+		default:
+			return []Value{d2RetainElem(NewCarrier(src.Parent), src)}
+		}
+	}
+	return []Value{NewCarrier(src.Parent)}
 }

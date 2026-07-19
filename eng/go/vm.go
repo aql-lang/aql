@@ -2092,6 +2092,14 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		if !ok {
 			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
+		// Retag a {:T}/[:T] param's concrete runtime arg with its element type so
+		// compiled body writes enforce it — the compiled mirror of the
+		// interpreter's RetagTypedContainerParam. Uses the SAME shared core, so a
+		// flex arg is retagged in place (reference identity preserved) and a plain
+		// arg is re-unified — both paths agree with the interpreter (no divergence).
+		if IsConcrete(v) {
+			locals[i] = RetagTypedContainerValue(pat, v)
+		}
 	}
 	return nil
 }

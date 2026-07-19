@@ -5805,6 +5805,10 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// below, which pops the baseline.
 	e.registry.PushFnBaseline(e.registry.Defs.Snapshot())
 
+	// Retag typed-container args so the args stack (args.N) and unnamed body
+	// pushes carry the {:T}/[:T] tag too, not just the named binding — a body
+	// write via args.N must enforce the same contract (Codex round 4).
+	args = RetagTypedContainerArgs(sig.Params, args)
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
@@ -5835,7 +5839,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			InstallFrameBinding(e.registry, p.Name, args[i])
+			InstallFrameBinding(e.registry, p.Name, RetagTypedContainerParam(p, args[i]))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
