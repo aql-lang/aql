@@ -57,6 +57,19 @@ func sliceResult(result interface{}) ([]Value, error) {
 	}
 }
 
+// sliceRetain wraps a sliceResult return: when the result is a list (a
+// list-slice, not a string-slice or empty None), it copies src's [:T] element
+// tag onto the result so `slice` of a typed list stays typed — a slice is a
+// pure subset/reorder that preserves element types, so downstream reads narrow
+// and downstream writes stay enforced (#4, round 3). A string source has no
+// element tag, so d2RetainElem no-ops there.
+func sliceRetain(res []Value, err error, src Value) ([]Value, error) {
+	if err == nil && len(res) == 1 && res[0].Parent.ConformsTo(TList) {
+		res[0] = d2RetainElem(res[0], src)
+	}
+	return res, err
+}
+
 // sliceResultItem converts a single item produced by voxgigstruct.Slice
 // into an Value, recursing into nested []interface{} slices.
 func sliceResultItem(item interface{}) (Value, error) {

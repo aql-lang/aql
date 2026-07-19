@@ -305,10 +305,12 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 // check mode (the FlexList set sig otherwise has no ReturnsFn). args are
 // [index, value, FlexList].
 func setFlexListReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TFlexList)
 	if len(args) == 3 {
 		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+		res = d2RetainElem(res, args[2])
 	}
-	return []Value{NewCarrier(TFlexList)}
+	return []Value{res}
 }
 
 // flexGrowReturns builds the check-mode mirror for a flex GROW word
@@ -317,10 +319,12 @@ func setFlexListReturns(args []Value, r *Registry) []Value {
 // the same way the runtime raises. word rides in the diagnostic.
 func flexGrowReturns(word string) func([]Value, *Registry) []Value {
 	return func(args []Value, r *Registry) []Value {
+		res := NewCarrier(TFlexList)
 		if len(args) == 2 {
 			d2CheckWrite(r, args[1], args[0], word, args[0].Pos())
+			res = d2RetainElem(res, args[1])
 		}
-		return []Value{NewCarrier(TFlexList)}
+		return []Value{res}
 	}
 }
 
@@ -1171,7 +1175,11 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 			return []Value{args[2]}
 		}
 	}
-	return []Value{NewCarrier(TFlexMap)}
+	res := NewCarrier(TFlexMap)
+	if len(args) == 3 {
+		res = d2RetainElem(res, args[2]) // chained/bound flex writes stay checked
+	}
+	return []Value{res}
 }
 
 // setListHandler is the List form of set: copy-returning, like Map —

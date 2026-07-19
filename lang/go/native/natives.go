@@ -394,7 +394,8 @@ func sliceStartEndHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 	end := int(_as1)
 	data := valueToSliceArg(args[2])
 	result := voxgigstruct.Slice(data, start, end)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[2])
 }
 
 // sliceStartHandler implements `slice start data` (forward-first:
@@ -405,7 +406,8 @@ func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	s := int(_as0)
 	data := valueToSliceArg(args[1])
 	result := voxgigstruct.Slice(data, s)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[1])
 }
 
 // sliceAllHandler implements `slice data` — the identity/copy form that
@@ -413,7 +415,8 @@ func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 func sliceAllHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	data := valueToSliceArg(args[0])
 	result := voxgigstruct.Slice(data)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[0])
 }
 
 // ---- handlers extracted from per-word RegisterFoo closures ----

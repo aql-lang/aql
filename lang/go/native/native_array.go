@@ -828,7 +828,9 @@ func reverseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	for i := 0; i < n; i++ {
 		elems[i] = list.Get(n - 1 - i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): reverse is a pure reorder — retain the source [:T] tag so
+	// downstream reads narrow and downstream writes stay enforced.
+	return []Value{d2RetainElem(NewList(elems), args[0])}, nil
 }
 
 // ---- take ----
@@ -860,7 +862,9 @@ func takeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	for i := start; i < end; i++ {
 		elems[i-start] = list.Get(i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): take selects a contiguous subset — element types are
+	// preserved, so retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(elems), args[1])}, nil
 }
 
 // ---- shed ----
@@ -892,7 +896,9 @@ func shedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	for i := start; i < end; i++ {
 		elems[i-start] = list.Get(i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): shed drops a prefix/suffix — the remaining elements keep
+	// their type, so retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(elems), args[1])}, nil
 }
 
 // ---- where ----
@@ -935,7 +941,9 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if result == nil {
 		result = []Value{}
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): unique is a dedup subset — elements are unchanged, so
+	// retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[0])}, nil
 }
 
 // ---- grade ----
@@ -1092,7 +1100,8 @@ func sortbyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	for i, idx := range indices {
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): sortby reorders the data list — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- member ----
@@ -1416,7 +1425,8 @@ func sortbyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	for i, idx := range indices {
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): sortby (reach form) reorders the data list — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // forEachHandler runs the body once per data element for its side effects,

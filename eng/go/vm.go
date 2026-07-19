@@ -2092,6 +2092,17 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		if !ok {
 			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
+		// Retag a {:T}/[:T] param's concrete runtime arg with its element type so
+		// compiled body writes enforce it — the compiled mirror of the
+		// interpreter's RetagTypedContainerParam. Without this the compiled body
+		// binds the untagged arg and `(m set b/q "bad")` diverges from the
+		// interpreter (which retags at the binding boundary).
+		if IsConcrete(v) && (IsTypedMap(pat) || IsTypedList(pat)) {
+			if unified, uok := Unify(pat, v); uok {
+				unified.Quoted = v.Quoted
+				locals[i] = unified
+			}
+		}
 	}
 	return nil
 }

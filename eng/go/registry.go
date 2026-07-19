@@ -1872,7 +1872,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
-			InstallFrameBinding(r, p.Name, arg)
+			InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])

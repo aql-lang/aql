@@ -281,3 +281,50 @@ Known, acceptable limits (precision, not soundness):
 Follow-on: a compiled typed-container bind (an `OpBindTyped`-style container kind)
 would let typed-flex defs compile instead of falling back — a perf optimization,
 not a correctness gap.
+
+## Codex-review hardening (rounds 1–3)
+
+The automated reviewer surfaced tag-loss holes that the original phasing left
+open. Each is a place where a value flowed OUT of a typed container (or INTO a
+`{:T}` param) through a path that rebuilt the container and dropped `elem`, so a
+DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
+(the tag is a hidden field; both compiled and interpreted run the same handler).
+
+- **Round 1 — immutable list-mutators + chained residual.** `push`/`unshift`
+  over an immutable `[:T]` list bypassed the write-check; the `set` residual
+  dropped the tag so a chained `((xs set 0 v) set 1 w)` lost enforcement. Fixed
+  via `d2AdoptTyped` (enforce) + `d2RetainElem` (retain) on every mutator.
+- **Round 2 — deep `setpath` / `merge` / flex check-mirror / flex-param compile
+  divergence.** `setReachNative` now validates the value at EVERY set point (not
+  just the leaf); `merge` re-tags the rebuilt result via `d2ReTagContainer`; the
+  flex `set` residual retains the tag; a `{:T}` flex param dispatches through a
+  DYNAMIC carrier (`typedContainerCarrier`/`paramBodyCarrier` set `Dynamic`) so
+  the compiled dispatch rematches at runtime instead of preselecting a diverging
+  handler.
+- **Round 3 — the fundamental param-boundary hole + three tag-loss copies.**
+  1. **Param binds the arg UNTAGGED** → a write inside the fn body escaped
+     enforcement (BOTH a plain and a flex argument). `RetagTypedContainerParam`
+     re-tags a concrete `{:T}`/`[:T]` arg with the param's element constraint at
+     every binding site (`execFnDefSig`/`CallAQL`/`InstallFnDef` in the
+     interpreter, `checkParamContract` on the compiled path) — so the body write
+     is enforced identically in both. Dispatch already element-checks the arg and
+     rejects a non-conformer before binding, so the re-tag `Unify` cannot fail.
+  2. **`inject`** rebuilds a plain node through `valueToAny`/`structConvert`;
+     `d2ReTagContainer` re-validates + re-tags it against the data template's
+     `{:T}` (mirrors `merge`). The reject branch is unreachable through source (a
+     `{:T}` container can't be CONSTRUCTED holding a marker), pinned by a direct
+     handler test.
+  3. **Flex chained check-residual** now retains the tag (`setFlexListReturns` /
+     `flexGrowReturns` via `d2RetainElem`), so a second chained flex write is
+     flagged in check too.
+  4. **Copy / reorder stdlib ops retain the source tag.** Every op that returns a
+     SUBSET or REORDER of one typed container preserves its element types, so the
+     rebuilt copy must keep `elem`: `reverse`, `take`, `shed`, `unique`, `sort`
+     (list AND map — a `{:T}` map sorted by value is still `{:T}`), `sortby`
+     (both forms), `slice` (all three arities, via `sliceRetain`), and `filter`
+     (all four forms, list and map). The audit deliberately EXCLUDES ops that
+     transform or combine element types — `map`/`each` (transform), `fold`/`scan`
+     (reduce), `where`/`grade` (indices), `flatten` (structural: a `[:[:T]]`
+     flattens to `[:T]`), `concat`/`append` (combine — already per-element
+     enforced via `d2AdoptTyped`), and `clone` (already preserves `elem`, since
+     `CloneValue` copies the Value struct and only replaces `Data`/`ID`).

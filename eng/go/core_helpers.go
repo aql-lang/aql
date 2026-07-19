@@ -348,7 +348,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 					if arg.Parent.Equal(TList) && !arg.Quoted {
 						arg.Quoted = true
 					}
-					InstallFrameBinding(r, p.Name, arg)
+					InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 				}
 			}
 			out := make([]Value, len(skeleton))
@@ -409,7 +409,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				if arg.Parent.Equal(TList) && !arg.Quoted {
 					arg.Quoted = true
 				}
-				InstallFrameBinding(r, p.Name, arg)
+				InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 				names = append(names, p.Name)
 			} else {
 				// Unnamed parameter: push value back for the body to use
@@ -555,6 +555,30 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 		return v, true
 	}
 	return Value{}, false
+}
+
+// RetagTypedContainerParam retags a CONCRETE runtime arg bound to a {:T}/[:T]
+// param with the param's element constraint, so typed-container PARAM writes are
+// enforced in the body. The arg is otherwise bound untagged — a caller's plain
+// `{a:1}` for `m:{:Integer}` would let `(m set b/q "bad")` reach the write path
+// with no ElemConstraint and bypass enforcement. Unify against the pattern both
+// VALIDATES (the sig already admitted the arg, so it conforms) and recursively
+// tags; a non-container param or a non-concrete arg passes through. Applied at
+// every param-binding site (execFnDefSig / CallAQL / InstallFnDef).
+func RetagTypedContainerParam(p FnParam, arg Value) Value {
+	if p.Pattern == nil || !IsConcrete(arg) {
+		return arg
+	}
+	pat := *p.Pattern
+	if !IsTypedMap(pat) && !IsTypedList(pat) {
+		return arg
+	}
+	unified, ok := Unify(pat, arg)
+	if !ok { //covergate:allow dispatch (matchSignature/checkParamContract) element-checks the concrete arg against pat and rejects any non-conformer with no_signature BEFORE param binding, so an arg reaching here always satisfies pat and Unify cannot fail
+		return arg
+	}
+	unified.Quoted = arg.Quoted // preserve the list-arg no-auto-eval quote
+	return unified
 }
 
 // paramBodyCarrier builds a fn-body INPUT carrier for a param when no call-site

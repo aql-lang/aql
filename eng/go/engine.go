@@ -5835,7 +5835,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			InstallFrameBinding(e.registry, p.Name, args[i])
+			InstallFrameBinding(e.registry, p.Name, RetagTypedContainerParam(p, args[i]))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
