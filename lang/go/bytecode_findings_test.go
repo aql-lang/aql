@@ -3803,7 +3803,9 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		{"predicate refine boundary value", `def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g`, "signature_error"},
 		{"arity modifier misses every sig", `add/3 2 3`, "signature_error"},
 		{"bare type-literal operand", `get 'a' Map`, "signature_error"},
-		{"undef leaves no overload", `def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false`, "signature_error"},
+		// (Boolean add is now a defined within-type error, so the popped-
+		// clone probe uses a Map tuple — still unmatched after the undef.)
+		{"undef leaves no overload", `def add fn [[a:Map b:Map] [Map] [a]]  undef add  add {a:1} {b:2}`, "signature_error"},
 		{"map-literal member dispatch (unfinished unit stubbed)", `def f fn [[x:Integer] [Integer] [add x 1]] {f}`, "signature_error"},
 		{"void arg group at def", `def f fn [[x:Integer] [] []] def r (f 1)`, "def_error"},
 		{"void arg group at consumer", `def f fn [[x:Integer] [] []] 3 add (f 1)`, "no_value_error"},
@@ -3890,14 +3892,32 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	// run time and DEFERS to the interpreter, which computes the value a
 	// static trap would have wrongly raised over. The deferred-token shapes
 	// keep the whole-program refusal.)
+	// The REFINEMENT ESCAPE (the original carrier hazard, in its live form):
+	// mkb's declared return is Boolean but the runtime value carries the
+	// Flag-reparented tag, so the merged [Flag Flag] overload MATCHES at run
+	// time. Since `add` gained its within-type CoreDefault overloads, the
+	// static Boolean carriers MATCH [Boolean Boolean] at check time — a
+	// match that is not a dispatch proof (a subtype-tagged runtime value
+	// re-matches the more-specific [Flag Flag]) — so the compile REFUSES up
+	// front (recordCallRefusal's core-default gate) instead of reaching the
+	// dispatch-recovery rematch; the interpreter owns the program and both
+	// paths agree on `true`.
+	{
+		src := `import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`
+		prog, reason, _, _ := mustNew(t).CompileCheck(src)
+		if prog != nil || !strings.Contains(reason, "core-default dispatch over a carrier operand") {
+			t.Errorf("refinement escape: want the core-default refusal, got prog=%v reason=%q", prog != nil, reason)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).Run(src)
+		if compiled {
+			t.Errorf("refinement escape: must fall back to the interpreter")
+		}
+		if codeOf(errC) != codeOf(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("refinement escape: fallback=%v/%v interp=%v/%v (should agree)", gotC, errC, gotI, errI)
+		}
+	}
 	rematches := []struct{ name, src string }{
-		// The REFINEMENT ESCAPE (the original carrier hazard, in its live
-		// form): mkb's declared return is Boolean but the runtime value
-		// carries the Flag-reparented tag, so the merged [Flag Flag] overload
-		// MATCHES at run time — the rematch defers and the interpreter
-		// computes true.
-		{"refined-subtype carrier rematch defers",
-			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`},
 		// A value-sensitive predicate param (membershipBeyondNominal): the
 		// carrier's runtime VALUE decides membership — this variant PASSES at
 		// run time (f 5 → 11 ∈ Big), so the rematch matches and defers.

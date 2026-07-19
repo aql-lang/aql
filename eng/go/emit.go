@@ -4217,6 +4217,23 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
+	case sig.CoreDefault && anyNonConcreteOperand(args):
+		// A CoreDefault overload (the within-type scalar/Micron arithmetic
+		// defaults) is UNLOCKED: a runtime value whose tag is a strict
+		// SUBTYPE of the static carrier's type (the refinement escape —
+		// `def Flag (refine Boolean)` with a merged [Flag Flag] overload)
+		// re-matches to the more-specific user overload that sorts before
+		// it. The static CoreDefault match over a non-concrete operand is
+		// therefore not a dispatch proof. The dispatch-outcome chain routes
+		// this shape to OpCallNativePoly FIRST (tryRecordPoly's
+		// coreDefaultCarrier arm — the VM re-matches over the live table,
+		// exactly the interpreter's dispatch); this refusal is the safety
+		// net for the shapes poly declines. Concrete operands bake fine:
+		// their runtime tag IS the static tag. (Locked native sigs never
+		// need any of this: locked-first means no user overload can
+		// pre-empt them at runtime.)
+		es.SiteCounts[SiteDynamic]++
+		es.MarkUncompilable("core-default dispatch over a carrier operand at " + word)
 	case anyDynamicCarrier(args) && !shuffleOK && !es.dynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)

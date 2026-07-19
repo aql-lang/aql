@@ -5,33 +5,46 @@ func init() {
 
 	register(&Entry{
 		Word:    "add",
-		Summary: "Add two numbers, or concatenate when at least one operand is a String.",
+		Summary: "Add two numbers, concatenate sequences, or combine two values of one type.",
 		Description: "Adds two numeric values. When both are integers the result is an integer; " +
 			"if either is a float the result is a float. When at least one operand is a " +
 			"String, the other Scalar is coerced to its string form and the two are " +
-			"concatenated. Two non-String scalars (e.g. a Boolean and a Number) match " +
-			"neither overload and raise a type error rather than silently stringifying.",
+			"concatenated. Beyond those, add is defined WITHIN every scalar type and " +
+			"Micron kind: Atom add Atom concatenates the names, Bytes add Bytes " +
+			"concatenates, a same-kind Micron pair combines field-wise (rebuilt through " +
+			"the kind's make validator; Qion adds same-currency amounts, Pathon joins " +
+			"paths), and Boolean add Boolean is a deliberate type error (use the " +
+			"logical words). A cross-type pair (e.g. a Boolean and a Number) stays a " +
+			"type error — operations apply within a type, not across.",
 		Notes: []string{
 			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
 			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` is a type error.",
+			"A user Micron kind can override the field-wise default with its own signature: `def add fn [[a:Kindon b:Kindon] …]`.",
 		},
 	})
 
 	register(&Entry{
 		Word:    "sub",
-		Summary: "Subtract: a sub b ≡ a - b.",
+		Summary: "Subtract: a sub b ≡ a - b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b sub`, `a sub b`, and `sub b a` " +
 			"compute a - b. The handler returns args[1] - args[0]; under the " +
-			"argument-order rule args[0] is the rightmost source-position arg.",
+			"argument-order rule args[0] is the rightmost source-position arg. " +
+			"Within-type: String/Atom/Bytes sub removes every occurrence of the right " +
+			"operand ('hello.txt' sub '.txt' → 'hello'), Pathon sub strips a matching " +
+			"trailing run of segments, Qion sub subtracts same-currency amounts, and a " +
+			"same-kind Micron pair subtracts field-wise.",
 		Notes: []string{
 			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 
 	register(&Entry{
-		Word:        "mul",
-		Summary:     "Multiply two numbers.",
-		Description: "Multiplies two numeric values (commutative).",
+		Word:    "mul",
+		Summary: "Multiply two numbers; within-type on every scalar and Micron kind.",
+		Description: "Multiplies two numeric values (commutative). Within-type: " +
+			"String/Atom/Bytes mul is the operand-major Cartesian element product " +
+			"('ab' mul 'xy' → 'axaybxby'), a same-kind Micron pair multiplies " +
+			"field-wise, and Boolean/Qion/Pathon mul are deliberate errors.",
 		Notes: []string{
 			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
 		},
@@ -39,19 +52,26 @@ func init() {
 
 	register(&Entry{
 		Word:    "div",
-		Summary: "Divide: a div b ≡ a / b.",
+		Summary: "Divide: a div b ≡ a / b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b div`, `a div b`, and `div b a` " +
-			"compute a / b. Integer division truncates toward zero.",
+			"compute a / b. Integer division truncates toward zero. Within-type: " +
+			"String/Atom/Bytes div counts non-overlapping occurrences of the right " +
+			"operand ('a,b,c' div ',' → 2), and a same-kind Micron pair divides " +
+			"field-wise.",
 		Notes: []string{
 			"Integer division by zero is an error; Float division by zero is IEEE-754 (x/0 → ±inf, 0/0 → nan).",
+			"String/Bytes division by an empty operand is an error (the sequence analogue of dividing by zero).",
 		},
 	})
 
 	register(&Entry{
 		Word:    "mod",
-		Summary: "Remainder: a mod b ≡ a %% b.",
+		Summary: "Remainder: a mod b ≡ a %% b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b mod`, `a mod b`, and `mod b a` " +
-			"compute a %% b (the truncated remainder). For the IEEE round-to-nearest remainder, use `MathUtil.remainder`.",
+			"compute a %% b (the truncated remainder). For the IEEE round-to-nearest remainder, use `MathUtil.remainder`. " +
+			"Within-type: String/Atom/Bytes mod is the tail after the LAST occurrence " +
+			"of the right operand ('path/to/f' mod '/' → 'f'; the whole value when " +
+			"absent), and a same-kind Micron pair mods field-wise.",
 		Notes: []string{
 			"Integer modulo by zero is an error; Float modulo by zero is IEEE-754 nan.",
 		},
@@ -59,9 +79,11 @@ func init() {
 
 	register(&Entry{
 		Word:    "pow",
-		Summary: "Power: a pow b ≡ a^b.",
+		Summary: "Power: a pow b ≡ a^b; within-type on every scalar and Micron kind.",
 		Description: "All three call forms `a b pow`, `a pow b`, and `pow b a` " +
-			"compute a^b.",
+			"compute a^b. Within-type: String/Atom/Bytes pow repeats the left operand " +
+			"once per element of the right ('ab' pow 'xy' → 'abab'), and a same-kind " +
+			"Micron pair pows field-wise.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
 			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",

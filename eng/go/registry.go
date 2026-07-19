@@ -1269,6 +1269,30 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	}
 }
 
+// RegisterCoreDefault appends UNLOCKED CoreDefault overloads onto an
+// already-registered builtin word's native FnDefInfo (it must already be a
+// builtin — Register must have run first). The sigs dispatch after every
+// more-specific overload (they are unlocked, so a user/module override
+// wins by specificity) yet live on the native definition, so `undef` of
+// the builtin still refuses and no def-clone is created. They carry the
+// CoreDefault flag so the export transplant skips them. The word stays in
+// builtinWords — this does NOT introduce a new dispatchable name.
+func (r *Registry) RegisterCoreDefault(name string, sigs ...Signature) {
+	if r == nil || !r.builtinWords[name] { //covergate:allow only ever invoked for a name Register already installed as a builtin word
+		return
+	}
+	stamped := make([]Signature, len(sigs))
+	for i := range sigs {
+		s := sigs[i]
+		s.Locked = false
+		s.CoreDefault = true
+		stamped[i] = s
+	}
+	// The word is already registered (Register fired any OnRegisterHook);
+	// this only appends overloads to its native definition.
+	r.upsertFnDef(name, stamped...)
+}
+
 // reservedLiterals are the value literals the parser produces directly
 // (not registered words), so they never appear in builtinWords yet must
 // also be protected from redefinition.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/cockroachdb/apd/v3"
@@ -166,25 +167,138 @@ func powIntFault(a, b int64) error {
 	return nil
 }
 
+// The per-word numeric leaf towers, shared by the [Number Number]
+// signatures below and by the Micron field-wise default
+// (native_scalar_ops.go), which drives the identical per-leaf semantics
+// on each numeric field through towerApply. Each closure follows the
+// kernel b-op-a convention (it receives (a, b) = (args[0], args[1]) and
+// computes `b OP a`), so the swap form reads naturally.
+var (
+	addTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			c, ok := checkedAddInt(b, a)
+			if !ok {
+				return Value{}, integerOverflowError("add", a, b)
+			}
+			return NewInteger(c), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Add(b, a)), nil },
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Add, b, a) },
+		fltFn: func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
+	}
+	subTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			c, ok := checkedSubInt(b, a)
+			if !ok {
+				return Value{}, integerOverflowError("sub", a, b)
+			}
+			return NewInteger(c), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Sub(b, a)), nil },
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Sub, b, a) },
+		fltFn: func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
+	}
+	mulTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			c, ok := checkedMulInt(b, a)
+			if !ok {
+				return Value{}, integerOverflowError("mul", a, b)
+			}
+			return NewInteger(c), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Mul(b, a)), nil },
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Mul, b, a) },
+		fltFn: func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
+	}
+	divTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			if a == 0 {
+				return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
+			}
+			return NewInteger(b / a), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) {
+			if a.Sign() == 0 {
+				return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
+			}
+			return NewBigInteger(new(big.Int).Quo(b, a)), nil
+		},
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) {
+			return apdBin(ctx.Quo, b, a)
+		},
+		fltFn: func(a, b float64) (Value, error) {
+			return NewFloat(b / a), nil
+		},
+	}
+	modTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			if a == 0 {
+				return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
+			}
+			return NewInteger(b % a), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) {
+			if a.Sign() == 0 {
+				return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
+			}
+			return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
+		},
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) }, //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+		fltFn: func(a, b float64) (Value, error) {
+			return NewFloat(math.Mod(b, a)), nil
+		},
+	}
+	powTowerOps = towerOps{
+		intFn: func(a, b int64) (Value, error) {
+			if a < 0 {
+				return Value{}, fmt.Errorf("pow: negative exponent %d", a)
+			}
+			result, ok := checkedPowInt(b, a)
+			if !ok {
+				return Value{}, integerOverflowError("pow", a, b)
+			}
+			return NewInteger(result), nil
+		},
+		bigFn: func(a, b *big.Int) (Value, error) {
+			if a.Sign() < 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+				return Value{}, fmt.Errorf("pow: negative exponent")
+			}
+			return NewBigInteger(new(big.Int).Exp(b, a, nil)), nil
+		},
+		decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Pow, b, a) },
+		fltFn: func(a, b float64) (Value, error) { return NewFloat(math.Pow(b, a)), nil },
+	}
+)
+
+// towerOpsFor maps a core arithmetic word name to its numeric leaf
+// tower, so the Micron field-wise default can drive the same per-field
+// numeric semantics the [Number Number] signatures use.
+func towerOpsFor(op string) (towerOps, bool) {
+	switch op {
+	case "add":
+		return addTowerOps, true
+	case "sub":
+		return subTowerOps, true
+	case "mul":
+		return mulTowerOps, true
+	case "div":
+		return divTowerOps, true
+	case "mod":
+		return modTowerOps, true
+	case "pow":
+		return powTowerOps, true
+	}
+	return towerOps{}, false //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+}
+
 var mathNatives = []NativeFunc{
 	{
 		Name: "add",
 
 		Signatures: []Signature{
 			{
-				Args: []*Type{TNumber, TNumber},
-				Impl: Go(numericBinaryHandler(towerOps{
-					intFn: func(a, b int64) (Value, error) {
-						c, ok := checkedAddInt(b, a)
-						if !ok {
-							return Value{}, integerOverflowError("add", a, b)
-						}
-						return NewInteger(c), nil
-					},
-					bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Add(b, a)), nil },
-					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Add, b, a) },
-					fltFn: func(a, b float64) (Value, error) { return NewFloat(b + a), nil },
-				})),
+				Args:      []*Type{TNumber, TNumber},
+				Impl:      Go(numericBinaryHandler(addTowerOps)),
 				ReturnsFn: returnsIntArithChecked("add", addIntFault), BarrierPos: -1,
 			},
 			// String concatenation requires AT LEAST ONE String operand;
@@ -207,19 +321,8 @@ var mathNatives = []NativeFunc{
 
 		Signatures: []Signature{
 			{
-				Args: []*Type{TNumber, TNumber},
-				Impl: Go(numericBinaryHandler(towerOps{
-					intFn: func(a, b int64) (Value, error) {
-						c, ok := checkedSubInt(b, a)
-						if !ok {
-							return Value{}, integerOverflowError("sub", a, b)
-						}
-						return NewInteger(c), nil
-					},
-					bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Sub(b, a)), nil },
-					decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Sub, b, a) },
-					fltFn: func(a, b float64) (Value, error) { return NewFloat(b - a), nil },
-				})),
+				Args:      []*Type{TNumber, TNumber},
+				Impl:      Go(numericBinaryHandler(subTowerOps)),
 				ReturnsFn: returnsIntArithChecked("sub", subIntFault), BarrierPos: -1,
 			},
 			// Temporal sub overloads: moved to aql:time-util — see the
@@ -230,19 +333,8 @@ var mathNatives = []NativeFunc{
 		Name: "mul",
 
 		Signatures: []Signature{{
-			Args: []*Type{TNumber, TNumber},
-			Impl: Go(numericBinaryHandler(towerOps{
-				intFn: func(a, b int64) (Value, error) {
-					c, ok := checkedMulInt(b, a)
-					if !ok {
-						return Value{}, integerOverflowError("mul", a, b)
-					}
-					return NewInteger(c), nil
-				},
-				bigFn: func(a, b *big.Int) (Value, error) { return NewBigInteger(new(big.Int).Mul(b, a)), nil },
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Mul, b, a) },
-				fltFn: func(a, b float64) (Value, error) { return NewFloat(b * a), nil },
-			})),
+			Args:      []*Type{TNumber, TNumber},
+			Impl:      Go(numericBinaryHandler(mulTowerOps)),
 			ReturnsFn: returnsIntArithChecked("mul", mulIntFault), BarrierPos: -1,
 		}},
 	},
@@ -254,37 +346,8 @@ var mathNatives = []NativeFunc{
 		CompileEffect: CompileValueDiverges,
 
 		Signatures: []Signature{{
-			Args: []*Type{TNumber, TNumber},
-			Impl: Go(numericBinaryHandler(towerOps{
-				intFn: func(a, b int64) (Value, error) {
-					// Integer division by zero has no defined result
-					// (there is no integer infinity) — it stays a hard
-					// error. The Float path below follows IEEE-754 instead.
-					if a == 0 {
-						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
-					}
-					return NewInteger(b / a), nil
-				},
-				bigFn: func(a, b *big.Int) (Value, error) {
-					// BigInteger division truncates toward zero (like Integer).
-					if a.Sign() == 0 {
-						return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
-					}
-					return NewBigInteger(new(big.Int).Quo(b, a)), nil
-				},
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) {
-					// BigDecimal division rounds to the context (decimal128);
-					// apd's DivisionByZero trap surfaces zero divisors as an
-					// error.
-					return apdBin(ctx.Quo, b, a)
-				},
-				fltFn: func(a, b float64) (Value, error) {
-					// Float division by zero is IEEE-754: x/0 → ±inf,
-					// 0/0 → nan. Go's float division already produces
-					// these, so we do NOT special-case a == 0.
-					return NewFloat(b / a), nil
-				},
-			})),
+			Args:      []*Type{TNumber, TNumber},
+			Impl:      Go(numericBinaryHandler(divTowerOps)),
 			ReturnsFn: returnsDivMod("division by zero"), BarrierPos: -1,
 		}},
 	},
@@ -295,29 +358,8 @@ var mathNatives = []NativeFunc{
 		CompileEffect: CompileValueDiverges,
 
 		Signatures: []Signature{{
-			Args: []*Type{TNumber, TNumber},
-			Impl: Go(numericBinaryHandler(towerOps{
-				intFn: func(a, b int64) (Value, error) {
-					// Integer modulo by zero stays a hard error (no
-					// integer infinity / NaN). The Float path is IEEE.
-					if a == 0 {
-						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
-					}
-					return NewInteger(b % a), nil
-				},
-				bigFn: func(a, b *big.Int) (Value, error) {
-					if a.Sign() == 0 {
-						return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
-					}
-					return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
-				},
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Rem, b, a) }, //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-				fltFn: func(a, b float64) (Value, error) {
-					// Float modulo by zero is IEEE-754: math.Mod(x, 0)
-					// returns NaN. No special-case error.
-					return NewFloat(math.Mod(b, a)), nil
-				},
-			})),
+			Args:      []*Type{TNumber, TNumber},
+			Impl:      Go(numericBinaryHandler(modTowerOps)),
 			ReturnsFn: returnsDivMod("modulo by zero"), BarrierPos: -1,
 		}},
 	},
@@ -325,28 +367,8 @@ var mathNatives = []NativeFunc{
 		Name: "pow",
 
 		Signatures: []Signature{{
-			Args: []*Type{TNumber, TNumber},
-			Impl: Go(numericBinaryHandler(towerOps{
-				intFn: func(a, b int64) (Value, error) {
-					// Compute b ** a under §1.4 swap-form preference.
-					if a < 0 {
-						return Value{}, fmt.Errorf("pow: negative exponent %d", a)
-					}
-					result, ok := checkedPowInt(b, a)
-					if !ok {
-						return Value{}, integerOverflowError("pow", a, b)
-					}
-					return NewInteger(result), nil
-				},
-				bigFn: func(a, b *big.Int) (Value, error) {
-					if a.Sign() < 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-						return Value{}, fmt.Errorf("pow: negative exponent")
-					}
-					return NewBigInteger(new(big.Int).Exp(b, a, nil)), nil
-				},
-				decFn: func(ctx *apd.Context, a, b *apd.Decimal) (Value, error) { return apdBin(ctx.Pow, b, a) },
-				fltFn: func(a, b float64) (Value, error) { return NewFloat(math.Pow(b, a)), nil },
-			})),
+			Args:      []*Type{TNumber, TNumber},
+			Impl:      Go(numericBinaryHandler(powTowerOps)),
 			ReturnsFn: returnsIntArithChecked("pow", powIntFault), BarrierPos: -1,
 		}},
 	},
@@ -462,6 +484,129 @@ func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return []Value{NewDateTime(t.Add(d))}, nil
 }
 
+// --- affine temporal arithmetic (aql:time-util) ---
+//
+// The affine package: subtracting two points of the same leaf yields a
+// duration, durations of the same leaf add / subtract, and a ClockDuration
+// pair supports div (→ Float ratio) and mod (→ ClockDuration remainder).
+// These extensions read args in FORWARD form (args[0] is the first written
+// operand), matching the existing Date±Duration overloads above, so
+// `sub d1 d2` is d1 − d2 and `div c1 c2` is c1 ÷ c2.
+
+// dateSubHandler is Date − Date → CalendarDuration (whole days). The
+// difference is computed over CIVIL dates — each operand's y/m/d
+// reconstructed at UTC midnight — never by dividing a wall-clock
+// duration: in a DST-observing location consecutive local midnights can
+// be 23 or 25 hours apart (a raw /24h truncates that ±1 day to 0), and
+// time.Duration saturates for pairs more than ~290 years apart. The
+// UTC-midnight Unix seconds divide by 86400 exactly (PR #292 review).
+func dateSubHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		days := int(civilDayNumber(AsDate(args[0])) - civilDayNumber(AsDate(args[1])))
+		return []Value{tt.NewCalendarDuration(0, 0, days)}, nil
+	}
+}
+
+// civilDayNumber is t's calendar date as a day count (its y/m/d at UTC
+// midnight, in days since the Unix epoch — negative before it).
+func civilDayNumber(t time.Time) int64 {
+	y, m, d := t.Date()
+	secs := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix()
+	// Floor division: pre-epoch midnights are negative and must round
+	// toward -inf so day arithmetic stays exact across the epoch.
+	if secs >= 0 {
+		return secs / 86400
+	}
+	return (secs - 86399) / 86400
+}
+
+// dateTimeSubHandler is DateTime − DateTime → ClockDuration.
+func dateTimeSubHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{tt.NewClockDuration(AsDateTime(args[0]).Sub(AsDateTime(args[1])))}, nil
+	}
+}
+
+// instantSubHandler is Instant − Instant → ClockDuration.
+func instantSubHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{tt.NewClockDuration(AsInstant(args[0]).Sub(AsInstant(args[1])))}, nil
+	}
+}
+
+// timeOfDaySubHandler is TimeOfDay − TimeOfDay → ClockDuration.
+func timeOfDaySubHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{tt.NewClockDuration(AsTimeOfDay(args[0]) - AsTimeOfDay(args[1]))}, nil
+	}
+}
+
+// clockDurArith is ClockDuration ± ClockDuration → ClockDuration. A
+// ClockDuration is an int64 nanosecond count, so the arithmetic is
+// CHECKED — an out-of-range result raises rather than silently wrapping
+// to an unrelated duration (the WAT Exhibit K policy, uniform with the
+// integer words; PR #292 review).
+func clockDurArith(tt TemporalModuleTypes, neg bool) Handler {
+	op := "add"
+	if neg {
+		op = "sub"
+	}
+	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		a, _ := AsClockDuration(args[0])
+		b, _ := AsClockDuration(args[1])
+		var c int64
+		var ok bool
+		if neg {
+			c, ok = checkedSubInt(int64(a), int64(b))
+		} else {
+			c, ok = checkedAddInt(int64(a), int64(b))
+		}
+		if !ok {
+			return nil, r.AqlError("integer_overflow",
+				op+": ClockDuration overflow — the result does not fit the int64 nanosecond range", op)
+		}
+		return []Value{tt.NewClockDuration(time.Duration(c))}, nil
+	}
+}
+
+// calDurArith is CalendarDuration ± CalendarDuration → CalendarDuration
+// (component-wise; months are NOT normalised into years — a calendar
+// duration is a symbolic tuple, not a fixed span).
+func calDurArith(tt TemporalModuleTypes, neg bool) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		a, _ := AsCalendarDuration(args[0])
+		b, _ := AsCalendarDuration(args[1])
+		s := 1
+		if neg {
+			s = -1
+		}
+		return []Value{tt.NewCalendarDuration(a.Years+s*b.Years, a.Months+s*b.Months, a.Days+s*b.Days)}, nil
+	}
+}
+
+// clockDurDivHandler is ClockDuration ÷ ClockDuration → Float (a
+// dimensionless ratio). Division by a zero duration follows IEEE-754
+// (±Inf / NaN), like Float div.
+func clockDurDivHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	a, _ := AsClockDuration(args[0])
+	b, _ := AsClockDuration(args[1])
+	return []Value{NewFloat(float64(a) / float64(b))}, nil
+}
+
+// clockDurModHandler is ClockDuration mod ClockDuration → ClockDuration.
+// A zero divisor has no remainder (and integer % 0 would panic), so it is
+// a hard error like integer modulo by zero.
+func clockDurModHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		a, _ := AsClockDuration(args[0])
+		b, _ := AsClockDuration(args[1])
+		if b == 0 {
+			return nil, r.AqlError("arith_error", "mod: modulo by a zero duration", "mod")
+		}
+		return []Value{tt.NewClockDuration(a % b)}, nil
+	}
+}
+
 // TemporalArithmeticExtensions builds the add / sub WORD-EXTENSION
 // clones aql:time-util exports (design/OPEN-WORDS.0.md §2.4 / §6
 // migration 1): the temporal overloads that historically sat on the
@@ -473,17 +618,39 @@ func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 // the module transplants the overloads onto the importer's bare
 // add / sub (and TimeUtil.add / TimeUtil.sub work namespaced).
 func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
+	// Anchored (first-party waiver): the affine POINT − POINT overloads
+	// (Date − Date, DateTime − DateTime, Instant − Instant) are all-builtin
+	// tuples the module-scope user-type rule would otherwise refuse.
+	// aql:time-util ships with the kernel, so the waiver applies — the same
+	// escape hatch aql:io uses for its Pathon-anchored list/remove.
 	return []FnDefInfo{
-		NewWordExtension("add", []Signature{
+		NewWordExtensionAnchored("add", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(false)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(false)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(false)), Returns: []*Type{TInstant}, BarrierPos: -1},
 			{Args: []*Type{TDate, tt.ClockDuration}, Impl: Go(addDateClkHandler), Returns: []*Type{TDateTime}, BarrierPos: -1},
+			// duration + duration (same leaf)
+			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, false)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
+			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, false)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
 		}),
-		NewWordExtension("sub", []Signature{
+		NewWordExtensionAnchored("sub", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(true)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(true)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(true)), Returns: []*Type{TInstant}, BarrierPos: -1},
+			// point − point → duration (the affine core)
+			{Args: []*Type{TDate, TDate}, Impl: Go(dateSubHandler(tt)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
+			{Args: []*Type{TDateTime, TDateTime}, Impl: Go(dateTimeSubHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
+			{Args: []*Type{TInstant, TInstant}, Impl: Go(instantSubHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
+			{Args: []*Type{tt.TimeOfDay, tt.TimeOfDay}, Impl: Go(timeOfDaySubHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
+			// duration − duration (same leaf)
+			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, true)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
+			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, true)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
+		}),
+		NewWordExtensionAnchored("div", []Signature{
+			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurDivHandler), Returns: []*Type{TFloat}, BarrierPos: -1},
+		}),
+		NewWordExtensionAnchored("mod", []Signature{
+			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurModHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 		}),
 	}
 }

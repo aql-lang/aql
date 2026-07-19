@@ -217,15 +217,11 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		// apply.tsv:38 — same via a ref value on the stack.
 		{"ref-value carrier vs apply",
 			`def inc fn [[n:Integer][Integer][n add 1]]  5 (ref inc) apply`},
-		// open-words.tsv:32 — a Boolean carrier against add's builtin
-		// overloads; the 3-arg [Map Any Patrun] overload falls to the
-		// zero-edge Map slot (true/false fail it too).
-		{"Boolean carrier vs builtin add",
-			`def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`},
-		// open-words.tsv:83 — module-PRIVATE Flag overload not exported:
-		// two Flag carriers are disjoint from every builtin add slot.
-		{"Flag carriers vs builtin add (module add private)",
-			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)`},
+		// (The former Boolean-carrier and private-Flag-overload cases are
+		// no longer carrier-disjoint: `add` now carries a within-type
+		// [Boolean Boolean] CoreDefault overload that a Boolean — or a
+		// `refine Boolean` — matches, so those calls dispatch it and raise
+		// a type_error at runtime rather than trapping as unmatched.)
 		// open-words.tsv:100 — the COUNTING case: the merged [Point Point]
 		// overload has one Point-compatible candidate for two Point slots,
 		// so the Integer must occupy one of them (assignment infeasibility).

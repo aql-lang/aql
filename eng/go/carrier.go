@@ -1478,12 +1478,21 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	}
 	// Only a genuinely dynamic dispatch (the case the checker could not
 	// commit to one overload — an island or a refusal today), a strict-
-	// disjunct straddle (disjunctStraddle), or a no-signature recovery over an
+	// disjunct straddle (disjunctStraddle), a no-signature recovery over an
 	// Any-typed operand (dynamicRecovery — matchSignature found no overload
-	// because an operand's type is statically unknown, e.g. a List/Map element).
+	// because an operand's type is statically unknown, e.g. a List/Map element),
+	// or a CoreDefault overload matched over a NON-CONCRETE operand: a
+	// CoreDefault is unlocked, so a runtime value whose tag is a strict
+	// subtype of the carrier's type (the refinement escape — `refine
+	// Boolean` with a merged [Flag Flag] overload) re-matches to the more
+	// specific overload; the VM's runtime re-match over the LIVE table is
+	// exactly the interpreter's dispatch, so poly keeps parity where a
+	// baked CALL_NATIVE would freeze the wrong overload.
 	// A fully concrete, single-overload call lowers to a faithful baked
 	// CALL_NATIVE, not poly.
-	if !disjunctStraddle && !dynamicRecovery && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+	coreDefaultCarrier := sig.CoreDefault && anyNonConcreteOperand(args)
+	if !disjunctStraddle && !dynamicRecovery && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) &&
+		!coreDefaultCarrier {
 		return false
 	}
 	// Shapes the VM re-match cannot faithfully dispatch: code bodies,
@@ -2701,6 +2710,20 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 func anyDynamicCarrier(vs []Value) bool {
 	for _, v := range vs {
 		if v.Dynamic {
+			return true
+		}
+	}
+	return false
+}
+
+// anyNonConcreteOperand reports whether any value is not a concrete
+// payload-bearing value (a typed carrier or a bare type literal) — the
+// operand shape under which a static CoreDefault match is not a dispatch
+// proof (recordCallRefusal): the runtime tag may be a strict subtype a
+// more-specific unlocked overload claims.
+func anyNonConcreteOperand(vs []Value) bool {
+	for _, v := range vs {
+		if !IsConcrete(v) {
 			return true
 		}
 	}

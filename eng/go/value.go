@@ -377,6 +377,17 @@ type FnSig struct {
 	// arriving from a DIFFERENT module raises [aql/extend_conflict],
 	// while identical provenance (diamond re-import) is idempotent.
 	Origin string
+	// CoreDefault marks a core-provided UNLOCKED default overload that the
+	// kernel appends to a builtin word (RegisterCoreDefault) — the Micron
+	// field-wise arithmetic default is the sole user. Unlike a locked
+	// native sig it dispatches AFTER (is beaten by) any more-specific
+	// user/module overload, so a user's own `def add fn [[a:Kindon
+	// b:Kindon] …]` wins by specificity. Unlike an ordinary unlocked def it
+	// lives on the native FnDefInfo (so `undef` of the builtin still
+	// refuses) and is SKIPPED by the export transplant (so it never rides
+	// a module's word extension into an importer, where its builtin-only
+	// tuple would trip the module-scope user-type rule).
+	CoreDefault bool
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
