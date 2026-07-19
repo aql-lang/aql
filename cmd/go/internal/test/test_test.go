@@ -149,15 +149,23 @@ func TestRunReadResultsError(t *testing.T) {
 	}
 }
 
-func TestRunCoverage(t *testing.T) {
-	dir := t.TempDir()
-	// triple (rows 4-6) is never called, so its body row stays uncovered.
-	mod := write(t, filepath.Join(dir, "calc.aql"),
+// coverageFixture writes calc.aql (add2 is exercised, triple is not — its body
+// on row 5 stays uncovered → 71.4% coverage) plus a suite importing it, and
+// returns their paths.
+func coverageFixture(t *testing.T, dir string) (mod, suite string) {
+	t.Helper()
+	mod = write(t, filepath.Join(dir, "calc.aql"),
 		"def add2 fn [[x:Integer] [Integer] [\n  x add 2\n]]\n"+
 			"def triple fn [[x:Integer] [Integer] [\n  x mul 3\n]]\n"+
 			"export \"Calc\" { add2: add2/r  triple: triple/r }\n")
-	f := write(t, filepath.Join(dir, "calc_test.aql"),
+	suite = write(t, filepath.Join(dir, "calc_test.aql"),
 		"import \"aql:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
+	return mod, suite
+}
+
+func TestRunCoverage(t *testing.T) {
+	dir := t.TempDir()
+	mod, f := coverageFixture(t, dir)
 	htmlDir := filepath.Join(t.TempDir(), "cov")
 	// Run on the interpreter so the uncovered set is exact (no VM position
 	// folding): add2 is exercised, triple is not, so triple's body (row 5) is
@@ -192,6 +200,43 @@ func TestRunCoverage(t *testing.T) {
 	// triple body (row 5).
 	if !strings.Contains(string(modHTML), "covered") || !strings.Contains(string(modHTML), "uncovered") {
 		t.Errorf("mod0.html missing coverage classes:\n%s", modHTML)
+	}
+}
+
+// --coverage-min fails the run when aggregate coverage is below the threshold,
+// even though every test passed, and (alone) writes no HTML report.
+func TestRunCoverageMinFail(t *testing.T) {
+	dir := t.TempDir()
+	_, f := coverageFixture(t, dir) // 71.4% coverage
+	code, stdout, stderr := runCmd("--coverage-min", "90", "--no-compile", f)
+	if code != 1 {
+		t.Errorf("code = %d, want 1 (coverage below minimum)", code)
+	}
+	if !strings.Contains(stderr, "below the required 90.0%") {
+		t.Errorf("stderr = %q, want the coverage-min message", stderr)
+	}
+	// The summary still prints, but no HTML report is written without --coverage.
+	if !strings.Contains(stdout, "cover ") {
+		t.Errorf("stdout = %q, want the coverage summary", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "coverage")); !os.IsNotExist(err) {
+		t.Error("--coverage-min alone must not write an HTML report")
+	}
+}
+
+// --coverage-min at or below the actual coverage passes.
+func TestRunCoverageMinPass(t *testing.T) {
+	dir := t.TempDir()
+	_, f := coverageFixture(t, dir) // 71.4% coverage
+	code, stdout, stderr := runCmd("--coverage-min", "50", "--no-compile", f)
+	if code != 0 {
+		t.Errorf("code = %d, want 0 (coverage meets minimum)", code)
+	}
+	if strings.Contains(stderr, "below the required") {
+		t.Errorf("stderr = %q, want no coverage-min failure", stderr)
+	}
+	if !strings.Contains(stdout, "cover ") {
+		t.Errorf("stdout = %q, want the coverage summary", stdout)
 	}
 }
 

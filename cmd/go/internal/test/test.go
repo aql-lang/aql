@@ -59,6 +59,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	registry := fs.String("r", "", "registry path")
 	coverage := fs.Bool("coverage", false, "measure imported-user-module line coverage; print a summary and write an HTML report")
 	coverageDir := fs.String("coverage-dir", "coverage", "directory for the HTML coverage report written with --coverage")
+	coverageMin := fs.Float64("coverage-min", 0, "fail the run (exit 1) when aggregate line coverage is below this percentage; implies coverage measurement")
 	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when possible; silent interpreter fallback (the default; also enabled by AQL_COMPILE)")
 	noCompileFlag := fs.Bool("no-compile", false, "run each suite on the interpreter instead of the default bytecode compiler (also enabled by AQL_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — a suite that is not compilable errors instead of falling back")
@@ -91,8 +92,10 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	o := run.OptionsFor(pathutil.Expand(*registry), 0, pol)
 	mode := run.ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag)
 
+	// A --coverage-min threshold implies coverage measurement even without
+	// --coverage (you can't gate on a number you don't measure).
 	var accum *covAccum
-	if *coverage {
+	if *coverage || *coverageMin > 0 {
 		accum = newCovAccum()
 	}
 	var passed, failed int
@@ -106,16 +109,26 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "\n=== %d files: %d passed, %d failed ===\n", len(files), passed, failed)
+	belowMin := false
 	if accum != nil {
 		accum.report(stdout)
-		index, err := accum.writeHTML(*coverageDir)
-		if err != nil {
-			fmt.Fprintf(stderr, "warning: coverage report: %s\n", err)
-		} else if index != "" {
-			fmt.Fprintf(stdout, "coverage report: %s\n", index)
+		if *coverage {
+			index, err := accum.writeHTML(*coverageDir)
+			if err != nil {
+				fmt.Fprintf(stderr, "warning: coverage report: %s\n", err)
+			} else if index != "" {
+				fmt.Fprintf(stdout, "coverage report: %s\n", index)
+			}
+		}
+		if *coverageMin > 0 {
+			cov, total := accum.aggregate()
+			if pct := percent(cov, total); pct < *coverageMin {
+				fmt.Fprintf(stderr, "coverage %.1f%% is below the required %.1f%% (--coverage-min)\n", pct, *coverageMin)
+				belowMin = true
+			}
 		}
 	}
-	if failed > 0 || anyErr {
+	if failed > 0 || anyErr || belowMin {
 		return 1
 	}
 	return 0

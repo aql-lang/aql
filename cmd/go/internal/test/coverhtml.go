@@ -83,6 +83,17 @@ func (a *covAccum) rows(id string) (covered, uncovered []int) {
 	return covered, uncovered
 }
 
+// aggregate sums covered and total executable lines across every module — the
+// denominator for the --coverage-min gate.
+func (a *covAccum) aggregate() (covered, total int) {
+	for _, id := range a.order {
+		cov, unc := a.rows(id)
+		covered += len(cov)
+		total += len(cov) + len(unc)
+	}
+	return covered, total
+}
+
 // report prints the aggregated per-module summary line (with uncovered rows)
 // for every module the run touched.
 func (a *covAccum) report(w io.Writer) {

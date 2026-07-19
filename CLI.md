@@ -329,6 +329,13 @@ Flags:
   to full coverage.
 * `--coverage-dir PATH` — where the HTML report is written (default
   `coverage`). Ignored without `--coverage`.
+* `--coverage-min PCT` — fail the run (exit 1) when **aggregate** line
+  coverage — total covered lines over total executable lines across every
+  imported module — is below `PCT`, even if every test passed. Implies
+  coverage measurement, so `aql test --coverage-min 80` gates without
+  needing `--coverage` (add `--coverage` too if you also want the HTML
+  report). Pair with `--no-compile` so folded compiled positions don't
+  drag the number below the real figure.
 * `--no-compile` / `--force-compile` / `--compile` — select the engine
   exactly as for [`aql run`](#bytecode-compilation).
 * `-r PATH` — registry path, same as `aql run`. The permission flags
