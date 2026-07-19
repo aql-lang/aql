@@ -336,9 +336,28 @@ width wrapping):
    overload past the first, were DELETED (`def f fn […] end f 1 2 3` lost
    `end f 1 2 3`). It now declines to the general (node-preserving) path
    unless the wrapper is the last node and has exactly one triple.
+4. **Dot-key capitalization** — the literal `dot` / `dotr` accessor words
+   quote their following bare word as a field NAME, so `opts dot table`
+   became `opts dot Table` (a different field). Added an `afterDot` guard.
+5. **Comment absorption** — a line comment runs to end of line, so a closing
+   delimiter placed after it on the same line was commented out
+   (`{a:1 # note b:2}` → the `}` is inside the comment → unbalanced). Any
+   container with a line comment now renders multi-line, closing on its own
+   line.
 
-This is why the formatter is a trustworthy base for the remaining example
-work: the risk was never the layout, it was fmt changing what code MEANS.
+Bugs 4–5 were found by a second sweep over all 100 repo `.aql` programs;
+the final verification is that fmt turns **0 of the 99 parseable files**
+into unparseable source. The risk was never the layout, it was fmt changing
+what code MEANS.
+
+**Known non-corruption limitation (pre-existing, cosmetic):** the
+bracketless single-param fn form is not idempotent when it must wrap — the
+wrap introduces a root-level newline that the formatter's physical-newline
+statement splitting re-reads as a boundary, so a second pass drops the
+continuation indent. Both passes parse to the identical program (no data or
+semantic change); only the indentation of the continuation line differs. A
+real fix needs continuation-aware statement splitting (or wrapping the
+bracketless body inside a delimiter), out of scope for the correctness pass.
 
 ## Risks
 
