@@ -135,8 +135,11 @@ func TestFormatBlankLineHandling(t *testing.T) {
 // whose signature triple does not fit on one line puts the body on its
 // own indented lines between `[` and `]]`.
 func TestFormatFnMultiLine(t *testing.T) {
-	src := "def process-all fn [[input:String] [String] [input upper input lower input trim input rev]]\n"
-	want := "def process-all fn [[input:String] [String] [\n" +
+	// A multi-parameter fn keeps the bracketed spec-list form, so this
+	// exercises tryFnFormat's multi-line body path (single-param fns take
+	// the bracketless triple form and bypass tryFnFormat).
+	src := "def process-all fn [[input:String extra:String] [String] [input upper input lower input trim input rev]]\n"
+	want := "def process-all fn [[input:String extra:String] [String] [\n" +
 		"  input upper input lower input trim input rev\n" +
 		"]]\n"
 	got := Format(src)
@@ -201,7 +204,7 @@ func TestFormatFnNotApplicable(t *testing.T) {
 // statement ending in a map keeps `{` on the header line and indents one
 // entry per line.
 func TestFormatTrailingMap(t *testing.T) {
-	src := "export Something {alpha:1 beta:2 gamma:3 delta:4 epsilon:5 zeta:6 eta:7}\n"
+	src := "export Something {alpha:1 beta:2 gamma:3 delta:4 epsilon:5 zeta:6 eta:7 theta:8}\n"
 	want := "export Something {\n" +
 		"  alpha:1\n" +
 		"  beta:2\n" +
@@ -210,6 +213,7 @@ func TestFormatTrailingMap(t *testing.T) {
 		"  epsilon:5\n" +
 		"  zeta:6\n" +
 		"  eta:7\n" +
+		"  theta:8\n" +
 		"}\n"
 	got := Format(src)
 	if got != want {
@@ -248,7 +252,7 @@ func TestFormatTrailingListWrappedGroup(t *testing.T) {
 // TestFormatWrapStatement covers the generic wrap: a long run of plain
 // words breaks with a two-space continuation indent.
 func TestFormatWrapStatement(t *testing.T) {
-	src := "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima\n"
+	src := "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike\n"
 	got := Format(src)
 	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
 	if len(lines) < 2 {

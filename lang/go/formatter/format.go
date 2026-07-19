@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-const maxLineWidth = 70
+const maxLineWidth = 72
 
 // knownTypes lists type names that should be capitalised
 // when they appear in type annotation positions (after :).
@@ -82,6 +82,7 @@ func Format(src string) string {
 	tokens := tokenize(src)
 	tree := buildTree(tokens)
 	capitalizeTypesInTree(tree)
+	elideFnBrackets(tree)
 	return emitRoot(tree, 0)
 }
 
@@ -135,6 +136,16 @@ func tokenize(src string) []Token {
 				tokens = append(tokens, Token{TokComment, src[i : i+end]})
 				i = i + end
 			}
+			continue
+		}
+
+		// Template literals: `...${...}...` are scanned verbatim as one
+		// atomic token so their content is emitted exactly as written and
+		// never rewrapped — the "backtick content is left verbatim" rule.
+		if ch == '`' {
+			s, n := scanBacktick(src[i:])
+			tokens = append(tokens, Token{TokString, s})
+			i += n
 			continue
 		}
 
@@ -274,6 +285,61 @@ func scanString(s string) (string, int) {
 	return s, len(s)
 }
 
+// scanBacktick scans a `...` template literal (s[0] == '`'), returning the
+// full literal text — both backticks included — and the byte count
+// consumed. Interpolation holes ${...} are scanned with brace-depth
+// tracking, skipping nested string and template literals so their
+// delimiters do not close the outer template early; nesting composes to
+// any depth. An unterminated literal consumes the rest of the input.
+func scanBacktick(s string) (string, int) {
+	i := 1
+	for i < len(s) {
+		switch {
+		case s[i] == '\\' && i+1 < len(s):
+			i += 2
+		case s[i] == '`':
+			return s[:i+1], i + 1
+		case s[i] == '$' && i+1 < len(s) && s[i+1] == '{':
+			i = scanInterpHole(s, i+2)
+		default:
+			i++
+		}
+	}
+	return s, len(s)
+}
+
+// scanInterpHole scans from just past a "${" to just past its matching
+// "}", tracking brace depth and skipping nested string / template
+// literals (whose braces must not affect the count). Returns the index
+// after the closing brace, or len(s) when the hole is unterminated.
+func scanInterpHole(s string, i int) int {
+	depth := 1
+	for i < len(s) {
+		switch {
+		case s[i] == '\\' && i+1 < len(s):
+			i += 2
+		case s[i] == '{':
+			depth++
+			i++
+		case s[i] == '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+			i++
+		case s[i] == '`':
+			_, n := scanBacktick(s[i:])
+			i += n
+		case s[i] == '"' || s[i] == '\'':
+			_, n := scanString(s[i:])
+			i += n
+		default:
+			i++
+		}
+	}
+	return len(s)
+}
+
 // --- Tree builder ---
 
 func buildTree(tokens []Token) *Node {
@@ -411,6 +477,110 @@ func capitalize(s string) string {
 	return string(runes)
 }
 
+// --- fn bracket elision ---
+
+// elideFnBrackets rewrites single-parameter function definitions from the
+// bracketed spec-list form `fn [[p] [r] [body]]` to the lighter triple
+// form `fn p r [body]` — "single params (and returns) do not need
+// brackets". Only a single-overload fn whose sole parameter can be
+// rendered without brackets is rewritten; multi-parameter, multi-overload,
+// empty-parameter, and sole-`List`-parameter fns keep the spec-list form
+// (a bare `List` in the input slot is rejected by fn's `tnot List` guard,
+// lang/spec/fn-triple.tsv). Runs after capitalizeTypesInTree; it only
+// moves nodes, never rewrites their text, so capitalisation is preserved
+// and the rewrite is idempotent (the triple form has no wrapper to match).
+func elideFnBrackets(n *Node) {
+	for _, ch := range n.Children {
+		if ch.Kind == NdList || ch.Kind == NdMap || ch.Kind == NdParen || ch.Kind == NdRoot {
+			elideFnBrackets(ch)
+		}
+	}
+	var out []*Node
+	i := 0
+	for i < len(n.Children) {
+		ch := n.Children[i]
+		if ch.Kind == NdWord && ch.Text == "fn" && i+1 < len(n.Children) &&
+			n.Children[i+1].Kind == NdList {
+			if triple := elideFnTriple(n.Children[i+1]); triple != nil {
+				out = append(out, ch)
+				out = append(out, triple...)
+				i += 2
+				continue
+			}
+		}
+		out = append(out, ch)
+		i++
+	}
+	n.Children = out
+}
+
+// elideFnTriple returns the bracketless triple-form node sequence for a
+// single-overload fn wrapper whose sole parameter is safe to unbracket,
+// or nil when the wrapper must be left as the spec-list form.
+func elideFnTriple(wrapper *Node) []*Node {
+	parts := nonTrivial(wrapper.Children)
+	if len(parts) != 3 {
+		return nil
+	}
+	for _, p := range parts {
+		if p.Kind != NdList {
+			return nil
+		}
+	}
+	pkids := nonTrivial(parts[0].Children)
+	if paramCount(pkids) != 1 || !paramUnbracketSafe(pkids) {
+		return nil
+	}
+	out := append([]*Node{}, pkids...)
+	out = append(out, unbracketRet(parts[1]))
+	out = append(out, parts[2])
+	return out
+}
+
+// paramCount counts parameter heads in a params-list's children: a name
+// or bare-type word (not the type sitting after a `:`), a `{…}` map
+// param, or a value-pattern literal each count once.
+func paramCount(kids []*Node) int {
+	n := 0
+	for i, k := range kids {
+		switch k.Kind {
+		case NdMap:
+			n++
+		case NdWord, NdNumber, NdString:
+			if !(i > 0 && kids[i-1].Kind == NdColon) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// paramUnbracketSafe reports whether a sole parameter can render without
+// its list brackets. A nested list/paren (a value-pattern list) or a bare
+// unnamed `List` type must stay bracketed.
+func paramUnbracketSafe(kids []*Node) bool {
+	for _, k := range kids {
+		if k.Kind == NdList || k.Kind == NdParen {
+			return false
+		}
+	}
+	if len(kids) == 1 && kids[0].Kind == NdWord && kids[0].Text == "List" {
+		return false
+	}
+	return true
+}
+
+// unbracketRet drops the brackets around a single-type return list,
+// returning the bare type word; a multi-token or non-word return keeps
+// its list.
+func unbracketRet(ret *Node) *Node {
+	kids := nonTrivial(ret.Children)
+	if len(kids) == 1 && kids[0].Kind == NdWord {
+		return kids[0]
+	}
+	return ret
+}
+
 // --- Emitter ---
 
 func emitRoot(n *Node, indent int) string {
@@ -530,11 +700,14 @@ func tryFnFormat(nodes []*Node, indent int) string {
 		return oneLine
 	}
 
-	// If header + " [" is too long, wrap it.
+	// The body opens with " [". When the header line has room, keep the
+	// bracket on it; otherwise wrap the header, carrying the body-open
+	// bracket on the last wrapped piece so no line overflows the width.
+	openLine := header + " ["
 	if len(header)+2 > maxLineWidth {
-		header = wrapStatement(append(headerParts,
+		openLine = wrapStatement(append(headerParts,
 			&Node{Kind: NdWord, Text: "[" + argsStr},
-			&Node{Kind: NdWord, Text: retStr},
+			&Node{Kind: NdWord, Text: retStr + " ["},
 		), indent)
 	}
 
@@ -544,7 +717,7 @@ func tryFnFormat(nodes []*Node, indent int) string {
 	bodyIndent := indent + 2
 	groups := splitIntoGroups(bodyChildren)
 	var lines []string
-	lines = append(lines, header+" [")
+	lines = append(lines, openLine)
 	for _, grp := range groups {
 		grpLine := strings.Repeat(" ", bodyIndent) + renderInline(grp, bodyIndent)
 		if len(grpLine) <= maxLineWidth {

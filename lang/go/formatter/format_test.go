@@ -22,14 +22,29 @@ func TestFormatBasic(t *testing.T) {
 			want: `(import "textkit")` + "\n",
 		},
 		{
-			name: "fn single list",
+			name: "fn single param drops brackets",
 			in:   "def square fn [[x:Integer] [Integer] [x mul x]]\n",
-			want: "def square fn [[x:Integer] [Integer] [x mul x]]\n",
+			want: "def square fn x:Integer Integer [x mul x]\n",
+		},
+		{
+			name: "fn single list idempotent",
+			in:   "def square fn x:Integer Integer [x mul x]\n",
+			want: "def square fn x:Integer Integer [x mul x]\n",
+		},
+		{
+			name: "fn multi param keeps brackets",
+			in:   "def add2 fn [[a:Integer b:Integer] [Integer] [a add b]]\n",
+			want: "def add2 fn [[a:Integer b:Integer] [Integer] [a add b]]\n",
 		},
 		{
 			name: "type capitalize after colon",
 			in:   "def f fn [[x:string] [integer] [x]]\n",
-			want: "def f fn [[x:String] [Integer] [x]]\n",
+			want: "def f fn x:String Integer [x]\n",
+		},
+		{
+			name: "fn sole List param keeps brackets",
+			in:   "def f fn [[List] [Integer] [size]]\n",
+			want: "def f fn [[List] [Integer] [size]]\n",
 		},
 		{
 			name: "no capitalize variable names",

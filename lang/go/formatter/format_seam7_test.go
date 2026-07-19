@@ -73,9 +73,11 @@ func TestFormatMapCommasSeam7(t *testing.T) {
 // trailing tokens after the fn wrapper) overflowed it. tryFnFormat only
 // reformats up to the wrapper, so trailing tokens are dropped — this is
 // the observed behaviour for such (malformed) input, asserted verbatim.
+// A multi-parameter fn is used so the spec-list form is kept and
+// tryFnFormat runs (a single-param fn would take the bracketless form).
 func TestFormatFnSingleLineTrailingSeam7(t *testing.T) {
-	src := "def n fn [[a:Integer] [Integer] [a]] one two three four five six seven eight\n"
-	want := "def n fn [[a:Integer] [Integer] [a]]\n"
+	src := "def n fn [[a:Integer b:Integer] [Integer] [a]] one two three four five six seven eight\n"
+	want := "def n fn [[a:Integer b:Integer] [Integer] [a]]\n"
 	if got := Format(src); got != want {
 		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
 	}
@@ -87,8 +89,8 @@ func TestFormatFnSingleLineTrailingSeam7(t *testing.T) {
 // path where a single body group itself exceeds the width and falls to
 // wrapStatement (format.go:552-554).
 func TestFormatFnBodyGroupWrapSeam7(t *testing.T) {
-	src := "def f fn [[x:Integer] [Integer] [x add x add x add x add x add x add x add x add x add x add x add x add x]]\n"
-	want := "def f fn [[x:Integer] [Integer] [\n" +
+	src := "def f fn [[x:Integer y:Integer] [Integer] [x add x add x add x add x add x add x add x add x add x add x add x add x]]\n"
+	want := "def f fn [[x:Integer y:Integer] [Integer] [\n" +
 		"  x add x add x add x add x add x add x add x add x add x add x add x\n" +
 		"    add x\n" +
 		"]]\n"
@@ -103,8 +105,8 @@ func TestFormatFnBodyGroupWrapSeam7(t *testing.T) {
 // starting a fresh part.
 func TestFormatWrapAttachSeam7(t *testing.T) {
 	src := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet, kilo, lima, mike\n"
-	want := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india,\n" +
-		"  juliet, kilo, lima, mike\n"
+	want := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet,\n" +
+		"  kilo, lima, mike\n"
 	if got := Format(src); got != want {
 		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
 	}

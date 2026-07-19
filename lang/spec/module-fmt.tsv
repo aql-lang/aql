@@ -13,3 +13,4 @@
 import "aql:fmt" end Fmt.format "[ a  b  c ]"	'[a b c]\n'	Fmt.format collapses list spacing and adds a trailing newline
 import "aql:fmt" end Fmt.format "{ a:1   b:2 }"	'{a:1 b:2}\n'	Fmt.format normalises map spacing
 import "aql:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical source but ensures a trailing newline
+import "aql:fmt" end Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"	'def double fn x:Integer Integer [x mul 2]\n'	Fmt.format drops brackets around a single fn param and return
