@@ -101,9 +101,14 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, r.AqlError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "push")
+	if werr != nil {
+		return nil, werr
+	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("push_error", aerr.Error(), "push")
 	}
@@ -129,8 +134,13 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	if err != nil {
 		return nil, r.AqlError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "unshift")
+	if werr != nil {
+		return nil, werr
+	}
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
 	}

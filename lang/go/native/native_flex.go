@@ -169,9 +169,14 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "append")
+	if werr != nil {
+		return nil, werr
+	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("append_error", aerr.Error(), "append")
 	}
@@ -224,12 +229,17 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("append_error", err.Error(), "append")
 	}
 	// Slice() snapshots before the grow, so `append f f` (self-concat)
-	// is well-defined. Each appended element is adopted so the tree
-	// stays entirely mutable.
+	// is well-defined. Each appended element is enforced + re-tagged against
+	// the [:T] element type (the concat spread must not bypass what the
+	// single-value append enforces) then adopted so the tree stays mutable.
 	elems := src.Slice()
 	adopted := make([]Value, len(elems))
 	for i, el := range elems {
-		a, aerr := eng.AdoptIntoFlex(el)
+		tagged, terr := d2AdoptTyped(r, args[1], el, "append")
+		if terr != nil {
+			return nil, terr
+		}
+		a, aerr := eng.AdoptIntoFlex(tagged)
 		if aerr != nil {
 			return nil, r.AqlError("append_error", aerr.Error(), "append")
 		}

@@ -19,6 +19,12 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 		return res, err
 	}
 
+	// A flex-family carrier (check-mode `(flex […])` residual) vs a typed list
+	// [:T]: gradual accept, element-tagged. (See unifyCarrierVsTyped.)
+	if res, handled := unifyCarrierVsTyped(a, sa, b, sb, ShapeTypedList, TFlexList); handled {
+		return res, nil
+	}
+
 	// If one side is the bare List type literal (`List`), it unifies
 	// with any List-family value except a table.
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TList)
@@ -84,8 +90,7 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 			typed, concrete = b, a
 		}
 		ct, _ := AsChildType(typed)
-		lst, _ := AsList(concrete)
-		return unifyTypedListWithConcrete(ct.Child, lst.Slice())
+		return unifyTypedListWithConcrete(concrete, ct.Child)
 	}
 
 	// Both concrete lists → element-by-element.
@@ -104,17 +109,33 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 	return NewList(result), nil
 }
 
-// unifyTypedListWithConcrete unifies a child type constraint against
-// each element of a concrete list. Every element must unify.
-func unifyTypedListWithConcrete(childType Value, elems []Value) (Value, *UnifyError) {
-	result, err := unifyZip(len(elems), constAt(childType), sliceAt(elems))
+// unifyTypedListWithConcrete unifies a child type constraint against each
+// element of the concrete list side. The result RETAINS childType as its
+// element tag (Value.elem) and PRESERVES mutability: a FlexList stays a
+// FlexList (flex only toggles mutability, never strips the element-type
+// contract), a plain List stays plain. A CARRIER (check-mode abstract list,
+// IsConcrete false) has no readable elements — unify gradually to its own
+// kind, tagged, rather than dereferencing nil (the flex-[:T] panic twin).
+// See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func unifyTypedListWithConcrete(concrete, childType Value) (Value, *UnifyError) {
+	if !IsConcrete(concrete) {
+		// A carrier (a check-mode abstract list with no readable elements) tags
+		// gradually; its concrete elements are validated at runtime.
+		out := concrete
+		out.SetElemConstraint(childType)
+		return out, nil
+	}
+	lst, _ := AsList(concrete) // concrete list-family (plain or flex) → readable
+	result, err := unifyZip(lst.Len(), constAt(childType), sliceAt(lst.Slice()))
 	if err != nil {
 		return Value{}, err
 	}
-	// Retain childType as the element tag on the concrete result so writes
-	// can be enforced and reads narrowed — the list stays concrete
-	// (ListPayload). See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
-	out := NewList(result)
+	var out Value
+	if IsFlexList(concrete) {
+		out = NewFlexList(result)
+	} else {
+		out = NewList(result)
+	}
 	out.SetElemConstraint(childType)
 	return out, nil
 }

@@ -17,6 +17,14 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 		return res, err
 	}
 
+	// A flex-family carrier (check-mode `(flex …)` residual with no shape
+	// tracking) vs a typed map {:T}: gradual accept, element-tagged. (The
+	// shape-tracked map carrier is ShapeMap and flows through the concrete arm
+	// below; this covers the bare-carrier fallback.) See unifyCarrierVsTyped.
+	if res, handled := unifyCarrierVsTyped(a, sa, b, sb, ShapeTypedMap, TFlexMap); handled {
+		return res, nil
+	}
+
 	// Bare Map type literal: unifies with any Map-family value except
 	// a record (records are nominal).
 	aLit := sa == ShapeTypeLiteral && denotedType(a).Equal(TMap)
@@ -91,8 +99,7 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 			typed, concrete = b, a
 		}
 		ct, _ := AsChildType(typed)
-		m, _ := AsMap(concrete)
-		return unifyTypedMapWithConcrete(ct.Child, m)
+		return unifyTypedMapWithConcrete(concrete, ct.Child)
 	}
 
 	// Both concrete maps: key-by-key unification, with absent-on-one-
@@ -155,15 +162,32 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 	return NewMap(result), nil
 }
 
-// unifyTypedMapWithConcrete unifies a child type constraint against
-// each value of a concrete map. Every value must unify. The concrete
-// result RETAINS childType as its element tag (Value.elem) so writes can
-// be enforced and reads narrowed — the map stays concrete (MapPayload),
-// the tag rides alongside. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
-func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, *UnifyError) {
+// unifyTypedMapWithConcrete unifies a child type constraint against each
+// value of the concrete map side. Every value must unify. The result RETAINS
+// childType as its element tag (Value.elem) so writes can be enforced and
+// reads narrowed, and PRESERVES the concrete side's mutability: a FlexMap
+// stays a FlexMap (flex only toggles mutability — it never strips the
+// element-type contract), a plain Map stays a plain Map. A CARRIER (a
+// check-mode abstract map, IsConcrete false — e.g. the residual of
+// `(flex {…})`) has no readable entries: unify gradually to the carrier's own
+// kind, tagged, rather than dereferencing nil (the flex-{:T} panic).
+// See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func unifyTypedMapWithConcrete(concrete, childType Value) (Value, *UnifyError) {
+	if !IsConcrete(concrete) {
+		// A carrier (a check-mode abstract map with no readable entries) tags
+		// gradually; its concrete elements are validated at runtime.
+		out := concrete
+		out.SetElemConstraint(childType)
+		return out, nil
+	}
+	m, _ := AsMap(concrete) // concrete map-family (plain or flex) → readable
 	res, err := unifyMapValues(m, func(string) Value { return childType })
 	if err != nil {
 		return Value{}, err
+	}
+	if IsFlexMap(concrete) {
+		om, _ := AsMutableMap(res) // res is a fresh plain Map — reuse its OrderedMap
+		res = NewFlexMap(om)
 	}
 	res.SetElemConstraint(childType)
 	return res, nil

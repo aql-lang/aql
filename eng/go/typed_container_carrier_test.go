@@ -2,6 +2,30 @@ package eng
 
 import "testing"
 
+// unifyTyped{List,Map}WithConcrete's !IsConcrete guard (typed flex layer) tags
+// an abstract CARRIER gradually. Ordinary dispatch routes flex carriers through
+// unifyCarrierVsTyped first (and only the shape-tracked MAP carrier reaches the
+// map twin), so the LIST arm is dispatch-unreachable — pin both by direct call.
+func TestUnifyTypedContainerCarrierGuard(t *testing.T) {
+	child := NewTypeLiteral(TInteger)
+	lc := NewCarrier(TFlexList)
+	out, uerr := unifyTypedListWithConcrete(lc, child)
+	if uerr != nil {
+		t.Fatalf("list carrier: %v", uerr)
+	}
+	if c, ok := out.ElemConstraint(); !ok || !c.Equal(TInteger) {
+		t.Errorf("list carrier not tagged with [:Integer]")
+	}
+	mc := NewCarrier(TFlexMap)
+	outm, merr := unifyTypedMapWithConcrete(mc, child)
+	if merr != nil {
+		t.Fatalf("map carrier: %v", merr)
+	}
+	if c, ok := outm.ElemConstraint(); !ok || !c.Equal(TInteger) {
+		t.Errorf("map carrier not tagged with {:Integer}")
+	}
+}
+
 // typedContainerCarrier (D2 Part A) threads a {:T} param's element type into
 // the body carrier. Its guard arms are exercised through the compile path by
 // the langspec census; the arms that ordinary dispatch cannot reach (a typed

@@ -27,9 +27,8 @@ does not. Three measured facts:
    (`unify_list.go:109 unifyTypedListWithConcrete`) is identical.
 2. **The runtime never carries `{:T}`.** Immutable `set` (`setMapHandler`) returns
    `NewMap(out)` — untagged. A `{:T}` fn PARAM is bound to whatever concrete map is
-   passed (a plain map). Flex-`{:T}` is separately blocked (`flex {:Integer}` →
-   `flex_error`, and `def m:{:Integer} (flex …)` currently **panics** — a
-   pre-existing latent bug, see Appendix A).
+   passed (a plain map). (Flex-`{:T}` was separately blocked/panicked here too;
+   both are now fixed — see "Typed flex nodes".)
 3. **So writes cannot be rejected at runtime, and the concrete top-level example
    cannot be rejected at all.** `def m:{:Integer} {a:1} (m set "b" "wrong")` has no
    element type at the `set` site. The only place a `{:T}` element type is live is
@@ -202,9 +201,10 @@ to **runtime**. A+B stay; R4 tightens B's reads once R2 makes them sound.
   need `elem` to reference a real constraint. Mitigation: reuse the child Value the
   `{:T}` type literal already carries (mint a member type if a bare `*Type` is
   insufficient).
-- **Flex.** Mutable-by-reference `{:T}` flex would need in-place write enforcement;
-  it is currently blocked/panics (Appendix A). Keep flex out of scope until its
-  construction is fixed, or continue to reject `{:T}` flex at construction.
+- **Flex — DONE (see "Typed flex nodes" below).** `flex` only toggles mutability,
+  so a `{:T}` flex is now a first-class, write-enforced, mutability-preserving node.
+  The former panic (Appendix A) is fixed and the enforcement covers the in-place
+  mutation API (`set` / `append` / `push` / `unshift`).
 
 ## Validation surface (every phase)
 
@@ -231,9 +231,53 @@ to **runtime**. A+B stay; R4 tightens B's reads once R2 makes them sound.
   `ReturnsFn`s (R2); `getNodeReturns`/`getIntKeyReturns` (R4).
 - `lang/go/native/setpath.go`, `merge.go`, `inject.go` — R3.
 
-## Appendix A — pre-existing flex-`{:T}` panic (out of scope, file separately)
+## Typed flex nodes (the flex layer — DONE)
 
-`def m:{:Integer} (flex {a:1}) …` → `internal_error: invalid memory address or nil
-pointer dereference` (reproduced on a clean tree without the D2 changes). A
-`{:T}`-typed def with a flex body nil-derefs. Unrelated to D2; a panic is an
-ADR-005 violation and should be fixed independently.
+`flex` only toggles mutability; it must never drop the `{:T}`/`[:T]` element
+contract. A `{:T}` flex is now first-class:
+
+- **No panic.** The former `def m:{:Integer} (flex {a:1})` nil-deref (Appendix A)
+  came from the typed-vs-concrete unify arm calling `AsMap`/`AsList` on a
+  **check-mode flex carrier** (`(flex …)` is a `Data=nil` carrier there;
+  `AsMap`→nil → `unifyMapValues(nil).Keys()`). Fixed: `unifyTyped{Map,List}
+  WithConcrete` guards `!IsConcrete` and tags the carrier gradually;
+  `unifyCarrierVsTyped` (scoped to genuine Flex{Map,List} carriers — a general
+  dynamic carrier must still narrow/reject) handles the bare-carrier fallback.
+- **Flex-preserving unify.** The typed-vs-concrete arm now returns a `NewFlexMap`
+  / `NewFlexList` (not a plain immutable `NewMap`/`NewList`) when the concrete
+  side is flex, carrying `elem`. `FlexDeepCopy` preserves `elem` too, so flexing an
+  already-typed container keeps enforcement.
+- **Write enforcement (in-place + copy).** Every write — `set`/`setpath` (immutable
+  AND flex) + the flex grow API (`append`, `push`, `unshift`, incl. the list-concat
+  spread) — routes the written value through `d2AdoptTyped`, which `Unify`s it
+  against `elem`. That both enforces AND **recursively re-tags**: writing an
+  UNTYPED `{y:2}` into a `{:{:Integer}}` stores it tagged `{:Integer}`, so a later
+  write into IT is enforced. (Scoped to container element types — a scalar element
+  stores the value byte-identical, no census churn.) This closed a real soundness
+  hole the adversarial verify found: the write path used to validate-but-not-retag,
+  so nested `{:{:T}}`/`[:[:T]]` subtrees written via set/grow became freely typed —
+  the hole existed in the committed immutable `set`/`setpath` too, now fixed.
+- **node↔flex round-trip.** `FlexDeepCopy` AND `NodeDeepCopy` preserve `elem`, so
+  `flex`/`node` only toggle mutability and never drop the contract.
+- **Three-surface agreement.** Interpret validates the concrete flex body + enforces
+  writes; there is no compiled typed-container bind, so `markTypedContainerDefUncompilable`
+  refuses a `{:T}` def over a non-concrete (flex) body → it falls back to the
+  interpreter (`--force-compile` honestly refuses; census stays byte-identical).
+
+Known, acceptable limits (precision, not soundness):
+- **Flex writes are RUNTIME-enforced; check is conservative.** A flex node is
+  mutable by reference, so `aql check` does not statically flag a bad flex write
+  (`def m:{:Integer} (flex {a:1}) (m set b/q "wrong")` checks clean, runs-rejects) —
+  the runtime is the source of truth. Immutable writes DO have a top-level check
+  mirror (`d2CheckWrite`); flex does not, by design.
+- **Construction over a flex carrier can't be statically validated** — a `(flex …)`
+  check-mode residual is an abstract carrier; `def m:{:Integer} (flex {a:"s"})`
+  checks clean but the interpreter rejects the concrete body. Gradual, sound.
+- **A `{:T}` param is a plain typed map statically.** `def f fn [[m:{:Integer}]
+  [FlexMap] …]` over a flex arg: the compiler analyses `set` on the param as
+  returning `Map` (the param type carries no flex-ness), so a declared `[FlexMap]`
+  return is a static mismatch — correct compiler strictness; declare `[Map]`/`[Any]`.
+
+Follow-on: a compiled typed-container bind (an `OpBindTyped`-style container kind)
+would let typed-flex defs compile instead of falling back — a perf optimization,
+not a correctness gap.

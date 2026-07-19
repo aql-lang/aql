@@ -169,9 +169,11 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 	// own rebuild below) carry no tag and pass through.
 	// See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
 	if len(rest) == 0 {
-		if e := d2WriteRuntimeError(r, data, val, "setpath"); e != nil {
+		tagged, e := d2AdoptTyped(r, data, val, "setpath")
+		if e != nil {
 			return Value{}, e
 		}
+		val = tagged
 	}
 
 	// Class / Object instance: edit the projected field map, then
