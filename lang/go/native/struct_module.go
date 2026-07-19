@@ -50,8 +50,8 @@ var StructModuleNatives = []NativeFunc{
 		Name: "merge",
 		Signatures: []Signature{
 			// Both index-merge forms always build a NewList.
-			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), Returns: []*Type{TList}, ReturnsFn: mergeListMapReturns, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), Returns: []*Type{TList}, ReturnsFn: mergeMapListReturns, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(mergeHandler), Returns: []*Type{TAny}, ReturnsFn: mergeReturns, BarrierPos: -1},
 		},
 	},
@@ -240,6 +240,27 @@ func mergeReturns(args []Value, _ *Registry) []Value {
 		return []Value{d2DynamicTypedResidual(d2typedMergeOperand(args[0], args[1]))}
 	}
 	return dyn
+}
+
+// mergeListMapReturns / mergeMapListReturns are the check residuals for the two
+// index-merge overloads, whose result is a LIST governed by the LIST operand's
+// [:T] (the runtime handlers re-tag against it — round 7). The residual carries
+// child + elem so a chained write after an index merge is diagnosed in check
+// (#8, Codex round 8). List operand: args[0] for list-map, args[1] for map-list.
+func mergeListMapReturns(args []Value, _ *Registry) []Value {
+	res := NewDynamicCarrier(TList)
+	if len(args) == 2 {
+		res = d2DynamicTypedResidual(args[0])
+	}
+	return []Value{res}
+}
+
+func mergeMapListReturns(args []Value, _ *Registry) []Value {
+	res := NewDynamicCarrier(TList)
+	if len(args) == 2 {
+		res = d2DynamicTypedResidual(args[1])
+	}
+	return []Value{res}
 }
 
 // setpathReturns mirrors setpathHandler's data-operand selection (the

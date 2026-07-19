@@ -440,8 +440,8 @@ WORD match
   [Scalar/String Scalar/String Node/Map] barrier=3 returns=[Node/Map]
   [Scalar/String Scalar/String] barrier=2 returns=[Node/Map]
 WORD merge
-  [Node/Map Node/List] barrier=2 returns=[Node/List]
-  [Node/List Node/Map] barrier=2 returns=[Node/List]
+  [Node/Map Node/List] barrier=2 returns=[Node/List] +returnsfn
+  [Node/List Node/Map] barrier=2 returns=[Node/List] +returnsfn
   [Any Any] barrier=2 returns=[Any] +returnsfn
 WORD mini
   [Scalar/Atom Scalar/String Node/Map] barrier=3 runcheck quote={0} returns=[Any]

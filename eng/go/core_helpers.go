@@ -599,9 +599,7 @@ func RetagTypedContainerValue(pat, arg Value) Value {
 		if err != nil { //covergate:allow pat is IsTypedMap/IsTypedList (checked above) so it carries ChildTypeInfo; AsChildType cannot fail
 			return arg
 		}
-		out := arg
-		out.SetElemConstraint(ci.Child)
-		return out
+		return retagFlexElem(arg, ci.Child)
 	}
 	unified, ok := Unify(pat, arg)
 	if !ok { //covergate:allow dispatch (matchSignature/checkParamContract) element-checks the concrete arg against pat and rejects any non-conformer with no_signature BEFORE param binding, so an arg reaching here always satisfies pat and Unify cannot fail
@@ -609,6 +607,45 @@ func RetagTypedContainerValue(pat, arg Value) Value {
 	}
 	unified.Quoted = arg.Quoted // preserve the list-arg no-auto-eval quote
 	return unified
+}
+
+// retagFlexElem retags a flex container v so its element type is elemType,
+// returning v's header with the tag set (the FlexListData/FlexMapData pointer
+// stays shared — identity preserved). When elemType is itself a typed container
+// (a nested {:{:T}} / [:[:T]] flex), v's EXISTING children are recursively
+// retagged IN PLACE so a nested write enforces the contract at every depth
+// (FlexDeepCopy makes the whole tree flex, so every child is a mutable flex
+// container). Fixes the nested-container invariant hole (#8, Codex round 8).
+func retagFlexElem(v Value, elemType Value) Value {
+	out := v
+	out.SetElemConstraint(elemType)
+	if IsTypedMap(elemType) || IsTypedList(elemType) {
+		if ci, err := AsChildType(elemType); err == nil {
+			retagFlexChildrenInPlace(v, ci.Child)
+		}
+	}
+	return out
+}
+
+// retagFlexChildrenInPlace retags every existing child of the flex container v so
+// each child's element type is grandElem, writing the retagged child header back
+// into v's shared store (a mutation of the shared FlexMapData/FlexListData, which
+// is exactly what preserves the caller's flex identity).
+func retagFlexChildrenInPlace(v Value, grandElem Value) {
+	if IsFlexMap(v) {
+		if om, _ := AsMutableMap(v); om != nil {
+			for _, k := range om.Keys() {
+				e, _ := om.Get(k)
+				om.Set(k, retagFlexElem(e, grandElem))
+			}
+		}
+		return
+	}
+	if fd, _ := AsFlexList(v); fd != nil {
+		for i := range fd.Elems {
+			fd.Elems[i] = retagFlexElem(fd.Elems[i], grandElem)
+		}
+	}
 }
 
 // isTypedContainerParam reports whether p's pattern is a {:T} map / [:T] list —

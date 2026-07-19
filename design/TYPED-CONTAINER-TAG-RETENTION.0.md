@@ -393,11 +393,7 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      source element tag (`d2RetainElem`), so the check-mode write mirror
      (`d2CheckWrite` reads `ElemConstraint`) fires.
 
-  Limitation (precision, not soundness): the flex header retag tags the container
-  at the TOP level only; it does not recursively re-tag an UNTAGGED flex's nested
-  containers (that would require a rebuild, which is exactly what breaks
-  identity). The common case — an already-`[:T]`-constructed flex, or one whose
-  nested containers were tagged at construction — is fully enforced.
+  (Round 8 closed the nested-flex gap this note originally described — see below.)
 - **Round 7 — the index-merge governing operand + merge check residual.**
   1. **The list↔map index-merge handlers picked the wrong governing tag.** Both
      `mergeListMapHandler` and `mergeMapListHandler` build a LIST result (the
@@ -414,3 +410,19 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      `m:{:Integer}`) wasn't diagnosed in check. It now returns
      `d2DynamicTypedResidual` over the governing operand, so the residual carries
      the child + `elem` and the chained write is flagged.
+- **Round 8 — nested flex retag + the last two check residuals.**
+  1. **A nested-typed flex param left its children untagged** (the round-6
+     limitation, promoted to a P1 soundness hole): `def f fn [[m:{:{:Integer}}]
+     …] [(m.a set y/q "bad")]]; f (flex {a:{x:1}})` succeeded because the header
+     retag tagged only the outer map, so the inner `m.a` write bypassed the
+     `{:Integer}` contract. `retagFlexElem` now RECURSIVELY retags a flex's
+     EXISTING children in place — `FlexDeepCopy` makes the whole tree flex, so
+     every child is a mutable flex container whose header tag is written back into
+     the shared store. Identity is preserved (no rebuild) AND every depth
+     enforces; interpreter and compiled agree (shared `RetagTypedContainerValue`).
+  2. **The index-merge overloads and `clone`** now carry typed check residuals
+     (`mergeListMapReturns`/`mergeMapListReturns` over the list operand;
+     `cloneReturnsFn` via the both-fields typed residual for a plain list/map and
+     `d2RetainElem` preserving the exact Parent for a flex/other kind), so a
+     chained write after an index merge or a clone is diagnosed in check —
+     runtime already retained the tag (`d2ReTagContainer` / `CloneValue`).
