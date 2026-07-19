@@ -574,9 +574,34 @@ func RetagTypedContainerParam(p FnParam, arg Value) Value {
 	if p.Pattern == nil || !IsConcrete(arg) {
 		return arg
 	}
-	pat := *p.Pattern
+	return RetagTypedContainerValue(*p.Pattern, arg)
+}
+
+// RetagTypedContainerValue is the shared retag core used by BOTH the interpreter
+// (RetagTypedContainerParam) and the compiled entry guard (checkParamContract),
+// so the two paths agree. It tags a concrete {:T}/[:T] arg with the pattern's
+// element constraint; a non-typed-container pattern or a non-flex/non-container
+// arg passes through.
+//
+// A flex container is a REFERENCE type: Unify would deep-copy its backing store
+// (NewFlexList/NewFlexMap) and detach the body binding, so a body write would
+// mutate a copy and leave the caller's flex untouched. Retag the header in place
+// — the FlexListData/FlexMapData pointer stays shared. Dispatch has already
+// element-checked the arg (a non-conforming flex is rejected before binding), so
+// its elements conform; no re-validate, no rebuild. A plain (immutable) arg is
+// re-unified — that validates AND recursively re-tags nested containers.
+func RetagTypedContainerValue(pat, arg Value) Value {
 	if !IsTypedMap(pat) && !IsTypedList(pat) {
 		return arg
+	}
+	if IsFlexList(arg) || IsFlexMap(arg) {
+		ci, err := AsChildType(pat)
+		if err != nil { //covergate:allow pat is IsTypedMap/IsTypedList (checked above) so it carries ChildTypeInfo; AsChildType cannot fail
+			return arg
+		}
+		out := arg
+		out.SetElemConstraint(ci.Child)
+		return out
 	}
 	unified, ok := Unify(pat, arg)
 	if !ok { //covergate:allow dispatch (matchSignature/checkParamContract) element-checks the concrete arg against pat and rejects any non-conformer with no_signature BEFORE param binding, so an arg reaching here always satisfies pat and Unify cannot fail

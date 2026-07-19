@@ -374,3 +374,27 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      (chained-write enforcement), preserving the dynamic modality — the same
      both-fields shape as the immutable `set` residuals, extended to the dynamic
      `setpath`/`merge` residual family.
+- **Round 6 — flex reference identity + the flex/node conversion residuals.**
+  1. **The param retag broke flex identity** (a regression the round-3 #1 retag
+     introduced). `RetagTypedContainerParam` ran `Unify`, which for a flex arg
+     rebuilds a DETACHED `NewFlexList`/`NewFlexMap` — so a body write mutated a
+     copy and the caller's flex was untouched, violating flex's reference
+     semantics. Fixed by `RetagTypedContainerValue` (the shared core, used by
+     BOTH the interpreter and the compiled `checkParamContract`, so they agree):
+     a flex arg is retagged **in place** (header copy + `SetElemConstraint`, the
+     `FlexListData`/`FlexMapData` pointer stays shared); a plain arg is still
+     re-unified. Sound because dispatch already element-checks a flex arg and
+     rejects a non-conformer before binding — no re-validate, no rebuild. Both
+     paths agreeing was load-bearing: fixing only the interpreter opened a
+     compiled-vs-interpreted divergence (`[99 2 3]` vs `[1 2 3]`).
+  2. **`flexReturns`/`nodeReturns` emitted bare carriers**, so a top-level write
+     into a typed flex/node result (`append "bad" (flex xs)` for `xs:[:Integer]`)
+     wasn't diagnosed in check even though runtime raises. Both now retain the
+     source element tag (`d2RetainElem`), so the check-mode write mirror
+     (`d2CheckWrite` reads `ElemConstraint`) fires.
+
+  Limitation (precision, not soundness): the flex header retag tags the container
+  at the TOP level only; it does not recursively re-tag an UNTAGGED flex's nested
+  containers (that would require a rebuild, which is exactly what breaks
+  identity). The common case — an already-`[:T]`-constructed flex, or one whose
+  nested containers were tagged at construction — is fully enforced.

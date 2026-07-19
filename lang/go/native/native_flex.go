@@ -105,21 +105,25 @@ func flexReturns(args []Value, r *Registry) []Value {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
 	shapes := r != nil && r.Check.IsActive()
+	// flex only toggles mutability — a {:T}/[:T] source stays typed, so carry the
+	// element tag onto the residual (FlexDeepCopy preserves it at runtime). The
+	// tag drives the check-mode write mirror (d2CheckWrite reads ElemConstraint),
+	// so `append "bad" (flex xs)` for xs:[:Integer] is diagnosed (#6, Codex round 6).
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
 		if shapes {
 			if ss, ok := eng.StoreShapeOf(args[0]); ok {
 				v := NewCarrier(TFlexMap)
 				v.Data = ss.CloneShape()
-				return []Value{v}
+				return []Value{d2RetainElem(v, args[0])}
 			}
 			if v, ok := eng.MintFlexShapeCarrier(args[0], 0); ok {
-				return []Value{v}
+				return []Value{d2RetainElem(v, args[0])}
 			}
 		}
-		return []Value{NewCarrier(TFlexMap)}
+		return []Value{d2RetainElem(NewCarrier(TFlexMap), args[0])}
 	case p.ConformsTo(TList):
-		return []Value{NewCarrier(TFlexList)}
+		return []Value{d2RetainElem(NewCarrier(TFlexList), args[0])}
 	case p.ConformsTo(TXml):
 		return []Value{NewCarrier(TFlexXml)}
 	}
@@ -133,11 +137,13 @@ func nodeReturns(args []Value, _ *Registry) []Value {
 	if len(args) != 1 || args[0].Parent == nil {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
+	// node just toggles mutability back — a {:T}/[:T] flex stays typed as a plain
+	// container, so retain the element tag (NodeDeepCopy preserves it at runtime).
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
-		return []Value{NewCarrier(TMap)}
+		return []Value{d2RetainElem(NewCarrier(TMap), args[0])}
 	case p.ConformsTo(TList):
-		return []Value{NewCarrier(TList)}
+		return []Value{d2RetainElem(NewCarrier(TList), args[0])}
 	case p.ConformsTo(TXml):
 		return []Value{NewCarrier(TXml)}
 	}
