@@ -95,7 +95,7 @@ func TestCoverageForAPI(t *testing.T) {
 	}
 	r.SetParseFunc(parser.Parse)
 
-	if _, _, ok := CoverageFor(r, "nope"); ok {
+	if _, _, _, ok := CoverageFor(r, "nope"); ok {
 		t.Fatal("unregistered id must report ok=false")
 	}
 
@@ -105,9 +105,13 @@ func TestCoverageForAPI(t *testing.T) {
 	defer disarm()
 	activeCover(r).record("m", 1)
 
-	covered, total, ok := CoverageFor(r, "m")
+	covered, total, uncovered, ok := CoverageFor(r, "m")
 	if !ok || covered != 1 || total != 2 {
 		t.Fatalf("CoverageFor = (%d,%d,%v), want (1,2,true)", covered, total, ok)
+	}
+	// Row 1 was recorded, so row 2 is the sole uncovered line.
+	if len(uncovered) != 1 || uncovered[0] != 2 {
+		t.Fatalf("uncovered = %v, want [2]", uncovered)
 	}
 }
 

@@ -317,10 +317,13 @@ Flags:
 
 * `--coverage` — arm the line-coverage hook before each suite, then
   report every user module the suite imported (`import "./mod.aql"`) as
-  `cover <id>  <pct>% (<covered>/<total>)`. Because the bytecode VM
+  `cover <id>  <pct>% (<covered>/<total>)  uncovered: <lines>`. The
+  `uncovered:` list names the exact source line numbers that never ran,
+  so you can jump straight to the untested code. Because the bytecode VM
   folds some source positions, compiled coverage is a *subset* of the
-  interpreter's; pair with `--no-compile` for the line-granular figure
-  when driving a module to full coverage.
+  interpreter's (some folded lines show as falsely uncovered); pair with
+  `--no-compile` for the exact, line-granular set when driving a module
+  to full coverage.
 * `--no-compile` / `--force-compile` / `--compile` — select the engine
   exactly as for [`aql run`](#bytecode-compilation).
 * `-r PATH` — registry path, same as `aql run`. The permission flags

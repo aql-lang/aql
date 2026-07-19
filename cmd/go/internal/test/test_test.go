@@ -151,16 +151,37 @@ func TestRunReadResultsError(t *testing.T) {
 
 func TestRunCoverage(t *testing.T) {
 	dir := t.TempDir()
+	// triple (rows 4-6) is never called, so its body row stays uncovered.
 	mod := write(t, filepath.Join(dir, "calc.aql"),
-		"def add2 fn [[x:Integer] [Integer] [x add 2]]\nexport \"Calc\" { add2: add2/r }\n")
+		"def add2 fn [[x:Integer] [Integer] [\n  x add 2\n]]\n"+
+			"def triple fn [[x:Integer] [Integer] [\n  x mul 3\n]]\n"+
+			"export \"Calc\" { add2: add2/r  triple: triple/r }\n")
 	f := write(t, filepath.Join(dir, "calc_test.aql"),
 		"import \"aql:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
-	code, stdout, _ := runCmd("--coverage", f)
+	// Run on the interpreter so the uncovered set is exact (no VM position
+	// folding): add2 is exercised, triple is not, so triple's body (row 5) is
+	// the uncovered line.
+	code, stdout, _ := runCmd("--coverage", "--no-compile", f)
 	if code != 0 {
 		t.Errorf("code = %d, want 0", code)
 	}
 	if !strings.Contains(stdout, "cover "+mod) || !strings.Contains(stdout, "%") {
 		t.Errorf("stdout = %q, want a coverage line for the module", stdout)
+	}
+	if !strings.Contains(stdout, "uncovered: 5") {
+		t.Errorf("stdout = %q, want the uncovered line numbers (5)", stdout)
+	}
+}
+
+// coverageLine appends uncovered row numbers only when some remain.
+func TestCoverageLine(t *testing.T) {
+	full := coverageLine("m.aql", 4, 4, nil)
+	if strings.Contains(full, "uncovered") {
+		t.Errorf("fully-covered line = %q, want no uncovered suffix", full)
+	}
+	partial := coverageLine("m.aql", 2, 4, []int{3, 6})
+	if !strings.Contains(partial, "uncovered: 3, 6") {
+		t.Errorf("partial line = %q, want uncovered: 3, 6", partial)
 	}
 }
 

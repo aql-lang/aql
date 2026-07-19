@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aql-lang/aql/cmd/go/internal/command"
@@ -257,12 +258,32 @@ func mapInt(m native.ReadMap, key string) int {
 }
 
 // reportCoverage prints per-module line coverage for every source registered
-// during the run (each `import "./mod.aql"` under an armed hook registers one).
+// during the run (each `import "./mod.aql"` under an armed hook registers one),
+// naming the exact uncovered line numbers so the user can jump to them.
 func reportCoverage(w io.Writer, reg *native.Registry) {
 	for _, id := range reg.CoverSourceIDs() {
-		covered, total, _ := modules.CoverageFor(reg, id)
-		fmt.Fprintf(w, "  cover %s  %.1f%% (%d/%d)\n", id, percent(covered, total), covered, total)
+		covered, total, uncovered, _ := modules.CoverageFor(reg, id)
+		fmt.Fprint(w, coverageLine(id, covered, total, uncovered))
 	}
+}
+
+// coverageLine renders one module's coverage summary, appending the uncovered
+// line numbers when any remain. Pure (no I/O) so both arms are unit-testable.
+func coverageLine(id string, covered, total int, uncovered []int) string {
+	line := fmt.Sprintf("  cover %s  %.1f%% (%d/%d)", id, percent(covered, total), covered, total)
+	if len(uncovered) > 0 {
+		line += "  uncovered: " + joinInts(uncovered)
+	}
+	return line + "\n"
+}
+
+// joinInts renders a row-number list as "3, 6, 7".
+func joinInts(xs []int) string {
+	parts := make([]string, len(xs))
+	for i, x := range xs {
+		parts[i] = strconv.Itoa(x)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // percent is covered/total as a percentage, defined as 100 for an empty
