@@ -185,6 +185,17 @@ func tokenize(src string) []Token {
 			continue
 		}
 
+		// Minilang literals (+re/…/, +gex|…|, +hb/…/, +m:…) are scanned
+		// verbatim as one atomic token so their delimiters and inner
+		// characters are never re-tokenised and re-spaced.
+		if ch == '+' {
+			if lit, n := scanMinilang(src[i:]); n > 0 {
+				tokens = append(tokens, Token{TokWord, lit})
+				i += n
+				continue
+			}
+		}
+
 		// Single-char tokens
 		if kind, ok := singleCharToken(ch); ok {
 			tokens = append(tokens, Token{kind, string(ch)})
@@ -421,6 +432,74 @@ func scanInterpHole(s string, i int) int {
 		}
 	}
 	return len(s)
+}
+
+// scanMinilang detects and scans an AQL minilang literal starting at
+// s[0] == '+' (e.g. +re/[a-z]+/, +gex|a*b|, +hb/de_ad/, +m:a@b.com),
+// returning the full raw literal text and the byte count, or ("", 0) when s
+// does not start one. The body is scanned VERBATIM and emitted as a single
+// atomic token — the whole point of the scan: a literal's delimiters and
+// inner characters ([, ], +, *, |, /) are ordinary word/bracket tokens to
+// the rest of the lexer, so without atomic scanning `+re/[a-z]+/` fragments
+// and re-spaces to `+re/ [a-z] +/`, corrupting valid source.
+//
+// The recogniser mirrors the parser's setupMiniLitMatcher
+// (eng/go/parser/grammar.go): `+<name><delim><body>` where name is a
+// lowercase kind atom ([a-z][a-z0-9-]*), delim is the first non-space char
+// after the name, and the body runs to the first UNESCAPED delim (closed
+// form) or to unescaped whitespace (open form), honouring the \<delim>, \\,
+// \<space>, \<tab> escapes. A leading `+` followed by a digit (`+0d5`) is a
+// signed number, not a name start, so it is declined here and falls through.
+func scanMinilang(s string) (string, int) {
+	if len(s) == 0 || s[0] != '+' {
+		return "", 0
+	}
+	i := 1
+	if i >= len(s) || !(s[i] >= 'a' && s[i] <= 'z') {
+		return "", 0 // the kind name must start with a lowercase letter
+	}
+	for i < len(s) && ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= '0' && s[i] <= '9') || s[i] == '-') {
+		i++
+	}
+	if i >= len(s) || isSpaceByte(s[i]) {
+		return "", 0 // no delimiter (whitespace or end of input) → not a literal
+	}
+	delim := s[i]
+	i++
+	closed := false
+	body := 0
+	for i < len(s) {
+		c := s[i]
+		if isSpaceByte(c) {
+			break // open form: the literal ends at unescaped whitespace
+		}
+		if c == '\\' && i+1 < len(s) {
+			if nxt := s[i+1]; nxt == delim || nxt == '\\' || nxt == ' ' || nxt == '\t' {
+				i += 2 // \<delim>, \\, \<space>, \<tab> — an escaped body char
+				body++
+				continue
+			}
+			i++ // any other backslash (e.g. \d) is preserved raw
+			body++
+			continue
+		}
+		if c == delim {
+			closed = true
+			i++
+			break
+		}
+		i++
+		body++
+	}
+	if !closed && body == 0 {
+		return "", 0 // an empty open source (`+name:` before whitespace) is not one
+	}
+	return s[:i], i
+}
+
+// isSpaceByte reports whether b is one of the AQL source whitespace bytes.
+func isSpaceByte(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
 // --- Tree builder ---
