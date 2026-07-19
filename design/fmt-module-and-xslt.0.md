@@ -10,9 +10,10 @@ declarative rule-set conversion retiring the Go layout code (Phase 3) — it
 depends on that CST and is likewise not recommended. Phase 5's `describe`/help
 example canonicalisation is now **DONE** (156 of 161 examples rewritten to
 fmt's canonical form, the other 5 one-line and verified non-corrupted, pinned
-by `help/fmt_examples_test.go`); only the inline PROSE examples in the Diátaxis
-docs remain, a discretionary alignment call. See "Phased plan" for the
-per-phase state. This is a
+by `help/fmt_examples_test.go`); the only inline "prose examples" left are the
+Notation paragraph's snippets that *explain* the `# returns` convention, which
+are correctly left verbatim — so Phase 5 is complete too. See "Phased plan"
+for the per-phase state. This is a
 discovery/design note, not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on
 explicit instruction").
 
@@ -354,12 +355,16 @@ these as `Fmt.*` AQL):
   examples) stay one line — `describe` renders one example per line — and are
   verified non-corrupted instead. `help/fmt_examples_test.go` pins every
   non-wrapping example as fmt-clean (a no-op under fmt) and the wrapping few as
-  non-corrupted, so they cannot drift back out. REMAINING (genuinely
-  discretionary, not blocking): the inline `expr # returns X` PROSE examples in
-  the Diátaxis docs (not fenced blocks), which use deliberate column alignment;
-  and optionally a no-wrap width on the source formatter so the 5 long examples
-  could be one-line-canonical too (low value — they are already one line and
-  verified clean).
+  non-corrupted, so they cannot drift back out. The remaining "inline prose
+  examples" turn out to be a NON-item: the only inline `# returns` snippets in
+  the Diátaxis docs (2 per file) live in the **Notation** paragraph that
+  *explains the `# returns` convention itself* (`square 4  # returns 16`) — the
+  `  #` double-space IS the notation being documented, so running fmt over it
+  would collapse the very convention the prose defines. They are correctly left
+  verbatim. Phase 5 is therefore complete. (A no-wrap width on the source
+  formatter — so the 5 long examples could be one-line-canonical too — is a
+  possible nicety, low value since they are already one line and verified
+  clean.)
 
 ## Formatter correctness baseline (verified 2026-07)
 
