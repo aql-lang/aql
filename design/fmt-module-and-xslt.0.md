@@ -236,14 +236,19 @@ these as `Fmt.*` AQL):
   template rules on this substrate and route `Fmt.format` through them,
   retiring the Go rule code (the largest piece — a full rule-set port under
   the coverage gate).
-- **Phase 4 — embedded formatting DONE; doc pipeline REMAINING.**
-  `aql fmt` reformats ```` ```aql ```` fences and `<!-- aqlfmt --> … <!-- /aqlfmt -->`
-  marker regions in Markdown/HTML (CLI dispatch by extension; runtime words
-  `Fmt.format-markdown` / `Fmt.format-html`). REMAINING: run `describe`/help
-  and prose-doc examples through fmt at the `genhelp`/CLI layer (F3). Note:
-  hand-authored describe examples use deliberate `;#`-comment alignment that
-  fmt collapses, so this is a visible-output change warranting maintainer
-  sign-off, not a silent migration.
+- **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
+  examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
+  `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI
+  dispatch by extension; runtime words `Fmt.format-markdown` /
+  `Fmt.format-html`). The prose docs' ```` ```aql ```` blocks are now run
+  through fmt (README) and pinned fmt-clean by a gate
+  (`test/go/docexamples`). A formatter fix keeps a trailing `# comment`
+  attached to its statement (never wrapped off), so annotated example lines
+  survive fmt and the `# returns` extractor still pairs them. REMAINING: the
+  inline `expr # returns X` prose examples (not in fenced blocks) and the
+  `describe`/help worked examples. Both use deliberate column alignment that
+  fmt collapses — a visible-output change to the docs and the `describe`
+  command warranting maintainer sign-off, not a silent migration.
 
 ## Risks
 
