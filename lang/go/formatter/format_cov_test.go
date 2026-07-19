@@ -114,6 +114,36 @@ func TestFormatTypeCapitalization(t *testing.T) {
 	}
 }
 
+// TestFormatValueWordsNotCapitalized pins the fix that fmt must not
+// capitalise the type names that are also valid lowercase VALUE / function
+// words — none (the None value, distinct from the None type), and the native
+// words list / any / node. Capitalising them changes program semantics
+// (`size none` → `size None`, `list 1 2 3` → `List 1 2 3`), so they are left
+// verbatim, while genuine lowercase type names still capitalise and existing
+// capitalised forms are untouched.
+func TestFormatValueWordsNotCapitalized(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"none value stays", "size none\n", "size none\n"},
+		{"none in prose-ish stays", "none has a\n", "none has a\n"},
+		{"list constructor stays", "list 1 2 3\n", "list 1 2 3\n"},
+		{"any predicate stays", "any [1 2]\n", "any [1 2]\n"},
+		{"node constructor stays", "node {a:1}\n", "node {a:1}\n"},
+		// Genuine type names still capitalise.
+		{"integer type capitalises", "x is integer\n", "x is Integer\n"},
+		{"map type capitalises", "convert map v\n", "convert Map v\n"},
+		// Already-capital forms are never altered.
+		{"None literal untouched", "size None\n", "size None\n"},
+		{"List literal untouched", "x is List\n", "x is List\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Format(tt.in); got != tt.want {
+				t.Errorf("Format(%q)\n  got:  %q\n  want: %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestFormatBlankLineHandling pins emitRoot's blank-line policy: runs of
 // blank lines collapse to one, and leading blank lines are dropped.
 func TestFormatBlankLineHandling(t *testing.T) {

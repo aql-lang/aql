@@ -16,6 +16,9 @@ import "aql:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical
 import "aql:fmt" end Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"	'def double fn x:Integer Integer [x mul 2]\n'	Fmt.format drops brackets around a single fn param and return
 import "aql:fmt" end Fmt.format "def   f   (+re/[a-z]+/)"	'def f (+re/[a-z]+/)\n'	Fmt.format keeps a minilang literal verbatim (its [ ] + delimiters are not re-tokenised) while normalising the surrounding spacing
 import "aql:fmt" end Fmt.format "+gex|a*b|"	'+gex|a*b|\n'	Fmt.format leaves a pipe-delimited minilang literal untouched
+import "aql:fmt" end Fmt.format "size none"	'size none\n'	Fmt.format keeps the lowercase none VALUE verbatim (never rewrites it to the None type)
+import "aql:fmt" end Fmt.format "list 1 2 3"	'list 1 2 3\n'	Fmt.format keeps the list constructor word verbatim (never rewrites it to the List type)
+import "aql:fmt" end Fmt.format "x is integer"	'x is Integer\n'	Fmt.format still capitalises a genuine lowercase type name
 import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x 1\n```'	Fmt.format-markdown reformats a fenced aql block
 import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest
 import "aql:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width

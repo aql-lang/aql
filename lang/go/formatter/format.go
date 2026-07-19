@@ -7,12 +7,23 @@ import (
 
 const maxLineWidth = 72
 
-// knownTypes lists type names that should be capitalised
-// when they appear in type annotation positions (after :).
+// knownTypes lists type names auto-capitalised to their canonical form when
+// they appear as a lowercase word (e.g. `x:integer` → `x:Integer`).
+//
+// It deliberately EXCLUDES none / list / any / node: each is also a valid
+// lowercase VALUE or function word — `none` is the None value (distinct from
+// the `None` type: `canon none` → `none`, and `none tcmp None → 1`), and
+// `list` / `any` / `node` are native words (a list constructor, a predicate,
+// a node constructor). Capitalising those would change program semantics
+// (`size none` → `size None`, `list 1 2 3` → `List 1 2 3`), and a formatter
+// must never do that. The remaining names are undefined as values, so they
+// only ever occur as type annotations and capitalising them is always safe.
+// (Capital forms like `None` / `List` are never touched — capitalize only
+// ever uppercases.)
 var knownTypes = map[string]bool{
-	"any": true, "none": true, "scalar": true, "number": true,
+	"scalar": true, "number": true,
 	"integer": true, "float": true, "string": true, "boolean": true,
-	"atom": true, "node": true, "list": true, "map": true,
+	"atom": true, "map": true,
 	"table": true, "record": true, "object": true, "function": true,
 }
 
