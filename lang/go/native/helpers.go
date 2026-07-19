@@ -70,6 +70,22 @@ func sliceRetain(res []Value, err error, src Value) ([]Value, error) {
 	return res, err
 }
 
+// sliceListReturns is the check-mode residual for a LIST slice overload (data
+// arg at index dataIdx): slice is a subset that preserves element types, so the
+// residual is a both-fields typed-list carrier retaining the source [:T] tag —
+// so `((slice xs) set 0 "bad")` for xs:[:Integer] is diagnosed at check, like
+// reverse/take/shed (#10, Codex round 10). Only wired on the TList overloads
+// (the TString overloads return a string with no element tag).
+func sliceListReturns(dataIdx int) func([]Value, *Registry) []Value {
+	return func(args []Value, _ *Registry) []Value {
+		res := NewCarrier(TList)
+		if dataIdx < len(args) {
+			res = d2TypedListResidual(args[dataIdx])
+		}
+		return []Value{res}
+	}
+}
+
 // sliceResultItem converts a single item produced by voxgigstruct.Slice
 // into an Value, recursing into nested []interface{} slices.
 func sliceResultItem(item interface{}) (Value, error) {

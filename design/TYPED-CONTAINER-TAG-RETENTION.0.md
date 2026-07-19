@@ -441,3 +441,11 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      at check despite the tagged runtime result. Fixed centrally in
      `ReturnsPreserveListAt` (copies the source `ElemConstraint`), covering every
      op that uses it (reverse / take / shed / sort / …).
+- **Round 10 — the last two check-mirror gaps.** The plain immutable `push` /
+  `unshift` grows and the list `slice` overloads had NO `ReturnsFn` (unlike their
+  FlexList / reverse-take counterparts), so a bad top-level grow
+  (`def xs:[:Integer] [1] (push "bad" xs)`) and a chained write after a grow or
+  slice weren't diagnosed at check even though the runtime rejected them.
+  `plainListGrowReturns` (d2CheckWrite + typed residual) and `sliceListReturns`
+  (typed residual over the data-list arg) fill them; the string `slice` overloads
+  are deliberately left bare (a string result carries no element tag).

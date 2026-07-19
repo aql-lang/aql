@@ -280,7 +280,7 @@ var Natives = []NativeFunc{
 			// Returns a List (was undeclared → Any, which widened a fold/scan
 			// accumulator to Any on the second round and then wrongly rejected the
 			// next `push` — `[] fold [push] xs`). Mirrors unshift's List overload.
-			{Args: []*Type{TAny, TList}, Impl: Go(pushHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(pushHandler), Returns: []*Type{TList}, ReturnsFn: plainListGrowReturns("push"), BarrierPos: -1},
 		},
 	},
 	{
@@ -296,7 +296,7 @@ var Natives = []NativeFunc{
 
 		Signatures: []Signature{
 			{Args: []*Type{TAny, TFlexList}, Impl: Go(unshiftFlexHandler), Returns: []*Type{TFlexList}, ReturnsFn: flexGrowReturns("unshift"), BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Impl: Go(unshiftHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(unshiftHandler), Returns: []*Type{TList}, ReturnsFn: plainListGrowReturns("unshift"), BarrierPos: -1},
 		},
 	},
 	{
@@ -375,11 +375,11 @@ func stringSliceNative() NativeFunc {
 
 		Signatures: []Signature{
 			{Args: []*Type{TInteger, TInteger, TString}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TInteger, TList}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TList}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(2), BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Impl: Go(sliceStartHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TList}, Impl: Go(sliceStartHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Impl: Go(sliceStartHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(1), BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(sliceAllHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(sliceAllHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(sliceAllHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(0), BarrierPos: -1},
 		},
 	}
 }

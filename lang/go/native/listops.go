@@ -5,6 +5,23 @@ import "github.com/aql-lang/aql/eng/go"
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
 //
+// plainListGrowReturns is the check-mode mirror for an immutable-list grow
+// (push / unshift over a plain [:T] list): args are [value, list]. It flags a
+// provably non-conforming top-level grow (d2CheckWrite) and retains the source
+// list's tag on the residual (a both-fields typed carrier) so a chained write
+// stays enforced — the plain grows otherwise had no ReturnsFn (#10, Codex round
+// 10), unlike their FlexList counterparts (flexGrowReturns).
+func plainListGrowReturns(word string) func([]Value, *Registry) []Value {
+	return func(args []Value, r *Registry) []Value {
+		res := NewCarrier(TList)
+		if len(args) == 2 {
+			d2CheckWrite(r, args[1], args[0], word, args[0].Pos())
+			res = d2TypedListResidual(args[1])
+		}
+		return []Value{res}
+	}
+}
+
 // push appends a single element to the end of a list, returning a new list.
 //
 //	push 99 [1,2,3] → [1,2,3,99]
