@@ -453,16 +453,20 @@ def sift-blocks-table fn [[maps:List] [List] [
   def out (rows-loop maps 0 [])  out]]
 
 # ----------------------------------------------------------------------------
-# Shared row builder for the tabular families — coerce each cell (strict
-# 'error') under its column type, pad missing cells with "".
+# Shared row builder for the tabular families — coerce each cell under its
+# column type, padding missing cells with "". Coercion is strict-aware: under
+# strict:'skip' a cell that fails its type flags the whole row for skipping (a
+# `__skip` marker the caller drops), mirroring the pattern family; under
+# strict:'error' (the default) the coercion raises.
 # ----------------------------------------------------------------------------
-def sift-row fn [[cols:List cells:List types:Map] [Map] [
+def sift-row fn [[cols:List cells:List types:Map strict:String] [Map] [
   def loop fn [[i:Integer acc:Map] [Map] [
     if (i gte (size cols)) [acc] [
       def col (cols get i)
       def cell (if (i lt (size cells)) [cells get i] [""])
       def vt (sift-col-type types col "string")
-      def nacc (acc set (col) (sift-coerce vt cell))
+      def cv (sift-coerce-strict vt cell strict)
+      def nacc (if (cv eq sift-skip) [acc set (quote __skip) true] [acc set (col) cv])
       def i1 (i add 1)  def r (loop i1 nacc)  r
     ]
   ]]
@@ -487,18 +491,19 @@ def sift-fam-columns fn [[src:String opts:Map] [List] [
   def name-mode (sift-opt-str opts "names" "normalize")
   def label (sift-opt-str opts "label" "")
   def types0 (sift-types opts)
+  def strict (sift-strict opts)
   def rf (sift-resolve-fields opts types0)
   def types rf.types
   def given rf.given
   if given [
     def cols rf.names
     def body (if (header and ((size lines) gt 0)) [shed 1 lines] [lines])
-    sift-columns-rows cols body types label
+    sift-columns-rows cols body types label strict
   ] [
     if (header not) [ raise sift_spec_error "columns: header:false requires fields" ] [
       if ((size lines) eq 0) [[]] [
         def cols (sift-dedup (sift-name-cols (sift-fields (lines get 0)) name-mode))
-        sift-columns-rows cols (shed 1 lines) types label
+        sift-columns-rows cols (shed 1 lines) types label strict
       ]
     ]
   ]
@@ -521,7 +526,7 @@ def sift-dedup fn [[names:List] [List] [
   ]]
   def dl (loop names 0 ({} set (quote seen) {} set (quote out) []))  dl.out]]
 
-def sift-columns-rows fn [[cols:List body:List types:Map label:String] [List] [
+def sift-columns-rows fn [[cols:List body:List types:Map label:String strict:String] [List] [
   def labeled (label neq "")
   def loop fn [[items:List i:Integer acc:List] [List] [
     if (i gte (size items)) [acc] [
@@ -532,9 +537,11 @@ def sift-columns-rows fn [[cols:List body:List types:Map label:String] [List] [
           def lbl (if ((size toks) gt 0) [sift-strip-colon (toks get 0)] [""])
           def row0 ({} set (label) lbl)
           def rest (if ((size toks) gt 0) [shed 1 toks] [toks])
-          push (sift-row-into row0 cols rest types) acc
+          def row (sift-row-into row0 cols rest types strict)
+          if ((row get "__skip") is None not) [acc] [push row acc]
         ] [
-          push (sift-row cols (sift-split-n line (size cols)) types) acc
+          def row (sift-row cols (sift-split-n line (size cols)) types strict)
+          if ((row get "__skip") is None not) [acc] [push row acc]
         ]
       ])
       def i1 (i add 1)  def r (loop items i1 nacc)  r
@@ -544,13 +551,15 @@ def sift-columns-rows fn [[cols:List body:List types:Map label:String] [List] [
 
 def sift-strip-colon fn [[s:String] [String] [ if ((s mini re `:$` {}).ok) [slice 0 ((size s) sub 1) s] [s] ]]
 
-# like sift-row but merging onto an existing row (label case).
-def sift-row-into fn [[row0:Map cols:List cells:List types:Map] [Map] [
+# like sift-row but merging onto an existing row (label case); same strict-aware
+# skip semantics.
+def sift-row-into fn [[row0:Map cols:List cells:List types:Map strict:String] [Map] [
   def loop fn [[i:Integer acc:Map] [Map] [
     if (i gte (size cols)) [acc] [
       def col (cols get i)
       def cell (if (i lt (size cells)) [cells get i] [""])
-      def nacc (acc set (col) (sift-coerce (sift-col-type types col "string") cell))
+      def cv (sift-coerce-strict (sift-col-type types col "string") cell strict)
+      def nacc (if (cv eq sift-skip) [acc set (quote __skip) true] [acc set (col) cv])
       def i1 (i add 1)  def r (loop i1 nacc)  r
     ]
   ]]
@@ -573,6 +582,7 @@ def sift-fam-dsv fn [[src:String opts:Map] [List] [
   def sep (sift-opt-str opts "sep" "ws")
   def limit (sift-opt-int opts "limit" 0)
   def types0 (sift-types opts)
+  def strict (sift-strict opts)
   def rf (sift-resolve-fields opts types0)
   def types rf.types
   def cols0 (if rf.given [rf.names] [None])
@@ -582,7 +592,9 @@ def sift-fam-dsv fn [[src:String opts:Map] [List] [
       def nacc (if ((StringUtil.trim line) eq "") [acc] [
         def cells (sift-dsv-split line sep limit)
         def cols (if (acc.cols is None) [if (cols0 is None) [sift-auto-cols (size cells)] [cols0]] [acc.cols])
-        acc set (quote cols) cols set (quote rows) (push (sift-row cols cells types) acc.rows)
+        def row (sift-row cols cells types strict)
+        def nrows (if ((row get "__skip") is None not) [acc.rows] [push row acc.rows])
+        acc set (quote cols) cols set (quote rows) nrows
       ])
       def i1 (i add 1)  def r (loop items i1 nacc)  r
     ]
@@ -651,6 +663,7 @@ def sift-fam-fixed fn [[src:String opts:Map] [List] [
   def lines (sift-preprocess src opts)
   def trim (sift-opt-bool opts "trim" true)
   def types0 (sift-types opts)
+  def strict (sift-strict opts)
   def spans (sift-fixed-spans opts)
   def rf (sift-resolve-fields opts types0)
   def types rf.types
@@ -661,7 +674,8 @@ def sift-fam-fixed fn [[src:String opts:Map] [List] [
         def line (items get i)
         def nacc (if ((StringUtil.trim line) eq "") [acc] [
           def cells (sift-fixed-cells line spans trim)
-          push (sift-row cols cells types) acc
+          def row (sift-row cols cells types strict)
+          if ((row get "__skip") is None not) [acc] [push row acc]
         ])
         def i1 (i add 1)  def r (loop items i1 nacc)  r
       ]
@@ -677,16 +691,17 @@ def sift-fam-fixed fn [[src:String opts:Map] [List] [
 # ----------------------------------------------------------------------------
 # Returns the ordered capturing-group names ("" for an unnamed group).
 def sift-group-names fn [[re:String] [List] [
-  def toks ((re mini re `\\.|\[(?:\\.|[^\]])*\]|\(\?P<[A-Za-z_][A-Za-z0-9_]*>|\(\?|\(` {}).ms)
+  def toks ((re mini re `\\.|\[(?:\\.|[^\]])*\]|\(\?P<[A-Za-z0-9_]+>|\(\?<[A-Za-z0-9_]+>|\(\?|\(` {}).ms)
   def loop fn [[items:List i:Integer acc:List] [List] [
     if (i gte (size items)) [acc] [
       def tok (items get i)
       def m tok.m
       def head (slice 0 1 m)
       def nacc (if ((head eq "\\") or (head eq "[")) [acc] [           # escaped char / class: skip
-        if ((slice 0 4 m) eq `(?P<`) [ push (slice 4 ((size m) sub 1) m) acc ] [   # named
-          if ((slice 0 2 m) eq `(?`) [acc] [                # non-capturing: skip
-            push "" acc ]]                                  # unnamed capturing
+        if ((slice 0 4 m) eq `(?P<`) [ push (slice 4 ((size m) sub 1) m) acc ] [   # (?P<name>
+          if ((slice 0 3 m) eq `(?<`) [ push (slice 3 ((size m) sub 1) m) acc ] [  # (?<name> (P-less)
+            if ((slice 0 2 m) eq `(?`) [acc] [              # non-capturing: skip
+              push "" acc ]]]                               # unnamed capturing
       ])
       def i1 (i add 1)  def r (loop items i1 nacc)  r
     ]
@@ -911,8 +926,19 @@ def sift-issue-of fn [[e:Any] [List] [
   def issue ({} set (quote code) e.code set (quote detail) e.message)
   [issue]
 ]]
+# Report a caught error as an issue ONLY when it is a spec error. A dry-run over
+# an EMPTY source surfaces the family-level option validation (a pattern whose
+# re has no named group, a fixed spec with neither cols nor widths) as
+# sift_spec_error BEFORE any line is read, while a data-level parse error on the
+# empty probe (no match / no separator) is not a spec defect and is dropped.
+def sift-issue-if-spec fn [[e:Any] [List] [
+  if ((convert String e.code) eq "sift_spec_error") [ sift-issue-of e ] [ [] ]
+]]
+def sift-check-family fn [[v:Any] [List] [
+  do [ def _r (sift-parse-do v None "")  [] ] error [sift-issue-if-spec]
+]]
 def sift-issues fn [[v:Any] [List] [
-  do [ def _v (sift-spec-from v)  [] ] error [sift-issue-of]
+  do [ def _v (sift-spec-from v)  sift-check-family v ] error [sift-issue-of]
 ]]
 
 # parse: kind name | inline spec | fn, with optional call-site opts.
@@ -956,7 +982,7 @@ def sift-store-kind fn [[nm:String nspec:Map] [Any] [
 
 def sift-w-define fn [[name:Atom/q spec:Any] [] [
   def nm (convert String name)
-  if ((nm mini re `^[A-Z]` {}).ok) [ raise sift_bad_name "define: parser name must be lowercase (capitalised names are types)" ] [
+  if (((nm mini re `[A-Z]` {}).ok) or ((nm mini re `^parse_` {}).ok)) [ raise sift_bad_name (join "" ["define: parser name must be lowercase and must not use the reserved parse_ prefix, got " nm]) ] [
     if (sift-known-family nm) [ raise sift_kind_exists (join "" ["a name that collides with a family is rejected: " nm]) ] [
       if (sift-catalog has (nm)) [ raise sift_kind_exists (join "" ["parser " nm " is already registered"]) ] [
         def nspec (spec sift-spec-from)     # stack form: a fn value passes as data
@@ -1028,8 +1054,16 @@ def sift-spec-project fn [[spec:Map] [Map] [
   def bse ({} set (quote name) (spec get "name") set (quote family) (spec get "family"))
   def o (spec get "opts")
   def b1 (if (o is Map) [bse set (quote opts) o] [bse])
+  # Preserve the normalized detection claims so introspection returns the spec
+  # in full (Sift.detect reads these; tooling can inspect / re-export them).
+  def p (spec get "path")
+  def b2 (if (p is None) [b1] [b1 set (quote path) p])
+  def c (spec get "cmd")
+  def b3 (if (c is None) [b2] [b2 set (quote cmd) c])
+  def a (spec get "argv")
+  def b4 (if (a is None) [b3] [b3 set (quote argv) a])
   def d (spec get "doc")
-  if (d is None) [b1] [b1 set (quote doc) d]
+  if (d is None) [b4] [b4 set (quote doc) d]
 ]]
 
 def sift-w-detect fn [[arg:Any] [Any] [

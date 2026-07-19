@@ -18,20 +18,17 @@ var siftTestAQL string
 // validation always intercepts (the AQL analog of //covergate:allow). Each
 // entry is asserted to actually be uncovered, so it cannot rot.
 //
-// All three are terminal `else` arms of an exhaustive dispatch over a value
-// that is validated against a FIXED SET one call earlier — the validator
-// raises first, so the arm is dead through every public entry point:
+// Both are terminal `else` arms of an exhaustive dispatch over a value that is
+// validated against a FIXED SET one call earlier — the validator raises first,
+// so the arm is dead through every public entry point:
 //   - 136 sift-coerce-val's "unknown type": vtype is checked by sift-known-type
-//     (against sift-type-set) at spec build — sift-w-parse-opts:195,
-//     sift-kv-types:206, sift-fields-types:253 — before sift-coerce reaches it.
-//   - 316 sift-kv-store's "bad repeat": repeat is checked against
-//     sift-repeat-set in sift-kv-lines:327 before the fold calls sift-kv-store.
-//   - 794 sift-run-family's "unknown family": family is checked by
-//     sift-known-family in sift-spec-from:821 before sift-run-spec runs it.
+//     (against sift-type-set) at spec build — sift-w-parse-opts, sift-kv-types,
+//     sift-fields-types — before sift-coerce reaches it.
+//   - 809 sift-run-family's "unknown family": family is checked by
+//     sift-known-family in sift-spec-from before sift-run-spec runs it.
 var siftCoverAllow = map[int]string{
-	136: "shadowed: sift-known-type (sift-type-set) validates vtype at spec build (195/206/253) before sift-coerce-val",
-	316: "shadowed: sift-repeat-set validates repeat in sift-kv-lines:327 before the fold reaches sift-kv-store",
-	794: "shadowed: sift-known-family validates family in sift-spec-from:821 before sift-run-spec calls sift-run-family",
+	136: "shadowed: sift-known-type (sift-type-set) validates vtype at spec build before sift-coerce-val",
+	809: "shadowed: sift-known-family validates family in sift-spec-from before sift-run-spec calls sift-run-family",
 }
 
 // TestSiftAQLCoverage runs the aql:test suite for sift under the coverage hook

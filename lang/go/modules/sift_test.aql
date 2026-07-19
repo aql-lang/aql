@@ -154,6 +154,12 @@ Test.cover [
     Test.test "a blank body line is skipped" [
       Assert.equal 2 (size (Sift.parse columns/q {} "H1 H2\n1 2\n\n3 4"))                # branch: sift-columns-rows blank skip sift.aql:529
     ]
+    Test.test "strict:'skip' drops a malformed typed row (columns, non-label)" [
+      Assert.equal 2 (size (Sift.parse {family:'columns' fields:{n:'integer'} opts:{strict:'skip'}} "hdr\n5\nbad\n7"))   # #3 sift-row __skip via columns non-label
+    ]
+    Test.test "strict:'skip' drops a malformed typed row (columns, label mode)" [
+      Assert.equal 1 (size (Sift.parse {family:'columns' fields:{n:'integer'} opts:{label:'k' strict:'skip'}} "hdr\nok 5\nbad x"))   # #3 sift-row-into __skip via columns label
+    ]
   ]
 
   # ------------------------------------------------------------------------
@@ -199,6 +205,9 @@ Test.cover [
     Test.test "chop drops trailing lines" [
       Assert.equal 2 (size (Sift.parse dsv/q {sep:':' chop:1} "a\nb\nc"))                # tsv:92
     ]
+    Test.test "strict:'skip' drops a malformed typed row (dsv)" [
+      Assert.equal 2 (size (Sift.parse {family:'dsv' fields:{n:'integer'} opts:{strict:'skip'}} "5\nbad\n7"))   # #3 sift-row __skip via dsv
+    ]
   ]
 
   # ------------------------------------------------------------------------
@@ -229,6 +238,9 @@ Test.cover [
     Test.test "types option coerces a fixed column" [
       Assert.equal 123 (((Sift.parse fixed/q {widths:[3] fields:['a'] types:{a:'integer'}} "123") get 0) get "a")   # branch: sift-row typed cell (fixed)
     ]
+    Test.test "strict:'skip' drops a malformed typed row (fixed)" [
+      Assert.equal 2 (size (Sift.parse {family:'fixed' fields:{c1:'integer'} opts:{widths:[1] strict:'skip'}} "5\nx\n7"))   # #3 sift-row __skip via fixed
+    ]
   ]
 
   # ------------------------------------------------------------------------
@@ -258,6 +270,12 @@ Test.cover [
     ]
     Test.test "a coercion skip drops the line (per line)" [
       Assert.equal 1 (size (Sift.parse pattern/q {re:'(?P<n>\\w+)' per:'line' vtype:'integer' strict:'skip'} "abc\n5"))   # branch: sift-pattern-run per-line __skip sift.aql:776
+    ]
+    Test.test "a P-less (?<name>) group becomes a field" [
+      Assert.equal '2024' ((Sift.parse pattern/q {re:'(?<yr>[0-9]+)'} "2024") dot yr)      # #5 sift-group-names (?< P-less arm
+    ]
+    Test.test "a digit-initial group name normalizes to f-" [
+      Assert.equal '42' ((Sift.parse pattern/q {re:'(?P<1x>[0-9]+)'} "42") get "f-1x")     # #5 digit-initial capture name
     ]
   ]
 
@@ -300,6 +318,23 @@ Test.cover [
     ]
     Test.test "spec projects a doc string" [
       Assert.equal 'd' ((Sift.spec ds_full) dot doc)                                     # branch: sift-spec-from-map doc sift.aql:828 + sift-spec-project doc sift.aql:1032
+    ]
+    Test.test "define rejects a mixed-case name" [
+      Assert.throws [ Sift.define fooBar {family:'kv'} ]                                 # #2 sift-w-define rejects an uppercase letter anywhere
+    ]
+    Test.test "define rejects the reserved parse_ prefix" [
+      Assert.throws [ Sift.define parse_x {family:'kv'} ]                                # #2 sift-w-define rejects the parse_ prefix
+    ]
+    Test.test "spec preserves a detect path claim" [
+      Sift.define ds_dp {family:'kv' detect:{path:["/ds-detect-path"]}} end
+      Assert.equal ["/ds-detect-path"] ((Sift.spec ds_dp) dot path)                      # #4 sift-spec-project path arm
+    ]
+    Test.test "spec preserves a detect cmd claim" [
+      Sift.define ds_dc {family:'columns' detect:{cmd:{match:["dsdetectcmd"] argv:["a"]}}} end
+      Assert.equal ["dsdetectcmd"] ((Sift.spec ds_dc) dot cmd)                           # #4 sift-spec-project cmd arm
+    ]
+    Test.test "spec preserves a detect argv claim" [
+      Assert.equal ["a"] ((Sift.spec ds_dc) dot argv)                                    # #4 sift-spec-project argv arm
     ]
   ]
 
@@ -356,6 +391,15 @@ Test.cover [
     ]
     Test.test "check on a non-map spec reports an issue" [
       Assert.equal 1 (size (Sift.check 5))                                               # branch: sift-spec-from non-map via sift-issues sift.aql:805/915
+    ]
+    Test.test "check flags a fixed spec missing cols/widths" [
+      Assert.equal sift_spec_error/q ((Sift.check {family:'fixed'}) dot 0 dot code)      # #1 family validation (fixed spans) via empty-source dry-run
+    ]
+    Test.test "check flags a pattern spec with no named group" [
+      Assert.equal sift_spec_error/q ((Sift.check {family:'pattern' opts:{re:'nogroups'}}) dot 0 dot code)   # #1 family validation (pattern groups)
+    ]
+    Test.test "check passes a valid pattern spec (empty-probe parse error ignored)" [
+      Assert.equal [] (Sift.check {family:'pattern' opts:{re:'(?P<a>x)'}})               # #1 sift-issue-if-spec drops a non-spec (parse) error
     ]
   ]
 
