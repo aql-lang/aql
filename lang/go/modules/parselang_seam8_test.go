@@ -2,6 +2,7 @@ package modules
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -57,18 +58,19 @@ func TestW8FormatParseHandler(t *testing.T) {
 	}
 }
 
-// TestW8InstallHostParserDuplicate drives installHostParser's duplicate-key
-// refusal (325).
-func TestW8InstallHostParserDuplicate(t *testing.T) {
+// TestW8InstallBuiltinParserDuplicate drives installBuiltinParser's
+// duplicate-key refusal — defensive: the fixed built-in set is disjoint, so
+// only a drifted TabnasKinds could collide.
+func TestW8InstallBuiltinParserDuplicate(t *testing.T) {
 	r := mcovReg(t)
 	exports := native.NewOrderedMap()
 	spec := ParseLangSpec{Name: "dupw8", Handler: func(a []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 		return nil, nil
 	}}
-	if err := installHostParser(exports, r, spec); err != nil {
+	if err := installBuiltinParser(exports, r, spec); err != nil {
 		t.Fatalf("first install should succeed: %v", err)
 	}
-	if err := installHostParser(exports, r, spec); err == nil {
+	if err := installBuiltinParser(exports, r, spec); err == nil {
 		t.Error("second install of the same name should error")
 	}
 }
@@ -135,64 +137,46 @@ func TestW8ResolveParseSourceBad(t *testing.T) {
 	}
 }
 
-// TestW8RegisterFormatParserNoFormats drives RegisterFormatParser's
-// missing-formats-capability arm (parselang.go:277): a bare registry with no
-// formats capability installed.
-func TestW8RegisterFormatParserNoFormats(t *testing.T) {
-	bare, err := native.NewRegistry()
-	if err != nil {
-		t.Fatal(err)
+// TestW8NewParseLangFnValidation drives the value constructor's validation
+// arms: empty name, nil handler, and a name RegisterNativeFunc refuses.
+func TestW8NewParseLangFnValidation(t *testing.T) {
+	if _, err := NewParseLangFn(ParseLangSpec{Name: "", Handler: w9NopParser}); err == nil {
+		t.Error("NewParseLangFn: empty Name should error")
 	}
-	if native.HostFormats(bare) != nil {
-		t.Skip("bare registry unexpectedly has a formats capability")
+	if _, err := NewParseLangFn(ParseLangSpec{Name: "x"}); err == nil {
+		t.Error("NewParseLangFn: nil Handler should error")
 	}
-	rerr := RegisterFormatParser(bare, "w8fmt", w8Fmt{})
-	if rerr == nil {
-		t.Error("RegisterFormatParser without a formats capability should error")
+	if _, err := NewParseLangFn(ParseLangSpec{Name: "not a word", Handler: w9NopParser}); err == nil {
+		t.Error("NewParseLangFn: an invalid word name should error")
 	}
-}
-
-// TestW8ParseRegisterValidate drives parseRegisterValidate's name (492),
-// non-function (499) and bad-signature (511) arms.
-func TestW8ParseRegisterValidate(t *testing.T) {
-	r := mcovReg(t)
-	fn := mcovFilterFn()
-
-	// 492: non-concrete name.
-	if _, err := parseRegisterValidate([]native.Value{native.NewTypeLiteral(native.TAtom), fn}, r); err == nil {
-		t.Error("parseRegisterValidate: non-concrete name should error")
+	if v, err := NewFormatParserFn("w8fmt", w8Fmt{}); err != nil || !native.IsConcrete(v) {
+		t.Errorf("NewFormatParserFn should build a concrete fn value, got %v (err %v)", v, err)
 	}
-	// 499: not a function value.
-	if _, err := parseRegisterValidate([]native.Value{native.NewAtom("k"), native.NewInteger(5)}, r); err == nil {
-		t.Error("parseRegisterValidate: non-function should error")
-	}
-	// 511: a function whose leading params are not [String|Any, Map].
-	badSig := native.NewFunction(native.FnDefInfo{
-		Name: "p",
-		Signatures: []native.FnSig{{
-			Params: []native.FnParam{{Type: native.TInteger}, {Type: native.TInteger}},
-		}},
-	})
-	if _, err := parseRegisterValidate([]native.Value{native.NewAtom("k"), badSig}, r); err == nil {
-		t.Error("parseRegisterValidate: wrong param types should error")
+	if v, err := NewParseLangFn(ParseLangSpec{Name: "purew8", Handler: w9NopParser, Pure: true}); err != nil || !native.IsConcrete(v) {
+		t.Errorf("NewParseLangFn Pure should build a concrete fn value, got %v (err %v)", v, err)
 	}
 }
 
-// TestW8ParseRegisterReturnsGuards drives parseRegisterReturns's early-return
-// guards (558 / 561).
-func TestW8ParseRegisterReturnsGuards(t *testing.T) {
-	r := mcovReg(t)
-	exports := native.NewOrderedMap()
-	idents := map[string]registerIdent{}
-	fn := parseRegisterReturns(exports, idents)
-
-	// 558: fewer than two args.
-	if out := fn([]native.Value{native.NewTypeLiteral(native.TAtom)}, r); out != nil {
-		t.Errorf("parseRegisterReturns: <2 args should return nil, got %v", out)
+// TestW8NewParseLangFnRegistryError drives the constructor's sub-registry
+// construction arm through the newDefaultRegistry seam.
+func TestW8NewParseLangFnRegistryError(t *testing.T) {
+	orig := newDefaultRegistry
+	t.Cleanup(func() { newDefaultRegistry = orig })
+	newDefaultRegistry = func(_ ...func(*native.Registry)) (*native.Registry, error) {
+		return nil, errors.New("w8 registry boom")
 	}
-	// 561: args[1] is not a function value.
-	if out := fn([]native.Value{native.NewAtom("k"), native.NewInteger(5)}, r); out != nil {
-		t.Errorf("parseRegisterReturns: non-function should return nil, got %v", out)
+	if _, err := NewParseLangFn(ParseLangSpec{Name: "x", Handler: w9NopParser}); err == nil {
+		t.Error("NewParseLangFn: a registry construction error should propagate")
+	}
+}
+
+// TestW8RegisterTombstone drives the ParseLang.register tombstone directly:
+// an unconditional parse_registry_frozen raise with the migration hint.
+func TestW8RegisterTombstone(t *testing.T) {
+	r := mcovReg(t)
+	_, err := parseRegisterFrozenHandler(nil, nil, nil, r)
+	if err == nil || !strings.Contains(err.Error(), "parse_registry_frozen") {
+		t.Errorf("register tombstone must raise parse_registry_frozen, got %v", err)
 	}
 }
 
@@ -217,14 +201,5 @@ func TestW8AontuAndTabnasSrcErrors(t *testing.T) {
 	}
 	if _, err := specs[0].Handler([]native.Value{w8LitS(), opts}, nil, nil, r); err == nil {
 		t.Error("tabnas handler: non-concrete src should error")
-	}
-}
-
-// TestW8HostStateNoCreate drives parseLangHostStateFor's no-create arm (220):
-// a registry with no state returns nil when create=false.
-func TestW8HostStateNoCreate(t *testing.T) {
-	r := mcovReg(t)
-	if s := parseLangHostStateFor(r, false); s != nil {
-		t.Error("parseLangHostStateFor(create=false) on a fresh registry should be nil")
 	}
 }

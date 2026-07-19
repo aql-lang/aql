@@ -846,14 +846,14 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// declines and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
+				`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`,
 				args[0].Pos())
 			macroDegradedAdvisory(r, "parse", "the aql:parselang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("parse_unknown_lang",
 			fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-			`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+			`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`)
 	}
 
 	source, opts := parseSurfaceOperands(args)
@@ -880,8 +880,8 @@ func parseSurfaceOperands(args []Value) (source, opts Value) {
 // resolved kind, with the fn value supplied by the caller instead of the
 // ParseLang namespace. fn is the parser operand (args[0], or the value a
 // bare word resolved to); it must be a concrete Function whose every
-// signature opens with the standard [source opts] prefix — the same contract
-// ParseLang.register enforces — so a wrong-shaped fn fails loudly here
+// signature opens with the standard [source opts] prefix — the shared
+// ParseLangFnSigWhy contract — so a wrong-shaped fn fails loudly here
 // rather than silently mis-collecting its operands. A Function-typed carrier
 // under analysis (a computed parser) degrades to a dynamic value, exactly
 // like the other not-statically-expandable macro paths.
@@ -919,10 +919,10 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 
 // ParseLangFnSigWhy reports why fnDef cannot serve as a parser (a ParseLang)
 // — every signature must open with the STANDARD parser prefix
-// [source:(String|Any) opts:Map …] — or "" when it conforms. It is the single
-// contract shared by the `parse` macro's fn-operand form (parseFnExpand) and
-// aql:parselang's ParseLang.register validation (modules/parselang.go), so
-// both surfaces enforce byte-identical requirements.
+// [source:(String|Any) opts:Map …] — or "" when it conforms. It is the ONE
+// contract every parser surface enforces: the `parse` macro's fn-operand
+// form (parseFnExpand), the compiled parselang-fn-dispatch, and the
+// NewParseLangFn value constructor's callers.
 func ParseLangFnSigWhy(fnDef FnDefInfo) string {
 	for _, sig := range fnDef.Signatures {
 		if len(sig.Params) < 2 {

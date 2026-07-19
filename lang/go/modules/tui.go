@@ -27,7 +27,7 @@ import (
 // The words draw into a double buffer: print-at/clear mutate an
 // offscreen grid, show hands the full frame to the backend (which owns
 // any diffing). The terminal itself is HOST-INJECTED via RegisterHostTui
-// (the RegisterHostParser pattern) — with no backend registered every
+// (the host-state capability pattern) — with no backend registered every
 // entry word raises `no_backend`, which is the natural state of the spec
 // harness and of hosts without a terminal. Error vocabulary: `closed`
 // (operations on a closed Terminal or end of input), `no_backend`,

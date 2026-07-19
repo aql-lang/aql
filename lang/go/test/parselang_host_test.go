@@ -10,9 +10,10 @@ import (
 
 // The calc PARSER is the parse-system sibling of the iop calc mini-language:
 // same `<a> <op> <b>` surface, but it returns an AST `{op,left,right}` (raw
-// token strings) instead of an evaluated integer. It is registered through
-// the Go host API (lang.RegisterParser); the framework resolves the source
-// (String or {src:…}) before the handler runs, so the handler sees a String.
+// token strings) instead of an evaluated integer. It is built through the Go
+// host API (lang.NewParseLangFn) and bound with DefineValue; the framework
+// resolves the source (String or {src:…}) before the handler runs, so the
+// handler sees a String.
 
 func calcParserSpec() lang.ParseLangSpec {
 	return lang.ParseLangSpec{
@@ -50,8 +51,12 @@ func newCalcParserInstance(t *testing.T) *lang.AQL {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if err := a.RegisterParser(calcParserSpec()); err != nil {
-		t.Fatalf("RegisterParser: %v", err)
+	v, err := lang.NewParseLangFn(calcParserSpec())
+	if err != nil {
+		t.Fatalf("NewParseLangFn: %v", err)
+	}
+	if err := a.DefineValue("calc", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
 	}
 	return a
 }
@@ -163,13 +168,13 @@ func TestParseLangHostSourceForms(t *testing.T) {
 	}
 }
 
-// TestParseLangHostDesugarEquivalence proves `parse calc` is sugar for the
-// standard ParseLang.parse_calc call.
+// TestParseLangHostDesugarEquivalence proves `parse calc` on a bound parser
+// value is sugar for the direct call `calc <source> <opts> end`.
 func TestParseLangHostDesugarEquivalence(t *testing.T) {
 	a := newCalcParserInstance(t)
 	imp := `import "aql:parselang"  `
 	sugar := runLast(t, a, imp+`(parse calc 'x * y').op`)
-	desugared := runLast(t, a, imp+`(ParseLang.parse_calc 'x * y' {} end).op`)
+	desugared := runLast(t, a, imp+`(calc 'x * y' {} end).op`)
 	if sugar != desugared || sugar != "*" {
 		t.Fatalf("sugar=%v desugared=%v: parse must desugar to the standard call", sugar, desugared)
 	}
@@ -185,11 +190,15 @@ func TestParseLangHostRegisterAfterImport(t *testing.T) {
 	if _, err := a.Run(`import "aql:parselang"`); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if err := a.RegisterParser(calcParserSpec()); err != nil {
-		t.Fatalf("RegisterParser after import: %v", err)
+	v, err := lang.NewParseLangFn(calcParserSpec())
+	if err != nil {
+		t.Fatalf("NewParseLangFn: %v", err)
+	}
+	if err := a.DefineValue("calc", v); err != nil {
+		t.Fatalf("DefineValue after import: %v", err)
 	}
 	if got := runLast(t, a, `(parse calc 'x - y').op`); got != "-" {
-		t.Fatalf("post-import registration: got %v, want -", got)
+		t.Fatalf("post-import binding: got %v, want -", got)
 	}
 }
 
@@ -220,7 +229,6 @@ func TestParseLangHostRuntimeErrors(t *testing.T) {
 		{"unknown operator", imp + `parse calc 'x ^ y'`, "unknown operator"},
 		{"malformed source", imp + `parse calc 'x +'`, "expected"},
 		{"unknown kind", imp + `parse nope 'x + y'`, "parse_unknown_lang"},
-		{"no import", `parse calc 'x + y'`, "parse_unknown_lang"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -236,40 +244,41 @@ func TestParseLangHostRuntimeErrors(t *testing.T) {
 	}
 }
 
-// TestParseLangHostRegistrationContract pins what RegisterParser refuses.
+// TestParseLangHostNoImportValueForm pins that a BOUND parser value needs no
+// aql:parselang import at all — the value form is import-free (only the
+// kind sugar and the ParseLang namespace need the module).
+func TestParseLangHostNoImportValueForm(t *testing.T) {
+	a := newCalcParserInstance(t)
+	if got := runLast(t, a, `(parse calc 'x + y').op`); got != "+" {
+		t.Fatalf("no-import value form: got %v, want +", got)
+	}
+}
+
+// TestParseLangHostRegistrationContract pins what NewParseLangFn refuses.
 func TestParseLangHostRegistrationContract(t *testing.T) {
 	t.Run("empty name", func(t *testing.T) {
-		a, _ := lang.New()
-		if err := a.RegisterParser(lang.ParseLangSpec{Handler: calcParserSpec().Handler}); err == nil {
+		if _, err := lang.NewParseLangFn(lang.ParseLangSpec{Handler: calcParserSpec().Handler}); err == nil {
 			t.Fatal("expected error for empty name")
 		}
 	})
-	t.Run("parse_ prefix rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		spec := calcParserSpec()
-		spec.Name = "parse_calc"
-		if err := a.RegisterParser(spec); err == nil {
-			t.Fatal("expected error for parse_ prefix")
-		}
-	})
-	t.Run("capitalised name rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		spec := calcParserSpec()
-		spec.Name = "Calc"
-		if err := a.RegisterParser(spec); err == nil {
-			t.Fatal("expected error for capitalised name")
-		}
-	})
 	t.Run("nil handler rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		if err := a.RegisterParser(lang.ParseLangSpec{Name: "calc"}); err == nil {
+		if _, err := lang.NewParseLangFn(lang.ParseLangSpec{Name: "calc"}); err == nil {
 			t.Fatal("expected error for nil handler")
 		}
 	})
-	t.Run("duplicate registration rejected", func(t *testing.T) {
-		a := newCalcParserInstance(t)
-		if err := a.RegisterParser(calcParserSpec()); err == nil {
-			t.Fatal("expected error registering calc twice")
+	t.Run("DefineValue rejects capitalised names", func(t *testing.T) {
+		a, _ := lang.New()
+		v, err := lang.NewParseLangFn(calcParserSpec())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.DefineValue("Calc", v); err == nil {
+			t.Fatal("expected error for a capitalised value name")
+		}
+		if err := a.DefineValue("", v); err == nil {
+			t.Fatal("expected error for an empty value name")
 		}
 	})
+	// (The parse_ prefix and duplicate-kind rules died with the namespace:
+	// a value binding is def-scoped — rebinding shadows, like any def.)
 }

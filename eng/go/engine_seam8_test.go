@@ -578,6 +578,24 @@ func TestW8ExecFnDefSigListAutoEvalError(t *testing.T) {
 	}
 }
 
+func TestW8ExecFnDefSigMapAutoEval(t *testing.T) {
+	// A map arg with Eval=true is auto-evaluated in place (the success twin
+	// of the error arm below).
+	r := covRegistry(t, nil)
+	sig := &Signature{Params: []FnParam{{Type: TMap}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
+	m := NewOrderedMap()
+	m.Set("k", NewInteger(1))
+	mapArg := NewMap(m)
+	mapArg.Eval = true
+	e := NewTop(r)
+	e.tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
+	e.pointer = 1
+	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil); err != nil {
+		t.Fatalf("execFnDefSig map autoeval: %v", err)
+	}
+}
+
 func TestW8ExecFnDefSigMapAutoEvalError(t *testing.T) {
 	// A map arg whose value evaluation fails propagates the error.
 	r := covRegistry(t, nil)

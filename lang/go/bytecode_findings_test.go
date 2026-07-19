@@ -3172,28 +3172,22 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 	}
 }
 
-// TestParseLangFnValueDispatchCompiles pins the two sub-features that let an
-// AQL-registered parser (`ParseLang.register`) compile to bytecode
-// (design/aql-bytecode-stage3-inlining-plan.0.md, module-parselang:23):
-//
-//	A. SOUND check-mode registration — the register handler installs the
-//	   parser at check time (ReturnsFn) so `ParseLang.parse_<name>` resolves
-//	   statically, AND the runtime register handler is idempotent for the
-//	   compiled path's re-run of the SAME source call (so it does not raise
-//	   parse_kind_exists). A GENUINE double-register (different source Pos)
-//	   still errors — the negative below pins it.
-//	B. body-bearing fn-VALUE dispatch — the resolved parser fn value, called
-//	   with args, lowers to a CALL_USER unit (its `__pa` tail captured INSIDE
-//	   the unit) instead of leaking `__pa` into the top-level residual.
+// TestParseLangFnValueDispatchCompiles pins body-bearing fn-VALUE dispatch
+// for a def-bound AQL parser (module-parselang:23): the bound parser fn,
+// called with args — directly or through the `parse` sugar — lowers to a
+// CALL_USER unit (its `__pa` tail captured INSIDE the unit) instead of
+// leaking `__pa` into the top-level residual. (The former sub-feature A,
+// check-time registration, died with the frozen kind namespace — the
+// negative below pins the tombstone's cross-engine parity instead.)
 func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 	const reg = `"aql:parselang" import end  "aql:string-util" import end  ` +
-		`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  `
+		`def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  `
 
-	// POSITIVE: the desugared standard call (row 23) and the `parse` sugar
+	// POSITIVE: the desugared direct call (row 23) and the `parse` sugar
 	// (row 16) compile, run through the VM, and match the interpreter.
 	for _, c := range []struct{ src, want string }{
-		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 1`, "[+]"},
-		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 0`, "[x]"},
+		{reg + `(calc 'x + y' {} end) get 1`, "[+]"},
+		{reg + `(calc 'x + y' {} end) get 0`, "[x]"},
 		{reg + `(parse calc 'x + y') get 1`, "[+]"},
 	} {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
@@ -3225,20 +3219,16 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE (sub-feature A soundness): a GENUINE double-register of the same
-	// kind — two distinct `register` calls in the source — must still error
-	// `parse_kind_exists` in BOTH engines. The idempotency keys on the
-	// fn-value source Pos, so two different call sites are NOT treated as one.
-	dbl := `"aql:parselang" import end  ` +
-		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ` +
-		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])`
+	// NEGATIVE: the registration surface is a TOMBSTONE — `ParseLang.register`
+	// raises parse_registry_frozen identically in BOTH engines.
+	dbl := `"aql:parselang" import end  ParseLang.register`
 	_, _, eC := mustNew(t).RunCompiled(dbl)
 	_, eI := mustNew(t).Run(dbl)
-	if codeOf(eC) != "parse_kind_exists" {
-		t.Errorf("double-register compiled: code=%q want parse_kind_exists (err=%v)", codeOf(eC), eC)
+	if codeOf(eC) != "parse_registry_frozen" {
+		t.Errorf("register tombstone compiled: code=%q want parse_registry_frozen (err=%v)", codeOf(eC), eC)
 	}
-	if codeOf(eI) != "parse_kind_exists" {
-		t.Errorf("double-register interp: code=%q want parse_kind_exists (err=%v)", codeOf(eI), eI)
+	if codeOf(eI) != "parse_registry_frozen" {
+		t.Errorf("register tombstone interp: code=%q want parse_registry_frozen (err=%v)", codeOf(eI), eI)
 	}
 }
 

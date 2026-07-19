@@ -5262,7 +5262,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
 	// A NON-anonymous body-bearing fn VALUE reached as a CALL while the
 	// BYTECODE EMITTER is active (a `fn` literal resolved from a map / module
-	// export, e.g. `ParseLang.parse_calc 'x' {}`) is dispatched like a named
+	// export, e.g. `ParseLang.parse_json 'x' {}`) is dispatched like a named
 	// user fn: through buildFnBodyReturnsFn (spliceFnValueCheckResult), which
 	// arms the body compile so the per-call `__pa` tail is captured inside its
 	// own CALL_USER unit instead of leaking into the top-level residual.
@@ -5454,7 +5454,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 
 // spliceFnValueCheckResult is the check-mode dispatch for a NON-anonymous
 // body-bearing fn VALUE (a `fn` literal resolved from a map/module export and
-// then CALLED, e.g. `ParseLang.parse_calc 'x' {}`). Unlike a NAMED user fn
+// then CALLED, e.g. `ParseLang.parse_json 'x' {}`). Unlike a NAMED user fn
 // (which dispatches through stepWord → its registered ReturnsFn) and unlike an
 // anonymous lambda (spliceAnonCheckResult, analysis-only), a called fn value
 // previously fell through to execFnDefSig, whose inline body splice leaks the

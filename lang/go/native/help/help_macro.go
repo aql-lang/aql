@@ -94,8 +94,8 @@ func init() {
 			"`ParseLang.parse_<kind> <source> <opts> end` at the call site. The `source` is the " +
 			"required LAST argument — a String or a {src:…} Source map — and `opts` is the optional " +
 			"middle one. A parser returns whatever the language yields (an AST, a transduction, …), " +
-			"typed Any. Parsers live in the aql:parselang module (import it first; ParseLang.kinds " +
-			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
+			"typed Any. The built-in kinds live in the aql:parselang module (import it first; " +
+			"ParseLang.kinds lists them) and the kind set is FIXED — new kinds cannot be registered. " +
 			"An unknown kind is an expansion-time error. The first argument may instead BE the parser " +
 			"— a ParseLang value: a fn (or a word bound to one) whose every signature starts with the " +
 			"standard [source:String opts:Map] prefix — called directly with no kind lookup, so a " +

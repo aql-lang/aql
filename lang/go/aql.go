@@ -629,36 +629,56 @@ func (a *AQL) RegisterMiniLang(spec MiniLangSpec) error {
 // form of the standard parser signature. The framework resolves the source
 // before the function runs, so it receives args[0]=source (a String) and
 // args[1]=opts; it returns the parse result. Handlers passed to
-// RegisterParser (ParseLangSpec.Handler) carry this type.
+// NewParseLangFn (ParseLangSpec.Handler) carry this type.
 type ParseLang = modules.ParseLang
 
-// ParseLangSpec describes a Go-implemented parser for RegisterParser. The
+// ParseLangSpec describes a Go-implemented parser for NewParseLangFn. The
 // standard [source:String opts:Map] prefix is supplied automatically and the
 // source is resolved to a String before the handler runs; declare only the
 // Returns and the Handler (a ParseLang).
 type ParseLangSpec = modules.ParseLangSpec
 
-// RegisterParser installs a Go-implemented parser on the instance — the
-// embedder twin of the AQL `ParseLang.register` word, and the sibling of
-// RegisterMiniLang. After the program imports "aql:parselang", the parser is
-// callable as `parse <Name> <opts?> <source>`; it returns whatever the
-// language yields (an AST, a transduction, …), typed Any. Registration may
-// precede or follow the import.
-//
-// The kind name must be a lowercase atom with no `parse_` prefix, the handler
-// must be non-nil, and the name must not collide with an existing parser. The
-// handler receives args[0]=source (a resolved String) and args[1]=opts.
+// NewParseLangFn builds a ParseLang Function VALUE from spec — the
+// successor of the removed RegisterParser: the parse kind namespace is
+// fixed (built-in kinds only), so a Go-implemented parser is handed to
+// programs as a value instead of a registered kind. Bind it with
+// DefineValue (or export it from a module) and call it through the `parse`
+// word's value form.
 //
 // Example — a calc parser that returns an AST instead of evaluating:
 //
-//	a.RegisterParser(lang.ParseLangSpec{
+//	p, _ := lang.NewParseLangFn(lang.ParseLangSpec{
 //	    Name:    "calc",
 //	    Returns: []*lang.Type{lang.TMap},
 //	    Handler: calcParseHandler, // 'x + y' → {op:'+', left:'x', right:'y'}
 //	})
+//	a.DefineValue("calc", p)
 //	a.Run(`import "aql:parselang"  parse calc 'x + y'`) // → {op:'+' …}
-func (a *AQL) RegisterParser(spec ParseLangSpec) error {
-	return modules.RegisterHostParser(a.registry, spec)
+func NewParseLangFn(spec ParseLangSpec) (Value, error) {
+	return modules.NewParseLangFn(spec)
+}
+
+// NewFormatParserFn wraps a read Format's decoder as a ParseLang Function
+// VALUE — the value-form successor of the removed RegisterFormatParser's
+// parse side. Register the format with the read registry separately when it
+// should also be reachable from `read`.
+func NewFormatParserFn(name string, f native.Format) (Value, error) {
+	return modules.NewFormatParserFn(name, f)
+}
+
+// DefineValue binds name to v in the instance's definition table — the host
+// twin of `def name <value>` (lowercase names; capitalised names are types —
+// use DefineType). The canonical way to install a NewParseLangFn value so
+// programs reach it by bare name (`parse myp '…'`).
+func (a *AQL) DefineValue(name string, v Value) error {
+	if name == "" {
+		return fmt.Errorf("define value: name must not be empty")
+	}
+	if name[0] >= 'A' && name[0] <= 'Z' {
+		return fmt.Errorf("define value %q: lowercase names bind values (capitalised names are types — use DefineType)", name)
+	}
+	native.InstallDef(a.registry, name, v)
+	return nil
 }
 
 // (RegisterStackOnly was retired. To install a stack-only word, set

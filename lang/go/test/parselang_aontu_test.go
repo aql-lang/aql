@@ -185,21 +185,27 @@ func TestParseLangAontuErrors(t *testing.T) {
 	}
 }
 
-// TestParseLangAontuNotReRegisterable confirms aontu occupies its kind slot:
-// a host parser cannot claim the name once the module is built.
-func TestParseLangAontuNotReRegisterable(t *testing.T) {
+// TestParseLangAontuKindNotShadowable confirms aontu occupies its kind slot:
+// the built-in kind wins over a same-named value binding, so a host parser
+// bound as `aontu` never intercepts `parse aontu`. (The calc parser would
+// reject 'a:1' — only the built-in decodes it.)
+func TestParseLangAontuKindNotShadowable(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	spec := lang.ParseLangSpec{
+	v, err := lang.NewParseLangFn(lang.ParseLangSpec{
 		Name:    "aontu",
 		Returns: []*lang.Type{lang.TMap},
 		Handler: calcParserSpec().Handler,
+	})
+	if err != nil {
+		t.Fatalf("NewParseLangFn: %v", err)
 	}
-	if err := a.RegisterParser(spec); err == nil {
-		t.Fatal("expected error re-registering the built-in aontu parser")
-	} else if !strings.Contains(err.Error(), "already registered") {
-		t.Fatalf("error %q should say already registered", err.Error())
+	if err := a.DefineValue("aontu", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
+	}
+	if got := aStr(t, a, aontuImp+`(parse aontu 'a:1') get 'a'`); got != "1" {
+		t.Fatalf("built-in aontu should win over the binding: got %v, want 1", got)
 	}
 }

@@ -24,9 +24,10 @@ func init() {
 			"constrain scalars, an absolute `$.a` reference resolves from the root and a relative `.k` " +
 			"reference resolves a sibling key. A conflict, unresolvable reference or a value that does " +
 			"not fully resolve to concrete data raises parse_syntax_error.",
-		"register": "Install an AQL fn as a new parser: ParseLang.register <name> <fn>. " +
-			"Every fn signature must start with the standard prefix [source:String opts:Map …].",
-		"kinds": "List the registered parser-kind atoms.",
+		"register": "TOMBSTONE — raises parse_registry_frozen: the parse kind namespace is fixed " +
+			"and registration was removed. Pass a custom parser as a Function value instead " +
+			"(def myp (fn [[source:String opts:Map] [Any] [...]])  parse myp '...').",
+		"kinds": "List the (fixed) built-in parser-kind atoms.",
 		"source": "Resolve a `parse` source value to its String: a String passes through, " +
 			"a {src:'…'} map yields its src, a {file:…} map is not yet supported.",
 	})

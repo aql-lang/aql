@@ -3,9 +3,7 @@ package modules
 import (
 	"fmt"
 	"strings"
-	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -31,56 +29,55 @@ import (
 // no kind lookup (the ParseLang-value form; see native_macro.go
 // parseFnExpand).
 //
+// The kind namespace is FIXED: the built-in kinds below are the whole set,
+// and registration was removed (`ParseLang.register` survives one release
+// as a tombstone raising parse_registry_frozen). Custom parsers are
+// Function VALUES — `parse <fn> …`, a def-bound name, or a Go-built
+// NewParseLangFn value — which are lexically scoped instead of sharing one
+// flat namespace.
+//
 // Out-of-band exports (no `parse_` prefix — never reachable via `parse`):
 //
-//	ParseLang.register  — install an AQL fn as a new parser
-//	ParseLang.kinds     — list the registered parser-kind atoms
+//	ParseLang.register  — TOMBSTONE: raises parse_registry_frozen
+//	ParseLang.kinds     — list the (fixed) parser-kind atoms
 //	ParseLang.source    — resolve a source value (String | {src:…}) to a String
 //
 // Source resolution: a String passes through; a `{src:String}` map yields
 // its src; a `{file:…}` map raises `parse_file_unsupported` (deferred in
-// v1). Host-registered parsers (RegisterHostParser) get resolution for free
-// — the framework resolves the source before the parser body runs. An
-// AQL-registered parser receives the source as given and may call
-// `ParseLang.source` to normalise it.
+// v1). Every framework-built parser (the built-in kinds, NewParseLangFn
+// values, Parse.parser values) gets resolution for free — parseSourceShell
+// resolves the source before the parser body runs. A hand-written AQL
+// parser fn receives the source as given and may call `ParseLang.source`
+// to normalise it.
 
-// BuildParseLangModule creates the "aql:parselang" native module. It ships
-// the framework — register / kinds / source — and folds in any
-// host-registered parsers; it carries no built-in parser kinds.
+// BuildParseLangModule creates the "aql:parselang" native module: the FIXED
+// built-in parser kinds (the tabnas family + aontu) plus the out-of-band
+// framework words (kinds / source / the register tombstone).
 func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
 	exports := native.NewOrderedMap()
-	// registerIdents tracks the source-call identity of each AQL-registered
-	// parser so the runtime register handler is idempotent for the compiled
-	// path's double execution (check-mode ReturnsFn install + VM re-run) while
-	// a genuine user double-register still errors. See parseRegisterInstall.
-	registerIdents := map[string]registerIdent{}
 
-	// ---- out-of-band: register ----------------------------------------
-	// ParseLang.register <name> <fn> installs an AQL function as the parser
-	// `parse_<name>`. Every fn signature must start with the standard
-	// prefix [source:(String|Any) opts:Map …]. Mirrors MiniLang.register.
+	// ---- out-of-band: register (TOMBSTONE) ------------------------------
+	// The parse kind namespace is fixed; registration was removed. The word
+	// survives one release as an unconditional, hint-carrying raise so an
+	// existing program fails loudly with the migration path instead of a
+	// bare missing-export miss. DryPassWrap mirrors the raise statically, so
+	// `aql check` flags the use too (the unquote/splice tombstone pattern).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-register",
 		Signatures: []native.Signature{{
-			Args:          []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:     map[int]bool{0: true},
-			Returns:       []*native.Type{},
-			BarrierPos:    -1,
-			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Impl:          native.Go(parseRegisterHandler(exports, registerIdents)),
-			// Check-mode install so `ParseLang.parse_<name>` is statically
-			// resolvable; idempotent on the source-call identity so the compiled
-			// program's runtime re-run does not raise parse_kind_exists.
-			ReturnsFn: parseRegisterReturns(exports, registerIdents),
+			Args:       []*native.Type{},
+			Returns:    []*native.Type{},
+			BarrierPos: -1,
+			Impl:       native.Go(parseRegisterFrozenHandler),
+			ReturnsFn:  native.DryPassWrap(parseRegisterFrozenHandler, native.ReturnsStatic()),
 		}},
 	})
-	exports.Set("register", wrapMiniFnDef("parselang-register", [][]native.FnParam{
-		{{Type: native.TAtom, Quote: true}, {Type: native.TFunction}},
-	}, []*native.Type{}, map[int]bool{0: true}, subReg))
+	exports.Set("register", wrapMiniFnDef("parselang-register", [][]native.FnParam{{}},
+		[]*native.Type{}, nil, subReg))
 
 	// ---- out-of-band: kinds -------------------------------------------
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -135,32 +132,21 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: native.TAny}},
 	}, []*native.Type{native.TString}, nil, subReg))
 
-	// ---- built-in parser kinds + host-registered parsers ----------------
+	// ---- the FIXED built-in parser kinds ---------------------------------
 	// The tabnas parser family (ini, json, jsonic, json5, jsonc, csv, toml,
 	// yaml, xml, zon, markdown, feed) ships in the box, so `import
-	// "aql:parselang"` then `parse <kind> '<text>'` works with no host
-	// registration. Each gets source resolution (String or {src:…}) for
-	// free, like every host parser. aontu (github.com/rjrodger/aontu, a
-	// CUE-inspired unification config dialect with no Go port) ships as a
-	// hand-written parser in native (see native/aontu.go) and installs the
-	// same way. Host-registered parsers follow. One merged loop (built-ins
-	// first, exactly the previous install order) keeps a single coverable
-	// install-error arm — see design/TEST-SEAMS.10.md.
-	//
-	// create=true: record the live module even with no host parsers yet,
-	// so a post-import RegisterHostParser injects directly (the loaded
-	// cache would otherwise never rebuild). Mirrors the MiniLang fold.
-	state := parseLangHostStateFor(parent, true)
-	state.mu.Lock()
-	builtins := append(tabnasParserSpecs(), aontuParserSpec())
-	for _, spec := range append(builtins, state.specs...) {
-		if err := installHostParser(exports, subReg, spec); err != nil {
-			state.mu.Unlock()
+	// "aql:parselang"` then `parse <kind> '<text>'` works out of the box.
+	// Each gets source resolution (String or {src:…}) for free
+	// (parseSourceShell). aontu (github.com/rjrodger/aontu, a CUE-inspired
+	// unification config dialect with no Go port) ships as a hand-written
+	// parser in native (see native/aontu.go) and installs the same way.
+	// This set is the WHOLE kind namespace — nothing else ever installs
+	// into it.
+	for _, spec := range append(tabnasParserSpecs(), aontuParserSpec()) {
+		if err := installBuiltinParser(exports, subReg, spec); err != nil { //covergate:allow the built-in kind set is static and name-disjoint (TabnasKinds + aontu, order pinned by tabnas_format_test.go), so the duplicate-key arm cannot fire; the installer's arm itself is driven directly by TestW8InstallBuiltinParserDuplicate (§modules)
 			return native.ModuleDesc{}, err
 		}
 	}
-	state.live = &builtParseLang{exports: exports, subReg: subReg}
-	state.mu.Unlock()
 
 	return native.ModuleDesc{
 		Src:     subReg,
@@ -185,13 +171,14 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 // and host parsers supplied via ParseLangSpec.Handler.
 type ParseLang func(args []native.Value, ctx map[string]native.Value, stack []native.Value, r *native.Registry) ([]native.Value, error)
 
-// ParseLangSpec describes a Go-implemented parser for the host registration
-// API (RegisterHostParser). The standard [source:String opts:Map] prefix is
-// supplied automatically and the source is RESOLVED to a String before the
-// handler runs, so a handler receives args[0]=source:String, args[1]=opts.
+// ParseLangSpec describes a Go-implemented parser for the value
+// constructor (NewParseLangFn). The standard [source:String opts:Map]
+// prefix is supplied automatically and the source is RESOLVED to a String
+// before the handler runs, so a handler receives args[0]=source:String,
+// args[1]=opts.
 type ParseLangSpec struct {
-	// Name is the parser-kind atom, unprefixed and lowercase ("calc", not
-	// "parse_calc"). It is the token a caller writes after `parse`.
+	// Name labels the parser (it becomes part of the built value's inner
+	// word name, so it must be a plain lowercase word like "calc").
 	Name string
 	// Returns are the parser's output types (nil → [Any]).
 	Returns []*native.Type
@@ -206,95 +193,6 @@ type ParseLangSpec struct {
 	// built-in kinds set this — host parsers are unknown code and stay
 	// unfolded unless the host opts in.
 	Pure bool
-}
-
-// capParseLangHost is the registry capability slot holding host-registered
-// parsers. Per-registry, like capMiniLangHost — no process-global table.
-const capParseLangHost = "engine.parselang.host"
-
-type parseLangHostState struct {
-	mu    sync.Mutex
-	specs []ParseLangSpec
-	live  *builtParseLang
-}
-
-type builtParseLang struct {
-	exports *native.OrderedMap
-	subReg  *native.Registry
-}
-
-func parseLangHostStateFor(r *native.Registry, create bool) *parseLangHostState {
-	if s, ok, _ := eng.Cap[*parseLangHostState](r, capParseLangHost); ok && s != nil {
-		return s
-	}
-	if !create {
-		return nil
-	}
-	s := &parseLangHostState{}
-	_ = r.Capabilities.Set(capParseLangHost, s)
-	return s
-}
-
-// RegisterHostParser installs a Go-implemented parser on reg — the embedder
-// twin of the AQL `ParseLang.register` word. The parser becomes resolvable
-// as `parse <Name> …` once the program imports "aql:parselang";
-// registration may happen before OR after that import. The contract mirrors
-// MiniLang: a lowercase kind name with no `parse_` prefix, a non-nil
-// handler, no collision with an existing parser.
-func RegisterHostParser(reg *native.Registry, spec ParseLangSpec) error {
-	if why := parseValidKindName(spec.Name); why != "" {
-		return fmt.Errorf("register parser: %s", why)
-	}
-	if spec.Handler == nil {
-		return fmt.Errorf("register parser %q: handler must not be nil", spec.Name)
-	}
-	// Reject a collision with a built-in kind here, BEFORE import: state.live
-	// is nil until aql:parselang is built, so the duplicate would otherwise
-	// only surface as a delayed import failure when the built-ins are installed.
-	if builtinParserKind(spec.Name) {
-		return fmt.Errorf("register parser %q: already registered (built-in)", spec.Name)
-	}
-	state := parseLangHostStateFor(reg, true)
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	for _, s := range state.specs {
-		if s.Name == spec.Name {
-			return fmt.Errorf("register parser %q: already registered", spec.Name)
-		}
-	}
-	if state.live != nil {
-		if err := installHostParser(state.live.exports, state.live.subReg, spec); err != nil {
-			return err
-		}
-	}
-	state.specs = append(state.specs, spec)
-	return nil
-}
-
-// RegisterFormatParser registers f as a read format (reachable from `read`
-// by name and by each ext) AND as a `parse` kind of the same name (reachable
-// from `parse <name>`). It is the single-call bridge for hosts that want a
-// format available on BOTH surfaces from one definition. The parse side
-// decodes via the format's Decode (a DecodeOpter format additionally honours
-// `parse <name> <opts> <src>`).
-func RegisterFormatParser(reg *native.Registry, name string, f native.Format, exts ...string) error {
-	// Register the parse side FIRST: RegisterHostParser performs all the
-	// fallible validation (name shape, built-in/duplicate collision) and the
-	// parse-side install, so a rejected parser leaves `read`'s registries
-	// untouched — the bridge is atomic. We pre-check the read-side
-	// precondition (the formats capability) up front so the subsequent
-	// native.RegisterFormat cannot fail after the parser is installed.
-	if native.HostFormats(reg) == nil {
-		return fmt.Errorf("register format parser %q: formats capability not installed", name)
-	}
-	if err := RegisterHostParser(reg, ParseLangSpec{
-		Name:    name,
-		Returns: []*native.Type{native.TAny},
-		Handler: formatParseHandler(name, f),
-	}); err != nil {
-		return err
-	}
-	return native.RegisterFormat(reg, name, f, exts...)
 }
 
 // formatParseHandler adapts a read Format into a ParseLang: it decodes
@@ -326,11 +224,13 @@ func formatParseHandler(name string, f native.Format) ParseLang {
 	}
 }
 
-// installHostParser registers a shell native that resolves the source value
-// to a String and then calls the host handler, and exports the standard
-// trivial-delegation wrapper under parse_<name>. The dispatch source slot is
-// TAny so a String OR a {src:…}/{file:…} Source map matches the signature.
-func installHostParser(exports *native.OrderedMap, subReg *native.Registry, spec ParseLangSpec) error {
+// installBuiltinParser registers a shell native that resolves the source
+// value to a String and then calls the kind's handler, and exports the
+// standard trivial-delegation wrapper under parse_<name>. The dispatch
+// source slot is TAny so a String OR a {src:…}/{file:…} Source map matches
+// the signature. Build-time only: the built-in kinds are the whole
+// namespace.
+func installBuiltinParser(exports *native.OrderedMap, subReg *native.Registry, spec ParseLangSpec) error {
 	key := "parse_" + spec.Name
 	if _, exists := exports.Get(key); exists {
 		return fmt.Errorf("register parser %q: already registered", spec.Name)
@@ -481,21 +381,6 @@ func resolveParseSource(v native.Value, r *native.Registry) (string, error) {
 		"e.g. parse calc 'x + y'  or  parse calc {src:'x + y'}")
 }
 
-// parseValidKindName reports why a parser-kind name is unusable, or "".
-// Mirrors miniValidKindName but rejects the parse_ prefix.
-func parseValidKindName(name string) string {
-	if name == "" {
-		return "parser name must not be empty"
-	}
-	if strings.HasPrefix(name, "parse_") {
-		return "parser name must not carry the parse_ prefix (register adds it)"
-	}
-	if name[0] >= 'A' && name[0] <= 'Z' {
-		return "parser name must be lowercase (capitalised names are types)"
-	}
-	return ""
-}
-
 // parseSourceHandler is the ParseLang.source word: resolve a source value to
 // its String.
 func parseSourceHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -506,80 +391,14 @@ func parseSourceHandler(args []native.Value, _ map[string]native.Value, _ []nati
 	return []native.Value{native.NewString(s)}, nil
 }
 
-// parseRegisterValidate runs the name + signature validation `register`
-// enforces, returning the validated key ("parse_<name>") or an error. Shared
-// by the runtime handler and the check-mode ReturnsFn so both apply the exact
-// same contract.
-func parseRegisterValidate(args []native.Value, r *native.Registry) (string, error) {
-	name, err := args[0].AsConcreteAtom()
-	if err != nil {
-		return "", r.AqlError("parse_bad_name", fmt.Sprintf("register: %v", err), "register")
-	}
-	if why := parseValidKindName(name); why != "" {
-		return "", r.AqlError("parse_bad_name", "register: "+why, "register")
-	}
-	fnDef, ok := args[1].Data.(native.FnDefInfo)
-	if !ok || len(fnDef.Signatures) == 0 {
-		return "", r.AqlError("parse_bad_signature", "register: expected a function value", "register")
-	}
-	// The standard-prefix contract is shared with the `parse` macro's
-	// fn-operand form (native.ParseLangFnSigWhy) so both surfaces enforce
-	// byte-identical requirements.
-	if why := native.ParseLangFnSigWhy(fnDef); why != "" {
-		return "", r.AqlErrorHint("parse_bad_signature", "register: "+why, "register",
-			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
-	}
-	return "parse_" + name, nil
-}
-
-// parseRegisterInstall validates and installs an AQL fn as parse_<name>,
-// tracking the registering source-call identity in idents. It is the single
-// install body shared by the runtime handler and the check-mode ReturnsFn; the
-// collision / idempotency rule lives in registerCollisionInstall (shared with
-// MiniLang / EmitLang).
-func parseRegisterInstall(exports *native.OrderedMap, idents map[string]registerIdent, args []native.Value, r *native.Registry) error {
-	key, err := parseRegisterValidate(args, r)
-	if err != nil {
-		return err
-	}
-	return registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
-		return r.AqlError("parse_kind_exists",
-			fmt.Sprintf("register: parser %q is already registered", strings.TrimPrefix(key, "parse_")), "register")
-	})
-}
-
-// parseRegisterHandler validates and installs an AQL fn as parse_<name>.
-// Mirrors miniRegisterHandler; the source param may be String or Any.
-func parseRegisterHandler(exports *native.OrderedMap, idents map[string]registerIdent) native.Handler {
-	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		if err := parseRegisterInstall(exports, idents, args, r); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
-}
-
-// parseRegisterReturns is the check-mode counterpart of parseRegisterHandler:
-// it performs the SAME install so a dynamically-registered parser
-// (`ParseLang.register calc …`) is statically resolvable as
-// `ParseLang.parse_calc` during the check pass. The install is idempotent on
-// the registering source-call identity (parseRegisterInstall), so the runtime
-// handler re-running the identical `register` in the compiled program is a
-// no-op rather than a `parse_kind_exists` error. A non-concrete name or fn
-// value leaves the export unresolved (the downstream `get` refuses, as before).
-func parseRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent) native.ReturnsFunc {
-	return func(args []native.Value, r *native.Registry) []native.Value {
-		if len(args) < 2 || !native.IsConcrete(args[0]) {
-			return nil
-		}
-		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
-			return nil
-		}
-		if err := parseRegisterInstall(exports, idents, args, r); err != nil {
-			surfaceRegisterCheckError(r, err, args[0])
-		}
-		return nil
-	}
+// parseRegisterFrozenHandler is ParseLang.register's TOMBSTONE: the parse
+// kind namespace is FIXED (the built-in kinds are the whole set), so
+// registration was removed. An unconditional, hint-carrying raise — the
+// DryPassWrap mirror on its signature surfaces the same finding statically.
+func parseRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	return nil, r.AqlErrorHint("parse_registry_frozen",
+		"register: the parse kind namespace is fixed — registration was removed", "register",
+		"pass the parser as a Function value instead: def myp (fn [[source:String opts:Map] [Any] [...]])  parse myp '...' — Go hosts build one with NewParseLangFn")
 }
 
 // parseFnDispatchHandler is the runtime resolver behind the compiled
@@ -639,21 +458,6 @@ func tabnasParserSpecs() []ParseLangSpec {
 		}
 	}
 	return specs
-}
-
-// builtinParserKind reports whether name is one of the built-in parser kinds
-// (the tabnas family json/csv/ini/… plus the hand-written aontu) — the names
-// BuildParseLangModule installs before any host registration.
-func builtinParserKind(name string) bool {
-	if name == "aontu" {
-		return true
-	}
-	for _, spec := range tabnasParserSpecs() {
-		if spec.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // aontuParserSpec is the built-in aontu parse kind. Its handler decodes the

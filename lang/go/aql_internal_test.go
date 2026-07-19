@@ -21,6 +21,29 @@ func TestRegisterFormat(t *testing.T) {
 	}
 }
 
+// TestNewFormatParserFnLangSurface drives the lang-level NewFormatParserFn
+// wrapper: the built value binds with DefineValue and parses import-free.
+func TestNewFormatParserFnLangSurface(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := NewFormatParserFn("bracket", &bracketFormat{})
+	if err != nil {
+		t.Fatalf("NewFormatParserFn: %v", err)
+	}
+	if err := a.DefineValue("bracket", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
+	}
+	got, err := a.Run(`parse bracket 'hi'`)
+	if err != nil {
+		t.Fatalf("parse bracket: %v", err)
+	}
+	if len(got) != 1 || got[0] != "hi" {
+		t.Fatalf("parse bracket = %v, want [hi]", got)
+	}
+}
+
 // bracketFormat is a test format.
 type bracketFormat struct{}
 
