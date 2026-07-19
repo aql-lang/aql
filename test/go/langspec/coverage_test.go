@@ -52,6 +52,13 @@ var hermeticExempt = map[string]string{
 	"Model.start": "background watch goroutine; not deterministic in a spec row (model_test.go)",
 	"Model.stop":  "watch lifecycle; paired with start, no hermetic spec surface (model_test.go)",
 	"Model.model": "real-FS build tool; no hermetic spec surface (model_test.go)",
+	// Test.cover / Test.coverage measure INTERPRETER line coverage of a module-
+	// under-test: the recorded rows (and thus the report) exist only on the
+	// tree-walk path (the compiled VM never fires the coverage hook), so a spec
+	// row would diverge compiled-vs-interpreter. Covered by the Go tests in
+	// lang/go/modules/test_coverage_test.go + test_coverage_cov_test.go.
+	"Test.cover":    "interpreter-only coverage measurement; mode-dependent, no hermetic spec surface (test_coverage_test.go)",
+	"Test.coverage": "interpreter-only coverage report; mode-dependent, no hermetic spec surface (test_coverage_test.go)",
 }
 
 // TestModuleExportCoverage fails when any native-module export lacks a

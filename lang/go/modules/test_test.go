@@ -40,6 +40,55 @@ func runTestAQL(t *testing.T, r *native.Registry, src string) []native.Value {
 	return out
 }
 
+// Test.skip "name" [body] parks a CASE: the body is NEVER run (a raise inside
+// it must not fire), and it records ok=true + skipped=true without failing the
+// run. (Stack form `[body] "name" Test.skip` — the case sig is [String, List].)
+// The case is parked inside a Test.describe so run.path is non-empty, which
+// also exercises skipCase's path-copy into the recorded result.
+func TestSkipCase(t *testing.T) {
+	r := testRegistry(t)
+	// The body would raise if run; runTestAQL asserts no error, so a clean run
+	// proves skip did not execute the body.
+	runTestAQL(t, r, `Test.describe "grp" [ [ raise kaboom "x" ] "parked" Test.skip ]`)
+	run := activeRun(r)
+	if len(run.results) != 1 {
+		t.Fatalf("expected 1 recorded result, got %d", len(run.results))
+	}
+	if run.failures != 0 {
+		t.Errorf("a skipped case must not count as a failure; failures=%d", run.failures)
+	}
+	m, err := native.AsMap(run.results[0])
+	if err != nil {
+		t.Fatalf("result is not a map: %v", err)
+	}
+	skipped, _ := m.Get("skipped")
+	if b, _ := skipped.AsConcreteBoolean(); !b {
+		t.Errorf("skipped = %v, want true", skipped)
+	}
+	okv, _ := m.Get("ok")
+	if b, _ := okv.AsConcreteBoolean(); !b {
+		t.Errorf("ok = %v, want true", okv)
+	}
+	name, _ := m.Get("name")
+	if s, _ := name.AsConcreteString(); s != "parked" {
+		t.Errorf("name = %q, want parked", s)
+	}
+	// The recorded path carries the enclosing describe group — this exercises
+	// skipCase's path-copy loop (empty at top level, one entry here).
+	pathV, _ := m.Get("path")
+	pathL, err := native.AsList(pathV)
+	if err != nil {
+		t.Fatalf("path is not a list: %v", err)
+	}
+	pv := pathL.Slice()
+	if len(pv) != 1 {
+		t.Fatalf("path length = %d, want 1", len(pv))
+	}
+	if s, _ := pv[0].AsConcreteString(); s != "grp" {
+		t.Errorf("path[0] = %q, want grp", s)
+	}
+}
+
 func TestTestModuleExports(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {

@@ -1248,6 +1248,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		val := e.tape.At(e.pointer)
 
+		// Line-coverage seam (coverage.go): record the executing token's source
+		// row when a coverage run has armed the hook AND this registry is a
+		// tagged coverage target. Inert (one atomic load) otherwise.
+		e.registry.noteCoverage(val.Pos())
+
 		if e.trace != nil {
 			snapshot := e.tape.Snapshot()
 			note := e.traceNote
@@ -1572,6 +1577,10 @@ func (e *Engine) resolveOrphanedForwards() error {
 				break
 			}
 			val := e.tape.At(e.pointer)
+			// Line-coverage seam (coverage.go): this forward-retry loop steps
+			// tokens (a paren/forward re-evaluated after curryOrStack) outside
+			// the main loop, so it mirrors the main loop's per-step emit.
+			e.registry.noteCoverage(val.Pos())
 			switch {
 			case IsWord(val):
 				if err := e.stepWord(val); err != nil {
@@ -2235,6 +2244,11 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 			break
 		}
 		v := e.tape.At(e.pointer)
+		// Line-coverage seam (coverage.go): a forward-arg paren group evaluates
+		// its inner tokens HERE, off the main loop — the dominant path for
+		// `def x (f …)`-style fn-body statements. Mirror the main loop's emit so
+		// nested fn-body rows attribute to the module-under-test.
+		e.registry.noteCoverage(v.Pos())
 
 		if IsOpenParen(v) {
 			depth++
@@ -6691,6 +6705,10 @@ func (e *Engine) stepCloseParen() error {
 				// Re-evaluate from current pointer up to closeIdx.
 				for e.pointer < closeIdx {
 					val := e.tape.At(e.pointer)
+					// Line-coverage seam (coverage.go): this nested forward-
+					// resolution loop steps tokens off the main loop; mirror
+					// its per-step emit.
+					e.registry.noteCoverage(val.Pos())
 					switch {
 					case IsWord(val):
 						if err := e.stepWord(val); err != nil {

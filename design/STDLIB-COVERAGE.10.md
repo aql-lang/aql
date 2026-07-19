@@ -44,6 +44,7 @@ Three buckets:
 | `net/http`, `net/url` (structure) | `aql:net`, `aql:url` | shipped + designed — [NET-URL](go-modules/NET-URL.10.md) |
 | `io`, `io/fs`, all `os` filesystem | `aql:io` (all filesystem) | shipped + designed — [IO](go-modules/IO.10.md) |
 | `os` (env/args/identity/exit) | `aql:os` | designed — [OS](go-modules/OS.10.md) |
+| `os/exec` (run a command, capture output) | `aql:exec` | designed — [EXEC](go-modules/EXEC.10.md) |
 | `runtime` (GOOS/GOARCH/NumCPU/…) | `aql:runtime` | designed — [RUNTIME](go-modules/RUNTIME.10.md) |
 | `path`, `path/filepath` | `aql:path-util`, `aql:filepath` | designed |
 | `text/template` | `aql:template` | designed — [TEXT-TEMPLATE](go-modules/TEXT-TEMPLATE.10.md) |
@@ -79,7 +80,6 @@ effectful, a capability seam + policy scope).
 | **`aql:crypto`** (real ciphers) | `crypto/{aes,cipher,rsa,ecdsa,ed25519,tls,x509}`, `encoding/{pem,asn1}` | **Biggest gap.** `bin-util` did only hashing/HMAC/random — symmetric/asymmetric **encryption, signing, TLS, certificates** are uncovered and security-sensitive; deserves its own gated capability. |
 | **`aql:archive`** | `archive/{tar,zip}` | Container files; pairs with `Bytes`/`io`. |
 | **`aql:compress`** | `compress/{gzip,flate,zlib,bzip2}` | Byte→byte; sits beside `bin-util`. |
-| **`aql:exec`** | `os/exec` | Process spawning — flagged in [OS.10.md](go-modules/OS.10.md) as a future, dangerous, separately-gated module. |
 | **raw networking** | `net` (TCP/UDP/IP), `net.Lookup*` (DNS), `net/smtp`, `net/textproto` | `aql:net` is HTTP-only today; sockets/DNS/SMTP are gaps (security-sensitive, capability-gated). |
 | **`aql:mime`** | `mime`, `mime/multipart` | Content-type detection + multipart form uploads (HTTP-adjacent). |
 | html auto-escaping | `html/template` | `text/template` is covered; the *contextual auto-escaping* variant would build on `aql:coding`. |
@@ -94,5 +94,6 @@ toolchain machinery, intentionally invisible to a sealed query language.
 Everything in bucket C fits AQL's grain; the only sizeable, broadly-useful
 omission from current designs is **real cryptography** (ciphers / PKI /
 TLS), since `bin-util` stopped at hashing. After that, **archive /
-compress**, **`os/exec`**, and **raw networking / DNS** are the next most
-defensible additions.
+compress** and **raw networking / DNS** are the next most defensible
+additions (`os/exec` graduated to bucket A —
+[EXEC](go-modules/EXEC.10.md)).

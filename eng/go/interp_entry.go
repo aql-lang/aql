@@ -102,6 +102,8 @@ func (r *Registry) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 func (r *Registry) InheritObserveHooks(parent *Registry) {
 	r.interpHook = parent.interpHook
 	r.bailHook = parent.bailHook
+	r.coverHook = parent.coverHook
+	r.coverSources = parent.coverSources
 }
 
 // noteInterp emits one interpreter-entry observation when the hook is armed.

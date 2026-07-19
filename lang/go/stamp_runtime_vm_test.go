@@ -191,6 +191,52 @@ def h (fn [[x:Integer] [Integer] [ add 1 ((m get "f") x) ]])
 	}
 }
 
+// A body whose OUTER stored-fn unit compiles but whose NESTED fn SUB-UNIT
+// refuses at Finalize — the detached-stamp Finalize belt (stamp_runtime.go).
+// compileStoredFnUnit RECORDS the inner fn as a sub-unit and returns ok (it
+// lowers nothing); Finalize's per-unit lowering loop then declines the inner
+// unit ("fn zzinner: consumes loop results" — the Stage-2 loop-result
+// boundary), so StampDetachedFn leaves the value plain and it interprets
+// unchanged. This is distinct from TestStampFnValueRefusingBodyInterprets-
+// Unchanged above, where compileStoredFnUnit itself declines (the earlier
+// return); here the outer compile succeeds and only Finalize refuses. It is
+// the shape the variation sweep's module-body transform reaches over a sift
+// row — the reason the belt graduated from //covergate:allow
+// (design/COVERAGE-ALLOWLIST.10.md).
+func TestDetachedStampSubUnitFinalizeRefusalDeclines(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.registry.EnableRuntimeStamping()
+	// Module load detached-stamps every module-scope fn (StampFnValueInPlace).
+	// zzouter's OUTER body compiles (compileStoredFnUnit ok — it records the
+	// nested zzinner as a sub-unit but lowers nothing), then Finalize's per-unit
+	// lowering loop declines zzinner ("fn zzinner: consumes loop results" — the
+	// Stage-2 boundary: `size` over the `for 3 [1]` loop residual). So the belt
+	// fires: zzouter stays plain and interprets. `[]` (no return contract) keeps
+	// the three-value loop residual interpreter-valid. `M.run` returns the inner
+	// fn value, which — a 0-arg fn at the top level — auto-invokes and yields
+	// the loop's three 1s, proving the graceful fallback runs unchanged.
+	out, err := a.RunInterp(`import module [ def zzouter fn [[] [] [def zzinner fn [[] [] [size (for 3 [1])]] zzinner]] export "M" {run: zzouter/r} ] end M.run`)
+	if err != nil {
+		t.Fatalf("belt is a graceful fallback — the module must load and run, got: %v", err)
+	}
+	if len(out) != 3 {
+		t.Fatalf("M.run must yield the loop's three values, got %d: %v", len(out), out)
+	}
+	// The belt recorded its attribution event for zzouter.
+	found := false
+	for _, ev := range a.registry.StampEvents() {
+		if ev.Name == "zzouter" && !ev.Stamped && ev.Reason == "finalize left the unit unstamped" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("belt must record the finalize-left-unstamped event for zzouter: %+v", a.registry.StampEvents())
+	}
+}
+
 // The detached compile is fully isolated: the live registry's def depths,
 // check-state identity, and diagnostics are untouched by a stamp performed
 // mid-session.
