@@ -382,13 +382,32 @@ these as `Fmt.*` AQL):
     transformed tree the emitter walks (capitalisation + fn-bracket elision
     applied), so a rule set only decides layout. `TestFmtTreeDeclarativeFormatter`
     is the payoff: a formatter for **AQL source** written as a declarative AQL
-    rule table over `Fmt.tree` (rules keyed by `Fmt.kind`, recursion through
-    `node.children`, `join` for the output) reproduces `Fmt.format`
-    **byte-for-byte** on the attachment-free core (leaves + bracket
-    containers). This proves the vocabulary reaches and formats real source,
-    not just data — the remaining port is the attachment rule and the
-    wrapping strategies (blocked on the (a)/(b)/(c) fork above), NOT the
-    tree-access plumbing, which is done and covered.
+    rule table over `Fmt.tree` (rules keyed by `Fmt.kind`, an `attaches` rule
+    reproducing the emitter's token-adjacency logic, and a `fold` over
+    `node.children` threading the previous node) reproduces `Fmt.format`
+    **byte-for-byte for EVERY statement that fits on one line** — the full
+    inline layer, attachment included (`x:Integer`, `m.k`, `x?`, `foo.bar`,
+    `input.(baz)`, nested containers, multi-param sigs all verified). This
+    proves the vocabulary reaches and formats real source, not just data —
+    the ONLY remaining port is the **wrapping strategies** (blocked on the
+    (a)/(b)/(c) fork above), NOT the inline layer or the tree-access plumbing,
+    both of which are done and covered.
+  - **Finding — the imperative reproduction (fork (b)) fights the engine's
+    scoping; the AQL-natural path is Doc-DATA (fork (a)).** Writing the inline
+    layer surfaced three distinct engine-scoping frictions that a recursive
+    string-building formatter hits but a Doc-DATA one does not: (1) a `get`
+    with an integer index in a mutually-recursive fn fails dispatch; (2) a
+    map-value paren-expr (`{s:(join …)}`) cannot see body-local `def`s; (3) a
+    body-local `def` holding a USER-FN result is lost after a subsequent `if`
+    in a fold body. Each was worked around (index-free `fold`, bare-word map
+    values, compute-the-`if`-first + inline the fn call), but the pattern is
+    clear: reproducing the *imperative* emitter in AQL is not "just more AQL",
+    it fights the interpreter — whereas the DATA formatter
+    (`TestFmtDeclarativeFormatter`) builds `{fmt:…}` Doc data via `each` and
+    hits none of this. So fork (a) (emit Doc data, accept the reflow) is the
+    AQL-*idiomatic* completion and fork (b) (byte-identical imperative port) is
+    the one that fights the tool — which sharpens, rather than resolves, the
+    maintainer decision.
     Production `Fmt.format` deliberately stays on the fast Go emitter: an
     engine-interpreted AQL formatter would be a large perf regression for
     byte-identical output (fork (b)), and the clean document-algebra reflow

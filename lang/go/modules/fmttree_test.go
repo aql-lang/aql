@@ -98,32 +98,68 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
 
-	// The declarative source formatter: rules keyed by node kind, an `inline`
-	// helper that space-joins a node's formatted children, and `apply` that
-	// dispatches. Handles leaves and the bracket containers — the
-	// attachment-free core.
+	// The declarative source formatter, written entirely in AQL over Fmt.tree:
+	//   - `apply` dispatches a node to its rule via Fmt.kind;
+	//   - `attaches` reproduces the emitter's token-adjacency rule (a comma /
+	//     colon / dot / question glues to the previous token; a token after a
+	//     colon / dot glues; a word ending in `.` glues its successor);
+	//   - `sepfor` chooses "" (glue) or " " (space) between adjacent children;
+	//   - `foldstep` folds the children into the inline string, threading the
+	//     previous node so `sepfor` can consult it;
+	//   - `rules` maps every node kind to its layout.
+	// This is the emitter's inline layer expressed as AQL data + a fold — it
+	// reproduces Fmt.format byte-for-byte for every statement that fits on one
+	// line (the wrapping strategies are the remaining, fork-gated piece).
 	const rules = `import "aql:fmt"
 def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
-def inline fn [nd:Any Any [join " " ((nd.children) each [apply])]]
+def ends-dot fn [nd:Any Any [
+  def t (nd.text)
+  all [(eq (Fmt.kind nd) word/q) (gt 0 (size t)) (eq (slice ((size t) sub 1) (size t) t) ".")]
+]]
+def attaches fn [[cur:Any prev:Any] Any [
+  def ck (Fmt.kind cur)
+  def pk (Fmt.kind prev)
+  any [(eq ck comma/q) (eq ck colon/q) (eq ck question/q) (eq ck dot/q)
+       (eq pk colon/q) (eq pk dot/q) (ends-dot prev)]
+]]
+def sepfor fn [[elem:Any prev:Any] Any [
+  if (eq prev none) [""] [if (attaches elem prev) [""] [" "]]
+]]
+def foldstep fn [[elem:Any accm:Any] Any [
+  def news (join "" [accm.s (sepfor elem accm.p) (apply elem)])
+  {s:news p:elem}
+]]
+def inline fn [nd:Any Any [
+  def r ({s:"" p:none} fold [foldstep] (nd.children))
+  r.s
+]]
 def rules {
-  root:   (nd:Any => (inline nd))
-  word:   (nd:Any => (nd.text))
-  string: (nd:Any => (nd.text))
-  number: (nd:Any => (nd.text))
-  list:   (nd:Any => (join "" ["[" (inline nd) "]"]))
-  paren:  (nd:Any => (join "" ["(" (inline nd) ")"]))
+  root:(nd:Any => (inline nd)) word:(nd:Any => (nd.text)) string:(nd:Any => (nd.text))
+  number:(nd:Any => (nd.text)) comment:(nd:Any => (nd.text)) comma:(nd:Any => (nd.text))
+  colon:(nd:Any => (nd.text)) dot:(nd:Any => (nd.text)) question:(nd:Any => (nd.text))
+  bang:(nd:Any => (nd.text)) pipe:(nd:Any => (nd.text)) semicolon:(nd:Any => (nd.text))
+  list:(nd:Any => (join "" ["[" (inline nd) "]"])) map:(nd:Any => (join "" ["{" (inline nd) "}"]))
+  paren:(nd:Any => (join "" ["(" (inline nd) ")"]))
 }
 `
 
-	// Each case is an attachment-free single statement; the declarative
-	// formatter must reproduce Fmt.format exactly.
+	// Every case is a single statement that fits on one line, spanning the
+	// attachment rule (colon / dot / question / word-dot), nesting, and
+	// multi-param sigs; the declarative formatter reproduces Fmt.format exactly.
 	cases := []string{
 		"def x 1",
+		"x:Integer",
+		"m . k",
 		"[1 2 3]",
 		"(add 1 2)",
-		"def xs [1 2 3]",
+		"{a:1 b:2}",
+		"x ? y",
+		"a | b",
 		"[1 [2 3] 4]",
+		"foo.bar",
+		"input.(baz)",
 		"(f (g 1) 2)",
+		"x:Integer y:String",
 	}
 	for _, src := range cases {
 		prog := rules + "apply (Fmt.tree " + strconv.Quote(src) + ")"
