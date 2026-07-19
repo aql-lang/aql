@@ -14,3 +14,5 @@ import "aql:fmt" end Fmt.format "[ a  b  c ]"	'[a b c]\n'	Fmt.format collapses l
 import "aql:fmt" end Fmt.format "{ a:1   b:2 }"	'{a:1 b:2}\n'	Fmt.format normalises map spacing
 import "aql:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical source but ensures a trailing newline
 import "aql:fmt" end Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"	'def double fn x:Integer Integer [x mul 2]\n'	Fmt.format drops brackets around a single fn param and return
+import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x 1\n```'	Fmt.format-markdown reformats a fenced aql block
+import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest

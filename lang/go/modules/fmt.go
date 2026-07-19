@@ -28,14 +28,32 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 // FmtNatives is the NativeFunc slice for the aql:fmt module's
 // Go-implemented words. Each wraps a function in lang/go/formatter so the
-// language-level word and the CLI share one driver. Registered into the
-// module's isolated sub-registry by BuildFmtModule; every signature is
-// BarrierPos -1 (all-forward eligible), the rule module wrappers must
-// follow so the swap form `src Fmt.format` still dispatches
+// language-level word and the CLI share one driver:
+//
+//   - format          — format an AQL source string.
+//   - format-markdown — reformat AQL inside ```aql fences and
+//     <!-- aqlfmt --> … <!-- /aqlfmt --> regions of a
+//     Markdown document, leaving the rest untouched.
+//   - format-html     — reformat AQL inside <!-- aqlfmt --> regions of an
+//     HTML document, leaving the rest untouched.
+//
+// Registered into the module's isolated sub-registry by BuildFmtModule;
+// every signature is BarrierPos -1 (all-forward eligible), the rule module
+// wrappers must follow so the swap form `src Fmt.format` still dispatches
 // (lang/go/CLAUDE.md, "Module FnDef Wrappers").
 var FmtNatives = []native.NativeFunc{
-	{
-		Name: "format",
+	stringFormatterNative("format", formatter.Format),
+	stringFormatterNative("format-markdown", formatter.FormatMarkdown),
+	stringFormatterNative("format-html", formatter.FormatHTML),
+}
+
+// stringFormatterNative builds a String -> String native named name whose
+// handler applies fn to a concrete source string, rejecting a non-concrete
+// argument (a type literal / dependent-type constraint) rather than
+// panicking.
+func stringFormatterNative(name string, fn func(string) string) native.NativeFunc {
+	return native.NativeFunc{
+		Name: name,
 		Signatures: []native.Signature{
 			{
 				Args: []*native.Type{native.TString},
@@ -44,11 +62,11 @@ var FmtNatives = []native.NativeFunc{
 					if err != nil {
 						return nil, err
 					}
-					return []native.Value{native.NewString(formatter.Format(src))}, nil
+					return []native.Value{native.NewString(fn(src))}, nil
 				}),
 				Returns:    []*native.Type{native.TString},
 				BarrierPos: -1,
 			},
 		},
-	},
+	}
 }
