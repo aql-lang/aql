@@ -373,10 +373,9 @@ func TestFormatMapEntryForms(t *testing.T) {
 	}{
 		{"explicit optional pair", "{foo?: bar}\n", "{foo?:bar}\n"},
 		{"string key", `{"a":1}` + "\n", `{"a":1}` + "\n"},
-		// (No idempotence for this row: a line comment inside a
-		// single-line map swallows the rest of the rendered line on a
-		// second pass — a pre-existing formatter limitation.)
-		{"comment inside map", "{a:1\n# note\nb:2}\n", "{a:1 # note b:2}\n"},
+		// A line comment inside a map forces the map multi-line: on one line
+		// the comment would swallow the following entry and the closing `}`.
+		{"comment inside map", "{a:1\n# note\nb:2}\n", "{a:1\n  # note\n  b:2\n}\n"},
 		{"digit modifier shorthand", "{foo/2}\n", "{foo:foo/2}\n"},
 		{"digit+force shorthand", "{foo/2s}\n", "{foo:foo/2s}\n"},
 		{"qs shorthand", "{foo/qs}\n", "{foo:foo/qs}\n"},
@@ -393,9 +392,7 @@ func TestFormatMapEntryForms(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("Format(%q)\n  got:  %q\n  want: %q", tt.in, got, tt.want)
 			}
-			if tt.name != "comment inside map" {
-				checkIdempotent(t, tt.in)
-			}
+			checkIdempotent(t, tt.in)
 		})
 	}
 }

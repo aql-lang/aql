@@ -78,3 +78,58 @@ func TestFormatMinilangVerbatim(t *testing.T) {
 		t.Errorf("long minilang literal was altered:\n%s", out)
 	}
 }
+
+// TestFormatCommentNeverSwallowsDelimiter pins the fix that a line comment
+// (`# …`, which runs to end of line) never has a closing delimiter or a
+// following token placed after it on the same line — otherwise fmt silently
+// comments the delimiter out and unbalances the source. Each container with
+// an interior line comment therefore breaks multi-line, closing on its own
+// line; and every formatted result stays a fixed point.
+func TestFormatCommentNeverSwallowsDelimiter(t *testing.T) {
+	cases := []struct{ name, in string }{
+		{"paren", "def x (\n  a  # c1\n)\n"},
+		{"list", "foo [\n  a  # c\n  b\n]\n"},
+		{"map", "{a:1\n# note\nb:2}\n"},
+		{"nested paren+list", "def f (\n  do [ x ] error [ raise ]  # oops\n)\n"},
+		{"comment then close then more", "g [\n  a  # note\n  b c d\n]\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := Format(c.in)
+			// No output line may have a token after a '# …' line comment: the
+			// comment must be the tail of its line.
+			for _, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+				if h := strings.Index(ln, "# "); h >= 0 {
+					tail := strings.TrimRight(ln[h:], " ")
+					if strings.ContainsAny(tail, ")]}") && !strings.Contains(tail, "#!") {
+						// A ')' etc. after the '#' would be commented out.
+						// Allow it only if it is part of the comment PROSE, not a
+						// real delimiter — here our inputs use plain word comments.
+						t.Errorf("%s: delimiter after line comment:\n%s", c.name, out)
+					}
+				}
+			}
+			// Idempotence: the corrected layout is a fixed point.
+			if twice := Format(out); twice != out {
+				t.Errorf("%s: not idempotent\n once:  %q\n twice: %q", c.name, out, twice)
+			}
+		})
+	}
+}
+
+// TestFormatDotKeyNotCapitalized pins that the literal dot / dotr accessor
+// words quote their following bare word as a FIELD NAME, so a type-named
+// field (opts dot table) is never capitalised into a different field.
+func TestFormatDotKeyNotCapitalized(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"opts dot table\n", "opts dot table\n"},
+		{"m dotr string\n", "m dotr string\n"},
+		{"opts dot region\n", "opts dot region\n"}, // not a type name anyway
+		{"x is integer\n", "x is Integer\n"},       // genuine type still capitalises
+	}
+	for _, c := range cases {
+		if got := Format(c.in); got != c.want {
+			t.Errorf("Format(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

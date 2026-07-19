@@ -619,7 +619,14 @@ func capitalizeTypesInTree(n *Node) {
 					(n.Children[i-2].Text == "refine" || n.Children[i-2].Text == "def")
 				// Skip if before ":" (it's a key/param name).
 				beforeColon := i+1 < len(n.Children) && n.Children[i+1].Kind == NdColon
-				if !afterDef && !afterTypeName && !beforeColon {
+				// Skip after the literal dot/dotr accessor word: these QUOTE the
+				// following bare word as a field NAME (`opts dot table` reads
+				// field "table"), so capitalising it would read a different
+				// field. (The `.` sugar produces a single dotted word carrying a
+				// ".", already skipped by the Contains check above.)
+				afterDot := i > 0 && n.Children[i-1].Kind == NdWord &&
+					(n.Children[i-1].Text == "dot" || n.Children[i-1].Text == "dotr")
+				if !afterDef && !afterTypeName && !beforeColon && !afterDot {
 					ch.Text = capitalize(lower)
 				}
 			}
@@ -1091,6 +1098,11 @@ func wrapStatement(nodes []*Node, indent int) string {
 		}
 		cur = append(cur, s)
 		curLen += tokenLen
+		// A line comment runs to end of line, so nothing may follow it on
+		// this line — flush so the next token starts fresh.
+		if n.Kind == NdComment {
+			flush(contPrefix)
+		}
 	}
 	flush(contPrefix)
 	return strings.Join(lines, "\n")
@@ -1103,11 +1115,13 @@ func emitList(n *Node, indent int) string {
 		return "[]"
 	}
 
-	// Try single line.
-	inner := renderInline(children, indent)
-	single := "[" + inner + "]"
-	if len(single)+indent <= maxLineWidth {
-		return single
+	// Try single line — but not when a line comment would swallow the `]`.
+	if !hasLineComment(children) {
+		inner := renderInline(children, indent)
+		single := "[" + inner + "]"
+		if len(single)+indent <= maxLineWidth {
+			return single
+		}
 	}
 
 	// Multi-line. Split children into logical groups for wrapping.
@@ -1154,6 +1168,12 @@ func splitIntoGroups(children []*Node) [][]*Node {
 			cur = nil
 		}
 		cur = append(cur, ch)
+		// A line comment ends its line, so it closes the current group — the
+		// next token must begin a new group (and thus a new line).
+		if ch.Kind == NdComment {
+			groups = append(groups, cur)
+			cur = nil
+		}
 	}
 	if len(cur) > 0 {
 		groups = append(groups, cur)
@@ -1182,9 +1202,9 @@ func emitMap(n *Node, indent int) string {
 	// Parse key:value entries.
 	entries := parseMapEntries(children)
 
-	// Try single line.
+	// Try single line — but not when a line comment would swallow the `}`.
 	single := "{" + renderMapEntries(entries, indent) + "}"
-	if len(single)+indent <= maxLineWidth {
+	if len(single)+indent <= maxLineWidth && !hasLineComment(children) {
 		return single
 	}
 
@@ -1347,20 +1367,22 @@ func emitParen(n *Node, indent int) string {
 		return "()"
 	}
 
-	inner := renderInline(children, indent)
-	single := "(" + inner + ")"
-	if len(single)+indent <= maxLineWidth {
-		return single
+	// A line comment inside the group forces multi-line: on one line the
+	// closing `)` would land after `# …` and be commented out.
+	if !hasLineComment(children) {
+		inner := renderInline(children, indent)
+		single := "(" + inner + ")"
+		if len(single)+indent <= maxLineWidth {
+			return single
+		}
+		inner = renderInline(children, indent+2)
+		full := "(" + inner + ")"
+		if len(full)+indent <= maxLineWidth { //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
+			return full
+		}
 	}
 
-	// Multi-line.
 	childIndent := indent + 2
-	inner = renderInline(children, childIndent)
-	full := "(" + inner + ")"
-	if len(full)+indent <= maxLineWidth { //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
-		return full
-	}
-
 	var lines []string
 	wrapped := wrapStatement(children, childIndent)
 	wlines := strings.Split(wrapped, "\n")
@@ -1368,6 +1390,21 @@ func emitParen(n *Node, indent int) string {
 	lines = append(lines, wlines...)
 	lines = append(lines, strings.Repeat(" ", indent)+")")
 	return strings.Join(lines, "\n")
+}
+
+// hasLineComment reports whether nodes contain a LINE comment (`# …`, which
+// runs to end of line). Such a comment poisons any single-line rendering: a
+// closing delimiter or a following token placed after it on the same line is
+// swallowed into the comment (e.g. `(a # c)` comments out the `)`). Block
+// comments (`## … ##`) are bounded and do not trigger this. Callers that
+// would join tokens onto one line must break instead when this is true.
+func hasLineComment(nodes []*Node) bool {
+	for _, n := range nodes {
+		if n.Kind == NdComment {
+			return true
+		}
+	}
+	return false
 }
 
 // nonTrivial filters out newlines and commas.
