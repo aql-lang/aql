@@ -300,7 +300,45 @@ these as `Fmt.*` AQL):
   inline `expr # returns X` prose examples (not in fenced blocks) and the
   `describe`/help worked examples. Both use deliberate column alignment that
   fmt collapses — a visible-output change to the docs and the `describe`
-  command warranting maintainer sign-off, not a silent migration.
+  command warranting maintainer sign-off, not a silent migration. Two
+  concrete findings now bound this work (see "Formatter correctness baseline"):
+  the correctness blockers are GONE (fmt no longer corrupts the examples), so
+  what remains is purely presentational; and `help.Format` renders each
+  example as `"  " + line`, re-indenting nothing, so a fmt-WRAPPED example
+  (7 of 161 exceed 72 cols) would leave its continuation lines at column 0 and
+  break the Examples block. Doing this cleanly needs a no-wrap width on the
+  source formatter (the sibling of `Fmt.render`'s width) plus the sign-off on
+  the ~43 now-safe canonicalisations (double-space collapse, bracketless fn,
+  map-shorthand expansion).
+
+## Formatter correctness baseline (verified 2026-07)
+
+Before any "run all examples through fmt" work, the formatter was audited by
+running `Format` over every describe/help example and every `lang/spec/*.tsv`
+input and flagging any change that survived whitespace/comma/bracket/case
+normalisation (a candidate semantic change). Three real corruption bugs were
+found and fixed; after them the corpus is **corruption-free** — every change
+fmt makes is a documented, semantically-preserving canonicalisation (comma
+removal, bracket elision, safe type capitalisation, map-shorthand expansion,
+width wrapping):
+
+1. **Minilang literals** (`+re/[a-z]+/` → `+re/ [a-z] +/`, `+gex|a*b|` →
+   `+gex | a*b |`). The hand-lexer split them at their inner `[`/`]`/`|`.
+   Fixed with `scanMinilang` (verbatim atomic scan mirroring the parser's
+   `setupMiniLitMatcher`).
+2. **`none` / `list` / `any` / `node`** rewritten to their type-literal
+   spelling (`size none` → `size None`, `list 1 2 3` → `List 1 2 3`) — but
+   these are valid VALUE / function words distinct from the types
+   (`canon none` → `none`; `none tcmp None → 1`). Removed from `knownTypes`;
+   the other ten names are undefined as values so they still capitalise.
+3. **Silent truncation** — `tryFnFormat` emitted only `header [args][ret][body]`
+   from the first triple, so any tokens after the `fn` wrapper, and every
+   overload past the first, were DELETED (`def f fn […] end f 1 2 3` lost
+   `end f 1 2 3`). It now declines to the general (node-preserving) path
+   unless the wrapper is the last node and has exactly one triple.
+
+This is why the formatter is a trustworthy base for the remaining example
+work: the risk was never the layout, it was fmt changing what code MEANS.
 
 ## Risks
 
