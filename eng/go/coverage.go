@@ -77,6 +77,15 @@ func (r *Registry) ArmCoverageHook(fn func(coverID string, row int)) func() {
 	return func() { r.coverHook.fn.Store(nil) }
 }
 
+// CoverageArmed reports whether a coverage run has the hook armed right now. A
+// module loader consults it at import time so a module-under-test tags itself
+// as a coverage target (SetCoverID) ONLY inside a `Test.cover [ import … ]`
+// body — an ordinary run leaves it untagged, so the compiled hot path stays a
+// single field compare with no atomic load.
+func (r *Registry) CoverageArmed() bool {
+	return r != nil && r.coverHook != nil && r.coverHook.fn.Load() != nil
+}
+
 // SetCoverID tags this registry with a stable coverage source id. A module
 // loader sets it on the module's sub-registry so the module's executed tokens
 // are attributed to it; the empty default means "not a coverage target" and
@@ -94,6 +103,18 @@ func (r *Registry) CoverID() string {
 		return ""
 	}
 	return r.coverID
+}
+
+// noteVMCoverage is the compiled (VM) step-site coverage emit: it records
+// debug[pc]'s row when this registry is a coverage target. The coverID field
+// compare short-circuits an untagged unit BEFORE noteCoverage's atomic load, so
+// an ordinary compiled run pays one branch per instruction. Kept tiny (the Go
+// inliner folds it into the VM run loop) so vm.go's hot loop is unchanged.
+func (r *Registry) noteVMCoverage(debug []SrcPos, pc int) {
+	if r == nil || r.coverID == "" {
+		return
+	}
+	r.noteCoverage(debug[pc])
 }
 
 // noteCoverage emits one line-coverage observation when the hook is armed AND

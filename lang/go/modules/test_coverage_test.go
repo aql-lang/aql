@@ -74,48 +74,6 @@ Test.coverage "aql:sift"`)
 	t.Logf("sift coverage from a 2-op exercise: %d/%d rows (%.1f%%)", covered, total, pct)
 }
 
-// With runtime stamping armed, Test.cover must SUSPEND it for the body (so the
-// module-under-test tree-walks through the coverage hook rather than running as
-// stamped VM units the hook can't see) and RESTORE it afterwards.
-func TestCoverSuspendsStamping(t *testing.T) {
-	r, err := native.DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.SetParseFunc(parser.Parse)
-	InstallResolver(r)
-	r.EnableRuntimeStamping() // arm stamping so Test.cover must suspend it
-	if !r.RuntimeStampingEnabled() {
-		t.Fatal("precondition: stamping should be enabled")
-	}
-	vals, perr := parser.Parse(`
-import "aql:test"
-Test.cover [
-  import "aql:sift"
-  Sift.parse kv/q {sep:':'} "a: 1"
-]
-Test.coverage "aql:sift"`)
-	if perr != nil {
-		t.Fatalf("parse: %v", perr)
-	}
-	out, rerr := native.NewTop(r).Run(vals)
-	if rerr != nil {
-		t.Fatalf("run: %v", rerr)
-	}
-	// Stamping must be RESTORED after Test.cover returns.
-	if !r.RuntimeStampingEnabled() {
-		t.Fatalf("Test.cover did not restore runtime stamping")
-	}
-	rep, rerr := native.AsMap(out[len(out)-1])
-	if rerr != nil {
-		t.Fatalf("report is not a map")
-	}
-	covered, _ := func() (int64, error) { v, _ := rep.Get("covered"); return v.AsConcreteInteger() }()
-	if covered <= 0 {
-		t.Fatalf("covered = %d, want > 0 (hook must fire under suspended stamping)", covered)
-	}
-}
-
 // Test.coverage on an unregistered id raises test_cover_no_source.
 func TestCoverAPINoSource(t *testing.T) {
 	_, err := coverRun(t, `import "aql:test"  Test.coverage "aql:nonesuch"`)

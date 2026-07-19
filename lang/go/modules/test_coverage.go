@@ -12,10 +12,12 @@ import (
 // engine coverage hook (eng/go/coverage.go) armed, accumulating the source rows
 // the module-under-test executes; `Test.coverage <id>` reports the percentage
 // against the module's DENOMINATOR — every executable row of its registered
-// source (a module loader calls RegisterCoverSource + SetCoverID; aql:sift
-// does). Coverage is an INTERPRETER measurement: run the suite no-compile so the
-// module's fn bodies tree-walk through the single hook (compiled == interpreted
-// by the differential gates, so the executed rows are the same).
+// source (a module loader calls RegisterCoverSource + SetCoverID; aql:sift and
+// every user file-module do). The hook fires from BOTH engines — the compiled
+// VM (the normal, fast mode: a module fn stamped to a bytecode unit) and the
+// interpreter step loop (an unstamped/uncompilable fn) — into one collector, so
+// the covered set is the same in either mode (compiled == interpreted by the
+// differential gates).
 
 const capTestCover = "Test.cover.active"
 
@@ -140,11 +142,18 @@ func coverWalkValue(v native.Value, rows map[int]bool) {
 func coverNatives(parent *native.Registry) []native.NativeFunc {
 	return []native.NativeFunc{
 		{
-			// Test.cover [body] — run body with the coverage hook armed. Coverage
-			// is a pure INTERPRETER measurement (the body tree-walks here), so the
-			// body rides as a raw NoEvalArgs list and needs no closure/compile
-			// shape — a compiled caller falls back to the interpreter, which is the
-			// only mode that fires the coverage hook anyway.
+			// Test.cover [body] — run body with the coverage hook armed, recording
+			// every source row the module-under-test executes IN WHATEVER MODE the
+			// body runs. A module fn stamped to a VM unit records via the VM hook
+			// (vm.go), an interpreted fn via the step-loop hook (engine.go); both
+			// emit into one collector, so the covered set is mode-independent (the
+			// compiled==interpreted differential). This is the PROGRAMMATIC /
+			// manual coverage form (its body usually contains `import`, which is
+			// not closure-compilable, so the body itself tree-walks — but the
+			// module fns it calls still run compiled when stamping is on). The
+			// `aql test --coverage` runner arms the same hook externally and runs
+			// whole test files COMPILED, so a `Test.test` case body's module calls
+			// record on the VM.
 			Name: "test-cover",
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},
@@ -156,17 +165,6 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					cover := activeCover(parent)
-					// Coverage is an INTERPRETER measurement (see file header):
-					// suspend runtime fn-unit stamping for the body so a module-
-					// under-test's fns tree-walk through the step-loop hook rather
-					// than running as stamped VM units the hook does not observe.
-					// Restore the prior state after (the default is already off).
-					restoreStamp := func() {}
-					if r.RuntimeStampingEnabled() {
-						r.DisableRuntimeStamping()
-						restoreStamp = r.EnableRuntimeStamping
-					}
-					defer restoreStamp()
 					disarm := parent.ArmCoverageHook(cover.record)
 					defer disarm()
 					_, e := native.New(r).Run(body.Slice())

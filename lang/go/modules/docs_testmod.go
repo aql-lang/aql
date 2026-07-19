@@ -14,7 +14,7 @@ func init() {
 		"prop":           "Build a PropertySpec with a generator and property.",
 		"check-prop":     "Run a property's generator/property loop directly.",
 		"run-property":   "Run a PropertySpec map, returning its property result.",
-		"skip":           "Record a parked property without running it.",
+		"skip":           "Park a test case or property as skipped without running its body.",
 		"results":        "Return the accumulated TestResult table.",
 		"report":         "Render a one-line-per-case String summary of results.",
 		"summary":        "Tally results into a total/passed/failed map.",

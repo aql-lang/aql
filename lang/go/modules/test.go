@@ -672,31 +672,47 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				}),
 			}},
 		},
-		// Test.skip — a drop-in replacement for Test.check-prop that does
-		// NOT run the generator/property bodies. It records a skipped
-		// result (ok=true, skipped=true) so the property still appears in
-		// Test.report / Test.results but contributes no failure and costs
-		// nothing to evaluate. Swap `check-prop` → `skip` on a property to
-		// park it while iterating, instead of commenting it out (§11b.4).
+		// Test.skip parks a test WITHOUT running its body — two forms:
+		//   Test.skip "name" [body]                         — skip a CASE (the
+		//     drop-in for `Test.test "name" [body]`; records ok+skipped).
+		//   Test.skip "name" [gen] [prop] runs seed shrinks — skip a PROPERTY
+		//     (the drop-in for `Test.check-prop`).
+		// Either way the entry still appears in Test.report / Test.results as
+		// `skip:`, contributes no failure, and costs nothing to evaluate — so a
+		// case can be parked while iterating instead of commented out (§11b.4).
 		{
 			Name: "test-skip",
-			Signatures: []native.Signature{{
-				Args: []*native.Type{
-					native.TString,  // name
-					native.TList,    // gen body (quoted, ignored)
-					native.TList,    // property body (quoted, ignored)
-					native.TInteger, // runs (ignored)
-					native.TInteger, // seed (ignored)
-					native.TInteger, // max-shrinks (ignored)
+			Signatures: []native.Signature{
+				{
+					// Case form: name + a quoted (never-run) body.
+					Args:       []*native.Type{native.TString, native.TList},
+					NoEvalArgs: map[int]bool{1: true},
+					Returns:    []*native.Type{}, BarrierPos: -1,
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+						name, _ := args[0].AsConcreteString()
+						activeRun(parent).skipCase(name)
+						return nil, nil
+					}),
 				},
-				NoEvalArgs: map[int]bool{1: true, 2: true},
-				Returns:    []*native.Type{native.TMap},
-				ReturnsFn:  testPropResultShapeReturns,
-				BarrierPos: -1,
-				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-					return runSkipProp(parent, args)
-				}),
-			}},
+				{
+					// Property form: name + gen + property + runs/seed/shrinks.
+					Args: []*native.Type{
+						native.TString,  // name
+						native.TList,    // gen body (quoted, ignored)
+						native.TList,    // property body (quoted, ignored)
+						native.TInteger, // runs (ignored)
+						native.TInteger, // seed (ignored)
+						native.TInteger, // max-shrinks (ignored)
+					},
+					NoEvalArgs: map[int]bool{1: true, 2: true},
+					Returns:    []*native.Type{native.TMap},
+					ReturnsFn:  testPropResultShapeReturns,
+					BarrierPos: -1,
+					Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+						return runSkipProp(parent, args)
+					}),
+				},
+			},
 		},
 	}
 }
@@ -1177,6 +1193,33 @@ func (run *testRun) runCase(r *native.Registry, name string, runBody func() erro
 	if !ok {
 		run.failures++
 	}
+	run.mu.Unlock()
+}
+
+// skipCase records a SKIPPED test case: like runCase but the body is never
+// run, so the result is ok=true + skipped=true (Test.report renders it `skip:`,
+// the tally counts it under skipped, and it never fails the run). This is the
+// drop-in for `Test.test "n" [body]` → `Test.skip "n" [body]` to park a case
+// while iterating, instead of commenting it out or deleting the body.
+func (run *testRun) skipCase(name string) {
+	run.mu.Lock()
+	pathCopy := append([]string(nil), run.path...)
+	run.mu.Unlock()
+	pathVals := make([]native.Value, len(pathCopy))
+	for i, p := range pathCopy {
+		pathVals[i] = native.NewString(p)
+	}
+	om := native.NewOrderedMap()
+	om.Set("name", native.NewString(name))
+	om.Set("path", native.NewList(pathVals))
+	om.Set("ok", native.NewBoolean(true))
+	om.Set("skipped", native.NewBoolean(true))
+	om.Set("expected", native.NewNone())
+	om.Set("actual", native.NewNone())
+	om.Set("error", native.NewNone())
+	om.Set("duration-ms", native.NewInteger(0))
+	run.mu.Lock()
+	run.results = append(run.results, native.NewMap(om))
 	run.mu.Unlock()
 }
 
