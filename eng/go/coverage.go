@@ -1,6 +1,7 @@
 package eng
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 )
@@ -64,6 +65,23 @@ func (r *Registry) CoverSource(id string) (string, bool) {
 	defer r.coverSources.mu.Unlock()
 	src, ok := r.coverSources.m[id]
 	return src, ok
+}
+
+// CoverSourceIDs returns every registered cover source id, sorted. The
+// `aql test --coverage` runner enumerates them after a run to report each
+// imported module's line coverage. Nil-safe; empty when nothing registered.
+func (r *Registry) CoverSourceIDs() []string {
+	if r == nil || r.coverSources == nil {
+		return nil
+	}
+	r.coverSources.mu.Lock()
+	defer r.coverSources.mu.Unlock()
+	ids := make([]string, 0, len(r.coverSources.m))
+	for id := range r.coverSources.m {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // ArmCoverageHook installs fn as the line-coverage observer and returns the

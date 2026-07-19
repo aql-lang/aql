@@ -15,9 +15,16 @@ import (
 // source (a module loader calls RegisterCoverSource + SetCoverID; aql:sift and
 // every user file-module do). The hook fires from BOTH engines — the compiled
 // VM (the normal, fast mode: a module fn stamped to a bytecode unit) and the
-// interpreter step loop (an unstamped/uncompilable fn) — into one collector, so
-// the covered set is the same in either mode (compiled == interpreted by the
-// differential gates).
+// interpreter step loop (an unstamped/uncompilable fn) — into one collector.
+//
+// The two engines' covered sets are CLOSE but not identical: the compiled set
+// is a SUBSET of the interpreter's. The tree-walker steps every source token,
+// so its rows are maximal; the VM folds some source positions (a trailing
+// bare-word return compiles into the preceding expression's result, carrying no
+// distinct instruction for its own row), so compiled coverage can miss rows the
+// interpreter records — never the reverse. Measure with the interpreter
+// (`aql test --coverage --no-compile`, or a Test.cover run on the interpreter)
+// when the goal is to drive a module to 100%.
 
 const capTestCover = "Test.cover.active"
 
@@ -60,6 +67,38 @@ func activeCover(parent *native.Registry) *testCover {
 	c := &testCover{}
 	_ = parent.Capabilities.Set(capTestCover, c)
 	return c
+}
+
+// ArmCoverageCollector arms reg's coverage hook to record into the SAME
+// collector CoverageFor / Test.coverage report from, returning the disarm func.
+// The `aql test --coverage` runner arms it BEFORE running a test file so that
+// (a) reg.CoverageArmed() is true when the file imports a user module — which
+// makes loadFileModule tag the module and register its source (feature C) —
+// and (b) the module's executed rows accumulate for CoverageFor to report. It
+// is the external twin of what Test.cover arms around its own body.
+func ArmCoverageCollector(reg *native.Registry) func() {
+	return reg.ArmCoverageHook(activeCover(reg).record)
+}
+
+// CoverageFor reports (covered, total, ok) executable-line counts for a
+// registered cover source id against the rows recorded into reg's active
+// collector — the Go twin of the Test.coverage word, for the aql test
+// --coverage runner. ok is false when no source is registered for id; total is
+// 0 when the registered source parses to no executable rows.
+func CoverageFor(reg *native.Registry, id string) (covered, total int, ok bool) {
+	src, has := reg.CoverSource(id)
+	if !has {
+		return 0, 0, false
+	}
+	denom := coverDenominator(reg, src)
+	rows := activeCover(reg).coveredRows(id)
+	hit := 0
+	for row := range denom {
+		if rows[row] {
+			hit++
+		}
+	}
+	return hit, len(denom), true
 }
 
 // coverDenominator parses src and returns the set of EXECUTABLE rows: every
@@ -146,14 +185,16 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 			// every source row the module-under-test executes IN WHATEVER MODE the
 			// body runs. A module fn stamped to a VM unit records via the VM hook
 			// (vm.go), an interpreted fn via the step-loop hook (engine.go); both
-			// emit into one collector, so the covered set is mode-independent (the
-			// compiled==interpreted differential). This is the PROGRAMMATIC /
-			// manual coverage form (its body usually contains `import`, which is
-			// not closure-compilable, so the body itself tree-walks — but the
-			// module fns it calls still run compiled when stamping is on). The
-			// `aql test --coverage` runner arms the same hook externally and runs
-			// whole test files COMPILED, so a `Test.test` case body's module calls
-			// record on the VM.
+			// emit into one collector. The compiled set is a subset of the
+			// interpreter's (the VM folds some source positions — see the file
+			// header), so a run whose module fns tree-walk yields the most complete
+			// line coverage. This is the PROGRAMMATIC / manual coverage form (its
+			// body usually contains `import`, which is not closure-compilable, so
+			// the body itself tree-walks — but the module fns it calls still run
+			// compiled when stamping is on). The `aql test --coverage` runner arms
+			// the same hook externally and runs whole test files COMPILED by
+			// default, so a `Test.test` case body's module calls record on the VM
+			// (add --no-compile for the interpreter's line-granular coverage).
 			Name: "test-cover",
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TList},

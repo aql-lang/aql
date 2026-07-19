@@ -85,6 +85,32 @@ func TestCoverAPINoSource(t *testing.T) {
 	}
 }
 
+// CoverageFor + ArmCoverageCollector are the Go seams the `aql test --coverage`
+// runner uses: an unregistered id reports ok=false; a registered source reports
+// covered/total against the rows the armed collector recorded.
+func TestCoverageForAPI(t *testing.T) {
+	r, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetParseFunc(parser.Parse)
+
+	if _, _, ok := CoverageFor(r, "nope"); ok {
+		t.Fatal("unregistered id must report ok=false")
+	}
+
+	// A 2-executable-row source; arm the collector, record one row, report.
+	r.RegisterCoverSource("m", "def a 1\ndef b 2\n")
+	disarm := ArmCoverageCollector(r)
+	defer disarm()
+	activeCover(r).record("m", 1)
+
+	covered, total, ok := CoverageFor(r, "m")
+	if !ok || covered != 1 || total != 2 {
+		t.Fatalf("CoverageFor = (%d,%d,%v), want (1,2,true)", covered, total, ok)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

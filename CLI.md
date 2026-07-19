@@ -16,6 +16,7 @@ supports.
   * [`aql` / `aql run`](#aql--aql-run)
   * [`aql do`](#aql-do)
   * [`aql check`](#aql-check)
+  * [`aql test`](#aql-test)
   * [`aql help`](#aql-help)
   * [`aql describe`](#aql-describe)
   * [`aql fmt`](#aql-fmt)
@@ -289,6 +290,41 @@ aql check --color never script.aql # plain text even on a terminal
 
 **In your editor.** `aql lsp` publishes these same diagnostics as you
 type — see [`aql lsp`](#aql-lsp).
+
+### `aql test`
+
+Discover and run test suites written with the `aql:test` framework. A
+suite is any `*_test.aql` file that imports `aql:test` and registers
+cases with `Test.test` / `Test.describe` (parking cases with
+`Test.skip`). `aql test` runs each file, prints its per-case report,
+and exits non-zero if any case failed or any suite errored.
+
+```bash
+aql test                            # run every *_test.aql under the cwd
+aql test math_test.aql              # run one suite file
+aql test src/ lib/                  # walk several directories
+aql test --coverage sift_test.aql   # add per-module line coverage
+```
+
+Suites run on the **bytecode compiler by default** — the normal, fast
+execution mode — falling back to the interpreter only for a file the
+compiler refuses. Discovery: no arguments walks the current directory
+recursively for `*_test.aql`; a directory argument is walked the same
+way; an explicit file argument is run verbatim (even without the
+`_test.aql` suffix).
+
+Flags:
+
+* `--coverage` — arm the line-coverage hook before each suite, then
+  report every user module the suite imported (`import "./mod.aql"`) as
+  `cover <id>  <pct>% (<covered>/<total>)`. Because the bytecode VM
+  folds some source positions, compiled coverage is a *subset* of the
+  interpreter's; pair with `--no-compile` for the line-granular figure
+  when driving a module to full coverage.
+* `--no-compile` / `--force-compile` / `--compile` — select the engine
+  exactly as for [`aql run`](#bytecode-compilation).
+* `-r PATH` — registry path, same as `aql run`. The permission flags
+  (`--perms`, `--allow`, `--deny`, …) are accepted too.
 
 ### `aql help`
 

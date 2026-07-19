@@ -9,15 +9,23 @@ import (
 // TestCompiledCoverage verifies the compiled-mode coverage seam (the VM hook in
 // eng/go/vm.go): when a coverage run is armed and a module-under-test runs
 // COMPILED (its fns stamped to bytecode units on a coverID-tagged registry),
-// the executed source rows are recorded — the same rows the interpreter records
-// (the compiled==interpreted differential). A `Test.cover` body usually can't
-// compile (it holds an `import`), so this is the path the `aql test --coverage`
-// runner takes: arm the hook externally, run the program compiled.
+// the executed source rows are recorded via the VM hook — the path the
+// `aql test --coverage` runner takes (arm the hook externally, run compiled).
+//
+// It also pins the HONEST relationship between the two engines' line coverage:
+// the compiled covered set is a SUBSET of the interpreter's. The tree-walking
+// interpreter steps every source token, so its row set is maximal; the bytecode
+// VM folds some source positions (a trailing bare-word return like `r` compiles
+// into the preceding expression's result, carrying no distinct instruction for
+// its own row), so compiled coverage can MISS rows the interpreter records. It
+// never covers a row the interpreter doesn't. (This is why the runner offers
+// `--coverage --no-compile`: the interpreter's line-granular coverage is the
+// one to drive to 100%.)
 func TestCompiledCoverage(t *testing.T) {
 	dir := t.TempDir()
 	mod := filepath.Join(dir, "calc.aql")
 	// add2's body is rows 2-3; triple's body is rows 6-7; the module never
-	// exercises triple, so triple's body must stay uncovered.
+	// exercises triple, so triple's body must stay uncovered in BOTH engines.
 	src := "def add2 fn [[x:Integer] [Integer] [\n" +
 		"  def r (x add 2)\n" +
 		"  r\n" +
@@ -51,7 +59,10 @@ func TestCompiledCoverage(t *testing.T) {
 			}
 			return rows, ran && reason == ""
 		}
-		if _, err := a.Run(prog); err != nil {
+		// The interpreter arm must be the TREE-WALKER (RunInterp), not the
+		// compiled-by-default Run — otherwise this compares compiled to compiled
+		// and the subset relationship below is vacuous.
+		if _, err := a.RunInterp(prog); err != nil {
 			t.Fatalf("interpreter run: %v", err)
 		}
 		return rows, false
@@ -68,14 +79,24 @@ func TestCompiledCoverage(t *testing.T) {
 		t.Errorf("triple's body (row 6) recorded, but triple was never called; got %v", compiledRows)
 	}
 
-	// Mode independence: the interpreter records the same covered set.
 	interpRows, _ := rowsFor(false)
-	if len(compiledRows) != len(interpRows) {
-		t.Errorf("compiled/interpreter covered sets differ: compiled=%v interp=%v", compiledRows, interpRows)
-	}
+	// Compiled coverage is a SUBSET of interpreter coverage: the VM never
+	// records a row the tree-walker doesn't.
 	for row := range compiledRows {
 		if !interpRows[row] {
-			t.Errorf("row %d covered compiled but not interpreted (compiled=%v interp=%v)", row, compiledRows, interpRows)
+			t.Errorf("row %d covered compiled but NOT interpreted — compiled must be a subset (compiled=%v interp=%v)", row, compiledRows, interpRows)
 		}
+	}
+	// The interpreter is strictly more complete here: it records row 3 (add2's
+	// trailing `r` return) that the VM folds into the preceding expression.
+	if !interpRows[3] {
+		t.Errorf("interpreter should cover add2's trailing return (row 3); got %v", interpRows)
+	}
+	if compiledRows[3] {
+		t.Errorf("compiled unexpectedly covered row 3 — if the VM now records trailing returns, update this pin; got %v", compiledRows)
+	}
+	// triple stays uncovered in the interpreter too (it is never called).
+	if interpRows[6] {
+		t.Errorf("triple's body (row 6) recorded by the interpreter, but triple was never called; got %v", interpRows)
 	}
 }

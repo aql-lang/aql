@@ -174,3 +174,25 @@ func TestCoverSourceRegistry(t *testing.T) {
 		t.Fatalf("holderless registry reports a source")
 	}
 }
+
+// CoverSourceIDs: sorted ids, empty when none, nil/holderless inertness.
+func TestCoverSourceIDs(t *testing.T) {
+	r := covReg(t)
+	if ids := r.CoverSourceIDs(); len(ids) != 0 {
+		t.Fatalf("fresh registry ids = %v, want empty", ids)
+	}
+	r.RegisterCoverSource("z-mod", "def z 1")
+	r.RegisterCoverSource("a-mod", "def a 1")
+	ids := r.CoverSourceIDs()
+	if len(ids) != 2 || ids[0] != "a-mod" || ids[1] != "z-mod" {
+		t.Fatalf("ids = %v, want sorted [a-mod z-mod]", ids)
+	}
+
+	var nilR *Registry
+	if ids := nilR.CoverSourceIDs(); ids != nil {
+		t.Fatalf("nil registry ids = %v, want nil", ids)
+	}
+	if ids := (&Registry{}).CoverSourceIDs(); ids != nil {
+		t.Fatalf("holderless registry ids = %v, want nil", ids)
+	}
+}
