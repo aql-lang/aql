@@ -58,6 +58,53 @@ func TestParseFnNameBoundCarrier(t *testing.T) {
 	}
 }
 
+// --- recordParseLangFnDispatch (compile-recorder arms; mirrors the W9
+// recordDeferredParseDispatch tests) ---
+
+func TestParseFnDispatchInstallGuard(t *testing.T) {
+	// Nil registry / nil sig are no-ops (no panic) — mirror of the
+	// InstallParseDeferredDispatch guard test.
+	InstallParseLangFnDispatch(nil, nil)
+	r := seam5Reg(t)
+	InstallParseLangFnDispatch(r, nil)
+}
+
+func TestParseFnDispatchRecordNoDispatcher(t *testing.T) {
+	r := seam5Reg(t)
+	cleanup := r.Check.Begin()
+	defer cleanup()
+	r.Check.Emit = NewEmitState()
+	r.Check.Compiling = true
+	fn := NewCarrier(TFunction)
+	// No dispatcher installed → the sig lookup fails and recording declines.
+	if _, ok := recordParseLangFnDispatch(r, fn, []Value{fn, NewString("x")}); ok {
+		t.Fatal("recordParseLangFnDispatch must decline without an installed dispatcher")
+	}
+}
+
+func TestParseFnDispatchRecordThreeArgs(t *testing.T) {
+	r := seam5Reg(t)
+	cleanup := r.Check.Begin()
+	defer cleanup()
+	r.Check.Emit = NewEmitState()
+	r.Check.Compiling = true
+	InstallParseLangFnDispatch(r, &Signature{
+		Args:       []*Type{TAny, TAny, TMap},
+		Returns:    []*Type{TAny},
+		BarrierPos: -1,
+	})
+	fn := NewCarrier(TFunction)
+	// Three args → the opts-middle / source-last split branch.
+	out, ok := recordParseLangFnDispatch(r, fn,
+		[]Value{fn, NewMap(NewOrderedMap()), NewString("x + y")})
+	if !ok {
+		t.Fatal("recordParseLangFnDispatch should record with a dispatcher installed")
+	}
+	if !out.Dynamic {
+		t.Fatalf("fn-dispatch result should be a dynamic carrier, got %s", out.String())
+	}
+}
+
 // Outside check mode a non-concrete fn-family binding is NOT a parser: the
 // name path falls through to the ordinary unknown-kind error.
 func TestParseFnNameBoundTypeLiteralFallsThrough(t *testing.T) {

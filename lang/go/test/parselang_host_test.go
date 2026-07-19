@@ -89,9 +89,9 @@ func TestParseLangHostHandlerType(t *testing.T) {
 
 // TestParseLangValueComputed pins the computed ParseLang-value form of the
 // core `parse` word — the parser fn produced by a runtime call: `parse (mk)
-// 'hi'`. It lives here rather than as a module-parselang.tsv §10 row because
-// the compiled path currently refuses a computed parser operand (operand
-// provenance) while the interpreter runs it fine.
+// 'hi'`. The module-parselang.tsv §10 twin row additionally pins compiled
+// parity (the recorded parselang-fn-dispatch); this is the fast Go-level
+// interpreter pin.
 func TestParseLangValueComputed(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {

@@ -128,6 +128,29 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.InstallParseDeferredDispatch(parent, &fn.Signatures[0])
 	}
 
+	// ---- out-of-band: fn dispatch (compile-pass seam, NOT exported) ------
+	// parselang-fn-dispatch is the RUNTIME twin of the `parse` macro's
+	// ParseLang-VALUE form for a parser operand that is not concrete under
+	// analysis (a computed parser, a Function-typed binding). The compile
+	// pass records ONE call (fn, source, opts) — the fn operand's provenance
+	// is its own producing event — and at run time this word dispatches the
+	// LIVE fn through the same `<fn> <source> <opts> end` sequence
+	// parseFnExpand splices, enforcing the same ParseLangFnSigWhy contract
+	// with byte-identical errors. NOT exported: the surface stays
+	// `parse <fn>`.
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: "parselang-fn-dispatch",
+		Signatures: []native.Signature{{
+			Args:       []*native.Type{native.TAny, native.TAny, native.TMap},
+			Returns:    []*native.Type{native.TAny},
+			BarrierPos: -1,
+			Impl:       native.Go(parseFnDispatchHandler),
+		}},
+	})
+	if fn := subReg.Lookup("parselang-fn-dispatch"); fn != nil && len(fn.Signatures) == 1 {
+		native.InstallParseLangFnDispatch(parent, &fn.Signatures[0])
+	}
+
 	// ---- out-of-band: source ------------------------------------------
 	// ParseLang.source <source> resolves a String or {src:…} Source map to
 	// a String (so AQL parsers can opt into the same normalisation host
@@ -623,6 +646,40 @@ func parseDeferredDispatchHandler(exports *native.OrderedMap, _ *native.Registry
 		}
 		return res, nil
 	}
+}
+
+// parseFnDispatchHandler is the runtime resolver behind the compiled
+// `parse <fn>` value-form dispatch for a non-concrete parser operand (see
+// the registration comment in BuildParseLangModule). args are
+// [fn source opts]. It enforces the contract parseFnExpand enforces at
+// expansion time — the operand must be a Function carrying the standard
+// [source opts] prefix (native.ParseLangFnSigWhy) — with byte-identical
+// errors, then replays the value-form expansion tail: the fn value followed
+// by `source opts end`, stepped in a sub-engine over the calling registry.
+func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	fnDef, ok := args[0].Data.(native.FnDefInfo)
+	if !ok {
+		return nil, r.AqlErrorHint("parse_error",
+			"parse: the parser is not a usable function value", "parse",
+			"pass a parser fn: parse (fn [[source:String opts:Map] [Any] [...]]) 'x'")
+	}
+	if why := native.ParseLangFnSigWhy(fnDef); why != "" {
+		return nil, r.AqlErrorHint("parse_bad_signature",
+			"parse: "+why, "parse",
+			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
+	}
+	sub := native.NewTop(r)
+	res, err := sub.Run([]native.Value{args[0], args[1], args[2], native.NewEnd()})
+	if err != nil {
+		return nil, err
+	}
+	if len(res) != 1 {
+		// Defensive: a conforming parser yields exactly one value; a drifted
+		// fn must fail loudly rather than corrupt the operand stack.
+		return nil, r.AqlError("internal_error",
+			fmt.Sprintf("parse fn: expected one result, got %d", len(res)), "parse")
+	}
+	return res, nil
 }
 
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser

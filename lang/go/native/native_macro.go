@@ -695,7 +695,12 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 				// A Function-typed carrier binding (a fn param, a computed
 				// parser) under analysis: the parser is real at run time but
 				// not expandable here — degrade like the other macro paths.
+				// The COMPILE pass records the runtime fn dispatch against
+				// the live binding so the result has provenance.
 				macroDegradedAdvisory(r, "parse", "the parser fn bound to "+kind+" is not a concrete value under analysis", args[0].Pos())
+				if out, ok := recordParseLangFnDispatch(r, top, args); ok {
+					return []Value{out}, nil
+				}
 				return []Value{NewDynamicCarrier(TAny)}, nil
 			}
 			// A non-concrete non-carrier Function binding (the bare Function
@@ -779,6 +784,13 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 	if !ok {
 		if r.Check.IsActive() && !IsConcrete(fn) {
 			macroDegradedAdvisory(r, "parse", "the parser fn is not a concrete value under analysis", args[0].Pos())
+			// COMPILE pass: record the runtime fn dispatch so the result has
+			// provenance and the program compiles — the fn operand's own
+			// producing event is the proof. Pure check keeps the dynamic
+			// degrade below.
+			if out, ok := recordParseLangFnDispatch(r, fn, args); ok {
+				return []Value{out}, nil
+			}
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		// A fn-family value whose payload is not an FnDefInfo — defensive: the
@@ -918,6 +930,56 @@ func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
 	outs := []Value{NewDynamicCarrier(TAny)}
 	rec.RecordCall("parselang-deferred-dispatch", sig,
 		[]Value{args[0], source, opts}, outs, args[0].Pos(), true, false)
+	return outs[0], true
+}
+
+// capParseLangFnDispatch holds the parselang-fn-dispatch *Signature — the
+// runtime resolver a compiled `parse <fn>` VALUE-form call dispatches
+// through when the parser operand is not concrete under analysis (a
+// computed parser, a Function-typed binding). Installed once per registry
+// when aql:parselang is built, like capParseDeferredDispatch.
+const capParseLangFnDispatch = "engine.parse.fn-dispatch"
+
+// InstallParseLangFnDispatch records the parselang-side fn-dispatch
+// signature so the `parse` macro's compile branch can record calls against
+// it. Called from BuildParseLangModule with the importing registry.
+func InstallParseLangFnDispatch(r *Registry, sig *Signature) {
+	if r == nil || sig == nil {
+		return
+	}
+	_ = r.Capabilities.Set(capParseLangFnDispatch, sig)
+}
+
+// recordParseLangFnDispatch records the ONE runtime call a compiled
+// `parse <fn>` value-form dispatch lowers to when the parser operand is not
+// concrete under analysis: CALL_NATIVE parselang-fn-dispatch(fn, source,
+// opts) with a dynamic(Any) result registered as the event's output. The fn
+// OPERAND's provenance is its own producing event — the recorded call that
+// computed it — so the parse result reaches downstream consumers with
+// provenance instead of refusing "residual value of unknown provenance".
+// The exact mirror of recordDeferredParseDispatch with the fn value in
+// place of the kind atom; declines (pure check, suspended analysis, no
+// aql:parselang import) leave the caller on the unrecorded dynamic degrade.
+func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool) {
+	rec := r.Check.Recorder()
+	if !r.Check.Compiling || !rec.Active() {
+		return Value{}, false
+	}
+	sig, ok, _ := eng.Cap[*Signature](r, capParseLangFnDispatch)
+	if !ok || sig == nil {
+		return Value{}, false
+	}
+	source, opts := parseSurfaceOperands(args)
+	pos := fn.Pos()
+	if pos.Row == 0 {
+		// A COMPUTED fn value carries no source position — anchor the
+		// recorded event at the source operand, which is written at the
+		// `parse` call site, so a runtime raise stamps a real location.
+		pos = source.Pos()
+	}
+	outs := []Value{NewDynamicCarrier(TAny)}
+	rec.RecordCall("parselang-fn-dispatch", sig,
+		[]Value{fn, source, opts}, outs, pos, true, false)
 	return outs[0], true
 }
 
