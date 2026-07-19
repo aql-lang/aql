@@ -806,7 +806,12 @@ func emitStatement(nodes []*Node, indent int) string {
 	if len(nodes) == 0 {
 		return ""
 	}
-	if nodes[0].Kind == NdComment || nodes[0].Kind == NdBlockComment {
+	// A comment-only statement renders as just that comment. This must NOT
+	// fire when tokens follow the comment: a BLOCK comment (`## … ##`) is
+	// bounded, so `## bc ## foo` is a real statement whose `foo` would be
+	// dropped. (A LINE comment runs to end of line, so a statement starting
+	// with one is always comment-only anyway — len(nodes) == 1.)
+	if len(nodes) == 1 && (nodes[0].Kind == NdComment || nodes[0].Kind == NdBlockComment) {
 		return strings.Repeat(" ", indent) + nodes[0].Text
 	}
 

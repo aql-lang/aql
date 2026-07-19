@@ -117,6 +117,24 @@ func TestFormatCommentNeverSwallowsDelimiter(t *testing.T) {
 	}
 }
 
+// TestFormatBlockCommentKeepsTrailingContent pins that content following a
+// BLOCK comment (`## … ##`, which is bounded, unlike a line comment) at the
+// start of a statement is preserved — it was silently dropped when
+// emitStatement returned only the leading comment.
+func TestFormatBlockCommentKeepsTrailingContent(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"## bc ## foo bar\n", "## bc ## foo bar\n"},
+		{"## bc ##\n", "## bc ##\n"},       // comment-only: unchanged
+		{"# line only\n", "# line only\n"}, // line comment: whole statement
+		{"foo ## bc ## bar\n", "foo ## bc ## bar\n"},
+	}
+	for _, c := range cases {
+		if got := Format(c.in); got != c.want {
+			t.Errorf("Format(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 // TestFormatDotKeyNotCapitalized pins that the literal dot / dotr accessor
 // words quote their following bare word as a FIELD NAME, so a type-named
 // field (opts dot table) is never capitalised into a different field.
