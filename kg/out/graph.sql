@@ -42,6 +42,8 @@ INSERT INTO entities VALUES ('ent:Product:2046405728378673079', 'Product', 'kg k
 INSERT INTO entity_attributes VALUES ('ent:Product:2046405728378673079', 'path', 'kg');
 INSERT INTO entities VALUES ('ent:Product:5397757900009317848', 'Product', 'lang/go module', 'lang/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:5397757900009317848', 'path', 'lang/go');
+INSERT INTO entities VALUES ('ent:Product:5770789618934008141', 'Product', 'lang/spec directory', 'lang/spec directory', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Product:5770789618934008141', 'path', 'lang/spec');
 INSERT INTO entities VALUES ('ent:Product:6289010343240002096', 'Product', 'aql-lang/aql repository', 'aql-lang/aql repository', 'accepted');
 INSERT INTO entity_external_ids VALUES ('ent:Product:6289010343240002096', 'github', 'aql-lang/aql');
 INSERT INTO entities VALUES ('ent:Product:6926990046092332766', 'Product', 'cmd/go module', 'cmd/go module', 'accepted');
@@ -66,6 +68,10 @@ INSERT INTO assertions VALUES ('ast:2249958554827628895', 'ent:Concept:810192700
 INSERT INTO assertion_evidence VALUES ('ast:2249958554827628895', 'src:readme', 'intro', 'words can equally take their arguments from a value stack, which is what makes point-free pipelines compose', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2451444146340209174', 'ent:Document:4990200910103175455', 'supports', 'entity', 'ent:Product:1225291689777530860', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2451444146340209174', 'src:readme', 'Documentation', 'CLI Reference | You want to drive the aql binary from the shell.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2510153559955756366', 'ent:Concept:7376417356888575267', 'part_of', 'entity', 'ent:Product:5770789618934008141', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2510153559955756366', 'src:agents', 'Task router', 'The executable language spec (the rows tests run against) | lang/spec/*.tsv', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:2985288027710857565', 'ent:Product:5770789618934008141', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:2985288027710857565', 'src:readme', 'Repository layout', 'lang/spec/ | Engine spec TSV files (the language''s executable spec).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3771181527847705674', 'ent:Document:1344160336771235777', 'supports', 'entity', 'ent:Concept:8101927001878214763', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3771181527847705674', 'src:readme', 'Documentation', 'Explanation | You want to understand why AQL is the way it is.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4324334117755500109', 'ent:Product:1628071779061296422', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
@@ -86,8 +92,6 @@ INSERT INTO assertions VALUES ('ast:7033649832942744685', 'ent:Document:48150861
 INSERT INTO assertion_evidence VALUES ('ast:7033649832942744685', 'src:readme', 'Documentation', 'Reference | You need the precise behaviour of a syntax form, type, or word.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7078456856804224733', 'ent:Product:1225291689777530860', 'part_of', 'entity', 'ent:Product:6926990046092332766', NULL, NULL, NULL, NULL, 0.97, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7078456856804224733', 'src:readme', 'Repository layout', 'cmd/go/ | The aql CLI / REPL', 'direct_record', 'kg-ingest');
-INSERT INTO assertions VALUES ('ast:7470640719768204156', 'ent:Concept:7376417356888575267', 'part_of', 'entity', 'ent:Product:5397757900009317848', NULL, NULL, NULL, NULL, 0.85, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:7470640719768204156', 'src:agents', 'Task router', 'The executable language spec (the rows tests run against) | lang/spec/*.tsv', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7771136335190801661', 'ent:Product:9152211458201666591', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7771136335190801661', 'src:readme', 'Repository layout', 'wpg/ | The wasm web playground (wpg/wasm + wpg/serve).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7834498903675958327', 'ent:Product:5397757900009317848', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-19T00:00:00Z', NULL);

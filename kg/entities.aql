@@ -93,11 +93,25 @@ def unify-by-id fn [[entities:List] [List] [
   ]] entities []
 ]]
 
+# Drop EXACT duplicates: a record whose id and full content deep-equal
+# an already-kept record is the same object arriving again (overlapping
+# candidate bundles, a re-ingested graph) — corroboration, not a
+# duplicate-id violation. A record that shares an id but DIFFERS in
+# content is kept, so validation still reports the genuine
+# duplicate-id inconsistency instead of silently picking a winner.
+def dedupe-identical fn [[xs:List] [List] [
+  fold [var [[x acc]
+    def seen (((filter [var [[y] (y.id eq x.id) and (y deq x)]] acc) size) gt 0)
+    if seen [acc] [push x acc]
+  ]] xs []
+]]
+
 export "KgEnt" {
   index-by-id: index-by-id/r
   find-by-id: find-by-id/r
   canonical-id: canonical-id/r
   unify-by-id: unify-by-id/r
+  dedupe-identical: dedupe-identical/r
   distinct-sorted: distinct-sorted/r
   merge-pair: merge-pair/r
 }

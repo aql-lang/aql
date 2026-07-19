@@ -5,9 +5,10 @@
 #     validate.aql; build-assertion refuses an empty evidence list here,
 #     because an unsupported claim must never be constructed silently)
 #   - conflicting claims are PRESERVED: when a single-valued predicate
-#     (schema.aql) has two or more accepted assertions with distinct
-#     canonical objects on one subject, every member of the group is
-#     re-marked "disputed" — nothing is overwritten or discarded
+#     (schema.aql) has two or more accepted claims (asserted / inferred /
+#     estimated / disputed — not superseded, not unresolved) with
+#     distinct canonical objects on one subject, every member of the
+#     group is re-marked "disputed" — nothing is overwritten or discarded
 #   - a conflict auto-resolves ONLY when the objects canonicalize to the
 #     same value (then there is no conflict at all: the assertions are
 #     duplicates and share one id) — everything else goes to review
@@ -71,7 +72,7 @@ def same-object fn [[a:Map b:Map] [Boolean] [
 def mark-conflicts fn [[assertions:List] [Map] [
   def contested (filter [var [[a]
     ((KgSchema.term-approved a.predicate KgSchema.single-valued-predicates)
-      and (not (a.status eq "superseded")))
+      and (not ((a.status eq "superseded") or (a.status eq "unresolved"))))
   ]] assertions)
   def groups (fold [var [[a acc]
     def k (claim-key a)

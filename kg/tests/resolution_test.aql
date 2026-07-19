@@ -6,6 +6,8 @@ import "aql:test"
 import "./schema.aql"
 import "./entities.aql"
 import "./resolve.aql"
+import "./ingest.aql"
+import "./assertions.aql"
 
 def mk fn [[id:String label:String nlabel:String eids:Map attrs:Map] [Map] [
   KgSchema.mk-entity {
@@ -108,6 +110,50 @@ def chain-index (KgEnt.index-by-id [
   "canonical-id chases a two-step merge chain" Test.test end
 [ (KgEnt.canonical-id chain-index "ent:zz") "ent:zz" Assert.equal ]
   "canonical-id is the identity for unknown ids" Test.test end
+
+# -- blank external identifiers never drive a merge (PR #293 review) ------
+
+def blank1 (KgIngest.ingest-entity {key: "b1" type: "Person" label: "Kai Sable"
+  external_ids: {orcid: ""}})
+def blank2 (KgIngest.ingest-entity {key: "b2" type: "Person" label: "Ada Wren"
+  external_ids: {orcid: ""}})
+[ (blank1.external_ids has orcid) false Assert.equal ]
+  "a blank external-id value is pruned at ingest" Test.test end
+def r6 (KgResolve.resolve-entities [blank1 blank2] [])
+[ ((filter [dot status eq "merged"] (r6 get "entities")) size) 0 Assert.equal ]
+  "two blank identifiers never auto-merge unrelated entities" Test.test end
+
+# -- transitive merge chains (PR #293 review) -----------------------------
+
+def chain-a (mk "ent:Person:60" "Ann Chain" "ann chain" {s1: "x"} {})
+def chain-b (mk "ent:Person:61" "Bee Chain" "bee chain" {s1: "x" s2: "y"} {})
+def chain-c (mk "ent:Person:62" "Cee Chain" "cee chain" {s2: "y"} {})
+def r7 (KgResolve.resolve-entities [chain-a chain-b chain-c] [])
+def chain-entities (r7 get "entities")
+[ ((filter [dot status eq "merged"] chain-entities) size) 2 Assert.equal ]
+  "an identifier chain merges every linked entity" Test.test end
+def chain-idx (KgEnt.index-by-id chain-entities)
+[ (KgEnt.canonical-id chain-idx "ent:Person:62") "ent:Person:60" Assert.equal ]
+  "the chain's tail resolves to the head canonical entity" Test.test end
+[ (KgEnt.canonical-id chain-idx "ent:Person:61") "ent:Person:60" Assert.equal ]
+  "the chain's middle resolves to the head canonical entity" Test.test end
+
+# -- unresolved claims never drag accepted claims into dispute ------------
+
+def uev [(KgSchema.mk-evidence {source_id: "src:u" locator: "l" quote: none
+  extraction_method: "manual" extractor: "t"})]
+def u1 (KgSchema.mk-assertion {id: "ast:u1" subject_id: "ent:Person:60"
+  predicate: "works_for" object: (KgSchema.mk-entity-ref "ent:x")
+  evidence: uev confidence: 0.9 status: "asserted" valid_from: none
+  valid_to: none recorded_at: "t" rule: none})
+def u2 (KgSchema.mk-assertion {id: "ast:u2" subject_id: "ent:Person:60"
+  predicate: "works_for" object: (KgSchema.mk-entity-ref "ent:y")
+  evidence: uev confidence: 0.4 status: "unresolved" valid_from: none
+  valid_to: none recorded_at: "t" rule: none})
+def marked (KgAst.mark-conflicts [u1 u2])
+[ (((filter [dot id eq "ast:u1"] (marked get "assertions")) get 0) get "status")
+  "asserted" Assert.equal ]
+  "an unresolved candidate does not dispute an accepted claim" Test.test end
 
 print (Test.report)
 if ((Test.fail-count) gt 0) [raise test_failed "resolution_test failures"]

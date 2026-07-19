@@ -52,6 +52,8 @@
       attributes: { path: "wpg" } }
     { key: "kg", type: "Product", label: "kg knowledge-graph pipeline"
       attributes: { path: "kg" } }
+    { key: "lang-spec", type: "Product", label: "lang/spec directory"
+      attributes: { path: "lang/spec" } }
     { key: "readme", type: "Document", label: "README.md" }
     { key: "agents-md", type: "Document", label: "AGENTS.md" }
     { key: "tutorial", type: "Document", label: "TUTORIAL.md" }
@@ -130,11 +132,16 @@
       evidence: [{ source: "src:agents", locator: "First: let the tool document itself",
         quote: "The aql CLI documents both the language and itself, and that output is generated from the live engine" }]
       confidence: 0.95 }
+    { subject: "lang-spec", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "lang/spec/ | Engine spec TSV files (the language's executable spec)." }]
+      confidence: 0.98 }
     { subject: "spec", predicate: "part_of"
-      object: { kind: "entity", entity: "lang-go" }
+      object: { kind: "entity", entity: "lang-spec" }
       evidence: [{ source: "src:agents", locator: "Task router",
         quote: "The executable language spec (the rows tests run against) | lang/spec/*.tsv" }]
-      confidence: 0.85 }
+      confidence: 0.95 }
     { subject: "readme", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:agents", locator: "header",

@@ -11,7 +11,11 @@
 #                    status?} ]
 #     assertions: [ {subject predicate object evidence confidence?
 #                    status? valid_from? valid_to? rule? recorded_at?} ] }
-# where `key` is a bundle-local name, an object is exactly
+# where `key` is a caller-chosen candidate name — the SAME key + type +
+# label in two bundles deliberately names the same entity (that is how a
+# re-ingested or overlapping bundle stays stable); auto-generated keys
+# (rows-to-candidates) are namespaced by source id so they can never
+# collide by coincidence — an object is exactly
 #   {kind:"entity" entity:<key-or-ent-id>}  or
 #   {kind:"literal" value datatype unit? language?}
 # and an evidence entry is {source locator quote? extraction_method?
@@ -64,6 +68,14 @@ def ingest-source fn [[raw:Map] [Map] [
 
 # ---- entities -----------------------------------------------------------
 
+# Drop external-id schemes whose value is blank: an empty value can
+# never identify anything, and two blanks must never count as a
+# "matching identifier" during resolution (that would auto-merge
+# unrelated entities at 0.98 confidence).
+def prune-external-ids fn [[eids:Map] [Map] [
+  filter [var [[v] not ((convert String v) eq "")]] eids
+]]
+
 # One candidate entity -> KgEntity with a deterministic id. A key that
 # is already an ent: id (an existing bundle re-ingesting) is kept
 # verbatim, so re-processing a graph preserves its identifiers.
@@ -78,7 +90,7 @@ def ingest-entity fn [[raw:Map] [Map] [
     label: label
     normalized_label: nlabel
     aliases: (KgEnt.distinct-sorted (each [var [[a] KgNorm.norm-display a]] (get-or raw "aliases" [])))
-    external_ids: (get-or raw "external_ids" {})
+    external_ids: (prune-external-ids (get-or raw "external_ids" {}))
     attributes: (get-or raw "attributes" {})
     status: (get-or raw "status" "accepted")
   }
@@ -265,7 +277,7 @@ def rows-to-candidates fn [[rows:List spec:Map] [Map] [
   def per-row (each [var [[i]
     def row (rows get i)
     def label (convert String (get-or row label-col ""))
-    def key `row-${convert String i}`
+    def key `${src-id}:row-${convert String i}`
     def evidence [(KgUtil.as-map {
       source: src-id
       locator: `row ${convert String i}`
@@ -368,6 +380,7 @@ def bundle-to-candidates fn [[bundle:Map] [Map] [
 ]]
 
 export "KgIngest" {
+  prune-external-ids: prune-external-ids/r
   ingest-source: ingest-source/r
   ingest-entity: ingest-entity/r
   ingest-object: ingest-object/r

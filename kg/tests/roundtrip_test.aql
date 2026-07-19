@@ -48,6 +48,22 @@ def rebuilt (KgReport.build-graph re-cands {recorded_at: stamp})
 [ (each [dot id] (rebuilt get "assertions")) (each [dot id] (bundle get "assertions")) Assert.equal ]
   "re-ingesting the bundle keeps every assertion id" Test.test end
 
+# -- overlapping bundles deduplicate, never fail (PR #293 review) ---------
+
+def doubled (KgReport.build-graph [
+  (IO.read (make Pathon "fixtures/valid.jsonic"))
+  (IO.read (make Pathon "fixtures/valid.jsonic"))
+] {recorded_at: stamp})
+def single (KgReport.build-graph [
+  (IO.read (make Pathon "fixtures/valid.jsonic"))
+] {recorded_at: stamp})
+[ ((doubled get "summary") get "error_count") 0 Assert.equal ]
+  "ingesting the same bundle twice produces no validation errors" Test.test end
+[ ((doubled get "assertions") size) ((single get "assertions") size) Assert.equal ]
+  "repeated identical claims deduplicate to one assertion each" Test.test end
+[ ((doubled get "entities") size) ((single get "entities") size) Assert.equal ]
+  "repeated identical entities deduplicate to one entity each" Test.test end
+
 # -- SQL emission ---------------------------------------------------------
 
 [ (KgStore.emit-sql bundle) (KgStore.emit-sql bundle) Assert.equal ]
