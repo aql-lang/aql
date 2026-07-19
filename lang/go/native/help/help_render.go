@@ -44,6 +44,7 @@ var moduleCatalog = []ModuleInfo{
 	{"log", "Structured logging: severity levels, fields, console/memory sinks, a global threshold."},
 	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
 	{"repl", "A socket REPL server and client, written in AQL over aql:net."},
+	{"fmt", "Source formatting: pretty-print AQL into canonical layout (shared with the `aql fmt` CLI)."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

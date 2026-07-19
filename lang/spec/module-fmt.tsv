@@ -1,0 +1,15 @@
+# AQL Language Specification: the aql:fmt module
+# Format: input<TAB>expected<TAB>description
+#
+# The source pretty-printer, exposed as a runtime API. Fmt.format formats
+# AQL source text into canonical layout (normalised spacing, a trailing
+# newline) and shares its implementation with the `aql fmt` CLI. The result
+# is the formatted string, so the expected column is the canonical
+# single-quoted rendering with the trailing newline shown as \n.
+#
+# The non-concrete-argument error arm is pinned by a Go test
+# (lang/go/modules/fmt_test.go) rather than an ERROR row here.
+#
+import "aql:fmt" end Fmt.format "[ a  b  c ]"	'[a b c]\n'	Fmt.format collapses list spacing and adds a trailing newline
+import "aql:fmt" end Fmt.format "{ a:1   b:2 }"	'{a:1 b:2}\n'	Fmt.format normalises map spacing
+import "aql:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical source but ensures a trailing newline
