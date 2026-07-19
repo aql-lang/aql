@@ -156,6 +156,17 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 						return nil, err
 					}
 					cover := activeCover(parent)
+					// Coverage is an INTERPRETER measurement (see file header):
+					// suspend runtime fn-unit stamping for the body so a module-
+					// under-test's fns tree-walk through the step-loop hook rather
+					// than running as stamped VM units the hook does not observe.
+					// Restore the prior state after (the default is already off).
+					restoreStamp := func() {}
+					if r.RuntimeStampingEnabled() {
+						r.DisableRuntimeStamping()
+						restoreStamp = r.EnableRuntimeStamping
+					}
+					defer restoreStamp()
 					disarm := parent.ArmCoverageHook(cover.record)
 					defer disarm()
 					_, e := native.New(r).Run(body.Slice())
@@ -168,8 +179,8 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 			// registered source id against the rows a prior Test.cover recorded.
 			Name: "test-coverage",
 			Signatures: []native.Signature{{
-				Args:       []*native.Type{native.TString},
-				Returns:    []*native.Type{native.TMap}, BarrierPos: -1,
+				Args:    []*native.Type{native.TString},
+				Returns: []*native.Type{native.TMap}, BarrierPos: -1,
 				Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 					id, err := args[0].AsConcreteString()
 					if err != nil {

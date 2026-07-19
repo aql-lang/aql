@@ -101,7 +101,7 @@ func TestCoverageHookGates(t *testing.T) {
 // Nil-receiver and holderless registries stay inert (no panic).
 func TestCoverageHookNilSafety(t *testing.T) {
 	var nilR *Registry
-	nilR.SetCoverID("x")     // no panic
+	nilR.SetCoverID("x")              // no panic
 	nilR.noteCoverage(SrcPos{Row: 1}) // no panic
 	if nilR.CoverID() != "" {
 		t.Fatalf("nil registry cover id = %q, want empty", nilR.CoverID())
