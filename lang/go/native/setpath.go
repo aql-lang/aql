@@ -161,6 +161,19 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 	k := keys[0]
 	rest := keys[1:]
 
+	// R3: a deep write into a typed container ({:T}) enforces its element tag
+	// at the leaf, at runtime. Because construction tags nested containers
+	// recursively, `data` at THIS level already carries the element type
+	// governing the write here — so this one guard covers arbitrary nesting.
+	// Untyped levels (and class/resource instances, which validate via their
+	// own rebuild below) carry no tag and pass through.
+	// See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+	if len(rest) == 0 {
+		if e := d2WriteRuntimeError(r, data, val, "setpath"); e != nil {
+			return Value{}, e
+		}
+	}
+
 	// Class / Object instance: edit the projected field map, then
 	// rebuild type-preservingly. A class instance re-makes through
 	// MakeClassInstance, so the same strict validation `make` runs
@@ -252,7 +265,11 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 			return Value{}, err
 		}
 		cp[idx] = child
-		return NewList(cp), nil
+		res := NewList(cp)
+		if elem, ok := data.ElemConstraint(); ok { // R3: keep [:T] on the copy
+			res.SetElemConstraint(elem)
+		}
+		return res, nil
 	}
 
 	// Map key (the default). Shallow-clone the source map (or start fresh
@@ -276,7 +293,11 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 		}
 		out.Set(keyStr, child)
 	}
-	return NewMap(out), nil
+	res := NewMap(out)
+	if elem, ok := data.ElemConstraint(); ok { // R3: keep {:T} on the copy
+		res.SetElemConstraint(elem)
+	}
+	return res, nil
 }
 
 // reachKeyString renders a reach key Value as its map-key string (a word /

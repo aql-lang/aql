@@ -204,6 +204,109 @@ func TestTypedContainerWriteBodyCheckConservative(t *testing.T) {
 	}
 }
 
+// --- R3: setpath deep-write enforcement ---
+
+// tcValue runs src and returns its final value (a helper for R3 setpath tests).
+func tcValue(t *testing.T, src string) (Value, *Registry) {
+	t.Helper()
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerIOWords(r)
+	out, rerr := tcRun(t, src)
+	if rerr != nil {
+		t.Fatalf("[%s] run: %v", src, rerr)
+	}
+	return out[len(out)-1], r
+}
+
+func TestSetpathTypedWriteEnforcement(t *testing.T) {
+	m, r := tcValue(t, `def m:{:Integer} {a:1} m`)
+
+	// Shallow non-conforming → runtime type_error.
+	if _, err := setReachNative(m, []Value{NewString("b")}, NewString("wrong"), r); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("shallow non-conforming setpath: got %v, want conformance error", err)
+	}
+	// Shallow conforming → ok, result keeps the tag.
+	out, err := setReachNative(m, []Value{NewString("b")}, NewInteger(9), r)
+	if err != nil {
+		t.Fatalf("shallow conforming setpath: %v", err)
+	}
+	if c, ok := out.ElemConstraint(); !ok || !c.Equal(TInteger) {
+		t.Errorf("setpath result lost its {:Integer} tag")
+	}
+
+	// Nested {:{:Integer}}: a deep non-conforming write is rejected because the
+	// inner container carries the recursively-retained tag.
+	nm, nr := tcValue(t, `def m:{:{:Integer}} {a:{x:1}} m`)
+	if _, err := setReachNative(nm, []Value{NewString("a"), NewString("x")}, NewString("wrong"), nr); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("nested non-conforming setpath: got %v, want conformance error", err)
+	}
+	// Nested conforming → ok.
+	if _, err := setReachNative(nm, []Value{NewString("a"), NewString("x")}, NewInteger(42), nr); err != nil {
+		t.Errorf("nested conforming setpath: %v", err)
+	}
+}
+
+func TestSetpathTypedListWrite(t *testing.T) {
+	xs, r := tcValue(t, `def xs:[:Integer] [1 2 3] xs`)
+	if _, err := setReachNative(xs, []Value{NewInteger(0)}, NewString("wrong"), r); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("[:Integer] setpath reject: got %v", err)
+	}
+	out, err := setReachNative(xs, []Value{NewInteger(0)}, NewInteger(9), r)
+	if err != nil {
+		t.Fatalf("conforming list setpath: %v", err)
+	}
+	if c, ok := out.ElemConstraint(); !ok || !c.Equal(TInteger) {
+		t.Errorf("list setpath result lost its [:Integer] tag")
+	}
+}
+
+// An untyped container's setpath is unchanged.
+func TestSetpathUntypedUnenforced(t *testing.T) {
+	m, r := tcValue(t, `def m {a:1} m`)
+	if _, err := setReachNative(m, []Value{NewString("b")}, NewString("wrong"), r); err != nil {
+		t.Errorf("untyped setpath should succeed: %v", err)
+	}
+}
+
+// setpathReturns flags a shallow non-conforming write in check mode; a deep path
+// or a conforming write stays silent.
+func TestSetpathReturnsCheck(t *testing.T) {
+	mk := func() *Registry {
+		r, err := DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Check.Mode = true
+		return r
+	}
+	tm, _ := tcValue(t, `def m:{:Integer} {a:1} m`)
+
+	// Shallow non-conforming (data, "path", newVal) → diagnostic.
+	r := mk()
+	setpathReturns([]Value{tm, NewString("b"), NewString("wrong")}, r)
+	if !tcHasTypeError(r, "does not conform to element type Integer") {
+		t.Errorf("shallow non-conforming setpathReturns: expected diagnostic, got %+v", r.Check.Diagnostics)
+	}
+	// Deep path → conservative (runtime-only).
+	r = mk()
+	setpathReturns([]Value{tm, NewString("a.x"), NewString("wrong")}, r)
+	if tcHasTypeError(r, "does not conform") {
+		t.Errorf("deep path should be check-conservative, got %+v", r.Check.Diagnostics)
+	}
+	// Conforming → silent.
+	r = mk()
+	setpathReturns([]Value{tm, NewString("b"), NewInteger(9)}, r)
+	if tcHasTypeError(r, "does not conform") {
+		t.Errorf("conforming setpathReturns should be silent, got %+v", r.Check.Diagnostics)
+	}
+}
+
 // d2TypedContainerBound (Part B read narrowing) — its edge branches are not
 // reachable through ordinary dispatch (the accessor callers gate on
 // IsTypedMap/IsTypedList, and the disjunct-child read currently ends dynamic

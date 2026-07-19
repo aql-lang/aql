@@ -148,7 +148,17 @@ long-term model but pays a whole-corpus reparent ripple up front; defer it unles
 - **Phase R2 — `set` write-check + result retention (runtime + check).** The
   maintainer's example now errors at check AND `aql run`. Gate: census green (valid
   corpus has no non-conforming writes); new pins for reject + conforming-keeps-tag.
-- **Phase R3 — `setpath`/`merge`/`inject`** deep-write enforcement.
+- **Phase R3 — `setpath` deep-write enforcement (DONE); `merge`/`inject` deferred.**
+  `setReachNative` enforces the element tag at the leaf write, at runtime, for
+  arbitrary nesting (construction tags nested containers recursively, so the
+  current-level `data` already carries the governing element type) and keeps the
+  tag on the rebuilt copy; `setpathReturns` mirrors the SHALLOW (single-segment)
+  case at check time (a deep path is runtime-only — compiled + interpreted raise
+  identically, census byte-identical). `merge`/`inject` go through voxgigstruct and
+  DROP the tag (result is a plain untagged map), so there is NO soundness hole (an
+  untagged result makes no false `{:T}` claim) — only an invariant-completeness gap
+  (merging into a `{:T}` loses the type). Enforce+retain across a deep merge needs a
+  walk of the merged result; deferred (not silently skipped).
 - **Phase R4 — strict reads** (D2 Part B `dynamic(T)` → `(T tor None)`). NOTE a
   pre-existing precision bug to fix here: `d2TypedContainerBound`'s single-type
   branch binds `child.Parent` (the element's lattice SUPERTYPE — a `{:Integer}`

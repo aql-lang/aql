@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"strings"
 
 	eng "github.com/aql-lang/aql/eng/go"
 )
@@ -219,7 +220,7 @@ func mergeReturns(args []Value, _ *Registry) []Value {
 // position-agnostic path/data/newVal heuristic) and claims the data
 // container's kind — setReachNative always returns an updated copy of the
 // SAME top-level container.
-func setpathReturns(args []Value, _ *Registry) []Value {
+func setpathReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	pathIdx := -1
 	for i := range args {
@@ -238,10 +239,17 @@ func setpathReturns(args []Value, _ *Registry) []Value {
 		}
 	}
 	a, b := args[others[0]], args[others[1]]
-	data := a
+	data, newVal := a, b
 	if !(a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) &&
 		(b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) {
-		data = b
+		data, newVal = b, a
+	}
+	// R3: a SHALLOW (single-segment) write into a top-level typed container
+	// mirrors the runtime element-tag check (setReachNative). A deep path is
+	// enforced at runtime only — sound because the compiled + interpreted runs
+	// raise the identical type_error (the census stays byte-identical).
+	if s, err := AsString(args[pathIdx]); err == nil && !strings.Contains(s, ".") {
+		d2CheckWrite(r, data, newVal, "setpath", args[pathIdx].Pos())
 	}
 	return []Value{dynamicContainerKind(data)}
 }
