@@ -159,14 +159,22 @@ long-term model but pays a whole-corpus reparent ripple up front; defer it unles
   untagged result makes no false `{:T}` claim) — only an invariant-completeness gap
   (merging into a `{:T}` loses the type). Enforce+retain across a deep merge needs a
   walk of the merged result; deferred (not silently skipped).
-- **Phase R4 — strict reads** (D2 Part B `dynamic(T)` → `(T tor None)`). NOTE a
-  pre-existing precision bug to fix here: `d2TypedContainerBound`'s single-type
-  branch binds `child.Parent` (the element's lattice SUPERTYPE — a `{:Integer}`
-  read narrows to `dynamic(Number)`, `{:String}` to `dynamic(Scalar)`) because a
-  type literal's `.Parent` is its supertype. Use the child value's own denoted
-  type (as the disjunct branch already does via `NewDynamicCarrierValue`). The
-  census tolerates the widening today (gradual, non-divergent); R4 makes reads
-  exact. R2's write-check is already exact — it unifies against the child value.
+- **Phase R4 — exact/strict reads — ATTEMPTED, REVERTED (blocked).**
+  `d2TypedContainerBound`'s single-type branch binds `child.Parent` (the
+  element's lattice SUPERTYPE — a `{:Integer}` read narrows to `dynamic(Number)`,
+  `{:String}` to `dynamic(Scalar)`) because a type literal's `.Parent` is its
+  supertype. The obvious fix — bind the exact denoted type
+  (`NewDynamicCarrier(DenotedTypeNode(child))`) — was tried and **reverted**: it
+  DIVERGES the compiled/interpreted differential
+  (`edge-containers-1.tsv:L114` — `def r (each [drop [9]] [0 0]) (r get 0) eq
+  (r get 1)`: compiled `true`, interpreted `false`, 2 mismatches). The
+  exact element type let a downstream `eq` fold over an each-produced typed list
+  commit differently than the interpreter. So the supertype narrowing is
+  imprecise but load-bearing; making reads exact needs the downstream
+  dispatch/fold fixed FIRST (likely the each-result element typing + the eq
+  compiled fold), then re-attempt. Strict `(T tor None)` reads are gated behind
+  this. R2/R3's write-checks are already EXACT (they unify against the child
+  value directly), so write soundness does not depend on R4.
 
 Phase R1 is the make-or-break core-model step; if its census is not byte-identical,
 the representation is leaking (into equality, rendering, `typeof`, or dispatch) and

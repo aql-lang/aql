@@ -323,10 +323,11 @@ func TestD2TypedContainerBoundBranches(t *testing.T) {
 	if !ok || !eng.IsDisjunct(b) {
 		t.Errorf("disjunct-typed-map bound = (%v, %v), want a disjunct carrier", b.Parent, ok)
 	}
-	// Single-type child → a plain dynamic carrier. NOTE: it currently binds
-	// child.Parent (the element's lattice SUPERTYPE — Integer→Number), a Part B
-	// read-precision limit that R4 (strict reads) will tighten; R2's write-check
-	// is unaffected (it unifies against the child value directly).
+	// Single-type child → a dynamic carrier. It binds child.Parent (the
+	// element's SUPERTYPE — Integer→Number); the exact-type narrowing (R4) is
+	// held back because it diverges the compiled/interpreted differential (see
+	// d2TypedContainerBound). R2's write-check is exact regardless (it unifies
+	// against the child value directly).
 	b2, ok2 := d2TypedContainerBound(eng.NewTypedMap(NewTypeLiteral(TInteger)))
 	if !ok2 || eng.IsConcrete(b2) {
 		t.Errorf("integer-typed-map bound = (%v, %v), want a dynamic carrier", b2.Parent, ok2)

@@ -616,7 +616,14 @@ func d2TypedContainerBound(container Value) (Value, bool) {
 	}
 	// A disjunct element ({:(String tor Integer)}) keeps its DisjunctInfo bound;
 	// clone for a fresh identity (the shared child ID would collide in operand-
-	// provenance tracking). A single-type element takes a fresh dynamic carrier.
+	// provenance tracking). A single-type element takes a fresh dynamic carrier
+	// of child.Parent — the element's lattice SUPERTYPE (Integer→Number). This
+	// is imprecise (R4 attempted the exact type via DenotedTypeNode) BUT
+	// load-bearing: narrowing to the exact element type diverged the compiled
+	// vs interpreted runs (edge-containers-1.tsv:L114 — a `(r get 0) eq
+	// (r get 1)` over an each-produced typed list folded differently). The
+	// exact narrowing needs the downstream dispatch fixed first; kept at the
+	// supertype until then. See design/TYPED-CONTAINER-TAG-RETENTION.0.md (R4).
 	if IsDisjunct(child) {
 		return NewDynamicCarrierValue(CloneValue(child)), true
 	}
