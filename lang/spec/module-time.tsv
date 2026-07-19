@@ -162,3 +162,23 @@ import "aql:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil
 import "aql:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported
 import "aql:time-util"  (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) (TimeUtil.timeout 900 [1]) is TimeUtil.Timeout	true	timer handles carry the module-minted Timeout type (exported literal)
 import "aql:time-util"  (TimeUtil.cancel (TimeUtil.interval 1000 [1 add 2])) (TimeUtil.interval 900 [1]) is TimeUtil.Interval	true	interval handles carry the module-minted Interval type (exported literal)
+#
+# §23  the affine package — point−point → duration, duration arithmetic,
+# and ClockDuration div/mod (word extensions transplanted onto add/sub/
+# div/mod at import; read in forward form: `sub a b` = a − b).
+import "aql:time-util"  add (TimeUtil.hours 2) (TimeUtil.minutes 30)	2h30m0s	ClockDuration + ClockDuration
+import "aql:time-util"  sub (TimeUtil.hours 2) (TimeUtil.minutes 30)	1h30m0s	ClockDuration − ClockDuration
+import "aql:time-util"  add (TimeUtil.days 5) (TimeUtil.months 2)	P0Y2M5D	CalendarDuration + CalendarDuration, component-wise
+import "aql:time-util"  sub (TimeUtil.days 5) (TimeUtil.days 2)	P0Y0M3D	CalendarDuration − CalendarDuration
+import "aql:time-util"  typeof (add (TimeUtil.hours 2) (TimeUtil.minutes 30))	ClockDuration	duration sum stays a ClockDuration
+import "aql:time-util"  div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	ClockDuration ÷ ClockDuration is a Float ratio
+import "aql:time-util"  mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	ClockDuration mod ClockDuration
+import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000))	P0Y0M11D	Date − Date is a CalendarDuration in days
+import "aql:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.unix 1699996400)	1h0m0s	Instant − Instant is a ClockDuration
+import "aql:time-util"  typeof (sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000)))	CalendarDuration	Date − Date yields a CalendarDuration
+# negatives — a zero-duration modulo has no remainder
+import "aql:time-util"  mod (TimeUtil.hours 1) (TimeUtil.seconds 0)	ERROR:modulo by a zero duration	ClockDuration mod a zero duration errors
+import "aql:time-util"  sub (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1699000000)))	264h0m0s	DateTime − DateTime is a ClockDuration
+import "aql:time-util"  sub (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))))	0s	TimeOfDay − TimeOfDay is a ClockDuration
+import "aql:time-util"  TimeUtil.div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	the namespaced div extension works alongside the transplant
+import "aql:time-util"  TimeUtil.mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	the namespaced mod extension works alongside the transplant

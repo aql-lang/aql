@@ -376,7 +376,12 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	incoming := make([]Signature, 0, len(ext.Signatures))
 	for i := range ext.Signatures {
 		s := ext.Signatures[i]
-		if s.Locked || s.Fallback {
+		if s.Locked || s.Fallback || s.CoreDefault {
+			// CoreDefault overloads (the Micron field-wise default) are the
+			// kernel's, not the module's: they must not ride a word
+			// extension into an importer (their builtin-only tuple would
+			// trip the module-scope user-type rule, and the importer already
+			// carries its own copy from core registration).
 			continue
 		}
 		// Normalise host-authored clones: a Go module builder writes the

@@ -960,12 +960,13 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 | `mod` | `a % b` | `10 mod 3` returns `1` |
 | `pow` | `a ^ b` | `2 pow 10` returns `1024` |
 
-`add` on non-numeric scalars performs string concatenation:
-`"a" add "b"` returns `'ab'`. This wins whenever **either** operand is
-non-numeric: the other operand is rendered to text and the result is
-a `String`, so `1 add "x"` returns `'1x'` and `true add 1` returns `'true1'` (no
-type error — `add` simply concatenates). Use it deliberately, not as
-a guard against mixed-type mistakes.
+`add` concatenates when **at least one operand is a `String`**: the other
+scalar is rendered to text and the result is a `String`, so `"a" add "b"`
+returns `'ab'` and `1 add "x"` returns `'1x'`. Two non-`String` scalars do
+NOT concatenate — `add true 1` is a `[aql/type_error]`, not `'true1'`.
+Every scalar type and Micron kind instead defines all six arithmetic words
+*within its own type* — see [Within-type operations](#within-type-operations)
+below.
 
 Two further sharp edges on numbers:
 
@@ -1014,6 +1015,65 @@ MathUtil.abs -5                   # returns 5
 MathUtil.floor 3.7                # returns 3
 MathUtil.sqrt 16                  # returns 4.0
 ```
+
+`abs`, `negate`, `sign`, `min`, and `max` are total over the **whole**
+`Number` family: a `BigInteger`/`BigDecimal` argument is handled exactly
+(`abs` / `negate` keep the exact type, `min` / `max` return the selected
+operand unchanged, `sign` yields an `Integer`).
+
+### Within-type operations
+
+The six arithmetic words are **total within every scalar type and every
+Micron kind** — applied within a type, never across it (a cross-type pair
+is a `[aql/type_error]`). Some of these are unusual, but each is defined.
+
+**`String` / `Atom` — the occurrence package.** `add` concatenates; the
+rest operate on occurrences of the right operand in the left (an `Atom`
+mirrors this on its name, so string-producing ops return an `Atom`):
+
+| Word | Meaning | Example |
+|------|---------|---------|
+| `sub` | remove every occurrence | `"hello.txt" sub ".txt"` → `'hello'` |
+| `div` | count occurrences (an `Integer`) | `"a,b,c" div ","` → `2` |
+| `mod` | the tail after the LAST occurrence | `"path/to/f" mod "/"` → `'f'` |
+| `mul` | operand-major Cartesian character product | `"ab" mul "xy"` → `'axaybxby'` |
+| `pow` | the left repeated once per character of the right | `"ab" pow "xy"` → `'abab'` |
+
+Dividing or modding by an empty string is an `[aql/arith_error]` (the
+string analogue of division by zero).
+
+**`Bytes`** mirror the same occurrence package over byte subsequences
+(`add` concatenates).
+
+**`Boolean`** arithmetic is a **defined error**: `add true false` raises
+`[aql/type_error]` — `Boolean` carries the logical words (`and` / `or` /
+`xor` / `not`), not arithmetic.
+
+**Microns.** A same-kind pair with no more-specific signature falls to the
+**field-wise default**: the op runs field by field over the two primary
+field maps (each field pair dispatching the same op by its own scalar
+type), and the result is rebuilt through the kind's `make` validator — so
+it is the same kind, or a loud `make` error if the combination is invalid.
+Two builtin kinds are hand-written: `Qion` (same-currency money `add` /
+`sub`; a different currency, or `mul`/`div`/`mod`/`pow`, is a defined
+error) and `Pathon` (`add` joins, `sub` strips a matching trailing run of
+segments). A **user** kind can override the default by adding its own
+signature (`def add fn [[a:Kindon b:Kindon] [Kindon] […]]`), which wins by
+specificity; where none is defined, the field-wise map default applies.
+
+```
+def Pointon refine Micron {x:Integer y:Integer}
+(make Pointon {x:1 y:2}) add (make Pointon {x:10 y:20})   # {x:11 y:22}
+(make Qion "USD 12.50") add (make Qion "USD 2.25")        # USD 14.75
+(make Pathon "usr/local") add (make Pathon "bin/aql")     # usr/local/bin/aql
+```
+
+**Time family** (needs `import "aql:time-util"`, read in forward form
+`sub a b` = a − b): subtracting two same-leaf points yields a duration
+(`Date − Date` → `CalendarDuration` in days; `DateTime`/`Instant`/
+`TimeOfDay` → `ClockDuration`); durations of the same leaf `add`/`sub`; and
+`ClockDuration div ClockDuration` is a `Float` ratio, `mod` a
+`ClockDuration` remainder.
 
 ### Strings
 

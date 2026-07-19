@@ -1,0 +1,108 @@
+# AQL Language Specification: within-type scalar & Micron operations
+# Format: input<TAB>expected<TAB>description
+#
+# Every scalar type and every Micron kind has WELL-DEFINED behaviour under
+# the binary arithmetic words add / sub / mul / div / mod / pow, applied
+# WITHIN a type (never across it — a cross-type pair is a type error).
+# Rows use the SWAP form `a op b`, which reads naturally (the handler
+# computes `a OP b`); the pure forward form `op a b` reverses the operands,
+# exactly like the numeric words (see arithmetic.tsv).
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  String — the occurrence package
+#   add : concatenation (rides the [String Scalar] sig)
+#   sub : remove every occurrence of the right operand
+#   div : count occurrences (an Integer)
+#   mod : the tail after the LAST occurrence (whole string if none)
+#   mul : operand-major Cartesian character product
+#   pow : the left operand repeated once per character of the right
+"foo" add "bar"	'foobar'	String add is concatenation
+"hello.txt" sub ".txt"	'hello'	sub removes the occurrence
+"a-b-c" sub "-"	'abc'	sub removes every occurrence
+"missing" sub "zzz"	'missing'	sub with no occurrence is unchanged
+"a,b,c" div ","	2	div counts occurrences
+"aaaa" div "aa"	2	div counts NON-overlapping occurrences
+"abc" div "z"	0	div with no occurrence is zero
+"path/to/file" mod "/"	'file'	mod is the tail after the last separator
+"nosep" mod "/"	'nosep'	mod with no occurrence is the whole string
+"ab" mul "xy"	'axaybxby'	mul is the Cartesian character product
+"ab" pow "xy"	'abab'	pow repeats the left once per right char
+"x" pow ""	''	pow by an empty string is empty
+"abc" sub ""	'abc'	sub by an empty string is unchanged
+# negatives — dividing / modding by an empty string has no defined result
+"abc" div ""	ERROR:division by an empty string	div by empty string errors
+"abc" mod ""	ERROR:modulo by an empty string	mod by empty string errors
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  Atom — the occurrence package on the name (Atom result; div counts)
+foo/q add bar/q	foobar/q	Atom add concatenates names
+foobar/q sub bar/q	foo/q	Atom sub removes an occurrence
+foo/q div o/q	2	Atom div counts occurrences (Integer)
+ab/q mul xy/q	axaybxby/q	Atom mul is the Cartesian product
+typeof (foo/q add bar/q)	Atom	Atom string-producing op stays an Atom
+typeof (foo/q div o/q)	Integer	Atom div yields an Integer
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  Boolean — arithmetic is a DEFINED ERROR (use and / or / xor / not)
+true add false	ERROR:arithmetic is not defined on Boolean	Boolean add errors
+true sub true	ERROR:arithmetic is not defined on Boolean	Boolean sub errors
+true mul false	ERROR:arithmetic is not defined on Boolean	Boolean mul errors
+false div true	ERROR:arithmetic is not defined on Boolean	Boolean div errors
+true mod true	ERROR:arithmetic is not defined on Boolean	Boolean mod errors
+true pow false	ERROR:arithmetic is not defined on Boolean	Boolean pow errors
+# the logical words are unaffected
+true and false	false	and still works on Boolean
+false or true	true	or still works on Boolean
+not true	false	not still works on Boolean
+true xor true	false	xor still works on Boolean
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  Bytes — the occurrence package over byte subsequences
+(convert Bytes "hello world hello") div (convert Bytes "hello")	2	Bytes div counts occurrences
+(convert Bytes "a.b.c") sub (convert Bytes ".") convert String	'abc'	Bytes sub removes occurrences
+(convert Bytes "path/to/x") mod (convert Bytes "/") convert String	'x'	Bytes mod is the tail after the last
+(convert Bytes "ab") pow (convert Bytes "xy") convert String	'abab'	Bytes pow repeats per right byte
+(convert Bytes "abc") div (convert Bytes "")	ERROR:division by an empty string	Bytes div by empty errors
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  Micron — the field-wise default over the primary field map
+# Emailon: user and host concatenate field-wise, rebuilt via `make`.
+(make Emailon "alice@example.com") add (make Emailon "b@example.org")	aliceb@example.comexample.org	Emailon add is field-wise
+# Coloron: numeric channels add; a channel that leaves 0..255 is a loud make error.
+(make Coloron "#10203004") add (make Coloron "#01020304")	#11223308	Coloron add is channel-wise
+(make Coloron "#102030") add (make Coloron "#010203")	ERROR:must be in 0..255	Coloron add overflow errors via the validator
+# Semveron: numeric components add; string components concatenate.
+(make Semveron "1.2.3") add (make Semveron "1.0.1")	2.2.4	Semveron add is component-wise
+# user kind: field-wise default over the schema, rendered as its field map.
+def Pointon refine Micron {x:Integer y:Integer} (make Pointon {x:1 y:2}) add (make Pointon {x:10 y:20})	{x:11 y:22}	user Micron add uses the field-wise default
+def Pointon refine Micron {x:Integer y:Integer} (make Pointon {x:5 y:9}) sub (make Pointon {x:2 y:3})	{x:3 y:6}	user Micron sub is field-wise
+# cross-kind is an error (within a kind, not across).
+(make Emailon "a@b.io") add (make Urlon "https://x.com")	ERROR:different Micron kinds	cross-kind Micron op errors
+#
+# ─────────────────────────────────────────────────────────────────────
+# §6  Micron — user overrides win over the default
+# A more specific [Kindon Kindon] signature the user adds REPLACES the
+# unlocked field-wise default (open-words merge / specificity).
+def Pointon refine Micron {x:Integer y:Integer} def add fn [[a:Pointon b:Pointon] [Integer] [(a.x add b.x) add (a.y add b.y)]] (make Pointon {x:1 y:2}) add (make Pointon {x:10 y:20})	33	a user override replaces the field-wise default
+#
+# ─────────────────────────────────────────────────────────────────────
+# §7  Qion — same-currency money arithmetic (add / sub); the rest is an error
+(make Qion "USD 12.50") add (make Qion "USD 2.25")	USD 14.75	Qion add is exact same-currency money
+(make Qion "USD 12.50") sub (make Qion "USD 2.25")	USD 10.25	Qion sub is exact same-currency money
+(make Qion "USD 1.00") add (make Qion "EUR 1.00")	ERROR:different currencies	Qion add across currencies errors
+(make Qion "USD 1.00") mul (make Qion "USD 2.00")	ERROR:not defined between two Qion	Qion mul is a defined error
+(make Qion "USD 1.00") div (make Qion "USD 2.00")	ERROR:not defined between two Qion	Qion div is a defined error
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  Pathon — add joins, sub strips a trailing run of segments
+(make Pathon "usr/local") add (make Pathon "bin/aql")	usr/local/bin/aql	Pathon add joins relative segments
+(make Pathon "usr/local/bin") sub (make Pathon "local/bin")	usr	Pathon sub strips a matching trailing run
+(make Pathon "usr/local/bin") sub (make Pathon "zzz")	usr/local/bin	Pathon sub with no matching suffix is unchanged
+(make Pathon "usr") add (make Pathon "/bin")	ERROR:absolute path	Pathon join of an absolute right operand errors
+(make Pathon "a/b") mul (make Pathon "c/d")	ERROR:not defined between two Pathon	Pathon mul is a defined error
+#
+# ─────────────────────────────────────────────────────────────────────
+# §9  Map / List are NOT exposed to the arithmetic words
+# (the field-wise engine is reachable only INSIDE a Micron field).
+add {a:1} {b:2}	ERROR:no signature matches	plain Map add is a signature error
+add [1] [2]	ERROR:no signature matches	plain List add is a signature error

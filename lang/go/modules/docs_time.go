@@ -83,9 +83,11 @@ func init() {
 		"start-of": "First instant of the given unit of a Date.",
 		"end-of":   "Last instant of the given unit of a Date.",
 
-		// arithmetic word extensions (transplanted onto core add/sub at import)
-		"add": "Date/DateTime/Instant plus a CalendarDuration/ClockDuration (word extension of core add).",
-		"sub": "Date/DateTime/Instant minus a CalendarDuration/ClockDuration (word extension of core sub).",
+		// arithmetic word extensions (transplanted onto core add/sub/div/mod at import)
+		"add": "Date/DateTime/Instant plus a duration, or two same-leaf durations summed (word extension of core add).",
+		"sub": "A point minus a duration, two same-leaf points differenced to a duration, or two durations subtracted (word extension of core sub).",
+		"div": "ClockDuration divided by ClockDuration, a dimensionless Float ratio (word extension of core div).",
+		"mod": "ClockDuration modulo ClockDuration, the remainder as a ClockDuration (word extension of core mod).",
 
 		// conversions
 		"to-date":        "Date part of a DateTime/Instant.",

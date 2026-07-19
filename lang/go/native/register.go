@@ -108,6 +108,14 @@ func Register(r *Registry) {
 		r.RegisterNativeFunc(n)
 	}
 
+	// Within-type scalar & Micron operations (String/Atom/Bytes occurrence
+	// package, Boolean's defined arithmetic error, the Micron field-wise
+	// default) — installed as CoreDefault overloads AFTER mathNatives and
+	// bytesNatives so they append to the existing arithmetic words. Unlocked
+	// (CoreDefault) so a user's more-specific override wins; see
+	// installScalarOpDefaults.
+	installScalarOpDefaults(r)
+
 	// I/O, help, module, temporal (consolidated)
 	for _, n := range miscNatives {
 		r.RegisterNativeFunc(n)

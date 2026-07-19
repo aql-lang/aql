@@ -92,13 +92,15 @@ func TestDispatchRematchMatchDefers(t *testing.T) {
 // TestDispatchRematchWideWindowRendersBounded — the render bound (plan 3a):
 // the local-add shape's match examined a WIDER window (3 positions) than the
 // tuple its error renders (the single stack value — the forward walk breaks
-// at the `true`/`false` WORD tokens). The record gate proves the written
+// at the `none` WORD tokens; the fixture originally used `true`/`false`,
+// which now MATCH add's within-type [Boolean Boolean] CoreDefault and no
+// longer produce an unmatched dispatch). The record gate proves the written
 // tuple is the window's leading slice by ID and stamps its length as
 // DispatchSpec.NWritten; the compiled rematch re-runs the match over the
 // FULL window and renders over window[:NWritten] — byte-identical to the
 // interpreter, running COMPILED (formerly a whole-program refusal).
 func TestDispatchRematchWideWindowRendersBounded(t *testing.T) {
-	const src = `def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false`
+	const src = `def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add none none`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
