@@ -1,11 +1,17 @@
 # `aql:fmt` — a formatter as a core module, and the XSLT question
 
 Status: Phases 1, 3-rules, 3-vocabulary, 4-embedded, and the Phase-2 seam
-have **landed**; the trivia-preserving tabnas CST (Phase 2 front end) and the
-final declarative rule-set conversion — retiring the Go layout code by
-routing `Fmt.format` through AQL rules (Phase 3) — remain. See "Phased plan"
-for the per-phase state. This is a discovery/design note, not an ADR (see
-`lang/go/CLAUDE.md`, "ADRs — only on explicit instruction").
+have **landed**, and the source formatter is now **verified corruption-free**
+(seven `fmt`-corruption bugs found and fixed — see "Formatter correctness
+baseline"). Two items now carry a **RECOMMENDATION** rather than open work:
+the trivia-preserving tabnas CST front end — *keep the hand-lexer*, a tabnas
+swap is an impedance mismatch (see the Phase-2 entry's CONCLUSION); and the
+declarative rule-set conversion retiring the Go layout code (Phase 3) — it
+depends on that CST and is likewise not recommended. What remains genuinely
+open is Phase 5's example canonicalisation, a visible-output decision for the
+maintainer. See "Phased plan" for the per-phase state. This is a
+discovery/design note, not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on
+explicit instruction").
 
 ## Context
 
@@ -288,8 +294,26 @@ these as `Fmt.*` AQL):
     blocks don't churn — the front end has, by construction, no functional
     benefit (identical output) against real regression risk, which is why it
     is a maintainer priorities call, not a mechanical task.
-  Until then keep the current lossless hand-lexer as `DefaultParse` — it
-  already preserves comments/newlines/backticks — so fmt stays correct.
+  - **CONCLUSION — impedance mismatch (working the conversion through).**
+    Attempting the token→`Node` conversion surfaces a fundamental
+    incompatibility: the hand-lexer produces COARSE word tokens (its
+    `isDelimiter` is only `[]{}(),;:?!|#`, so `foo.bar`, `a<b>`, `=>`, `x/r`
+    are each ONE word), while the tabnas lexer produces FINE semantic tokens
+    (`foo` `.` `bar`, `<`, `>`, `=>`, `x` `/` `r` separately, per its custom
+    `#DT`/`#LA`/`#RA`/`#AR` tokens). To reproduce the hand-lexer's output a
+    tabnas front end would have to RE-COALESCE those fine tokens back into
+    coarse words — i.e. re-implement the hand-lexer on top of tabnas, MORE
+    code for byte-identical output. The formatter genuinely needs a
+    different lexer than the semantic parser: coarse, trivia-preserving,
+    word-coalescing — which the hand-lexer already IS. So the recommended
+    resolution is **keep the hand-lexer as `DefaultParse`**; the `Parse`
+    seam already satisfies "the parser is a parameter", and a tabnas swap of
+    the DEFAULT is an impedance mismatch, not an improvement. (The probe was
+    not wasted: it surfaced corruption #7 — `##` is a line comment — which
+    is now fixed.)
+  Keep the current lossless hand-lexer as `DefaultParse` — it already
+  preserves comments/newlines/backticks and (post the 7 corruption fixes)
+  is verified corruption-free — so fmt stays correct.
 - **Phase 3 — rules.** Rule behaviour DONE in the Go formatter: 72-col,
   backtick-verbatim (`scanBacktick`), and bracketless single param/return
   (`elideFnBrackets`). The declarative **substrate** is DONE: a
