@@ -77,10 +77,38 @@ type Node struct {
 	Children []*Node
 }
 
-// Format formats AQL source code.
+// Parse turns AQL source into the format tree the emitter walks (an
+// NdRoot node). It is a PARAMETER of the formatter (see FormatWith) so the
+// front end is pluggable: the default is the built-in lossless lexer, but
+// a tabnas grammar that preserves comments, backticks, and layout can be
+// dropped in without touching the layout rules or the emitter. The
+// contract is a lossless tree — comments (NdComment/NdBlockComment),
+// newlines (NdNewline), and source order must be preserved for the
+// emitter to reproduce them.
+type Parse func(src string) *Node
+
+// DefaultParse is the built-in front end: the lossless lexer plus tree
+// builder. It is the Parse used by Format.
+func DefaultParse(src string) *Node {
+	return buildTree(tokenize(src))
+}
+
+// Format formats AQL source code using the default parser.
 func Format(src string) string {
-	tokens := tokenize(src)
-	tree := buildTree(tokens)
+	return FormatWith(src, DefaultParse)
+}
+
+// FormatWith formats AQL source using the supplied parser, then applies
+// the (parser-independent) layout rules and emits. A nil parse falls back
+// to DefaultParse. This is the seam through which a tabnas-based,
+// trivia-preserving parser is injected — the layout rules
+// (capitalizeTypesInTree, elideFnBrackets) and the emitter operate on the
+// tree regardless of which front end produced it.
+func FormatWith(src string, parse Parse) string {
+	if parse == nil {
+		parse = DefaultParse
+	}
+	tree := parse(src)
 	capitalizeTypesInTree(tree)
 	elideFnBrackets(tree)
 	return emitRoot(tree, 0)

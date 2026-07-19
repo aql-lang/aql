@@ -1,8 +1,10 @@
 # `aql:fmt` — a formatter as a core module, and the XSLT question
 
-Status: **Phase 1 landed** (the `aql:fmt` module + runtime API). Phases 2–4
-are designed here and not yet implemented. This is a discovery/design note,
-not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on explicit instruction").
+Status: Phases 1, 3-rules, 4-embedded, and the Phase-2 seam have **landed**;
+the trivia-preserving tabnas CST (Phase 2 front end) and the full
+declarative rule-set conversion (Phase 3) remain. See "Phased plan" for the
+per-phase state. This is a discovery/design note, not an ADR (see
+`lang/go/CLAUDE.md`, "ADRs — only on explicit instruction").
 
 ## Context
 
@@ -213,22 +215,35 @@ these as `Fmt.*` AQL):
   `modules.go` + `help_render.go`, tests in `fmt_test.go` (both handler arms +
   end-to-end dispatch). `import "aql:fmt"` / `Fmt.format` works; `aql describe
   "aql:fmt"` lists it; the CLI keeps calling the shared driver.
-- **Phase 2 — lossless tabnas CST.** New `fmtcore` parse layer on
-  `jsonic.NewLex` (own jsonic instance — never mutate the shared `Parse`
-  config, F2 caveat): comment-capturing matcher, token-level ordered maps,
-  backtick spelling retained. `Format` gains the `Parse`-function parameter.
-  Keep the current lexer as a fallback for un-parseable (WIP) source so fmt
-  stays best-effort.
-- **Phase 3 — declarative rules + new behaviour.** The `Fmt.*` document
-  algebra and rule engine; port the table above; land 72-col,
-  backtick-verbatim, and bracketless single param/return here (where the rules
-  live) rather than in throwaway Go.
-- **Phase 4 — doc pipeline + embedded formatting.** Run `describe`/help
-  examples through fmt at the `genhelp`/CLI layer (F3). Add `aql fmt` support
-  for Markdown/HTML: fence ```` ```aql ```` blocks and paired comment markers
-  (proposed: `<!-- aqlfmt:start -->…<!-- aqlfmt:end -->` for HTML/Markdown,
-  `# aqlfmt:start`/`# aqlfmt:end` for line-comment hosts) — reformat only the
-  marked spans, leave the host document byte-for-byte otherwise.
+- **Phase 2 — parser as a parameter.** DONE (seam): `Format(src)` →
+  `FormatWith(src, Parse)`, with `Parse` a `func(src) *Node` front end and
+  `DefaultParse` the built-in lossless lexer. The layout rules and emitter
+  run on the tree regardless of front end. REMAINING: the trivia-preserving
+  tabnas CST front end that plugs into `Parse` — build it on `jsonic.NewLex`
+  (own jsonic instance — never mutate the shared `Parse` config, F2 caveat;
+  note `Lex.Next` skips the SP/LN/CM IGNORE set, so comment/whitespace
+  retention needs a custom lex path), with a comment-capturing matcher,
+  token-level ordered maps, and backtick spelling retained. Keep the current
+  lexer as the fallback for un-parseable (WIP) source so fmt stays
+  best-effort.
+- **Phase 3 — rules.** Rule behaviour DONE in the Go formatter: 72-col,
+  backtick-verbatim (`scanBacktick`), and bracketless single param/return
+  (`elideFnBrackets`). The declarative **substrate** is DONE: a
+  Wadler/Prettier document algebra (`formatter.Doc`/`RenderDoc`) exposed as
+  the runtime word **`Fmt.render`**, driven by an AQL doc tree
+  (`{fmt:'group' body:…}` etc.) — "formatting words in the fmt module,
+  expressed as AQL data". REMAINING: express the rule table above as AQL
+  template rules on this substrate and route `Fmt.format` through them,
+  retiring the Go rule code (the largest piece — a full rule-set port under
+  the coverage gate).
+- **Phase 4 — embedded formatting DONE; doc pipeline REMAINING.**
+  `aql fmt` reformats ```` ```aql ```` fences and `<!-- aqlfmt --> … <!-- /aqlfmt -->`
+  marker regions in Markdown/HTML (CLI dispatch by extension; runtime words
+  `Fmt.format-markdown` / `Fmt.format-html`). REMAINING: run `describe`/help
+  and prose-doc examples through fmt at the `genhelp`/CLI layer (F3). Note:
+  hand-authored describe examples use deliberate `;#`-comment alignment that
+  fmt collapses, so this is a visible-output change warranting maintainer
+  sign-off, not a silent migration.
 
 ## Risks
 

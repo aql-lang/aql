@@ -45,6 +45,7 @@ var FmtNatives = []native.NativeFunc{
 	stringFormatterNative("format", formatter.Format),
 	stringFormatterNative("format-markdown", formatter.FormatMarkdown),
 	stringFormatterNative("format-html", formatter.FormatHTML),
+	renderDocNative(),
 }
 
 // stringFormatterNative builds a String -> String native named name whose
