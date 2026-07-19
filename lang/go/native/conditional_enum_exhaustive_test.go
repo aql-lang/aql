@@ -160,19 +160,20 @@ func TestCheckCaseCoverageInactiveAndNil(t *testing.T) {
 	r := seam5Reg(t)
 	scrut := NewEnum([]Value{NewAtom("red"), NewAtom("green")})
 	elems := []Value{NewAtom("red"), NewString("R")}
-	checkCaseCoverage(r, scrut, elems)
+	checkCaseCoverage(r, scrut, NewList(elems), elems)
 	if n := countDiag(r, "case_nonexhaustive"); n != 0 {
 		t.Fatalf("inactive check must not emit, got %d", n)
 	}
 	// A nil registry is tolerated (defensive guard).
-	checkCaseCoverage(nil, scrut, elems)
+	checkCaseCoverage(nil, scrut, NewList(elems), elems)
 }
 
 func TestCheckCaseCoverageNonDisjunct(t *testing.T) {
 	// A concrete non-disjunct scrutinee fails AsDisjunct → skipped.
 	r := seam5Reg(t)
 	defer r.Check.Begin()()
-	checkCaseCoverage(r, NewAtom("red"), []Value{NewAtom("red"), NewString("R")})
+	elems := []Value{NewAtom("red"), NewString("R")}
+	checkCaseCoverage(r, NewAtom("red"), NewList(elems), elems)
 	if len(r.Check.Diagnostics) != 0 {
 		t.Fatalf("non-disjunct scrutinee must not emit, got %d", len(r.Check.Diagnostics))
 	}
@@ -182,7 +183,8 @@ func TestCheckCaseCoverageEmptyDisjunct(t *testing.T) {
 	// A disjunct with no alternatives carries no coverage obligation.
 	r := seam5Reg(t)
 	defer r.Check.Begin()()
-	checkCaseCoverage(r, NewEnum(nil), []Value{NewAtom("red"), NewString("R")})
+	elems := []Value{NewAtom("red"), NewString("R")}
+	checkCaseCoverage(r, NewEnum(nil), NewList(elems), elems)
 	if len(r.Check.Diagnostics) != 0 {
 		t.Fatalf("empty disjunct must not emit, got %d", len(r.Check.Diagnostics))
 	}
@@ -198,7 +200,7 @@ func TestCheckCaseCoverageParenExprArmSuppresses(t *testing.T) {
 		NewParenExpr([]Value{NewWord("id"), NewAtom("red")}), NewString("X"),
 		NewAtom("green"), NewString("G"),
 	}
-	checkCaseCoverage(r, scrut, elems)
+	checkCaseCoverage(r, scrut, NewList(elems), elems)
 	if n := countDiag(r, "case_nonexhaustive"); n != 0 {
 		t.Fatalf("ParenExpr arm must suppress exhaustiveness, got %d", n)
 	}
@@ -211,10 +213,98 @@ func TestCheckCaseCoverageDedup(t *testing.T) {
 	defer r.Check.Begin()()
 	scrut := NewEnum([]Value{NewAtom("red"), NewAtom("green"), NewAtom("blue")})
 	elems := []Value{NewAtom("red"), NewString("R")} // blue+green uncovered, no default
-	checkCaseCoverage(r, scrut, elems)
-	checkCaseCoverage(r, scrut, elems)
+	clauses := NewList(elems)
+	checkCaseCoverage(r, scrut, clauses, elems)
+	checkCaseCoverage(r, scrut, clauses, elems)
 	if n := countDiag(r, "case_nonexhaustive"); n != 1 {
-		t.Fatalf("duplicate findings must dedup to 1, got %d", n)
+		t.Fatalf("re-analysis of the SAME site must dedup to 1, got %d", n)
+	}
+}
+
+// --- PR #290 review follow-ups. ---
+
+func TestCaseDistinctSitesBothReported(t *testing.T) {
+	// Two separate case sites that omit the same member must BOTH be reported:
+	// dedup is per (code, detail, position), not per detail, so an identical
+	// message at a different source location is not dropped.
+	r := seam5Reg(t)
+	src := `def Color enum [red/q green/q blue/q]
+def a fn [[c:Color] [String] [case c [red/q "R" green/q "G"]]]
+def b fn [[c:Color] [String] [case c [red/q "X" green/q "Y"]]]
+a red/q
+b green/q`
+	if _, err := seam5Check(r, src); err != nil {
+		t.Fatal(err)
+	}
+	if n := countDiag(r, "case_nonexhaustive"); n != 2 {
+		t.Fatalf("two distinct sites omitting blue must both report, got %d", n)
+	}
+	rows := map[int]bool{}
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == "case_nonexhaustive" {
+			rows[d.Row] = true
+		}
+	}
+	if len(rows) != 2 {
+		t.Fatalf("distinct sites must carry distinct rows, got %v", rows)
+	}
+}
+
+func TestCaseNonexhaustiveHasSourcePosition(t *testing.T) {
+	// The nonexhaustive finding anchors at the clause list (a parsed value), not
+	// the scrutinee param carrier (which has no position) — so the CLI can
+	// render an excerpt and the LSP can highlight the dispatch.
+	r := seam5Reg(t)
+	src := `def Color enum [red/q green/q blue/q]
+def name fn [[c:Color] [String] [case c [red/q "R" green/q "G"]]]
+name red/q`
+	if _, err := seam5Check(r, src); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == "case_nonexhaustive" {
+			found = true
+			if d.Row == 0 && d.Col == 0 {
+				t.Fatalf("nonexhaustive must carry a source position, got row=%d col=%d", d.Row, d.Col)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a case_nonexhaustive diagnostic")
+	}
+}
+
+func TestCaseTypeArmUndecidable(t *testing.T) {
+	// A non-concrete arm — a builtin type or a named (predicate) type — cannot
+	// decide coverage (check-mode membership is optimistic), so it suppresses
+	// the exhaustiveness verdict like a code-body predicate, and is never
+	// flagged unreachable.
+	r := seam5Reg(t)
+	src := `def Color enum [red/q green/q blue/q]
+def f fn [[c:Color] [String] [case c [red/q "R" Atom "other"]]]
+f red/q`
+	if _, err := seam5Check(r, src); err != nil {
+		t.Fatal(err)
+	}
+	if n := countDiag(r, "case_nonexhaustive"); n != 0 {
+		t.Fatalf("a builtin-type arm must suppress exhaustiveness, got %d", n)
+	}
+	if n := countDiag(r, "case_unreachable_clause"); n != 0 {
+		t.Fatalf("a type arm must not be flagged unreachable, got %d", n)
+	}
+
+	// A named user type arm behaves the same.
+	r2 := seam5Reg(t)
+	src2 := `def Color enum [red/q green/q blue/q]
+def Tag (refine Atom)
+def g fn [[c:Color] [String] [case c [red/q "R" Tag "other"]]]
+g red/q`
+	if _, err := seam5Check(r2, src2); err != nil {
+		t.Fatal(err)
+	}
+	if n := countDiag(r2, "case_nonexhaustive"); n != 0 {
+		t.Fatalf("a named-type arm must suppress exhaustiveness, got %d", n)
 	}
 }
 

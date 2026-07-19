@@ -225,7 +225,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	// type). When the scrutinee is a closed set of concrete alternatives,
 	// flag members no arm covers and arms that match no member. See
 	// design/ENUM-EXHAUSTIVENESS.0.md.
-	checkCaseCoverage(r, v, elems)
+	checkCaseCoverage(r, v, clauses, elems)
 	// At least one clause pair. A trailing default (odd length) makes the
 	// innermost else a definite value; WITHOUT one (even length) the innermost
 	// `if guard [block]` has no else and the chain is variadic (0-or-1), which
@@ -301,12 +301,19 @@ func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 //   - case_unreachable_clause: a concrete match arm matches no member of the
 //     set (an out-of-set / typo'd constant).
 //
-// A predicate arm (`[gt 3]`, isCodeBody) or a ParenExpr arm makes coverage
-// undecidable, so it suppresses the exhaustiveness verdict; unreachable
-// detection still runs for the concrete arms. A trailing default makes the
-// case exhaustive by construction. Modelled on the redundant_guard lint
-// (eng ApplyGuardNarrowing). See design/ENUM-EXHAUSTIVENESS.0.md.
-func checkCaseCoverage(r *Registry, v Value, elems []Value) {
+// An UNDECIDABLE arm — a code-body predicate (`[gt 3]`, isCodeBody), a
+// ParenExpr, or any NON-concrete match (a type literal or a named predicate
+// type like `Pos`, whose check-mode membership `UnifyR` answers optimistically
+// and so cannot be trusted to decide coverage) — suppresses the exhaustiveness
+// verdict; only CONCRETE-value arms decide coverage and drive unreachable
+// detection. A trailing default makes the case exhaustive by construction.
+// Modelled on the redundant_guard lint (eng ApplyGuardNarrowing). See
+// design/ENUM-EXHAUSTIVENESS.0.md.
+//
+// clauses is the parsed clause-list Value; its position anchors the
+// case-level (nonexhaustive) diagnostic — the scrutinee v is often a param
+// carrier (ParamInputCarrier) with no source position.
+func checkCaseCoverage(r *Registry, v Value, clauses Value, elems []Value) {
 	if r == nil || !r.Check.IsActive() {
 		return
 	}
@@ -334,6 +341,14 @@ func checkCaseCoverage(r *Registry, v Value, elems []Value) {
 			continue
 		}
 		arm := resolveCaseMatch(r, match)
+		if !IsConcrete(arm) {
+			// A type / predicate-type arm: its membership over the closed set is
+			// not statically decidable (check-mode UnifyR is optimistic — a `Pos`
+			// arm would falsely mark every member covered), so treat it like a
+			// code-body predicate rather than trust the match.
+			undecidable = true
+			continue
+		}
 		armCovers := false
 		for j, alt := range di.Alternatives {
 			if _, ok := UnifyR(arm, alt, r); ok {
@@ -341,7 +356,7 @@ func checkCaseCoverage(r *Registry, v Value, elems []Value) {
 				armCovers = true
 			}
 		}
-		if !armCovers && IsConcrete(arm) {
+		if !armCovers {
 			addCaseDiag(r, "case_unreachable_clause",
 				"case clause "+arm.String()+" matches no member of "+
 					caseMemberList(di.Alternatives),
@@ -358,11 +373,24 @@ func checkCaseCoverage(r *Registry, v Value, elems []Value) {
 		}
 	}
 	if len(missing) > 0 {
+		row, col := caseAnchorPos(clauses, elems)
 		addCaseDiag(r, "case_nonexhaustive",
 			"case does not cover "+caseMemberList(missing)+
 				" — add clauses or a trailing default",
-			v.Pos().Row, v.Pos().Col)
+			row, col)
 	}
+}
+
+// caseAnchorPos returns a PARSED source position to anchor a case-level
+// diagnostic: the clause list, falling back to its first element. Never the
+// resolved scrutinee carrier — a param binding's carrier has no position, so
+// the CLI would render no excerpt and the LSP no highlight.
+func caseAnchorPos(clauses Value, elems []Value) (row, col int) {
+	p := clauses.Pos()
+	if p.Row == 0 && p.Col == 0 && len(elems) > 0 {
+		p = elems[0].Pos()
+	}
+	return p.Row, p.Col
 }
 
 // resolveCaseMatch resolves a bare-word match to its bound value / type or an
@@ -389,12 +417,14 @@ func caseMemberList(alts []Value) string {
 	return strings.Join(parts, ", ")
 }
 
-// addCaseDiag emits a coverage advisory, de-duplicated by (code, detail) so a
-// fn body re-analysed per call-shape reports each finding once (the
-// redundant_guard dedup pattern).
+// addCaseDiag emits a coverage advisory, de-duplicated by (code, detail,
+// position) so a fn body re-analysed per call-shape reports each finding once
+// (the redundant_guard dedup pattern) WITHOUT collapsing two distinct case
+// sites that happen to omit the same members — each source occurrence, at its
+// own row/col, stays visible.
 func addCaseDiag(r *Registry, code, detail string, row, col int) {
 	for _, d := range r.Check.Diagnostics {
-		if d.Code == code && d.Detail == detail {
+		if d.Code == code && d.Detail == detail && d.Row == row && d.Col == col {
 			return
 		}
 	}
