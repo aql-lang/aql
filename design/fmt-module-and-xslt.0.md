@@ -1,21 +1,27 @@
 # `aql:fmt` — a formatter as a core module, and the XSLT question
 
-Status: Phases 1, 3-rules, 3-vocabulary, 4-embedded, and the Phase-2 seam
-have **landed**, and the source formatter is now **verified corruption-free**
-(seven `fmt`-corruption bugs found and fixed — see "Formatter correctness
-baseline"). Two items now carry a **RECOMMENDATION** rather than open work:
-the trivia-preserving tabnas CST front end — *keep the hand-lexer*, a tabnas
-swap is an impedance mismatch (see the Phase-2 entry's CONCLUSION); and the
-declarative rule-set conversion retiring the Go layout code (Phase 3) — it
-depends on that CST and is likewise not recommended. Phase 5's `describe`/help
-example canonicalisation is now **DONE** (156 of 161 examples rewritten to
-fmt's canonical form, the other 5 one-line and verified non-corrupted, pinned
-by `help/fmt_examples_test.go`); the only inline "prose examples" left are the
-Notation paragraph's snippets that *explain* the `# returns` convention, which
-are correctly left verbatim — so Phase 5 is complete too. See "Phased plan"
-for the per-phase state. This is a
-discovery/design note, not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on
-explicit instruction").
+Status: Phases 1, 3-rules, 3-vocabulary, 4-embedded, the Phase-2 seam, **and
+the trivia-preserving tabnas CST front end** have **landed**, and the source
+formatter is now **verified corruption-free** (seven `fmt`-corruption bugs
+found and fixed — see "Formatter correctness baseline"). The tabnas front end
+(`formatter.TabnasParse`, driven by `eng/go/parser.LexTokens`) is now the
+formatter's **`DefaultParse`** — `aql fmt`, the `aql:fmt` module, the LSP, and
+the Markdown/HTML embedders all parse through the AQL-configured tabnas lexer.
+It re-coalesces tabnas's fine tokens back into the hand-lexer's coarse words
+and is pinned **byte-identical** to the retained hand-lexer (`HandParse`)
+across the whole 73-file `.aql` corpus plus an edge-case battery
+(`formatter/format_tabnas_test.go`). The earlier "impedance mismatch → keep the
+hand-lexer" recommendation is thereby **superseded** — the conversion was
+worked all the way through (see the Phase-2 entry). One item remains open: the
+declarative rule-set conversion retiring the Go layout code (Phase 3-full) —
+it can now build on this CST. Phase 5's `describe`/help example canonicalisation
+is **DONE** (156 of 161 examples rewritten to fmt's canonical form, the other 5
+one-line and verified non-corrupted, pinned by `help/fmt_examples_test.go`); the
+only inline "prose examples" left are the Notation paragraph's snippets that
+*explain* the `# returns` convention, correctly left verbatim — so Phase 5 is
+complete. See "Phased plan" for the per-phase state. This is a discovery/design
+note, not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on explicit
+instruction").
 
 ## Context
 
@@ -252,35 +258,48 @@ these as `Fmt.*` AQL):
   `modules.go` + `help_render.go`, tests in `fmt_test.go` (both handler arms +
   end-to-end dispatch). `import "aql:fmt"` / `Fmt.format` works; `aql describe
   "aql:fmt"` lists it; the CLI keeps calling the shared driver.
-- **Phase 2 — parser as a parameter.** DONE (seam): `Format(src)` →
-  `FormatWith(src, Parse)`, with `Parse` a `func(src) *Node` front end and
-  `DefaultParse` the built-in lossless lexer. The layout rules and emitter
-  run on the tree regardless of front end. REMAINING: the trivia-preserving
-  tabnas CST front end that plugs into `Parse`. Two findings from the
-  investigation pin the shape and the blocker:
-  - **Trivia lexing is solved (mechanism found).** `Lex.Next` skips the
-    SP/LN/CM IGNORE set, but `Lex.Config.IgnoreSet` is a **per-instance**
-    map (`{TinSP,TinLN,TinCM}` by default, "plugins can customize"). A
-    `jsonic.NewLex(src, cfg)` whose `cfg.IgnoreSet` omits those Tins makes
-    `Next` return the space / line / **comment** tokens verbatim (each
-    carries `Token.Src` + row/col/byte offsets). So a trivia-preserving
-    token stream needs no custom matcher — just an ignore-set override.
-    The cleanest wiring reuses the existing `buildTree([]Token)` by writing
-    only a `tabnasTin → formatter.TokenKind` adapter over that stream.
-  - **The real blocker is layering (F3), a DECISION not a task.** A *raw*
-    `jsonic.NewLex` is not the AQL grammar: AQL's backtick-verbatim /
-    template literals and `+minilang/…/` literals are recognised by the
-    eng parser's *configured* jsonic instance (custom tokens + rules in
-    `eng/go/parser/grammar.go`), not by a bare lexer. A raw-lex front end
-    would mis-tokenise exactly the spans the new rules must keep verbatim.
-    The two honest options: (a) the `formatter` package takes a dependency
-    on `eng/go/parser` to reuse the configured instance — no import CYCLE
-    (`formatter → eng/parser → eng`, and eng/parser imports neither back),
-    but it abandons the package's engine-dep-free leaf status (F3); or (b)
-    the trivia-lexer lives in a new leaf package that re-declares AQL's
-    backtick/minilang lex customisations independently — duplicating grammar
-    knowledge. Pick (a) or (b) before writing the front end; both are viable,
-    neither is mechanical.
+- **Phase 2 — parser as a parameter, AND the tabnas CST front end (DONE).**
+  Seam: `Format(src)` → `FormatWith(src, Parse)`, with `Parse` a
+  `func(src) *Node` front end. The layout rules and emitter run on the tree
+  regardless of front end. The tabnas front end that plugs into `Parse` is now
+  **built and is the default** (`formatter.TabnasParse`, wired as
+  `DefaultParse`; the hand-lexer is retained as `HandParse`, the independent
+  reference). It is proven byte-identical to the hand-lexer across the whole
+  `.aql` corpus + an edge battery (`TestTabnasParse*`). The build worked the
+  earlier impedance-mismatch objection all the way through — here is how each
+  concern resolved:
+  - **Trivia lexing (mechanism).** `eng/go/parser.LexTokens` drives the
+    AQL-configured tabnas lexer with `cfg.IgnoreSet = {}`, so `Next` returns
+    `#SP`/`#LN`/`#CM` verbatim, each carrying `Src` + byte offset `SI`. It
+    returns `(tokens, ok)`; `ok` is false when `lex.Err` is set (an
+    unterminated string/backtick, a bad token), the signal the front end uses
+    to fall back.
+  - **Layering (F3) — resolved as option (a).** `formatter` now imports
+    `eng/go/parser` for `LexTokens`. No import cycle
+    (`formatter → eng/parser → eng`; eng/parser imports neither back). The
+    package's engine-dep-free leaf status was the cost, paid deliberately —
+    reusing the ONE configured lexer beats re-declaring AQL's lex
+    customisations in a second place (option (b)'s duplication).
+  - **Coarse-vs-fine impedance — re-coalesced, not re-implemented.**
+    `tabnasTokenize` accumulates a run of adjacent word-part tokens
+    (`#TX #DT #LA #RA #AR #ML #NR #BD #XML`, plus a mid-word `#ST`) into one
+    coarse word, exactly reproducing the hand-lexer's `isDelimiter` word rule
+    — `foo.bar`, `a<b>`, `x="1"/>` each collapse back to one word. A handful
+    of narrow rules close the byte-for-byte gap the fine tokens open:
+    - a lone `#NR` whose literal ends in a bare `.` (`1.`) splits into a
+      number + a dot operator — the hand-lexer only keeps a `.` in a number
+      when a digit follows (`1.5`);
+    - a run of blank lines arrives as ONE `#LN` (`"\n\n\n"`) and is
+      re-split into one `TokNewline` per `\n`;
+    - a standalone `.` (empty word buffer) is a `TokDot`, not glued;
+    - a **backtick literal** is scanned verbatim from source via the shared
+      `scanBacktick` (the flat `Next` loop lacks the grammar-rule context that
+      drives `#TL` lexing, so it mis-lexes the interior — e.g. a `//` inside a
+      URL swallows the line tail into a comment); the swallowed tail is
+      recovered by re-tokenising the byte gap.
+    This is bounded adapter code (≈120 lines), not a second hand-lexer, and it
+    is regression-locked to the hand-lexer by the corpus differential.
+  One supporting finding from the original probe, retained for the record:
   - **The configured lexer's token stream is PROVEN (probe run).** Driving
     the AQL-configured jsonic (`setupBaseTokens` + the template / bignum /
     minilang / xml matchers) via `jsonic.NewLex(src, j.Config())` with
@@ -288,36 +307,20 @@ these as `Fmt.*` AQL):
     `#NR`/`#BD` number, `#ST` string, `#CM` whole line comment, `#LN`/`#SP`
     trivia, `#OS`/`#CS`/`#OB`/`#CB`/`#OP`/`#CP` brackets, `#DT` dot — and
     crucially **`#ML` captures a whole `+re/[a-z]+/` minilang literal** and
-    `#CM` a whole comment, so those need NO special handling. Only two spans
-    need reconstruction to match the hand-lexer's Node model: a backtick
-    literal (lexed as `#BT` … inner tokens … `#BT`; rejoin verbatim by byte
-    span) and a DOTTED word (`foo` `.` `bar` arrive as `#TX #DT #TX`;
-    coalesce adjacent — no `#SP` between — into one `foo.bar` word token, as
-    the hand-lexer does). The remaining risk is purely matching the
-    hand-lexer BYTE-FOR-BYTE so the golden tests and fmt-clean-pinned doc
-    blocks don't churn — the front end has, by construction, no functional
-    benefit (identical output) against real regression risk, which is why it
-    is a maintainer priorities call, not a mechanical task.
-  - **CONCLUSION — impedance mismatch (working the conversion through).**
-    Attempting the token→`Node` conversion surfaces a fundamental
-    incompatibility: the hand-lexer produces COARSE word tokens (its
-    `isDelimiter` is only `[]{}(),;:?!|#`, so `foo.bar`, `a<b>`, `=>`, `x/r`
-    are each ONE word), while the tabnas lexer produces FINE semantic tokens
-    (`foo` `.` `bar`, `<`, `>`, `=>`, `x` `/` `r` separately, per its custom
-    `#DT`/`#LA`/`#RA`/`#AR` tokens). To reproduce the hand-lexer's output a
-    tabnas front end would have to RE-COALESCE those fine tokens back into
-    coarse words — i.e. re-implement the hand-lexer on top of tabnas, MORE
-    code for byte-identical output. The formatter genuinely needs a
-    different lexer than the semantic parser: coarse, trivia-preserving,
-    word-coalescing — which the hand-lexer already IS. So the recommended
-    resolution is **keep the hand-lexer as `DefaultParse`**; the `Parse`
-    seam already satisfies "the parser is a parameter", and a tabnas swap of
-    the DEFAULT is an impedance mismatch, not an improvement. (The probe was
-    not wasted: it surfaced corruption #7 — `##` is a line comment — which
-    is now fixed.)
-  Keep the current lossless hand-lexer as `DefaultParse` — it already
-  preserves comments/newlines/backticks and (post the 7 corruption fixes)
-  is verified corruption-free — so fmt stays correct.
+    `#CM` a whole comment, so those need NO special handling. This is the
+    stream `LexTokens` now returns, and `tabnasTokenize` adapts.
+  - **SUPERSEDED — the impedance mismatch was worked through, not avoided.**
+    The earlier conclusion recommended keeping the hand-lexer as the default
+    because reproducing its COARSE word tokens from tabnas's FINE tokens
+    (`foo.bar` vs `foo`·`.`·`bar`; `x="1"/>` vs `x=`·`"1"`·`/`·`>`) meant
+    re-coalescing — "more code for byte-identical output". That objection was
+    correct about the mechanism (re-coalescing IS required) but the code turned
+    out bounded (≈120 lines of adapter, all covered) and the byte-identity is
+    exactly the property that makes the swap SAFE, verified by the corpus
+    differential. The probe also paid for itself in corruption fixes (#7 `##`
+    is a line comment; and, on the second pass, the `//`-in-backtick line-tail
+    swallow and the `1.`-trailing-dot rule). The default is now the tabnas
+    front end; the hand-lexer stays as `HandParse`, the differential oracle.
 - **Phase 3 — rules.** Rule behaviour DONE in the Go formatter: 72-col,
   backtick-verbatim (`scanBacktick`), and bracketless single param/return
   (`elideFnBrackets`). The declarative **substrate** is DONE: a

@@ -96,13 +96,26 @@ type Node struct {
 // emitter to reproduce them.
 type Parse func(src string) *Node
 
-// DefaultParse is the built-in front end: the lossless lexer plus tree
-// builder. It is the Parse used by Format.
+// DefaultParse is the formatter's default front end: the trivia-preserving
+// tabnas CST parser (TabnasParse). It realises the Q2 requirement that "Fmt
+// should parse, using a tabnas parser" — the production `aql fmt`, the fmt
+// module, the LSP, and the markdown/HTML embedders all reach it through
+// Format. HandParse remains as the independent reference that
+// TestTabnasParseCorpus pins DefaultParse against, byte-for-byte.
 func DefaultParse(src string) *Node {
+	return TabnasParse(src)
+}
+
+// HandParse is the original hand-written lexer/tree-builder front end
+// (tokenize → buildTree). It is retained as the INDEPENDENT reference the
+// tabnas front end is differentially verified against — two front ends that
+// must agree on every input keep each other honest. Injectable via
+// FormatWith like any other Parse.
+func HandParse(src string) *Node {
 	return buildTree(tokenize(src))
 }
 
-// Format formats AQL source code using the default parser.
+// Format formats AQL source code using the default (tabnas) parser.
 func Format(src string) string {
 	return FormatWith(src, DefaultParse)
 }

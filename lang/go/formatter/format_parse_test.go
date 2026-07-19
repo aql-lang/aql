@@ -27,4 +27,10 @@ func TestFormatWithParserSeam(t *testing.T) {
 	if got, want := FormatWith("a  b", DefaultParse), Format("a  b"); got != want {
 		t.Errorf("DefaultParse divergence: %q vs %q", got, want)
 	}
+
+	// The hand-lexer reference and the (default) tabnas front end agree — the
+	// same equivalence TestTabnasParseCorpus pins across the whole corpus.
+	if got, want := FormatWith("def  x  1", HandParse), FormatWith("def  x  1", DefaultParse); got != want {
+		t.Errorf("HandParse vs DefaultParse divergence: %q vs %q", got, want)
+	}
 }
