@@ -267,22 +267,77 @@ func singleCharToken(ch byte) (TokenKind, bool) {
 	return 0, false
 }
 
+// scanNumber consumes a complete AQL numeric literal starting at start,
+// so `aql fmt` never splits one apart. It covers plain decimals, the `0d`
+// BigInteger/BigDecimal form, `0x`/`0o`/`0b` base literals, `_` digit
+// separators, and `e` exponents. A trailing `.` is taken only when a digit
+// follows, leaving `0d5.foo` as `0d5` + dot-access
+// (eng/go/parser/grammar.go).
 func scanNumber(src string, start int) string {
 	j := start
 	if j < len(src) && src[j] == '-' {
 		j++
 	}
-	for j < len(src) && src[j] >= '0' && src[j] <= '9' {
-		j++
-	}
-	if j < len(src) && src[j] == '.' && j+1 < len(src) && src[j+1] >= '0' && src[j+1] <= '9' {
-		j++
-		for j < len(src) && src[j] >= '0' && src[j] <= '9' {
-			j++
+	// Base-prefixed literals: 0d/0x/0o/0b, each requiring a matching digit
+	// after the two-char prefix (else `0` is a plain number and the letter
+	// starts a word, e.g. `0dfoo` → `0` `dfoo`).
+	if j+2 < len(src) && src[j] == '0' {
+		switch src[j+1] {
+		case 'd', 'D':
+			if isDecDigit(src[j+2]) {
+				return src[start:scanRealTail(src, scanDigitRun(src, j+2, isDecDigit), isDecDigit)]
+			}
+		case 'x', 'X':
+			if isHexDigit(src[j+2]) {
+				return src[start:scanDigitRun(src, j+2, isHexDigit)]
+			}
+		case 'o', 'O':
+			if isOctDigit(src[j+2]) {
+				return src[start:scanDigitRun(src, j+2, isOctDigit)]
+			}
+		case 'b', 'B':
+			if isBinDigit(src[j+2]) {
+				return src[start:scanDigitRun(src, j+2, isBinDigit)]
+			}
 		}
 	}
-	return src[start:j]
+	// Plain decimal: digit run, optional fraction, optional exponent.
+	return src[start:scanRealTail(src, scanDigitRun(src, j, isDecDigit), isDecDigit)]
 }
+
+// scanRealTail consumes an optional `.<digits>` fraction and an optional
+// `e<sign?><digits>` exponent starting at j, using digit-class pred for
+// both the mantissa fraction and the exponent digits.
+func scanRealTail(src string, j int, pred func(byte) bool) int {
+	if j+1 < len(src) && src[j] == '.' && pred(src[j+1]) {
+		j = scanDigitRun(src, j+1, pred)
+	}
+	if j < len(src) && (src[j] == 'e' || src[j] == 'E') {
+		k := j + 1
+		if k < len(src) && (src[k] == '+' || src[k] == '-') {
+			k++
+		}
+		if k < len(src) && isDecDigit(src[k]) {
+			j = scanDigitRun(src, k, isDecDigit)
+		}
+	}
+	return j
+}
+
+// scanDigitRun consumes a run of pred-digits and `_` separators from j.
+func scanDigitRun(src string, j int, pred func(byte) bool) int {
+	for j < len(src) && (pred(src[j]) || src[j] == '_') {
+		j++
+	}
+	return j
+}
+
+func isDecDigit(c byte) bool { return c >= '0' && c <= '9' }
+func isHexDigit(c byte) bool {
+	return isDecDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+func isOctDigit(c byte) bool { return c >= '0' && c <= '7' }
+func isBinDigit(c byte) bool { return c == '0' || c == '1' }
 
 func isDelimiter(b byte) bool {
 	switch b {
