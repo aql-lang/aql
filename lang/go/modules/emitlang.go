@@ -341,33 +341,12 @@ func emitRegisterValidate(args []native.Value, r *native.Registry) (string, erro
 	if !ok || len(fnDef.Signatures) == 0 {
 		return "", r.AqlError("emit_bad_signature", "register: expected a function value", "register")
 	}
-	for _, sig := range fnDef.Signatures {
-		if len(sig.Params) < 2 {
-			return "", r.AqlErrorHint("emit_bad_signature",
-				"register: every signature must start [value:Any opts:Map …] and return a value",
-				"register",
-				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-		}
-		p0 := sig.Params[0].Type
-		if p0 == nil || !p0.Equal(native.TAny) {
-			return "", r.AqlErrorHint("emit_bad_signature",
-				"register: the first parameter must be value:Any so the emitter accepts every value",
-				"register",
-				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-		}
-		p1 := sig.Params[1].Type
-		if p1 == nil || !p1.ConformsTo(native.TMap) {
-			return "", r.AqlErrorHint("emit_bad_signature",
-				"register: every signature must start [value:Any opts:Map …] and return a String",
-				"register",
-				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-		}
-		if len(sig.Returns) == 0 || sig.Returns[0] == nil || !sig.Returns[0].ConformsTo(native.TString) {
-			return "", r.AqlErrorHint("emit_bad_signature",
-				"register: every signature must return a String (emit is value→string)",
-				"register",
-				"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
-		}
+	// The signature contract is shared with the `emit` macro's fn-operand
+	// form (native.EmitLangFnSigWhy) so both surfaces enforce byte-identical
+	// requirements.
+	if why := native.EmitLangFnSigWhy(fnDef); why != "" {
+		return "", r.AqlErrorHint("emit_bad_signature", "register: "+why, "register",
+			"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
 	}
 	return "emit_" + name, nil
 }

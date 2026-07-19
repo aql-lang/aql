@@ -1613,20 +1613,14 @@ func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerI
 	if !ok || len(fnDef.Signatures) == 0 {
 		return r.AqlError("mini_bad_signature", "register: expected a function value", "register")
 	}
-	filterShaped := true
-	for _, sig := range fnDef.Signatures {
-		if len(sig.Params) < 2 ||
-			sig.Params[0].Type == nil || !sig.Params[0].Type.ConformsTo(native.TString) ||
-			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(native.TMap) {
-			return r.AqlErrorHint("mini_bad_signature",
-				"register: every signature must start with the standard prefix [src:String opts:Map …]",
-				"register",
-				"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
-		}
-		if len(sig.Params) != 3 {
-			filterShaped = false
-		}
+	// The standard-prefix contract is shared with the `mini` macro's
+	// fn-operand form (native.MiniLangFnSigWhy) so both surfaces enforce
+	// byte-identical requirements; likewise the filter-shape probe.
+	if why := native.MiniLangFnSigWhy(fnDef); why != "" {
+		return r.AqlErrorHint("mini_bad_signature", "register: "+why, "register",
+			"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
 	}
+	filterShaped := native.MiniLangFnFilterShaped(fnDef)
 	key := "lang_" + name
 	if err := registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
 		return r.AqlError("mini_kind_exists",

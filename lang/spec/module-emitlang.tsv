@@ -81,3 +81,18 @@ import "aql:emitlang"  EmitLang.emit_tsv [{a:1 b:2}] {} end	'a\tb\n1\t2\n'	emit_
 import "aql:emitlang"  EmitLang.emit_toml {a:1} {} end	'a = 1'	emit_toml — key = value
 import "aql:emitlang"  EmitLang.emit_ini {a:1} {} end	'a=1'	emit_ini — flat key=value
 import "aql:emitlang"  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml — Xml element
+#
+# §fnv  an emitter VALUE as the target — `emit <fn> <opts?> <data>`. The
+#       first operand may BE the emitter: a Function (or a word bound to one)
+#       whose every signature is [value:Any opts:Map …] → [String …] — the
+#       same contract EmitLang.register enforces (one shared validator). A
+#       registered kind wins a name collision; without these forms a Function
+#       operand would fall to emit_auto and JSON-emit the fn value itself.
+import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}	'UP'	a word bound to an emitter fn is the value form spelled by name
+import "aql:emitlang"  emit (fn [[value:Any opts:Map] [String] ['VF']]) {a:1}	'VF'	an anonymous emitter fn used inline
+import "aql:emitlang"  def px fn [[value:Any opts:Map] [String] [(opts get 'p') add (emit value)]]  emit px {p:'X:'} {a:1}	'X:{"a":1}'	3-arg form: opts in the middle, data last — opts reach the fn
+#
+# §fnv  value-form negatives — the [value opts]→String contract is enforced
+import "aql:emitlang"  emit (fn [[value:Any opts:Map] [Integer] [1]]) {a:1}	ERROR:emit_bad_signature	an emitter must return a String
+import "aql:emitlang"  emit (fn [[a:Integer b:Map] [String] ['x']]) {a:1}	ERROR:emit_bad_signature	the first parameter must be value:Any
+import "aql:emitlang"  emit (Function) {a:1}	ERROR:uncalled_function	the Function TYPE literal is not an emitter value (auto path, unchanged)

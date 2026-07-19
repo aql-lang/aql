@@ -65,7 +65,7 @@ func init() {
 
 	register(&Entry{
 		Word:    "mini",
-		Summary: "Call an embedded mini-language: mini <kind> <src> <opts?>.",
+		Summary: "Call an embedded mini-language: mini <kind|fn> <src> <opts?>.",
 		Description: "Conceptually every mini expansion produces a FUNCTION in place with src and opts bound. " +
 			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
@@ -74,12 +74,16 @@ func init() {
 			"MiniLang.Jp, MiniLang.Jq, MiniLang.Xp — user kinds too) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
 			"Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
-			"register your own with MiniLang.register). An unknown kind is an expansion-time error. Note " +
+			"register your own with MiniLang.register). An unknown kind is an expansion-time error. " +
+			"The first argument may instead BE the transducer — a fn (or a word bound to one) whose every " +
+			"signature starts with the standard [src:String opts:Map] prefix — called directly with no kind " +
+			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
 			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
 			`import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m          ;# => 'bc' — a stored matcher`,
 			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
+			`import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'  ;# => 'abab' — a fn as the transducer`,
 		},
 	})
 
@@ -106,7 +110,7 @@ func init() {
 
 	register(&Entry{
 		Word:    "emit",
-		Summary: "Emit a value to a string: emit <kind> <opts?> <data> (kind optional — defaults to the value's natural format).",
+		Summary: "Emit a value to a string: emit <kind|fn> <opts?> <data> (kind optional — defaults to the value's natural format).",
 		Description: "The symmetric inverse of `parse`: expands to the standard call " +
 			"`EmitLang get emit_<kind> <data> <opts> end` at the call site. The `data` is the " +
 			"required LAST argument and `opts` is the optional middle one. The kind is OPTIONAL — " +
@@ -117,10 +121,13 @@ func init() {
 			"for all formats. Emitters live in the aql:emitlang module (import it first; " +
 			"EmitLang.kinds lists them; register your own with EmitLang.register). An unknown " +
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
-			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported.",
+			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported. The first argument may " +
+			"instead BE the emitter — a fn (or a word bound to one) whose every signature is " +
+			"[value:Any opts:Map] → [String] — called directly with no kind lookup.",
 		Examples: []string{
 			`import "aql:emitlang"  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
 			`import "aql:emitlang"  emit json {pretty:true} {a:1} ;# => indented json`,
+			`import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}  ;# => 'UP' — a fn as the emitter`,
 		},
 	})
 }

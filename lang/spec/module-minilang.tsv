@@ -318,3 +318,23 @@ import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]] 
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  def f (+poly/x/)  f/r is (MiniLang.Poly)	true	a filter-shaped user kind mints its member type at register time
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  (+poly/x/) is (MiniLang.Re)	false	the user kind's partial is not a builtin kind's
 import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.Gen	None	a non-filter kind never produces a tagged partial, so no type is minted
+#
+# §fnv  a mini-language VALUE as the transducer — `mini <fn> <src> <opts?>`.
+#       The first operand may BE the transducer: a Function (or a word bound
+#       to one) whose every signature starts with the standard
+#       [src:String opts:Map …] prefix — the same contract MiniLang.register
+#       enforces (one shared validator). A registered kind wins a name
+#       collision. A FILTER-shaped fn (every sig [src opts subject]) yields
+#       the same partially-applied Function a registered filter kind yields —
+#       but with no MiniKind tag, so the name-keyed member types
+#       (MiniLang.Re, …) do not apply to it.
+import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'	'abab'	a word bound to a generator fn is the value form spelled by name
+import "aql:minilang"  mini (fn [[src:String opts:Map] [String] [src]]) 'zz'	'zz'	an anonymous transducer fn used inline
+import "aql:minilang"  def g fn [[src:String opts:Map] [String] [opts get 'p']]  mini g 'zz' {p:'q'}	'q'	3-arg form: the opts map reaches the fn
+import "aql:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  "banana" mini cnt 'an'	77	a filter-shaped fn partial-applies: the subject comes from the stack
+import "aql:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  def c (mini cnt 'an')  "hi" c	77	the filter partial is storable and applies later
+#
+# §fnv  value-form negatives — the [src opts] prefix contract is enforced
+import "aql:minilang"  mini (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:mini_bad_signature	a non-transducer fn is rejected (bad prefix)
+import "aql:minilang"  def k 42  mini k 'x'	ERROR:mini_unknown_lang	a non-fn binding is not a transducer — unknown kind unchanged
+import "aql:minilang"  mini (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a transducer value
