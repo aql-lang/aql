@@ -113,73 +113,17 @@ func micronPathonGrammar(order []string) *tabnas.Tabnas {
 		})
 }
 
-// MicronLiteralSpec describes one EXTRA literal shape merged into the
-// Micron grammar — the opt-in hook that lets a user-defined Micron
-// kind join the `+m:…` literal (MiniLang.micron in aql:minilang wraps
-// this for AQL registrations; hosts can call MicronGrammarWith
-// directly). The kind's shape is a whole tabnas GRAMMAR, not a bare
-// regexp: its declared match token(s) gate the shape at the lexer
-// (the merged dispatch is token-driven), and its rules/actions own
-// recognition and node construction. The value the grammar leaves as
-// the parse node is the shape's result; the caller (the aql:minilang
-// bridge) routes it through the kind's builder AFTER the parse.
-type MicronLiteralSpec struct {
-	// Tag identifies the shape's grammar in the merge — the kind's
-	// name. Merge requires it distinct from Emailon/Urlon/Pathon and
-	// from every other extra.
-	Tag string
-	// Tokens are the shape's gate match-token names, in the order they
-	// slot into the computed TokenOrder between the builtin leaves and
-	// the Pathon catch-all. Each must be unique across the merge set
-	// (the tabnas merge unifies custom tokens BY NAME — a collision
-	// would silently alias two shapes).
-	Tokens []string
-	// Grammar builds or returns the kind's literal grammar. It
-	// receives the computed TokenOrder for callers that rebuild per
-	// merge (the builtin leaves do); a pre-built user grammar ignores
-	// it — such a grammar must carry NO TokenOrder of its own, so the
-	// commutative merge adopts the builtins' computed order and
-	// re-allocates the user tokens into their precedence slot.
-	Grammar func(order []string) (*tabnas.Tabnas, error)
-}
-
-// MicronGrammarWith builds the merged Micron literal grammar with the
-// given extra shapes spliced between the builtin leaves and the Pathon
-// catch-all: Emailon, Urlon, extras (in order), Pathon. The builtin
-// leaves carry the SAME computed TokenOrder (which includes the
-// extras' gate tokens), so the commutative merge unifies the lexer
-// precedence without conflict. Extra token names are validated unique
-// against the builtin tokens and each other. With no extras this is
-// exactly the builtin merged grammar.
-func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
-	order := make([]string, 0, 3+len(extras))
-	order = append(order, "#EMAILON", "#URLON")
-	seen := map[string]string{"#EMAILON": "Emailon", "#URLON": "Urlon", "#PATHON": "Pathon"}
-	for _, e := range extras {
-		for _, tok := range e.Tokens {
-			if owner, dup := seen[tok]; dup {
-				return nil, fmt.Errorf(
-					"micron grammar: token %s of %s collides with %s (the merge unifies tokens by name)",
-					tok, e.Tag, owner)
-			}
-			seen[tok] = e.Tag
-			order = append(order, tok)
-		}
-	}
-	order = append(order, "#PATHON")
-
+// micronBuildMergedGrammar builds THE merged Micron literal grammar:
+// Emailon ~ Urlon ~ Pathon. The leaf set is FIXED — the `+m` literal is
+// NOT extensible (the former MicronLiteralSpec/MicronGrammarWith extras
+// hook was removed with the frozen kind namespaces): a custom Micron
+// source is parsed by an ordinary parser fn value and constructed with
+// `make`, never by joining this merge.
+func micronBuildMergedGrammar() (*tabnas.Tabnas, error) {
+	order := []string{"#EMAILON", "#URLON", "#PATHON"}
 	m, err := micronEmailonGrammar(order).Merge(micronUrlonGrammar(order))
 	if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 		return nil, err
-	}
-	for _, e := range extras {
-		g, gerr := e.Grammar(order)
-		if gerr != nil {
-			return nil, fmt.Errorf("micron grammar: %s: %w", e.Tag, gerr)
-		}
-		if m, err = m.Merge(g); err != nil {
-			return nil, err
-		}
 	}
 	return m.Merge(micronPathonGrammar(order))
 }
@@ -188,9 +132,7 @@ func MicronGrammarWith(extras ...MicronLiteralSpec) (*tabnas.Tabnas, error) {
 // Emailon ~ Urlon ~ Pathon (no extras). Built on first use; the build
 // cannot fail (distinct tags, identical options), but any error is
 // kept and surfaced per parse rather than panicking (ADR-005).
-var micronMergedGrammar = sync.OnceValues(func() (*tabnas.Tabnas, error) {
-	return MicronGrammarWith()
-})
+var micronMergedGrammar = sync.OnceValues(micronBuildMergedGrammar)
 
 // micronParseMu serializes merged-grammar parses — the tabnas instance
 // is shared process-wide and a parse is not documented reentrant.

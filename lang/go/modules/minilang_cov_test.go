@@ -207,169 +207,30 @@ func TestMiniCovMicronBuiltin(t *testing.T) {
 	}
 }
 
-// TestMiniCovMicronUserKind drives the user-Micron literal machinery:
-// token-only registration claims its span, the builder's instance carries
-// properties, builtin leaves keep their spans, and a gate mismatch falls
-// through to Pathon.
-func TestMiniCovMicronUserKind(t *testing.T) {
-	reg := mcovImp + `def Ticketon refine Micron {id:String}  ` +
-		`MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  `
-	r := mcovReg(t)
-	out := mcovRun(t, r, reg+`mini m 'T-123' typeof`)
-	if out[0].String() != "Ticketon" {
-		t.Errorf("registered kind typeof = %s, want Ticketon", out[0].String())
+// TestMiniCovMicronTombstone pins the frozen +m literal grammar: the
+// former MiniLang.micron user-shape hook raises mini_registry_frozen
+// unconditionally — with and without legacy args — and a user Micron
+// TYPE still works through make (only the literal sugar is builtin-only).
+func TestMiniCovMicronTombstone(t *testing.T) {
+	if err := mcovErr(t, mcovReg(t), mcovImp+`MiniLang.micron`); err == nil ||
+		!strings.Contains(err.Error(), "mini_registry_frozen") {
+		t.Errorf("micron tombstone must raise mini_registry_frozen, got %v", err)
 	}
-	r2 := mcovReg(t)
-	out2 := mcovRun(t, r2, reg+`(mini m 'T-123').id`)
-	if s, _ := out2[0].AsConcreteString(); s != "T-123" {
-		t.Errorf("builder instance .id = %v, want T-123", out2[0])
-	}
-	r3 := mcovReg(t)
-	out3 := mcovRun(t, r3, reg+`mini m 'alice@example.com' typeof`)
-	if out3[0].String() != "Emailon" {
-		t.Errorf("builtin leaf should keep its span, got %s", out3[0].String())
-	}
-	r4 := mcovReg(t)
-	out4 := mcovRun(t, r4, reg+`mini m 'T-nope' typeof`)
-	if out4[0].String() != "Pathon" {
-		t.Errorf("gate mismatch should fall to Pathon, got %s", out4[0].String())
-	}
-}
-
-// TestMiniCovMicronRuledGrammar covers the RULED registration paths: a
-// gated val alternate with a ref action (the userA arm) and a plain gated
-// alternate defaulting to the matched span.
-func TestMiniCovMicronRuledGrammar(t *testing.T) {
-	r := mcovReg(t)
-	out := mcovRun(t, r, mcovImp+`def Depton refine Micron {team:String}  `+
-		`MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-[a-z]+/'}}} rule:{val:{open:[{s:'#DP' a:'@team'}]}} ref:{'@team': ([nd:Any] => ['ops'])}} ([t:String] => [make Depton {team:t}])  end  `+
-		`(mini m 'D-x').team`)
-	if s, _ := out[0].AsConcreteString(); s != "ops" {
-		t.Errorf("ruled grammar with ref action: .team = %v, want ops", out[0])
-	}
-
-	r2 := mcovReg(t)
-	out2 := mcovRun(t, r2, mcovImp+`def Depton refine Micron {team:String}  `+
-		`MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-[a-z]+/'}}} rule:{val:{open:[{s:'#DP'}]}}} ([s:String] => [make Depton {team:s}])  end  `+
-		`(mini m 'D-ops').team`)
-	if s, _ := out2[0].AsConcreteString(); s != "D-ops" {
-		t.Errorf("plain gated alternate should default to the span, got %v", out2[0])
-	}
-}
-
-// TestMiniCovMicronBuilderForm covers the aql:parse builder form of
-// MiniLang.micron — a Parse.grammar value consumed like Parse.parser
-// consumes one.
-func TestMiniCovMicronBuilderForm(t *testing.T) {
-	r := mcovReg(t)
-	out := mcovRun(t, r, mcovImp+`import "aql:parse"  def Baron refine Micron {v:String}  `+
-		`def g (Parse.grammar)  Parse.spec g {options:{match:{token:{'#BX':'@/B[0-9]+/'}}}}  `+
-		`MiniLang.micron Baron g ([s:String] => [make Baron {v:s}])  end  mini m 'B77' typeof`)
-	if out[0].String() != "Baron" {
-		t.Errorf("builder-form kind typeof = %s, want Baron", out[0].String())
-	}
-}
-
-// TestMiniCovMicronBuilderNegatives pins the builder-form refusals:
-// a consumed builder, a builder carrying its own tag, and a builder
-// whose gate token collides with a builtin leaf (caught at finalize —
-// the builder form bypasses the map-decidable check).
-func TestMiniCovMicronBuilderNegatives(t *testing.T) {
-	pre := mcovImp + `import "aql:parse"  import "aql:parselang"  def Baron refine Micron {v:String}  `
-	fn := ` ([s:String] => [make Baron {v:s}])`
-
-	if err := mcovErr(t, mcovReg(t), pre+
-		`def g (Parse.grammar)  Parse.abnf g 'x = "a"' {start:'x'}  def used (Parse.parser g)  end  `+
-		`MiniLang.micron Baron g`+fn); err == nil ||
-		!strings.Contains(err.Error(), "parse_grammar_done") {
-		t.Errorf("a consumed builder should be refused, got %v", err)
-	}
-
-	if err := mcovErr(t, mcovReg(t), pre+
-		`def g (Parse.grammar)  Parse.spec g {options:{tag:'x' match:{token:{'#BX':'@/B[0-9]+/'}}}}  `+
-		`MiniLang.micron Baron g`+fn); err == nil ||
-		!strings.Contains(err.Error(), "must not set options.tag") {
-		t.Errorf("a tagged builder should be refused, got %v", err)
-	}
-
-	if err := mcovErr(t, mcovReg(t), pre+
-		`def g (Parse.grammar)  Parse.spec g {options:{match:{token:{'#EMAILON':'@/x/'}}}}  `+
-		`MiniLang.micron Baron g`+fn); err == nil ||
-		!strings.Contains(err.Error(), "collides with Emailon") {
-		t.Errorf("a builtin-token builder should collide at finalize, got %v", err)
-	}
-}
-
-// TestMiniCovMicronBuilderContract pins the post-parse Build rules: a
-// builder that returns the wrong shape and a ref action that raises
-// during the parse are both loud.
-func TestMiniCovMicronBuilderContract(t *testing.T) {
-	// Wrong instance back from the builder.
 	if err := mcovErr(t, mcovReg(t), mcovImp+`def Ticketon refine Micron {id:String}  `+
-		`MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [42])  end  `+
-		`mini m 'T-1'`); err == nil ||
-		!strings.Contains(err.Error(), "must return one Ticketon instance") {
-		t.Errorf("a non-conforming builder result should be loud, got %v", err)
+		`MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])`); err == nil ||
+		!strings.Contains(err.Error(), "mini_registry_frozen") {
+		t.Errorf("a legacy micron registration must raise mini_registry_frozen, got %v", err)
 	}
-
-	// A ref action raising mid-parse surfaces via the claimed-span rule.
-	if err := mcovErr(t, mcovReg(t), mcovImp+`def Depton refine Micron {team:String}  `+
-		`MiniLang.micron Depton {options:{match:{token:{'#DP':'@/D-[a-z]+/'}}} rule:{val:{open:[{s:'#DP' a:'@team'}]}} ref:{'@team': ([nd:Any] => [raise 'cbboom'])}} ([t:String] => [make Depton {team:t}])  end  `+
-		`mini m 'D-x'`); err == nil || !strings.Contains(err.Error(), "cbboom") {
-		t.Errorf("a raising grammar callback should surface loudly, got %v", err)
-	}
-
-	// The empty literal keeps riding the builtin fast path even with
-	// registrations present.
+	// The user TYPE itself is untouched; +m never claims its spans (Pathon
+	// catch-all), and make still constructs instances.
 	r := mcovReg(t)
-	out := mcovRun(t, r, mcovImp+`def Ticketon refine Micron {id:String}  `+
-		`MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])  end  `+
-		`mini m '' typeof`)
-	if out[0].String() != "Pathon" {
-		t.Errorf("empty literal should stay the empty relative path, got %s", out[0].String())
+	out := mcovRun(t, r, mcovImp+`def Ticketon refine Micron {id:String}  (make Ticketon {id:'T-1'}) typeof`)
+	if out[0].String() != "Ticketon" {
+		t.Errorf("make Ticketon typeof = %s, want Ticketon", out[0].String())
 	}
-}
-
-// TestMiniCovMicronNegatives pins MiniLang.micron's refusals.
-func TestMiniCovMicronNegatives(t *testing.T) {
-	mk := `def Baron refine Micron {v:Integer}  `
-	fn := ` ([s:String] => [make Baron {v:1}])`
-	cases := []struct{ name, src, want string }{
-		{"builtin kind refused", mcovImp +
-			`MiniLang.micron Emailon {options:{match:{token:{'#T':'@/x/'}}}} ([s:String] => [s])`,
-			"builtin Micron"},
-		{"non-Micron kind refused", mcovImp +
-			`MiniLang.micron Integer {options:{match:{token:{'#T':'@/x/'}}}} ([s:String] => [s])`,
-			"expected a Micron kind"},
-		{"retired string form", mcovImp + mk +
-			`MiniLang.micron Baron 'B[0-9]+'` + fn, "expected a grammar"},
-		{"no match token", mcovImp + mk +
-			`MiniLang.micron Baron {options:{}}` + fn, "at least one match token"},
-		{"options.tag forbidden", mcovImp + mk +
-			`MiniLang.micron Baron {options:{tag:'x' match:{token:{'#T':'@/x/'}}}}` + fn,
-			"must not set options.tag"},
-		{"builtin token collision", mcovImp + mk +
-			`MiniLang.micron Baron {options:{match:{token:{'#PATHON':'@/x/'}}}}` + fn,
-			"collides with a builtin leaf"},
-		{"duplicate registration", mcovImp + mk +
-			`MiniLang.micron Baron {options:{match:{token:{'#B1':'@/b/'}}}}` + fn + ` end ` +
-			`MiniLang.micron Baron {options:{match:{token:{'#B2':'@/c/'}}}}` + fn,
-			"already registered"},
-		{"cross-kind token collision", mcovImp + mk + `def Caron refine Micron {v:Integer}  ` +
-			`MiniLang.micron Baron {options:{match:{token:{'#TK':'@/b/'}}}}` + fn + ` end ` +
-			`MiniLang.micron Caron {options:{match:{token:{'#TK':'@/c/'}}}} ([s:String] => [make Caron {v:1}])`,
-			"collides with Baron"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			err := mcovErr(t, mcovReg(t), c.src)
-			if err == nil {
-				t.Fatalf("expected error for %s", c.name)
-			}
-			if !strings.Contains(err.Error(), c.want) {
-				t.Fatalf("error %q does not contain %q", err.Error(), c.want)
-			}
-		})
+	out2 := mcovRun(t, r, `mini m 'T-123' typeof`)
+	if out2[0].String() != "Pathon" {
+		t.Errorf("an unclaimed span stays a Pathon, got %s", out2[0].String())
 	}
 }
 
@@ -611,96 +472,6 @@ func TestMiniCovRunReDirect(t *testing.T) {
 	}
 }
 
-// TestMiniCovStateAccessorsDirect pins the create=false arm of the
-// micron-literal per-registry state accessor.
-func TestMiniCovStateAccessorsDirect(t *testing.T) {
-	r := mcovReg(t)
-	if s := micronLitStateFor(r, false); s != nil {
-		t.Errorf("no micron-lit state expected on a fresh registry, got %v", s)
-	}
-}
-
-// mcovTokenGrammarMap builds {options:{match:{token:{tok:pat}}}} as
-// concrete ordered maps for the direct check-mode tests.
-func mcovTokenGrammarMap(tok, pat string) native.Value {
-	tokens := native.NewOrderedMap()
-	tokens.Set(tok, native.NewString(pat))
-	match := native.NewOrderedMap()
-	match.Set("token", native.NewMap(tokens))
-	options := native.NewOrderedMap()
-	options.Set("match", native.NewMap(match))
-	spec := native.NewOrderedMap()
-	spec.Set("options", native.NewMap(options))
-	return native.NewMap(spec)
-}
-
-// TestMiniCovMicronLitReturnsDirect drives MiniLang.micron's check-mode
-// hook: a non-Micron kind and the retired String shape both surface
-// diagnostics with the runtime message.
-func TestMiniCovMicronLitReturnsDirect(t *testing.T) {
-	r := mcovReg(t)
-	done := r.Check.Begin()
-	defer done()
-
-	fn := mcovFilterFn()
-
-	// Non-Micron kind.
-	out := miniMicronLitReturns([]native.Value{
-		native.NewTypeLiteral(native.TInteger), native.NewString("x"), fn}, r)
-	if len(out) != 0 {
-		t.Errorf("expected no returns, got %v", out)
-	}
-	if len(r.Check.Diagnostics) == 0 {
-		t.Fatal("a non-Micron kind should add a diagnostic")
-	}
-	if r.Check.Diagnostics[0].Code != "micron_literal" {
-		t.Errorf("diagnostic code = %s, want micron_literal", r.Check.Diagnostics[0].Code)
-	}
-
-	// A user Micron kind with the RETIRED string shape.
-	userKind := r.Types.MintType("Covon", native.TMicron)
-	kindV := native.NewTypeLiteral(userKind)
-	before := len(r.Check.Diagnostics)
-	miniMicronLitReturns([]native.Value{kindV, native.NewString("B[0-9]+"), fn}, r)
-	if len(r.Check.Diagnostics) != before+1 {
-		t.Fatalf("retired string shape should add one diagnostic, got %+v", r.Check.Diagnostics[before:])
-	}
-	if !strings.Contains(r.Check.Diagnostics[before].Detail, "expected a grammar") {
-		t.Errorf("diagnostic %q should carry the grammar migration message", r.Check.Diagnostics[before].Detail)
-	}
-
-	// A Map shape with no gate token flags via micronSpecMapCheck.
-	empty := native.NewOrderedMap()
-	before2 := len(r.Check.Diagnostics)
-	miniMicronLitReturns([]native.Value{kindV, native.NewMap(empty), fn}, r)
-	if len(r.Check.Diagnostics) != before2+1 {
-		t.Fatalf("token-less grammar map should add one diagnostic")
-	}
-	if !strings.Contains(r.Check.Diagnostics[before2].Detail, "match token") {
-		t.Errorf("diagnostic %q should name the missing match token", r.Check.Diagnostics[before2].Detail)
-	}
-
-	// A well-formed grammar map dry-replays its steps cleanly.
-	before3 := len(r.Check.Diagnostics)
-	miniMicronLitReturns([]native.Value{kindV, mcovTokenGrammarMap("#TK", "@/T-[0-9]+/"), fn}, r)
-	if len(r.Check.Diagnostics) != before3 {
-		t.Errorf("a valid grammar map should add no diagnostics, got %+v", r.Check.Diagnostics[before3:])
-	}
-
-	// An invalid token regexp flags at the dry replay with the runtime
-	// message.
-	before4 := len(r.Check.Diagnostics)
-	miniMicronLitReturns([]native.Value{kindV, mcovTokenGrammarMap("#TK", "@/T-[0-9+/"), fn}, r)
-	if len(r.Check.Diagnostics) != before4+1 {
-		t.Fatalf("an invalid token regexp should add one diagnostic, got %+v", r.Check.Diagnostics[before4:])
-	}
-
-	// A non-concrete options section is skipped leniently.
-	lenientSpec := native.NewOrderedMap()
-	lenientSpec.Set("options", native.NewTypeLiteral(native.TMap))
-	before5 := len(r.Check.Diagnostics)
-	miniMicronLitReturns([]native.Value{kindV, native.NewMap(lenientSpec), fn}, r)
-	if len(r.Check.Diagnostics) != before5 {
-		t.Errorf("a non-concrete options section must be skipped, got %+v", r.Check.Diagnostics[before5:])
-	}
-}
+// (The micron-literal state accessor, grammar-map validator and
+// check-mode dry-pass tests died with the MiniLang.micron tombstone —
+// TestMiniCovMicronTombstone pins the frozen surface.)

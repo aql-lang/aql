@@ -1,16 +1,12 @@
 package eng
 
 import (
-	"fmt"
-	"regexp"
 	"testing"
-
-	tabnas "github.com/tabnas/parser/go"
 )
 
-// micronTestOrder is the no-extras token order the standalone-grammar
-// tests build with — the same order MicronGrammarWith computes when no
-// user shapes are registered.
+// micronTestOrder is the FIXED token order the standalone-grammar tests
+// build with — the same order micronBuildMergedGrammar uses (the +m
+// literal grammar is not extensible).
 var micronTestOrder = []string{"#EMAILON", "#URLON", "#PATHON"}
 
 // TestMicronMergedGrammarDispatch pins the merged literal grammar's
@@ -138,77 +134,23 @@ func TestMicronMergeCommutative(t *testing.T) {
 	}
 }
 
-// testExtraGrammar builds a token-only extra shape's grammar the way
-// the aql:minilang bridge does: an anchored gate token, NO TokenOrder
-// of its own (the merge adopts the builtins' computed order), and one
-// val open-alternate whose action produces the shape's node.
-func testExtraGrammar(tag, token string, pattern *regexp.Regexp, act func(s string) any) *tabnas.Tabnas {
-	j := tabnas.Make(tabnas.Options{
-		Tag: tag,
-		Match: &tabnas.MatchOptions{
-			Token: map[string]*regexp.Regexp{token: pattern},
-		},
-	})
-	tin := j.Token(token)
-	j.Rule("val", func(rs *tabnas.RuleSpec, _ *tabnas.Parser) {
-		rs.AddOpen(&tabnas.AltSpec{
-			S: [][]tabnas.Tin{{tin}},
-			A: func(r *tabnas.Rule, ctx *tabnas.Context) {
-				r.Node = act(fmt.Sprintf("%v", r.O0.ResolveVal(r, ctx)))
-			},
-		})
-	})
-	return j
-}
+// (The extras hook — MicronLiteralSpec / MicronGrammarWith — was removed
+// with the frozen kind namespaces: the +m literal grammar is fixed to the
+// builtin leaves, so the former testExtraGrammar / extras / token-collision
+// pins died with it. micronBuildMergedGrammar is pinned below.)
 
-// TestMicronGrammarWithExtras pins the opt-in hook: an extra shape's
-// GRAMMAR merges BETWEEN the builtin leaves and the Pathon catch-all —
-// it claims spans Pathon would otherwise catch, never spans the
-// builtin leaves own, and its own actions produce the shape's node
-// (construction rides in the grammar; the aql:minilang bridge routes
-// it through the kind's builder after the parse).
-func TestMicronGrammarWithExtras(t *testing.T) {
-	actCalls := 0
-	ticket := MicronLiteralSpec{
-		Tag:    "Ticketon",
-		Tokens: []string{"#U0TICKETON"},
-		Grammar: func(_ []string) (*tabnas.Tabnas, error) {
-			return testExtraGrammar("Ticketon", "#U0TICKETON",
-				regexp.MustCompile(`\AT-[0-9]+\z`),
-				func(s string) any {
-					actCalls++
-					fields := NewOrderedMap()
-					fields.Set("id", NewString(s))
-					return NewValueRaw(TMicron, MicronPayload{Fields: fields})
-				}), nil
-		},
-	}
-	m, err := MicronGrammarWith(ticket)
+// TestMicronBuildMergedGrammar pins the fixed builtin merge directly: each
+// leaf claims its span and the Pathon catch-all takes the rest.
+func TestMicronBuildMergedGrammar(t *testing.T) {
+	m, err := micronBuildMergedGrammar()
 	if err != nil {
-		t.Fatalf("MicronGrammarWith: %v", err)
+		t.Fatalf("micronBuildMergedGrammar: %v", err)
 	}
-
-	node, err := m.Parse("T-123")
-	if err != nil {
-		t.Fatalf("parse T-123: %v", err)
-	}
-	v, ok := node.(Value)
-	if !ok || !IsMicronValue(v) {
-		t.Fatalf("T-123 → %v, want the extra's Micron value", node)
-	}
-	if got, _ := MicronProperty(v, "id"); !ValuesEqual(got, NewString("T-123")) {
-		t.Fatalf("T-123 id property = %v", got)
-	}
-	if actCalls != 1 {
-		t.Fatalf("extra action ran %d times, want 1", actCalls)
-	}
-
-	// Builtin leaves keep their spans — the extra sits AFTER them.
 	for src, kind := range map[string]*Type{
 		"alice@example.com": TEmailon,
 		"https://x.com/a":   TUrlon,
 		"plain/path":        TPathon,
-		"T-notanumber":      TPathon, // gate mismatch → catch-all
+		"T-123":             TPathon, // no user shapes — everything else is a Pathon
 	} {
 		node, err := m.Parse(src)
 		if err != nil {
@@ -219,38 +161,5 @@ func TestMicronGrammarWithExtras(t *testing.T) {
 		if !ok || !v.Parent.Equal(kind) {
 			t.Errorf("parse %q → %v, want %s", src, node, kind.Name())
 		}
-	}
-
-	// No extras ≡ the builtin merged grammar.
-	base, err := MicronGrammarWith()
-	if err != nil {
-		t.Fatalf("MicronGrammarWith(): %v", err)
-	}
-	if _, err := base.Parse("T-123"); err != nil {
-		t.Fatalf("base grammar should catch T-123 as a Pathon: %v", err)
-	}
-}
-
-// TestMicronGrammarWithTokenCollision pins the uniqueness rule: the
-// tabnas merge unifies custom tokens BY NAME, so an extra reusing a
-// builtin token name (or another extra's) must be refused loudly
-// rather than silently aliasing two shapes.
-func TestMicronGrammarWithTokenCollision(t *testing.T) {
-	mk := func(tag, token string) MicronLiteralSpec {
-		return MicronLiteralSpec{
-			Tag:    tag,
-			Tokens: []string{token},
-			Grammar: func(_ []string) (*tabnas.Tabnas, error) {
-				return testExtraGrammar(tag, token,
-					regexp.MustCompile(`\AZ[0-9]+\z`),
-					func(s string) any { return NewString(s) }), nil
-			},
-		}
-	}
-	if _, err := MicronGrammarWith(mk("Clashon", "#EMAILON")); err == nil {
-		t.Error("a builtin token name collision was not refused")
-	}
-	if _, err := MicronGrammarWith(mk("Aon", "#UZ"), mk("Bon", "#UZ")); err == nil {
-		t.Error("a cross-extra token name collision was not refused")
 	}
 }

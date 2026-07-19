@@ -201,31 +201,8 @@ func TestS6b5MicronGrammarConstructorRefusalFallsToPathon(t *testing.T) {
 	}
 }
 
-func TestS6b5MicronGrammarWithExtraErrors(t *testing.T) {
-	// An extra whose Grammar builder fails surfaces the tagged error.
-	_, err := MicronGrammarWith(MicronLiteralSpec{
-		Tag:    "S6b5Bad",
-		Tokens: []string{"#S6B5BAD"},
-		Grammar: func([]string) (*tabnas.Tabnas, error) {
-			return nil, errors.New("s6b5 builder boom")
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "S6b5Bad") {
-		t.Errorf("builder error should be tagged, got %v", err)
-	}
-
-	// An extra whose Grammar returns a nil grammar fails the merge.
-	_, err = MicronGrammarWith(MicronLiteralSpec{
-		Tag:    "S6b5Nil",
-		Tokens: []string{"#S6B5NIL"},
-		Grammar: func([]string) (*tabnas.Tabnas, error) {
-			return nil, nil
-		},
-	})
-	if err == nil {
-		t.Error("a nil extra grammar must fail the merge")
-	}
-}
+// (TestS6b5MicronGrammarWithExtraErrors died with the extras hook — the
+// +m literal grammar is fixed to the builtin leaves.)
 
 func TestS6b5MicronFromStringGrammarUnavailable(t *testing.T) {
 	saved := micronMergedGrammar

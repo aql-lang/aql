@@ -88,32 +88,5 @@ func TestS7B_MiniGexShapeDefault(t *testing.T) {
 // the frozen kind namespace — TestMiniCovRegisterTombstonesDirect drives
 // the tombstone handlers that replaced them.)
 
-// TestS7B_MiniMicronValidateArms drives miniMicronLitValidate's lenient
-// carrier arm and its non-Function refusal.
-func TestS7B_MiniMicronValidateArms(t *testing.T) {
-	r := mcovReg(t)
-
-	// Lenient carrier kind: a dynamic carrier is neither concrete nor a
-	// bare node, so validation defers the kind to the runtime handler.
-	carrier := native.NewCarrier(native.TMicron)
-	if _, _, err := miniMicronLitValidate(
-		[]native.Value{carrier, s7bMap(), mcovFilterFn()}, r, true); err != nil {
-		t.Errorf("lenient carrier kind should not error, got %v", err)
-	}
-
-	// A valid user Micron kind but a non-Function builder is refused.
-	userKind := r.Types.MintType("S7bon", native.TMicron)
-	kindV := native.NewTypeLiteral(userKind)
-	if _, _, err := miniMicronLitValidate(
-		[]native.Value{kindV, s7bMap(), native.NewInteger(5)}, r, false); err == nil {
-		t.Error("non-Function builder should be refused")
-	}
-}
-
-// TestS7B_MicronSpecMapNonMap drives micronSpecMapCheck's non-map refusal.
-func TestS7B_MicronSpecMapNonMap(t *testing.T) {
-	r := mcovReg(t)
-	if err := micronSpecMapCheck(native.NewInteger(5), r, false); err == nil {
-		t.Error("micronSpecMapCheck: non-map spec should error")
-	}
-}
+// (The miniMicronLitValidate / micronSpecMapCheck seams died with the
+// MiniLang.micron tombstone.)

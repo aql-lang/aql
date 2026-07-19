@@ -400,6 +400,14 @@ func TestParseCovParserFailures(t *testing.T) {
 		t.Errorf("malformed ABNF should fail the finalize with parse_bad_grammar, got %v", err)
 	}
 
+	// A Parse.spec options step whose token regexp cannot compile fails at
+	// the same replay (the deferred Grammar(gs) call's error arm).
+	rBad := pcovReg(t)
+	err = pcovErr(t, rBad, pcovImports+`def g Parse.grammar  Parse.spec g {options:{match:{token:{'#BX':'@/[[/'}}}}  def broke (Parse.parser g)`)
+	if err == nil || !strings.Contains(err.Error(), "parse_bad_grammar") {
+		t.Errorf("an invalid spec token regexp should fail the finalize with parse_bad_grammar, got %v", err)
+	}
+
 	// There is no kind-name collision any more — the parser is a def-scoped
 	// VALUE, and a built-in kind simply WINS the `parse <name>` lookup: the
 	// binding is legal, the sugar still reaches the built-in json.
