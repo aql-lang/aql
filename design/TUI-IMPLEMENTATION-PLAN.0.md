@@ -26,10 +26,12 @@ shipped code; this plan invents no new architecture.
   (`eng/go/invoke.go`) is the single VM-first/CallAQL-fallback seam every
   native callback word dispatches through; `update`/`view` ride it
   unchanged.
-- **The host-registration pattern is DONE.** `RegisterHostParser`
-  (`lang/go/modules/parselang.go`) is the template `RegisterHostTui`
-  instantiates — with one simplification: TUI words resolve the backend
-  at **dispatch time**, so there is no pre-import replay step to copy.
+- **The host-registration pattern is DONE.** The (since-removed)
+  `RegisterHostParser` was the template `RegisterHostTui` instantiated —
+  with one simplification: TUI words resolve the backend at **dispatch
+  time**, so there is no pre-import replay step to copy. (The parse-side
+  original died with the frozen kind namespaces; RegisterHostTui is now
+  the live example of the recipe.)
 - **Policy gating is DONE** (`native.HostPolicy`,
   `lang/go/native/capabilities.go`; template `checkNetPolicy`) — but the
   **`terminal` scope itself is new**: unlike `network`/`process` it did
