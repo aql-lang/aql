@@ -7,9 +7,12 @@ baseline"). Two items now carry a **RECOMMENDATION** rather than open work:
 the trivia-preserving tabnas CST front end — *keep the hand-lexer*, a tabnas
 swap is an impedance mismatch (see the Phase-2 entry's CONCLUSION); and the
 declarative rule-set conversion retiring the Go layout code (Phase 3) — it
-depends on that CST and is likewise not recommended. What remains genuinely
-open is Phase 5's example canonicalisation, a visible-output decision for the
-maintainer. See "Phased plan" for the per-phase state. This is a
+depends on that CST and is likewise not recommended. Phase 5's `describe`/help
+example canonicalisation is now **DONE** (156 of 161 examples rewritten to
+fmt's canonical form, the other 5 one-line and verified non-corrupted, pinned
+by `help/fmt_examples_test.go`); only the inline PROSE examples in the Diátaxis
+docs remain, a discretionary alignment call. See "Phased plan" for the
+per-phase state. This is a
 discovery/design note, not an ADR (see `lang/go/CLAUDE.md`, "ADRs — only on
 explicit instruction").
 
@@ -343,22 +346,20 @@ these as `Fmt.*` AQL):
   `describe`/help worked examples. Both use deliberate column alignment that
   fmt collapses — a visible-output change to the docs and the `describe`
   command warranting maintainer sign-off, not a silent migration. Two
-  concrete findings now bound this work (see "Formatter correctness baseline"):
-  the correctness blockers are GONE (fmt no longer corrupts the examples —
-  the CORRECTNESS half is DONE and pinned by `help/fmt_examples_test.go`,
-  which runs all 161 examples through fmt and asserts none is corrupted), so
-  what remains is purely presentational. The exact scope of that presentational
-  half is now measured: of 161 examples, **143 change under fmt (one line each),
-  5 wrap, 13 are already clean.** The 143 changes are DOMINATED by
-  `;#` → `; #` — every example uses `;#` as a compact result-marker convention
-  (`expr   ;# => 6`) and fmt spaces the `;` (end) from the `#` (comment). So
-  canonicalising is not a mechanical tidy: it rewrites the established `;#`
-  documentation convention across ~all examples (plus double-space collapse,
-  bracketless fn, map-shorthand, comma removal), and `help.Format` re-indents
-  nothing so the 5 that wrap need a no-wrap width to stay one line. This is a
-  documentation-STYLE decision (does `; #` read as well as `;#`? do bracketless
-  fn examples teach as well as the explicit `fn [[…] […] […]]` form?), which is
-  why it is reserved for maintainer sign-off, not a silent migration.
+  the `describe`/help worked examples are now **DONE**: every example is run
+  through fmt and the 156 that fit the width are rewritten to fmt's canonical
+  form (the dominant change is the `;#` result-marker spaced to `; #`, plus
+  map-colon tightening, comma removal, double-space collapse, and the
+  bracketless single-fn form). The 5 that fmt would WRAP (long multi-statement
+  examples) stay one line — `describe` renders one example per line — and are
+  verified non-corrupted instead. `help/fmt_examples_test.go` pins every
+  non-wrapping example as fmt-clean (a no-op under fmt) and the wrapping few as
+  non-corrupted, so they cannot drift back out. REMAINING (genuinely
+  discretionary, not blocking): the inline `expr # returns X` PROSE examples in
+  the Diátaxis docs (not fenced blocks), which use deliberate column alignment;
+  and optionally a no-wrap width on the source formatter so the 5 long examples
+  could be one-line-canonical too (low value — they are already one line and
+  verified clean).
 
 ## Formatter correctness baseline (verified 2026-07)
 
