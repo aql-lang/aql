@@ -108,9 +108,10 @@ var storageNatives = []NativeFunc{
 			// FlexList (in-place index set; 0..len-1 only — sparse is
 			// an error, growth is append's job)
 			{
-				Args:    []*Type{TInteger, TAny, TFlexList},
-				Impl:    Go(setFlexListHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TInteger, TAny, TFlexList},
+				Impl:      Go(setFlexListHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: setFlexListReturns, BarrierPos: -1,
 			},
 
 			// FlexXml (in-place attribute set; name → value, like the DOM
@@ -298,6 +299,65 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 		return unified, nil // nested typed container — store the recursively-tagged value
 	}
 	return v, nil
+}
+
+// setFlexListReturns mirrors setFlexListHandler's [:T] write enforcement in
+// check mode (the FlexList set sig otherwise has no ReturnsFn). args are
+// [index, value, FlexList].
+func setFlexListReturns(args []Value, r *Registry) []Value {
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+	}
+	return []Value{NewCarrier(TFlexList)}
+}
+
+// flexGrowReturns builds the check-mode mirror for a flex GROW word
+// (append/push/unshift over a FlexList): args are [value, FlexList], so a
+// non-conforming top-level grow into a typed flex list is flagged at check time
+// the same way the runtime raises. word rides in the diagnostic.
+func flexGrowReturns(word string) func([]Value, *Registry) []Value {
+	return func(args []Value, r *Registry) []Value {
+		if len(args) == 2 {
+			d2CheckWrite(r, args[1], args[0], word, args[0].Pos())
+		}
+		return []Value{NewCarrier(TFlexList)}
+	}
+}
+
+// d2ReTagContainer enforces + re-tags a whole rebuilt container (a merge result
+// that lost its tag through valueToAny/structConvert) against a typed operand's
+// element constraint: every entry must conform, and the result carries the tag.
+// Returns the result unchanged when neither operand is a typed container. word
+// rides in the diagnostic.
+func d2ReTagContainer(r *Registry, typedSrc, result Value, word string) (Value, error) {
+	elem, ok := typedSrc.ElemConstraint()
+	if !ok {
+		return result, nil
+	}
+	var constraint Value
+	switch {
+	case result.Parent.ConformsTo(TMap):
+		constraint = eng.NewTypedMap(elem)
+	case result.Parent.ConformsTo(TList):
+		constraint = eng.NewCarrierTypedListValue(elem)
+	default:
+		return result, nil
+	}
+	unified, uok := Unify(constraint, result)
+	if !uok {
+		return Value{}, r.AqlError("type_error",
+			fmt.Sprintf("%s: a merged value does not conform to element type %s", word, elem.String()), word)
+	}
+	return unified, nil
+}
+
+// d2typedMergeOperand returns whichever of a/b carries an element tag (a first),
+// or a when neither does (d2ReTagContainer then no-ops).
+func d2typedMergeOperand(a, b Value) Value {
+	if _, ok := a.ElemConstraint(); ok {
+		return a
+	}
+	return b
 }
 
 // d2RetainElem copies src's element tag (if any) onto res and returns res — a
@@ -1100,6 +1160,9 @@ func contextReturns(_ []Value, r *Registry) []Value {
 // legacy fresh FlexMap carrier, so nothing changes where the shape
 // machinery is not in play.
 func setFlexMapReturns(args []Value, r *Registry) []Value {
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // flex {:T} write mirror
+	}
 	// len guard: the no-signature recovery can assume this sig with a
 	// short arg window (defensive — panic prevention).
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {

@@ -545,11 +545,13 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 		v := NewTypedMap(ci.Child)
 		v.ID = GenerateID(IDPrefixForType(TMap))
 		v.Carrier = true
+		v.Dynamic = true // a {:T} param admits a flex arg — in-place mutation must runtime-rematch, not preselect the immutable handler
 		return v, true
 	}
 	if IsTypedList(pat) && (a.Parent.ConformsTo(TList) || a.Parent.Equal(TAny)) {
 		v := NewCarrierTypedListValue(ci.Child)
 		v.ID = GenerateID(IDPrefixForType(TList))
+		v.Dynamic = true
 		return v, true
 	}
 	return Value{}, false
@@ -570,11 +572,13 @@ func paramBodyCarrier(p FnParam) Value {
 				v := NewTypedMap(ci.Child)
 				v.ID = GenerateID(IDPrefixForType(TMap))
 				v.Carrier = true
+				v.Dynamic = true
 				return v
 			}
 			if IsTypedList(pat) {
 				v := NewCarrierTypedListValue(ci.Child)
 				v.ID = GenerateID(IDPrefixForType(TList))
+				v.Dynamic = true
 				return v
 			}
 		}

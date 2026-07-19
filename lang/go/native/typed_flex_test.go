@@ -182,6 +182,110 @@ func TestTypedFlexPreservesMutability(t *testing.T) {
 	}
 }
 
+// --- Codex round-2: deep setpath / merge / flex check-mirror ---
+
+func TestDeepSetpathEnforcement(t *testing.T) {
+	// #1: setReachNative validates the value written at EVERY level against the
+	// parent's element type, not just the leaf. (Direct call — the StructUtil
+	// module resolver isn't wired into the bare test registry.)
+	m, r := tcValue(t, `def m:{:Integer} {a:1} m`)
+	// deep path into a scalar-element {:Integer} — the intermediate is a map,
+	// which is not an Integer, so even a conforming leaf is rejected.
+	if _, err := setReachNative(m, []Value{NewString("b"), NewString("x")}, NewInteger(9), r); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("deep setpath into scalar-element {:Integer} should reject: got %v", err)
+	}
+	// a nested-typed {:{:Integer}} allows a conforming deep write.
+	nm, nr := tcValue(t, `def m:{:{:Integer}} {a:{x:1}} m`)
+	if _, err := setReachNative(nm, []Value{NewString("a"), NewString("x")}, NewInteger(9), nr); err != nil {
+		t.Errorf("conforming nested-typed deep setpath should succeed: %v", err)
+	}
+	// a non-conforming leaf into the nested-typed inner is rejected.
+	if _, err := setReachNative(nm, []Value{NewString("a"), NewString("x")}, NewString("bad"), nr); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("bad leaf into {:{:Integer}} should reject: got %v", err)
+	}
+	// untyped is unchanged.
+	um, ur := tcValue(t, `def m {a:1} m`)
+	if _, err := setReachNative(um, []Value{NewString("b"), NewString("x")}, NewString("ok"), ur); err != nil {
+		t.Errorf("untyped deep setpath should succeed: %v", err)
+	}
+}
+
+func TestMergeTypedEnforcement(t *testing.T) {
+	// #2: mergeHandler enforces the element type on a merge INTO a {:T} and
+	// retains the tag. (Direct call — no module resolver needed.)
+	bad := NewOrderedMap()
+	bad.Set("b", NewString("bad"))
+	m, r := tcValue(t, `def m:{:Integer} {a:1} m`)
+	if _, err := mergeHandler([]Value{m, NewMap(bad)}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type") {
+		t.Errorf("merge of a bad value into {:Integer} should reject: got %v", err)
+	}
+	// conforming merge keeps the tag.
+	good := NewOrderedMap()
+	good.Set("b", NewInteger(2))
+	m2, r2 := tcValue(t, `def m:{:Integer} {a:1} m`)
+	out, merr := mergeHandler([]Value{m2, NewMap(good)}, nil, nil, r2)
+	if merr != nil {
+		t.Fatalf("conforming merge: %v", merr)
+	}
+	if c, ok := out[0].ElemConstraint(); !ok || !c.Equal(TInteger) {
+		t.Errorf("merge result lost the {:Integer} tag")
+	}
+	// untyped merge unchanged (no tag).
+	um, ur := tcValue(t, `def m {a:1} m`)
+	uout, uerr := mergeHandler([]Value{um, NewMap(good)}, nil, nil, ur)
+	if uerr != nil {
+		t.Fatalf("untyped merge: %v", uerr)
+	}
+	if _, ok := uout[0].ElemConstraint(); ok {
+		t.Errorf("untyped merge produced a tagged result")
+	}
+
+	// Index-merge into a TYPED LIST enforces the element type too (the
+	// mergeListMap / mergeMapList paths + d2ReTagContainer's list arm).
+	xs, xr := tcValue(t, `def xs:[:Integer] [1 2 3] xs`)
+	badIdx := NewOrderedMap()
+	badIdx.Set("0", NewString("bad"))
+	if _, err := mergeListMapHandler([]Value{xs, NewMap(badIdx)}, nil, nil, xr); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("list-map index-merge of a bad value into [:Integer] should reject: got %v", err)
+	}
+	xs2, xr2 := tcValue(t, `def xs:[:Integer] [1 2 3] xs`)
+	if _, err := mergeMapListHandler([]Value{NewMap(badIdx), xs2}, nil, nil, xr2); err == nil ||
+		!strings.Contains(err.Error(), "does not conform to element type Integer") {
+		t.Errorf("map-list index-merge of a bad value into [:Integer] should reject: got %v", err)
+	}
+	// d2ReTagContainer's default arm: a typed operand but a non-container
+	// result is returned unchanged (defensive — a merge never yields a scalar).
+	tm, tr := tcValue(t, `def m:{:Integer} {a:1} m`)
+	if out, err := d2ReTagContainer(tr, tm, NewInteger(5), "merge"); err != nil || !out.Parent.Equal(TInteger) {
+		t.Errorf("d2ReTagContainer over a scalar result = (%v, %v), want the value unchanged", out.Parent, err)
+	}
+}
+
+func TestFlexWriteCheckMirror(t *testing.T) {
+	// #3: flex writes are now flagged in CHECK mode (top-level), mirroring the
+	// runtime — set / append / push / unshift.
+	for _, src := range []string{
+		`def m:{:Integer} (flex {a:1}) (m set b/q "bad")`,
+		`def xs:[:Integer] (flex [1]) (append "bad" xs)`,
+		`def xs:[:Integer] (flex [1]) (push "bad" xs)`,
+		`def xs:[:Integer] (flex [1]) (unshift "bad" xs)`,
+	} {
+		r := tcCheck(t, src)
+		if !tcHasTypeError(r, "does not conform to element type Integer") {
+			t.Errorf("flex write should be flagged in check mode: %q: %+v", src, r.Check.Diagnostics)
+		}
+	}
+	// conforming flex write is silent.
+	r := tcCheck(t, `def m:{:Integer} (flex {a:1}) (m set b/q 2)`)
+	if tcHasTypeError(r, "does not conform") {
+		t.Errorf("conforming flex write should be check-silent: %+v", r.Check.Diagnostics)
+	}
+}
+
 // --- Immutable list mutators enforce + retain the element tag (Codex review #3) ---
 
 func TestImmutableListMutatorEnforcement(t *testing.T) {

@@ -161,21 +161,6 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 	k := keys[0]
 	rest := keys[1:]
 
-	// R3: a deep write into a typed container ({:T}) enforces its element tag
-	// at the leaf, at runtime. Because construction tags nested containers
-	// recursively, `data` at THIS level already carries the element type
-	// governing the write here — so this one guard covers arbitrary nesting.
-	// Untyped levels (and class/resource instances, which validate via their
-	// own rebuild below) carry no tag and pass through.
-	// See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
-	if len(rest) == 0 {
-		tagged, e := d2AdoptTyped(r, data, val, "setpath")
-		if e != nil {
-			return Value{}, e
-		}
-		val = tagged
-	}
-
 	// Class / Object instance: edit the projected field map, then
 	// rebuild type-preservingly. A class instance re-makes through
 	// MakeClassInstance, so the same strict validation `make` runs
@@ -266,7 +251,15 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 		if err != nil {
 			return Value{}, err
 		}
-		cp[idx] = child
+		// Enforce + re-tag the value written at THIS level against data's
+		// element type — a deep path that builds an intermediate must still
+		// conform to the OUTER [:T] (`setpath xs 0 "bad"` / a nested map into a
+		// scalar-element list are both rejected here, not just the leaf).
+		tchild, terr := d2AdoptTyped(r, data, child, "setpath")
+		if terr != nil {
+			return Value{}, terr
+		}
+		cp[idx] = tchild
 		res := NewList(cp)
 		if elem, ok := data.ElemConstraint(); ok { // R3: keep [:T] on the copy
 			res.SetElemConstraint(elem)
@@ -285,16 +278,23 @@ func setReachNative(data Value, keys []Value, val Value, r *Registry) (Value, er
 		}
 	}
 	keyStr := reachKeyString(k)
-	if len(rest) == 0 {
-		out.Set(keyStr, val)
-	} else {
+	toSet := val
+	if len(rest) != 0 {
 		existing, _ := out.Get(keyStr)
 		child, err := setReachNative(existing, rest, val, r)
 		if err != nil {
 			return Value{}, err
 		}
-		out.Set(keyStr, child)
+		toSet = child
 	}
+	// Enforce + re-tag the value written at THIS level against data's element
+	// type (leaf val OR the recursively-built intermediate) — covers deep paths
+	// that would otherwise slip an off-type child into a tagged outer container.
+	tset, terr := d2AdoptTyped(r, data, toSet, "setpath")
+	if terr != nil {
+		return Value{}, terr
+	}
+	out.Set(keyStr, tset)
 	res := NewMap(out)
 	if elem, ok := data.ElemConstraint(); ok { // R3: keep {:T} on the copy
 		res.SetElemConstraint(elem)

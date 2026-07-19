@@ -11,12 +11,15 @@ import "testing"
 // (the census exercises the compile paths; the branch coverage is here).
 func TestParamBodyCarrier(t *testing.T) {
 	mapPat := NewTypedMap(NewTypeLiteral(TInteger))
-	if v := paramBodyCarrier(FnParam{Pattern: &mapPat, Type: TMap}); !IsTypedMap(v) {
-		t.Errorf("{:Integer} param → %s, want a typed-map carrier", v.Parent.String())
+	// A {:T} param carrier must be DYNAMIC — the arg may be flex, so an in-place
+	// mutation in the body must runtime-rematch rather than preselect the
+	// immutable handler (the compile-vs-interpret divergence fix).
+	if v := paramBodyCarrier(FnParam{Pattern: &mapPat, Type: TMap}); !IsTypedMap(v) || !v.Dynamic {
+		t.Errorf("{:Integer} param → %s (dynamic=%v), want a dynamic typed-map carrier", v.Parent.String(), v.Dynamic)
 	}
 	listPat := NewCarrierTypedListValue(NewTypeLiteral(TInteger))
-	if v := paramBodyCarrier(FnParam{Pattern: &listPat, Type: TList}); !IsTypedList(v) {
-		t.Errorf("[:Integer] param → %s, want a typed-list carrier", v.Parent.String())
+	if v := paramBodyCarrier(FnParam{Pattern: &listPat, Type: TList}); !IsTypedList(v) || !v.Dynamic {
+		t.Errorf("[:Integer] param → %s (dynamic=%v), want a dynamic typed-list carrier", v.Parent.String(), v.Dynamic)
 	}
 	// A non-typed-container param falls back to ParamInputCarrier (no pattern).
 	if v := paramBodyCarrier(FnParam{Type: TInteger}); v.Parent == nil || !v.Parent.ConformsTo(TInteger) {

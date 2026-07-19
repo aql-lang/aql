@@ -61,9 +61,10 @@ var flexNatives = []NativeFunc{
 			},
 			// Any other value: append as a single element.
 			{
-				Args:    []*Type{TAny, TFlexList},
-				Impl:    Go(appendElemHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TAny, TFlexList},
+				Impl:      Go(appendElemHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: flexGrowReturns("append"), BarrierPos: -1,
 			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
