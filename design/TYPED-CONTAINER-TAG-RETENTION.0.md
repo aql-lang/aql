@@ -426,3 +426,18 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      `d2RetainElem` preserving the exact Parent for a flex/other kind), so a
      chained write after an index merge or a clone is diagnosed in check —
      runtime already retained the tag (`d2ReTagContainer` / `CloneValue`).
+- **Round 9 — flex-child identity on the WRITE path + list-copy check residuals.**
+  1. **`d2AdoptTyped` rebuilt an already-flex child** (the same flex-identity
+     regression, now on the write path). Writing a flex child into a nested-typed
+     flex container (`d:{:{:Integer}} set a c` where `c = flex {x:1}`) ran
+     `Unify`, whose flex branch allocates a fresh store — so a later mutation
+     through `c` was invisible through `d.a`. Now, after `Unify` VALIDATES, a flex
+     child is retagged IN PLACE via the exported `RetagFlexElem` (the same helper
+     round 8 introduced for params); a plain child keeps the rebuilt tagged value.
+  2. **The list-copy check residuals dropped `elem`.** `ReturnsPreserveListAt`
+     built a typed-list carrier (`ChildTypeInfo.Child`) but never copied the
+     source's `ElemConstraint` pointer, and `d2CheckWrite` consults only the
+     pointer — so `(reverse xs) set 0 "bad"` for `xs:[:Integer]` wasn't diagnosed
+     at check despite the tagged runtime result. Fixed centrally in
+     `ReturnsPreserveListAt` (copies the source `ElemConstraint`), covering every
+     op that uses it (reverse / take / shed / sort / …).

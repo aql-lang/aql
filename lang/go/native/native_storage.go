@@ -296,7 +296,18 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 			word)
 	}
 	if IsTypedMap(elem) || IsTypedList(elem) {
-		return unified, nil // nested typed container — store the recursively-tagged value
+		// Nested typed container — store the recursively-tagged value. A FLEX child
+		// is by-reference: Unify above validated it but rebuilt a DETACHED copy
+		// (unifyTyped*WithConcrete's flex branch allocates a fresh store), so a
+		// later mutation through the original child would not be visible through
+		// the container. Keep the caller's flex value and retag it IN PLACE
+		// instead (#9, Codex round 9) — validation already passed via Unify.
+		if IsFlexMap(v) || IsFlexList(v) {
+			if ci, cerr := AsChildType(elem); cerr == nil {
+				return eng.RetagFlexElem(v, ci.Child), nil
+			}
+		}
+		return unified, nil
 	}
 	return v, nil
 }

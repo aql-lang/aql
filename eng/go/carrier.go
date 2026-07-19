@@ -190,7 +190,16 @@ func ReturnsPreserveListAt(i int) ReturnsFunc {
 			return []Value{NewCarrier(TList)}
 		}
 		elem := DataListElemTypeFromValue(args[i])
-		return []Value{NewCarrierTypedList(elem)}
+		out := NewCarrierTypedList(elem)
+		// Copy the source's element constraint onto the residual so the check-mode
+		// write mirror fires: d2CheckWrite consults ElemConstraint (the elem
+		// pointer), which NewCarrierTypedList sets in ChildTypeInfo.Child but not
+		// as the pointer — so `(reverse xs) set 0 "bad"` for xs:[:Integer] is
+		// diagnosed at check, mirroring the tagged runtime result (#9, round 9).
+		if ec, ok := args[i].ElemConstraint(); ok {
+			out.SetElemConstraint(ec)
+		}
+		return []Value{out}
 	}
 }
 
