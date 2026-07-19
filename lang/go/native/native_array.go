@@ -1009,7 +1009,8 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4: `at` gathers a subset of the data list's elements — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- insert-at / remove-at ----
@@ -1033,15 +1034,22 @@ func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if idx < 0 || idx > n {
 		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("insert-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n), "insert-at")
 	}
+	// insert-at adds args[1] as a NEW element — enforce it against the data's
+	// [:T] element type (like push/set), storing the recursively-retagged value,
+	// and retain the tag on the result copy (#4, Codex round 4).
+	tagged, terr := d2AdoptTyped(r, args[2], args[1], "insert-at")
+	if terr != nil {
+		return nil, terr
+	}
 	result := make([]Value, 0, n+1)
 	for i := 0; i < idx; i++ {
 		result = append(result, data.Get(i))
 	}
-	result = append(result, args[1])
+	result = append(result, tagged)
 	for i := idx; i < n; i++ {
 		result = append(result, data.Get(i))
 	}
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[2])}, nil
 }
 
 // removeAtHandler returns a new list with the element at index args[0]
@@ -1071,7 +1079,8 @@ func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 		result = append(result, data.Get(i))
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (Codex round 4): remove-at is a subset — retain the source [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- sortby ----
@@ -1241,7 +1250,9 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if result == nil {
 		result = []Value{}
 	}
-	return []Value{NewList(result)}, nil
+	// #4: replicate repeats each source element — all elements come from the
+	// data list unchanged, so retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- expand ----
@@ -1917,7 +1928,8 @@ func compressHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			result = append(result, data.Get(i))
 		}
 	}
-	return []Value{NewList(result)}, nil
+	// #4: compress is a mask-filtered subset — retain the data list's [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- eachrank ----

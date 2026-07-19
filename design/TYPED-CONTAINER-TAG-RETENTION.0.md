@@ -328,3 +328,32 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      flattens to `[:T]`), `concat`/`append` (combine — already per-element
      enforced via `d2AdoptTyped`), and `clone` (already preserves `elem`, since
      `CloneValue` copies the Value struct and only replaces `Data`/`ID`).
+- **Round 4 — the args-stack escape + the last copy ops + read-narrowing shape.**
+  1. **The args stack (`args.N`) bound the RAW arg**, so a body write via `args.0`
+     bypassed the contract even though the named binding retagged — a second
+     compiled-vs-interpreted divergence (compiled retags its locals in
+     `checkParamContract`; the interpreter did not retag the args stack).
+     `RetagTypedContainerArgs` retags the whole arg slice at each interpreter
+     fn-entry (`InstallFnDef` closure, `execFnDefSig`, `CallAQL`) up front, so the
+     named binding, the args stack, AND unnamed body-token pushes all see the
+     tagged value. Copy-on-write — no allocation when no param is a typed
+     container (the leaf fast path stays allocation-free).
+  2. **`remove-at`/`at`/`replicate`/`compress`** are subset/gather/mask copies that
+     preserve element types → retain the source `[:T]` tag; **`insert-at`** adds a
+     NEW element → enforce it via `d2AdoptTyped` (store the retagged value) AND
+     retain the tag. `expand` is correctly EXCLUDED — it injects `Integer(0)`
+     fillers for false mask slots, so retaining a non-Integer source tag would be
+     an unsound false claim; `member`/`indices` return Booleans/indices, not
+     source elements.
+  3. **The immutable `set` check residual is now a PROPER typed carrier** when the
+     receiver is tagged (`d2TypedListResidual`/`d2TypedMapResidual`): the element
+     type rides in BOTH `ChildTypeInfo.Child` (so a read from `(xs set i v)`
+     narrows via `getIntKeyReturns` instead of degrading to `dynamic(Any)`) AND the
+     `elem` pointer (so a chained write into the residual stays enforced —
+     `d2CheckWrite`/`ElemConstraint` read the pointer, not the child). Setting only
+     the child (the first attempt) silently broke round-3 #3's chained-write
+     enforcement; both fields are load-bearing. Census stays byte-identical — the
+     exact-read-narrowing divergence R4 hit (an each-produced list) does not
+     recur for the set-residual path (verified by the differential + a 100-seed
+     variation run, whose only failures are pre-existing unledgered refusal
+     buckets present on the clean baseline too).

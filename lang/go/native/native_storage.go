@@ -375,6 +375,34 @@ func d2RetainElem(res, src Value) Value {
 	return res
 }
 
+// d2TypedListResidual / d2TypedMapResidual build a set-copy check residual as a
+// PROPER typed carrier when the receiver is tagged: the element type rides in
+// BOTH the carrier's ChildTypeInfo.Child (so a READ from `(xs set i v)` narrows
+// to the element bound via getIntKeyReturns instead of degrading to dynamic(Any)
+// — Codex round 4) AND the `elem` pointer (so a CHAINED write into the residual
+// stays enforced — d2CheckWrite reads ElemConstraint, round-3 #3). An untyped
+// receiver keeps the bare carrier.
+func d2TypedListResidual(src Value) Value {
+	elem, ok := src.ElemConstraint()
+	if !ok {
+		return NewCarrier(TList)
+	}
+	v := eng.NewCarrierTypedListValue(elem)
+	v.SetElemConstraint(elem)
+	return v
+}
+
+func d2TypedMapResidual(src Value) Value {
+	elem, ok := src.ElemConstraint()
+	if !ok {
+		return NewCarrier(TMap)
+	}
+	v := eng.NewTypedMap(elem)
+	v.Carrier = true
+	v.SetElemConstraint(elem)
+	return v
+}
+
 // d2CheckWrite is the check-mode mirror of the write enforcement: at the
 // top-level straight line, a provably-non-conforming CONCRETE write into a
 // tagged container is flagged as the type_error the runtime raises identically
@@ -1196,7 +1224,7 @@ func setListIndexReturns(args []Value, r *Registry) []Value {
 	if len(args) == 3 {
 		CheckListIndex(r, args[0], args[2], "set")
 		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // R2: [:T] write enforcement
-		res = d2RetainElem(res, args[2])
+		res = d2TypedListResidual(args[2])
 	}
 	return []Value{res}
 }
@@ -1209,7 +1237,7 @@ func setMapTypedReturns(args []Value, r *Registry) []Value {
 	res := NewCarrier(TMap)
 	if len(args) == 3 {
 		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
-		res = d2RetainElem(res, args[2]) // chained/bound writes stay checked
+		res = d2TypedMapResidual(args[2]) // typed carrier: chained writes + read narrowing
 	}
 	return []Value{res}
 }

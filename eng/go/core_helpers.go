@@ -322,6 +322,11 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			}
 			return target.CallAQL(&s, args, fnDefCopy.Captured)
 		}
+		// Retag typed-container args up front so EVERY access path in the body —
+		// named binding, the args stack (args.N), and unnamed body-token pushes —
+		// sees the tagged value and enforces the {:T}/[:T] param contract (a write
+		// via args.N must not bypass what a write via the named param enforces).
+		args = RetagTypedContainerArgs(s.Params, args)
 		// Leaf fast path: per-call work is registry installs plus ONE
 		// slice copy of the memoized skeleton with the arg cells patched
 		// (see the construction-time comment above).
@@ -579,6 +584,42 @@ func RetagTypedContainerParam(p FnParam, arg Value) Value {
 	}
 	unified.Quoted = arg.Quoted // preserve the list-arg no-auto-eval quote
 	return unified
+}
+
+// isTypedContainerParam reports whether p's pattern is a {:T} map / [:T] list —
+// the only params RetagTypedContainerParam acts on.
+func isTypedContainerParam(p FnParam) bool {
+	if p.Pattern == nil {
+		return false
+	}
+	pat := *p.Pattern
+	return IsTypedMap(pat) || IsTypedList(pat)
+}
+
+// RetagTypedContainerArgs retags every concrete {:T}/[:T] argument with its
+// param's element constraint, returning a slice where EVERY body access path —
+// the named binding, the args stack (`args.N`), and unnamed body-token pushes —
+// sees the tagged value. Retagging only the named binding (RetagTypedContainerParam
+// at the InstallFrameBinding site) left `args.N` and unnamed params reading the raw
+// untagged arg, so a body write through them bypassed enforcement and diverged from
+// the compiled path (which retags its locals in checkParamContract). Copy-on-write:
+// returns args unchanged (no allocation) when no param is a typed container — the
+// common case, keeping the leaf fn-dispatch fast path allocation-free.
+func RetagTypedContainerArgs(params []FnParam, args []Value) []Value {
+	out := args
+	cloned := false
+	for i := 0; i < len(args) && i < len(params); i++ {
+		if !IsConcrete(args[i]) || !isTypedContainerParam(params[i]) {
+			continue
+		}
+		if !cloned {
+			out = make([]Value, len(args))
+			copy(out, args)
+			cloned = true
+		}
+		out[i] = RetagTypedContainerParam(params[i], args[i])
+	}
+	return out
 }
 
 // paramBodyCarrier builds a fn-body INPUT carrier for a param when no call-site
