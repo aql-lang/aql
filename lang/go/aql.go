@@ -697,6 +697,11 @@ func (a *AQL) DefineValue(name string, v Value) error {
 	if name[0] >= 'A' && name[0] <= 'Z' {
 		return fmt.Errorf("define value %q: lowercase names bind values (capitalised names are types — use DefineType)", name)
 	}
+	// The host twin of `def` enforces def's word-name grammar too — a name
+	// source AQL cannot spell would install an unreachable binding.
+	if err := native.ValidateWordName(name); err != nil {
+		return fmt.Errorf("define value %q: %w", name, err)
+	}
 	native.InstallDef(a.registry, name, v)
 	return nil
 }

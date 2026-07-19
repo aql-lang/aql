@@ -278,6 +278,11 @@ func TestParseLangHostRegistrationContract(t *testing.T) {
 		if err := a.DefineValue("", v); err == nil {
 			t.Fatal("expected error for an empty value name")
 		}
+		// The full def word-name grammar is enforced — a name source AQL
+		// cannot spell must be refused, not silently installed.
+		if err := a.DefineValue("1parser", v); err == nil {
+			t.Fatal("expected error for a name failing ValidateWordName")
+		}
 	})
 	// (The parse_ prefix and duplicate-kind rules died with the namespace:
 	// a value binding is def-scoped — rebinding shadows, like any def.)

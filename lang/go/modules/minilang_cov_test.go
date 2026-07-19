@@ -348,6 +348,35 @@ func TestMiniCovNewMiniLangFn(t *testing.T) {
 	}
 }
 
+// TestMiniCovNewMiniLangFnQuotedInput pins the FnParam.Quote contract on a
+// constructed value: a Quote:true Input rides as QuoteArgs on the inner
+// native, so the trivial-delegation dispatch /q-captures a bare word into
+// the quoted slot instead of evaluating it (which would be undefined_word).
+func TestMiniCovNewMiniLangFnQuotedInput(t *testing.T) {
+	r := mcovReg(t)
+	v, err := NewMiniLangFn(MiniLangSpec{
+		Name:    "ql",
+		Inputs:  []native.FnParam{{Type: native.TAtom, Quote: true}},
+		Returns: []*native.Type{native.TString},
+		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+			a, err := args[2].AsConcreteAtom()
+			if err != nil {
+				return nil, r.AqlError("mini_error", "ql: input: "+err.Error(), "ql")
+			}
+			return []native.Value{native.NewString("q:" + a)}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewMiniLangFn: %v", err)
+	}
+	native.InstallDef(r, "ql", v)
+	// The direct call forward-collects the bare word into the quoted slot.
+	out := mcovRun(t, r, `ql 'src' {} someword end`)
+	if s, _ := out[0].AsConcreteString(); s != "q:someword" {
+		t.Errorf("quoted input = %v, want q:someword (the bare word as an atom)", out[0])
+	}
+}
+
 // TestMiniCovOptHelpersDirect pins miniOptInt / miniOptString /
 // miniDropGrouping / miniCompiledPattern directly.
 func TestMiniCovOptHelpersDirect(t *testing.T) {

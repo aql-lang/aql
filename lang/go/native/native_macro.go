@@ -437,9 +437,20 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		// spelled by name (`def dbl (fn …)  mini dbl 'ab'`) — mirror parse's
 		// bound-variable fallback. A registered kind wins a collision
 		// (checked above); an unbound name or a non-Function binding keeps
-		// the unknown-kind handling below.
-		if top, ok := r.Defs.Top(kind); ok &&
-			(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		// the unknown-kind handling below. A name def-bound to a COMPUTED
+		// fn (`def m (mk)`) has no Defs binding under analysis — installDef
+		// declines so the compiled closure machinery owns the name — and
+		// resolves through the per-pass fn-carrier side table
+		// (checkFnCarrierBind) instead, like parse.
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
+			}
+		}
+		if bound {
 			// The /q-captured word bypassed stepWord's use tracking.
 			r.Check.RecordUse(kind)
 			if _, isFn := top.Data.(FnDefInfo); isFn {
@@ -885,10 +896,12 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 
 // ParseLangFnSigWhy reports why fnDef cannot serve as a parser (a ParseLang)
 // — every signature must open with the STANDARD parser prefix
-// [source:(String|Any) opts:Map …] — or "" when it conforms. It is the ONE
-// contract every parser surface enforces: the `parse` macro's fn-operand
-// form (parseFnExpand), the compiled parselang-fn-dispatch, and the
-// NewParseLangFn value constructor's callers.
+// [source:(String|Any) opts:Map …] and declare exactly ONE return (a parser
+// yields one result — the contract parselang-fn-dispatch enforces at run
+// time, so the statically-expanded and computed forms agree) — or "" when
+// it conforms. It is the ONE contract every parser surface enforces: the
+// `parse` macro's fn-operand form (parseFnExpand), the compiled
+// parselang-fn-dispatch, and the NewParseLangFn value constructor's callers.
 func ParseLangFnSigWhy(fnDef FnDefInfo) string {
 	for _, sig := range fnDef.Signatures {
 		if len(sig.Params) < 2 {
@@ -898,6 +911,9 @@ func ParseLangFnSigWhy(fnDef FnDefInfo) string {
 		if p0 == nil || !(p0.ConformsTo(TString) || p0.Equal(TAny)) ||
 			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(TMap) {
 			return "every signature must start [source:String opts:Map …]"
+		}
+		if len(sig.Returns) != 1 {
+			return "every signature must declare exactly one return (a parser yields one result)"
 		}
 	}
 	return ""
@@ -1075,10 +1091,19 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// VALUE form spelled by name (`def up (fn …)  emit up {a:1}`) — without
 	// this it would fall to the auto form below and JSON-emit the fn value
 	// itself. A registered kind wins a collision; a lone `emit f` stays a
-	// bare-variable auto emit, unchanged.
+	// bare-variable auto emit, unchanged. A name def-bound to a COMPUTED fn
+	// has no Defs binding under analysis and resolves through the per-pass
+	// fn-carrier side table (checkFnCarrierBind), like parse.
 	if leadingKind && !explicit {
-		if top, ok := r.Defs.Top(kind); ok &&
-			(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
+			}
+		}
+		if bound {
 			// The /q-captured word bypassed stepWord's use tracking.
 			r.Check.RecordUse(kind)
 			if _, isFn := top.Data.(FnDefInfo); isFn {

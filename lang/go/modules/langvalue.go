@@ -29,6 +29,12 @@ func NewParseLangFn(spec ParseLangSpec) (native.Value, error) {
 	if spec.Handler == nil {
 		return native.Value{}, fmt.Errorf("new parser fn %q: Handler must not be nil", spec.Name)
 	}
+	// A parser yields exactly one result (the ParseLangFnSigWhy contract) —
+	// reject a multi-return spec here rather than building a value every
+	// parse surface would refuse.
+	if len(spec.Returns) > 1 {
+		return native.Value{}, fmt.Errorf("new parser fn %q: a parser yields exactly one result (declare at most one Return)", spec.Name)
+	}
 	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return native.Value{}, err
@@ -104,14 +110,26 @@ func NewMiniLangFn(spec MiniLangSpec) (native.Value, error) {
 		params = append(params, native.FnParam{Type: in.Type, Quote: in.Quote})
 	}
 	args := make([]*native.Type, len(params))
+	// A Quote:true Input rides as QuoteArgs on BOTH the inner native
+	// signature (the trivial-delegation dispatch matches against it, so
+	// forward collection /q-captures a bare word there) and the wrapper —
+	// the documented FnParam.Quote contract.
+	var quotes map[int]bool
 	for i, p := range params {
 		args[i] = p.Type
+		if p.Quote {
+			if quotes == nil {
+				quotes = map[int]bool{}
+			}
+			quotes[i] = true
+		}
 	}
 	inner := "minilang-value-" + spec.Name
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: inner,
 		Signatures: []native.Signature{{
 			Args:       args,
+			QuoteArgs:  quotes,
 			Returns:    spec.Returns,
 			BarrierPos: -1,
 			Impl:       native.Go(spec.Handler),
@@ -122,7 +140,7 @@ func NewMiniLangFn(spec MiniLangSpec) (native.Value, error) {
 	if subReg.Lookup(inner) == nil {
 		return native.Value{}, fmt.Errorf("new minilang fn %q: name is not a valid word (use a plain lowercase name)", spec.Name)
 	}
-	return wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg), nil
+	return wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, quotes, subReg), nil
 }
 
 // NewEmitLangFn builds an emitter Function VALUE from spec — the value-form

@@ -426,9 +426,7 @@ func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []
 	if err != nil {
 		return nil, err
 	}
-	if len(res) != 1 {
-		// Defensive: a conforming parser yields exactly one value; a drifted
-		// fn must fail loudly rather than corrupt the operand stack.
+	if len(res) != 1 { //covergate:allow ParseLangFnSigWhy (checked above) admits only single-return signatures and the engine's fn return-count check enforces the declared count, so a conforming run cannot yield ≠1 results; kept as drift protection so a future contract change fails loudly instead of corrupting the operand stack (§modules)
 		return nil, r.AqlError("internal_error",
 			fmt.Sprintf("parse fn: expected one result, got %d", len(res)), "parse")
 	}

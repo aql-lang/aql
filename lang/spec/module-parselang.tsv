@@ -120,6 +120,7 @@ import "aql:parselang"  def mk2 fn [[b:Boolean] [Function] [if b [fn [[source:St
 import "aql:parselang"  parse (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:parse_bad_signature	a non-parser fn is rejected (too few params)
 import "aql:parselang"  parse (fn [[a:Integer b:Map] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the source param must be String or Any
 import "aql:parselang"  parse (fn [[source:String b:Integer] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the opts param must be a Map
+import "aql:parselang"  parse (fn [[source:Any opts:Map] [Any Any] [source source]]) 'x'	ERROR:parse_bad_signature	a parser yields exactly ONE result — a multi-return fn is rejected (the dispatch contract, enforced at expansion too)
 import "aql:parselang"  def myp 42  parse myp 'x'	ERROR:parse_unknown_lang	a non-fn binding is not a parser — unknown kind unchanged
 import "aql:parselang"  parse (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a parser value
 import "aql:parselang"  def mkb fn [[] [Function] [fn [[a:Integer] [Integer] [a]]]]  parse (mkb) 'x'	ERROR:parse_bad_signature	a computed non-parser fn is rejected — expansion-time and dispatch-time contracts agree

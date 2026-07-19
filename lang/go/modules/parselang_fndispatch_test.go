@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/aql-lang/aql/lang/go/native"
@@ -43,10 +44,13 @@ func TestFnDispatchArms(t *testing.T) {
 		t.Error("fn dispatch: a run error should propagate")
 	}
 
-	// A conforming fn yielding two results → the defensive count arm.
+	// A multi-return signature → parse_bad_signature (the single-result
+	// contract is enforced up front; the downstream count arm is a
+	// covergate-allowed drift guard).
 	ftwo := fdFn(t, r, `fn [[source:Any opts:Map] [Any Any] [1 2]]`)
-	if _, err := parseFnDispatchHandler([]native.Value{ftwo, native.NewString("s"), opts}, nil, nil, r); err == nil {
-		t.Error("fn dispatch: a non-single result should error")
+	if _, err := parseFnDispatchHandler([]native.Value{ftwo, native.NewString("s"), opts}, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "parse_bad_signature") {
+		t.Errorf("fn dispatch: a multi-return signature should be parse_bad_signature, got %v", err)
 	}
 
 	// The happy path: a conforming identity parser echoes its source.

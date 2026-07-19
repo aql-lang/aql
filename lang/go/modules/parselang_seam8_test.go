@@ -149,6 +149,10 @@ func TestW8NewParseLangFnValidation(t *testing.T) {
 	if _, err := NewParseLangFn(ParseLangSpec{Name: "not a word", Handler: w9NopParser}); err == nil {
 		t.Error("NewParseLangFn: an invalid word name should error")
 	}
+	if _, err := NewParseLangFn(ParseLangSpec{Name: "multi", Handler: w9NopParser,
+		Returns: []*native.Type{native.TAny, native.TAny}}); err == nil {
+		t.Error("NewParseLangFn: a multi-return spec should error (a parser yields one result)")
+	}
 	if v, err := NewFormatParserFn("w8fmt", w8Fmt{}); err != nil || !native.IsConcrete(v) {
 		t.Errorf("NewFormatParserFn should build a concrete fn value, got %v (err %v)", v, err)
 	}
