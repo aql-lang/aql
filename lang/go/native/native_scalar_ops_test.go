@@ -139,6 +139,21 @@ func TestSeqMulPowGuardTrips(t *testing.T) {
 	if _, err := seqPow(r, "pow", big, big, NewString); err == nil {
 		t.Errorf("seqPow over cap: want error")
 	}
+	// The guard estimates BYTES, not runes: two inputs of 4-byte runes
+	// whose rune-count product passes the old rune-based estimate must
+	// still trip on their byte size (PR #292 review).
+	wide := strings.Repeat("\U0001F600", 6000) // 6000 runes, 24000 bytes
+	if _, err := seqMul(r, "mul", wide, wide, NewString); err == nil {
+		t.Errorf("seqMul multibyte over cap: want error")
+	}
+	// A small multibyte product still succeeds, byte-exactly.
+	v, err := seqMul(r, "mul", "é", "xy", NewString)
+	if err != nil {
+		t.Fatalf("seqMul small multibyte: %v", err)
+	}
+	if s, _ := v.AsConcreteString(); s != "éxéy" {
+		t.Errorf("seqMul multibyte = %q, want éxéy", s)
+	}
 }
 
 // ---- Bytes occurrence package ----
@@ -578,33 +593,25 @@ func TestSeqReturnsAndMicronReturns(t *testing.T) {
 	if len(c) != 1 || !c[0].Parent.Equal(TEmailon) {
 		t.Errorf("micronOpReturns same-kind = %v", c)
 	}
-	// different kinds -> family root + a check-mode cross-kind mirror.
+	// different kinds -> family root; CARRIER operands are NOT mirrored
+	// (a carrier's runtime tag can be a strict subtype a more-specific
+	// user overload claims — the refinement escape).
 	u := evalOneVal(t, r, `make Urlon "https://x.com"`)
 	done = r.Check.Begin()
+	nBefore = len(r.Check.Diagnostics)
 	c = mrf([]Value{NewCarrier(TEmailon), NewCarrier(TUrlon)}, r)
 	if len(c) != 1 || !c[0].Parent.Equal(TMicron) {
 		t.Errorf("micronOpReturns cross-kind = %v", c)
 	}
-	if len(r.Check.Diagnostics) == 0 {
-		t.Errorf("micronOpReturns: cross-kind carriers not mirrored")
+	if len(r.Check.Diagnostics) != nBefore {
+		t.Errorf("micronOpReturns: carrier operands must not be mirrored")
 	}
-	// kind-level defined errors mirror from the carrier types alone.
-	for _, tc := range []struct {
-		op   string
-		kind *Type
-	}{{"mul", TQion}, {"div", TPathon}} {
-		n := len(r.Check.Diagnostics)
-		micronOpReturns(tc.op)([]Value{NewCarrier(tc.kind), NewCarrier(tc.kind)}, r)
-		if len(r.Check.Diagnostics) <= n {
-			t.Errorf("micronOpReturns %s over %s carriers: no mirror", tc.op, tc.kind.Leaf())
-		}
+	if micronOpReturns("mul")([]Value{NewCarrier(TQion), NewCarrier(TQion)}, r); len(r.Check.Diagnostics) != nBefore {
+		t.Errorf("micronOpReturns: Qion carrier operands must not be mirrored")
 	}
-	// concrete operands run the full handler (cross-kind pair errors) —
-	// a different op than the carrier mirror above so the dedupe
-	// (code+detail+position) can't swallow it.
-	n := len(r.Check.Diagnostics)
+	// two CONCRETE operands run the full handler (cross-kind pair errors).
 	micronOpReturns("sub")([]Value{e, u}, r)
-	if len(r.Check.Diagnostics) <= n {
+	if len(r.Check.Diagnostics) <= nBefore {
 		t.Errorf("micronOpReturns concrete cross-kind: no mirror")
 	}
 	done()

@@ -153,7 +153,11 @@ func seqOp(r *Registry, op, a, b string, mk func(string) Value) (Value, error) {
 // ("ab" mul "xy" → "axaybxby").
 func seqMul(r *Registry, op, a, b string, mk func(string) Value) (Value, error) {
 	ra, rb := []rune(a), []rune(b)
-	if err := seqSizeGuard(r, op, int64(len(ra))*int64(len(rb))*2); err != nil {
+	// The exact output size in BYTES: every byte of a is emitted once per
+	// rune of b, and every byte of b once per rune of a. Counting runes as
+	// one byte each would let two multi-byte-rune inputs pass the guard
+	// yet build a result up to 4x the cap (PR #292 review).
+	if err := seqSizeGuard(r, op, int64(len(a))*int64(len(rb))+int64(len(b))*int64(len(ra))); err != nil {
 		return Value{}, err
 	}
 	var sb strings.Builder
@@ -262,12 +266,19 @@ func booleanArithHandler(op string) Handler {
 	}
 }
 
-// booleanArithReturns is the check-mode mirror: a Boolean arithmetic
-// call is a GUARANTEED runtime error, flagged with the byte-identical
-// detail (the setMicron immutability-error pattern).
+// booleanArithReturns is the check-mode mirror: Boolean arithmetic over
+// two CONCRETE Boolean operands on the top-level straight line is a
+// GUARANTEED runtime error, flagged with the byte-identical detail (the
+// setMicron immutability-error pattern). Both gates are load-bearing
+// (PR #292 review): reachability (atUncaughtTopLevel — a mirror inside
+// an uncalled fn body / branch is not unconditionally reached), and
+// concreteness — a Boolean-typed CARRIER's runtime value can carry a
+// strict-subtype tag (`refine Boolean`) that a more-specific user
+// overload claims at run time (the refinement escape), so the
+// CoreDefault match over a carrier proves nothing.
 func booleanArithReturns(op string) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
-		if r != nil && r.Check.IsActive() && len(args) == 2 {
+		if atUncaughtTopLevel(r) && len(args) == 2 && IsConcrete(args[0]) && IsConcrete(args[1]) {
 			eng.CheckAddUniqueDiagnostic(r, "type_error", booleanArithDetail(op), op, args[0].Pos())
 		}
 		return []Value{}
@@ -592,38 +603,29 @@ func seqOpReturns(op string, elem *Type, h Handler) ReturnsFunc {
 
 // micronOpReturns narrows a Micron op to the operand kind when both
 // operands are statically the same kind (else the family root), and
-// mirrors the STATICALLY-DECIDABLE guaranteed errors:
-//   - two concrete operands run the real (pure) handler — full
-//     validation, byte-identical detail;
-//   - two typed carriers of DIFFERENT leaf kinds are the guaranteed
-//     cross-kind refusal;
-//   - a same-kind Qion / Pathon pair under an op the kind defines as an
-//     error (everything but add / sub) raises regardless of values.
+// mirrors the guaranteed errors of a call whose operands are BOTH
+// CONCRETE by running the real (pure) handler — full validation,
+// byte-identical detail.
 //
-// Value-dependent failures (currency mismatch, validator refusals, an
-// absolute right-hand path) stay with the runtime handler.
+// Carrier operands are deliberately NOT mirrored, even for shapes that
+// look statically decidable (a cross-kind pair, a same-kind Qion/Pathon
+// mul): a CoreDefault is an unlocked overload, so a carrier's runtime
+// value can arrive tagged with a strict SUBTYPE the static type admits
+// (a fn declared to return the base kind reparenting to a newtype — the
+// refinement escape), and a more-specific user overload over those tags
+// pre-empts the default at run time. Only concrete operands' tags are
+// final (PR #292 review — the same reasoning as booleanArithReturns and
+// the compile-side coreDefaultCarrier poly routing). Value-dependent
+// failures (currency mismatch, validator refusals, an absolute
+// right-hand path) stay with the runtime handler either way.
 func micronOpReturns(op string) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		if len(args) != 2 || args[0].Parent == nil || args[1].Parent == nil {
 			return []Value{NewCarrier(TMicron)}
 		}
-		lp, rp := args[1].Parent, args[0].Parent // handler order: left=args[1], right=args[0]
-		if atUncaughtTopLevel(r) && !args[0].Dynamic && !args[1].Dynamic {
-			switch {
-			case IsConcrete(args[0]) && IsConcrete(args[1]):
-				if _, err := micronBinaryOp(r, op, args[1], args[0]); err != nil {
-					mirrorOpError(r, op, err, args[0].Pos())
-				}
-			case !lp.Equal(rp) && !lp.Equal(TMicron) && !rp.Equal(TMicron):
-				mirrorOpError(r, op, r.AqlError("type_error",
-					fmt.Sprintf("%s: %s and %s are different Micron kinds — core operations apply within a kind, not across",
-						op, lp.Leaf(), rp.Leaf()), op), args[0].Pos())
-			case lp.Equal(rp) && lp.ConformsTo(TQion) && op != "add" && op != "sub":
-				mirrorOpError(r, op, r.AqlError("type_error",
-					op+": is not defined between two Qion values — only add and sub (same currency) are", op), args[0].Pos())
-			case lp.Equal(rp) && lp.ConformsTo(TPathon) && op != "add" && op != "sub":
-				mirrorOpError(r, op, r.AqlError("type_error",
-					op+": is not defined between two Pathon values — only add (join) and sub (strip trailing segments) are", op), args[0].Pos())
+		if atUncaughtTopLevel(r) && IsConcrete(args[0]) && IsConcrete(args[1]) {
+			if _, err := micronBinaryOp(r, op, args[1], args[0]); err != nil {
+				mirrorOpError(r, op, err, args[0].Pos())
 			}
 		}
 		if args[0].Parent.Equal(args[1].Parent) {

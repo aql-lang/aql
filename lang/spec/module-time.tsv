@@ -182,3 +182,4 @@ import "aql:time-util"  sub (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.un
 import "aql:time-util"  sub (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))))	0s	TimeOfDay − TimeOfDay is a ClockDuration
 import "aql:time-util"  TimeUtil.div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	the namespaced div extension works alongside the transplant
 import "aql:time-util"  TimeUtil.mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	the namespaced mod extension works alongside the transplant
+import "aql:time-util"  add (TimeUtil.hours 2562047) (TimeUtil.hours 1)	ERROR:ClockDuration overflow	checked duration arithmetic — no int64 wrap (WAT Exhibit K)

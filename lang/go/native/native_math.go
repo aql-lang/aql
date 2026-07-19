@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/cockroachdb/apd/v3"
@@ -492,12 +493,31 @@ func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 // operand), matching the existing Date±Duration overloads above, so
 // `sub d1 d2` is d1 − d2 and `div c1 c2` is c1 ÷ c2.
 
-// dateSubHandler is Date − Date → CalendarDuration (whole days).
+// dateSubHandler is Date − Date → CalendarDuration (whole days). The
+// difference is computed over CIVIL dates — each operand's y/m/d
+// reconstructed at UTC midnight — never by dividing a wall-clock
+// duration: in a DST-observing location consecutive local midnights can
+// be 23 or 25 hours apart (a raw /24h truncates that ±1 day to 0), and
+// time.Duration saturates for pairs more than ~290 years apart. The
+// UTC-midnight Unix seconds divide by 86400 exactly (PR #292 review).
 func dateSubHandler(tt TemporalModuleTypes) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-		days := int(AsDate(args[0]).Sub(AsDate(args[1])).Hours()) / 24
+		days := int(civilDayNumber(AsDate(args[0])) - civilDayNumber(AsDate(args[1])))
 		return []Value{tt.NewCalendarDuration(0, 0, days)}, nil
 	}
+}
+
+// civilDayNumber is t's calendar date as a day count (its y/m/d at UTC
+// midnight, in days since the Unix epoch — negative before it).
+func civilDayNumber(t time.Time) int64 {
+	y, m, d := t.Date()
+	secs := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix()
+	// Floor division: pre-epoch midnights are negative and must round
+	// toward -inf so day arithmetic stays exact across the epoch.
+	if secs >= 0 {
+		return secs / 86400
+	}
+	return (secs - 86399) / 86400
 }
 
 // dateTimeSubHandler is DateTime − DateTime → ClockDuration.
@@ -521,15 +541,31 @@ func timeOfDaySubHandler(tt TemporalModuleTypes) Handler {
 	}
 }
 
-// clockDurArith is ClockDuration ± ClockDuration → ClockDuration.
+// clockDurArith is ClockDuration ± ClockDuration → ClockDuration. A
+// ClockDuration is an int64 nanosecond count, so the arithmetic is
+// CHECKED — an out-of-range result raises rather than silently wrapping
+// to an unrelated duration (the WAT Exhibit K policy, uniform with the
+// integer words; PR #292 review).
 func clockDurArith(tt TemporalModuleTypes, neg bool) Handler {
-	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	op := "add"
+	if neg {
+		op = "sub"
+	}
+	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		a, _ := AsClockDuration(args[0])
 		b, _ := AsClockDuration(args[1])
+		var c int64
+		var ok bool
 		if neg {
-			b = -b
+			c, ok = checkedSubInt(int64(a), int64(b))
+		} else {
+			c, ok = checkedAddInt(int64(a), int64(b))
 		}
-		return []Value{tt.NewClockDuration(a + b)}, nil
+		if !ok {
+			return nil, r.AqlError("integer_overflow",
+				op+": ClockDuration overflow — the result does not fit the int64 nanosecond range", op)
+		}
+		return []Value{tt.NewClockDuration(time.Duration(c))}, nil
 	}
 }
 
