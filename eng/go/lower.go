@@ -1130,6 +1130,15 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 			}
 		})
 	}
+	// buried marks a unit-level branch value-def (`def m (if …)`) whose SINGLE read
+	// has a COMPUTED producer (another call/branch/loop) lowered between it and its
+	// consumer, so the producer's result sits ON TOP of it and the consumer finds
+	// it buried ("result operand of <word> is not on top" — the trie `def m (if …);
+	// def res (do {…} (iota m) … fold)` shape, where the do-init buries m before
+	// `iota m`). planBranchPromotion seats such a def in a frame local; a def with
+	// NO intervening producer (the common immediately-consumed case) is left on the
+	// sim, unpessimised.
+	buried := es.computeBranchBurial(events, refs)
 	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
 	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
 	// But if its (zero-value) RESULT is CONSUMED — bound by `def x (for …)`
@@ -1217,7 +1226,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
 		// program-residual-only value the dead-drop must not touch.
 		if ev.kind == evBranch {
-			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, forceOrder, promoted, dead)
+			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, storeSource, buried, forceOrder, promoted, dead)
 			continue
 		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
@@ -1577,7 +1586,53 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 // is consumed by the first use (bucket's `bcount set bi ((bcount get bi) add
 // 1)`). Gated to a SINGLE-value merge so the store seats exactly one value —
 // a multi-value / variadic merge is refused at the store hook.
-func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
+// computeBranchBurial marks a unit-level branch value-def (`def m (if …)`) whose
+// SINGLE read has a COMPUTED producer (another call/branch/loop) lowered between
+// it and its consumer, so the producer's result sits ON TOP of it and the
+// consumer finds it buried ("result operand of <word> is not on top" — the trie
+// `def m (if …); def res (do {…} (iota m) … fold)` shape, where the do-init
+// buries m before `iota m`). A def with NO intervening producer (the common
+// immediately-consumed case) is left on the sim, unpessimised.
+func (es *EmitState) computeBranchBurial(events []emitEvent, refs map[int]int) map[int]bool {
+	buried := map[int]bool{}
+	for i := range events {
+		s := events[i].seq
+		if events[i].kind != evBranch || !es.eventInfo[s].valueDef || refs[s] != 1 {
+			continue
+		}
+		consumer := -1
+		for j := i + 1; j < len(events) && consumer < 0; j++ {
+			forEachOperand(&events[j], func(op emitOperand) {
+				if op.kind == opEvent && op.idx == s && op.resIdx == 0 {
+					consumer = j
+				}
+			})
+		}
+		// consumer == -1 (the single read is a fragment / residual, not a flat
+		// operand) leaves the loop below inert (j < -1 is false): a non-flat read
+		// is not a flat sim burial, so it correctly stays unpromoted here.
+		for j := i + 1; j < consumer; j++ {
+			if isProducingEvent(events[j].kind) {
+				buried[s] = true
+				break
+			}
+		}
+	}
+	return buried
+}
+
+// isProducingEvent reports whether an event kind leaves a fresh result value on
+// the simulated operand stack (so, lowered between a value-def and its consumer,
+// it BURIES the value-def). Store / dyn-bind / flow events push nothing.
+func isProducingEvent(kind int) bool {
+	switch kind {
+	case evCall, evBranch, evLoop, evCallUser, evFallback, evTrap:
+		return true
+	}
+	return false
+}
+
+func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, storeSource, buried, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
 	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
 		if dead == nil {
 			dead = map[int]bool{}
@@ -1585,8 +1640,24 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 		dead[ev.seq] = true
 		return promoted, dead
 	}
+	// A UNIT-LEVEL branch value-def (`def m (if …)` produced at the fn/program top
+	// level, not inside a branch/loop fragment) promotes even on a single read, the
+	// same as a unit-level native/user-call value-def: a binding may be consumed
+	// out-of-order or BURIED by a later-sibling computed operand (the trie
+	// `def m (if …); def res (do {…} (iota m) … fold)` — the do-init buries m's
+	// sim slot before `iota m` reads it → "result operand of iota is not on top").
+	// A unit-level branch value-def whose single-read result is BURIED by an
+	// intervening computed producer before its consumer (buried[ev.seq]) can't be
+	// seated on the sim top — promote it to a frame local. Excludes a fragment-
+	// INTERNAL def (reachable on its own fragment sim; a cross-fragment read is the
+	// separate crossFragRef case) and a loop-carried STORE SOURCE (lowerStore seats
+	// it off the sim top, so promoting it strands the store — as the native
+	// value-def promotion excludes it at lower.go:1305). The buried gate is what
+	// keeps the common immediately-consumed `def y (if …) y mul 2` on the optimal
+	// sim-top consume (no intervening producer → not buried → not promoted).
+	unitBuriable := es.eventInfo[ev.seq].valueDef && !fragInternal[ev.seq] && !storeSource[ev.seq] && buried[ev.seq]
 	if branchSingleValue(ev.br) && (es.eventInfo[ev.seq].valueDef || forceOrder[ev.seq]) &&
-		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || es.dynEnv) {
+		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || unitBuriable || es.dynEnv) {
 		if promoted == nil {
 			promoted = map[int]int{}
 		}

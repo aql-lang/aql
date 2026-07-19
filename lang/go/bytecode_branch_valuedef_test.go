@@ -74,6 +74,70 @@ def _ (bcount set bi ((bcount get bi) add 1)) end
 	}
 }
 
+// TestBranchValueDefBuried pins the fix for a UNIT-LEVEL branch value-def whose
+// single read is BURIED by an intervening computed producer before its consumer:
+// `def m (if …); def res (do {…} (iota m) … fold)` — the trie common-len shape.
+// The fold INIT (`do {…}`) is its own producing event, lowered between m's
+// production and `iota m`, so it pushes ON TOP of m's sim slot and iota finds its
+// operand not on top → "stack discipline: result operand of iota is not on top".
+// computeBranchBurial now detects the intervening producer and planBranchPromotion
+// seats m in a frame local (read via PUSH_LOCAL from any depth). A def with NO
+// intervening producer (`def y (if …) y mul 2`) stays on the sim, unpessimised.
+// compile == interpret MUST hold; compiles natively (no island).
+func TestBranchValueDefBuried(t *testing.T) {
+	strict := []struct{ name, src, want string }{
+		// The minimal buried shape: m (if-def) buried by the do-init before iota.
+		{"if-def buried by fold do-init before iota",
+			`def m (if (1 gt 0) [3] [0])
+def res (do {n: [10]} (iota m) [ var [[i acc] acc] ] fold)
+(res "n" get)`, "[10]"},
+		// The real trie common-len fn: prefix length via a folded do-accumulator.
+		{"trie common-len (iota over an if-def, folded)",
+			`def common-len fn [ [a:String b:String] [Integer] [
+  def m (if ((a size) lt (b size)) [a size] [b size])
+  def res (do {n: [0], ok: [true]} (iota m) [
+    var [[i acc]
+      if (acc "ok" get)
+        [ if ((a slice i (i 1 add)) (b slice i (i 1 add)) eq)
+            [ do {n: [(acc "n" get) 1 add], ok: [true]} ]
+            [ do {n: [acc "n" get], ok: [false]} ] ]
+        [acc] ] ] fold)
+  res "n" get
+] ]
+["abcx" "abcy" common-len]`, "[[3]]"},
+		// A native-call producer between the if-def and its consumer buries it too.
+		{"if-def buried by an intervening native-call producer",
+			`def m (if (1 gt 0) [2] [0])
+def other (5 add 6)
+def r (iota m)
+[(r size) other]`, "[[2 11]]"},
+	}
+	for _, c := range strict {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog == nil {
+				t.Fatalf("must compile natively, refused: %q", reason)
+			}
+			if strings.Contains(prog.Disassemble(), "FALLBACK") {
+				t.Errorf("%s must compile native (no island)", c.name)
+			}
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("RunCompiledStrict: %v", err)
+			}
+			b, _ := New()
+			want, _ := b.RunInterp(c.src)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			}
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
+	}
+}
+
 // TestBranchArmResultSelfConsumed pins the fix for a value-def that is BOTH the
 // arm RESULT and consumed as an operand WITHIN the same arm — the todo-api PUT
 // handler shape `def t2 {…}; (todos set (id) t2) drop; t2`, where t2 is the
