@@ -62,6 +62,7 @@ const pinnedFalsePositives = 0
 // aggregate history is archived in design/CHECK-ACCURACY-RATCHET.10.md.
 var unflaggedPins = map[string]int{
 	"accessor.tsv":          1,
+	"bignum.tsv":            8,
 	"case.tsv":              2,
 	"class.tsv":             1,
 	"compare-restrict.tsv":  2,
@@ -87,6 +88,7 @@ var unflaggedPins = map[string]int{
 	"micron.tsv":            3,
 	"module-debug.tsv":      3,
 	"module-emitlang.tsv":   8,
+	"module-io.tsv":         29,
 	"module-log.tsv":        6,
 	"module-minilang.tsv":   28,
 	"module-net.tsv":        7,
@@ -95,6 +97,7 @@ var unflaggedPins = map[string]int{
 	"module-query.tsv":      1,
 	"module-sift.tsv":       24,
 	"module-struct.tsv":     2,
+	"module-tui.tsv":        20,
 	"patrun.tsv":            1,
 	"reach.tsv":             3,
 	"record.tsv":            2,
