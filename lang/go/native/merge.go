@@ -67,7 +67,11 @@ func mergeListMapHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 		// idx > len(result): gap, ignore
 	}
 
-	out, terr := d2ReTagContainer(r, d2typedMergeOperand(args[0], args[1]), NewList(result), "merge")
+	// The result is a LIST built from args[0] (the list operand), so the LIST's
+	// [:T] governs — every merged value must conform to it. Re-tag against args[0]
+	// (NOT d2typedMergeOperand, which would pick the map patch's tag and validate
+	// the list result against the wrong contract — Codex round 7).
+	out, terr := d2ReTagContainer(r, args[0], NewList(result), "merge")
 	if terr != nil {
 		return nil, terr
 	}
@@ -111,7 +115,12 @@ func mergeMapListHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 		// idx > len(result): gap, ignore
 	}
 
-	out, terr := d2ReTagContainer(r, d2typedMergeOperand(args[0], args[1]), NewList(result), "merge")
+	// The result is a LIST built from args[1] (the list operand), so the LIST's
+	// [:T] governs — the map patch's integer-keyed values are written INTO it and
+	// must conform to it. Re-tag against args[1] (NOT d2typedMergeOperand, which
+	// picks args[0], the map patch, and validates against the wrong contract —
+	// `{:String}{"0":"bad"} merge [:Integer][1]` must reject; Codex round 7).
+	out, terr := d2ReTagContainer(r, args[1], NewList(result), "merge")
 	if terr != nil {
 		return nil, terr
 	}

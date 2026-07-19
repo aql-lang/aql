@@ -233,11 +233,11 @@ func mergeReturns(args []Value, _ *Registry) []Value {
 	if a == nil || b == nil {
 		return dyn
 	}
-	switch {
-	case a.ConformsTo(TMap) && b.ConformsTo(TMap):
-		return []Value{NewDynamicCarrier(TMap)}
-	case a.ConformsTo(TList) && b.ConformsTo(TList):
-		return []Value{NewDynamicCarrier(TList)}
+	// A same-kind merge yields that kind; retain the governing operand's element
+	// tag (d2DynamicTypedResidual) so a chained write after a typed merge is
+	// diagnosed in check — the residual otherwise loses child + elem (#7, round 7).
+	if (a.ConformsTo(TMap) && b.ConformsTo(TMap)) || (a.ConformsTo(TList) && b.ConformsTo(TList)) {
+		return []Value{d2DynamicTypedResidual(d2typedMergeOperand(args[0], args[1]))}
 	}
 	return dyn
 }

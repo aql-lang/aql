@@ -398,3 +398,19 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
   containers (that would require a rebuild, which is exactly what breaks
   identity). The common case — an already-`[:T]`-constructed flex, or one whose
   nested containers were tagged at construction — is fully enforced.
+- **Round 7 — the index-merge governing operand + merge check residual.**
+  1. **The list↔map index-merge handlers picked the wrong governing tag.** Both
+     `mergeListMapHandler` and `mergeMapListHandler` build a LIST result (the
+     map's integer-keyed values are written INTO the list), so the LIST operand's
+     `[:T]` governs — but they re-tagged against `d2typedMergeOperand`, which
+     prefers the MAP patch. So `{:String}{"0":"bad"} merge [:Integer][1]`
+     validated the result against `String`, succeeded, and returned a `[:String]`
+     list instead of rejecting `"bad"` against the destination's `Integer`
+     contract — a soundness hole. Fixed to re-tag against the list operand
+     (`args[0]` for list-map, `args[1]` for map-list). `d2typedMergeOperand` stays
+     for the same-kind generic `merge` (both operands are the result's kind).
+  2. **`mergeReturns` emitted plain dynamic carriers.** A chained write after a
+     same-kind typed merge (`def r (merge m {b:2}) (r set c/q "bad")` for
+     `m:{:Integer}`) wasn't diagnosed in check. It now returns
+     `d2DynamicTypedResidual` over the governing operand, so the residual carries
+     the child + `elem` and the chained write is flagged.
