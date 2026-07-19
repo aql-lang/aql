@@ -1022,6 +1022,23 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// readers about reachable states (completion plan 2.3; the article's
 	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
 	"redundant_guard": SeverityInfo,
+	// Case exhaustiveness (design/case-exhaustiveness.0.md). A default-less
+	// `case` whose clause matches do not provably cover the scrutinee's
+	// static type is an ERROR: the uncovered value silently produces
+	// nothing at runtime. Coverage is proven in the sound direction only
+	// (opaque predicate matches never count), a gradual dynamic(T)
+	// scrutinee skips the check, and the trailing default stays optional
+	// exactly when the type disjunction is fully met — so the finding
+	// fires only where a genuinely uncoverable value exists. NOT a
+	// RuntimeMirror: no-match is not a runtime error, so the compile
+	// pipeline refuses on it like any other model-level error.
+	"case_not_exhaustive": SeverityError,
+	// The advisory duals of the same coverage computation (info,
+	// non-gating, per the redundant_guard precedent): a trailing default
+	// made unreachable because the clauses already cover every
+	// alternative, and a clause subsumed by the clauses before it.
+	"case_redundant_default":  SeverityInfo,
+	"case_unreachable_clause": SeverityInfo,
 	// RESERVED — no emit site yet (completion plan 4.4 / G6). The general
 	// "options-looking map literal flows into a slot with no Options schema"
 	// lint is BLOCKED ON PRECISION: atom-spelled and string-spelled map keys

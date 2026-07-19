@@ -91,13 +91,31 @@ func init() {
 			"same way \u2014 value pushed first, like the error handler \u2014 so a block " +
 			"list can consume it; a plain-value block is the result as-is. A trailing " +
 			"odd element is the default. The stack-value form `v case [clauses]` " +
-			"serves error handlers and pipelines.",
+			"serves error handlers and pipelines. `aql check` requires the clauses " +
+			"to be EXHAUSTIVE over the scrutinee's static type: a default-less case " +
+			"with a provably-uncoverable value is a check error " +
+			"(case_not_exhaustive). The default is not needed when the type " +
+			"disjunctions are met — the clauses cover every union alternative, " +
+			"every enum member, Boolean's true+false, or the concrete value. " +
+			"Comparison predicates prove coverage by interval union ([gt 3] plus " +
+			"[lte 3] covers Integer, as does a refine'd range with its " +
+			"complement) and [is T] covers nominally; a base-type clause does " +
+			"NOT cover a user-defined newtype (nominal boundary). A dynamic " +
+			"(untyped or computed) scrutinee REQUIRES a trailing default or an " +
+			"Any clause.",
 		Examples: []string{
 			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
 			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,
-			`case "x" [Integer "int" String "str"]      ;# 'str'`,
+			`case "x" [Integer "int" String "str"]      ;# 'str' — String provably covers "x", so no default is needed`,
 			`case 5 [Integer [mul 10] "other"]          ;# 50 — the block sees the value`,
 			`do [risky] error [get code case [bad_input/q "rejected" "unexpected"]]`,
+			`case 9 [1 "one" 2 "two"]                   ;# check ERROR case_not_exhaustive — 9 matches no clause; add a default`,
+			`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] ;# exhaustive over IS — no default needed`,
+			`def f fn [[x:IS][Integer][case x [Integer 1]]] ;# check ERROR case_not_exhaustive — uncovered: String`,
+			`def f fn [[b:Boolean][Integer][case b [true 1 false 0]]] ;# true+false cover Boolean`,
+			`def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]] ;# exhaustive — the intervals cover Integer`,
+			`def Pos refine Integer def f fn [[x:Pos][String][case x [Pos "p"]]] ;# a newtype needs its OWN clause — Integer would not cover it`,
+			`def f fn [[x:Any][String][case x [1 "one" "other"]]] ;# a dynamic scrutinee REQUIRES the default (or an Any clause)`,
 		},
 	})
 

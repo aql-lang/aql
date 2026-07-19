@@ -168,6 +168,24 @@ explicitly first. For the same reason `convert BigInteger 3.14` and
 and to/from `Integer`/`String` is exact, and `convert Float 0d2.5` is
 allowed but documented as a lossy projection.
 
+**Opting in to `Float → BigDecimal`.** Because a binary `Float` is
+inexact, the plain refusal above is the default — but a 3-arg `convert`
+with an `accuracy` option lets you take the conversion anyway, once
+you state *which* reading of the inexact value you want:
+
+| Option | Meaning | `3.14159` → |
+| --- | --- | --- |
+| `{accuracy:'shortest'}` | shortest decimal that round-trips to the same `Float` — what the literal reads as | `0d3.14159` |
+| `{accuracy:'exact'}` | the true dyadic value the `float64` holds | `0d3.141589999999999882618340052431449294...` |
+| `{accuracy:'round' places:N}` | the exact value rounded to `N` decimal places, half away from zero | `0d3.14` (`places:2`) |
+
+The option applies only to a `Float → BigDecimal` conversion (it is
+inert for any other source/target, like `truthy` on a non-Boolean);
+`Float → BigInteger` stays refused (convert to `Integer` first). A
+non-finite `Float` (`nan`/`inf`), an unknown mode, `round` without
+`places`, `exact`/`shortest` *with* `places`, and a negative `places`
+are all rejected.
+
 **Division.** `BigInteger div BigInteger` truncates toward zero and
 returns a BigInteger (with `mod`), like `Integer div`. `BigDecimal div
 BigDecimal` returns a BigDecimal rounded to the active decimal context —
@@ -1627,7 +1645,7 @@ before the call.
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
-| `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
+| `case` | Dispatch on a value: match/block pairs + optional default. `aql check` requires the clauses to cover the scrutinee's static type (`case_not_exhaustive` error); the default is not needed when the type disjunctions are met | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [add 1 2]` returns `3` |
 | `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
@@ -1651,6 +1669,195 @@ truthy — a String's characters are never inspected. (Parsing the words
 `"true"`/`"false"` into booleans is a separate operation, not part of
 coercion.) A condition that produces *no* value at all (e.g. an empty
 block `[]` as the condition) is an error, not a false.
+
+#### `case` — dispatch and exhaustiveness
+
+`case <value> [m1 b1 m2 b2 … default]` walks match/block pairs in
+order; the first match wins, and a trailing odd element is the default.
+A match unifies with the value (equal scalars/atoms; a type literal
+matches its members), or — when the match is a code-body list — runs as
+a predicate with the value on the stack:
+
+```
+case 2 [1 "one" 2 "two" "many"]           # 'two'  — an equal scalar matches
+case 5 [[gt 3] "big" "small"]             # 'big'  — [gt 3] runs as `5 gt 3`
+case "x" [Integer "int" String "str"]     # 'str'  — a type literal matches its members
+```
+
+**`case` is statically exhaustive.** `aql check` requires the clauses
+to cover the scrutinee's static type: a default-less `case` with a
+provably-uncoverable value is an error, `case_not_exhaustive`, which
+fails the check and refuses `aql run` at preflight. Coverage is proven
+in the sound direction only — a clause counts only when every runtime
+value of an alternative provably matches it — so the checker may
+conservatively demand a default it cannot prove unnecessary, but it
+never wrongly proves a `case` exhaustive. Three coverage channels
+compose: value/type matches (with a nominal newtype boundary),
+`[is T]` predicates, and comparison predicates / `refine`d ranges via
+interval union. The default is **not** required when the type
+disjunctions are met:
+
+**A declared union, covered alternative by alternative** (or by the
+union type itself in match position):
+
+```
+def IS (Integer tor String)
+def f fn [[x:IS][String][case x [Integer "i" String "s"]]]
+f 5                       # 'i' — exhaustive over IS, no default needed
+f "hi"                    # 's'
+
+def g fn [[x:IS][String][case x [IS "either"]]]
+g 5                       # 'either' — the union type covers all its members
+
+def h fn [[x:IS][Integer][case x [Integer 1]]]
+# check error: case_not_exhaustive — uncovered: String
+```
+
+**Boolean, by `true` and `false`** (or the `Boolean` literal):
+
+```
+def f fn [[b:Boolean][Integer][case b [true 1 false 0]]]
+f false                   # 0 — true+false cover Boolean
+
+def g fn [[b:Boolean][Integer][case b [true 1]]]
+# check error: case_not_exhaustive — uncovered: false
+```
+
+**An enum, member by member** (or by a covering type literal such as
+`Atom`):
+
+```
+def Color (red/q tor green/q tor blue/q)
+def f fn [[c:Color][String][case c [red/q "warm" green/q "calm" blue/q "cool"]]]
+f green/q                 # 'calm' — every member listed
+
+def g fn [[c:Color][String][case c [red/q "warm" green/q "calm"]]]
+# check error: case_not_exhaustive — uncovered: blue
+```
+
+**An optional, by the base type plus `none`:**
+
+```
+def MaybeInt (Integer tor none)
+def f fn [[x:MaybeInt][Integer][case x [Integer 1 none 0]]]
+f 5                       # 1
+```
+
+**A plain type, by itself or an ancestor** — concrete value clauses can
+never cover an infinite type:
+
+```
+def f fn [[x:Integer][String][case x [Number "some number"]]]
+f 7                       # 'some number' — the ancestor covers Integer
+
+def g fn [[x:Integer][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — uncovered: Integer
+```
+
+**A concrete scrutinee is value-precise** — a clause that provably
+matches is enough:
+
+```
+case 2 [1 "one" 2 "two"]  # 'two' — 2 provably matches, no default needed
+case 9 [1 "one" 2 "two"]  # check error: case_not_exhaustive — uncovered: 9
+case 9 [1 "one" "many"]   # 'many' — a trailing default always satisfies the check
+```
+
+**Comparison predicates prove coverage by interval union** — with
+EXACT `int64` bounds over the Integer domain (which is exactly int64),
+merged with ℤ-adjacency; a genuine gap is caught and an `[eq …]` point
+bridges it. **Float and Number are never interval-total**: `nan` is a
+Float inhabitant and every ordered comparison against it is false, so a
+comparison-only clause list cannot cover them (a concrete non-`nan`
+float is still point-checked against the intervals):
+
+```
+def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]]
+f 5                       # 1 — (3,∞) ∪ (-∞,3] covers Integer, no default needed
+
+def g fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2]]]
+# check error: case_not_exhaustive — uncovered: Integer (3 itself is missed)
+
+def h fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2 [eq 3] 3]]]
+h 3                       # 3 — the [eq 3] point closes the gap
+
+def k fn [[x:Float][Integer][case x [[gte 3.0] 1 [lt 3.0] 2]]]
+# check error: case_not_exhaustive — uncovered: Float (nan matches no comparison)
+
+case 5.0 [[gt 3.0] "big"] # 'big' — a concrete float is point-checked
+case nan [[lte 0.0] "x"]  # check error — nan is admitted by no interval
+```
+
+A `refine`d range type used as a match contributes its bounds the same
+way — restricted to its BASE family (`Big` below admits no Float at
+runtime, so its interval never counts toward a Float scrutinee) — and
+its complement predicate completes the domain:
+
+```
+def Big (Integer gt 10)
+def f fn [[x:Integer][String][case x [Big "big" [lte 10] "small"]]]
+f 50                      # 'big' — (10,∞) ∪ (-∞,10] covers Integer
+```
+
+An unrecognized predicate shape (anything but `[gt/gte/lt/lte/eq N]`
+or `[is T]`) stays opaque and proves nothing.
+
+**A dynamic scrutinee requires a default** — with no static type to
+prove coverage against, the clause list must carry its own catch-all: a
+trailing default or an `Any` clause. A code-body scrutinee computes its
+value, so the same rule applies to it:
+
+```
+def f fn [[x:Any][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — the scrutinee is dynamic
+
+def g fn [[x:Any][String][case x [1 "one" "other"]]]
+g 9                       # 'other' — the default satisfies the check
+
+def h fn [[x:Any][String][case x [1 "one" Any "other"]]]
+h 9                       # 'other' — an Any clause is the written catch-all
+
+case [1 add 1] [2 "two"]  # check error — a computed scrutinee is dynamic too
+```
+
+(The historical no-match/no-default produce-nothing behaviour is
+therefore no longer expressible in a check-clean program; the engine
+still produces nothing when an unchecked run falls through.)
+
+**The newtype boundary is nominal in both directions** — a base-type
+clause does not cover a user-minted newtype alternative, and a newtype
+clause does not cover its base. A `Pos` scrutinee demands a `Pos`
+clause, an `[is Pos]` predicate, an `Any` clause, or a default:
+
+```
+def Pos refine Integer
+def f fn [[x:Pos][String][case x [Pos "p"]]]
+def y:Pos 5
+f y                       # 'p' — the newtype's own clause covers it
+
+def g fn [[x:Pos][String][case x [[is Pos] "p"]]]
+                          # checks clean — [is T] covers nominally too
+
+def h fn [[x:Pos][String][case x [Integer "i"]]]
+# check error: case_not_exhaustive — uncovered: Pos (the base does not cover it)
+
+def k fn [[x:Integer][String][case x [Pos "p"]]]
+# check error: case_not_exhaustive — uncovered: Integer (nor the reverse)
+```
+
+The same coverage computation yields two info-severity advisories
+(never gating): `case_unreachable_clause`, for a clause an earlier
+clause fully subsumes, and `case_redundant_default`, for a default made
+dead by full coverage of a declared union:
+
+```
+def f fn [[x:Integer][Integer][case x [Number 1 Integer 2 3]]]
+# info: case_unreachable_clause — Integer can never match after Number
+
+def IS (Integer tor String)
+def g fn [[x:IS][String][case x [Integer "i" String "s" "d"]]]
+# info: case_redundant_default — the clauses already cover IS
+```
 
 #### `for` forms
 
