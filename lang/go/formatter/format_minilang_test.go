@@ -117,15 +117,18 @@ func TestFormatCommentNeverSwallowsDelimiter(t *testing.T) {
 	}
 }
 
-// TestFormatBlockCommentKeepsTrailingContent pins that content following a
-// BLOCK comment (`## … ##`, which is bounded, unlike a line comment) at the
-// start of a statement is preserved — it was silently dropped when
-// emitStatement returned only the leading comment.
-func TestFormatBlockCommentKeepsTrailingContent(t *testing.T) {
+// TestFormatDoubleHashIsLineComment pins that `##` is a LINE comment to end
+// of line, exactly like `#` — AQL has no bounded block comment. So the whole
+// `## … ## …` tail is one comment emitted verbatim; the formatter must never
+// treat what follows the second `##` as code and reformat it (which corrupted
+// comment text: `## t ## x is integer` → `## t ## x is Integer`).
+func TestFormatDoubleHashIsLineComment(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"## bc ## foo bar\n", "## bc ## foo bar\n"},
-		{"## bc ##\n", "## bc ##\n"},       // comment-only: unchanged
-		{"# line only\n", "# line only\n"}, // line comment: whole statement
+		{"## t ## x is integer\n", "## t ## x is integer\n"}, // NOT `x is Integer`
+		{"## t ## {a:1,b:2}\n", "## t ## {a:1,b:2}\n"},       // comma NOT removed
+		{"## bc ##\n", "## bc ##\n"},
+		{"# line only\n", "# line only\n"},
 		{"foo ## bc ## bar\n", "foo ## bc ## bar\n"},
 	}
 	for _, c := range cases {

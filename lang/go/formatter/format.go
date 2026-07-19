@@ -35,7 +35,6 @@ const (
 	TokString
 	TokNumber
 	TokComment
-	TokBlockComment
 	TokLBracket
 	TokRBracket
 	TokLBrace
@@ -67,7 +66,6 @@ const (
 	NdString
 	NdNumber
 	NdComment
-	NdBlockComment
 	NdList
 	NdMap
 	NdParen
@@ -93,7 +91,7 @@ type Node struct {
 // front end is pluggable: the default is the built-in lossless lexer, but
 // a tabnas grammar that preserves comments, backticks, and layout can be
 // dropped in without touching the layout rules or the emitter. The
-// contract is a lossless tree — comments (NdComment/NdBlockComment),
+// contract is a lossless tree — comments (NdComment),
 // newlines (NdNewline), and source order must be preserved for the
 // emitter to reproduce them.
 type Parse func(src string) *Node
@@ -152,20 +150,11 @@ func tokenize(src string) []Token {
 			continue
 		}
 
-		// Block comment ## ... ##
-		if ch == '#' && i+1 < len(src) && src[i+1] == '#' {
-			end := strings.Index(src[i+2:], "##")
-			if end < 0 {
-				tokens = append(tokens, Token{TokBlockComment, src[i:]})
-				i = len(src)
-			} else {
-				tokens = append(tokens, Token{TokBlockComment, src[i : i+2+end+2]})
-				i = i + 2 + end + 2
-			}
-			continue
-		}
-
-		// Line comment
+		// Comment. Both `#` and `##` run to end of line — AQL has NO bounded
+		// block comment (`## a ## b` is one comment; the real parser lexes
+		// `#` to EOL). Modelling `## … ##` as bounded made fmt treat what
+		// follows on the line as CODE and reformat it — corrupting comment
+		// text (`## t ## x is integer` → `## t ## x is Integer`).
 		if ch == '#' {
 			end := strings.IndexByte(src[i:], '\n')
 			if end < 0 {
@@ -563,8 +552,6 @@ func buildTree(tokens []Token) *Node {
 			add(&Node{Kind: NdNumber, Text: tok.Text})
 		case TokComment:
 			add(&Node{Kind: NdComment, Text: tok.Text})
-		case TokBlockComment:
-			add(&Node{Kind: NdBlockComment, Text: tok.Text})
 		case TokNewline:
 			add(&Node{Kind: NdNewline})
 		default:
@@ -811,7 +798,7 @@ func emitStatement(nodes []*Node, indent int) string {
 	// bounded, so `## bc ## foo` is a real statement whose `foo` would be
 	// dropped. (A LINE comment runs to end of line, so a statement starting
 	// with one is always comment-only anyway — len(nodes) == 1.)
-	if len(nodes) == 1 && (nodes[0].Kind == NdComment || nodes[0].Kind == NdBlockComment) {
+	if len(nodes) == 1 && nodes[0].Kind == NdComment {
 		return strings.Repeat(" ", indent) + nodes[0].Text
 	}
 
@@ -824,7 +811,7 @@ func emitStatement(nodes []*Node, indent int) string {
 	// it overflows the width: the comment annotates the whole statement (as
 	// in `expr # returns X` doc examples) and must never be wrapped onto its
 	// own line, detached from what it annotates.
-	if last := nodes[len(nodes)-1]; last.Kind == NdComment || last.Kind == NdBlockComment {
+	if last := nodes[len(nodes)-1]; last.Kind == NdComment {
 		return line
 	}
 
@@ -981,7 +968,7 @@ func emitNode(n *Node, indent int) string {
 		return emitParen(n, indent)
 	case NdWord, NdNumber, NdString:
 		return n.Text
-	case NdComment, NdBlockComment:
+	case NdComment:
 		return n.Text
 	case NdComma:
 		return ","
@@ -1283,7 +1270,7 @@ func parseMapEntries(children []*Node) []mapEntry {
 			i++
 			continue
 		}
-		if ch.Kind == NdComment || ch.Kind == NdBlockComment {
+		if ch.Kind == NdComment {
 			entries = append(entries, mapEntry{comment: ch})
 			i++
 			continue

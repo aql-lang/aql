@@ -148,22 +148,22 @@ func TestFormatListNonFirstGroupWrapSeam7(t *testing.T) {
 	}
 }
 
-// TestFormatInlineBlockCommentSeam7 covers emitNode's comment arm
-// (format.go:606-607) reached naturally: a block comment sitting inside a
-// list renders inline through renderInline.
-func TestFormatInlineBlockCommentSeam7(t *testing.T) {
-	src := "[a ## c ## b]\n"
-	want := "[a ## c ## b]\n"
-	if got := Format(src); got != want {
-		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
+// TestFormatInlineCommentSeam7 covers emitNode's comment arm reached
+// naturally: a trailing comment renders inline through renderInline. A `##`
+// comment runs to end of line exactly like `#` (AQL has no bounded block
+// comment), so the whole tail is one comment and is emitted verbatim.
+func TestFormatInlineCommentSeam7(t *testing.T) {
+	for _, src := range []string{"foo bar # note\n", "foo bar ## note\n"} {
+		if got := Format(src); got != src {
+			t.Errorf("Format(%q) = %q, want unchanged", src, got)
+		}
+		idempotentSeam7(t, src)
 	}
-	idempotentSeam7(t, src)
 }
 
-// TestEmitNodeRootAndCommentsSeam7 covers emitNode's NdRoot arm
-// (format.go:596-597) and the NdComment/NdBlockComment arm
-// (format.go:606-607) via direct calls, mirroring the existing
-// emitNode direct-call test's idiom for the leaf kinds.
+// TestEmitNodeRootAndCommentsSeam7 covers emitNode's NdRoot arm and the
+// NdComment arm via direct calls, mirroring the existing emitNode
+// direct-call test's idiom for the leaf kinds.
 func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 	root := &Node{Kind: NdRoot, Children: []*Node{
 		{Kind: NdWord, Text: "hi"},
@@ -175,9 +175,6 @@ func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 	}
 	if got := emitNode(&Node{Kind: NdComment, Text: "# c"}, 0); got != "# c" {
 		t.Errorf("emitNode(NdComment) = %q, want %q", got, "# c")
-	}
-	if got := emitNode(&Node{Kind: NdBlockComment, Text: "## b ##"}, 0); got != "## b ##" {
-		t.Errorf("emitNode(NdBlockComment) = %q, want %q", got, "## b ##")
 	}
 }
 
