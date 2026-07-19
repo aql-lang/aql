@@ -23,9 +23,13 @@ def render fn [ [red/q] [String] ["R"]  [green/q] [String] ["G"] ]   # 'blue' om
 ```
 
 an uncovered call (`blue`) raises `no_signature` at runtime. Signature
-exhaustiveness would mirror that at check time — a genuine `RuntimeMirror`,
-upgrading a runtime trap to a compile-time error, the same way
-`case_not_exhaustive` models a `case` gap.
+exhaustiveness would catch that at check time — a **model-level** error like
+`case_not_exhaustive`, NOT a `RuntimeMirror`. (A finding emitted when `render`
+is merely *defined* has no guaranteed-executed call to mirror, and
+`RuntimeMirror` diagnostics deliberately do not refuse compilation
+— `eng/go/registry.go` — which is the opposite of the gate we want. `main`
+classifies its sibling `case_not_exhaustive` the same way, for the same
+reason.)
 
 ## What already exists
 
@@ -92,40 +96,47 @@ carrier, so the value-pattern sig `[red/q]` cannot match. This is a **general
 value-pattern-dispatch precision gap through any variable reference** — it is
 NOT enum-specific and reproduces with a plain `def`.
 
-Two consequences compound it:
+Two distinct paths, two distinct problems:
 
-- **Abstract path never checks.** A fn that takes an enum param and dispatches
-  on it (`def paint fn [[c:Color] [String] [render c]]`) is only analysed when
-  `paint` is *called* (fn bodies run only if reached —
-  `CheckState.FnBodyDepth`). Uncalled, no coverage check happens at all.
-- **Concrete path hits the gap.** When `paint` IS called (`paint red/q`), the
-  body is analysed with the concrete call shape (`c` = `red`), and `render c`
-  then trips the variable-reference precision gap above — a false
-  `no_signature` even when the overload set is COMPLETE.
+- **Abstract path: reached, but the partition can't compute.** Uncalled fn
+  bodies ARE analysed at construction — `checkFnBodyAtConstruction`
+  (`eng/go/core_helpers.go`) runs `AnalyseFnBody` for every freshly installed
+  non-generic body with GENERALIZED parameter carriers — so
+  `def paint fn [[c:Color] [String] [render c]]` is checked even uncalled, and
+  the generalized `Color` disjunct does reach the partition at `render c`
+  (a strict-disjunct dispatch is observable there). What blocks a finding here
+  is the partition's inability to compute enum coverage — the two bugs the fix
+  above addresses (concrete-member widening + pattern-blind `firstMatchingSig`)
+  — NOT reachability. (An earlier draft wrongly attributed this to fn bodies
+  going unanalysed; corrected per PR #291 review.)
+- **Concrete path: a separate precision gap.** A top-level `render c`, and the
+  per-call-shape re-analysis when a fn is called with a concrete argument
+  (`paint red/q` re-runs the body with `c` = `red`), resolve the variable
+  reference to an abstract `Atom` carrier rather than the concrete value — so a
+  value-pattern sig can't match and a false `no_signature` is raised even when
+  the overload set is COMPLETE (reproduced above). This is the general
+  variable-reference precision gap, independent of enums.
 
-So the disjunct partition, even fixed, is not reliably on the path: the value
-arrives either abstractly (body unanalysed) or concretely-through-a-variable
-(precision gap), not as the strict disjunct the partition consumes.
+(The `case` feature sidesteps both: it works over the clause list's own static
+analysis of the scrutinee type, not over overload dispatch — which is why it
+could ship self-contained.)
 
-(The `case` feature sidesteps all of this: it works over the clause list's own
-static analysis of the scrutinee type, not over overload dispatch — which is
-exactly why it could ship self-contained while this cannot.)
+## What a scoped effort would take
 
-## Why this is not a safe increment
+1. **Partition fix (confined, the first step).** Preserve concrete alternatives
+   in `alternativeCarriers`; add value-pattern awareness to `firstMatchingSig`.
+   This should surface the finding on the ABSTRACT construction-time path — the
+   first thing to confirm, since the disjunct already reaches the partition
+   there.
+2. **Variable-reference precision (the harder half).** Resolve a reference to a
+   known-concrete binding as that value at the call site, so the CONCRETE path
+   stops raising false `no_signature`. This touches how every `def` reference is
+   typed in analysis and shifts inferred types across the corpus — a core
+   checker change, and the broader win (it improves ALL value-pattern dispatch
+   through variables, not just enums).
 
-Closing the gap means changing one of two core things, both high-blast-radius
-and error-severity (`no_signature` / `partial_dispatch` gate `aql check`):
-
-1. **Variable-reference precision** — resolve a reference to a known-concrete
-   binding as that value at the call site. Touches how every `def` reference is
-   typed in analysis; shifts inferred types across the whole corpus.
-2. **Per-call-shape vs. abstract fn-body analysis** — analyse an enum param as
-   its disjunct so the partition sees it.
-
-Both are core checker changes deserving their own design + review. The
-motivating win is broader than enums: fixing (1) improves ALL value-pattern
-dispatch through variables, of which signature exhaustiveness is one
-beneficiary.
+Both are error-severity paths (`no_signature` / `partial_dispatch` gate
+`aql check`), deserving their own design + review.
 
 ## Recommendation
 
