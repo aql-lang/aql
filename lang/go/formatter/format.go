@@ -851,6 +851,15 @@ func tryFnFormat(nodes []*Node, indent int) string {
 		return ""
 	}
 
+	// Only the pristine case is handled here: the fn wrapper must be the LAST
+	// node of the statement. tryFnFormat renders just `header [args][ret][body]`,
+	// so any node after the wrapper (a trailing `end`, a following statement on
+	// the same line, another call) would be SILENTLY DROPPED. Decline instead
+	// and let wrapStatement — which emits every node — format the whole thing.
+	if fnIdx+2 != len(nodes) {
+		return ""
+	}
+
 	// Extract the inner lists from the wrapper.
 	var inner []*Node
 	for _, ch := range wrapper.Children {
@@ -858,7 +867,11 @@ func tryFnFormat(nodes []*Node, indent int) string {
 			inner = append(inner, ch)
 		}
 	}
-	if len(inner) < 3 || len(inner)%3 != 0 {
+	// Only a single signature triple ([args] [returns] [body]) is handled;
+	// this renderer emits only inner[0..2], so a multi-overload wrapper (6, 9,
+	// … inner lists) would drop every overload past the first. Decline and let
+	// the general path preserve them all.
+	if len(inner) != 3 {
 		return ""
 	}
 
@@ -873,13 +886,12 @@ func tryFnFormat(nodes []*Node, indent int) string {
 
 	body := inner[2]
 	bodyChildren := nonTrivial(body.Children)
-	bodyInline := renderInline(bodyChildren, indent)
 
-	// Try single line: def name fn [[args] [returns] [body]]
-	oneLine := header + " [" + bodyInline + "]]"
-	if len(oneLine) <= maxLineWidth {
-		return oneLine
-	}
+	// No single-line return here: tryFnFormat is reached only after
+	// emitStatement's renderInline of the whole statement already overflowed
+	// the width, and for this pristine single-overload shape that render
+	// equals the reconstructed `header [args][ret][body]` one-liner — so it
+	// never fits. The fn always lays out multi-line from here.
 
 	// The body opens with " [". When the header line has room, keep the
 	// bracket on it; otherwise wrap the header, carrying the body-open

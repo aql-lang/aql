@@ -19,6 +19,7 @@ import "aql:fmt" end Fmt.format "+gex|a*b|"	'+gex|a*b|\n'	Fmt.format leaves a pi
 import "aql:fmt" end Fmt.format "size none"	'size none\n'	Fmt.format keeps the lowercase none VALUE verbatim (never rewrites it to the None type)
 import "aql:fmt" end Fmt.format "list 1 2 3"	'list 1 2 3\n'	Fmt.format keeps the list constructor word verbatim (never rewrites it to the List type)
 import "aql:fmt" end Fmt.format "x is integer"	'x is Integer\n'	Fmt.format still capitalises a genuine lowercase type name
+import "aql:fmt" end Fmt.format "def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] end sum3 1 2 3"	'def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]\n  end sum3 1 2 3\n'	Fmt.format never drops statements that trail a fn definition (no truncation)
 import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x 1\n```'	Fmt.format-markdown reformats a fenced aql block
 import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest
 import "aql:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width

@@ -67,22 +67,38 @@ func TestFormatMapCommasSeam7(t *testing.T) {
 	}
 }
 
-// TestFormatFnSingleLineTrailingSeam7 covers tryFnFormat's single-line
-// return (format.go:529). The reconstructed `def name fn [[args] [ret]
-// [body]]` fits within the width even though the whole node run (with
-// trailing tokens after the fn wrapper) overflowed it. tryFnFormat only
-// reformats up to the wrapper, so trailing tokens are dropped — this is
-// the observed behaviour for such (malformed) input, asserted verbatim.
-// A multi-parameter fn is used so the spec-list form is kept and
-// tryFnFormat runs (a single-param fn would take the bracketless form).
-func TestFormatFnSingleLineTrailingSeam7(t *testing.T) {
+// TestFormatFnTrailingNotDropped covers tryFnFormat's two decline guards:
+// a fn wrapper followed by more tokens, and a multi-overload wrapper.
+// tryFnFormat reformats only `header [args][ret][body]`, so applying it to
+// either shape would SILENTLY DROP content (the trailing tokens, or every
+// overload past the first). Both must decline to the general path, which
+// preserves every token. A multi-parameter fn is used so the spec-list form
+// is kept and tryFnFormat is a candidate (a single-param fn takes the
+// bracketless form).
+func TestFormatFnTrailingNotDropped(t *testing.T) {
+	// Trailing tokens after the wrapper are preserved, never truncated.
 	src := "def n fn [[a:Integer b:Integer] [Integer] [a]] one two three four five six seven eight\n"
-	want := "def n fn [[a:Integer b:Integer] [Integer] [a]]\n"
-	if got := Format(src); got != want {
-		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
+	got := Format(src)
+	for _, tok := range []string{"one", "two", "three", "four", "five", "six", "seven", "eight"} {
+		if !strings.Contains(got, tok) {
+			t.Errorf("trailing token %q was dropped:\n%s", tok, got)
+		}
 	}
-	// The trimmed form is a fixed point.
-	idempotentSeam7(t, want)
+	if !strings.Contains(got, "def n fn [[a:Integer b:Integer] [Integer] [a]]") {
+		t.Errorf("the fn def itself was mangled:\n%s", got)
+	}
+	// The formatted output is a fixed point.
+	idempotentSeam7(t, got)
+
+	// A multi-overload wrapper (no trailing tokens, but long enough to reach
+	// tryFnFormat) hits the len(inner) != 3 guard and keeps every overload.
+	multi := "def g fn [[a:Integer b:Integer] [String] [\"first\"] [a:String b:String] [String] [\"second\"]]\n"
+	gotMulti := Format(multi)
+	for _, tok := range []string{"[a:Integer b:Integer]", "[a:String b:String]", "\"first\"", "\"second\""} {
+		if !strings.Contains(gotMulti, tok) {
+			t.Errorf("multi-overload fmt dropped %q:\n%s", tok, gotMulti)
+		}
+	}
 }
 
 // TestFormatFnBodyGroupWrapSeam7 covers tryFnFormat's multi-line body
