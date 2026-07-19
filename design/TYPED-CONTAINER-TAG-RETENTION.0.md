@@ -357,3 +357,20 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      recur for the set-residual path (verified by the differential + a 100-seed
      variation run, whose only failures are pre-existing unledgered refusal
      buckets present on the clean baseline too).
+- **Round 5 — the values projection + two check-mirror gaps.**
+  1. **`vals`** projects a `{:T}` map's values to a list — every value is
+     element-typed, so the result is `[:T]`; `valsHandler` retains the tag
+     (`elem` is container-kind agnostic) and a `valsReturns` typed-list residual
+     mirrors it in check. `keys` stays untagged (keys are always `String`).
+  2. **The list-concat `append` overload** (`[TList, TFlexList]`, the more-specific
+     pick for a list source) had NO `ReturnsFn`, so check never preflighted the
+     per-element enforcement `appendListHandler` runs at runtime —
+     `def f:[:Integer] (flex [1]) append [2 "bad"] f` passed check then raised.
+     `appendListReturns` validates each provably-known spread element and retains
+     the flex tag.
+  3. **The `setpath`/`dynamicContainerKind` residual** is now a dynamic TYPED
+     carrier when the receiver is tagged (`d2DynamicTypedResidual`): the element
+     rides in both the child payload (read narrowing) and the `elem` pointer
+     (chained-write enforcement), preserving the dynamic modality — the same
+     both-fields shape as the immutable `set` residuals, extended to the dynamic
+     `setpath`/`merge` residual family.

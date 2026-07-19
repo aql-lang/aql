@@ -195,6 +195,32 @@ func dynamicContainerKind(v Value) Value {
 	}
 }
 
+// d2DynamicTypedResidual is dynamicContainerKind PLUS the element tag when data
+// is a typed container: the element rides in BOTH the carrier's child payload
+// (so a read from a typed setpath/merge result narrows via getIntKeyReturns /
+// getNodeReturns instead of degrading to dynamic(Any)) AND the elem pointer (so a
+// chained write stays enforced — d2CheckWrite reads ElemConstraint). Preserves
+// the dynamic modality of the base carrier (#5, Codex round 5).
+func d2DynamicTypedResidual(data Value) Value {
+	base := dynamicContainerKind(data)
+	elem, ok := data.ElemConstraint()
+	if !ok {
+		return base
+	}
+	// elem is set only on a Map/List container, and dynamicContainerKind reflects
+	// that kind, so base is Map or List here — not-Map is List (no unreachable arm).
+	var typed Value
+	if base.Parent.ConformsTo(TMap) {
+		typed = eng.NewTypedMap(elem)
+		typed.Carrier = true
+	} else {
+		typed = eng.NewCarrierTypedListValue(elem)
+	}
+	typed.Dynamic = true
+	typed.SetElemConstraint(elem)
+	return typed
+}
+
 // mergeReturns: voxgigstruct.Merge over two same-kind containers yields
 // that kind; a mixed or scalar pair is value-dependent (later node wins)
 // and stays dynamic(Any).
@@ -251,7 +277,7 @@ func setpathReturns(args []Value, r *Registry) []Value {
 	if s, err := AsString(args[pathIdx]); err == nil && !strings.Contains(s, ".") {
 		d2CheckWrite(r, data, newVal, "setpath", args[pathIdx].Pos())
 	}
-	return []Value{d2RetainElem(dynamicContainerKind(data), data)}
+	return []Value{d2DynamicTypedResidual(data)}
 }
 
 // reifyReturns claims the hydrated instance's type from the TARGET

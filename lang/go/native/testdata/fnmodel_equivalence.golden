@@ -28,7 +28,7 @@ WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD append
   [Node/List Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
-  [Node/List Node/List/FlexList] barrier=2 returns=[Node/List/FlexList]
+  [Node/List Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
   [Any Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
 WORD apply
@@ -739,7 +739,7 @@ WORD usurp
 WORD validate
   [Node/Map Any] barrier=2 returns=[Any] +returnsfn
 WORD vals
-  [Node/Map] barrier=1 returns=[Node/List]
+  [Node/Map] barrier=1 returns=[Node/List] +returnsfn
 WORD var
   [Node/List] barrier=1 runcheck noeval={0} returns=[Any]
 WORD walk

@@ -55,9 +55,10 @@ var flexNatives = []NativeFunc{
 			// than the Any sig, so it wins whenever the argument is a
 			// list (including another FlexList, which conforms to List).
 			{
-				Args:    []*Type{TList, TFlexList},
-				Impl:    Go(appendListHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TList, TFlexList},
+				Impl:      Go(appendListHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: appendListReturns, BarrierPos: -1,
 			},
 			// Any other value: append as a single element.
 			{
@@ -248,4 +249,24 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	}
 	fd.Elems = append(fd.Elems, adopted...)
 	return []Value{args[1]}, nil
+}
+
+// appendListReturns is the check-mode mirror for the list-concat append
+// (`[TList, TFlexList]`): dispatch picks this more-specific overload for a list
+// source, which otherwise has no ReturnsFn, so check mode never preflighted the
+// per-element enforcement appendListHandler runs at runtime. Each provably-known
+// source element is validated against the destination's [:T] tag (mirroring the
+// runtime raise), and the flex list's tag is retained on the residual (#5, Codex
+// round 5). args are [sourceList, FlexList].
+func appendListReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TFlexList)
+	if len(args) == 2 {
+		if src, err := RequireConcreteList(args[0], "append"); err == nil {
+			for i := 0; i < src.Len(); i++ {
+				d2CheckWrite(r, args[1], src.Get(i), "append", args[0].Pos())
+			}
+		}
+		res = d2RetainElem(res, args[1])
+	}
+	return []Value{res}
 }
