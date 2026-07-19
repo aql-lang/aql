@@ -16,10 +16,21 @@
 # stack-value form `<value> case [clauses]` serves contexts where the
 # value is already on the stack (e.g. error handlers).
 #
+# STATIC EXHAUSTIVENESS (design/case-exhaustiveness.0.md): `aql check`
+# requires a case's clauses to cover the scrutinee's static type — a
+# default-less case with a provably-uncoverable value is a check ERROR
+# (case_not_exhaustive), and `aql run` refuses such a program at
+# preflight. The default is NOT required when the type disjunctions are
+# met: the clauses cover every union alternative / enum member /
+# Boolean's true+false / the concrete scrutinee value. Predicate
+# matches ([gt 3]) prove no coverage; a dynamic (untyped) scrutinee
+# skips the check — which is why the no-match row in §1 dispatches on
+# an Any-typed param. §6 pins the check-clean exhaustive shapes.
+#
 # §1  value matches (unify)
 case 2 [1 "one" 2 "two" "many"]	'two'	an equal scalar matches
 case 9 [1 "one" 2 "two" "many"]	'many'	no match takes the default
-case 9 [1 "one" 2 "two"]		no match and no default produces nothing
+def f fn [[x:Any][][case x [1 "one" 2 "two"]]] f 9		no match and no default produces nothing (dynamic scrutinee — a statically-typed one is a check error)
 case red/q [red/q "warm" blue/q "cool"]	'warm'	atoms match by equality
 case 2.0 [2 "int-two" "other"]	'other'	unify is exact across numeric leaves — 2.0 does not match 2
 #
@@ -48,3 +59,14 @@ case 1 Integer	ERROR:case_error	the clause list must be a list
 # §5  stack-value form — the value is already on the stack
 5 case [5 "five" "other"]	'five'	`v case [clauses]` reads the value from the stack
 def e (do [raise bad_input "nope"]) do [e dot code case [bad_input/q "B" "other"]]	'B'	…the natural shape inside error handlers
+#
+# §6  static exhaustiveness — default-less cases whose clauses cover the
+# scrutinee's static type run clean (these rows double as check-accuracy
+# canaries: the checker must NEVER flag them)
+def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] f 5	'i'	a declared union covered by its type clauses needs no default
+def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] f "x"	's'	…every alternative dispatches
+def f fn [[b:Boolean][Integer][case b [true 1 false 0]]] f false	0	true+false cover Boolean
+def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][String][case c [red/q "r" green/q "g" blue/q "b"]]] f green/q	'g'	every enum member listed needs no default
+def MaybeInt (Integer tor none) def f fn [[x:MaybeInt][Integer][case x [Integer 1 none 0]]] f 5	1	a none-able optional covered by Integer+none
+def IS (Integer tor String) def f fn [[x:IS][Integer][case x [[gt 3] 0 Integer 1 String 2]]] f 2	1	a predicate clause proves nothing, but full type clauses beside it still satisfy the check
+case 2 [1 "one" 2 "two"]	'two'	a concrete scrutinee that provably matches a clause needs no default

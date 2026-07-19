@@ -91,7 +91,14 @@ func init() {
 			"same way \u2014 value pushed first, like the error handler \u2014 so a block " +
 			"list can consume it; a plain-value block is the result as-is. A trailing " +
 			"odd element is the default. The stack-value form `v case [clauses]` " +
-			"serves error handlers and pipelines.",
+			"serves error handlers and pipelines. `aql check` requires the clauses " +
+			"to be EXHAUSTIVE over the scrutinee's static type: a default-less case " +
+			"with a provably-uncoverable value is a check error " +
+			"(case_not_exhaustive). The default is not needed when the type " +
+			"disjunctions are met — the clauses cover every union alternative, " +
+			"every enum member, Boolean's true+false, or the concrete value. " +
+			"Predicate matches ([gt 3]) prove no coverage; a dynamic (untyped) " +
+			"scrutinee skips the check.",
 		Examples: []string{
 			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
 			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,

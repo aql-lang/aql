@@ -1567,7 +1567,7 @@ before the call.
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
-| `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
+| `case` | Dispatch on a value: match/block pairs + optional default. `aql check` requires the clauses to cover the scrutinee's static type (`case_not_exhaustive` error); the default is not needed when the type disjunctions are met | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [add 1 2]` returns `3` |
 | `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
