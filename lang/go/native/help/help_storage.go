@@ -14,9 +14,9 @@ func init() {
 			"parens for a computed key: `m set (k) v`.",
 		// Canonical order: `receiver value key set`.
 		Examples: []string{
-			`ctx 42 "x" set         ;# store 42 under key "x" in a Store/context`,
-			`c 1 "count" set        ;# class instance: set field count (c.count := 1)`,
-			`{a:1} set b 2          ;# => {a:1 b:2} — new map; {a:1} is unchanged`,
+			`ctx 42 "x" set ; # store 42 under key "x" in a Store/context`,
+			`c 1 "count" set ; # class instance: set field count (c.count := 1)`,
+			`{a:1} set b 2 ; # => {a:1 b:2} — new map; {a:1} is unchanged`,
 		},
 	})
 
@@ -31,9 +31,9 @@ func init() {
 			"Returns None for missing keys in Maps/class instances/Lists.",
 		// Canonical order: `receiver key get`.
 		Examples: []string{
-			`{k: 9} "k" get         ;# => 9   — Map value by string key`,
-			`[10 20 30] 0 get       ;# => 10  — List element by index`,
-			`def i 1  [10 20] get i ;# => 20  — key is the VALUE of i`,
+			`{k:9} "k" get ; # => 9   — Map value by string key`,
+			`[10 20 30] 0 get ; # => 10  — List element by index`,
+			`def i 1 [10 20] get i ; # => 20  — key is the VALUE of i`,
 		},
 	})
 
@@ -45,8 +45,8 @@ func init() {
 			"`m.a` is `m dot a`, and chained `m.a.b` is `m dot a dot b`. Use dot (or .) for fixed " +
 			"field/key names; use get when the key is computed.",
 		Examples: []string{
-			`{k: 9} dot k           ;# => 9   — literal field k (≡ {k:9}.k)`,
-			`c dot count            ;# class field count (same as c.count)`,
+			`{k:9} dot k ; # => 9   — literal field k (≡ {k:9}.k)`,
+			`c dot count ; # class field count (same as c.count)`,
 		},
 	})
 
@@ -76,10 +76,10 @@ func init() {
 			"conditions. Covers Map/List/record (string, atom, or integer " +
 			"key), FlexMap/FlexList (key/index), class instances, and Store.",
 		Examples: []string{
-			`{a:None} has a         ;# => true  — present, value is none`,
-			`{a:1} has b            ;# => false — absent`,
-			`[10 20] has 1          ;# => true  — index in range`,
-			`none has a             ;# => false — total on a None parent`,
+			`{a:None} has a ; # => true  — present, value is none`,
+			`{a:1} has b ; # => false — absent`,
+			`[10 20] has 1 ; # => true  — index in range`,
+			`none has a ; # => false — total on a None parent`,
 		},
 	})
 
@@ -97,7 +97,7 @@ func init() {
 		Description: "Projects a map to the list of its keys, in insertion order. The " +
 			"complement to vals; for [key value] pairs use StructUtil.items.",
 		Examples: []string{
-			`{a:1 b:2 c:3} keys  ;# => ['a' 'b' 'c']`,
+			`{a:1 b:2 c:3} keys ; # => ['a' 'b' 'c']`,
 		},
 	})
 
@@ -107,7 +107,7 @@ func init() {
 		Description: "Projects a map to the list of its values, in insertion order. The " +
 			"complement to keys; for [key value] pairs use StructUtil.items.",
 		Examples: []string{
-			`{a:1 b:2 c:3} vals  ;# => [1 2 3]`,
+			`{a:1 b:2 c:3} vals ; # => [1 2 3]`,
 		},
 	})
 }
@@ -122,7 +122,7 @@ func init() {
 		Word:        "apply",
 		Summary:     "Apply a referenced function or a reach lens to stack arguments.",
 		Description: "x inc/r apply calls the referenced fn inc on x; xs apply $.1 reads index 1 via a reach lens. The general invoke-this-fn-or-lens word.",
-		Examples:    []string{`def inc fn [[n:Integer] [Integer] [n add 1]]  5 inc/r apply   ;# => 6`},
+		Examples:    []string{`def inc fn n:Integer Integer [n add 1] 5 inc/r apply ; # => 6`},
 	})
 	register(&Entry{
 		Word:        "rebind",

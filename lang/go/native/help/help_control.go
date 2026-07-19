@@ -59,8 +59,8 @@ func init() {
 			"Handlers read `e.code` (atom), `e.message` (string), and any payload " +
 			"keys; `convert Map e` projects the same fields.",
 		Examples: []string{
-			`raise "boom"                          ;# [aql/user_error]: boom`,
-			`raise bad_input "expected a list"     ;# [aql/bad_input]: …`,
+			`raise "boom" ; # [aql/user_error]: boom`,
+			`raise bad_input "expected a list" ; # [aql/bad_input]: …`,
 			`do [raise {code: nope/q, message: "m", got: 42}] error [var [[e] e.got print]]`,
 		},
 	})
@@ -93,10 +93,10 @@ func init() {
 			"odd element is the default. The stack-value form `v case [clauses]` " +
 			"serves error handlers and pipelines.",
 		Examples: []string{
-			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
-			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,
-			`case "x" [Integer "int" String "str"]      ;# 'str'`,
-			`case 5 [Integer [mul 10] "other"]          ;# 50 — the block sees the value`,
+			`case 2 [1 "one" 2 "two" "many"] ; # 'two'`,
+			`case 5 [[gt 3] "big" "small"] ; # 'big'`,
+			`case "x" [Integer "int" String "str"] ; # 'str'`,
+			`case 5 [Integer [mul 10] "other"] ; # 50 — the block sees the value`,
 			`do [risky] error [get code case [bad_input/q "rejected" "unexpected"]]`,
 		},
 	})
@@ -143,9 +143,9 @@ func init() {
 				"constructed structurally at dispatch.",
 		},
 		Examples: []string{
-			`def x 5  x mul 2                                           ;# 10`,
-			`def xs [1 add 2]  xs                                       ;# [3]`,
-			`def double fn [[n:Integer] [Integer] [n mul 2]]  double 4  ;# 8`,
+			`def x 5 x mul 2 ; # 10`,
+			`def xs [1 add 2] xs ; # [3]`,
+			`def double fn n:Integer Integer [n mul 2] double 4 ; # 8`,
 		},
 	})
 
@@ -189,9 +189,9 @@ func init() {
 			"Use with def to bind: def name fn [...] or fn [...] def name.",
 		},
 		Examples: []string{
-			`def double fn [[x:Integer] [Integer] [x mul 2]]  double 5   ;# => 10`,
-			`def triple fn x:Integer [Integer] [x mul 3]  triple 5       ;# => 15 (3-arg form)`,
-			`def add10 fn Integer [Integer] [10 add]  add10 5            ;# => 15 (unnamed param)`,
+			`def double fn x:Integer Integer [x mul 2] double 5 ; # => 10`,
+			`def triple fn x:Integer [Integer] [x mul 3] triple 5 ; # => 15 (3-arg form)`,
+			`def add10 fn Integer [Integer] [10 add] add10 5 ; # => 15 (unnamed param)`,
 		},
 	})
 
@@ -213,7 +213,7 @@ func init() {
 		Word:        "guard",
 		Summary:     "Pass a value through only when a condition holds: `cond guard value`.",
 		Description: "Returns the value when the condition is true, and none when it is false — a concise conditional gate.",
-		Examples:    []string{`true guard 42    ;# => 42`, `false guard 42   ;# => None`},
+		Examples:    []string{`true guard 42 ; # => 42`, `false guard 42 ; # => None`},
 	})
 	register(&Entry{
 		Word:        "error",
@@ -224,13 +224,13 @@ func init() {
 		Word:        "force-arity",
 		Summary:     "Wrap a function to collect exactly n forward arguments (the /N suffix).",
 		Description: "`force-arity n fn` fixes how many arguments the fn forward-collects, overriding its declared arity.",
-		Examples:    []string{`3 (force-arity 1 add) 4   ;# => 7`},
+		Examples:    []string{`3 (force-arity 1 add) 4 ; # => 7`},
 	})
 	register(&Entry{
 		Word:        "usurp",
 		Summary:     "Wrap a function so it forward-collects its arguments (the /u suffix).",
 		Description: "`usurp fn` returns a new fn that reads its args from the tokens ahead — handy for invoking a referenced fn in forward form.",
-		Examples:    []string{`def f fn [[x:Integer] [Integer] [mul x 2]]  3 (usurp f)   ;# => 6`},
+		Examples:    []string{`def f fn x:Integer Integer [mul x 2] 3 (usurp f) ; # => 6`},
 	})
 	register(&Entry{
 		Word:        "forward-args",

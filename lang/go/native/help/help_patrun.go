@@ -11,7 +11,7 @@ func init() {
 			"\"1\" share a rule). The stored value is often a function (`patrun Function`), making a Patrun a " +
 			"dispatch table. Vendors github.com/rjrodger/patrun.",
 		Examples: []string{
-			`def r (patrun String)  add {a:1} "A" r  find {a:1 z:9} r   ;# => 'A'`,
+			`def r (patrun String) add {a:1} "A" r find {a:1 z:9} r ; # => 'A'`,
 		},
 	})
 
@@ -23,8 +23,8 @@ func init() {
 			"specificity tie the alphabetically earlier pattern wins. `find {subject} pm {exact:true}` requires " +
 			"the matched pattern's keys to equal the subject's.",
 		Examples: []string{
-			`def r (patrun String)  add {a:1} "A" r  add {a:1 b:1} "B" r  find {a:1 b:1} r   ;# => 'B'`,
-			`find {x:9} r   ;# => None`,
+			`def r (patrun String) add {a:1} "A" r add {a:1 b:1} "B" r find {a:1 b:1} r ; # => 'B'`,
+			`find {x:9} r ; # => None`,
 		},
 	})
 
@@ -34,7 +34,7 @@ func init() {
 		Description: "`patterns pm` returns the registered rules as a list of `{pattern value}` maps, in " +
 			"registration order.",
 		Examples: []string{
-			`def r (patrun String)  add {a:1} "A" r  patterns r   ;# => [{pattern:{a:1} value:'A'}]`,
+			`def r (patrun String) add {a:1} "A" r patterns r ; # => [{pattern:{a:1} value:'A'}]`,
 		},
 	})
 }

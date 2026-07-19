@@ -7,7 +7,7 @@ func init() {
 		Description: "Prevents evaluation. `quote add` is the atom `add`; `quote [1 add 2]` is the unevaluated " +
 			"list `[1 add 2]`. The `/q` word suffix (`add/q`) is the canonical short form.",
 		Examples: []string{
-			`quote add   ;# => add   (an atom, not a call)`,
+			`quote add ; # => add   (an atom, not a call)`,
 		},
 	})
 
@@ -31,7 +31,7 @@ func init() {
 		Summary: "Bind a body that splices its elements inline at every reference (Forth-style).",
 		Description: "`def name word [body]` makes name expand its body in place wherever it is used, rather than " +
 			"binding the list as a value. The splice fires when the reference is stepped, so it sees current bindings.",
-		Examples: []string{`def double word [dup add]  5 double   ;# => 10`},
+		Examples: []string{`def double word [dup add] 5 double ; # => 10`},
 	})
 
 	register(&Entry{
@@ -77,9 +77,9 @@ func init() {
 			"register your own with MiniLang.register). An unknown kind is an expansion-time error. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
-			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
-			`import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m          ;# => 'bc' — a stored matcher`,
-			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
+			`import "aql:minilang" def r ("AbcD" mini re '[a-z]+') end r.fst.m ; # => 'bc'`,
+			`import "aql:minilang" def f (+re/[a-z]+/) ("AbcD" f).fst.m ; # => 'bc' — a stored matcher`,
+			`import "aql:minilang" mini bf '++++++++[>++++++++<-]>+.' ; # => 'A'`,
 		},
 	})
 
@@ -94,8 +94,8 @@ func init() {
 			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
 			"An unknown kind is an expansion-time error.",
 		Examples: []string{
-			`import "aql:parselang"  parse calc 'x + y'        ;# => the parser's AST`,
-			`import "aql:parselang"  parse calc {src:'x + y'}  ;# a {src:…} source map`,
+			`import "aql:parselang" parse calc 'x + y' ; # => the parser's AST`,
+			`import "aql:parselang" parse calc {src:'x + y'} ; # a {src:…} source map`,
 		},
 	})
 
@@ -114,8 +114,8 @@ func init() {
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
 			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported.",
 		Examples: []string{
-			`import "aql:emitlang"  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
-			`import "aql:emitlang"  emit json {pretty:true} {a:1} ;# => indented json`,
+			`import "aql:emitlang" emit {a:1 b:[2 3]} ; # => compact json (natural)`,
+			`import "aql:emitlang" emit json {pretty:true} {a:1} ; # => indented json`,
 		},
 	})
 }
