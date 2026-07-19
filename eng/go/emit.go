@@ -1474,6 +1474,27 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if IsBareTypeNode(v) && v.ID != "" {
 		return typeOperand(es.internType(v)), true
 	}
+	// A MUTABLE reference value (a `flex` map/list, a Store) read from an
+	// ENCLOSING scope must NEVER bake as a PUSH_CONST: the constant is a frozen
+	// snapshot, so a compiled `set` and a compiled `get` over one module-scope
+	// flex would touch DIFFERENT instances (sift's kind catalog — a runtime
+	// Sift.define's registration was invisible to a later Sift.parse). Route it
+	// to the live dynamic-scope lookup (OpLookupDynScope) so every reference
+	// re-resolves the one shared binding, exactly as the interpreter reads the
+	// name against the live def stack. Gated inside a fn unit (dynScopeRescue
+	// self-guards on len(units) > 1); a top-level flex has no baking hazard (its
+	// single frame IS the live binding), so a failed rescue falls through
+	// unchanged. Scoped to the whole-program / module-load compile
+	// (storedGradualDepth == 0), where this rescue is validated and the sift
+	// module's own fns compile. A DETACHED stamp (StampDetachedFn's isolated
+	// one-unit fork, storedGradualDepth > 0) recompiles a runtime-constructed fn
+	// VALUE, which never reads the module flexes; it keeps its established
+	// lowering (a decline there is a sound per-body interpreter fallback).
+	if es.storedGradualDepth == 0 && (IsFlexMap(v) || IsFlexList(v) || IsStore(v)) {
+		if op, ok := es.dynScopeRescue(v); ok {
+			return op, true
+		}
+	}
 	lit, ok := es.materialise(v)
 	if !ok {
 		return es.dynScopeRescue(v)

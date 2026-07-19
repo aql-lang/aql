@@ -1,0 +1,634 @@
+# ============================================================================
+# aql:sift — AQL unit-test suite (aql:test framework).
+#
+# Goal: exercise every code path of lang/go/modules/sift.aql for 100% line
+# coverage. Run under Test.cover so the interpreter coverage hook records the
+# module-under-test's executed rows.
+#
+# Every positive assertion's expected value is grounded in a lang/spec/
+# module-sift.tsv row (cited as `# tsv:NN`) or, for branch-coverage tests with
+# no direct tsv row, derived from the documented semantics and cited as
+# `# branch: sift.aql:NN`.
+#
+# NOTE on Assert.throws: the aql:test `assert-throws` native takes a SINGLE
+# body list — `Assert.throws [ body ]` — and asserts only that the body raises
+# (it does not accept or match an error-code atom). The two-arg form
+# `Assert.throws <code> [body]` fails to parse/dispatch (undefined_word on the
+# bare atom). Each throws-test below names the sift.aql raise line + expected
+# code in a trailing comment instead.
+#
+# NOTE on shared module state: `import "aql:sift"` runs once at the top of the
+# cover body; the kind catalog + detection tables are reference-semantic and
+# PERSIST across the individual Test.test bodies (same module instance). So
+# every Sift.define uses a globally-unique kind name and unique detect
+# paths/commands, and the exact-kinds baseline (Sift.kinds == the six families)
+# is asserted FIRST, before any test registers a kind.
+# ============================================================================
+
+import "aql:test"
+Test.cover [
+  import "aql:sift"
+
+  # ------------------------------------------------------------------------
+  # families / kinds baseline — asserted BEFORE any Sift.define registers a
+  # kind, so the catalog still holds exactly the six seeded families.
+  # ------------------------------------------------------------------------
+  Test.describe "families and kinds baseline" [
+    Test.test "families lists the six format families in order" [
+      Assert.equal [kv/q blocks/q columns/q dsv/q fixed/q pattern/q] (Sift.families)   # tsv:14
+    ]
+    Test.test "kinds lists every registered kind (six families at import)" [
+      Assert.equal [kv/q blocks/q columns/q dsv/q fixed/q pattern/q] (Sift.kinds)       # tsv:74
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # kv family
+  # ------------------------------------------------------------------------
+  Test.describe "kv family" [
+    Test.test "basic colon-separated" [
+      Assert.equal {a:'1' b:'2'} (Sift.parse kv/q {sep:':'} "a: 1\nb: 2")               # tsv:17
+    ]
+    Test.test "two-arg string source uses kv default sep" [
+      Assert.equal {a:'1'} (Sift.parse kv/q "a:1")                                       # branch: sift-w-parse [kind source:String]; kv default sep ':'
+    ]
+    Test.test "sep '=' with unquote strips one quote pair" [
+      Assert.equal {N:'x'} (Sift.parse kv/q {sep:'=' unquote:true} "N=\"x\"")            # tsv:21
+    ]
+    Test.test "unquote strips a single-quote pair" [
+      Assert.equal 'x' ((Sift.parse kv/q {sep:':' unquote:true} "a: 'x'") dot a)         # branch: sift-unquote single-quote arm sift.aql:223
+    ]
+    Test.test "unquote leaves an unquoted value unchanged" [
+      Assert.equal 'xy' ((Sift.parse kv/q {sep:':' unquote:true} "a: xy") dot a)         # branch: sift-unquote no-match else sift.aql:224
+    ]
+    Test.test "unquote leaves a one-char value unchanged (size<2)" [
+      Assert.equal 'q' ((Sift.parse kv/q {sep:':' unquote:true} "a: q") dot a)           # branch: sift-unquote size<2 else sift.aql:225
+    ]
+    Test.test "trim:false preserves surrounding whitespace" [
+      Assert.equal ' x' ((Sift.parse kv/q {sep:':' trim:false} "a: x") dot a)            # branch: sift-kv-lines trim:false arms sift.aql:338-339
+    ]
+    Test.test "repeat:'first' keeps the first value" [
+      Assert.equal {a:'1'} (Sift.parse kv/q {sep:':' repeat:'first'} "a: 1\na: 2")       # tsv:22
+    ]
+    Test.test "repeat:'last' keeps the last value" [
+      Assert.equal {a:'2'} (Sift.parse kv/q {sep:':' repeat:'last'} "a: 1\na: 2")        # tsv:23
+    ]
+    Test.test "repeat:'list' collects duplicates into a list" [
+      Assert.equal {a:['1' '2']} (Sift.parse kv/q {sep:':' repeat:'list'} "a: 1\na: 2")  # tsv:24
+    ]
+    Test.test "strict:'skip' drops a malformed (no-separator) line" [
+      Assert.equal {a:'1'} (Sift.parse kv/q {sep:':' strict:'skip'} "bad\na: 1")         # tsv:27
+    ]
+    Test.test "a blank line inside kv is skipped" [
+      Assert.equal {a:'1' b:'2'} (Sift.parse kv/q {sep:':'} "a: 1\n\nb: 2")              # branch: sift-kv-lines empty-line skip sift.aql:332
+    ]
+    Test.test "a single trailing empty line is dropped" [
+      Assert.equal {a:'1'} (Sift.parse kv/q {sep:':'} "a: 1\n")                          # branch: sift-lines trailing-empty drop sift.aql:262
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # blocks family
+  # ------------------------------------------------------------------------
+  Test.describe "blocks family" [
+    Test.test "blank-line-separated blocks" [
+      Assert.equal 2 (size (Sift.parse blocks/q {} "a: 1\n\nb: 2"))                       # tsv:33
+    ]
+    Test.test "sep:'indent' starts a block at each unindented line" [
+      Assert.equal 2 (size (Sift.parse blocks/q {sep:'indent'} "eth0:\n  a: 1\nlo:\n  b: 2"))  # tsv:34
+    ]
+    Test.test "table:true builds a table of unified-column rows" [
+      Assert.equal 2 (size (Sift.parse blocks/q {table:true} "a: 1\nb: 2\n\na: 3\nb: 4"))      # tsv:112
+    ]
+    Test.test "table:true fills an absent column with None" [
+      Assert.equal None (((Sift.parse blocks/q {table:true} "a: 1\n\nb: 2") get 0) get "b")    # branch: sift-row-of absent-col None sift.aql:433 (type literal None, not the none value)
+    ]
+    Test.test "kvsep overrides the block key/value separator" [
+      Assert.equal 2 (size (Sift.parse blocks/q {kvsep:'='} "a=1\n\nb=2"))               # branch: sift-fam-blocks kvsep option sift.aql:405
+    ]
+    Test.test "leading blank lines with an empty current block are ignored" [
+      Assert.equal 1 (size (Sift.parse blocks/q {} "\n\na: 1"))                          # branch: sift-group-blank blank-with-empty-cur else sift.aql:367
+    ]
+    Test.test "empty source yields no blocks (blank grouping)" [
+      Assert.equal 0 (size (Sift.parse blocks/q {} ""))                                  # branch: sift-group-blank end empty-cur else sift.aql:373
+    ]
+    Test.test "a blank line inside indent grouping is skipped" [
+      Assert.equal 2 (size (Sift.parse blocks/q {sep:'indent'} "eth0:\n  a: 1\n\nlo:\n  b: 2"))  # branch: sift-group-indent blank skip sift.aql:380
+    ]
+    Test.test "empty source yields no blocks (indent grouping)" [
+      Assert.equal 0 (size (Sift.parse blocks/q {sep:'indent'} ""))                      # branch: sift-group-indent end empty-cur else sift.aql:390
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # columns family
+  # ------------------------------------------------------------------------
+  Test.describe "columns family" [
+    Test.test "header row consumed; two data rows" [
+      Assert.equal 2 (size (Sift.parse columns/q {} "H1 H2\n1 2\n3 4"))                  # tsv:38
+    ]
+    Test.test "fields override consumes but ignores the header" [
+      Assert.equal '1' ((Sift.parse columns/q {fields:['a' 'b']} "H1 H2\n1 2") dot 0 dot a)   # tsv:98
+    ]
+    Test.test "headers normalize (%CPU -> cpu)" [
+      Assert.equal '9' ((Sift.parse columns/q {} "%CPU CMD\n9 top") dot 0 dot cpu)       # tsv:99
+    ]
+    Test.test "label mode names the row by its first token" [
+      Assert.equal 'Mem' ((Sift.parse columns/q {label:'kind'} "used free\nMem: 9 1") dot 0 dot kind)   # tsv:100
+    ]
+    Test.test "the last column is greedy under header:false" [
+      Assert.equal 'two three' (((Sift.parse columns/q {fields:['a' 'z2'] header:false} "one two three") get 0) get 'z2')  # tsv:101
+    ]
+    Test.test "names:'keep' leaves the header token verbatim" [
+      Assert.equal '1' (((Sift.parse columns/q {names:'keep'} "Foo Bar\n1 2") get 0) get "Foo")   # branch: sift-apply-name keep else sift.aql:507
+    ]
+    Test.test "duplicate header names are de-duplicated with -2" [
+      Assert.equal '2' (((Sift.parse columns/q {} "a a\n1 2") get 0) get "a-2")          # branch: sift-dedup collision arm sift.aql:518
+    ]
+    Test.test "label mode with a non-colon first token" [
+      Assert.equal 'Mem' (((Sift.parse columns/q {label:'name'} "used free\nMem 9 1") get 0) get "name")   # branch: sift-strip-colon else sift.aql:545 + sift-row-into
+    ]
+    Test.test "empty source yields no rows" [
+      Assert.equal 0 (size (Sift.parse columns/q {} ""))                                 # branch: sift-fam-columns empty-lines [] sift.aql:499
+    ]
+    Test.test "a blank body line is skipped" [
+      Assert.equal 2 (size (Sift.parse columns/q {} "H1 H2\n1 2\n\n3 4"))                # branch: sift-columns-rows blank skip sift.aql:529
+    ]
+    Test.test "strict:'skip' drops a malformed typed row (columns, non-label)" [
+      Assert.equal 2 (size (Sift.parse {family:'columns' fields:{n:'integer'} opts:{strict:'skip'}} "hdr\n5\nbad\n7"))   # #3 sift-row __skip via columns non-label
+    ]
+    Test.test "strict:'skip' drops a malformed typed row (columns, label mode)" [
+      Assert.equal 1 (size (Sift.parse {family:'columns' fields:{n:'integer'} opts:{label:'k' strict:'skip'}} "hdr\nok 5\nbad x"))   # #3 sift-row-into __skip via columns label
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # dsv family
+  # ------------------------------------------------------------------------
+  Test.describe "dsv family" [
+    Test.test "literal separator with named fields" [
+      Assert.equal 2 (size (Sift.parse dsv/q {sep:':' fields:['u' 'p']} "root:x\ndaemon:y"))   # tsv:42
+    ]
+    Test.test "default auto-names c1..cN" [
+      Assert.equal 1 (size (Sift.parse dsv/q {sep:':'} "a:b:c"))                         # tsv:43
+    ]
+    Test.test "default whitespace separator, multiple rows" [
+      Assert.equal 2 (size (Sift.parse dsv/q {} "a b c\nd e f"))                          # branch: sift-dsv-split ws arm sift.aql:567
+    ]
+    Test.test "limit makes the last field greedy (whitespace)" [
+      Assert.equal 'y z' ((Sift.parse dsv/q {limit:2 fields:['a' 'b']} "x y z") dot 0 dot b)    # tsv:102
+    ]
+    Test.test "limit makes the last field greedy (literal sep)" [
+      Assert.equal 'b:c' (((Sift.parse dsv/q {sep:':' limit:2} "a:b:c") get 0) get "c2")  # branch: sift-split-lit-n greedy sift.aql:596
+    ]
+    Test.test "limit above field count returns all parts (literal sep)" [
+      Assert.equal 'b' (((Sift.parse dsv/q {sep:':' limit:5} "a:b") get 0) get "c2")     # branch: sift-split-lit-n size<=n arm sift.aql:595
+    ]
+    Test.test "auto-named columns reused across rows" [
+      Assert.equal 2 (size (Sift.parse dsv/q {sep:':'} "a:b\nc:d"))                       # branch: sift-fam-dsv acc.cols reuse sift.aql:584
+    ]
+    Test.test "a blank line is skipped" [
+      Assert.equal 2 (size (Sift.parse dsv/q {sep:':'} "a:b\n\nc:d"))                     # branch: sift-fam-dsv blank skip sift.aql:582
+    ]
+    Test.test "fields as a Map: names in key order, per-field types" [
+      Assert.equal 5 (((Sift.parse dsv/q {sep:':' fields:{a:'string' b:{type:'integer'} c:{}}} "x:5:y") get 0) get "b")   # branch: sift-resolve-fields Map arm sift.aql:235-247
+    ]
+    Test.test "types option coerces a named dsv column" [
+      Assert.equal 5 (((Sift.parse dsv/q {sep:':' fields:['a' 'b'] types:{b:'integer'}} "x:5") get 0) get "b")   # branch: sift-row typed cell + sift-col-type present
+    ]
+    Test.test "missing cells are padded with an empty string" [
+      Assert.equal '' (((Sift.parse dsv/q {sep:':' fields:['a' 'b' 'c']} "x:y") get 0) get "c")   # branch: sift-row pad-missing sift.aql:462
+    ]
+    Test.test "comment drops full-line comments" [
+      Assert.equal 2 (size (Sift.parse dsv/q {sep:':' comment:'#'} "a\n#skip\nb"))       # tsv:93
+    ]
+    Test.test "chop drops trailing lines" [
+      Assert.equal 2 (size (Sift.parse dsv/q {sep:':' chop:1} "a\nb\nc"))                # tsv:92
+    ]
+    Test.test "strict:'skip' drops a malformed typed row (dsv)" [
+      Assert.equal 2 (size (Sift.parse {family:'dsv' fields:{n:'integer'} opts:{strict:'skip'}} "5\nbad\n7"))   # #3 sift-row __skip via dsv
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # fixed family
+  # ------------------------------------------------------------------------
+  Test.describe "fixed family" [
+    Test.test "fixed-width by consecutive widths" [
+      Assert.equal 1 (size (Sift.parse fixed/q {widths:[3 3]} "abcdef"))                 # tsv:46
+    ]
+    Test.test "cols with -1 reaching end of line" [
+      Assert.equal 'defg' ((Sift.parse fixed/q {cols:[[0 3] [3 -1]] fields:['a' 'b']} "abcdefg") dot 0 dot b)   # tsv:103
+    ]
+    Test.test "trim:true (default) trims a fixed cell" [
+      Assert.equal 'a' (((Sift.parse fixed/q {widths:[3]} "a  ") get 0) get "c1")        # branch: sift-fixed-cells trim arm sift.aql:644
+    ]
+    Test.test "trim:false preserves cell padding" [
+      Assert.equal 'a  ' (((Sift.parse fixed/q {widths:[3] trim:false} "a  ") get 0) get "c1")   # branch: sift-fixed-cells no-trim else sift.aql:644
+    ]
+    Test.test "a span starting past the line end yields empty" [
+      Assert.equal '' (((Sift.parse fixed/q {cols:[[10 20]] fields:['a']} "abc") get 0) get "a")   # branch: sift-slice-span s>n empty sift.aql:630
+    ]
+    Test.test "a span whose end precedes its start yields empty" [
+      Assert.equal '' (((Sift.parse fixed/q {cols:[[3 1]] fields:['a']} "abcdef") get 0) get "a")   # branch: sift-slice-span e2<s empty sift.aql:632
+    ]
+    Test.test "a blank line is skipped" [
+      Assert.equal 2 (size (Sift.parse fixed/q {widths:[3]} "abc\n\ndef"))               # branch: sift-fam-fixed blank skip sift.aql:662
+    ]
+    Test.test "types option coerces a fixed column" [
+      Assert.equal 123 (((Sift.parse fixed/q {widths:[3] fields:['a'] types:{a:'integer'}} "123") get 0) get "a")   # branch: sift-row typed cell (fixed)
+    ]
+    Test.test "strict:'skip' drops a malformed typed row (fixed)" [
+      Assert.equal 2 (size (Sift.parse {family:'fixed' fields:{c1:'integer'} opts:{widths:[1] strict:'skip'}} "5\nx\n7"))   # #3 sift-row __skip via fixed
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # pattern family
+  # ------------------------------------------------------------------------
+  Test.describe "pattern family" [
+    Test.test "named groups become fields" [
+      Assert.equal '5' ((Sift.parse pattern/q {re:'^(?P<a>\\w+) (?P<b>\\d+)$'} "x 5") dot b)   # tsv:50
+    ]
+    Test.test "a non-participating optional group yields None" [
+      Assert.equal none ((Sift.parse pattern/q {re:'^(?P<a>\\w+)(?: (?P<b>\\d+))?$'} "x") dot b)   # tsv:51
+    ]
+    Test.test "per:'line' yields a row per matching line" [
+      Assert.equal 1 ((Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' vtype:'integer'} "x 1\ny 2") dot 0 dot n)   # tsv:105
+    ]
+    Test.test "per:'line' with strict:'skip' drops non-matching lines" [
+      Assert.equal 1 (size (Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' strict:'skip'} "a\nx 1"))   # tsv:106
+    ]
+    Test.test "no match under strict:'skip' yields None (per source)" [
+      Assert.equal none (Sift.parse pattern/q {re:'(?P<a>z)' strict:'skip'} "x")         # tsv:54
+    ]
+    Test.test "an unnamed capturing group is dropped from the row" [
+      Assert.equal 'ab' ((Sift.parse pattern/q {re:'(?P<a>[a-z]+)([0-9])'} "ab5") dot a)   # branch: sift-group-names unnamed push "" + sift-pattern-row nm=="" skip
+    ]
+    Test.test "a coercion skip yields None (per source)" [
+      Assert.equal none (Sift.parse pattern/q {re:'(?P<n>\\w+)' vtype:'integer' strict:'skip'} "abc")   # branch: sift-pattern-row cv==skip sift.aql:705 + source __skip sift.aql:766
+    ]
+    Test.test "a coercion skip drops the line (per line)" [
+      Assert.equal 1 (size (Sift.parse pattern/q {re:'(?P<n>\\w+)' per:'line' vtype:'integer' strict:'skip'} "abc\n5"))   # branch: sift-pattern-run per-line __skip sift.aql:776
+    ]
+    Test.test "a P-less (?<name>) group becomes a field" [
+      Assert.equal '2024' ((Sift.parse pattern/q {re:'(?<yr>[0-9]+)'} "2024") dot yr)      # #5 sift-group-names (?< P-less arm
+    ]
+    Test.test "a digit-initial group name normalizes to f-" [
+      Assert.equal '42' ((Sift.parse pattern/q {re:'(?P<1x>[0-9]+)'} "42") get "f-1x")     # #5 digit-initial capture name
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # spec engine (inline specs never register)
+  # ------------------------------------------------------------------------
+  Test.describe "spec engine" [
+    Test.test "an inline spec parses without registering" [
+      Assert.equal {a:'1'} (Sift.parse {family:'kv' opts:{sep:'='}} "a=1")               # tsv:57
+    ]
+    Test.test "call-site opts overlay the spec's opts" [
+      Assert.equal {a:'1'} (Sift.parse {family:'kv' opts:{sep:':'}} {sep:'='} "a=1")     # tsv:111
+    ]
+    Test.test "a top-level fields folds onto empty opts" [
+      Assert.equal 'x' (((Sift.parse {family:'dsv' fields:['a' 'b']} "x y") get 0) get "a")   # branch: sift-fold-fields opts-None -> {} sift.aql:836
+    ]
+    Test.test "a top-level fields folds onto present opts" [
+      Assert.equal 'x' (((Sift.parse {family:'dsv' fields:['a'] opts:{sep:':'}} "x:y") get 0) get "a")   # branch: sift-fold-fields opts-is-Map sift.aql:837
+    ]
+    Test.test "a source map resolves via its 'src' field" [
+      Assert.ok ((size (Sift.parse kv/q {src:"a: 1"})) eq 1)                             # branch: sift-source src-present sift.aql:944
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # define / spec (registers kinds — AFTER the kinds baseline)
+  # ------------------------------------------------------------------------
+  Test.describe "define / spec" [
+    Test.test "a defined kind is an ordinary parse kind" [
+      Sift.define ds_parse {family:'kv' opts:{sep:'='}} end
+      Assert.equal {a:'1'} (Sift.parse ds_parse/q "a=1")                                 # tsv:62
+    ]
+    Test.test "spec returns the merged spec's family (family-only)" [
+      Sift.define ds_spec {family:'kv'} end
+      Assert.equal kv/q ((Sift.spec ds_spec) dot family)                                 # tsv:63 + sift-spec-project no-opts sift.aql:1030
+    ]
+    Test.test "spec projects a baked opts map" [
+      Sift.define ds_full {family:'kv' opts:{sep:'='} doc:'d'} end
+      Assert.equal '=' (((Sift.spec ds_full) dot opts) dot sep)                          # branch: sift-spec-project opts-is-Map sift.aql:1030
+    ]
+    Test.test "spec projects a doc string" [
+      Assert.equal 'd' ((Sift.spec ds_full) dot doc)                                     # branch: sift-spec-from-map doc sift.aql:828 + sift-spec-project doc sift.aql:1032
+    ]
+    Test.test "define rejects a mixed-case name" [
+      Assert.throws [ Sift.define fooBar {family:'kv'} ]                                 # #2 sift-w-define rejects an uppercase letter anywhere
+    ]
+    Test.test "define rejects the reserved parse_ prefix" [
+      Assert.throws [ Sift.define parse_x {family:'kv'} ]                                # #2 sift-w-define rejects the parse_ prefix
+    ]
+    Test.test "spec preserves a detect path claim" [
+      Sift.define ds_dp {family:'kv' detect:{path:["/ds-detect-path"]}} end
+      Assert.equal ["/ds-detect-path"] ((Sift.spec ds_dp) dot path)                      # #4 sift-spec-project path arm
+    ]
+    Test.test "spec preserves a detect cmd claim" [
+      Sift.define ds_dc {family:'columns' detect:{cmd:{match:["dsdetectcmd"] argv:["a"]}}} end
+      Assert.equal ["dsdetectcmd"] ((Sift.spec ds_dc) dot cmd)                           # #4 sift-spec-project cmd arm
+    ]
+    Test.test "spec preserves a detect argv claim" [
+      Assert.equal ["a"] ((Sift.spec ds_dc) dot argv)                                    # #4 sift-spec-project argv arm
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # detect (registers detect claims — unique paths/commands per test)
+  # ------------------------------------------------------------------------
+  Test.describe "detect" [
+    Test.test "detect resolves a path to its kind" [
+      Sift.define dt_path {family:'kv' detect:{path:["/proc/meminfo"]}} end
+      Assert.equal dt_path/q (Sift.detect "/proc/meminfo")                               # tsv:68
+    ]
+    Test.test "an undetected path yields None" [
+      Assert.equal none (Sift.detect "/no-such-detect-path-xyz")                         # tsv:69
+    ]
+    Test.test "detect resolves an argv0 basename to its kind" [
+      Sift.define dt_cmd {family:'columns' detect:{cmd:{match:["ps"]}}} end
+      Assert.equal dt_cmd/q (Sift.detect ["ps" "aux"])                                   # tsv:70
+    ]
+    Test.test "an unknown command yields None" [
+      Assert.equal none (Sift.detect ["no-such-command-xyz"])                            # branch: sift-w-detect cmd-not-found None sift.aql:1040
+    ]
+    Test.test "an empty argv list yields None" [
+      Assert.equal none (Sift.detect [])                                                 # branch: sift-w-detect empty-list None sift.aql:1037
+    ]
+    Test.test "a trailing-'*' path glob matches by prefix" [
+      Sift.define dt_glob {family:'kv' detect:{path:["/gdir/*"]}} end
+      Assert.equal dt_glob/q (Sift.detect "/gdir/foo")                                   # branch: sift-glob-match prefix arm sift.aql:900-902
+    ]
+    Test.test "detect.cmd may carry an argv list" [
+      Sift.define dt_argv {family:'columns' detect:{cmd:{match:["dtargvcmd"] argv:["a" "b"]}}} end
+      Assert.equal columns/q ((Sift.spec dt_argv) dot family)                            # branch: sift-read-cmd argv-List sift.aql:866
+    ]
+    Test.test "detect.cmd may carry argv without match" [
+      Sift.define dt_matchless {family:'kv' detect:{cmd:{argv:["x"]}}} end
+      Assert.equal kv/q ((Sift.spec dt_matchless) dot family)                            # branch: sift-read-cmd match-None sift.aql:863
+    ]
+    Test.test "an early path match short-circuits the remaining globs" [
+      Assert.equal dt_path/q (Sift.detect "/proc/meminfo")                               # branch: sift-w-detect acc-already-set short-circuit sift.aql:1048 (needs the earlier /gdir/* glob registered)
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # check (never registers)
+  # ------------------------------------------------------------------------
+  Test.describe "check" [
+    Test.test "a valid spec yields no issues" [
+      Assert.equal [] (Sift.check {family:'kv'})                                         # tsv:75
+    ]
+    Test.test "check reports the issue code" [
+      Assert.equal sift_spec_error/q ((Sift.check {family:'bogus'}) dot 0 dot code)      # tsv:76
+    ]
+    Test.test "check reports an unknown-key issue without raising" [
+      Assert.equal 1 (size (Sift.check {family:'kv' junk:1}))                            # tsv:77
+    ]
+    Test.test "check on a non-map spec reports an issue" [
+      Assert.equal 1 (size (Sift.check 5))                                               # branch: sift-spec-from non-map via sift-issues sift.aql:805/915
+    ]
+    Test.test "check flags a fixed spec missing cols/widths" [
+      Assert.equal sift_spec_error/q ((Sift.check {family:'fixed'}) dot 0 dot code)      # #1 family validation (fixed spans) via empty-source dry-run
+    ]
+    Test.test "check flags a pattern spec with no named group" [
+      Assert.equal sift_spec_error/q ((Sift.check {family:'pattern' opts:{re:'nogroups'}}) dot 0 dot code)   # #1 family validation (pattern groups)
+    ]
+    Test.test "check passes a valid pattern spec (empty-probe parse error ignored)" [
+      Assert.equal [] (Sift.check {family:'pattern' opts:{re:'(?P<a>x)'}})               # #1 sift-issue-if-spec drops a non-spec (parse) error
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # coercion + normalization + preprocessing
+  # ------------------------------------------------------------------------
+  Test.describe "coercion + normalization" [
+    Test.test "vtype:'integer' coerces every value" [
+      Assert.equal 1 ((Sift.parse kv/q {sep:':' vtype:'integer'} "a: 1\nb: 2") dot a)    # tsv:18
+    ]
+    Test.test "vtype:'float' coercion" [
+      Assert.equal 1.5 ((Sift.parse kv/q {sep:':' vtype:'float'} "a: 1.5") dot a)        # tsv:80
+    ]
+    Test.test "vtype:'boolean' accepts yes" [
+      Assert.equal true ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: yes") dot a)     # tsv:81
+    ]
+    Test.test "vtype:'boolean' accepts on" [
+      Assert.equal true ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: on") dot a)      # branch: sift-truthy in-set sift.aql:141
+    ]
+    Test.test "vtype:'boolean' accepts 1" [
+      Assert.equal true ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: 1") dot a)       # branch: sift-truthy '1' else sift.aql:141
+    ]
+    Test.test "vtype:'boolean' accepts off" [
+      Assert.equal false ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: off") dot a)    # branch: sift-falsy in-set sift.aql:142
+    ]
+    Test.test "vtype:'boolean' accepts no" [
+      Assert.equal false ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: no") dot a)     # branch: sift-falsy in-set sift.aql:142
+    ]
+    Test.test "vtype:'boolean' accepts 0" [
+      Assert.equal false ((Sift.parse kv/q {sep:':' vtype:'boolean'} "a: 0") dot a)      # branch: sift-falsy '0' else sift.aql:142
+    ]
+    Test.test "vtype:'percent' strips the sign to a Float" [
+      Assert.equal 55.0 ((Sift.parse kv/q {sep:':' vtype:'percent'} "a: 55%") dot a)     # tsv:83
+    ]
+    Test.test "vtype:'size' understands MiB" [
+      Assert.equal 2097152 ((Sift.parse kv/q {sep:':' vtype:'size'} "a: 2 MiB") dot a)   # tsv:88
+    ]
+    Test.test "vtype:'size' scales a kB value to bytes with normalized key" [
+      Assert.equal 16688332800 ((Sift.parse kv/q {sep:':' names:'normalize' vtype:'size'} "MemTotal: 16297200 kB") dot mem-total)   # tsv:20
+    ]
+    Test.test "vtype:'auto' infers Integer" [
+      Assert.equal 42 ((Sift.parse kv/q {sep:':' vtype:'auto'} "a: 42") dot a)           # tsv:84
+    ]
+    Test.test "vtype:'auto' infers Float" [
+      Assert.equal 4.5 ((Sift.parse kv/q {sep:':' vtype:'auto'} "a: 4.5") dot a)         # tsv:85
+    ]
+    Test.test "vtype:'auto' infers Boolean true" [
+      Assert.equal true ((Sift.parse kv/q {sep:':' vtype:'auto'} "a: true") dot a)       # tsv:86
+    ]
+    Test.test "vtype:'auto' infers Boolean false" [
+      Assert.equal false ((Sift.parse kv/q {sep:':' vtype:'auto'} "a: false") dot a)     # branch: sift-to-auto 'false' arm sift.aql:117
+    ]
+    Test.test "vtype:'auto' falls back to String" [
+      Assert.equal 'hello' ((Sift.parse kv/q {sep:':' vtype:'auto'} "a: hello") dot a)   # tsv:87
+    ]
+    Test.test "an empty cell under a typed column is None" [
+      Assert.equal none ((Sift.parse kv/q {sep:':' vtype:'integer'} "a:") dot a)         # tsv:89
+    ]
+    Test.test "names:'normalize' kebab-cases the key" [
+      Assert.equal '4' ((Sift.parse kv/q {sep:':' names:'normalize'} "MemTotal: 4") dot mem-total)   # tsv:19
+    ]
+    Test.test "names:'normalize' prefixes f- on a digit-leading key" [
+      Assert.equal 'x' ((Sift.parse kv/q {sep:':' names:'normalize'} "3D: x") get "f-3d")   # branch: sift-normalize-name f- digit-prefix sift.aql:81
+    ]
+    Test.test "names:'normalize' can produce an empty key" [
+      Assert.ok ((size (Sift.parse kv/q {sep:':' names:'normalize'} "%: 1")) eq 1)       # branch: sift-normalize-name low-eq-empty sift.aql:80
+    ]
+    Test.test "types option coerces only the named column" [
+      Assert.equal 5 ((Sift.parse kv/q {sep:':' types:{a:'integer'}} "a: 5\nb: x") dot a)   # branch: sift-types valid + sift-col-type present sift.aql:214
+    ]
+    Test.test "strict:'skip' drops a coercion failure" [
+      Assert.equal {b:2} (Sift.parse kv/q {sep:':' vtype:'integer' strict:'skip'} "a: x\nb: 2")   # tsv:28
+    ]
+    Test.test "skip drops leading lines" [
+      Assert.equal '1' ((Sift.parse kv/q {sep:':' skip:1} "drop\na: 1") dot a)           # tsv:91
+    ]
+    Test.test "skip beyond the line count yields nothing" [
+      Assert.equal {} (Sift.parse kv/q {sep:':' skip:5} "a: 1")                          # branch: sift-preprocess skip>=size [] sift.aql:274
+    ]
+    Test.test "chop beyond the line count yields nothing" [
+      Assert.equal {} (Sift.parse kv/q {sep:':' chop:5} "a: 1")                          # branch: sift-preprocess chop>=size [] sift.aql:275
+    ]
+  ]
+
+  # ------------------------------------------------------------------------
+  # error paths — one Assert.throws per distinct reachable raise in sift.aql.
+  # (Lines 136, 316, 794 are structurally unreachable — see report.)
+  # ------------------------------------------------------------------------
+  Test.describe "error paths" [
+    Test.test "size: not a size shape" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'size'} "a: hello" ]               # sift.aql:105 sift_type_error
+    ]
+    Test.test "size: unknown unit" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'size'} "a: 5 zz" ]                # sift.aql:108 sift_type_error
+    ]
+    Test.test "integer: not an integer" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'integer'} "a: x" ]                # sift.aql:124 sift_type_error (tsv:29)
+    ]
+    Test.test "float: not a float" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'float'} "a: xx" ]                 # sift.aql:126 sift_type_error
+    ]
+    Test.test "percent: not a percentage" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'percent'} "a: xx%" ]              # sift.aql:131 sift_type_error
+    ]
+    Test.test "boolean: not a boolean" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'boolean'} "a: nope" ]             # sift.aql:147 sift_type_error (tsv:82)
+    ]
+    Test.test "strict: unknown mode" [
+      Assert.throws [ Sift.parse kv/q {sep:':' strict:'nope'} "a: 1" ]                  # sift.aql:189 sift_spec_error (tsv:95)
+    ]
+    Test.test "vtype: unknown type" [
+      Assert.throws [ Sift.parse kv/q {sep:':' vtype:'nope'} "a: 1" ]                   # sift.aql:195 sift_spec_error (tsv:90)
+    ]
+    Test.test "types: unknown type" [
+      Assert.throws [ Sift.parse kv/q {sep:':' types:{a:'bogus'}} "a: 1" ]              # sift.aql:206 sift_spec_error
+    ]
+    Test.test "fields: unknown type" [
+      Assert.throws [ Sift.parse dsv/q {fields:{a:'bogus'}} "x" ]                       # sift.aql:253 sift_spec_error
+    ]
+    Test.test "preprocess: negative skip" [
+      Assert.throws [ Sift.parse kv/q {sep:':' skip:-1} "a: 1" ]                        # sift.aql:273 sift_spec_error (tsv:94)
+    ]
+    Test.test "preprocess: negative chop" [
+      Assert.throws [ Sift.parse kv/q {sep:':' chop:-1} "a: 1" ]                        # sift.aql:273 sift_spec_error (chop operand)
+    ]
+    Test.test "kv: repeat:'error' rejects a duplicate key" [
+      Assert.throws [ Sift.parse kv/q {sep:':' repeat:'error'} "a: 1\na: 2" ]           # sift.aql:313 sift_parse_error (tsv:25)
+    ]
+    Test.test "kv: unknown repeat mode" [
+      Assert.throws [ Sift.parse kv/q {sep:':' repeat:'nope'} "a: 1" ]                  # sift.aql:327 sift_spec_error (tsv:30)
+    ]
+    Test.test "kv: no separator on a line" [
+      Assert.throws [ Sift.parse kv/q {sep:':'} "bad line" ]                            # sift.aql:335 sift_parse_error (tsv:26)
+    ]
+    Test.test "blocks: unknown block separator" [
+      Assert.throws [ Sift.parse blocks/q {sep:'bad'} "a: 1" ]                          # sift.aql:398 sift_spec_error (tsv:35)
+    ]
+    Test.test "columns: header:false requires fields" [
+      Assert.throws [ Sift.parse columns/q {header:false} "1 2" ]                       # sift.aql:498 sift_spec_error (tsv:39)
+    ]
+    Test.test "fixed: cols and widths are mutually exclusive" [
+      Assert.throws [ Sift.parse fixed/q {cols:[[0 1] [1 2]] widths:[1]} "ab" ]         # sift.aql:605 sift_spec_error (tsv:104)
+    ]
+    Test.test "fixed: needs cols or widths" [
+      Assert.throws [ Sift.parse fixed/q {} "abc" ]                                     # sift.aql:623 sift_spec_error (tsv:47)
+    ]
+    Test.test "fixed: fields count must match spans" [
+      Assert.throws [ Sift.parse fixed/q {widths:[3 3] fields:['a']} "abcdef" ]         # sift.aql:658 sift_spec_error
+    ]
+    Test.test "pattern: opts.re is required" [
+      Assert.throws [ Sift.parse pattern/q {} "x" ]                                     # sift.aql:735 sift_spec_error
+    ]
+    Test.test "pattern: re must have a named group" [
+      Assert.throws [ Sift.parse pattern/q {re:'no groups'} "x" ]                       # sift.aql:738 sift_spec_error (tsv:52)
+    ]
+    Test.test "pattern: malformed regexp is a spec error" [
+      Assert.throws [ Sift.parse pattern/q {re:'([bad'} "x" ]                           # sift.aql:738 sift_spec_error (tsv:108)
+    ]
+    Test.test "pattern: no match in source (strict error)" [
+      Assert.throws [ Sift.parse pattern/q {re:'(?P<a>z)'} "x" ]                        # sift.aql:764 sift_parse_error (tsv:53)
+    ]
+    Test.test "pattern: unknown per mode" [
+      Assert.throws [ Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'nope'} "1" ]          # sift.aql:768 sift_spec_error (tsv:107)
+    ]
+    Test.test "pattern: no match on a line (strict error)" [
+      Assert.throws [ Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line'} "abc" ]        # sift.aql:774 sift_parse_error
+    ]
+    Test.test "define: spec must be a map" [
+      Assert.throws [ Sift.define e_notmap 5 ]                                          # sift.aql:805 sift_spec_error
+    ]
+    Test.test "spec: unknown spec key" [
+      Assert.throws [ Sift.parse {family:'kv' junk:1} "x" ]                             # sift.aql:813 sift_spec_error
+    ]
+    Test.test "spec: missing family" [
+      Assert.throws [ Sift.parse {opts:{sep:':'}} "x" ]                                 # sift.aql:819 sift_spec_error
+    ]
+    Test.test "spec: unknown family (inline)" [
+      Assert.throws [ Sift.parse {family:'nope'} "x" ]                                  # sift.aql:821 sift_spec_error (tsv:58)
+    ]
+    Test.test "spec: family:'fn' is deferred (unknown family)" [
+      Assert.throws [ Sift.parse {family:'fn'} "x" ]                                    # sift.aql:821 sift_spec_error (tsv:113)
+    ]
+    Test.test "spec: opts must be a map" [
+      Assert.throws [ Sift.parse {family:'kv' opts:5} "x" ]                             # sift.aql:823 sift_spec_error
+    ]
+    Test.test "spec: fields given both top-level and in opts" [
+      Assert.throws [ Sift.parse {family:'dsv' fields:['a'] opts:{fields:['b']}} "x" ]  # sift.aql:838 sift_spec_error
+    ]
+    Test.test "detect: detect must be a map" [
+      Assert.throws [ Sift.parse {family:'kv' detect:5} "x" ]                           # sift.aql:846 sift_spec_error
+    ]
+    Test.test "detect: detect.path must be a list" [
+      Assert.throws [ Sift.parse {family:'kv' detect:{path:'x'}} "x" ]                  # sift.aql:849 sift_spec_error
+    ]
+    Test.test "detect: detect.cmd must be a map" [
+      Assert.throws [ Sift.parse {family:'kv' detect:{cmd:5}} "x" ]                     # sift.aql:857 sift_spec_error
+    ]
+    Test.test "detect: detect.cmd.match must be a list" [
+      Assert.throws [ Sift.parse {family:'kv' detect:{cmd:{match:5}}} "x" ]             # sift.aql:863 sift_spec_error
+    ]
+    Test.test "detect: detect.cmd.argv must be a list" [
+      Assert.throws [ Sift.parse {family:'kv' detect:{cmd:{argv:5}}} "x" ]              # sift.aql:866 sift_spec_error
+    ]
+    Test.test "parse: unknown kind name" [
+      Assert.throws [ Sift.parse "missing" "x" ]                                        # sift.aql:936 sift_unknown_kind (tsv:59)
+    ]
+    Test.test "parse: source map without 'src'" [
+      Assert.throws [ Sift.parse kv/q {other:1} ]                                       # sift.aql:944 sift_bad_source
+    ]
+    Test.test "define: capitalised name is rejected" [
+      Assert.throws [ Sift.define Bad {family:'kv'} ]                                   # sift.aql:959 sift_bad_name (tsv:66)
+    ]
+    Test.test "define: name colliding with a family is rejected" [
+      Assert.throws [ Sift.define kv {family:'kv'} ]                                    # sift.aql:960 sift_kind_exists (tsv:65)
+    ]
+    Test.test "define: genuine re-definition collides" [
+      Sift.define e_redef {family:'kv'} end
+      Assert.throws [ Sift.define e_redef {family:'dsv'} ]                              # sift.aql:961 sift_kind_exists (tsv:64)
+    ]
+    Test.test "define: two kinds cannot claim one path" [
+      Sift.define e_pa {family:'kv' detect:{path:["/e-conflict-path"]}} end
+      Assert.throws [ Sift.define e_pb {family:'kv' detect:{path:["/e-conflict-path"]}} ]   # sift.aql:978 sift_detect_conflict (tsv:71)
+    ]
+    Test.test "define: two kinds cannot claim one command" [
+      Sift.define e_ca {family:'columns' detect:{cmd:{match:["e-conflict-cmd"]}}} end
+      Assert.throws [ Sift.define e_cb {family:'columns' detect:{cmd:{match:["e-conflict-cmd"]}}} ]   # sift.aql:987 sift_detect_conflict
+    ]
+    Test.test "spec: unknown kind name" [
+      Assert.throws [ Sift.spec nope ]                                                  # sift.aql:1024 sift_unknown_kind (tsv:67)
+    ]
+  ]
+]

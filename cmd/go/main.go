@@ -38,6 +38,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
 	"github.com/aql-lang/aql/cmd/go/internal/serve"
+	testcmd "github.com/aql-lang/aql/cmd/go/internal/test"
 	"github.com/aql-lang/aql/cmd/go/internal/tui"
 	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
@@ -180,6 +181,7 @@ func buildRegistry() *command.Registry {
 	r.Register(run.New())
 	r.Register(do.New())
 	r.Register(check.New())
+	r.Register(testcmd.New())
 	r.Register(help.New(provide))
 	r.Register(describe.New())
 	r.Register(aqlfmt.New())

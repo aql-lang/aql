@@ -16,6 +16,7 @@ supports.
   * [`aql` / `aql run`](#aql--aql-run)
   * [`aql do`](#aql-do)
   * [`aql check`](#aql-check)
+  * [`aql test`](#aql-test)
   * [`aql help`](#aql-help)
   * [`aql describe`](#aql-describe)
   * [`aql fmt`](#aql-fmt)
@@ -289,6 +290,56 @@ aql check --color never script.aql # plain text even on a terminal
 
 **In your editor.** `aql lsp` publishes these same diagnostics as you
 type — see [`aql lsp`](#aql-lsp).
+
+### `aql test`
+
+Discover and run test suites written with the `aql:test` framework. A
+suite is any `*_test.aql` file that imports `aql:test` and registers
+cases with `Test.test` / `Test.describe` (parking cases with
+`Test.skip`). `aql test` runs each file, prints its per-case report,
+and exits non-zero if any case failed or any suite errored.
+
+```bash
+aql test                            # run every *_test.aql under the cwd
+aql test math_test.aql              # run one suite file
+aql test src/ lib/                  # walk several directories
+aql test --coverage sift_test.aql   # add coverage + an HTML report
+```
+
+Suites run on the **bytecode compiler by default** — the normal, fast
+execution mode — falling back to the interpreter only for a file the
+compiler refuses. Discovery: no arguments walks the current directory
+recursively for `*_test.aql`; a directory argument is walked the same
+way; an explicit file argument is run verbatim (even without the
+`_test.aql` suffix).
+
+Flags:
+
+* `--coverage` — measure line coverage of every user module a suite
+  imports (`import "./mod.aql"`), aggregated across all suites. It prints
+  a summary line per module —
+  `cover <id>  <pct>% (<covered>/<total>)  uncovered: <lines>`, where the
+  `uncovered:` list names the exact source lines that never ran — and
+  writes a browsable **HTML report** to a `coverage/` folder: an
+  `index.html` summary plus one page per module with each source line
+  coloured covered (green) or uncovered (red). Because the bytecode VM
+  folds some source positions, compiled coverage is a *subset* of the
+  interpreter's (some folded lines show as falsely uncovered); pair with
+  `--no-compile` for the exact, line-granular set when driving a module
+  to full coverage.
+* `--coverage-dir PATH` — where the HTML report is written (default
+  `coverage`). Ignored without `--coverage`.
+* `--coverage-min PCT` — fail the run (exit 1) when **aggregate** line
+  coverage — total covered lines over total executable lines across every
+  imported module — is below `PCT`, even if every test passed. Implies
+  coverage measurement, so `aql test --coverage-min 80` gates without
+  needing `--coverage` (add `--coverage` too if you also want the HTML
+  report). Pair with `--no-compile` so folded compiled positions don't
+  drag the number below the real figure.
+* `--no-compile` / `--force-compile` / `--compile` — select the engine
+  exactly as for [`aql run`](#bytecode-compilation).
+* `-r PATH` — registry path, same as `aql run`. The permission flags
+  (`--perms`, `--allow`, `--deny`, …) are accepted too.
 
 ### `aql help`
 
