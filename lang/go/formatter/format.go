@@ -120,6 +120,66 @@ func Format(src string) string {
 	return FormatWith(src, DefaultParse)
 }
 
+// ParseTree returns the layout tree the emitter walks for src: the default
+// (tabnas) front end's parse with the semantics-preserving transforms already
+// applied (type-name capitalisation, fn-bracket elision). It is the seam a
+// DECLARATIVE formatter consumes — bridge this tree to AQL values (aql:fmt's
+// Fmt.tree) and a rule set keyed by node kind can lay it out, the Phase-3
+// "layout rules as AQL" direction. Emitting ParseTree(src) with the built-in
+// emitRoot reproduces Format(src) exactly.
+func ParseTree(src string) *Node {
+	tree := DefaultParse(src)
+	capitalizeTypesInTree(tree)
+	elideFnBrackets(tree)
+	return tree
+}
+
+// NodeKindName is the stable dispatch key for a node kind — the atom a
+// declarative rule table matches on (`word`, `list`, `map`, `paren`,
+// `comment`, `newline`, …). It is the source-CST analogue of Fmt.kind's
+// tag: a formatter written as AQL rules dispatches on these names.
+func NodeKindName(k NodeKind) string {
+	switch k {
+	case NdRoot:
+		return "root"
+	case NdWord:
+		return "word"
+	case NdString:
+		return "string"
+	case NdNumber:
+		return "number"
+	case NdComment:
+		return "comment"
+	case NdList:
+		return "list"
+	case NdMap:
+		return "map"
+	case NdParen:
+		return "paren"
+	case NdComma:
+		return "comma"
+	case NdColon:
+		return "colon"
+	case NdSemicolon:
+		return "semicolon"
+	case NdDot:
+		return "dot"
+	case NdQuestion:
+		return "question"
+	case NdBang:
+		return "bang"
+	case NdPipe:
+		return "pipe"
+	case NdNewline:
+		return "newline"
+	}
+	// NodeKind is a closed enum built only by this package's tokeniser and
+	// tree builder; every constructed kind is named above. The fallback
+	// names an out-of-range value defensively (never reached from a real
+	// parse; pinned by TestNodeKindNameUnknown).
+	return "unknown"
+}
+
 // FormatWith formats AQL source using the supplied parser, then applies
 // the (parser-independent) layout rules and emits. A nil parse falls back
 // to DefaultParse. This is the seam through which a tabnas-based,

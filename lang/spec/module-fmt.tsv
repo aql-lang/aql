@@ -38,3 +38,10 @@ import "aql:fmt" end {$kind:'entry' key:'a'} Fmt.kind	entry/q	Fmt.kind reports a
 import "aql:fmt" end {a:1 b:2} Fmt.children	[{$kind:entry/q key:'a' value:1} {$kind:entry/q key:'b' value:2}]	Fmt.children yields one entry node per Map key
 import "aql:fmt" end [7 8] Fmt.children	[7 8]	Fmt.children yields a List's elements verbatim
 import "aql:fmt" end 5 Fmt.children	[]	Fmt.children yields no children for a scalar leaf
+#
+# Fmt.tree bridges AQL SOURCE into the same $kind-tagged value tree, so the
+# rule vocabulary can format real code, not just data (see the declarative
+# source formatter in modules/fmttree_test.go).
+#
+import "aql:fmt" end Fmt.kind (Fmt.tree "x")	root/q	Fmt.tree parses source into a $kind-tagged CST whose root node classifies as 'root'
+import "aql:fmt" end (((Fmt.tree "foo") get "children") get 0) get "text"	'foo'	Fmt.tree exposes each node's text and children, so a rule set can walk real AQL source

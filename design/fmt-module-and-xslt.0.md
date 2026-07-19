@@ -373,6 +373,28 @@ these as `Fmt.*` AQL):
     The declarative substrate (Phase 3-vocabulary) is built and correct; what
     remains is this fork, which changes either the output or the effort
     envelope materially and is the maintainer's call.
+  - **Source bridge BUILT + declarative source formatter DEMONSTRATED.** The
+    piece common to every fork — getting the AQL-source layout tree into AQL
+    values so the rule vocabulary can reach it — is now done: **`Fmt.tree`**
+    (`modules/fmttree.go`) parses source and returns its layout CST as a
+    `$kind`-tagged value tree (`{$kind:'word'|'list'|… text:… children:[…]}`),
+    the shape `Fmt.kind` dispatches on. `formatter.ParseTree` exposes the same
+    transformed tree the emitter walks (capitalisation + fn-bracket elision
+    applied), so a rule set only decides layout. `TestFmtTreeDeclarativeFormatter`
+    is the payoff: a formatter for **AQL source** written as a declarative AQL
+    rule table over `Fmt.tree` (rules keyed by `Fmt.kind`, recursion through
+    `node.children`, `join` for the output) reproduces `Fmt.format`
+    **byte-for-byte** on the attachment-free core (leaves + bracket
+    containers). This proves the vocabulary reaches and formats real source,
+    not just data — the remaining port is the attachment rule and the
+    wrapping strategies (blocked on the (a)/(b)/(c) fork above), NOT the
+    tree-access plumbing, which is done and covered.
+    Production `Fmt.format` deliberately stays on the fast Go emitter: an
+    engine-interpreted AQL formatter would be a large perf regression for
+    byte-identical output (fork (b)), and the clean document-algebra reflow
+    (fork (a)) is a user-visible output change needing sign-off — so retiring
+    the Go core is gated on that decision, while the declarative vocabulary is
+    fully available (and now source-capable) for user-defined formatters.
 - **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
   examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
   `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI
