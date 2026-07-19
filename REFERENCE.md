@@ -1611,8 +1611,11 @@ fails the check and refuses `aql run` at preflight. Coverage is proven
 in the sound direction only — a clause counts only when every runtime
 value of an alternative provably matches it — so the checker may
 conservatively demand a default it cannot prove unnecessary, but it
-never wrongly proves a `case` exhaustive. The default is **not**
-required when the type disjunctions are met:
+never wrongly proves a `case` exhaustive. Three coverage channels
+compose: value/type matches (with a nominal newtype boundary),
+`[is T]` predicates, and comparison predicates / `refine`d ranges via
+interval union. The default is **not** required when the type
+disjunctions are met:
 
 **A declared union, covered alternative by alternative** (or by the
 union type itself in match position):
@@ -1680,39 +1683,75 @@ case 9 [1 "one" 2 "two"]  # check error: case_not_exhaustive — uncovered: 9
 case 9 [1 "one" "many"]   # 'many' — a trailing default always satisfies the check
 ```
 
-**Predicate matches prove nothing** (the match-guard rule): a total
-pair like `[gt 3]`/`[lte 3]` still needs a default, because the checker
-cannot prove predicate totality:
+**Comparison predicates prove coverage by interval union** — a total
+pair covers the whole numeric domain, with ℤ-adjacency for Integer and
+open/closed-point precision for Float; a genuine gap is caught and an
+`[eq …]` point bridges it:
 
 ```
 def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]]
-# check error: case_not_exhaustive — uncovered: Integer
+f 5                       # 1 — (3,∞) ∪ (-∞,3] covers Integer, no default needed
 
-def g fn [[x:Integer][Integer][case x [[gt 3] 1 2]]]
-g 5                       # 1 — the default restores exhaustiveness
+def g fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2]]]
+# check error: case_not_exhaustive — uncovered: Integer (3 itself is missed)
+
+def h fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2 [eq 3] 3]]]
+h 3                       # 3 — the [eq 3] point closes the gap
 ```
 
-**A dynamic (untyped) scrutinee opts out** — the check needs a static
-type, so an `:Any` param skips it. This is the one remaining home of
-the historical no-match/no-default behaviour (the `case` produces
-nothing, like `if` without an else):
+A `refine`d range type used as a match contributes its bounds the same
+way, so its complement predicate completes the domain:
 
 ```
-def f fn [[x:Any][][case x [1 "one" 2 "two"]]]
-f 9                       # produces nothing — checks clean (dynamic scrutinee)
+def Big (Integer gt 10)
+def f fn [[x:Integer][String][case x [Big "big" [lte 10] "small"]]]
+f 50                      # 'big' — (10,∞) ∪ (-∞,10] covers Integer
 ```
 
-**A bare-refine newtype is covered by its base, not vice versa** — the
-checker deliberately does not credit a newtype clause with covering its
-base type, even though unification admits base values at runtime:
+An unrecognized predicate shape (anything but `[gt/gte/lt/lte/eq N]`
+or `[is T]`) stays opaque and proves nothing.
+
+**A dynamic scrutinee requires a default** — with no static type to
+prove coverage against, the clause list must carry its own catch-all: a
+trailing default or an `Any` clause. A code-body scrutinee computes its
+value, so the same rule applies to it:
+
+```
+def f fn [[x:Any][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — the scrutinee is dynamic
+
+def g fn [[x:Any][String][case x [1 "one" "other"]]]
+g 9                       # 'other' — the default satisfies the check
+
+def h fn [[x:Any][String][case x [1 "one" Any "other"]]]
+h 9                       # 'other' — an Any clause is the written catch-all
+
+case [1 add 1] [2 "two"]  # check error — a computed scrutinee is dynamic too
+```
+
+(The historical no-match/no-default produce-nothing behaviour is
+therefore no longer expressible in a check-clean program; the engine
+still produces nothing when an unchecked run falls through.)
+
+**The newtype boundary is nominal in both directions** — a base-type
+clause does not cover a user-minted newtype alternative, and a newtype
+clause does not cover its base. A `Pos` scrutinee demands a `Pos`
+clause, an `[is Pos]` predicate, an `Any` clause, or a default:
 
 ```
 def Pos refine Integer
-def f fn [[x:Pos][String][case x [Integer "int-family"]]]
-f (def y:Pos 5 y)         # 'int-family' — the base covers the newtype
+def f fn [[x:Pos][String][case x [Pos "p"]]]
+def y:Pos 5
+f y                       # 'p' — the newtype's own clause covers it
 
-def g fn [[x:Integer][String][case x [Pos "p"]]]
-# check error: case_not_exhaustive — uncovered: Integer (conservative)
+def g fn [[x:Pos][String][case x [[is Pos] "p"]]]
+                          # checks clean — [is T] covers nominally too
+
+def h fn [[x:Pos][String][case x [Integer "i"]]]
+# check error: case_not_exhaustive — uncovered: Pos (the base does not cover it)
+
+def k fn [[x:Integer][String][case x [Pos "p"]]]
+# check error: case_not_exhaustive — uncovered: Integer (nor the reverse)
 ```
 
 The same coverage computation yields two info-severity advisories

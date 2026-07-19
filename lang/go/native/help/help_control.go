@@ -97,8 +97,12 @@ func init() {
 			"(case_not_exhaustive). The default is not needed when the type " +
 			"disjunctions are met — the clauses cover every union alternative, " +
 			"every enum member, Boolean's true+false, or the concrete value. " +
-			"Predicate matches ([gt 3]) prove no coverage; a dynamic (untyped) " +
-			"scrutinee skips the check.",
+			"Comparison predicates prove coverage by interval union ([gt 3] plus " +
+			"[lte 3] covers Integer, as does a refine'd range with its " +
+			"complement) and [is T] covers nominally; a base-type clause does " +
+			"NOT cover a user-defined newtype (nominal boundary). A dynamic " +
+			"(untyped or computed) scrutinee REQUIRES a trailing default or an " +
+			"Any clause.",
 		Examples: []string{
 			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
 			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,
@@ -109,8 +113,9 @@ func init() {
 			`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] ;# exhaustive over IS — no default needed`,
 			`def f fn [[x:IS][Integer][case x [Integer 1]]] ;# check ERROR case_not_exhaustive — uncovered: String`,
 			`def f fn [[b:Boolean][Integer][case b [true 1 false 0]]] ;# true+false cover Boolean`,
-			`def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]] ;# check ERROR — predicates prove no coverage`,
-			`def f fn [[x:Any][][case x [1 "one" 2 "two"]]] ;# a dynamic scrutinee skips the check (no-match produces nothing)`,
+			`def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]] ;# exhaustive — the intervals cover Integer`,
+			`def Pos refine Integer def f fn [[x:Pos][String][case x [Pos "p"]]] ;# a newtype needs its OWN clause — Integer would not cover it`,
+			`def f fn [[x:Any][String][case x [1 "one" "other"]]] ;# a dynamic scrutinee REQUIRES the default (or an Any clause)`,
 		},
 	})
 

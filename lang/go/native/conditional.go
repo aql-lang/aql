@@ -163,6 +163,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		v, clauses = clauses, v
 	}
 	if isCodeBody(v) {
+		// A code-body scrutinee is DYNAMIC — its result type is not
+		// statically modelled — so the clause list must carry its own
+		// catch-all (a trailing default or an Any clause). Emitted on
+		// both the plain-check and compile paths (case_exhaustive.go).
+		checkCaseCodeBodyScrutinee(r, v, clauses)
 		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
 		// dispatches on its last result. In compile mode:
 		//   - 0-net body → the run-time case_error (caseHandler): record a TERMINAL

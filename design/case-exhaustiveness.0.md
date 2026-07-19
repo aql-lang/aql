@@ -1,6 +1,9 @@
 # Case exhaustiveness — static coverage checking for `case`
 
-Status: landed (July 2026). Maintainer decision: hard errors.
+Status: landed (July 2026). Maintainer decisions: hard errors; then a
+second round (same month) refining three rules — the newtype boundary
+is nominal (base does not cover newtype), a dynamic scrutinee REQUIRES
+a default, and predicates are meaningful (interval / is-coverage).
 
 ## The rule
 
@@ -35,39 +38,48 @@ met**: the clauses cover
 
 Coverage is proven in the sound direction only — a clause is credited
 with covering an alternative only when every runtime inhabitant of the
-alternative provably unifies with the match (the same `UnifyR` relation
-`caseClauses` applies at runtime):
+alternative provably matches it. Three coverage channels compose:
 
-- a type-literal match covers an alternative by **lattice containment**
-  (`alt.ConformsTo(match)`), with named unions/enums expanded through
-  `UnionCarrierForType`;
-- a concrete match covers a concrete alternative by `UnifyR` itself, so
-  numeric-leaf exactness (`2.0` vs `2`) is decided identically to the
-  runtime;
-- **opaque matches prove nothing**: code-body predicates (`[gt 3]`),
-  paren expressions (runtime-evaluated generic instantiations),
-  unresolvable words, and predicate-refinement types in the covering
-  position (a `DepScalar` body only covers via the concrete-value
-  membership check). A total predicate pair (`[lt 3]`/`[gte 3]`) still
-  demands a default — the Rust match-guard rule. The closed-form
-  DepScalar complement (`NegateType`) is a compatible later precision
-  upgrade.
-- a bare-refine newtype match does NOT statically cover its base
-  scrutinee, even though `UnifyR` admits base values at runtime
-  (case.tsv §2) — crediting it would be sound, but the conservative
-  choice keeps the coverage relation purely lattice-shaped; revisit if
-  it bites.
+- **value/type matches** cover by lattice containment restricted by the
+  **newtype boundary** (`caseTypeCovers`): a user-minted alternative (a
+  `refine` newtype, a predicate refinement, a class) is covered only
+  within its minted lineage — `Integer` does NOT cover a `Pos`
+  alternative, and a `Pos` clause does not cover an `Integer`
+  scrutinee. `Any` is exempt (the written catch-all). Named
+  unions/enums expand through `UnionCarrierForType`; a concrete match
+  covers a concrete alternative by `UnifyR` itself, so numeric-leaf
+  exactness (`2.0` vs `2`) is decided identically to the runtime.
+- **`[is T]` predicates** cover by the runtime is-relation (the plain
+  lattice walk): `[is Pos]` covers a `Pos` alternative nominally, and
+  `[is Integer]` is the explicit family check.
+- **comparison predicates and DepScalar refinement matches** cover
+  numeric domains by **interval union**: `[gt 3]` and `[lte 3]`
+  together cover Integer, `Big` (`Integer gt 10`) plus `[lte 10]`
+  complete the domain, an `[eq c]` point bridges a single gap.
+  ℤ-adjacency merges integer bounds ((-∞,3] ∪ [4,∞) covers ℤ); every
+  other numeric family uses the ℝ rule (an open point at a shared
+  bound is a gap). Recognized shapes: `[gt/gte/lt/lte/eq <numeric
+  literal>]` and DepScalar Lo/Hi bounds.
 
-Consequently "cannot prove exhaustive" findings can be conservative
-(they demand a default the runtime might never need), but the checker
-never wrongly *proves* a case exhaustive.
+Unrecognized predicates and paren expressions stay opaque (no credit),
+so "cannot prove exhaustive" findings can be conservative (they demand
+a default the runtime might never need), but the checker never wrongly
+*proves* a case exhaustive.
 
-## Opt-outs and stability
+## The dynamic rule, opt-outs, and stability
 
-- A **gradual `dynamic(T)` scrutinee skips the check** — `x:Any` params
-  opt out of static typing, so the spec-pinned no-match/no-default
-  produce-nothing behaviour remains reachable (and spec-pinned) through
-  a dynamically-typed scrutinee (case.tsv §1).
+- A **gradual `dynamic(T)` scrutinee REQUIRES a trailing default or an
+  `Any` clause** — with no static type to prove coverage against, the
+  clause list must carry its own catch-all. A code-body scrutinee
+  (`case [body] […]`) computes its value and degrades to dynamic, so
+  the same rule applies (emitted in caseReturnsFn's code-body branch on
+  both check paths). The historical no-match/no-default
+  produce-nothing behaviour is therefore no longer expressible in a
+  check-clean program; the ENGINE still produces nothing when an
+  unchecked run falls through, pinned by
+  TestCaseRuntimeNoMatchProducesNothing (the library Run path does not
+  gate on the checker) and exercised compiled-vs-interpreted by the
+  differential fuzzer's no-default genCaseStmt.
 - A **concrete scrutinee inside a fn body is skipped**
   (`CheckState.FnBodyDepth > 0`): `AnalyseFnBody` re-runs bodies per
   call shape with the actual argument bound (`f 9` re-analyses with
@@ -89,9 +101,10 @@ The same coverage computation yields two advisories, per the
 `redundant_guard` precedent ("gate on wrongness, advise on smell"):
 
 - `case_unreachable_clause` — a clause an earlier clause fully subsumes
-  (`Integer` after `Number`, `5` after `Integer`, a duplicate literal).
-  Deliberately clause-vs-clause only — a domain-based rule would be
-  unstable under call-shape narrowing.
+  (`Integer` after `Number`, `5` after `Integer`, a duplicate literal,
+  `[gt 5]` after `[gt 3]` by interval containment, `[is Pos]` after
+  `[is Integer]`). Deliberately clause-vs-clause only — a domain-based
+  rule would be unstable under call-shape narrowing.
 - `case_redundant_default` — a trailing default made dead by full
   coverage. Emitted only over a DECLARED union domain
   (`DisjunctInfo.Declared`), the one alternative set that is stable and
@@ -104,9 +117,17 @@ The same coverage computation yields two advisories, per the
   stale header fix: the compile desugar never required a trailing
   default; only the code-body-scrutinee sub-path does).
 - `eng/go/registry.go` — severity classifications.
-- `lang/spec/case.tsv` — the no-match/no-default row now dispatches on
-  an `:Any` param (the statically-typed spelling is a check error); new
-  §6 pins the check-clean exhaustive shapes as accuracy canaries.
+- `lang/spec/case.tsv` — the no-match/no-default row was replaced by a
+  dynamic-scrutinee-with-default row (no check-clean spelling of the
+  produce-nothing shape exists any more); §6 pins the check-clean
+  exhaustive shapes as accuracy canaries, including interval totality,
+  the DepScalar complement, and the nominal newtype rows. NOTE: a
+  SINGLE-clause default-less case hard-refuses compilation ("if:
+  else-branch not captured" — an else-less 2-arg if is not a capturable
+  branch shape), which the compile-or-fallback corpus gate reports as a
+  divergence; spec rows for the nominal newtype semantics therefore use
+  a two-newtype union (`(Pos tor Neg)`) so the desugared chain has a
+  real else arm.
 - `test/go/langspec/check_run_fp_test.go` — pin 104 → 182: every
   generated default-less `case` that runs clean is now a SANCTIONED
   check-vs-run divergence (178 of 182 divergent programs are this

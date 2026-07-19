@@ -22,15 +22,22 @@
 # (case_not_exhaustive), and `aql run` refuses such a program at
 # preflight. The default is NOT required when the type disjunctions are
 # met: the clauses cover every union alternative / enum member /
-# Boolean's true+false / the concrete scrutinee value. Predicate
-# matches ([gt 3]) prove no coverage; a dynamic (untyped) scrutinee
-# skips the check — which is why the no-match row in §1 dispatches on
-# an Any-typed param. §6 pins the check-clean exhaustive shapes.
+# Boolean's true+false / the concrete scrutinee value. Coverage rules:
+# a base-type clause does NOT cover a user-minted newtype (a Pos
+# scrutinee needs Pos, [is Pos], or Any — not Integer); comparison
+# predicates and DepScalar refinements cover numeric domains by
+# interval union ([gt 3] plus [lte 3] covers Integer) and [is T]
+# covers by the is-relation; a DYNAMIC (untyped or computed) scrutinee
+# has no static type to prove coverage, so it REQUIRES a trailing
+# default or an Any clause. The historical no-match/no-default
+# produce-nothing behaviour is therefore no longer expressible in a
+# check-clean program (the engine still produces nothing when an
+# unchecked run falls through). §6 pins the check-clean shapes.
 #
 # §1  value matches (unify)
 case 2 [1 "one" 2 "two" "many"]	'two'	an equal scalar matches
 case 9 [1 "one" 2 "two" "many"]	'many'	no match takes the default
-def f fn [[x:Any][][case x [1 "one" 2 "two"]]] f 9		no match and no default produces nothing (dynamic scrutinee — a statically-typed one is a check error)
+def f fn [[x:Any][String][case x [1 "one" "other"]]] f 9	'other'	a dynamic scrutinee REQUIRES the default (or an Any clause) — the checker cannot prove coverage of an unknown type
 case red/q [red/q "warm" blue/q "cool"]	'warm'	atoms match by equality
 case 2.0 [2 "int-two" "other"]	'other'	unify is exact across numeric leaves — 2.0 does not match 2
 #
@@ -68,5 +75,9 @@ def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String 
 def f fn [[b:Boolean][Integer][case b [true 1 false 0]]] f false	0	true+false cover Boolean
 def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][String][case c [red/q "r" green/q "g" blue/q "b"]]] f green/q	'g'	every enum member listed needs no default
 def MaybeInt (Integer tor none) def f fn [[x:MaybeInt][Integer][case x [Integer 1 none 0]]] f 5	1	a none-able optional covered by Integer+none
-def IS (Integer tor String) def f fn [[x:IS][Integer][case x [[gt 3] 0 Integer 1 String 2]]] f 2	1	a predicate clause proves nothing, but full type clauses beside it still satisfy the check
+def IS (Integer tor String) def f fn [[x:IS][Integer][case x [[gt 3] 0 Integer 1 String 2]]] f 2	1	predicates compose with type clauses over a union
+def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]] f 5	1	comparison predicates prove coverage by interval union — [gt 3] plus [lte 3] covers Integer
+def Big (Integer gt 10) def f fn [[x:Integer][String][case x [Big "big" [lte 10] "small"]]] f 5	'small'	a DepScalar refinement match contributes its bounds; its complement completes the domain
+def Pos refine Integer def Neg refine Integer def PN (Pos tor Neg) def f fn [[x:PN][String][case x [Pos "p" Neg "n"]]] def y:Pos 5 f y	'p'	newtype alternatives are covered by their own clauses — Integer would cover NEITHER (nominal boundary)
+def Pos refine Integer def Neg refine Integer def PN (Pos tor Neg) def f fn [[x:PN][String][case x [[is Pos] "pos" [is Neg] "neg"]]] def y:Neg 7 f y	'neg'	…[is T] predicates cover nominally too
 case 2 [1 "one" 2 "two"]	'two'	a concrete scrutinee that provably matches a clause needs no default
