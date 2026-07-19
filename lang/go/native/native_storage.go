@@ -300,7 +300,18 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 	return v, nil
 }
 
-// d2CheckWrite is the check-mode mirror of d2WriteRuntimeError: at the
+// d2RetainElem copies src's element tag (if any) onto res and returns res — a
+// rebuilt map/list copy (the immutable list mutators, and the set/setpath
+// check-mode residuals) must carry the {:T}/[:T] tag so downstream reads narrow
+// and downstream writes stay enforced (the checker mirrors the runtime).
+func d2RetainElem(res, src Value) Value {
+	if elem, ok := src.ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return res
+}
+
+// d2CheckWrite is the check-mode mirror of the write enforcement: at the
 // top-level straight line, a provably-non-conforming CONCRETE write into a
 // tagged container is flagged as the type_error the runtime raises identically
 // (a RuntimeMirror — the program compiles and raises). Inside a fn body the
@@ -1110,11 +1121,13 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 // CheckListIndex flags it. The result model is the declared updated-copy
 // List either way (soundness: an unknown length or index stays silent).
 func setListIndexReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TList)
 	if len(args) == 3 {
 		CheckListIndex(r, args[0], args[2], "set")
 		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // R2: [:T] write enforcement
+		res = d2RetainElem(res, args[2])
 	}
-	return []Value{NewCarrier(TList)}
+	return []Value{res}
 }
 
 // setMapTypedReturns is the check-mode mirror of setMapHandler's typed-container
@@ -1122,10 +1135,12 @@ func setListIndexReturns(args []Value, r *Registry) []Value {
 // type_error the runtime raises. The residual is the declared updated-copy Map
 // (unchanged) — the receiver's tag drives the check, not the residual.
 func setMapTypedReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TMap)
 	if len(args) == 3 {
 		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+		res = d2RetainElem(res, args[2]) // chained/bound writes stay checked
 	}
-	return []Value{NewCarrier(TMap)}
+	return []Value{res}
 }
 
 func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {

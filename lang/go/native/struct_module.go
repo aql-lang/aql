@@ -251,7 +251,7 @@ func setpathReturns(args []Value, r *Registry) []Value {
 	if s, err := AsString(args[pathIdx]); err == nil && !strings.Contains(s, ".") {
 		d2CheckWrite(r, data, newVal, "setpath", args[pathIdx].Pos())
 	}
-	return []Value{dynamicContainerKind(data)}
+	return []Value{d2RetainElem(dynamicContainerKind(data), data)}
 }
 
 // reifyReturns claims the hydrated instance's type from the TARGET

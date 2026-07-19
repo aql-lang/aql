@@ -182,6 +182,39 @@ func TestTypedFlexPreservesMutability(t *testing.T) {
 	}
 }
 
+// --- Immutable list mutators enforce + retain the element tag (Codex review #3) ---
+
+func TestImmutableListMutatorEnforcement(t *testing.T) {
+	// push/unshift into an IMMUTABLE [:Integer] enforce (the copy-returning
+	// grow must uphold the same invariant `set` does — was a soundness hole).
+	for _, tc := range []struct{ src, word string }{
+		{`def xs:[:Integer] [1 2 3] (push "bad" xs)`, "push"},
+		{`def xs:[:Integer] [1 2 3] (unshift "bad" xs)`, "unshift"},
+	} {
+		if err := tfRunMode(t, tc.src, false); err == nil ||
+			!strings.Contains(err.Error(), "does not conform to element type Integer") {
+			t.Errorf("%s into [:Integer] should reject: got %v", tc.word, err)
+		}
+	}
+	if err := tfRunMode(t, `def xs:[:Integer] [1 2 3] (push 4 xs)`, false); err != nil {
+		t.Errorf("conforming push should succeed: %v", err)
+	}
+	// pop/shift retain the tag, so a bad grow on the RESULT is still caught.
+	for _, src := range []string{
+		`def xs:[:Integer] [1 2 3] def ys (pop xs) (push "bad" ys)`,
+		`def xs:[:Integer] [1 2 3] def ys (shift xs) (unshift "bad" ys)`,
+	} {
+		if err := tfRunMode(t, src, false); err == nil ||
+			!strings.Contains(err.Error(), "does not conform to element type Integer") {
+			t.Errorf("pop/shift should retain the [:Integer] tag: %q: got %v", src, err)
+		}
+	}
+	// Untyped lists are unchanged.
+	if err := tfRunMode(t, `def xs [1 2 3] (push "x" xs)`, false); err != nil {
+		t.Errorf("untyped push should succeed: %v", err)
+	}
+}
+
 // --- Nested typed containers re-tag on write (the adversarial-verify hole) ---
 
 func TestTypedContainerNestedRetag(t *testing.T) {

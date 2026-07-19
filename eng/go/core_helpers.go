@@ -555,6 +555,33 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 	return Value{}, false
 }
 
+// paramBodyCarrier builds a fn-body INPUT carrier for a param when no call-site
+// arg is available: a pattern-aware typed-container carrier for a {:T}/[:T]
+// param (so body reads narrow and disjoint uses are diagnosed), else the plain
+// ParamInputCarrier(p.Type). The main genArgs path uses typedContainerCarrier
+// with the actual arg; the poly-arm (user_poly.go) and construction-check
+// (buildFnBodyReturnsFn) body builders have only the param, so they route
+// here — otherwise `m:{:Integer}`'s `p.Type` is bare Map and reads stay Any.
+func paramBodyCarrier(p FnParam) Value {
+	if p.Pattern != nil {
+		pat := *p.Pattern
+		if ci, err := AsChildType(pat); err == nil && ci.Child.Parent != nil && !ci.Child.Parent.Equal(TAny) {
+			if IsTypedMap(pat) {
+				v := NewTypedMap(ci.Child)
+				v.ID = GenerateID(IDPrefixForType(TMap))
+				v.Carrier = true
+				return v
+			}
+			if IsTypedList(pat) {
+				v := NewCarrierTypedListValue(ci.Child)
+				v.ID = GenerateID(IDPrefixForType(TList))
+				return v
+			}
+		}
+	}
+	return ParamInputCarrier(p.Type)
+}
+
 func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	var out []Value
 	for i := range args {
@@ -1639,7 +1666,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		genArgs := make([]Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
-			genArgs[j] = ParamInputCarrier(p.Type)
+			genArgs[j] = paramBodyCarrier(p)
 		}
 		var declared []*Type
 		if !fnDef.Anonymous {

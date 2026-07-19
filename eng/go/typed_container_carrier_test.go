@@ -6,6 +6,29 @@ import "testing"
 // an abstract CARRIER gradually. Ordinary dispatch routes flex carriers through
 // unifyCarrierVsTyped first (and only the shape-tracked MAP carrier reaches the
 // map twin), so the LIST arm is dispatch-unreachable — pin both by direct call.
+// paramBodyCarrier (poly-arm + construction-check body-input builder) makes a
+// {:T}/[:T] param's body reads narrow. Its typed arms are pinned by direct call
+// (the census exercises the compile paths; the branch coverage is here).
+func TestParamBodyCarrier(t *testing.T) {
+	mapPat := NewTypedMap(NewTypeLiteral(TInteger))
+	if v := paramBodyCarrier(FnParam{Pattern: &mapPat, Type: TMap}); !IsTypedMap(v) {
+		t.Errorf("{:Integer} param → %s, want a typed-map carrier", v.Parent.String())
+	}
+	listPat := NewCarrierTypedListValue(NewTypeLiteral(TInteger))
+	if v := paramBodyCarrier(FnParam{Pattern: &listPat, Type: TList}); !IsTypedList(v) {
+		t.Errorf("[:Integer] param → %s, want a typed-list carrier", v.Parent.String())
+	}
+	// A non-typed-container param falls back to ParamInputCarrier (no pattern).
+	if v := paramBodyCarrier(FnParam{Type: TInteger}); v.Parent == nil || !v.Parent.ConformsTo(TInteger) {
+		t.Errorf("scalar param → %s, want an Integer carrier", v.Parent.String())
+	}
+	// A {:Any} pattern (child Any) falls through to ParamInputCarrier(TMap).
+	anyPat := NewTypedMap(NewTypeLiteral(TAny))
+	if v := paramBodyCarrier(FnParam{Pattern: &anyPat, Type: TMap}); v.Parent == nil || !v.Parent.ConformsTo(TMap) {
+		t.Errorf("{:Any} param → %s, want a Map carrier", v.Parent.String())
+	}
+}
+
 func TestUnifyTypedContainerCarrierGuard(t *testing.T) {
 	child := NewTypeLiteral(TInteger)
 	lc := NewCarrier(TFlexList)

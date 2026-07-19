@@ -334,6 +334,24 @@ func TestD2TypedContainerBoundBranches(t *testing.T) {
 	}
 }
 
+// The set residual retains the element tag, so a CHAINED / BOUND write is
+// caught in check mode too (mirrors the runtime — Codex review #2).
+func TestChainedWriteCheckMode(t *testing.T) {
+	r := tcCheck(t, `def m:{:Integer} {a:1} ((m set b/q 2) set c/q "wrong")`)
+	if !tcHasTypeError(r, "does not conform to element type Integer") {
+		t.Errorf("chained check-mode write should be flagged: %+v", r.Check.Diagnostics)
+	}
+	r2 := tcCheck(t, `def m:{:Integer} {a:1} def m2 (m set b/q 2) (m2 set c/q "wrong")`)
+	if !tcHasTypeError(r2, "does not conform to element type Integer") {
+		t.Errorf("bound-then-write check should be flagged: %+v", r2.Check.Diagnostics)
+	}
+	// A conforming chained write stays silent.
+	r3 := tcCheck(t, `def m:{:Integer} {a:1} ((m set b/q 2) set c/q 3)`)
+	if tcHasTypeError(r3, "does not conform") {
+		t.Errorf("conforming chained write should be silent: %+v", r3.Check.Diagnostics)
+	}
+}
+
 // A conforming write is silent; an untyped map write is silent.
 func TestTypedContainerWriteCheckNegatives(t *testing.T) {
 	for _, src := range []string{

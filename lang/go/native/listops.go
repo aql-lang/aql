@@ -10,9 +10,15 @@ import "github.com/aql-lang/aql/eng/go"
 //	push 99 [1,2,3] → [1,2,3,99]
 //	[1,2,3] 99 push → [1,2,3,99]
 func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	// A typed list ([:T]) enforces + recursively re-tags the grown element —
+	// the immutable grow must uphold the same element invariant `set` does.
+	tagged, terr := d2AdoptTyped(r, args[1], args[0], "push")
+	if terr != nil {
+		return nil, terr
+	}
 	// The copy-returning column stays ENTIRELY immutable: an element
 	// with flex inside is snapshot to its plain shape (AdoptIntoNode).
-	newElem, aerr := eng.AdoptIntoNode(args[0])
+	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("push_error", aerr.Error(), "push")
 	}
@@ -27,7 +33,7 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	copy(result, list)
 	result[len(list)] = newElem
 
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // pop removes the last element from a list, returning the new list
@@ -46,7 +52,7 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 	copy(newList, list[:len(list)-1])
 	popped := list[len(list)-1]
 
-	return []Value{NewList(newList), popped}, nil
+	return []Value{d2RetainElem(NewList(newList), args[0]), popped}, nil
 }
 
 // unshift prepends a single element to the beginning of a list, returning a new list.
@@ -54,9 +60,14 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 //	unshift 99 [1,2,3] → [99,1,2,3]
 //	[1,2,3] 99 unshift → [99,1,2,3]
 func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
+	// A typed list ([:T]) enforces + recursively re-tags the grown element.
+	tagged, terr := d2AdoptTyped(r, args[1], args[0], "unshift")
+	if terr != nil {
+		return nil, terr
+	}
 	// Entirely-immutable invariant for the copy-returning column: see
 	// pushHandler.
-	newElem, aerr := eng.AdoptIntoNode(args[0])
+	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
 	}
@@ -69,7 +80,7 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	result[0] = newElem
 	copy(result[1:], list)
 
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // shift removes the first element from a list, returning the new list
@@ -88,7 +99,7 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 	newList := make([]Value, len(list)-1)
 	copy(newList, list[1:])
 
-	return []Value{NewList(newList), shifted}, nil
+	return []Value{d2RetainElem(NewList(newList), args[0]), shifted}, nil
 }
 
 // ---- FlexList variants: mutate IN PLACE through the pointer-backed
