@@ -118,11 +118,17 @@ def render fn [ [red/q] [String] ["R"]  [green/q] [String] ["G"] ]   # 'blue' �
 ```
 
 Unlike Site 1 this one legitimately *is* a `RuntimeMirror` — an uncovered
-call is a guaranteed trap — so it fits the existing gating-mirror machinery
-and would upgrade a runtime failure to a compile-time error. It is the most
-valuable site and the hardest (it reasons over the sig set, not a linear
-clause list); deferred to a later phase. Hook: the fn-analysis/install path
-(`AnalyseFnBody` / `native_definition.go`).
+call is a guaranteed trap. It was investigated and found NOT to be a
+self-contained addition: the checker's call-site partition
+(`disjunctPartitionReturns`) can be made to compute enum coverage with a
+confined fix, but the value does not reach it as a disjunct in real programs —
+value-pattern dispatch loses the concrete value through any **variable
+reference** (a general, non-enum-specific precision gap), and fn bodies are
+analysed per-call-shape rather than over the abstract param type. Landing it
+therefore requires a core checker change (variable-reference precision, or the
+fn-body analysis model), not a tail-end add-on. Full findings, the
+ready-to-use partition fix, and the recommended scoped path:
+**`design/VALUE-PATTERN-DISPATCH.0.md`**.
 
 ## Precondition note
 
