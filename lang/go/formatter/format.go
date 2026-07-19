@@ -663,6 +663,14 @@ func emitStatement(nodes []*Node, indent int) string {
 		return line
 	}
 
+	// A statement ending in a trailing comment stays on one line even when
+	// it overflows the width: the comment annotates the whole statement (as
+	// in `expr # returns X` doc examples) and must never be wrapped onto its
+	// own line, detached from what it annotates.
+	if last := nodes[len(nodes)-1]; last.Kind == NdComment || last.Kind == NdBlockComment {
+		return line
+	}
+
 	// Try fn-specific formatting first.
 	if fn := tryFnFormat(nodes, indent); fn != "" {
 		return fn

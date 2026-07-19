@@ -23,24 +23,24 @@ multi-service supervisor.
 
 ```aql
 # words take their arguments where you write them
-add 1 2                              # returns 3
-10 sub 3                             # returns 7
+add 1 2 # returns 3
+10 sub 3 # returns 7
 
 # typed functions, lists, maps, records, concurrency
-def square fn [[x:Number] [Number] [mul x x]]
-square 4                             # returns 16
+def square fn x:Number Number [mul x x]
+square 4 # returns 16
 
-[1, 2, 3] each [square]              # returns [1 4 9]
-{name: "Ada"} . name                 # returns 'Ada'
+[1, 2, 3] each [square] # returns [1 4 9]
+{name:"Ada"}.name # returns 'Ada'
 
 def Point refine Record [x:Number y:Number]
-make Point [3 4]                     # returns {x:3 y:4}
+make Point [3 4] # returns {x:3 y:4}
 
-import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]
+import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]] # returns [3 7]
 
 # macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
-unless false [42]                    # returns 42
+unless false [42] # returns 42
 ```
 
 The stack is still there when you want it: `10 3 sub` is the all-stack
@@ -60,11 +60,11 @@ arguments**: a word takes its operands from the tokens written *after*
 it, in declared order, exactly like a conventional function call.
 
 ```aql
-add 1 2                              # returns 3 — the word comes first
-def square fn [[x:Number] [Number] [mul x x]]
-square 4                             # returns 16 — your own words read the same way
-import "aql:math-util"               # imports read forward, too
-3 7 MathUtil.min                     # returns 3 — module words are then in scope
+add 1 2 # returns 3 — the word comes first
+def square fn x:Number Number [mul x x]
+square 4 # returns 16 — your own words read the same way
+import "aql:math-util" # imports read forward, too
+3 7 MathUtil.min # returns 3 — module words are then in scope
 ```
 
 This is the canonical, recommended form for **all new code, examples,
