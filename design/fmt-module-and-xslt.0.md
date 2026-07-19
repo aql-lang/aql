@@ -344,14 +344,21 @@ these as `Fmt.*` AQL):
   fmt collapses — a visible-output change to the docs and the `describe`
   command warranting maintainer sign-off, not a silent migration. Two
   concrete findings now bound this work (see "Formatter correctness baseline"):
-  the correctness blockers are GONE (fmt no longer corrupts the examples), so
-  what remains is purely presentational; and `help.Format` renders each
-  example as `"  " + line`, re-indenting nothing, so a fmt-WRAPPED example
-  (7 of 161 exceed 72 cols) would leave its continuation lines at column 0 and
-  break the Examples block. Doing this cleanly needs a no-wrap width on the
-  source formatter (the sibling of `Fmt.render`'s width) plus the sign-off on
-  the ~43 now-safe canonicalisations (double-space collapse, bracketless fn,
-  map-shorthand expansion).
+  the correctness blockers are GONE (fmt no longer corrupts the examples —
+  the CORRECTNESS half is DONE and pinned by `help/fmt_examples_test.go`,
+  which runs all 161 examples through fmt and asserts none is corrupted), so
+  what remains is purely presentational. The exact scope of that presentational
+  half is now measured: of 161 examples, **143 change under fmt (one line each),
+  5 wrap, 13 are already clean.** The 143 changes are DOMINATED by
+  `;#` → `; #` — every example uses `;#` as a compact result-marker convention
+  (`expr   ;# => 6`) and fmt spaces the `;` (end) from the `#` (comment). So
+  canonicalising is not a mechanical tidy: it rewrites the established `;#`
+  documentation convention across ~all examples (plus double-space collapse,
+  bracketless fn, map-shorthand, comma removal), and `help.Format` re-indents
+  nothing so the 5 that wrap need a no-wrap width to stay one line. This is a
+  documentation-STYLE decision (does `; #` read as well as `;#`? do bracketless
+  fn examples teach as well as the explicit `fn [[…] […] […]]` form?), which is
+  why it is reserved for maintainer sign-off, not a silent migration.
 
 ## Formatter correctness baseline (verified 2026-07)
 
