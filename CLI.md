@@ -303,7 +303,7 @@ and exits non-zero if any case failed or any suite errored.
 aql test                            # run every *_test.aql under the cwd
 aql test math_test.aql              # run one suite file
 aql test src/ lib/                  # walk several directories
-aql test --coverage sift_test.aql   # add per-module line coverage
+aql test --coverage sift_test.aql   # add coverage + an HTML report
 ```
 
 Suites run on the **bytecode compiler by default** — the normal, fast
@@ -315,15 +315,20 @@ way; an explicit file argument is run verbatim (even without the
 
 Flags:
 
-* `--coverage` — arm the line-coverage hook before each suite, then
-  report every user module the suite imported (`import "./mod.aql"`) as
-  `cover <id>  <pct>% (<covered>/<total>)  uncovered: <lines>`. The
-  `uncovered:` list names the exact source line numbers that never ran,
-  so you can jump straight to the untested code. Because the bytecode VM
+* `--coverage` — measure line coverage of every user module a suite
+  imports (`import "./mod.aql"`), aggregated across all suites. It prints
+  a summary line per module —
+  `cover <id>  <pct>% (<covered>/<total>)  uncovered: <lines>`, where the
+  `uncovered:` list names the exact source lines that never ran — and
+  writes a browsable **HTML report** to a `coverage/` folder: an
+  `index.html` summary plus one page per module with each source line
+  coloured covered (green) or uncovered (red). Because the bytecode VM
   folds some source positions, compiled coverage is a *subset* of the
   interpreter's (some folded lines show as falsely uncovered); pair with
   `--no-compile` for the exact, line-granular set when driving a module
   to full coverage.
+* `--coverage-dir PATH` — where the HTML report is written (default
+  `coverage`). Ignored without `--coverage`.
 * `--no-compile` / `--force-compile` / `--compile` — select the engine
   exactly as for [`aql run`](#bytecode-compilation).
 * `-r PATH` — registry path, same as `aql run`. The permission flags

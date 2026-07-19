@@ -82,28 +82,29 @@ func ArmCoverageCollector(reg *native.Registry) func() {
 
 // CoverageFor reports executable-line coverage for a registered cover source id
 // against the rows recorded into reg's active collector — the Go twin of the
-// Test.coverage word, for the aql test --coverage runner. It returns the covered
-// count, the total (denominator) count, the SORTED list of uncovered row numbers
-// (so the runner can point the user at the exact untested lines), and ok. ok is
-// false when no source is registered for id; total is 0 (uncovered nil) when the
+// Test.coverage word, for the aql test --coverage runner. It returns the SORTED
+// covered and uncovered executable row numbers (so the runner can both count
+// them and colour each source line in an HTML report), and ok. The covered
+// count is len(covered) and the total is len(covered)+len(uncovered). ok is
+// false when no source is registered for id; both slices are nil when the
 // registered source parses to no executable rows.
-func CoverageFor(reg *native.Registry, id string) (covered, total int, uncovered []int, ok bool) {
+func CoverageFor(reg *native.Registry, id string) (covered, uncovered []int, ok bool) {
 	src, has := reg.CoverSource(id)
 	if !has {
-		return 0, 0, nil, false
+		return nil, nil, false
 	}
 	denom := coverDenominator(reg, src)
 	rows := activeCover(reg).coveredRows(id)
-	hit := 0
 	for row := range denom {
 		if rows[row] {
-			hit++
+			covered = append(covered, row)
 		} else {
 			uncovered = append(uncovered, row)
 		}
 	}
+	sort.Ints(covered)
 	sort.Ints(uncovered)
-	return hit, len(denom), uncovered, true
+	return covered, uncovered, true
 }
 
 // coverDenominator parses src and returns the set of EXECUTABLE rows: every

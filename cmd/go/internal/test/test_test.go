@@ -158,10 +158,11 @@ func TestRunCoverage(t *testing.T) {
 			"export \"Calc\" { add2: add2/r  triple: triple/r }\n")
 	f := write(t, filepath.Join(dir, "calc_test.aql"),
 		"import \"aql:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
+	htmlDir := filepath.Join(t.TempDir(), "cov")
 	// Run on the interpreter so the uncovered set is exact (no VM position
 	// folding): add2 is exercised, triple is not, so triple's body (row 5) is
 	// the uncovered line.
-	code, stdout, _ := runCmd("--coverage", "--no-compile", f)
+	code, stdout, _ := runCmd("--coverage", "--coverage-dir", htmlDir, "--no-compile", f)
 	if code != 0 {
 		t.Errorf("code = %d, want 0", code)
 	}
@@ -170,6 +171,43 @@ func TestRunCoverage(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "uncovered: 5") {
 		t.Errorf("stdout = %q, want the uncovered line numbers (5)", stdout)
+	}
+	// The HTML report is written and its path announced.
+	index := filepath.Join(htmlDir, "index.html")
+	if !strings.Contains(stdout, "coverage report: "+index) {
+		t.Errorf("stdout = %q, want the report path", stdout)
+	}
+	idxHTML, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatalf("read index.html: %v", err)
+	}
+	if !strings.Contains(string(idxHTML), mod) || !strings.Contains(string(idxHTML), "mod0.html") {
+		t.Errorf("index.html missing the module row:\n%s", idxHTML)
+	}
+	modHTML, err := os.ReadFile(filepath.Join(htmlDir, "mod0.html"))
+	if err != nil {
+		t.Fatalf("read mod0.html: %v", err)
+	}
+	// The module page colours the covered add2 body (row 2) and the uncovered
+	// triple body (row 5).
+	if !strings.Contains(string(modHTML), "covered") || !strings.Contains(string(modHTML), "uncovered") {
+		t.Errorf("mod0.html missing coverage classes:\n%s", modHTML)
+	}
+}
+
+// A --coverage run whose suites import no user module writes no report.
+func TestRunCoverageNoModules(t *testing.T) {
+	f := write(t, filepath.Join(t.TempDir(), "p_test.aql"), passSuite)
+	htmlDir := filepath.Join(t.TempDir(), "cov")
+	code, stdout, _ := runCmd("--coverage", "--coverage-dir", htmlDir, f)
+	if code != 0 {
+		t.Errorf("code = %d, want 0", code)
+	}
+	if strings.Contains(stdout, "coverage report:") {
+		t.Errorf("stdout = %q, want no report path (no user modules)", stdout)
+	}
+	if _, err := os.Stat(htmlDir); !os.IsNotExist(err) {
+		t.Errorf("coverage dir should not be created when nothing was covered")
 	}
 }
 
@@ -240,7 +278,7 @@ func TestDiscoverWalkError(t *testing.T) {
 // runFile surfaces a file-read error as an errored suite.
 func TestRunFileReadError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	p, f, errored := runFile(&stdout, &stderr, filepath.Join(t.TempDir(), "gone_test.aql"), lang.Options{}, defaultMode(), false)
+	p, f, errored := runFile(&stdout, &stderr, filepath.Join(t.TempDir(), "gone_test.aql"), lang.Options{}, defaultMode(), nil)
 	if !errored || p != 0 || f != 0 {
 		t.Errorf("runFile(missing) = (%d,%d,%v), want (0,0,true)", p, f, errored)
 	}
@@ -256,7 +294,7 @@ func TestRunFileInitError(t *testing.T) {
 	newAQL = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("init boom") }
 	f := write(t, filepath.Join(t.TempDir(), "i_test.aql"), passSuite)
 	var stdout, stderr bytes.Buffer
-	if _, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), false); !errored {
+	if _, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil); !errored {
 		t.Error("runFile should report an init error as errored")
 	}
 	if !strings.Contains(stderr.String(), "init") {

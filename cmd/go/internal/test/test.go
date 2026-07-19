@@ -57,7 +57,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	registry := fs.String("r", "", "registry path")
-	coverage := fs.Bool("coverage", false, "measure and report per-module line coverage of imported user modules")
+	coverage := fs.Bool("coverage", false, "measure imported-user-module line coverage; print a summary and write an HTML report")
+	coverageDir := fs.String("coverage-dir", "coverage", "directory for the HTML coverage report written with --coverage")
 	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when possible; silent interpreter fallback (the default; also enabled by AQL_COMPILE)")
 	noCompileFlag := fs.Bool("no-compile", false, "run each suite on the interpreter instead of the default bytecode compiler (also enabled by AQL_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — a suite that is not compilable errors instead of falling back")
@@ -90,10 +91,14 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	o := run.OptionsFor(pathutil.Expand(*registry), 0, pol)
 	mode := run.ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag)
 
+	var accum *covAccum
+	if *coverage {
+		accum = newCovAccum()
+	}
 	var passed, failed int
 	anyErr := false
 	for _, f := range files {
-		p, fl, errored := runFile(stdout, stderr, f, o, mode, *coverage)
+		p, fl, errored := runFile(stdout, stderr, f, o, mode, accum)
 		passed += p
 		failed += fl
 		if errored {
@@ -101,6 +106,15 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 	fmt.Fprintf(stdout, "\n=== %d files: %d passed, %d failed ===\n", len(files), passed, failed)
+	if accum != nil {
+		accum.report(stdout)
+		index, err := accum.writeHTML(*coverageDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "warning: coverage report: %s\n", err)
+		} else if index != "" {
+			fmt.Fprintf(stdout, "coverage report: %s\n", index)
+		}
+	}
 	if failed > 0 || anyErr {
 		return 1
 	}
@@ -146,11 +160,12 @@ func discover(targets []string) ([]string, error) {
 	return out, nil
 }
 
-// runFile runs one suite and prints its report. It returns the suite's passed
-// and failed case counts, plus an errored flag set when the file could not be
-// read, initialised, run, or its results read — an errored suite counts no
-// cases but forces a non-zero final exit.
-func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.CompileMode, coverage bool) (passed, failed int, errored bool) {
+// runFile runs one suite and prints its report. When accum is non-nil the run
+// is coverage-armed and the suite's imported-module coverage is folded into it.
+// It returns the suite's passed and failed case counts, plus an errored flag set
+// when the file could not be read, initialised, run, or its results read — an
+// errored suite counts no cases but forces a non-zero final exit.
+func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.CompileMode, accum *covAccum) (passed, failed int, errored bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s: %s\n", path, err)
@@ -166,7 +181,7 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 	// stdout/stderr rather than leaking to os.Stderr.
 	a.SetOutput(stdout)
 	a.NativeRegistry().ErrOutput = stderr
-	if coverage {
+	if accum != nil {
 		disarm := modules.ArmCoverageCollector(a.NativeRegistry())
 		defer disarm()
 	}
@@ -181,8 +196,8 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 		return 0, 0, true
 	}
 	fmt.Fprintln(stdout, report)
-	if coverage {
-		reportCoverage(stdout, a.NativeRegistry())
+	if accum != nil {
+		accum.collect(a.NativeRegistry())
 	}
 	return passed, failed, false
 }
@@ -255,16 +270,6 @@ func mapInt(m native.ReadMap, key string) int {
 	v, _ := m.Get(key)
 	n, _ := native.AsInteger(v)
 	return int(n)
-}
-
-// reportCoverage prints per-module line coverage for every source registered
-// during the run (each `import "./mod.aql"` under an armed hook registers one),
-// naming the exact uncovered line numbers so the user can jump to them.
-func reportCoverage(w io.Writer, reg *native.Registry) {
-	for _, id := range reg.CoverSourceIDs() {
-		covered, total, uncovered, _ := modules.CoverageFor(reg, id)
-		fmt.Fprint(w, coverageLine(id, covered, total, uncovered))
-	}
 }
 
 // coverageLine renders one module's coverage summary, appending the uncovered
