@@ -246,13 +246,32 @@ these as `Fmt.*` AQL):
   `FormatWith(src, Parse)`, with `Parse` a `func(src) *Node` front end and
   `DefaultParse` the built-in lossless lexer. The layout rules and emitter
   run on the tree regardless of front end. REMAINING: the trivia-preserving
-  tabnas CST front end that plugs into `Parse` — build it on `jsonic.NewLex`
-  (own jsonic instance — never mutate the shared `Parse` config, F2 caveat;
-  note `Lex.Next` skips the SP/LN/CM IGNORE set, so comment/whitespace
-  retention needs a custom lex path), with a comment-capturing matcher,
-  token-level ordered maps, and backtick spelling retained. Keep the current
-  lexer as the fallback for un-parseable (WIP) source so fmt stays
-  best-effort.
+  tabnas CST front end that plugs into `Parse`. Two findings from the
+  investigation pin the shape and the blocker:
+  - **Trivia lexing is solved (mechanism found).** `Lex.Next` skips the
+    SP/LN/CM IGNORE set, but `Lex.Config.IgnoreSet` is a **per-instance**
+    map (`{TinSP,TinLN,TinCM}` by default, "plugins can customize"). A
+    `jsonic.NewLex(src, cfg)` whose `cfg.IgnoreSet` omits those Tins makes
+    `Next` return the space / line / **comment** tokens verbatim (each
+    carries `Token.Src` + row/col/byte offsets). So a trivia-preserving
+    token stream needs no custom matcher — just an ignore-set override.
+    The cleanest wiring reuses the existing `buildTree([]Token)` by writing
+    only a `tabnasTin → formatter.TokenKind` adapter over that stream.
+  - **The real blocker is layering (F3), a DECISION not a task.** A *raw*
+    `jsonic.NewLex` is not the AQL grammar: AQL's backtick-verbatim /
+    template literals and `+minilang/…/` literals are recognised by the
+    eng parser's *configured* jsonic instance (custom tokens + rules in
+    `eng/go/parser/grammar.go`), not by a bare lexer. A raw-lex front end
+    would mis-tokenise exactly the spans the new rules must keep verbatim.
+    The two honest options: (a) the `formatter` package takes a dependency
+    on `eng/go/parser` to reuse the configured instance — abandoning its
+    engine-dep-free leaf status (F3), which would move doc-example
+    formatting and the import graph; or (b) the trivia-lexer lives in a new
+    leaf package that re-declares AQL's backtick/minilang lex customisations
+    independently — duplicating grammar knowledge. Pick (a) or (b) before
+    writing the front end; both are viable, neither is mechanical.
+  Until then keep the current lossless hand-lexer as `DefaultParse` — it
+  already preserves comments/newlines/backticks — so fmt stays correct.
 - **Phase 3 — rules.** Rule behaviour DONE in the Go formatter: 72-col,
   backtick-verbatim (`scanBacktick`), and bracketless single param/return
   (`elideFnBrackets`). The declarative **substrate** is DONE: a
