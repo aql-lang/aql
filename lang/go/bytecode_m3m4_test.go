@@ -125,20 +125,18 @@ func TestParseFnDispatchCheckObservationFree(t *testing.T) {
 }
 
 // TestMiniLangAbsenceFoldCompiles pins the M3 minilang growth ledger: the
-// PROVABLY-stable missing-key reads fold to None and compile natively, while
-// every key a register call may install keeps the sound fold decline.
+// kind namespace is FROZEN (no program-reachable word installs export keys
+// at run time), so EVERY missing-key read is provably stable — it folds to
+// None and compiles natively — while a present key still resolves to its
+// export, never a stale None.
 func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	positives := []struct{ name, src string }{
-		// module-minilang.tsv:320 — a non-filter kind (2-param sig) never
-		// mints a member type, so MiniLang.Gen is None on every run.
-		{"non-filter kind mints no type (minilang:320)",
-			`import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.Gen`},
-		// No register call at all: the ledger is empty, absence is stable.
-		{"missing key with no registration",
+		// A def-bound value never touches the export map (module-minilang.tsv
+		// pins the same read as a spec row): MiniLang.Gen is None on every run.
+		{"missing key with a value-form binding",
+			`import "aql:minilang"  def gen (fn [[src:String opts:Map] [Integer] [1]])  MiniLang.Gen`},
+		// No binding at all: the ledger is empty, absence is stable.
+		{"missing key with no binding",
 			`import "aql:minilang"  MiniLang.Nope`},
 	}
 	for _, c := range positives {
@@ -162,41 +160,16 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 		}
 	}
 
-	// NEGATIVES — the fold must keep declining for every key the register
-	// call may install; baking None for these would be a miscompile (the
-	// interpreter produces the minted type / the stored fn).
-	negatives := []struct{ name, src string }{
-		// A FILTER-shaped kind (3-param sigs) mints the capitalised member
-		// type at run time — the interpreter's answer is the Gen2 type
-		// literal, never None.
-		{"filter-kind minted type stays unfolded",
-			`import "aql:minilang"  MiniLang.register gen2 (fn [[src:String opts:Map subject:String] [Map] [{}]]) end  MiniLang.Gen2`},
-		// The transducer key itself is installed by the register call.
-		{"lang_<kind> key stays unfolded",
-			`import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.lang_gen`},
+	// NEGATIVE — a PRESENT key must never fold to a stale None: MiniLang.Re
+	// is the built-in member-type export, identical in both engines.
+	const present = `import "aql:minilang"  MiniLang.Re`
+	gotC, _, errC := mustNew(t).RunCompiled(present)
+	gotI, errI := mustNew(t).Run(present)
+	if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+		t.Fatalf("present key: compiled=%v/%v interp=%v/%v", gotC, errC, gotI, errI)
 	}
-	for _, c := range negatives {
-		prog, _, _, _ := mustNew(t).CompileCheck(c.src)
-		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-			// Compiling natively is acceptable ONLY if the value agrees with
-			// the interpreter (i.e. it did not fold a stale None).
-			gotC, _, errC := mustNew(t).RunCompiled(c.src)
-			gotI, errI := mustNew(t).Run(c.src)
-			if codeOf(errC) != codeOf(errI) || (errC == nil && fmt.Sprint(gotC) != fmt.Sprint(gotI)) {
-				t.Errorf("%s: compiled=%v/%v interp=%v/%v (stale absence baked?)",
-					c.name, gotC, errC, gotI, errI)
-			}
-			if errC == nil && strings.Contains(fmt.Sprint(gotC), "None") && !strings.Contains(fmt.Sprint(gotI), "None") {
-				t.Errorf("%s: compiled None where interpreter has %v", c.name, gotI)
-			}
-			continue
-		}
-		// Refused: the fallback must agree with the interpreter.
-		gotC, _, errC := mustNew(t).RunCompiled(c.src)
-		gotI, errI := mustNew(t).Run(c.src)
-		if codeOf(errC) != codeOf(errI) || (errC == nil && errI == nil && fmt.Sprint(gotC) != fmt.Sprint(gotI)) {
-			t.Errorf("%s: fallback=%v/%v interp=%v/%v", c.name, gotC, errC, gotI, errI)
-		}
+	if strings.Contains(fmt.Sprint(gotC), "None") {
+		t.Errorf("present key folded to None: %v", gotC)
 	}
 }
 

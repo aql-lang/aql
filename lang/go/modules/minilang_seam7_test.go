@@ -84,38 +84,9 @@ func TestS7B_MiniGexShapeDefault(t *testing.T) {
 	}
 }
 
-// TestS7B_MiniRegisterInstallErrors drives miniRegisterInstall's name and
-// signature refusal arms directly (the runtime handler path, without the
-// check-mode concrete-name guard).
-func TestS7B_MiniRegisterInstallErrors(t *testing.T) {
-	r := mcovReg(t)
-	exports := native.NewOrderedMap()
-	idents := map[string]registerIdent{}
-
-	// Non-concrete (type-literal) name.
-	err := miniRegisterInstall(exports, idents,
-		[]native.Value{native.NewTypeLiteral(native.TAtom), mcovFilterFn()}, r, nil)
-	if err == nil {
-		t.Error("register: non-concrete name should error")
-	}
-	// args[1] is not a Function value.
-	err = miniRegisterInstall(exports, idents,
-		[]native.Value{native.NewAtom("poly"), native.NewInteger(5)}, r, nil)
-	if err == nil {
-		t.Error("register: non-function body should error")
-	}
-}
-
-// TestS7B_MiniRegisterCompiledNameError drives miniRegisterCompiledHandler's
-// name AsConcreteAtom refusal arm.
-func TestS7B_MiniRegisterCompiledNameError(t *testing.T) {
-	r := mcovReg(t)
-	h := miniRegisterCompiledHandler(native.NewOrderedMap())
-	_, err := h([]native.Value{native.NewTypeLiteral(native.TAtom), mcovFilterFn()}, nil, nil, r)
-	if err == nil {
-		t.Error("register-compiled: non-concrete name should error")
-	}
-}
+// (The miniRegisterInstall / miniRegisterCompiledHandler seams died with
+// the frozen kind namespace — TestMiniCovRegisterTombstonesDirect drives
+// the tombstone handlers that replaced them.)
 
 // TestS7B_MiniMicronValidateArms drives miniMicronLitValidate's lenient
 // carrier arm and its non-Function refusal.

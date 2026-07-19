@@ -373,51 +373,44 @@ func TestMiniCovMicronNegatives(t *testing.T) {
 	}
 }
 
-// TestMiniCovRegister drives MiniLang.register: a generator kind (named
-// params via opts), a filter kind (stack subject + minted member type),
-// and MiniLang.kinds listing them.
-func TestMiniCovRegister(t *testing.T) {
+// TestMiniCovValueForms drives the def-bound value forms that replaced
+// registration: a generator fn (named params via opts) and a filter fn
+// (stack subject), both dispatched through `mini <name>`; kinds stays the
+// fixed built-in list.
+func TestMiniCovValueForms(t *testing.T) {
 	r := mcovReg(t)
 	out := mcovRun(t, r, mcovImp+
-		`MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  `+
+		`def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  `+
 		`mini poly 'x^2 + 3*y' {x:10, y:2}`)
 	if n, _ := out[0].AsConcreteInteger(); n != 106 {
-		t.Errorf("generator kind = %v, want 106", out[0])
+		t.Errorf("generator value = %v, want 106", out[0])
 	}
 
 	r2 := mcovReg(t)
 	out2 := mcovRun(t, r2, mcovImp+
-		`MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  `+
+		`def count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]])  `+
 		`"banana" mini count 'an'`)
 	if n, _ := out2[0].AsConcreteInteger(); n != 2 {
-		t.Errorf("filter kind = %v, want 2", out2[0])
+		t.Errorf("filter value = %v, want 2", out2[0])
 	}
-	// A filter-shaped kind mints its member type export.
-	mt := mcovRun(t, r2, `MiniLang.Count`)
-	if mt[0].String() != "Count" {
-		t.Errorf("MiniLang.Count = %s, want the minted member type", mt[0].String())
-	}
-	// kinds lists the new kind after the builtins.
+	// kinds is the FIXED built-in list — a def-bound value never appears.
 	kinds := mcovRun(t, r2, `MiniLang.kinds`)
-	if !strings.Contains(kinds[0].String(), "count") || !strings.Contains(kinds[0].String(), "re") {
-		t.Errorf("kinds = %s, want re … count", kinds[0].String())
+	if strings.Contains(kinds[0].String(), "count") || !strings.Contains(kinds[0].String(), "re") {
+		t.Errorf("kinds = %s, want the built-ins only", kinds[0].String())
 	}
 }
 
-// TestMiniCovRegisterNegatives pins the register contract.
-func TestMiniCovRegisterNegatives(t *testing.T) {
+// TestMiniCovRegisterTombstones pins the frozen registry: both register
+// words raise mini_registry_frozen unconditionally, and the fn-value
+// contract failure is loud on the value form.
+func TestMiniCovRegisterTombstones(t *testing.T) {
 	cases := []struct{ name, src, want string }{
-		{"collision with builtin", mcovImp +
-			`MiniLang.register re (fn [[s:String o:Map] [Integer] [1]])`, "mini_kind_exists"},
-		{"loop re-register collides", mcovImp +
-			`for 2 [MiniLang.register cnt (fn [[src:String opts:Map subject:String] [Integer] [1]]) end]`,
-			"mini_kind_exists"},
-		{"missing standard prefix", mcovImp +
-			`MiniLang.register bad (fn [[a:Integer] [Integer] [a]])`, "mini_bad_signature"},
-		{"lang_ prefix rejected", mcovImp +
-			`MiniLang.register lang_x (fn [[s:String o:Map] [Integer] [1]])`, "mini_bad_name"},
-		{"capitalised name rejected", mcovImp +
-			`MiniLang.register Bad (fn [[s:String o:Map] [Integer] [1]])`, "mini_bad_name"},
+		{"register tombstone", mcovImp + `MiniLang.register`, "mini_registry_frozen"},
+		{"register with legacy args", mcovImp +
+			`MiniLang.register re (fn [[s:String o:Map] [Integer] [1]])`, "mini_registry_frozen"},
+		{"register-compiled tombstone", mcovImp + `MiniLang.register-compiled`, "mini_registry_frozen"},
+		{"value form bad signature", mcovImp +
+			`def bad (fn [[a:Integer] [Integer] [a]])  mini bad 'x'`, "mini_bad_signature"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -432,38 +425,8 @@ func TestMiniCovRegisterNegatives(t *testing.T) {
 	}
 }
 
-// TestMiniCovRegisterCompiled drives MiniLang.register-compiled: the
-// macro hook rewrites the call site; the contract failures are loud.
-func TestMiniCovRegisterCompiled(t *testing.T) {
-	r := mcovReg(t)
-	out := mcovRun(t, r, mcovImp+`import "aql:string-util"  `+
-		`MiniLang.register up (fn [[s:String o:Map] [String] [s]]) end  `+
-		`MiniLang.register-compiled up (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  `+
-		`mini up 'hi'`)
-	if s, _ := out[0].AsConcreteString(); s != "HI" {
-		t.Errorf("compiled kind = %v, want HI", out[0])
-	}
-
-	if err := mcovErr(t, mcovReg(t), mcovImp+
-		`MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])`); err == nil ||
-		!strings.Contains(err.Error(), "mini_no_transducer") {
-		t.Errorf("compiler without transducer should be mini_no_transducer, got %v", err)
-	}
-	if err := mcovErr(t, mcovReg(t), mcovImp+
-		`MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  `+
-		`MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])`); err == nil ||
-		!strings.Contains(err.Error(), "mini_bad_compiler") {
-		t.Errorf("non-macro compiler should be mini_bad_compiler, got %v", err)
-	}
-	if err := mcovErr(t, mcovReg(t), mcovImp+
-		`MiniLang.register-compiled Bad (macro [[s o] [ quote [ s ] ]])`); err == nil ||
-		!strings.Contains(err.Error(), "mini_bad_name") {
-		t.Errorf("capitalised compiled name should be mini_bad_name, got %v", err)
-	}
-}
-
-// mcovHostSpec builds a Go host kind with one stack input: it returns
-// the subject's length plus the length of src.
+// mcovHostSpec builds a Go mini-language spec with one stack input: it
+// returns the subject's length plus the length of src.
 func mcovHostSpec(name string) MiniLangSpec {
 	return MiniLangSpec{
 		Name:    name,
@@ -483,94 +446,49 @@ func mcovHostSpec(name string) MiniLangSpec {
 	}
 }
 
-// TestMiniCovHostRegister drives RegisterHostMiniLang / installHostMiniLang:
-// pre-import and post-import registration both dispatch, and the contract
-// failures are loud.
-func TestMiniCovHostRegister(t *testing.T) {
-	// Pre-import registration.
+// TestMiniCovNewMiniLangFn drives the value constructor: a def-bound value
+// with a stack input dispatches through `mini <name>` (import-free), the
+// constructor's refusals are loud, and a binding never shadows a built-in
+// kind.
+func TestMiniCovNewMiniLangFn(t *testing.T) {
 	r := mcovReg(t)
-	if err := RegisterHostMiniLang(r, mcovHostSpec("hlen")); err != nil {
-		t.Fatalf("RegisterHostMiniLang: %v", err)
+	v, err := NewMiniLangFn(mcovHostSpec("hlen"))
+	if err != nil {
+		t.Fatalf("NewMiniLangFn: %v", err)
 	}
-	out := mcovRun(t, r, mcovImp+`'hello' mini hlen 'xy'`)
+	native.InstallDef(r, "hlen", v)
+	out := mcovRun(t, r, `'hello' mini hlen 'xy'`)
 	if n, _ := out[0].AsConcreteInteger(); n != 7 {
-		t.Errorf("host kind = %v, want 7 (2+5)", out[0])
+		t.Errorf("bound value = %v, want 7 (2+5)", out[0])
 	}
 
-	// Post-import registration injects into the live module.
-	r2 := mcovReg(t)
-	mcovRun(t, r2, mcovImp+`0 drop`)
-	if err := RegisterHostMiniLang(r2, mcovHostSpec("hlen2")); err != nil {
-		t.Fatalf("post-import RegisterHostMiniLang: %v", err)
-	}
-	out2 := mcovRun(t, r2, `'abc' mini hlen2 'q'`)
-	if n, _ := out2[0].AsConcreteInteger(); n != 4 {
-		t.Errorf("post-import host kind = %v, want 4", out2[0])
-	}
-
-	// Contract refusals.
-	r3 := mcovReg(t)
-	if err := RegisterHostMiniLang(r3, MiniLangSpec{Name: "", Handler: mcovHostSpec("x").Handler}); err == nil {
+	// Constructor refusals.
+	if _, err := NewMiniLangFn(MiniLangSpec{Name: "", Handler: mcovHostSpec("x").Handler}); err == nil {
 		t.Error("empty name must be refused")
 	}
-	if err := RegisterHostMiniLang(r3, MiniLangSpec{Name: "lang_x", Handler: mcovHostSpec("x").Handler}); err == nil {
-		t.Error("lang_ prefix must be refused")
-	}
-	if err := RegisterHostMiniLang(r3, MiniLangSpec{Name: "Xup", Handler: mcovHostSpec("x").Handler}); err == nil {
-		t.Error("capitalised name must be refused")
-	}
-	if err := RegisterHostMiniLang(r3, MiniLangSpec{Name: "nohandler"}); err == nil {
+	if _, err := NewMiniLangFn(MiniLangSpec{Name: "nohandler"}); err == nil {
 		t.Error("nil handler must be refused")
 	}
-	if err := RegisterHostMiniLang(r3, mcovHostSpec("dup")); err != nil {
-		t.Fatalf("first dup register: %v", err)
-	}
-	if err := RegisterHostMiniLang(r3, mcovHostSpec("dup")); err == nil {
-		t.Error("duplicate host kind must be refused")
+	if _, err := NewMiniLangFn(MiniLangSpec{Name: "not a word", Handler: mcovHostSpec("x").Handler}); err == nil {
+		t.Error("an invalid word name must be refused")
 	}
 
-	// Collision with a built-in kind: pre-import defers to the import.
-	r4 := mcovReg(t)
-	if err := RegisterHostMiniLang(r4, mcovHostSpec("re")); err != nil {
-		t.Fatalf("pre-import collision should defer to build: %v", err)
+	// A built-in kind wins over a same-named binding: `re` still
+	// regex-matches (the bound value would return an Integer length).
+	r2 := mcovReg(t)
+	v2, err := NewMiniLangFn(mcovHostSpec("re"))
+	if err != nil {
+		t.Fatalf("NewMiniLangFn(re): %v", err)
 	}
-	if err := mcovErr(t, r4, mcovImp+`1`); err == nil ||
-		!strings.Contains(err.Error(), "already registered") {
-		t.Errorf("import should fail on the host/builtin collision, got %v", err)
-	}
-	// Post-import: the live-inject path catches it immediately.
-	r5 := mcovReg(t)
-	mcovRun(t, r5, mcovImp+`0 drop`)
-	if err := RegisterHostMiniLang(r5, mcovHostSpec("bf")); err == nil ||
-		!strings.Contains(err.Error(), "already registered") {
-		t.Errorf("post-import builtin collision should refuse, got %v", err)
-	}
-}
-
-// TestMiniCovHostCompileHook covers the spec.Compile wiring: the hook
-// runs at the call site and its splice dispatches the standard call.
-func TestMiniCovHostCompileHook(t *testing.T) {
-	r := mcovReg(t)
-	spec := mcovHostSpec("hck")
-	spec.Compile = func(src string, opts native.Value, _ *native.Registry) ([]native.Value, error) {
-		// Defer to the standard transducer call — the same shape
-		// miniReCompileFor splices on a malformed pattern.
-		return []native.Value{
-			native.NewWord("MiniLang"), native.NewWord("dot"), native.NewWord("lang_hck"),
-			native.NewString(src), opts, native.NewEnd(),
-		}, nil
-	}
-	if err := RegisterHostMiniLang(r, spec); err != nil {
-		t.Fatalf("RegisterHostMiniLang with Compile: %v", err)
-	}
-	out := mcovRun(t, r, mcovImp+`'hello' mini hck 'xy'`)
-	if n, _ := out[0].AsConcreteInteger(); n != 7 {
-		t.Errorf("compile-hook kind = %v, want 7", out[0])
+	native.InstallDef(r2, "re", v2)
+	out2 := mcovRun(t, r2, mcovImp+`def m ("AbcD" mini re '[a-z]+')  m.fst.m`)
+	if s, _ := out2[0].AsConcreteString(); s != "bc" {
+		t.Errorf("built-in re should win over the binding: got %v, want bc", out2[0])
 	}
 }
 
 // TestMiniCovOptHelpersDirect pins miniOptInt / miniOptString /
-// miniDropGrouping / miniValidKindName / miniCompiledPattern directly.
+// miniDropGrouping / miniCompiledPattern directly.
 func TestMiniCovOptHelpersDirect(t *testing.T) {
 	// Non-map opts fall back to the default.
 	if n, err := miniOptInt(native.NewInteger(3), "k", 42); err != nil || n != 42 {
@@ -605,21 +523,6 @@ func TestMiniCovOptHelpersDirect(t *testing.T) {
 
 	if got := miniDropGrouping("de_ad be\tef\r\n"); got != "deadbeef" {
 		t.Errorf("miniDropGrouping = %q, want deadbeef", got)
-	}
-
-	for _, c := range []struct{ name, wantSub string }{
-		{"", "must not be empty"},
-		{"lang_x", "lang_ prefix"},
-		{"Xyz", "lowercase"},
-		{"ok", ""},
-	} {
-		got := miniValidKindName(c.name)
-		if c.wantSub == "" && got != "" {
-			t.Errorf("miniValidKindName(%q) = %q, want valid", c.name, got)
-		}
-		if c.wantSub != "" && !strings.Contains(got, c.wantSub) {
-			t.Errorf("miniValidKindName(%q) = %q, want %q", c.name, got, c.wantSub)
-		}
 	}
 
 	re1, err := miniCompiledPattern("cov-[a-z]+")
@@ -676,86 +579,18 @@ func mcovFilterFn() native.Value {
 	})
 }
 
-// TestMiniCovRegisterReturnsDirect drives miniRegisterReturns' arms: nil
-// registry, the compile-pass growth note, the pure-check install, and the
-// non-concrete guards.
-func TestMiniCovRegisterReturnsDirect(t *testing.T) {
-	owner := mcovReg(t)
-	exports := native.NewOrderedMap()
-	eng.RegisterModuleExportGrowth(owner, exports)
-	idents := map[string]registerIdent{}
-	var minted []string
-	mint := func(kind string) { minted = append(minted, kind) }
-	hook := miniRegisterReturns(exports, idents, mint, owner)
-
-	args := []native.Value{native.NewAtom("covk"), mcovFilterFn()}
-
-	// nil registry → no-op.
-	if out := hook(args, nil); out != nil {
-		t.Errorf("nil registry should return nil, got %v", out)
+// TestMiniCovRegisterTombstonesDirect drives the two frozen-registry
+// tombstone handlers directly: unconditional mini_registry_frozen raises
+// with the migration hints.
+func TestMiniCovRegisterTombstonesDirect(t *testing.T) {
+	r := mcovReg(t)
+	if _, err := miniRegisterFrozenHandler(nil, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "mini_registry_frozen") {
+		t.Errorf("register tombstone must raise mini_registry_frozen, got %v", err)
 	}
-
-	done := owner.Check.Begin()
-	defer done()
-
-	// Compile pass: notes growth, installs nothing.
-	owner.Check.Compiling = true
-	hook(args, owner)
-	if _, ok := exports.Get("lang_covk"); ok {
-		t.Error("compile pass must not install the kind")
-	}
-	owner.Check.Compiling = false
-
-	// Non-concrete name / non-fn value guards.
-	hook([]native.Value{native.NewTypeLiteral(native.TAtom), mcovFilterFn()}, owner)
-	hook([]native.Value{native.NewAtom("covk"), native.NewInteger(1)}, owner)
-	if _, ok := exports.Get("lang_covk"); ok {
-		t.Error("guarded args must not install the kind")
-	}
-
-	// Pure check: installs and mints the filter member type.
-	hook(args, owner)
-	if _, ok := exports.Get("lang_covk"); !ok {
-		t.Error("pure check should install lang_covk")
-	}
-	if len(minted) != 1 || minted[0] != "covk" {
-		t.Errorf("filter-shaped kind should mint its member type, got %v", minted)
-	}
-}
-
-// TestMiniCovGrowthNotesDirect drives noteMiniRegisterGrowth and
-// miniRegisterCompiledReturns' arms directly.
-func TestMiniCovGrowthNotesDirect(t *testing.T) {
-	owner := mcovReg(t)
-	exports := native.NewOrderedMap()
-	eng.RegisterModuleExportGrowth(owner, exports)
-
-	// Short args: no-op.
-	noteMiniRegisterGrowth(owner, exports, []native.Value{native.NewAtom("x")})
-	// Non-concrete name poisons.
-	noteMiniRegisterGrowth(owner, exports, []native.Value{
-		native.NewTypeLiteral(native.TAtom), mcovFilterFn()})
-	// Filter-shaped fn notes both keys.
-	noteMiniRegisterGrowth(owner, exports, []native.Value{
-		native.NewAtom("flt"), mcovFilterFn()})
-	// Provably non-filter fn notes only lang_.
-	genFn := native.NewFunction(native.FnDefInfo{
-		Name: "gen",
-		Signatures: []native.FnSig{{
-			Params: []native.FnParam{{Type: native.TString}, {Type: native.TMap}},
-		}},
-	})
-	noteMiniRegisterGrowth(owner, exports, []native.Value{native.NewAtom("gen"), genFn})
-
-	hook := miniRegisterCompiledReturns(owner, exports)
-	if out := hook([]native.Value{native.NewAtom("x")}, nil); out != nil {
-		t.Errorf("nil registry should return nil, got %v", out)
-	}
-	if out := hook([]native.Value{native.NewAtom("x")}, owner); out != nil {
-		t.Errorf("concrete name should return nil after noting, got %v", out)
-	}
-	if out := hook([]native.Value{native.NewTypeLiteral(native.TAtom)}, owner); out != nil {
-		t.Errorf("non-concrete name should return nil after poisoning, got %v", out)
+	if _, err := miniRegisterCompiledFrozenHandler(nil, nil, nil, r); err == nil ||
+		!strings.Contains(err.Error(), "mini_registry_frozen") {
+		t.Errorf("register-compiled tombstone must raise mini_registry_frozen, got %v", err)
 	}
 }
 
@@ -776,21 +611,12 @@ func TestMiniCovRunReDirect(t *testing.T) {
 	}
 }
 
-// TestMiniCovStateAccessorsDirect pins the create=false arms of the two
-// per-registry state accessors.
+// TestMiniCovStateAccessorsDirect pins the create=false arm of the
+// micron-literal per-registry state accessor.
 func TestMiniCovStateAccessorsDirect(t *testing.T) {
 	r := mcovReg(t)
-	if s := miniLangHostStateFor(r, false); s != nil {
-		t.Errorf("no host state expected on a fresh registry, got %v", s)
-	}
 	if s := micronLitStateFor(r, false); s != nil {
 		t.Errorf("no micron-lit state expected on a fresh registry, got %v", s)
-	}
-	// create=true mints once and then returns the same state.
-	s1 := miniLangHostStateFor(r, true)
-	s2 := miniLangHostStateFor(r, false)
-	if s1 == nil || s1 != s2 {
-		t.Error("host state should be minted once and shared")
 	}
 }
 

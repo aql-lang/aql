@@ -32,10 +32,18 @@ import (
 // `MiniLang.lang_<kind> <src> <opts> end`; the desugared call is
 // always equivalent.
 //
+// The kind namespace is FIXED: the built-in kinds below are the whole set,
+// and registration was removed (`MiniLang.register` and
+// `MiniLang.register-compiled` survive one release as tombstones raising
+// mini_registry_frozen). Custom mini-languages are Function VALUES —
+// `mini <fn> <src>`, a def-bound name, or a Go-built NewMiniLangFn value —
+// which are lexically scoped instead of sharing one flat namespace.
+//
 // Out-of-band exports (no `lang_` prefix — never reachable via `mini`):
 //
-//	MiniLang.register  — install an AQL fn as a new mini-language
-//	MiniLang.kinds     — list the registered kind atoms
+//	MiniLang.register           — TOMBSTONE: raises mini_registry_frozen
+//	MiniLang.register-compiled  — TOMBSTONE: raises mini_registry_frozen
+//	MiniLang.kinds              — list the (fixed) kind atoms
 
 // miniRePatterns memoizes compiled Go regexps keyed by pattern source,
 // so a mini call in a loop compiles its pattern once per process.
@@ -70,16 +78,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg.Types.AdoptSeqFrom(parent.Types)
 	tMini := subReg.Types.MintType("MiniLangCompiled", native.TIdeal)
 	exports := native.NewOrderedMap()
-	// Growth ledger (Phase 6 M3): every PROGRAM-reachable word that installs
-	// new keys into this export map at run time has a check-mode twin that
-	// notes its adds — minilang-register (lang_<kind> + the filter-kind
-	// member-type mint, miniRegisterReturns) and minilang-register-compiled
-	// (compile_<name>, miniRegisterCompiledReturns). Host registration
-	// (RegisterHostMiniLang) mutates exports from Go between runs, never
-	// mid-program. Registering the map lets the checker fold a PROVABLY
-	// stable missing-key read to None (`MiniLang.Gen` after registering a
-	// non-filter kind `gen` — module-minilang.tsv:320) while every unproven
-	// absence keeps the blanket fold decline. See
+	// Growth ledger (Phase 6 M3): the kind namespace is frozen, so NO
+	// program-reachable word installs new keys into this export map at run
+	// time (the register words are tombstones). Registering the map with an
+	// empty growth set lets the checker fold every missing-key read to a
+	// PROVABLY stable None (`MiniLang.Gen` — module-minilang.tsv) instead of
+	// the blanket fold decline unregistered maps get. See
 	// eng/go/module_export_growth.go.
 	eng.RegisterModuleExportGrowth(parent, exports)
 
@@ -97,7 +101,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	mintMiniFnType := func(kind string) {
 		name := strings.ToUpper(kind[:1]) + kind[1:]
 		if _, exists := exports.Get(name); exists { //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
-			return // idempotent (check-mode install + runtime re-run)
+			return // defensive: the built-in kind set is name-disjoint
 		}
 		// MintTypeWithBehavior + a bare MemberBehavior rather than
 		// MintMemberType: the auto parent gate would reject a
@@ -372,40 +376,27 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("xp")
 
-	// ---- out-of-band: register -----------------------------------------
-	// MiniLang.register <name> <fn> installs an AQL function as the
-	// mini-language `lang_<name>`. The fn must carry the standard
-	// signature prefix [String, Map, …] on every overload. Raw fn values
-	// in export maps dispatch like words (lang/spec/fn-value.tsv), so the
-	// value is stored as given; `register` exists to own the CONTRACT —
-	// name and signature validation, collision checks.
-	// registerIdents tracks the source-call identity of each AQL-registered
-	// kind so the check-mode install (miniRegisterReturns) and the runtime
-	// re-run (miniRegisterHandler) of the SAME `register` call are idempotent
-	// rather than a mini_kind_exists collision — mirrors parselang-register.
-	miniRegisterIdents := map[string]registerIdent{}
+	// ---- out-of-band: register (TOMBSTONE) ------------------------------
+	// The mini kind namespace is fixed; registration was removed. The word
+	// survives one release as an unconditional, hint-carrying raise so an
+	// existing program fails loudly with the migration path instead of a
+	// bare missing-export miss. DryPassWrap mirrors the raise statically, so
+	// `aql check` flags the use too (the unquote/splice tombstone pattern).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register",
 		Signatures: []native.Signature{{
-			Args:          []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:     map[int]bool{0: true},
-			Returns:       []*native.Type{},
-			BarrierPos:    -1,
-			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Impl:          native.Go(miniRegisterHandler(exports, miniRegisterIdents, mintMiniFnType)),
-			// Check-mode install so a later `mini <name> …` resolves the
-			// statically-registered kind (the fn is provided literally) instead
-			// of flagging "no mini-language is registered" — the minilang twin
-			// of parselang-register's check-mode ReturnsFn.
-			ReturnsFn: miniRegisterReturns(exports, miniRegisterIdents, mintMiniFnType, parent),
+			Args:       []*native.Type{},
+			Returns:    []*native.Type{},
+			BarrierPos: -1,
+			Impl:       native.Go(miniRegisterFrozenHandler),
+			ReturnsFn:  native.DryPassWrap(miniRegisterFrozenHandler, native.ReturnsStatic()),
 		}},
 	})
-	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{
-		{{Type: native.TAtom, Quote: true}, {Type: native.TFunction}},
-	}, []*native.Type{}, map[int]bool{0: true}, subReg))
+	exports.Set("register", wrapMiniFnDef("minilang-register", [][]native.FnParam{{}},
+		[]*native.Type{}, nil, subReg))
 
 	// ---- out-of-band: kinds ----------------------------------------------
-	// MiniLang.kinds → List of the registered kind atoms (lang_ stripped).
+	// MiniLang.kinds → List of the (fixed) kind atoms (lang_ stripped).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-kinds",
 		Signatures: []native.Signature{{
@@ -418,47 +409,22 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("kinds", wrapMiniFnDef("minilang-kinds", [][]native.FnParam{{}},
 		[]*native.Type{native.TList}, nil, subReg))
 
-	// ---- out-of-band: register-compiled (AQL compile hook) ---------------
-	// MiniLang.register-compiled <name> <macro> installs an expansion-time
-	// compiler (a macro template) as compile_<name>. The kind must already
-	// have a transducer (lang_<name>) — the compiler is an optimization on it.
-	// See design/MINILANG.5.md §13.
+	// ---- out-of-band: register-compiled (TOMBSTONE) -----------------------
+	// The AQL compile-hook surface died with the frozen namespace (an
+	// expansion-time macro rewrite is unrepresentable as a runtime value);
+	// the word survives one release as the same unconditional raise.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register-compiled",
 		Signatures: []native.Signature{{
-			Args:          []*native.Type{native.TAtom, native.TFunction},
-			QuoteArgs:     map[int]bool{0: true},
-			Returns:       []*native.Type{},
-			BarrierPos:    -1,
-			CompileEffect: native.CompileStoresFn, // stores the fn for interpreter-side dispatch
-			Impl:          native.Go(miniRegisterCompiledHandler(exports)),
-			// Growth-ledger note only (Phase 6 M3) — installs nothing at check.
-			ReturnsFn: miniRegisterCompiledReturns(parent, exports),
+			Args:       []*native.Type{},
+			Returns:    []*native.Type{},
+			BarrierPos: -1,
+			Impl:       native.Go(miniRegisterCompiledFrozenHandler),
+			ReturnsFn:  native.DryPassWrap(miniRegisterCompiledFrozenHandler, native.ReturnsStatic()),
 		}},
 	})
-	exports.Set("register-compiled", wrapMiniFnDef("minilang-register-compiled", [][]native.FnParam{
-		{{Type: native.TAtom, Quote: true}, {Type: native.TFunction}},
-	}, []*native.Type{}, map[int]bool{0: true}, subReg))
-
-	// ---- host-registered kinds (the Go embedder API) -------------------
-	// Fold in every kind a host installed via RegisterHostMiniLang on the
-	// importing registry, then record the live (exports, subReg) pair so a
-	// LATER RegisterHostMiniLang injects directly into this already-built
-	// module rather than waiting for a re-import that the loaded-module
-	// cache would never trigger.
-	// create=true: even with no host kinds yet, recording the live module
-	// lets a post-import RegisterHostMiniLang inject directly (the loaded
-	// cache would otherwise never rebuild).
-	state := miniLangHostStateFor(parent, true)
-	state.mu.Lock()
-	for _, spec := range state.specs {
-		if err := installHostMiniLang(exports, subReg, spec); err != nil {
-			state.mu.Unlock()
-			return native.ModuleDesc{}, err
-		}
-	}
-	state.live = &builtMiniLang{exports: exports, subReg: subReg}
-	state.mu.Unlock()
+	exports.Set("register-compiled", wrapMiniFnDef("minilang-register-compiled", [][]native.FnParam{{}},
+		[]*native.Type{}, nil, subReg))
 
 	return native.ModuleDesc{
 		Src:     subReg,
@@ -467,146 +433,29 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, nil
 }
 
-// MiniLangSpec describes a Go-implemented mini-language kind for the host
-// registration API (RegisterHostMiniLang). The standard minilang prefix
+// MiniLangSpec describes a Go-implemented mini-language for the value
+// constructor (NewMiniLangFn). The standard minilang prefix
 // [src:String opts:Map] is supplied automatically — a host declares only
 // the additional stack Inputs (zero or more, AFTER the prefix), the
 // Returns, and the Handler. The handler receives args[0]=src,
 // args[1]=opts, args[2..]=Inputs in order, exactly like a built-in kind.
 type MiniLangSpec struct {
-	// Name is the kind atom, unprefixed and lowercase ("iop", not
-	// "lang_iop"). It is the token a caller writes after `mini`.
+	// Name is the mini-language's name — used in the value's inner native
+	// word and in error messages. Lowercase, like the name it will usually
+	// be bound to.
 	Name string
 	// Inputs are the kind's stack inputs AFTER the [src opts] prefix.
 	// Nil/empty for a generator kind (inputs come from opts). Params
 	// should be unnamed (only Type / Quote are read) so the wrapper keeps
-	// the trivial-delegation dispatch short-circuit.
+	// the trivial-delegation dispatch short-circuit. Exactly ONE input
+	// makes the value FILTER-shaped: `mini <name> <src>` then expands to a
+	// partially-applied Function awaiting the subject.
 	Inputs []native.FnParam
 	// Returns are the kind's output types (nil = no declared output).
 	Returns []*native.Type
-	// Handler implements the kind at runtime — the immediate transducer
-	// `[src opts …inputs] → outputs`. Required: it is the semantic reference
-	// and the dynamic-src fallback even when Compile is set.
+	// Handler implements the mini-language at runtime — the immediate
+	// transducer `[src opts …inputs] → outputs`.
 	Handler native.Handler
-	// Compile is an OPTIONAL expansion-time compiler. When set, a `mini
-	// <Name> <src>` call runs it at the call site (whenever src is concrete)
-	// and splices its tokens instead of the standard call — e.g. a precompiled
-	// carrier + a consumer word. `mini` has no expansion cache, so the hook
-	// re-runs per call: memoize the compile (as `re` does). A non-concrete
-	// runtime src and check mode fall back to Handler.
-	Compile native.MiniCompileHook
-}
-
-// capMiniLangHost is the registry capability slot holding host-registered
-// mini-language kinds. Per-registry so each lang.New() instance owns its
-// own set (no process-global table, no leak across instances).
-const capMiniLangHost = "engine.minilang.host"
-
-// miniLangHostState is the per-registry record of host-registered kinds.
-// specs is the source of truth (folded into the module at build time);
-// live points at the built module so a post-import registration can inject
-// straight away.
-type miniLangHostState struct {
-	mu    sync.Mutex
-	specs []MiniLangSpec
-	live  *builtMiniLang
-}
-
-// builtMiniLang is the live (exports, subReg) pair captured once
-// BuildMiniLangModule has run for a registry.
-type builtMiniLang struct {
-	exports *native.OrderedMap
-	subReg  *native.Registry
-}
-
-// miniLangHostStateFor returns the host-minilang state on r, creating it
-// when create is true. Stored on the registry's capability store so it is
-// scoped to the instance and collected with it.
-func miniLangHostStateFor(r *native.Registry, create bool) *miniLangHostState {
-	if s, ok, _ := eng.Cap[*miniLangHostState](r, capMiniLangHost); ok && s != nil {
-		return s
-	}
-	if !create {
-		return nil
-	}
-	s := &miniLangHostState{}
-	_ = r.Capabilities.Set(capMiniLangHost, s)
-	return s
-}
-
-// RegisterHostMiniLang installs a Go-implemented mini-language kind on reg
-// — the embedder twin of the AQL-level `MiniLang.register` word. The kind
-// becomes resolvable as `mini <Name> …` once the program imports
-// "aql:minilang"; registration may happen before OR after that import
-// (a post-import call injects into the already-built module).
-//
-// It owns the same contract as `MiniLang.register`: a lowercase kind name
-// with no `lang_` prefix, a non-nil handler, and the standard
-// [src:String opts:Map …] signature prefix (guaranteed here by
-// construction). A name that collides with an existing kind — built-in or
-// host — is refused.
-func RegisterHostMiniLang(reg *native.Registry, spec MiniLangSpec) error {
-	if why := miniValidKindName(spec.Name); why != "" {
-		return fmt.Errorf("register minilang: %s", why)
-	}
-	if spec.Handler == nil {
-		return fmt.Errorf("register minilang %q: handler must not be nil", spec.Name)
-	}
-	if spec.Compile != nil {
-		native.RegisterMiniCompileGoHook(reg, spec.Name, spec.Compile)
-	}
-	state := miniLangHostStateFor(reg, true)
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	for _, s := range state.specs {
-		if s.Name == spec.Name {
-			return fmt.Errorf("register minilang %q: already registered", spec.Name)
-		}
-	}
-	// If the module is already built in this registry, install live (this
-	// also catches a collision against a built-in kind such as `re`/`bf`).
-	if state.live != nil {
-		if err := installHostMiniLang(state.live.exports, state.live.subReg, spec); err != nil {
-			return err
-		}
-	}
-	state.specs = append(state.specs, spec)
-	return nil
-}
-
-// installHostMiniLang registers spec's handler as an inner native in subReg
-// and exports the standard trivial-delegation wrapper under lang_<name>.
-// Mirrors the built-in kind path (wrapMiniFnDef) so a host kind dispatches
-// identically. The [src opts] prefix is prepended here; host Inputs are
-// copied type/quote-only to keep every wrapper param unnamed.
-func installHostMiniLang(exports *native.OrderedMap, subReg *native.Registry, spec MiniLangSpec) error {
-	key := "lang_" + spec.Name
-	if _, exists := exports.Get(key); exists {
-		return fmt.Errorf("register minilang %q: already registered", spec.Name)
-	}
-	params := make([]native.FnParam, 0, 2+len(spec.Inputs))
-	params = append(params,
-		native.FnParam{Type: native.TString},
-		native.FnParam{Type: native.TMap})
-	for _, in := range spec.Inputs {
-		params = append(params, native.FnParam{Type: in.Type, Quote: in.Quote})
-	}
-	args := make([]*native.Type, len(params))
-	for i, p := range params {
-		args[i] = p.Type
-	}
-	inner := "minilang-host-" + spec.Name
-	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: inner,
-		Signatures: []native.Signature{{
-			Args:       args,
-			Returns:    spec.Returns,
-			BarrierPos: -1,
-			Impl:       native.Go(spec.Handler),
-		}},
-	})
-	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg))
-	return nil
 }
 
 // wrapMiniFnDef builds the module FnDef wrapper for an inner native —
@@ -1570,201 +1419,28 @@ func runBrainfuck(prog, input string, maxSteps int64) (string, *bfError) {
 	return out.String(), nil
 }
 
-// miniValidKindName reports why a kind name is unusable, or "".
-func miniValidKindName(name string) string {
-	if name == "" {
-		return "kind name must not be empty"
-	}
-	if strings.HasPrefix(name, "lang_") {
-		return "kind name must not carry the lang_ prefix (register adds it)"
-	}
-	if name[0] >= 'A' && name[0] <= 'Z' {
-		return "kind name must be lowercase (capitalised names are types)"
-	}
-	return ""
+// miniRegisterFrozenHandler is MiniLang.register's TOMBSTONE: the mini kind
+// namespace is FIXED (the built-in kinds are the whole set), so registration
+// was removed. An unconditional, hint-carrying raise — the DryPassWrap
+// mirror on its signature surfaces the same finding statically.
+func miniRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	return nil, r.AqlErrorHint("mini_registry_frozen",
+		"register: the mini kind namespace is fixed — registration was removed", "register",
+		"pass the mini-language as a Function value instead: def myl (fn [[src:String opts:Map] [Any] [...]])  mini myl '...' — Go hosts build one with NewMiniLangFn")
 }
 
-// miniRegisterHandler validates and installs an AQL fn as lang_<name>.
-// The handler closes over the module's export map; the stored value is
-// the raw Function, which dispatches like a word post the fn-value fix.
-func miniRegisterHandler(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string)) native.Handler {
-	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		if err := miniRegisterInstall(exports, idents, args, r, mint); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
+// miniRegisterCompiledFrozenHandler is MiniLang.register-compiled's
+// TOMBSTONE: the AQL compile-hook surface died with the frozen namespace —
+// an expansion-time macro rewrite is unrepresentable as a runtime value, so
+// there is no value-form successor. The raise carries the closest migration
+// path (a plain fn value; the per-call compile becomes the fn's own work).
+func miniRegisterCompiledFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	return nil, r.AqlErrorHint("mini_registry_frozen",
+		"register-compiled: the mini kind namespace is fixed — compile hooks were removed with registration", "register-compiled",
+		"pass the mini-language as a Function value instead (mini <fn> '...') and memoize any expensive compile inside the fn")
 }
 
-// miniRegisterInstall validates the name/signature contract and installs the
-// fn as lang_<name>. Shared by the runtime handler and the check-mode
-// ReturnsFn so both apply the exact same contract — mirrors
-// parseRegisterInstall; the collision / idempotency rule lives in
-// registerCollisionInstall (shared with ParseLang / EmitLang).
-func miniRegisterInstall(exports *native.OrderedMap, idents map[string]registerIdent, args []native.Value, r *native.Registry, mint func(kind string)) error {
-	name, err := args[0].AsConcreteAtom()
-	if err != nil {
-		return r.AqlError("mini_bad_name", fmt.Sprintf("register: %v", err), "register")
-	}
-	if why := miniValidKindName(name); why != "" {
-		return r.AqlError("mini_bad_name", "register: "+why, "register")
-	}
-	fnDef, ok := args[1].Data.(native.FnDefInfo)
-	if !ok || len(fnDef.Signatures) == 0 {
-		return r.AqlError("mini_bad_signature", "register: expected a function value", "register")
-	}
-	// The standard-prefix contract is shared with the `mini` macro's
-	// fn-operand form (native.MiniLangFnSigWhy) so both surfaces enforce
-	// byte-identical requirements; likewise the filter-shape probe.
-	if why := native.MiniLangFnSigWhy(fnDef); why != "" {
-		return r.AqlErrorHint("mini_bad_signature", "register: "+why, "register",
-			"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
-	}
-	filterShaped := native.MiniLangFnFilterShaped(fnDef)
-	key := "lang_" + name
-	if err := registerCollisionInstall(exports, idents, key, args[1], r.Check.IsActive(), func() error {
-		return r.AqlError("mini_kind_exists",
-			fmt.Sprintf("register: minilang %q is already registered", name), "register")
-	}); err != nil {
-		return err
-	}
-	// A FILTER-shaped kind (every sig exactly [src opts subject]) expands
-	// to a MiniKind-tagged partial, so it gets the same named member type
-	// the builtin filter kinds have (`MiniLang.Poly` for kind `poly`) —
-	// usable in `is` and typed fn params. Other shapes never produce a
-	// tagged partial, so a type would be uninhabited: skip the mint.
-	if filterShaped && mint != nil {
-		mint(name)
-	}
-	return nil
-}
-
-// miniRegisterReturns is the check-mode counterpart of miniRegisterHandler: it
-// performs the SAME install so a dynamically-registered kind
-// (`MiniLang.register poly …`) is statically resolvable by a later
-// `mini poly …` during the check pass. Idempotent on the source-call identity,
-// so the compiled program's runtime re-run is a no-op rather than
-// mini_kind_exists. A non-concrete name or fn value leaves the kind
-// unregistered (the downstream `mini` degrades as before). owner is the
-// registry whose growth ledger tracks this export map (the Build parent).
-func miniRegisterReturns(exports *native.OrderedMap, idents map[string]registerIdent, mint func(kind string), owner *native.Registry) native.ReturnsFunc {
-	return func(args []native.Value, r *native.Registry) []native.Value {
-		// PURE-CHECK ONLY. Under a REAL compile (CompileCheck) the kind must NOT
-		// be installed here: a kind that ALSO has a `register-compiled` macro
-		// hook (module-minilang §L80) lowers `mini <name>` through the hook, and
-		// pre-installing the transducer makes the compiled path diverge from the
-		// interpreter (it ran the transducer instead of the hook). Leaving the
-		// compile pass un-installed keeps that row on its prior fallback path;
-		// pure check still installs so `mini <name>` resolves and the row clears.
-		if r == nil || r.Check.Compiling {
-			// Growth ledger (Phase 6 M3): the compile pass installs nothing,
-			// but the RUNTIME register this dispatch compiles to WILL — note
-			// the keys it may add so the missing-key None fold declines for
-			// them (and only them). A non-concrete kind name poisons the
-			// ledger: the key set is statically undecidable.
-			if r != nil {
-				noteMiniRegisterGrowth(owner, exports, args)
-			}
-			return nil
-		}
-		if len(args) < 2 || !native.IsConcrete(args[0]) {
-			return nil
-		}
-		if _, ok := args[1].Data.(native.FnDefInfo); !ok {
-			return nil
-		}
-		if err := miniRegisterInstall(exports, idents, args, r, mint); err != nil {
-			surfaceRegisterCheckError(r, err, args[0])
-		}
-		return nil
-	}
-}
-
-// noteMiniRegisterGrowth records, on owner's growth ledger, the export keys a
-// runtime `MiniLang.register <name> <fn>` MAY install: `lang_<name>` always,
-// plus the capitalised member-type key when the fn is not PROVABLY
-// non-filter-shaped (miniRegisterInstall mints the type only when every sig
-// has exactly the 3-param [src opts subject] shape; a register that fails
-// validation raises at run time and installs nothing, so over-noting its keys
-// is harmless — noted keys only make the absence fold DECLINE). A
-// non-concrete kind name poisons the ledger: any key could appear.
-func noteMiniRegisterGrowth(owner *native.Registry, exports *native.OrderedMap, args []native.Value) {
-	if len(args) < 2 {
-		return
-	}
-	name, err := args[0].AsConcreteAtom()
-	if err != nil {
-		eng.PoisonModuleExportGrowth(owner, exports)
-		return
-	}
-	keys := []string{"lang_" + name}
-	fnDef, isFn := args[1].Data.(native.FnDefInfo)
-	provablyNonFilter := false
-	if isFn && len(fnDef.Signatures) > 0 {
-		for _, sig := range fnDef.Signatures {
-			if len(sig.Params) != 3 {
-				provablyNonFilter = true
-				break
-			}
-		}
-	}
-	if !provablyNonFilter && name != "" {
-		keys = append(keys, strings.ToUpper(name[:1])+name[1:])
-	}
-	eng.NoteModuleExportAdd(owner, exports, keys...)
-}
-
-// miniRegisterCompiledReturns is minilang-register-compiled's check-mode
-// twin. It installs nothing (the hook is runtime state); its only job is the
-// growth-ledger note (Phase 6 M3): the runtime handler installs
-// compile_<name>, so the missing-key None fold must decline for that key. A
-// non-concrete name poisons the ledger.
-func miniRegisterCompiledReturns(owner *native.Registry, exports *native.OrderedMap) native.ReturnsFunc {
-	return func(args []native.Value, r *native.Registry) []native.Value {
-		if r == nil || len(args) < 1 {
-			return nil
-		}
-		if name, err := args[0].AsConcreteAtom(); err == nil {
-			eng.NoteModuleExportAdd(owner, exports, "compile_"+name)
-		} else {
-			eng.PoisonModuleExportGrowth(owner, exports)
-		}
-		return nil
-	}
-}
-
-// miniRegisterCompiledHandler installs an AQL compile hook (a macro) as
-// compile_<name>. The kind must already have a transducer (lang_<name>) — the
-// compiler is an optional optimization layered on it, and the transducer is
-// the semantic reference / check-mode target / non-concrete-src fallback.
-// args[0]=name (atom), args[1]=macro.
-func miniRegisterCompiledHandler(exports *native.OrderedMap) native.Handler {
-	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		name, err := args[0].AsConcreteAtom()
-		if err != nil {
-			return nil, r.AqlError("mini_bad_name", fmt.Sprintf("register-compiled: %v", err), "register-compiled")
-		}
-		if why := miniValidKindName(name); why != "" {
-			return nil, r.AqlError("mini_bad_name", "register-compiled: "+why, "register-compiled")
-		}
-		if _, ok := exports.Get("lang_" + name); !ok {
-			return nil, r.AqlErrorHint("mini_no_transducer",
-				fmt.Sprintf("register-compiled: no mini-language %q to compile", name),
-				"register-compiled",
-				"register its transducer first: MiniLang.register "+name+" <fn>")
-		}
-		fnDef, ok := args[1].Data.(native.FnDefInfo)
-		if !ok || !fnDef.Macro || len(fnDef.Signatures) == 0 {
-			return nil, r.AqlErrorHint("mini_bad_compiler",
-				"register-compiled: the compiler must be a macro", "register-compiled",
-				"MiniLang.register-compiled "+name+" (macro [[src opts] [ quote [ … ] ]])")
-		}
-		exports.Set("compile_"+name, args[1])
-		return nil, nil
-	}
-}
-
-// miniKindsHandler lists the registered kind atoms (lang_ stripped), in
+// miniKindsHandler lists the (fixed) kind atoms (lang_ stripped), in
 // registration order.
 func miniKindsHandler(exports *native.OrderedMap) native.Handler {
 	return func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {

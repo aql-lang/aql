@@ -465,14 +465,14 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// the trap and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
+				`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`,
 				args[0].Pos())
 			macroDegradedAdvisory(r, "mini", "the aql:minilang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
 			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-			`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`)
+			`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`)
 	}
 
 	opts := NewMap(NewOrderedMap())
@@ -481,51 +481,48 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 
 	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
-	// a compile hook AND src is concrete, compile at the call site and splice
-	// the hook's tokens instead of the standard call. A PLAIN check pass
-	// stays on the standard `lang_<kind>` call (the semantic reference for
-	// checking; a check-mode src is usually a carrier anyway) — but a
-	// COMPILE pass must take the SAME path the interpreter takes, or the
-	// recorded program bakes the transducer where the runtime runs the hook
-	// (`mini up 'hi'` compiled [hi] vs interpreted [HI] — a live miscompile
-	// the 2026-07-15 flip attempt caught). So the hook runs when NOT
-	// checking, or when COMPILING with a concrete src: the GO hook is pure
-	// expansion machinery over the source text (the §13 contract — hooks
-	// memoize, deterministic over src+opts), so its spliced tokens record
-	// exactly as the interpreter splices them. A compile pass that cannot
-	// mirror the hook faithfully (non-concrete src/opts, or an AQL hook —
-	// a macro whose check-mode expansion is not the runtime expansion)
-	// REFUSES instead of baking the transducer — slow, not wrong.
+	// a Go compile hook AND src is concrete, compile at the call site and
+	// splice the hook's tokens instead of the standard call. (Hooks are
+	// BUILT-IN machinery now — the AQL `register-compiled` surface died with
+	// the frozen kind namespace; `re` is the shipping example.) A PLAIN
+	// check pass stays on the standard `lang_<kind>` call (the semantic
+	// reference for checking; a check-mode src is usually a carrier anyway)
+	// — but a COMPILE pass must take the SAME path the interpreter takes,
+	// or the recorded program bakes the transducer where the runtime runs
+	// the hook (`mini up 'hi'` compiled [hi] vs interpreted [HI] — a live
+	// miscompile the 2026-07-15 flip attempt caught). So the hook runs when
+	// NOT checking, or when COMPILING with a concrete src: the GO hook is
+	// pure expansion machinery over the source text (the §13 contract —
+	// hooks memoize, deterministic over src+opts), so its spliced tokens
+	// record exactly as the interpreter splices them. A compile pass that
+	// cannot mirror the hook faithfully (non-concrete src/opts) REFUSES
+	// instead of baking the transducer — slow, not wrong.
 	// `mini` has no expansion cache, so the hook re-runs whenever the call
 	// is stepped — hooks memoize their compile (as `re` does). A
 	// non-concrete runtime src falls back to the standard transducer call.
 	if !r.Check.IsActive() || r.Check.Compiling {
 		goHook, hasGo := miniGoHook(r, kind)
-		aqlHook, hasAQL := miniCompileExport(r, kind)
-		if (hasGo || hasAQL) && r.Check.IsActive() {
+		if hasGo && r.Check.IsActive() {
 			refuse := func(why string) {
 				if es := r.Check.Recorder(); es.Active() {
 					es.MarkUncompilable("mini " + kind + ": " + why)
 				}
 			}
 			switch {
-			case hasAQL && !hasGo:
-				refuse("AQL compile hook is interpreter-only (check-mode expansion is not the runtime expansion)")
 			case func() bool { _, serr := args[1].AsConcreteString(); return serr != nil }():
 				refuse("compile hook needs a concrete src at compile time")
 			case !IsConcrete(opts):
 				refuse("compile hook needs concrete opts at compile time")
 			}
 		}
-		if hasGo || hasAQL {
+		if hasGo {
 			if src, serr := args[1].AsConcreteString(); serr == nil {
 				var hookToks []Value
 				var herr error
-				switch {
-				case hasGo && r.Check.IsActive() && !IsConcrete(opts):
+				if r.Check.IsActive() && !IsConcrete(opts) {
 					// Refused above; keep the standard call for analysis.
 					hookToks = nil
-				case hasGo:
+				} else {
 					hookToks, herr = goHook(src, opts, r)
 					// A COMPILE pass can only take the hook path when the
 					// expansion RECORDS — every token statically
@@ -536,12 +533,6 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 					if herr == nil && r.Check.IsActive() && !miniHookToksMaterialisable(hookToks) {
 						hookToks = nil
 					}
-				case r.Check.IsActive():
-					// AQL hook under a compile pass: refused above; the
-					// standard call below keeps the check-mode analysis.
-					hookToks = nil
-				default:
-					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
 				}
 				if herr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					return nil, herr
@@ -589,8 +580,8 @@ standardCall:
 // <opts?>` into the direct call `<fn> <src> <opts> end`, spliced at the call
 // site — the fn supplied by the caller instead of the MiniLang namespace. fn
 // must be a concrete Function whose every signature opens with the standard
-// [src opts] prefix — the same contract MiniLang.register enforces
-// (MiniLangFnSigWhy) — so a wrong-shaped fn fails loudly rather than
+// [src opts] prefix — the shared MiniLangFnSigWhy contract — so a
+// wrong-shaped fn fails loudly rather than
 // silently mis-collecting its operands. A FILTER-shaped fn (every sig
 // exactly [src opts subject]) expands to the same partially-applied
 // Function a registered filter kind produces — subject pending — but with
@@ -716,34 +707,9 @@ func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Valu
 // miniPartialSeq disambiguates partial names process-wide.
 var miniPartialSeq int
 
-// miniCompileExport returns kind's AQL compile-hook fn (the `compile_<kind>`
-// export of the bound MiniLang namespace), if present.
-func miniCompileExport(r *Registry, kind string) (Value, bool) {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return Value{}, false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return Value{}, false
-	}
-	return info.Fields.Get("compile_" + kind)
-}
-
-// miniInvokeAQLCompile runs an AQL compile hook at expansion time. An AQL hook
-// is a MACRO (template with quote/unquote): the language's list literals don't
-// capture locals, so a plain fn can't build a value-injected token list — the
-// macro template is the vehicle. It is expanded against [src, opts] and the
-// resulting tokens are what `mini` splices.
-func miniInvokeAQLCompile(r *Registry, kind string, fn Value, src string, opts Value) ([]Value, error) {
-	fnDef, ok := fn.Data.(FnDefInfo)
-	if !ok || !fnDef.Macro || len(fnDef.Signatures) == 0 {
-		return nil, r.AqlErrorHint("mini_bad_compiler",
-			fmt.Sprintf("compile_%s must be a macro", kind), "mini",
-			"register it as MiniLang.register-compiled "+kind+" (macro [[src opts] [ quote [ … ] ]])")
-	}
-	return eng.ExpandMacroWith(r, &fnDef, []Value{NewString(src), opts})
-}
+// (miniCompileExport / miniInvokeAQLCompile — the AQL compile-hook plumbing —
+// died with the frozen kind namespace: hooks are Go-only builtin machinery
+// now, discovered via miniGoHook.)
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
 // ModuleExport in the current scope.

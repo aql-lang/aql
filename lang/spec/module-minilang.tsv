@@ -7,9 +7,11 @@
 # kind-declared inputs always come from the STACK and tokens after the mini
 # call are never stolen. Kinds: `re` (Go regexp match — subject from stack,
 # match structure out) and `bf` (brainfuck — output String; `,` reads the
-# stack input or opts.in). `MiniLang.register` installs AQL fns as new kinds;
-# `MiniLang.kinds` lists them. NB backslashes in '…' strings need doubling
-# ('\\d' below is the pattern \d) — backtick strings are backslash-safe.
+# stack input or opts.in). The kind set is FIXED (`MiniLang.kinds` lists it;
+# `MiniLang.register` is a tombstone raising mini_registry_frozen) — custom
+# mini-languages are Function VALUES (`mini <fn> <src>`, §fnv). NB
+# backslashes in '…' strings need doubling ('\\d' below is the pattern \d)
+# — backtick strings are backslash-safe.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  re — Go regular expressions
@@ -26,18 +28,20 @@ import "aql:minilang"  "hi" mini bf ',.,.'	'hi'	filter form: `,` reads the STACK
 import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
 import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
-# §3  register / kinds — out-of-band exports (not mini-callable)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q]	the registered kind atoms, in registration order
-import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
-import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
-# Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
-# Go map a kind author can't reach, so an AQL kind holds its OWN cross-call cache —
-# a mutable `flex` map (module-level or closure-captured), keyed by src. CRITICAL:
-# get/set quote the key, so a VARIABLE key must be parenthesised — `get (src)` /
-# `set (src) v m` (a bare `get src` keys on the literal atom `src`). Here `calls.n`
-# counts the compute path: 3 calls, 2 distinct srcs → the body runs twice, the
-# repeat 'aa' is a cache hit. See design/MINILANG.5.md §7.
-import "aql:minilang"  def calls (flex {n:0}) end  def cache (flex {}) end  MiniLang.register dbl (fn [[src:String opts:Map subject:String] [String] [if ((cache get (src)) is None) [set 'n' ((calls get 'n') add 1) calls drop  def r (add src src)  set (src) r cache drop  r] [cache get (src)]]]) end  def x ("z" mini dbl 'aa') end  def y ("z" mini dbl 'aa') end  def z2 ("z" mini dbl 'bb') end  calls get 'n'	2	a user-registered kind memoises per src in a flex map — 3 calls, 2 distinct srcs, body computes twice (the repeat is a hit)
+# §3  value forms / kinds — custom mini-languages are def-bound fn VALUES
+#     (the kind namespace is fixed; §fnv pins the value-form contract)
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q]	the (fixed) kind atoms, in registration order
+import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}	106	a def-bound generator value: named params via opts
+import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  "banana" mini count 'an'	2	a def-bound filter value: subject from the stack, src reaching the body dynamically
+# Memoising a custom mini-language: built-in re/xp cache their compiled artifact
+# in a private Go map an author can't reach, so a fn-value language holds its OWN
+# cross-call cache — a mutable `flex` map (module-level or closure-captured),
+# keyed by src. CRITICAL: get/set quote the key, so a VARIABLE key must be
+# parenthesised — `get (src)` / `set (src) v m` (a bare `get src` keys on the
+# literal atom `src`). Here `calls.n` counts the compute path: 3 calls, 2
+# distinct srcs → the body runs twice, the repeat 'aa' is a cache hit. See
+# design/MINILANG.5.md §7.
+import "aql:minilang"  def calls (flex {n:0}) end  def cache (flex {}) end  def dbl (fn [[src:String opts:Map subject:String] [String] [if ((cache get (src)) is None) [set 'n' ((calls get 'n') add 1) calls drop  def r (add src src)  set (src) r cache drop  r] [cache get (src)]]])  def x ("z" mini dbl 'aa') end  def y ("z" mini dbl 'aa') end  def z2 ("z" mini dbl 'bb') end  calls get 'n'	2	a fn-value mini-language memoises per src in a flex map — 3 calls, 2 distinct srcs, body computes twice (the repeat is a hit)
 #
 # §4  the auto-`end` theft guard
 import "aql:minilang"  "x1" mini re '\\d' "ZZ"	{ok:true ms:[{m:'1' i:1 e:2 g:[]}] fst:{m:'1' i:1 e:2 g:[]} lst:{m:'1' i:1 e:2 g:[]} n:1} 'ZZ'	the token after the mini call is NOT stolen as the subject
@@ -51,11 +55,8 @@ import "aql:minilang"  "x" mini re '('	ERROR:mini_parse_error	a malformed patter
 import "aql:minilang"  mini bf '['	ERROR:mini_parse_error	unbalanced brackets
 import "aql:minilang"  mini bf '+[]' {steps:100}	ERROR:mini_eval_error	a runaway program hits the step budget instead of hanging
 import "aql:minilang"  mini bf '<'	ERROR:mini_eval_error	leaving the tape is loud
-import "aql:minilang"  MiniLang.register re (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_kind_exists	collision with a registered kind
-import "aql:minilang"  for 2 [MiniLang.register cnt (fn [[src:String opts:Map subject:String] [Integer] [1]]) end]	ERROR:mini_kind_exists	a loop re-registering the same kind still collides at runtime
-import "aql:minilang"  MiniLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:mini_bad_signature	the standard prefix [src:String opts:Map …] is enforced
-import "aql:minilang"  MiniLang.register lang_x (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	the lang_ prefix is register's job, not the caller's
-import "aql:minilang"  MiniLang.register Bad (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_bad_name	capitalised kind names are rejected (types)
+import "aql:minilang"  MiniLang.register	ERROR:mini_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
+import "aql:minilang"  MiniLang.register poly (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_registry_frozen	a legacy register call fails loudly with the migration hint
 #
 # §6  the `+name<delim>src<delim>` shortcut — terse lexer sugar for `mini name 'src'`.
 #     The delimiter is the first char after the name; the same char closes. Backslash
@@ -123,15 +124,13 @@ import "aql:minilang"  (MiniLang.lang_micron 'bob@corp.io' {} end) typeof	Emailo
 import "aql:minilang"  mini micron 5	ERROR:signature_error	the source must be a String
 #
 # §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
-#     A kind keeps its transducer (the semantic reference + fallback) and adds a
-#     compiler that runs at the `mini` site when src is concrete, splicing tokens
-#     instead of the standard call. `re` ships a Go hook (precompiled-pattern
-#     carrier + run-re consumer); AQL kinds add one via MiniLang.register-compiled
-#     (a macro). `mini` has no expansion cache, so hooks memoize (re does).
-import "aql:minilang"  import "aql:string-util"  MiniLang.register up (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled up (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  mini up 'hi'	'HI'	the AQL compile hook (a macro) uppercases src at the call site
-import "aql:minilang"  MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])	ERROR:mini_no_transducer	a compiler must layer on an existing transducer
-import "aql:minilang"  MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])	ERROR:mini_bad_compiler	the compiler must be a macro, not a plain fn
-import "aql:minilang"  MiniLang.register-compiled Bad (macro [[s o] [ quote [ s ] ]])	ERROR:mini_bad_name	capitalised names are rejected (types)
+#     A BUILT-IN kind keeps its transducer (the semantic reference + fallback) and
+#     may add a Go compiler that runs at the `mini` site when src is concrete,
+#     splicing tokens instead of the standard call. `re` ships one (precompiled-
+#     pattern carrier + run-re consumer). `mini` has no expansion cache, so hooks
+#     memoize (re does). The AQL hook surface (register-compiled) died with the
+#     frozen kind namespace — the word survives as a tombstone.
+import "aql:minilang"  MiniLang.register-compiled	ERROR:mini_registry_frozen	the AQL compile-hook surface was removed with registration (tombstone)
 #
 # §8  the `gex` kind — glob-expression SELECT (not a match-extractor like re).
 #     Anchored whole-subject match: `*` any run, `?` one char, `**`/`*?` a literal
@@ -294,15 +293,16 @@ import "aql:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPat
 # (/r parks the partial even with a subject on the stack — pinned in lang/go/test as
 # TestMiniPartialParked, not as a spec row: the compiled pipeline does not model a
 # /r-parked spliced partial yet)
-import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  def c (mini count 'an')  "banana" c	2	an AQL-registered filter kind gets the same storable-partial semantics
+import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  def c (mini count 'an')  "banana" c	2	a def-bound filter value gets the same storable-partial semantics
 import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
 #
-# §fnty  every filter kind's partial has a NAMED member type, exported under
-#        the capitalized kind name (MiniLang.Re, MiniLang.Gex, MiniLang.Jp,
-#        MiniLang.Jq, MiniLang.Xp; a filter-shaped MiniLang.register kind gets
-#        one too). typeof still reports Function — the member type is a
-#        CONSTRAINT (the DepScalar convention): use `is`, or a typed fn param
-#        (`fn [[m:(MiniLang.Re) …] …]`), to require a specific kind's partial.
+# §fnty  every built-in filter kind's partial has a NAMED member type,
+#        exported under the capitalized kind name (MiniLang.Re, MiniLang.Gex,
+#        MiniLang.Jp, MiniLang.Jq, MiniLang.Xp). typeof still reports Function
+#        — the member type is a CONSTRAINT (the DepScalar convention): use
+#        `is`, or a typed fn param (`fn [[m:(MiniLang.Re) …] …]`), to require
+#        a specific kind's partial. (Member types are keyed to built-in kinds;
+#        a fn-value mini-language's partial carries no kind tag.)
 import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabits its named type
 import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
 import "aql:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
@@ -315,19 +315,18 @@ import "aql:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lam
 import "aql:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
 import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
 import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
-import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  def f (+poly/x/)  f/r is (MiniLang.Poly)	true	a filter-shaped user kind mints its member type at register time
-import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map subject:String] [String] [subject]]) end  (+poly/x/) is (MiniLang.Re)	false	the user kind's partial is not a builtin kind's
-import "aql:minilang"  MiniLang.register gen (fn [[src:String opts:Map] [Integer] [1]]) end  MiniLang.Gen	None	a non-filter kind never produces a tagged partial, so no type is minted
+import "aql:minilang"  def cnt (fn [[src:String opts:Map subject:String] [Integer] [1]])  def c (mini cnt 'a')  c/r is (MiniLang.Re)	false	a fn-value partial carries no kind tag — never a builtin kind's member type
+import "aql:minilang"  MiniLang.Gen	None	a missing export reads as None — the export map is fixed post-build
 #
 # §fnv  a mini-language VALUE as the transducer — `mini <fn> <src> <opts?>`.
 #       The first operand may BE the transducer: a Function (or a word bound
 #       to one) whose every signature starts with the standard
-#       [src:String opts:Map …] prefix — the same contract MiniLang.register
-#       enforces (one shared validator). A registered kind wins a name
-#       collision. A FILTER-shaped fn (every sig [src opts subject]) yields
-#       the same partially-applied Function a registered filter kind yields —
-#       but with no MiniKind tag, so the name-keyed member types
-#       (MiniLang.Re, …) do not apply to it.
+#       [src:String opts:Map …] prefix — the shared MiniLangFnSigWhy
+#       validator (the same prefix the built-in kinds carry). A built-in
+#       kind wins a name collision. A FILTER-shaped fn (every sig
+#       [src opts subject]) yields the same partially-applied Function a
+#       built-in filter kind yields — but with no MiniKind tag, so the
+#       name-keyed member types (MiniLang.Re, …) do not apply to it.
 import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'	'abab'	a word bound to a generator fn is the value form spelled by name
 import "aql:minilang"  mini (fn [[src:String opts:Map] [String] [src]]) 'zz'	'zz'	an anonymous transducer fn used inline
 import "aql:minilang"  def g fn [[src:String opts:Map] [String] [opts get 'p']]  mini g 'zz' {p:'q'}	'q'	3-arg form: the opts map reaches the fn

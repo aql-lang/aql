@@ -80,6 +80,12 @@ func TestSeam6DBuilderRegistryInitError(t *testing.T) {
 	if _, xerr := buildRandExportsForState(newRandState(1)); xerr == nil {
 		t.Error("buildRandExportsForState with failing seam: expected error, got nil")
 	}
+	// Resolve's builder-error propagation arm (the same failure surfaced
+	// through the import resolver).
+	if _, rerr := Resolve("minilang", parent); rerr == nil ||
+		!strings.Contains(rerr.Error(), "seam6d") {
+		t.Errorf("Resolve with failing registry seam: got %v, want the injected cause", rerr)
+	}
 }
 
 // TestSeam6DInstallExportsRegistryInitError drives the Build-failure

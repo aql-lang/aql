@@ -74,3 +74,53 @@ func NewFormatParserFn(name string, f native.Format) (native.Value, error) {
 		Handler: formatParseHandler(name, f),
 	})
 }
+
+// NewMiniLangFn builds a mini-language Function VALUE from spec — the
+// value-form successor of the removed RegisterHostMiniLang. The standard
+// [src:String opts:Map] prefix is prepended to spec.Inputs (copied
+// type/quote-only so every wrapper param stays unnamed — the
+// trivial-delegation dispatch contract), so the value satisfies the `mini`
+// word's prefix contract (MiniLangFnSigWhy): `mini <name> '<src>'` works
+// once the value is bound to <name>. Exactly one Input makes the value
+// FILTER-shaped — the `mini` expansion then produces a partially-applied
+// Function awaiting the subject, like the built-in filter kinds (but with
+// no named member type: those are keyed to built-in kinds).
+func NewMiniLangFn(spec MiniLangSpec) (native.Value, error) {
+	if spec.Name == "" {
+		return native.Value{}, fmt.Errorf("new minilang fn: Name must not be empty")
+	}
+	if spec.Handler == nil {
+		return native.Value{}, fmt.Errorf("new minilang fn %q: Handler must not be nil", spec.Name)
+	}
+	subReg, err := newDefaultRegistry()
+	if err != nil {
+		return native.Value{}, err
+	}
+	params := make([]native.FnParam, 0, 2+len(spec.Inputs))
+	params = append(params,
+		native.FnParam{Type: native.TString},
+		native.FnParam{Type: native.TMap})
+	for _, in := range spec.Inputs {
+		params = append(params, native.FnParam{Type: in.Type, Quote: in.Quote})
+	}
+	args := make([]*native.Type, len(params))
+	for i, p := range params {
+		args[i] = p.Type
+	}
+	inner := "minilang-value-" + spec.Name
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: inner,
+		Signatures: []native.Signature{{
+			Args:       args,
+			Returns:    spec.Returns,
+			BarrierPos: -1,
+			Impl:       native.Go(spec.Handler),
+		}},
+	})
+	// RegisterNativeFunc records an invalid word name instead of installing
+	// (ADR-005: no panics) — surface it as this constructor's error.
+	if subReg.Lookup(inner) == nil {
+		return native.Value{}, fmt.Errorf("new minilang fn %q: name is not a valid word (use a plain lowercase name)", spec.Name)
+	}
+	return wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg), nil
+}

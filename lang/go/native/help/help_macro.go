@@ -70,11 +70,12 @@ func init() {
 			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
 			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
-			"deliberately. Each filter kind's partial has a NAMED member type (MiniLang.Re, MiniLang.Gex, " +
-			"MiniLang.Jp, MiniLang.Jq, MiniLang.Xp — user kinds too) for `is` checks and typed fn params " +
+			"deliberately. Each built-in filter kind's partial has a NAMED member type (MiniLang.Re, " +
+			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
-			"Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
-			"register your own with MiniLang.register). An unknown kind is an expansion-time error. " +
+			"The built-in kinds live in the aql:minilang module (import it first; MiniLang.kinds lists " +
+			"them) and the kind set is FIXED — new kinds cannot be registered. " +
+			"An unknown kind is an expansion-time error. " +
 			"The first argument may instead BE the transducer — a fn (or a word bound to one) whose every " +
 			"signature starts with the standard [src:String opts:Map] prefix — called directly with no kind " +
 			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +

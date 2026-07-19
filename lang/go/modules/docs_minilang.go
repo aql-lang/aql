@@ -57,15 +57,15 @@ func init() {
 			"parse RESULT (the matched span String for a plain gate; whatever the rules/ref actions " +
 			"produced otherwise) and must return one Kind instance \u2014 a failure or wrong-typed result " +
 			"is loud. One shape per kind; token names must be unique across the merge.",
-		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
-			"Every fn signature must start with the standard prefix [src:String opts:Map …]. " +
-			"A FILTER-shaped kind (exactly [src opts subject]) also exports a named member type " +
-			"for its partials (kind poly → MiniLang.Poly) — see MiniLang.Re for the convention.",
+		"register": "TOMBSTONE — raises mini_registry_frozen. The mini kind namespace is fixed " +
+			"(built-in kinds only); pass a custom mini-language as a Function value instead: " +
+			"def myl (fn [[src:String opts:Map] [Any] [...]])  mini myl '...' — Go hosts build " +
+			"one with NewMiniLangFn.",
 		"Re": "The named type of a `re` partial — the Function a parked `+re/…/` (or " +
 			"`def f (+re/…/)`) produces. `typeof` still reports Function (a member type is a " +
 			"constraint, like a DepScalar); use `is` (`f/r is (MiniLang.Re)`) or a typed fn param " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`) to require specifically a regexp matcher. " +
-			"Every filter kind has one: Re, Gex, Jp, Jq, Xp, plus user kinds via MiniLang.register.",
+			"Every built-in filter kind has one: Re, Gex, Jp, Jq, Xp.",
 		"Gex": "The named type of a `gex` partial (a stored glob-expression matcher) — " +
 			"see MiniLang.Re for the convention.",
 		"Jp": "The named type of a `jp` partial (a stored JSONPath query) — " +
@@ -74,10 +74,10 @@ func init() {
 			"see MiniLang.Re for the convention.",
 		"Xp": "The named type of an `xp` partial (a stored XPath query) — " +
 			"see MiniLang.Re for the convention.",
-		"kinds": "List the registered mini-language kind atoms.",
-		"register-compiled": "Add an expansion-time compile hook (a macro) to a kind: " +
-			"MiniLang.register-compiled <name> (macro [[src opts] [ quote [ … ] ]]). The kind must " +
-			"already have a transducer; `mini` runs the compiler at the call site and splices its tokens.",
+		"kinds": "List the (fixed) mini-language kind atoms.",
+		"register-compiled": "TOMBSTONE — raises mini_registry_frozen. The AQL compile-hook " +
+			"surface died with the frozen kind namespace; pass a custom mini-language as a " +
+			"Function value (mini <fn> '...') and memoize any expensive compile inside the fn.",
 		"run-re": "Internal: the compiled-`re` consumer — matches a precompiled-pattern carrier " +
 			"(from the re compile hook) against the stack subject.",
 	})

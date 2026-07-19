@@ -149,15 +149,28 @@ func TestUnpackModuleCheck(t *testing.T) {
 	}
 }
 
-// A mini-language kind registered with a STATICALLY-PROVIDED fn
-// (`MiniLang.register poly (fn …)`) is now installed in check mode (an
-// idempotent ReturnsFn mirroring parselang-register), so a later
-// `mini poly …` resolves the kind instead of flagging "no mini-language is
-// registered". The registration is pure (the fn is literal) — not runtime-only.
+// A def-bound mini-language value (`def poly (fn …)`) resolves statically:
+// a later `mini poly …` expands through the binding instead of flagging
+// "no mini-language is registered". The register tombstone, by contrast,
+// is flagged AT CHECK TIME (its DryPassWrap ReturnsFn mirrors the
+// unconditional mini_registry_frozen raise).
 func TestMiniLangRegisterCheck(t *testing.T) {
-	clean := `import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}`
+	clean := `import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}`
 	if n := checkErrs(t, clean); n != 0 {
-		t.Errorf("minilang register then use: expected 0 errors, got %d", n)
+		t.Errorf("minilang value form: expected 0 errors, got %d", n)
+	}
+	// The tombstone surfaces statically as a guaranteed-error mirror
+	// diagnostic (its DryPassWrap ReturnsFn re-raises under the dry pass).
+	a, _ := lang.New()
+	cr, _ := a.Check(`import "aql:minilang"  MiniLang.register`)
+	found := false
+	for _, d := range cr.Diagnostics {
+		if d.Code == "mini_registry_frozen" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the register tombstone must be flagged statically (mini_registry_frozen)")
 	}
 }
 

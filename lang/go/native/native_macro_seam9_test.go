@@ -97,28 +97,8 @@ func TestW9MiniPartialFnWrapperNotFnDef(t *testing.T) {
 	}
 }
 
-func TestW9MiniCompileExportUnbound(t *testing.T) {
-	r := seam5Reg(t)
-	if _, ok := miniCompileExport(r, "re"); ok {
-		t.Fatal("miniCompileExport must fail when MiniLang is unbound")
-	}
-}
-
-func TestW9MiniCompileExportNonModuleExport(t *testing.T) {
-	r := seam5Reg(t)
-	r.Defs.Push("MiniLang", NewInteger(5))
-	if _, ok := miniCompileExport(r, "re"); ok {
-		t.Fatal("miniCompileExport must fail when MiniLang is not a ModuleExport")
-	}
-}
-
-func TestW9MiniInvokeAQLCompileNotMacro(t *testing.T) {
-	r := seam5Reg(t)
-	// A non-macro (here a plain non-Function) compile hook is rejected.
-	if _, err := miniInvokeAQLCompile(r, "re", NewInteger(5), "src", NewMap(NewOrderedMap())); err == nil {
-		t.Fatal("miniInvokeAQLCompile must reject a non-macro hook")
-	}
-}
+// (The miniCompileExport / miniInvokeAQLCompile seams died with the AQL
+// compile-hook surface — hooks are Go-only builtin machinery now.)
 
 func TestW9MiniKindRegisteredNonModuleExport(t *testing.T) {
 	r := seam5Reg(t)

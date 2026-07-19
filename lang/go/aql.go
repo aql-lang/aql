@@ -596,33 +596,30 @@ type FnParam = native.FnParam
 // signature order (args[0] = sig position 0).
 type Handler = native.Handler
 
-// MiniLangSpec describes a Go-implemented mini-language kind for
-// RegisterMiniLang. The standard [src:String opts:Map] prefix is supplied
-// automatically; declare only the extra stack Inputs, the Returns, and the
-// Handler.
+// MiniLangSpec describes a Go-implemented mini-language for NewMiniLangFn.
+// The standard [src:String opts:Map] prefix is supplied automatically;
+// declare only the extra stack Inputs, the Returns, and the Handler.
 type MiniLangSpec = modules.MiniLangSpec
 
-// RegisterMiniLang installs a Go-implemented mini-language kind on the
-// instance — the embedder twin of the AQL `MiniLang.register` word. After
-// the program imports "aql:minilang", the kind is callable as
-// `mini <Name> <src> <opts>` exactly like a built-in (`re`, `bf`).
-// Registration may precede or follow the import.
-//
-// The kind name must be a lowercase atom with no `lang_` prefix, the
-// handler must be non-nil, and the name must not collide with an existing
-// kind (built-in or host). The handler receives args[0]=src, args[1]=opts,
-// and args[2..]=the declared Inputs.
+// NewMiniLangFn builds a mini-language Function VALUE from spec — the
+// successor of the removed RegisterMiniLang: the mini kind namespace is
+// fixed (built-in kinds only), so a Go-implemented mini-language is handed
+// to programs as a value instead of a registered kind. Bind it with
+// DefineValue (or export it from a module) and call it through the `mini`
+// word's value form. The handler receives args[0]=src, args[1]=opts, and
+// args[2..]=the declared Inputs.
 //
 // Example — an integer binary op whose operands name keys in opts:
 //
-//	a.RegisterMiniLang(lang.MiniLangSpec{
+//	m, _ := lang.NewMiniLangFn(lang.MiniLangSpec{
 //	    Name:    "iop",
 //	    Returns: []*lang.Type{lang.TInteger},
 //	    Handler: iopHandler, // parses "x + y", applies to opts.x, opts.y
 //	})
-//	a.Run(`import "aql:minilang"  mini iop 'x + y' {x:10, y:2}`) // → 12
-func (a *AQL) RegisterMiniLang(spec MiniLangSpec) error {
-	return modules.RegisterHostMiniLang(a.registry, spec)
+//	a.DefineValue("iop", m)
+//	a.Run(`mini iop 'x + y' {x:10, y:2}`) // → 12 (the value form needs no import)
+func NewMiniLangFn(spec MiniLangSpec) (Value, error) {
+	return modules.NewMiniLangFn(spec)
 }
 
 // ParseLang is the type of a parse_<lang> parser function — the handler

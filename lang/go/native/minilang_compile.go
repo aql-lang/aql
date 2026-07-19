@@ -19,10 +19,11 @@ import (
 // no expansion cache, so a hook re-runs every time the call is stepped — a
 // hook memoizes its own compile (as `re` does via miniCompiledPattern).
 //
-// Two registration paths feed one discovery point (miniHandler):
-//   - Go hooks live in a per-registry table (RegisterMiniCompileGoHook).
-//   - AQL hooks live as the `compile_<kind>` export of the MiniLang namespace
-//     (installed by MiniLang.register-compiled), expanded as a macro.
+// Hooks are BUILT-IN (Go-only) machinery: they live in a per-registry table
+// (RegisterMiniCompileGoHook) keyed by kind, discovered by miniHandler via
+// miniGoHook. The AQL hook surface (MiniLang.register-compiled) died with
+// the frozen kind namespace, and the kind set is fixed — so a hook can only
+// belong to a built-in kind (`re` is the shipping example).
 
 // miniHookToksMaterialisable reports whether a Go compile hook's expansion
 // can be RECORDED by a compile pass: every token is either inert data

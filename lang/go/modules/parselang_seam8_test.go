@@ -157,8 +157,8 @@ func TestW8NewParseLangFnValidation(t *testing.T) {
 	}
 }
 
-// TestW8NewParseLangFnRegistryError drives the constructor's sub-registry
-// construction arm through the newDefaultRegistry seam.
+// TestW8NewParseLangFnRegistryError drives both value constructors'
+// sub-registry construction arms through the newDefaultRegistry seam.
 func TestW8NewParseLangFnRegistryError(t *testing.T) {
 	orig := newDefaultRegistry
 	t.Cleanup(func() { newDefaultRegistry = orig })
@@ -167,6 +167,9 @@ func TestW8NewParseLangFnRegistryError(t *testing.T) {
 	}
 	if _, err := NewParseLangFn(ParseLangSpec{Name: "x", Handler: w9NopParser}); err == nil {
 		t.Error("NewParseLangFn: a registry construction error should propagate")
+	}
+	if _, err := NewMiniLangFn(MiniLangSpec{Name: "x", Handler: w9NopParser}); err == nil {
+		t.Error("NewMiniLangFn: a registry construction error should propagate")
 	}
 }
 
