@@ -5,46 +5,34 @@ import (
 	"testing"
 )
 
-// A parser registered via ParseLang.register is dispatched later through a
-// RUNTIME-added export key (`ParseLang.parse_<name>`). Historically the
-// bytecode recorder const-folded the `get <name>` over the module export to a
-// missing-key None — using the check-time module snapshot, BEFORE register
-// installed the key at runtime — then dropped the dispatch and left the call's
-// args on the stack, so the compiled program silently DIVERGED from the
-// interpreter. The guard required these programs to FALL BACK.
-//
-// Stage 3 (design/aql-bytecode-stage3-inlining-plan.0.md, module-parselang:23)
-// makes them compile SOUNDLY instead: ParseLang.register's check-mode ReturnsFn
-// installs `parse_<name>` so the key is present at check time (the runtime
-// register handler is idempotent on the source-call identity, so the compiled
-// program's re-run does not re-error), and the resolved parser fn value
-// dispatches to a CALL_USER unit (parselang.go + execFnDefSigStackMatch's
-// check-mode fn-value path). The invariant this test guards is unchanged — the
-// compiled result must never diverge from the interpreter — but the mechanism
-// is now "compile soundly", not "fall back". Whichever path RunCompiled takes,
-// the result (value + error presence) must match the interpreter exactly.
-func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
+// A def-bound parser fn is dispatched later through the bound name — bare
+// direct call, the `parse` sugar, or the desugared `<name> <src> <opts> end`
+// form. Historically (when the binding came from the removed
+// ParseLang.register) the bytecode recorder const-folded the export lookup
+// to a missing-key None using the check-time module snapshot, dropped the
+// dispatch, and left the call's args on the stack — the compiled program
+// silently DIVERGED from the interpreter. The kind namespace is frozen now
+// and the binding is an ordinary def, but the invariant this test guards is
+// unchanged: whichever path RunCompiled takes (compile or fall back), the
+// result (value + error presence) must match the interpreter exactly.
+func TestBoundParserDispatchNeverDiverges(t *testing.T) {
+	const bind = `import "aql:parselang"  import "aql:string-util"  ` +
+		`def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  `
 	cases := []struct {
 		name string
 		src  string
 	}{
 		{
 			"parselang bare dispatch (no trailing get)",
-			`import "aql:parselang"  import "aql:string-util"  ` +
-				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
-				`ParseLang.parse_calc 'x + y' {} end`,
+			bind + `calc 'x + y' {} end`,
 		},
 		{
 			"parselang sugar + get (already a spec row)",
-			`import "aql:parselang"  import "aql:string-util"  ` +
-				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
-				`(parse calc 'x + y') get 1`,
+			bind + `(parse calc 'x + y') get 1`,
 		},
 		{
 			"parselang desugared + get",
-			`import "aql:parselang"  import "aql:string-util"  ` +
-				`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ` +
-				`(ParseLang.parse_calc 'x + y' {} end) get 1`,
+			bind + `(calc 'x + y' {} end) get 1`,
 		},
 	}
 	for _, c := range cases {
@@ -65,9 +53,8 @@ func TestRegisterDispatchFallsBackNotDiverges(t *testing.T) {
 	}
 }
 
-// Negative / control: an out-of-band export that does NOT register a
-// runtime-dispatched word (ParseLang.kinds) must still COMPILE — the refusal is
-// scoped to register, not to the whole module.
+// Control: a plain static export read (ParseLang.kinds) must COMPILE — the
+// frozen-registry tombstone does not taint the rest of the module.
 func TestNonRegisterModuleWordStillCompiles(t *testing.T) {
 	src := `import "aql:parselang"  ParseLang.kinds`
 	a, _ := New()

@@ -8,15 +8,16 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// The calc mini-language exercises the Go host registration API
-// (lang.RegisterMiniLang). `iop` is an integer binary operation: src is
-// "<a> <op> <b>", a and b name keys in the opts map, and op is one of
-// + - * / %. It is a generator kind (no stack input — operands come from
-// opts), so its standard call shape is [src:String opts:Map] -> [Integer].
+// The calc mini-language exercises the Go host value constructor
+// (lang.NewMiniLangFn) bound with DefineValue. `iop` is an integer binary
+// operation: src is "<a> <op> <b>", a and b name keys in the opts map, and
+// op is one of + - * / %. It is a generator shape (no stack input —
+// operands come from opts), so its standard call is
+// [src:String opts:Map] -> [Integer].
 
-// calcSpec builds the iop kind. Implemented entirely in Go — the point of
-// the host API is that a kind needs no AQL source and no fork of the core
-// minilang module.
+// calcSpec builds the iop mini-language. Implemented entirely in Go — the
+// point of the host API is that a mini-language needs no AQL source and no
+// fork of the core minilang module.
 func calcSpec() lang.MiniLangSpec {
 	return lang.MiniLangSpec{
 		Name:    "iop",
@@ -83,15 +84,19 @@ func calcOperand(r *native.Registry, m native.ReadMap, name string) (int64, erro
 	return n, nil
 }
 
-// newCalcInstance builds an AQL instance with the iop kind registered.
+// newCalcInstance builds an AQL instance with the iop value bound.
 func newCalcInstance(t *testing.T) *lang.AQL {
 	t.Helper()
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if err := a.RegisterMiniLang(calcSpec()); err != nil {
-		t.Fatalf("RegisterMiniLang: %v", err)
+	v, err := lang.NewMiniLangFn(calcSpec())
+	if err != nil {
+		t.Fatalf("NewMiniLangFn: %v", err)
+	}
+	if err := a.DefineValue("iop", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
 	}
 	return a
 }
@@ -111,7 +116,7 @@ func runLast(t *testing.T, a *lang.AQL, src string) any {
 }
 
 // TestMiniLangHostCalcOperators pins every operator's result through a
-// `mini iop` call site — registration BEFORE import.
+// `mini iop` call site — binding BEFORE import.
 func TestMiniLangHostCalcOperators(t *testing.T) {
 	a := newCalcInstance(t)
 	cases := []struct {
@@ -136,23 +141,22 @@ func TestMiniLangHostCalcOperators(t *testing.T) {
 	}
 }
 
-// TestMiniLangHostDesugarEquivalence proves `mini iop` is pure sugar for the
-// standard MiniLang.lang_iop call — both forms must agree.
+// TestMiniLangHostDesugarEquivalence proves `mini iop` on a bound value is
+// pure sugar for the direct call `iop <src> <opts> end` — both must agree.
 func TestMiniLangHostDesugarEquivalence(t *testing.T) {
 	a := newCalcInstance(t)
 	sugar := runLast(t, a, `import "aql:minilang"  mini iop 'x * y' {x:6, y:7}`)
-	desugared := runLast(t, a, `import "aql:minilang"  MiniLang.lang_iop 'x * y' {x:6, y:7} end`)
+	desugared := runLast(t, a, `import "aql:minilang"  iop 'x * y' {x:6, y:7} end`)
 	if sugar != desugared {
-		t.Fatalf("sugar=%v desugared=%v: mini must desugar to the standard call", sugar, desugared)
+		t.Fatalf("sugar=%v desugared=%v: mini must desugar to the direct call", sugar, desugared)
 	}
 	if sugar != int64(42) {
 		t.Fatalf("got %v, want 42", sugar)
 	}
 }
 
-// TestMiniLangHostRegisterAfterImport covers the post-import registration
-// path: the module is already built and cached, so the kind must be injected
-// live rather than wait for a re-import the loaded cache never triggers.
+// TestMiniLangHostRegisterAfterImport covers binding AFTER the import — the
+// module is already built and cached; a def binding needs nothing from it.
 func TestMiniLangHostRegisterAfterImport(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
@@ -162,13 +166,27 @@ func TestMiniLangHostRegisterAfterImport(t *testing.T) {
 	if _, err := a.Run(`import "aql:minilang"`); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	// Register AFTER the import.
-	if err := a.RegisterMiniLang(calcSpec()); err != nil {
-		t.Fatalf("RegisterMiniLang after import: %v", err)
+	// Bind AFTER the import.
+	v, err := lang.NewMiniLangFn(calcSpec())
+	if err != nil {
+		t.Fatalf("NewMiniLangFn: %v", err)
+	}
+	if err := a.DefineValue("iop", v); err != nil {
+		t.Fatalf("DefineValue after import: %v", err)
 	}
 	got := runLast(t, a, `mini iop 'x + y' {x:40, y:2}`)
 	if got != int64(42) {
-		t.Fatalf("post-import registration: got %v, want 42", got)
+		t.Fatalf("post-import binding: got %v, want 42", got)
+	}
+}
+
+// TestMiniLangHostNoImportValueForm pins that a BOUND mini-language value
+// needs no aql:minilang import at all — the value form is import-free (only
+// the built-in kind sugar and the MiniLang namespace need the module).
+func TestMiniLangHostNoImportValueForm(t *testing.T) {
+	a := newCalcInstance(t)
+	if got := runLast(t, a, `mini iop 'x + y' {x:40, y:2}`); got != int64(42) {
+		t.Fatalf("no-import value form: got %v, want 42", got)
 	}
 }
 
@@ -221,67 +239,48 @@ func TestMiniLangHostRuntimeErrors(t *testing.T) {
 	}
 }
 
-// TestMiniLangHostRegistrationContract pins what RegisterMiniLang refuses:
-// bad names, nil handlers, duplicate registration, and built-in collisions.
+// TestMiniLangHostRegistrationContract pins what NewMiniLangFn refuses, and
+// that a binding never shadows a built-in kind.
 func TestMiniLangHostRegistrationContract(t *testing.T) {
 	t.Run("empty name", func(t *testing.T) {
-		a, _ := lang.New()
-		if err := a.RegisterMiniLang(lang.MiniLangSpec{Handler: calcSpec().Handler}); err == nil {
+		if _, err := lang.NewMiniLangFn(lang.MiniLangSpec{Handler: calcSpec().Handler}); err == nil {
 			t.Fatal("expected error for empty name")
 		}
 	})
-	t.Run("lang_ prefix rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		spec := calcSpec()
-		spec.Name = "lang_iop"
-		if err := a.RegisterMiniLang(spec); err == nil {
-			t.Fatal("expected error for lang_ prefix")
-		}
-	})
-	t.Run("capitalised name rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		spec := calcSpec()
-		spec.Name = "Iop"
-		if err := a.RegisterMiniLang(spec); err == nil {
-			t.Fatal("expected error for capitalised name")
-		}
-	})
 	t.Run("nil handler rejected", func(t *testing.T) {
-		a, _ := lang.New()
-		if err := a.RegisterMiniLang(lang.MiniLangSpec{Name: "iop"}); err == nil {
+		if _, err := lang.NewMiniLangFn(lang.MiniLangSpec{Name: "iop"}); err == nil {
 			t.Fatal("expected error for nil handler")
 		}
 	})
-	t.Run("duplicate registration rejected", func(t *testing.T) {
-		a := newCalcInstance(t)
-		if err := a.RegisterMiniLang(calcSpec()); err == nil {
-			t.Fatal("expected error registering iop twice")
+	t.Run("DefineValue rejects capitalised names", func(t *testing.T) {
+		a, _ := lang.New()
+		v, err := lang.NewMiniLangFn(calcSpec())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.DefineValue("Iop", v); err == nil {
+			t.Fatal("expected error for a capitalised value name")
 		}
 	})
-	t.Run("collision with built-in re (pre-import)", func(t *testing.T) {
-		// `re` is a built-in kind; a host kind of the same name must be
-		// refused — here at import time, when the fold runs.
+	t.Run("built-in kind wins over a binding", func(t *testing.T) {
+		// `re` is a built-in kind; a same-named binding never intercepts
+		// `mini re` (the iop handler would reject the regex source).
 		a, _ := lang.New()
 		spec := calcSpec()
 		spec.Name = "re"
-		if err := a.RegisterMiniLang(spec); err != nil {
-			t.Fatalf("pre-import register should defer the collision to build: %v", err)
+		v, err := lang.NewMiniLangFn(spec)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if _, err := a.Run(`import "aql:minilang"`); err == nil {
-			t.Fatal("import should fail: host kind collides with built-in re")
+		if err := a.DefineValue("re", v); err != nil {
+			t.Fatal(err)
 		}
-	})
-	t.Run("collision with built-in re (post-import)", func(t *testing.T) {
-		// After import the built-ins are live, so the collision is caught
-		// immediately at registration.
-		a, _ := lang.New()
-		if _, err := a.Run(`import "aql:minilang"`); err != nil {
-			t.Fatalf("import: %v", err)
-		}
-		spec := calcSpec()
-		spec.Name = "re"
-		if err := a.RegisterMiniLang(spec); err == nil {
-			t.Fatal("post-import register of `re` should collide with the built-in")
+		got := runLast(t, a, `import "aql:minilang"  def m ("AbcD" mini re '[a-z]+')  m.fst.m`)
+		if got != "bc" {
+			t.Fatalf("built-in re should win over the binding: got %v, want bc", got)
 		}
 	})
+	// (The lang_ prefix, duplicate-kind and collision rules died with the
+	// namespace: a value binding is def-scoped — rebinding shadows, like
+	// any def.)
 }

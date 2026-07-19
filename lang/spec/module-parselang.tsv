@@ -5,25 +5,27 @@
 # call site to the STANDARD parser call `ParseLang.parse_<kind> <source> <opts>
 # end`. Unlike `mini`, the `source` is the REQUIRED LAST surface arg (a String
 # or a {src:…} Source map) and `opts` is the optional MIDDLE one — disambiguated
-# by arity. A parser returns Any (an AST, a transduction, …). `ParseLang.register`
-# installs AQL fns as parsers; `ParseLang.kinds` lists them; `ParseLang.source`
-# resolves a source value to its String. These rows register a small `calc`
-# parser whose AST is the token list `[left op right]` (built by StringUtil.split
-# on the resolved source). A {file:…} source is deferred in v1.
+# by arity. A parser returns Any (an AST, a transduction, …). The kind set is
+# FIXED (the tabnas family + aontu); a custom parser is a Function VALUE (§10;
+# `ParseLang.register` is a tombstone raising parse_registry_frozen).
+# `ParseLang.kinds` lists the kinds; `ParseLang.source` resolves a source value
+# to its String. These rows def-bind a small `calc` parser fn whose AST is the
+# token list `[left op right]` (built by StringUtil.split on the resolved
+# source). A {file:…} source is deferred in v1.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  parse — an AQL-registered parser returning a tokenization
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc 'x + y') get 1	'+'	the parsed operator token
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc 'x + y') get 0	'x'	the left operand token
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers
+# §1  parse — a def-bound AQL parser fn returning a tokenization
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 1	'+'	the parsed operator token
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 0	'x'	the left operand token
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers
 #
 # §2  source forms and opts
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc {src:'a - b'}) get 1	'-'	a {src:…} Source map resolves to its string
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (parse calc {trace:true} 'x + y') get 1	'+'	3-arg form: opts in the middle, source last
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  (ParseLang.parse_calc 'x + y' {} end) get 1	'+'	parse is pure sugar — the desugared standard call is equivalent
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {src:'a - b'}) get 1	'-'	a {src:…} Source map resolves to its string
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {trace:true} 'x + y') get 1	'+'	3-arg form: opts in the middle, source last
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (calc 'x + y' {} end) get 1	'+'	parse is pure sugar — invoking the bound fn directly is equivalent
 #
 # §3  register / kinds / source — out-of-band exports
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q aontu/q calc/q]	the registered parser-kind atoms (the tabnas family + aontu ship built-in, calc is registered here)
+import "aql:parselang"  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q aontu/q]	the FIXED parser-kind atoms (the tabnas family + aontu — the whole namespace)
 import "aql:parselang"  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
 import "aql:parselang"  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
 #
@@ -31,13 +33,9 @@ import "aql:parselang"  ParseLang.source {src:'a b'}	'a b'	the source resolver u
 import "aql:parselang"  parse nope 'x'	ERROR:parse_unknown_lang	unknown kind: expansion-time error at the call site
 parse calc 'x'	ERROR:parse_unknown_lang	parse is core but parsers need the import (no auto-import)
 ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
-import "aql:parselang"  import "aql:string-util"  ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
-import "aql:parselang"  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_kind_exists	collision with a registered parser
-import "aql:parselang"  for 2 [ParseLang.register calc (fn [[source:String opts:Map] [Integer] [1]]) end]	ERROR:parse_kind_exists	a loop re-registering the same kind still collides at runtime
-import "aql:parselang"  ParseLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:parse_bad_signature	the standard prefix [source:String opts:Map …] is enforced
-import "aql:parselang"  ParseLang.register parse_x (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	the parse_ prefix is register's job, not the caller's
-import "aql:parselang"  ParseLang.register Bad (fn [[source:Any o:Map] [Any] [source]])	ERROR:parse_bad_name	capitalised parser names are rejected (types)
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
+import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
+import "aql:parselang"  ParseLang.register	ERROR:parse_registry_frozen	the kind namespace is fixed — the register tombstone raises with the value-form migration hint
 #
 # §5  ini — the built-in INI parser (github.com/tabnas/ini/go). No host
 #     registration needed: importing the module is enough. Top-level
@@ -100,3 +98,29 @@ import "aql:parselang"  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a 
 import "aql:parselang"  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
 import "aql:parselang"  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value cannot be generated
 import "aql:parselang"  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a relative reference to a missing sibling is a loud error
+#
+# §10  a ParseLang VALUE as the parser — `parse <fn> <opts?> <source>`. The
+#      first operand may BE the parser: a Function (or a word bound to one)
+#      whose every signature starts with the standard [source opts] prefix —
+#      the same contract ParseLang.register enforces. The call expands to the
+#      direct fn call `<fn> <source> <opts> end` with no kind lookup, so a
+#      parser works without being registered under a kind name. A registered
+#      kind wins a name collision. A parser COMPUTED by a runtime call —
+#      `parse (mk) 'x'` — compiles through the recorded parselang-fn-dispatch:
+#      the fn operand's producing event is its provenance.
+import "aql:parselang"  (parse (ParseLang.parse_json) '{"b":7}') get 'b'	7	a module-exported parser used as a ParseLang value
+import "aql:parselang"  def myp fn [[source:String opts:Map] [Map] [parse json source]]  (parse myp '{"a":42}') get 'a'	42	a word bound to a parser fn is the value form spelled by name
+import "aql:parselang"  parse (fn [[source:String opts:Map] [Any] [opts get 'k']]) {k:9} 'ignored'	9	3-arg form: the opts map reaches an anonymous parser fn
+import "aql:parselang"  def json fn [[source:String opts:Map] [Any] ['shadowed']]  (parse json '{"a":1}') get 'a'	1	a registered kind wins over a same-named binding
+import "aql:parselang"  def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]  parse (mk) 'hi'	'hi'	a computed ParseLang value parses (compiled via the recorded fn dispatch)
+import "aql:parselang"  def wrap fn [[p:Function] [Any] [parse p 'x']]  wrap (fn [[source:String opts:Map] [Any] [source]])	'x'	a Function param used as the parser by NAME — a carrier under analysis, dispatched at run time
+import "aql:parselang"  def mk2 fn [[b:Boolean] [Function] [if b [fn [[source:String opts:Map] [Any] [source]]] [fn [[source:String opts:Map] [Any] ['n']]]]]  parse (mk2 true) {k:1} 'z'	'z'	a branch-computed parser is a Function CARRIER under analysis — dispatched at run time, 3-arg surface
+#
+# §10  value-form negatives — the [source opts] prefix contract is enforced
+import "aql:parselang"  parse (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:parse_bad_signature	a non-parser fn is rejected (too few params)
+import "aql:parselang"  parse (fn [[a:Integer b:Map] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the source param must be String or Any
+import "aql:parselang"  parse (fn [[source:String b:Integer] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the opts param must be a Map
+import "aql:parselang"  parse (fn [[source:Any opts:Map] [Any Any] [source source]]) 'x'	ERROR:parse_bad_signature	a parser yields exactly ONE result — a multi-return fn is rejected (the dispatch contract, enforced at expansion too)
+import "aql:parselang"  def myp 42  parse myp 'x'	ERROR:parse_unknown_lang	a non-fn binding is not a parser — unknown kind unchanged
+import "aql:parselang"  parse (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a parser value
+import "aql:parselang"  def mkb fn [[] [Function] [fn [[a:Integer] [Integer] [a]]]]  parse (mkb) 'x'	ERROR:parse_bad_signature	a computed non-parser fn is rejected — expansion-time and dispatch-time contracts agree

@@ -397,8 +397,9 @@ diff internally with the shared helper.
 
 ### 4.3 Host registration — `RegisterHostTui`
 
-Exactly the `EXTENSION-MODULES.10.md` §2 shape, template
-`RegisterHostParser` (`lang/go/modules/parselang.go`):
+Exactly the `EXTENSION-MODULES.10.md` §2 shape, template the
+(since-removed) `RegisterHostParser` — the frozen kind namespaces retired
+the parse-side original, but RegisterHostTui keeps the recipe:
 
 ```go
 type TuiSpec struct {

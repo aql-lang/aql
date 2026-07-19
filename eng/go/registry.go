@@ -986,12 +986,6 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"parse_bad_matcher": SeverityError,
 	"parse_bad_abnf":    SeverityError,
 	"parse_bad_rule":    SeverityError,
-	// MiniLang.micron's check-mode dry pass (aql:minilang): a
-	// value-decidable registration shape error — a non-Micron or
-	// builtin kind, a non-Function builder, or a spec-Map grammar
-	// with a decidable document error (bad sections, no gate token,
-	// a user-set tag).
-	"micron_literal": SeverityError,
 	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,

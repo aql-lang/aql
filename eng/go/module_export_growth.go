@@ -27,10 +27,11 @@ package eng
 //
 // Notes are PER-PASS state: ResetModuleExportGrowth clears adds/poison (but
 // keeps the registration — a static property of the module implementation)
-// at every check/compile entry point, mirroring ResetParseDeferredKinds.
-// Host-side registration APIs (RegisterHostMiniLang et al) mutate exports
-// from Go between runs, never mid-program — the same out-of-band assumption
-// every check-mode fold already makes.
+// at every check/compile entry point. With the kind namespaces frozen the
+// shipping registrants note NO adds (custom languages are lexically-bound
+// fn values, never export-map keys), so registration alone makes every
+// missing-key read provably stable; the note/poison machinery remains for
+// any future module whose exports can grow mid-program.
 //
 // The ledger is keyed by the export map POINTER (the §4 discipline: aliasing
 // is pointer-payload, not ID-graph — the StoreShapeInfo precedent), and the

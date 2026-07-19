@@ -4,10 +4,10 @@ func init() {
 	registerDocs("aql:parse", map[string]string{
 		"grammar": "Mint a fresh parser-grammar builder: `Parse.grammar` → a Grammar value. " +
 			"Chain Parse.abnf / Parse.rule / Parse.token / Parse.matcher / Parse.action onto it, " +
-			"then finalize with Parse.register.",
+			"then finalize with Parse.parser.",
 		"abnf": "Add an ABNF grammar to a builder: `Parse.abnf <grammar> <abnf-src> <opts?>`. " +
 			"opts: {start:'rule', tag:'name', builtins:Bool, marks:Bool}. The install is deferred " +
-			"to Parse.register so semantic actions (Parse.action) are baked in. github.com/tabnas/abnf/go.",
+			"to Parse.parser so semantic actions (Parse.action) are baked in. github.com/tabnas/abnf/go.",
 		"rule": "Add a declarative grammar rule (the Map-subtype form): `Parse.rule <grammar> <name> <spec>`. " +
 			"spec mirrors Parse.RuleSpec {open:[alt…] close:[alt…]}, each alternate a Parse.AltSpec " +
 			"{s p r b a g n}. An inline Function in `a` is attached as a semantic action.",
@@ -27,9 +27,10 @@ func init() {
 			"a:'@name' references). rule:{name:{open:[alt…] close:[alt…]}} is the GrammarRuleSpec shape " +
 			"(see Parse.RuleSpec/Parse.AltSpec). v gates the builtin config-schema version. The two " +
 			"AQL extensions: abnf (a String, a {src start tag builtins marks} map, or a list of either) " +
-			"and matcher:{name:{priority fn}}. Everything defers to Parse.register and composes with " +
+			"and matcher:{name:{priority fn}}. Everything defers to Parse.parser and composes with " +
 			"the chained builder words. An unknown section is a loud parse_bad_spec.",
-		"register": "Finalize a builder and register it as a `parse <name>` kind: `Parse.register <name> <grammar>`. " +
-			"After import of aql:parselang, run it via the macro: `parse <name> '<source>'`.",
+		"parser": "Finalize a builder into a ParseLang Function VALUE: `Parse.parser <grammar>`. " +
+			"Bind it (`def calc (Parse.parser g)`) or pass it directly, then run it via the " +
+			"`parse` value form: `parse calc '<source>'` / `parse (Parse.parser g) '<source>'`.",
 	})
 }

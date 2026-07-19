@@ -8,9 +8,11 @@
 # The kind is OPTIONAL: bare `emit <data>` routes to emit_auto, which picks the
 # value's natural format (Map/List/scalar/Error → json, Table → csv, Xml → xml).
 # Every emitter traverses the value through the canonical walk engine — one code
-# path for all formats. `EmitLang.register` installs AQL fns as emitters;
-# `EmitLang.kinds` lists them. A shape a format cannot represent raises
-# emit_unsupported; an unknown explicit kind raises emit_unknown_lang.
+# path for all formats. The kind set is FIXED (`EmitLang.kinds` lists it;
+# `EmitLang.register` is a tombstone raising emit_registry_frozen) — custom
+# emitters are Function VALUES (`emit <fn> <data>`, §fnv). A shape a format
+# cannot represent raises emit_unsupported; an unknown explicit kind raises
+# emit_unknown_lang.
 # (Emit results are Strings, so the canonical expected form is single-quoted.)
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -51,9 +53,10 @@ import "aql:emitlang"  emit ini {a:1 b:2}	'a=1\nb=2'	a flat map → bare key=val
 # §7  xml — Xml-only
 import "aql:emitlang"  emit xml <r><c>1</c></r>	'<r><c>1</c></r>'	an Xml element round-trips to well-formed XML
 #
-# §8  out-of-band exports — kinds / register
-import "aql:emitlang"  EmitLang.kinds	[json/q jsonic/q yaml/q csv/q tsv/q toml/q ini/q xml/q]	the registered emitter-kind atoms (the built-in family, in fixed order)
-import "aql:emitlang"  EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end  emit up {a:1}	'UP'	register installs a custom emitter; emit <name> uses it
+# §8  out-of-band exports — kinds / the register tombstone (custom emitters
+#     are def-bound fn VALUES; §fnv pins the value-form contract)
+import "aql:emitlang"  EmitLang.kinds	[json/q jsonic/q yaml/q csv/q tsv/q toml/q ini/q xml/q]	the (fixed) emitter-kind atoms — the built-in family, in fixed order
+import "aql:emitlang"  def up (fn [[value:Any opts:Map] [String] ["UP"]])  emit up {a:1}	'UP'	a def-bound emitter value; emit <name> uses it
 #
 # §9  negatives
 import "aql:emitlang"  emit nope {a:1}	ERROR:emit_unknown_lang	unknown explicit kind: expansion-time error at the call site
@@ -65,11 +68,8 @@ import "aql:emitlang"  emit ini {a:{b:{c:1}}}	ERROR:emit_unsupported	ini support
 import "aql:emitlang"  emit csv {a:1}	ERROR:emit_unsupported	csv needs a table or list of rows — a bare Map is not tabular
 import "aql:emitlang"  emit csv 1	ERROR:emit_unsupported	csv needs a table or list of rows — a scalar is not tabular
 import "aql:emitlang"  emit toml {a:None}	ERROR:emit_unsupported	toml has no null — an unrepresentable scalar errors rather than corrupting the type
-import "aql:emitlang"  EmitLang.register Bad (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	capitalised emitter names are rejected (types)
-import "aql:emitlang"  EmitLang.register bad (fn [[a:Integer] [Integer] [a]])	ERROR:emit_bad_signature	the standard prefix [value:Any opts:Map …] is enforced
-import "aql:emitlang"  EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_bad_name	the emit_ prefix is register's job, not the caller's
-import "aql:emitlang"  EmitLang.register json (fn [[value:Any opts:Map] [String] ["x"]])	ERROR:emit_kind_exists	collision with a built-in emitter
-import "aql:emitlang"  for 2 [EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end]	ERROR:emit_kind_exists	a loop re-registering the same kind is a genuine double-register (idempotency covers only the compiled double-exec, not runtime repeats)
+import "aql:emitlang"  EmitLang.register	ERROR:emit_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
+import "aql:emitlang"  EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]])	ERROR:emit_registry_frozen	a legacy register call fails loudly with the migration hint
 #
 # §10  every per-kind export covered by its qualified name (ADR-003) — the
 #      desugared standard call `EmitLang.emit_<kind> <data> <opts> end`.
@@ -81,3 +81,18 @@ import "aql:emitlang"  EmitLang.emit_tsv [{a:1 b:2}] {} end	'a\tb\n1\t2\n'	emit_
 import "aql:emitlang"  EmitLang.emit_toml {a:1} {} end	'a = 1'	emit_toml — key = value
 import "aql:emitlang"  EmitLang.emit_ini {a:1} {} end	'a=1'	emit_ini — flat key=value
 import "aql:emitlang"  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml — Xml element
+#
+# §fnv  an emitter VALUE as the target — `emit <fn> <opts?> <data>`. The
+#       first operand may BE the emitter: a Function (or a word bound to one)
+#       whose every signature is [value:Any opts:Map …] → [String …] — the
+#       shared EmitLangFnSigWhy validator (the same prefix the built-in kinds
+#       carry). A built-in kind wins a name collision; without these forms a
+#       Function operand would fall to emit_auto and JSON-emit the fn value.
+import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}	'UP'	a word bound to an emitter fn is the value form spelled by name
+import "aql:emitlang"  emit (fn [[value:Any opts:Map] [String] ['VF']]) {a:1}	'VF'	an anonymous emitter fn used inline
+import "aql:emitlang"  def px fn [[value:Any opts:Map] [String] [(opts get 'p') add (emit value)]]  emit px {p:'X:'} {a:1}	'X:{"a":1}'	3-arg form: opts in the middle, data last — opts reach the fn
+#
+# §fnv  value-form negatives — the [value opts]→String contract is enforced
+import "aql:emitlang"  emit (fn [[value:Any opts:Map] [Integer] [1]]) {a:1}	ERROR:emit_bad_signature	an emitter must return a String
+import "aql:emitlang"  emit (fn [[a:Integer b:Map] [String] ['x']]) {a:1}	ERROR:emit_bad_signature	the first parameter must be value:Any
+import "aql:emitlang"  emit (Function) {a:1}	ERROR:uncalled_function	the Function TYPE literal is not an emitter value (auto path, unchanged)

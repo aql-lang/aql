@@ -367,7 +367,9 @@ type LogSinkSpec struct {
     OnMeasure   func(Measurement) error          // optional metrics (phase 5)
 }
 
-// Mirrors RegisterHostParser / RegisterHostEmitter exactly:
+// Mirrors the (since-removed) RegisterHostParser / RegisterHostEmitter
+// recipe — the frozen kind namespaces retired those, but the
+// validate/store/gate shape lives on here:
 //  - validates (lowercase name, non-nil OnRecord, no duplicate)
 //  - stores under CapLogSinks, working before AND after `import "aql:log"`
 //  - gates on the "log" policy scope

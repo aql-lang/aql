@@ -48,7 +48,14 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 	r.Check.RecordFnBinder(name)
 
 	// FnDefInfo body (from fn word): install typed signatures.
-	// Only fn-based defs register functions; simple value defs just use DefStacks.
+	// Only fn-based defs register functions; simple value defs just use
+	// DefStacks. A Function-FAMILY body with no FnDefInfo payload — a
+	// CARRIER under analysis — installs NOTHING here: the compiled closure
+	// machinery (RecordDynBind / MarkValueDef / closure render) owns such
+	// names, and a visible Defs binding diverts its provenance modeling.
+	// The def word's handler records the carrier in the check-scoped
+	// fn-carrier side table instead (native installAndRecordDef), which the
+	// parse/mini/emit value-form macros consult for name resolution.
 	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
 		fnDef, ok := body.Data.(FnDefInfo)
 		if !ok {

@@ -95,9 +95,11 @@ func TestParseLangIniSourceErrors(t *testing.T) {
 	}
 }
 
-// TestParseLangIniNotReRegisterable confirms ini occupies its kind slot: a
-// host parser cannot claim the name once the module is built.
-func TestParseLangIniNotReRegisterable(t *testing.T) {
+// TestParseLangIniKindNotShadowable confirms ini occupies its kind slot: the
+// built-in kind wins over a same-named value binding, so a host parser bound
+// as `ini` never intercepts `parse ini`. (The calc parser would reject
+// 'b = hello' — only the built-in decodes it.)
+func TestParseLangIniKindNotShadowable(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
@@ -105,14 +107,18 @@ func TestParseLangIniNotReRegisterable(t *testing.T) {
 	if _, err := a.Run(iniImp); err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	spec := lang.ParseLangSpec{
+	v, err := lang.NewParseLangFn(lang.ParseLangSpec{
 		Name:    "ini",
 		Returns: []*lang.Type{lang.TMap},
 		Handler: calcParserSpec().Handler,
+	})
+	if err != nil {
+		t.Fatalf("NewParseLangFn: %v", err)
 	}
-	if err := a.RegisterParser(spec); err == nil {
-		t.Fatal("expected error re-registering the built-in ini parser")
-	} else if !strings.Contains(err.Error(), "already registered") {
-		t.Fatalf("error %q should say already registered", err.Error())
+	if err := a.DefineValue("ini", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
+	}
+	if got := runLast(t, a, `(parse ini 'b = hello') get 'b'`); got != "hello" {
+		t.Fatalf("built-in ini should win over the binding: got %v, want hello", got)
 	}
 }

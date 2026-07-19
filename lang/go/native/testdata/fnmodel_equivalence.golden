@@ -236,7 +236,11 @@ WORD each
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
 WORD emit
+  [Type/Function Any Any] barrier=3 runcheck returns=[Scalar/String]
+  [Word/__FN Any Any] barrier=3 runcheck returns=[Scalar/String]
   [Scalar/Atom Any Any] barrier=3 runcheck quote={0} returns=[Scalar/String]
+  [Type/Function Any] barrier=2 runcheck returns=[Scalar/String]
+  [Word/__FN Any] barrier=2 runcheck returns=[Scalar/String]
   [Scalar/Atom Any] barrier=2 runcheck quote={0} returns=[Scalar/String]
   [Any Any] barrier=2 runcheck returns=[Scalar/String]
   [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Scalar/String]
@@ -471,7 +475,11 @@ WORD merge
   [Node/List Node/Map] barrier=2 returns=[Node/List]
   [Any Any] barrier=2 returns=[Any] +returnsfn
 WORD mini
+  [Type/Function Scalar/String Node/Map] barrier=3 runcheck returns=[Any]
+  [Word/__FN Scalar/String Node/Map] barrier=3 runcheck returns=[Any]
   [Scalar/Atom Scalar/String Node/Map] barrier=3 runcheck quote={0} returns=[Any]
+  [Type/Function Scalar/String] barrier=2 runcheck returns=[Any]
+  [Word/__FN Scalar/String] barrier=2 runcheck returns=[Any]
   [Scalar/Atom Scalar/String] barrier=2 runcheck quote={0} returns=[Any]
 WORD mmap
   [Scalar/Micron/Pathon Node/Map] barrier=2 returns=[Ideal/Mmap]
@@ -543,7 +551,11 @@ WORD pad
   [Scalar/Number/Integer Any] barrier=2 returns=[Scalar/String]
   [Any] barrier=1 returns=[Scalar/String]
 WORD parse
+  [Type/Function Node/Map Any] barrier=3 runcheck returns=[Any]
+  [Word/__FN Node/Map Any] barrier=3 runcheck returns=[Any]
   [Scalar/Atom Node/Map Any] barrier=3 runcheck quote={0} returns=[Any]
+  [Type/Function Any] barrier=2 runcheck returns=[Any]
+  [Word/__FN Any] barrier=2 runcheck returns=[Any]
   [Scalar/Atom Any] barrier=2 runcheck quote={0} returns=[Any]
   [Scalar/String] barrier=1 returns=[Any] +returnsfn
 WORD pathof
