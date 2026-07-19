@@ -362,11 +362,24 @@ width wrapping):
    (`{a:1 # note b:2}` → the `}` is inside the comment → unbalanced). Any
    container with a line comment now renders multi-line, closing on its own
    line.
+6. **Content after a leading block comment dropped** — `## bc ## foo` →
+   `## bc ##` (the `foo` deleted), because emitStatement returned only a
+   leading comment's text; now only fires for a comment-ONLY statement.
+7. **`##` mis-modelled as a bounded block comment** — AQL has none (`#` and
+   `##` both run to end of line; `## c ## print 42` runs nothing, verified),
+   but the hand-lexer treated `## … ##` as bounded and REFORMATTED what
+   followed as code (`## t ## x is integer` → `## t ## x is Integer`,
+   corrupting comment text). `#`/`##` are now one line-comment kind; the
+   `TokBlockComment` / `NdBlockComment` types (a construct that never
+   existed) are gone. **Found by the Phase-4 tabnas-lexer probe** — the
+   configured lexer returns the whole `## … ##` span as one `#CM`, which
+   exposed the mismodel; the CST investigation paid off before any CST was
+   built.
 
-Bugs 4–5 were found by a second sweep over all 100 repo `.aql` programs;
-the final verification is that fmt turns **0 of the 99 parseable files**
-into unparseable source. The risk was never the layout, it was fmt changing
-what code MEANS.
+Bugs 4–7 were found by sweeping all repo `.aql` programs (and, for 7, the
+Phase-4 lexer probe); the final verification is that fmt turns **0 of the
+72 parseable files** into unparseable source. The risk was never the
+layout, it was fmt changing what code MEANS.
 
 **Known non-corruption limitation (pre-existing, cosmetic):** the
 bracketless single-param fn form is not idempotent when it must wrap — the
