@@ -76,7 +76,7 @@ func TestFloatToBigDecimalRejections(t *testing.T) {
 		name             string
 		f                float64
 		accuracy         string
-		places           int
+		places           int64
 		placesSet        bool
 		wantErrSubstring string
 	}{
@@ -88,6 +88,9 @@ func TestFloatToBigDecimalRejections(t *testing.T) {
 		{"shortest-with-places", 1.0, "shortest", 2, true, "does not take a places option"},
 		{"round-without-places", 1.0, "round", 0, false, "requires a places option"},
 		{"round-negative-places", 1.0, "round", -1, true, "must be non-negative"},
+		// The `places` cap: an impractically large request is rejected up
+		// front rather than materialising a billion-digit string (DoS).
+		{"round-places-too-large", 1.0, "round", maxFloatFractionDigits + 1, true, "exceeds the maximum"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -97,6 +100,37 @@ func TestFloatToBigDecimalRejections(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), c.wantErrSubstring) {
 				t.Fatalf("%s: error %q missing %q", c.name, err.Error(), c.wantErrSubstring)
+			}
+		})
+	}
+}
+
+// TestFloatToBigDecimalSignedZero: exact and round preserve a negative
+// sign bit that big.Rat drops for zero, staying consistent with shortest.
+func TestFloatToBigDecimalSignedZero(t *testing.T) {
+	negZero := math.Copysign(0, -1)
+	cases := []struct {
+		name      string
+		f         float64
+		accuracy  string
+		places    int64
+		placesSet bool
+		want      string
+	}{
+		{"exact-neg-zero", negZero, "exact", 0, false, "-0d0"},
+		{"round-neg-zero", negZero, "round", 2, true, "-0d0.00"},
+		{"exact-pos-zero", 0.0, "exact", 0, false, "0d0"},
+		// A negative value that rounds to zero keeps the IEEE sign too.
+		{"round-neg-to-zero", -0.4, "round", 0, true, "-0d0"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := floatToBigDecimal(c.f, c.accuracy, c.places, c.placesSet)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			if got := mustDec(t, out); got != c.want {
+				t.Fatalf("%s = %q, want %q", c.name, got, c.want)
 			}
 		})
 	}

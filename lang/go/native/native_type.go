@@ -1349,7 +1349,11 @@ func bigDecimalToBigIntTrunc(src Value) (*big.Int, error) {
 // A non-finite Float (NaN / ±Inf) has no decimal expansion and is
 // refused. This is reached only from the 3-arg convert with an accuracy
 // option present — without it, Float → BigDecimal stays a hard error.
-func floatToBigDecimal(f float64, accuracy string, places int, placesSet bool) (Value, error) {
+//
+// `places` is carried as an int64 so an out-of-range request is caught
+// before any int narrowing (a 32-bit `int(places)` could otherwise wrap
+// a billion into a small or negative value and slip past the bound).
+func floatToBigDecimal(f float64, accuracy string, places int64, placesSet bool) (Value, error) {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return Value{}, fmt.Errorf("convert: cannot convert non-finite Float (%s) to BigDecimal", FormatFloat(f))
 	}
@@ -1368,12 +1372,13 @@ func floatToBigDecimal(f float64, accuracy string, places int, placesSet bool) (
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
 		}
-		return NewBigDecimal(d), nil
+		return NewBigDecimal(applyFloatSign(f, d)), nil
 	case "shortest":
 		if placesSet {
 			return Value{}, fmt.Errorf("convert: accuracy %q does not take a places option", accuracy)
 		}
-		// apd.SetFloat64 uses strconv's shortest round-tripping form.
+		// apd.SetFloat64 uses strconv's shortest round-tripping form
+		// (it already carries the sign bit, including a negative zero).
 		d := new(apd.Decimal)
 		if _, err := d.SetFloat64(f); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
@@ -1386,18 +1391,44 @@ func floatToBigDecimal(f float64, accuracy string, places int, placesSet bool) (
 		if places < 0 {
 			return Value{}, fmt.Errorf("convert: places must be non-negative, got %d", places)
 		}
+		// A float64 has at most maxFloatFractionDigits fractional digits
+		// (the smallest subnormal, 2^-1074), so rounding to more places
+		// than that only appends zeros while FloatString would still
+		// materialise every one — an unbounded string from a small
+		// number. Reject the impractical request rather than hang.
+		if places > maxFloatFractionDigits {
+			return Value{}, fmt.Errorf("convert: places %d exceeds the maximum %d (a float64 has no more fractional digits)", places, maxFloatFractionDigits)
+		}
 		// FloatString rounds the exact rational value to `places` digits,
 		// half away from zero — so the rounding sees the true stored
 		// value, not the already-shortened display form.
 		r := new(big.Rat).SetFloat64(f)
-		d, _, err := apd.NewFromString(r.FloatString(places))
+		d, _, err := apd.NewFromString(r.FloatString(int(places)))
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
 		}
-		return NewBigDecimal(d), nil
+		return NewBigDecimal(applyFloatSign(f, d)), nil
 	default:
 		return Value{}, fmt.Errorf("convert: unknown accuracy %q (want \"exact\", \"shortest\", or \"round\")", accuracy)
 	}
+}
+
+// maxFloatFractionDigits is the most fractional decimal digits any finite
+// float64 can carry: the smallest positive subnormal is 2^-1074, whose
+// exact decimal expansion has exactly 1074 places.
+const maxFloatFractionDigits = 1074
+
+// applyFloatSign restores a negative sign bit that big.Rat drops for a
+// zero: big.Rat has no signed zero, so the exact/round expansions of
+// -0.0 (and of a negative value that rounds to zero) come back as a
+// positive 0d0. apd's BigDecimal can represent signed zero, and AQL
+// treats -0.0 as a first-class Float, so we preserve math.Signbit here
+// to stay consistent with the shortest mode (which keeps it natively).
+func applyFloatSign(f float64, d *apd.Decimal) *apd.Decimal {
+	if math.Signbit(f) && d.IsZero() {
+		d.Negative = true
+	}
+	return d
 }
 
 func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -1449,7 +1480,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	base := ""
 	truthy := false
 	accuracy := ""
-	places := 0
+	var places int64
 	placesSet := false
 	if opts.Data != nil {
 		m, _ := AsMap(opts)
@@ -1464,8 +1495,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				accuracy = ValToString(av)
 			}
 			if pv, ok := m.Get("places"); ok && pv.Parent != nil && pv.Parent.ConformsTo(TInteger) {
-				pi, _ := AsInteger(pv)
-				places = int(pi)
+				places, _ = AsInteger(pv)
 				placesSet = true
 			}
 		}
