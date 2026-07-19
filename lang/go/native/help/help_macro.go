@@ -119,8 +119,9 @@ func init() {
 			"Table → csv, Xml → xml). Built-in kinds: json, jsonic, yaml, csv, tsv, toml, ini, xml " +
 			"(opts {pretty:true} / {indent:N} for json/jsonic/yaml/xml; {separation:sep} for csv). " +
 			"Every emitter traverses the value through the canonical walk engine — one code path " +
-			"for all formats. Emitters live in the aql:emitlang module (import it first; " +
-			"EmitLang.kinds lists them; register your own with EmitLang.register). An unknown " +
+			"for all formats. The built-in emitters live in the aql:emitlang module (import it " +
+			"first; EmitLang.kinds lists them) and the kind set is FIXED — new kinds cannot be " +
+			"registered. An unknown " +
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
 			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported. The first argument may " +
 			"instead BE the emitter — a fn (or a word bound to one) whose every signature is " +

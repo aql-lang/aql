@@ -663,6 +663,29 @@ func NewFormatParserFn(name string, f native.Format) (Value, error) {
 	return modules.NewFormatParserFn(name, f)
 }
 
+// EmitLangSpec describes a Go-implemented emitter for NewEmitLangFn. The
+// standard [value:Any opts:Map] prefix is supplied automatically; declare
+// only the Returns (nil → [String]) and the Handler.
+type EmitLangSpec = modules.EmitLangSpec
+
+// NewEmitLangFn builds an emitter Function VALUE from spec — the emit kind
+// namespace is fixed (built-in kinds only), so a Go-implemented emitter is
+// handed to programs as a value instead of a registered kind. Bind it with
+// DefineValue (or export it from a module) and call it through the `emit`
+// word's value form. The handler receives args[0]=value, args[1]=opts.
+//
+// Example — an uppercase debug emitter:
+//
+//	e, _ := lang.NewEmitLangFn(lang.EmitLangSpec{
+//	    Name:    "up",
+//	    Handler: upEmitHandler, // renders the value, uppercased
+//	})
+//	a.DefineValue("up", e)
+//	a.Run(`emit up {a:1}`) // the value form needs no import
+func NewEmitLangFn(spec EmitLangSpec) (Value, error) {
+	return modules.NewEmitLangFn(spec)
+}
+
 // DefineValue binds name to v in the instance's definition table — the host
 // twin of `def name <value>` (lowercase names; capitalised names are types —
 // use DefineType). The canonical way to install a NewParseLangFn value so

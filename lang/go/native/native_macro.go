@@ -941,9 +941,8 @@ func MiniLangFnFilterShaped(fnDef FnDefInfo) bool {
 // signature must be [value:Any opts:Map …] → [String …] (the first
 // parameter exactly Any so the emitter accepts every value) — or "" when it
 // conforms. It is the single contract shared by the `emit` macro's
-// fn-operand form (emitFnExpand) and aql:emitlang's EmitLang.register
-// validation (modules/emitlang.go), so both surfaces enforce byte-identical
-// requirements.
+// fn-operand form (emitFnExpand) and the NewEmitLangFn value constructor
+// (modules/langvalue.go builds conforming values by construction).
 func EmitLangFnSigWhy(fnDef FnDefInfo) string {
 	for _, sig := range fnDef.Signatures {
 		if len(sig.Params) < 2 {
@@ -1101,13 +1100,13 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
 			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
+				`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`,
 				args[0].Pos())
 			return []Value{NewDynamicCarrier(TString)}, nil
 		}
 		return nil, r.AqlErrorHint("emit_unknown_lang",
 			fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-			`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`)
+			`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`)
 	}
 
 	// Reconstruct a /q'd leading bare word as a Word so the variable it names
@@ -1152,8 +1151,8 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 // into the direct call `<fn> <data> <opts> end`, spliced at the call site —
 // the fn supplied by the caller instead of the EmitLang namespace. fn must
 // be a concrete Function whose every signature is [value:Any opts:Map …] →
-// [String …] — the same contract EmitLang.register enforces
-// (EmitLangFnSigWhy). A Function-typed carrier under analysis degrades to a
+// [String …] — the shared EmitLangFnSigWhy contract. A
+// Function-typed carrier under analysis degrades to a
 // dynamic String like the other not-statically-expandable macro paths.
 func emitFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 	fnDef, ok := fn.Data.(FnDefInfo)

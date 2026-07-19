@@ -101,7 +101,8 @@ func TestEmitBuiltins(t *testing.T) {
 }
 
 // TestEmitNegatives pins the error contract: unknown kinds, unsupported
-// shapes, and register validation — the negative half of the test discipline.
+// shapes, the register tombstone, and the value-form signature contract —
+// the negative half of the test discipline.
 func TestEmitNegatives(t *testing.T) {
 	cases := []struct{ src, wantCode string }{
 		{emitImp + `emit nope {a:1}`, "emit_unknown_lang"},
@@ -114,14 +115,15 @@ func TestEmitNegatives(t *testing.T) {
 		{emitImp + `emit csv 1`, "emit_unsupported"},
 		// toml cannot represent None (no null) — it errors, never corrupts
 		{emitImp + `emit toml {a:None}`, "emit_unsupported"},
-		{emitImp + `EmitLang.register Bad (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_bad_name"},
-		{emitImp + `EmitLang.register bad (fn [[a:Integer] [Integer] [a]])`, "emit_bad_signature"},
-		// the value parameter must be Any (an emitter must accept every value)
-		{emitImp + `EmitLang.register narrow (fn [[value:Integer opts:Map] [String] ["x"]])`, "emit_bad_signature"},
-		// the return type must be String (emit is value→string)
-		{emitImp + `EmitLang.register numret (fn [[value:Any opts:Map] [Integer] [1]])`, "emit_bad_signature"},
-		{emitImp + `EmitLang.register emit_x (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_bad_name"},
-		{emitImp + `EmitLang.register json (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_kind_exists"},
+		// the registration surface is a TOMBSTONE — with and without legacy args
+		{emitImp + `EmitLang.register`, "emit_registry_frozen"},
+		{emitImp + `EmitLang.register up (fn [[value:Any opts:Map] [String] ["x"]])`, "emit_registry_frozen"},
+		// the value-form contract: the value parameter must be Any (an emitter
+		// must accept every value), and the return type must be String
+		{emitImp + `def shorty (fn [[a:Integer] [Integer] [a]])  emit shorty {a:1}`, "emit_bad_signature"},
+		{emitImp + `def narrow (fn [[value:Integer opts:Map] [String] ["x"]])  emit narrow {a:1}`, "emit_bad_signature"},
+		{emitImp + `def numret (fn [[value:Any opts:Map] [Integer] [1]])  emit numret {a:1}`, "emit_bad_signature"},
+		{emitImp + `def wrongopts (fn [[value:Any opts:Integer] [String] ["x"]])  emit wrongopts {a:1}`, "emit_bad_signature"},
 	}
 	for _, c := range cases {
 		_, err := runEmit(t, c.src)
@@ -175,8 +177,8 @@ func TestEmitOptsSchemaTypoRejected(t *testing.T) {
 		{emitImp + `emit json {indent:1.0} {a:1}`, "'{\\n \"a\": 1\\n}'"},
 		// {prety:…} in the DATA slot is plain data, never options
 		{emitImp + `emit json {prety:true}`, `'{"prety":true}'`},
-		// an AQL-registered emitter owns its key set — arbitrary keys pass
-		{emitImp + `EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end  emit up {whatever:1} {a:1}`, `'UP'`},
+		// a def-bound emitter value owns its key set — arbitrary keys pass
+		{emitImp + `def up (fn [[value:Any opts:Map] [String] ["UP"]])  emit up {whatever:1} {a:1}`, `'UP'`},
 	}
 	for _, c := range accepted {
 		got, err := runEmit(t, c.src)
@@ -190,9 +192,10 @@ func TestEmitOptsSchemaTypoRejected(t *testing.T) {
 	}
 }
 
-// TestEmitHostEmitterOptsUnchecked pins that a HOST-registered emitter
-// (RegisterHostEmitter) keeps a plain-Map opts slot: its key set belongs to
-// the host handler, so arbitrary keys must dispatch.
+// TestEmitHostEmitterOptsUnchecked pins that a Go value-form emitter
+// (NewEmitLangFn) keeps a plain-Map opts slot: its key set belongs to the
+// host handler, so arbitrary keys must dispatch. The binding needs NO
+// import — the value form is import-free.
 func TestEmitHostEmitterOptsUnchecked(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {
@@ -200,7 +203,7 @@ func TestEmitHostEmitterOptsUnchecked(t *testing.T) {
 	}
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
-	if err := RegisterHostEmitter(reg, EmitLangSpec{
+	v, err := NewEmitLangFn(EmitLangSpec{
 		Name: "hostfmt",
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
 			opts := native.OptsToMap(args[1])
@@ -209,10 +212,12 @@ func TestEmitHostEmitterOptsUnchecked(t *testing.T) {
 			}
 			return []native.Value{native.NewString("PLAIN")}, nil
 		},
-	}); err != nil {
-		t.Fatalf("RegisterHostEmitter: %v", err)
+	})
+	if err != nil {
+		t.Fatalf("NewEmitLangFn: %v", err)
 	}
-	values, perr := parser.Parse(emitImp + `emit hostfmt {custom:1} {a:1}`)
+	native.InstallDef(reg, "hostfmt", v)
+	values, perr := parser.Parse(`emit hostfmt {custom:1} {a:1}`)
 	if perr != nil {
 		t.Fatalf("parse: %v", perr)
 	}
@@ -225,10 +230,10 @@ func TestEmitHostEmitterOptsUnchecked(t *testing.T) {
 	}
 }
 
-// TestEmitRegisterRoundTrip pins a custom emitter installed via
-// EmitLang.register and used through `emit <name>`.
+// TestEmitRegisterRoundTrip pins a def-bound custom emitter used through
+// `emit <name>`.
 func TestEmitRegisterRoundTrip(t *testing.T) {
-	src := emitImp + `EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]]) end  emit up {a:1}`
+	src := emitImp + `def up (fn [[value:Any opts:Map] [String] ["UP"]])  emit up {a:1}`
 	got, err := runEmit(t, src)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

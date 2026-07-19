@@ -124,3 +124,44 @@ func NewMiniLangFn(spec MiniLangSpec) (native.Value, error) {
 	}
 	return wrapMiniFnDef(inner, [][]native.FnParam{params}, spec.Returns, nil, subReg), nil
 }
+
+// NewEmitLangFn builds an emitter Function VALUE from spec — the value-form
+// successor of the removed RegisterHostEmitter. The value carries the
+// standard [value:Any opts:Map] prefix, so it satisfies the `emit` word's
+// contract (EmitLangFnSigWhy): `emit <name> <data>` works once the value is
+// bound to <name>. The emitter owns its opts key set (no Options-schema
+// pattern — that is a built-in-kind refinement).
+func NewEmitLangFn(spec EmitLangSpec) (native.Value, error) {
+	if spec.Name == "" {
+		return native.Value{}, fmt.Errorf("new emitter fn: Name must not be empty")
+	}
+	if spec.Handler == nil {
+		return native.Value{}, fmt.Errorf("new emitter fn %q: Handler must not be nil", spec.Name)
+	}
+	subReg, err := newDefaultRegistry()
+	if err != nil {
+		return native.Value{}, err
+	}
+	returns := spec.Returns
+	if returns == nil {
+		returns = []*native.Type{native.TString}
+	}
+	inner := "emitlang-value-" + spec.Name
+	subReg.RegisterNativeFunc(native.NativeFunc{
+		Name: inner,
+		Signatures: []native.Signature{{
+			Args:       []*native.Type{native.TAny, native.TMap},
+			Returns:    returns,
+			BarrierPos: -1,
+			Impl:       native.Go(spec.Handler),
+		}},
+	})
+	// RegisterNativeFunc records an invalid word name instead of installing
+	// (ADR-005: no panics) — surface it as this constructor's error.
+	if subReg.Lookup(inner) == nil {
+		return native.Value{}, fmt.Errorf("new emitter fn %q: name is not a valid word (use a plain lowercase name)", spec.Name)
+	}
+	return wrapMiniFnDef(inner, [][]native.FnParam{
+		{{Type: native.TAny}, {Type: native.TMap}},
+	}, returns, nil, subReg), nil
+}

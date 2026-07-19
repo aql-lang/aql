@@ -44,6 +44,34 @@ func TestNewFormatParserFnLangSurface(t *testing.T) {
 	}
 }
 
+// TestNewEmitLangFnLangSurface drives the lang-level NewEmitLangFn wrapper:
+// the built value binds with DefineValue and emits import-free.
+func TestNewEmitLangFnLangSurface(t *testing.T) {
+	a, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := NewEmitLangFn(EmitLangSpec{
+		Name: "up",
+		Handler: func(_ []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+			return []native.Value{native.NewString("UP")}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewEmitLangFn: %v", err)
+	}
+	if err := a.DefineValue("up", v); err != nil {
+		t.Fatalf("DefineValue: %v", err)
+	}
+	got, err := a.Run(`emit up {a:1}`)
+	if err != nil {
+		t.Fatalf("emit up: %v", err)
+	}
+	if len(got) != 1 || got[0] != "UP" {
+		t.Fatalf("emit up = %v, want [UP]", got)
+	}
+}
+
 // bracketFormat is a test format.
 type bracketFormat struct{}
 

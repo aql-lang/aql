@@ -232,45 +232,9 @@ func TestSeam6DStampExportProvenanceSkips(t *testing.T) {
 	}
 }
 
-// TestSeam6DRegisterCollisionCheckModeReanalysis pins the checkMode
-// re-analysis arm of registerCollisionInstall: analysing the SAME register
-// call twice during one check pass is a quiet no-op, while the runtime
-// re-run consumes the idempotency and a further runtime repeat collides.
-func TestSeam6DRegisterCollisionCheckModeReanalysis(t *testing.T) {
-	exports := native.NewOrderedMap()
-	idents := map[string]registerIdent{}
-	fn := native.NewInteger(1)
-	fn.SetPos(native.SrcPos{Row: 3, Col: 7, Src: "seam6d.aql"})
-	existsErr := func() error { return errors.New("kind_exists") }
-
-	if err := registerCollisionInstall(exports, idents, "k", fn, true, existsErr); err != nil {
-		t.Fatalf("first check-mode install: %v", err)
-	}
-	if err := registerCollisionInstall(exports, idents, "k", fn, true, existsErr); err != nil {
-		t.Errorf("check-mode re-analysis of the same call must be a no-op, got %v", err)
-	}
-	if err := registerCollisionInstall(exports, idents, "k", fn, false, existsErr); err != nil {
-		t.Errorf("the one VM re-run of the check install must be idempotent, got %v", err)
-	}
-	if err := registerCollisionInstall(exports, idents, "k", fn, false, existsErr); err == nil {
-		t.Error("a further runtime repeat (loop iteration) must collide")
-	}
-}
-
-// TestSeam6DSurfaceRegisterCheckErrorNilArms pins the nil-registry /
-// nil-error early return of surfaceRegisterCheckError.
-func TestSeam6DSurfaceRegisterCheckErrorNilArms(t *testing.T) {
-	at := native.NewString("x")
-	surfaceRegisterCheckError(nil, errors.New("boom"), at) // nil registry: no panic
-	r, err := native.DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	surfaceRegisterCheckError(r, nil, at) // nil error: no diagnostic
-	if n := len(r.Check.Diagnostics); n != 0 {
-		t.Errorf("nil error must add no diagnostics, got %d", n)
-	}
-}
+// (The registerCollisionInstall / surfaceRegisterCheckError seams died with
+// register_common.go — the last register word became a tombstone and the
+// shared idempotency machinery was deleted with the frozen namespaces.)
 
 // TestSeam6DGexCompileSeamFailure drives gexCompile's regexp-compile error
 // arm and its propagation (with hint) through miniGexHandler. The glob
