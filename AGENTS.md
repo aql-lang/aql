@@ -10,6 +10,18 @@ This file is a **router**. It points you at the right documentation and
 tools for the task in front of you; it does not duplicate them. Read the
 linked source — it is authoritative, this page is just the index.
 
+> **The repo as data — the project knowledge graph.** The repository
+> ships a machine-readable map of itself: modules, documents, tools,
+> and core concepts, with every relation backed by a quoted passage
+> from the docs — [`kg/out/graph.json`](kg/out/graph.json), built by
+> the AQL pipeline in [`kg/`](kg/README.md). Read it to orient fast;
+> query it with `kg/queries.aql`. **If your PR changes the repository's
+> structure, tooling, or documentation set, update
+> [`kg/project/aql-project.jsonic`](kg/project/aql-project.jsonic) and
+> rebuild with `make -C kg graph` so the committed graph stays
+> current** (the build is deterministic — unchanged input, unchanged
+> bytes).
+
 
 ## First: let the tool document itself (`aql describe` / `aql help`)
 
@@ -86,6 +98,7 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 | The key architectural decisions and their rationale | [ADR.md](ADR.md) |
 | The formal semantics | [FORMAL-SPEC.md](FORMAL-SPEC.md) |
 | The executable language spec (the rows tests run against) | [`lang/spec/*.tsv`](lang/spec/) |
+| See the repository itself as a graph (modules, docs, concepts, evidence) | [`kg/out/graph.json`](kg/out/graph.json) — guide: [kg/README.md](kg/README.md) |
 
 
 ## Build, test, verify
@@ -139,4 +152,5 @@ A few rules from those guides that bite hardest when missed:
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP fixtures. |
+| `kg/` | The project knowledge graph: an evidence-backed AQL pipeline and its generated bundle. |
 | `design/` | Internal design notes and proposals (historical record). |

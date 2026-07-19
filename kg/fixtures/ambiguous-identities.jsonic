@@ -1,0 +1,66 @@
+# ambiguous-identities.jsonic — identity-resolution exercises:
+#   nova-a / nova-b  share an authoritative identifier -> automatic merge
+#   reyes-a / reyes-b same name only                   -> possible_match,
+#                                                        review, NO merge
+#   kite-a / kite-b  same name, conflicting identifier -> different_entity
+{
+  sources: [
+    {
+      id: "src:directory"
+      kind: "jsonic"
+      locator: "fixtures/ambiguous-identities.jsonic"
+      title: "Merged Membership Directories"
+      retrieved_at: "2026-05-01T00:00:00Z"
+      content_hash: "fixture-directory-v1"
+      authority: "secondary"
+      metadata: {}
+    }
+  ]
+  entities: [
+    {
+      key: "nova-a"
+      type: "Person"
+      label: "Lin Nova"
+      external_ids: { orcid: "0000-0002-1825-0097" }
+      attributes: { field: "astrodynamics" }
+    }
+    {
+      key: "nova-b"
+      type: "Person"
+      label: "L. Nova"
+      external_ids: { orcid: "0000-0002-1825-0097" }
+      attributes: { chapter: "north" }
+    }
+    { key: "reyes-a", type: "Person", label: "Sam Reyes", attributes: { chapter: "north" } }
+    { key: "reyes-b", type: "Person", label: "Sam Reyes", attributes: { chapter: "south" } }
+    {
+      key: "kite-a"
+      type: "Person"
+      label: "Jo Kite"
+      external_ids: { staffno: "K-100" }
+    }
+    {
+      key: "kite-b"
+      type: "Person"
+      label: "Jo Kite"
+      external_ids: { staffno: "K-200" }
+    }
+  ]
+  assertions: [
+    {
+      subject: "nova-a"
+      predicate: "related_to"
+      object: { kind: "entity", entity: "reyes-a" }
+      evidence: [
+        {
+          source: "src:directory"
+          locator: "entities[0]"
+          quote: "Lin Nova (mentor: Sam Reyes)"
+          extraction_method: "direct_record"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.85
+    }
+  ]
+}

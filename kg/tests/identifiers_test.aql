@@ -1,0 +1,77 @@
+# identifiers_test.aql — deterministic ids, collision handling, and the
+# normalization/id property tests.
+# Run from kg/:  ../cmd/go/bin/aql tests/identifiers_test.aql
+
+import "aql:test"
+import "./identifiers.aql"
+import "./normalize.aql"
+
+# -- deterministic ids ----------------------------------------------------
+
+[ (KgId.entity-id "Person" "ada lovelace" "ada")
+  (KgId.entity-id "Person" "ada lovelace" "ada") Assert.equal ]
+  "identical entity input yields the identical id" Test.test end
+
+[ ((KgId.entity-id "Person" "ada" "k1") eq (KgId.entity-id "Organization" "ada" "k1"))
+  false Assert.equal ]
+  "the entity type participates in the fingerprint" Test.test end
+
+[ ((KgId.entity-id "Person" "sam reyes" "reyes-a") eq (KgId.entity-id "Person" "sam reyes" "reyes-b"))
+  false Assert.equal ]
+  "same-named candidates with distinct keys get distinct ids" Test.test end
+
+def obj {kind: "entity" entity_id: "ent:b"}
+[ (KgId.assertion-id "ent:a" "works_for" obj none none ["src:2" "src:1"])
+  (KgId.assertion-id "ent:a" "works_for" obj none none ["src:1" "src:2"]) Assert.equal ]
+  "evidence source order does not change the assertion id" Test.test end
+
+[ ((KgId.assertion-id "ent:a" "works_for" obj none none ["src:1"])
+   eq (KgId.assertion-id "ent:a" "works_for" obj "2024-01-01" none ["src:1"]))
+  false Assert.equal ]
+  "the validity interval participates in the fingerprint" Test.test end
+
+[ (KgId.source-id "a.json" "h1") (KgId.source-id "a.json" "h1") Assert.equal ]
+  "source ids are deterministic" Test.test end
+
+# -- collision handling ---------------------------------------------------
+
+[ (KgId.collisions [{id: "x" canon: "a"} {id: "x" canon: "a"} {id: "y" canon: "b"}])
+  [] Assert.equal ]
+  "re-claiming an id for the same canonical input is not a collision" Test.test end
+
+def clash (KgId.collisions [{id: "x" canon: "a"} {id: "x" canon: "b"}])
+[ (clash size) 1 Assert.equal ]
+  "an id claimed for two canonical inputs is a collision" Test.test end
+[ ((clash get 0) get "id") "x" Assert.equal ]
+  "the collision names the contested id" Test.test end
+
+# -- normalization --------------------------------------------------------
+
+[ (KgNorm.norm-label "  Ada\t\tLOVELACE  ") "ada lovelace" Assert.equal ]
+  "norm-label trims, collapses whitespace, and lowercases" Test.test end
+[ (KgNorm.norm-display "  Ada\t Lovelace ") "Ada Lovelace" Assert.equal ]
+  "norm-display preserves case" Test.test end
+
+# -- properties -----------------------------------------------------------
+
+# Idempotence: normalizing a normalized label changes nothing.
+Test.check-prop "norm-label is idempotent"
+  [r.string "aB c\td  E" 24]
+  [var [[s]
+    (KgNorm.norm-label (KgNorm.norm-label s)) eq (KgNorm.norm-label s)
+  ]]
+  60 1 0
+end drop
+
+# Identical canonical inputs generate identical ids.
+Test.check-prop "entity ids are a function of their canonical input"
+  [r.string "abcdefgh " 16]
+  [var [[s]
+    (KgId.entity-id "Concept" (KgNorm.norm-label s) "k")
+      eq (KgId.entity-id "Concept" (KgNorm.norm-label s) "k")
+  ]]
+  60 1 0
+end drop
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [raise test_failed "identifiers_test failures"]

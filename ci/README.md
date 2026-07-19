@@ -12,13 +12,28 @@ by GitHub. Rather than drop the change, it is staged here for a maintainer
 ## What the change is
 
 [`ci/ci.yml`](./ci.yml) is the **full** intended contents of
-`.github/workflows/ci.yml`. The only difference from the version currently
-on `main` is a new step, added immediately after **Test (all modules)**:
+`.github/workflows/ci.yml`. The differences from the version currently
+on `main` are two new steps, added immediately after **Test (all
+modules)**:
 
 ```yaml
       - name: Cover gate (ADR-008)
         run: make cover-gate
+
+      - name: Knowledge graph (check, test, freshness)
+        run: |
+          make -C kg check
+          make -C kg test
+          make -C kg graph
+          git diff --exit-code kg/out
 ```
+
+The second step keeps the committed project knowledge graph
+([`kg/out/graph.json`](../kg/out/graph.json)) honest: it type-checks the
+AQL pipeline, runs its test suite, rebuilds the bundle, and fails the
+build if the committed bundle drifts from the deterministic rebuild —
+mechanically enforcing the "update the graph with each PR" rule in
+[kg/README.md](../kg/README.md).
 
 This enforces ADR-008 (100% coverage across the merged cross-suite profile,
 minus the guards marked `//covergate:allow <reason>`) in CI. Those pragmas

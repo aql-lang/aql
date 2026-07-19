@@ -175,3 +175,8 @@ cmd/go/aqlbin
 /docs/wasm_exec.js
 /docs/sql-wasm.js
 /docs/sql-wasm.wasm
+
+# The generated project knowledge graph bundle is committed on purpose
+# (kg/README.md — refresh it with each PR); un-ignore it from the
+# Next.js `out` rule above.
+!kg/out/

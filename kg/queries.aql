@@ -1,0 +1,216 @@
+# queries.aql — graph queries over a bundle.
+#
+# Every function is a pure fold/filter over the typed lists — no context
+# tables, no hidden state. Traversal is BOUNDED by construction: the
+# only walk depths offered are one and two hops (one-hop-paths /
+# two-hop-paths); there is deliberately no recursive walker. Entity
+# endpoints are resolved through attributes.merged_into first, so a
+# query against a merged duplicate answers as its canonical entity.
+# (aql:query's pipeline resolves its FROM tables by name from the
+# context store, which fits Go-registered tables rather than in-memory
+# bundles — plain filter/fold reads clearer here, so that module is not
+# used.)
+
+import "aql:array-util"
+import "./util.aql"
+import "./schema.aql"
+import "./entities.aql"
+import "./normalize.aql"
+
+def eindex fn [[bundle:Map] [Map] [
+  KgEnt.index-by-id (KgUtil.list-at bundle "entities")
+]]
+
+# ---- entity lookups -----------------------------------------------------
+
+def entity-by-id fn [[bundle:Map id:String] [Any] [
+  (eindex bundle) get id
+]]
+
+def entities-by-type fn [[bundle:Map etype:String] [List] [
+  filter [dot type eq etype] (KgUtil.list-at bundle "entities")
+]]
+
+# Label lookup — matches the normalized label or any alias (the query
+# string is normalized the same way entity labels were).
+def entities-by-label fn [[bundle:Map label:String] [List] [
+  def probe (KgNorm.norm-label label)
+  filter [var [[e]
+    def alias-hit (((filter [var [[al] (KgNorm.norm-label al) eq probe]]
+      (KgUtil.list-at e "aliases")) size) gt 0)
+    (e.normalized_label eq probe) or alias-hit
+  ]] (KgUtil.list-at bundle "entities")
+]]
+
+# ---- assertion lookups --------------------------------------------------
+
+def assertions-for-subject fn [[bundle:Map id:String] [List] [
+  def index (eindex bundle)
+  def cid (KgEnt.canonical-id index id)
+  filter [var [[a]
+    (KgEnt.canonical-id index a.subject_id) eq cid
+  ]] (KgUtil.list-at bundle "assertions")
+]]
+
+def assertions-for-object fn [[bundle:Map id:String] [List] [
+  def index (eindex bundle)
+  def cid (KgEnt.canonical-id index id)
+  filter [var [[a]
+    if (KgSchema.is-entity-ref a.object)
+      [(KgEnt.canonical-id index a.object.entity_id) eq cid]
+      [false]
+  ]] (KgUtil.list-at bundle "assertions")
+]]
+
+def assertions-by-predicate fn [[bundle:Map predicate:String] [List] [
+  filter [dot predicate eq predicate] (KgUtil.list-at bundle "assertions")
+]]
+
+def assertions-by-source fn [[bundle:Map source_id:String] [List] [
+  filter [var [[a]
+    ((filter [dot source_id eq source_id] (KgUtil.list-at a "evidence")) size) gt 0
+  ]] (KgUtil.list-at bundle "assertions")
+]]
+
+# Assertions recorded inside [lo, hi] (RFC3339 strings compare
+# lexicographically, so plain string ordering is the time ordering).
+def assertions-in-range fn [[bundle:Map lo:String hi:String] [List] [
+  filter [var [[a]
+    (a.recorded_at gte lo) and (a.recorded_at lte hi)
+  ]] (KgUtil.list-at bundle "assertions")
+]]
+
+def evidence-for-assertion fn [[bundle:Map assertion_id:String] [List] [
+  def hits (filter [dot id eq assertion_id] (KgUtil.list-at bundle "assertions"))
+  if ((hits size) gt 0) [KgUtil.list-at (hits get 0) "evidence"] [[]]
+]]
+
+# ---- traversal (bounded) ------------------------------------------------
+
+# The graph's edge view: one {from to predicate assertion_id status} per
+# entity-to-entity assertion, endpoints canonicalized through merges;
+# superseded assertions do not contribute edges.
+def edge-list fn [[bundle:Map] [List] [
+  def index (eindex bundle)
+  fold [var [[a acc]
+    if ((KgSchema.is-entity-ref a.object) and (not (a.status eq "superseded")))
+      [
+        push (KgUtil.as-map {
+          from: (KgEnt.canonical-id index a.subject_id)
+          to: (KgEnt.canonical-id index a.object.entity_id)
+          predicate: a.predicate
+          assertion_id: a.id
+          status: a.status
+        }) acc
+      ]
+      [acc]
+  ]] (KgUtil.list-at bundle "assertions") []
+]]
+
+# Direct neighbors (either direction), self excluded, sorted.
+def neighbors fn [[bundle:Map id:String] [List] [
+  def cid (KgEnt.canonical-id (eindex bundle) id)
+  def hits (flatten (each [var [[e]
+    def efrom (e get "from")
+    def eto (e get "to")
+    if (efrom eq cid) [[eto]] [
+      if (eto eq cid) [[efrom]] [[]]
+    ]
+  ]] (edge-list bundle)))
+  filter [neq cid] (KgEnt.distinct-sorted hits)
+]]
+
+# Every edge directly connecting a and b (either direction) — depth 1.
+def one-hop-paths fn [[bundle:Map a:String b:String] [List] [
+  def index (eindex bundle)
+  def ca (KgEnt.canonical-id index a)
+  def cb (KgEnt.canonical-id index b)
+  filter [var [[e]
+    ((e.from eq ca) and (e.to eq cb)) or ((e.from eq cb) and (e.to eq ca))
+  ]] (edge-list bundle)
+]]
+
+# Every two-edge path a — via — b (edges in either direction), with the
+# intermediate distinct from both endpoints — depth 2, never deeper.
+def two-hop-paths fn [[bundle:Map a:String b:String] [List] [
+  def index (eindex bundle)
+  def ca (KgEnt.canonical-id index a)
+  def cb (KgEnt.canonical-id index b)
+  def es (edge-list bundle)
+  def firsts (filter [var [[e] (e.from eq ca) or (e.to eq ca)]] es)
+  flatten (each [var [[e1]
+    def mid (if (e1.from eq ca) [e1.to] [e1.from])
+    if ((mid eq ca) or (mid eq cb)) [[]] [
+      each [var [[e2] KgUtil.as-map {via: mid first: e1 second: e2}]]
+        (filter [var [[e2]
+          ((e2.from eq mid) and (e2.to eq cb)) or ((e2.from eq cb) and (e2.to eq mid))
+        ]] es)
+    ]
+  ]] firsts)
+]]
+
+# ---- review-oriented views ----------------------------------------------
+
+def unresolved-identities fn [[bundle:Map] [List] [
+  filter [var [[d]
+    (d.decision eq "possible_match") or (d.decision eq "insufficient_evidence")
+  ]] (KgUtil.list-at bundle "identity_decisions")
+]]
+
+def conflicting-assertions fn [[bundle:Map] [List] [
+  filter [dot status eq "disputed"] (KgUtil.list-at bundle "assertions")
+]]
+
+def validation-errors fn [[bundle:Map] [List] [
+  filter [dot severity eq "error"] (KgUtil.list-at bundle "validation_issues")
+]]
+
+# The composed human-review queue: identity decisions flagged for
+# review, disputed/unresolved assertions, low-confidence (< 0.80)
+# assertions, and every error-severity validation issue.
+def human-review-items fn [[bundle:Map] [List] [
+  def from-decisions (each [var [[d]
+    KgUtil.as-map {kind: "identity_decision" target_id: d.id
+      reason: `${d.decision} between ${d.left_entity_id} and ${d.right_entity_id} (confidence ${d.confidence})`}
+  ]] (filter [dot review_required eq true] (KgUtil.list-at bundle "identity_decisions")))
+  def from-status (each [var [[a]
+    KgUtil.as-map {kind: "assertion" target_id: a.id
+      reason: `assertion is ${a.status}`}
+  ]] (filter [var [[a]
+    (a.status eq "disputed") or (a.status eq "unresolved")
+  ]] (KgUtil.list-at bundle "assertions")))
+  def from-confidence (each [var [[a]
+    KgUtil.as-map {kind: "assertion" target_id: a.id
+      reason: `confidence ${a.confidence} below 0.80`}
+  ]] (filter [var [[a]
+    (a.confidence lt 0.8) and (not ((a.status eq "disputed") or (a.status eq "unresolved")))
+  ]] (KgUtil.list-at bundle "assertions")))
+  def from-issues (each [var [[i]
+    KgUtil.as-map {kind: "validation_issue" target_id: i.id
+      reason: i.message}
+  ]] (filter [dot severity eq "error"] (KgUtil.list-at bundle "validation_issues")))
+  def items (flatten [from-decisions from-status from-confidence from-issues])
+  items ArrayUtil.sortby (each [var [[x]
+    `${KgUtil.get-or x "kind" ""}|${KgUtil.get-or x "target_id" ""}|${KgUtil.get-or x "reason" ""}`
+  ]] items)
+]]
+
+export "KgQuery" {
+  entity-by-id: entity-by-id/r
+  entities-by-type: entities-by-type/r
+  entities-by-label: entities-by-label/r
+  assertions-for-subject: assertions-for-subject/r
+  assertions-for-object: assertions-for-object/r
+  assertions-by-predicate: assertions-by-predicate/r
+  assertions-by-source: assertions-by-source/r
+  assertions-in-range: assertions-in-range/r
+  evidence-for-assertion: evidence-for-assertion/r
+  edge-list: edge-list/r
+  neighbors: neighbors/r
+  one-hop-paths: one-hop-paths/r
+  two-hop-paths: two-hop-paths/r
+  unresolved-identities: unresolved-identities/r
+  conflicting-assertions: conflicting-assertions/r
+  validation-errors: validation-errors/r
+  human-review-items: human-review-items/r
+}

@@ -1,0 +1,301 @@
+# validate.aql — bundle-level business rules.
+#
+# Every rule reports KgIssue records (severity error/warning/info)
+# instead of raising: invalid data is surfaced, never hidden and never
+# silently repaired. Shape validation already happened at construction
+# (schema.aql make); the rules here need the WHOLE bundle for context —
+# uniqueness, dangling references, vocabulary membership, provenance,
+# merge legality, and fingerprint collisions.
+
+import "aql:struct-util"
+import "./util.aql"
+import "./schema.aql"
+import "./identifiers.aql"
+import "./entities.aql"
+
+# Issue shorthand.
+def iss fn [[severity:String rule:String kind:String target:String message:String] [Map] [
+  KgSchema.mk-issue {
+    id: (KgId.issue-id rule target message)
+    severity: severity
+    rule: rule
+    target_kind: kind
+    target_id: target
+    message: message
+    suggested_correction: none
+    automatic_correction_safe: false
+  }
+]]
+
+# ids appearing more than once, sorted.
+def dup-ids fn [[xs:List] [List] [
+  def counts (fold [var [[x acc]
+    def c (acc get x)
+    acc set (x) (if (c is None) [1] [c add 1])
+  ]] xs {})
+  filter [var [[k] (counts get k) gt 1]] (sort (keys counts))
+]]
+
+def in-range fn [[c:Number] [Boolean] [
+  (c gte 0.0) and (c lte 1.0)
+]]
+
+# ---- sources ------------------------------------------------------------
+
+def check-sources fn [[sources:List] [List] [
+  def dups (each [var [[id]
+    iss "error" "kg_duplicate_source_id" "source" id `duplicate source id ${id}`
+  ]] (dup-ids (each [dot id] sources)))
+  def per (flatten (each [var [[s]
+    flatten [
+      (if (s.id eq "") [[(iss "error" "kg_source_id_missing" "source" s.locator "source id is empty")]] [[]])
+      (if (KgSchema.term-approved s.kind KgSchema.source-kinds) [[]]
+        [[(iss "error" "kg_source_kind" "source" s.id `unknown source kind ${s.kind}`)]])
+      (if (s.locator eq "") [[(iss "error" "kg_source_locator_missing" "source" s.id "source locator is empty")]] [[]])
+      (if (KgSchema.term-approved s.authority KgSchema.authorities) [[]]
+        [[(iss "error" "kg_source_authority" "source" s.id `unknown authority ${s.authority}`)]])
+    ]
+  ]] sources))
+  flatten [dups per]
+]]
+
+# ---- entities -----------------------------------------------------------
+
+def check-entities fn [[entities:List] [List] [
+  def index (KgEnt.index-by-id entities)
+  def dups (each [var [[id]
+    iss "error" "kg_duplicate_entity_id" "entity" id `duplicate entity id ${id}`
+  ]] (dup-ids (each [dot id] entities)))
+  def per (flatten (each [var [[e]
+    def id-vals (vals e.external_ids)
+    def merged-tgt (e.attributes get "merged_into")
+    flatten [
+      (if (e.id eq "") [[(iss "error" "kg_entity_id_missing" "entity" e.label "entity id is empty")]] [[]])
+      (if (KgSchema.term-approved e.type KgSchema.entity-types) [[]]
+        [[(iss "error" "kg_entity_type" "entity" e.id `unknown entity type ${e.type}`)]])
+      (if (e.label eq "") [[(iss "error" "kg_entity_label_missing" "entity" e.id "entity label is empty")]] [[]])
+      (if (e.normalized_label eq "") [[(iss "error" "kg_entity_nlabel_missing" "entity" e.id "normalized label is empty")]] [[]])
+      (if (KgSchema.term-approved e.status KgSchema.entity-statuses) [[]]
+        [[(iss "error" "kg_entity_status" "entity" e.id `unknown entity status ${e.status}`)]])
+      (if (((KgEnt.distinct-sorted id-vals) size) eq (id-vals size)) [[]]
+        [[(iss "warning" "kg_external_id_dup_value" "entity" e.id
+          "two external-id schemes carry the same value on one entity")]])
+      (if (e.status eq "merged")
+        [
+          if (merged-tgt is None)
+            [[(iss "error" "kg_merge_target_missing" "entity" e.id
+              "merged entity has no attributes.merged_into")]]
+            [
+              flatten [
+                (if ((index get merged-tgt) is None)
+                  [[(iss "error" "kg_merge_target_dangling" "entity" e.id
+                    `merged_into ${merged-tgt} is not a known entity`)]]
+                  [[]])
+                (if (merged-tgt eq e.id)
+                  [[(iss "error" "kg_merge_self" "entity" e.id "entity merged into itself")]]
+                  [[]])
+              ]
+            ]
+        ]
+        [[]])
+    ]
+  ]] entities))
+  flatten [dups per]
+]]
+
+# ---- assertions ---------------------------------------------------------
+
+def check-assertions fn [[assertions:List entities:List sources:List] [List] [
+  def eindex (KgEnt.index-by-id entities)
+  def sindex (fold [var [[s acc] acc set (s.id) s]] sources {})
+  def dups (each [var [[id]
+    iss "error" "kg_duplicate_assertion_id" "assertion" id `duplicate assertion id ${id}`
+  ]] (dup-ids (each [dot id] assertions)))
+  def claim-groups (fold [var [[a acc]
+    def k `${a.subject_id}|${a.predicate}`
+    def cur (acc get k)
+    acc set (k) (if (cur is None) [1] [cur add 1])
+  ]] assertions {})
+  def per (flatten (each [var [[a]
+    def obj a.object
+    def evs (KgUtil.list-at a "evidence")
+    def is-ref (KgSchema.is-entity-ref obj)
+    def is-lit (KgSchema.is-literal obj)
+    flatten [
+      (if (a.id eq "") [[(iss "error" "kg_assertion_id_missing" "assertion" a.subject_id "assertion id is empty")]] [[]])
+      (if ((eindex get a.subject_id) is None)
+        [[(iss "error" "kg_dangling_subject" "assertion" a.id
+          `subject ${a.subject_id} is not a known entity`)]]
+        [[]])
+      (if (KgSchema.term-approved a.predicate KgSchema.predicates) [[]]
+        [[(iss "error" "kg_unknown_predicate" "assertion" a.id `unknown predicate ${a.predicate}`)]])
+      (if (is-ref xor is-lit) [[]]
+        [[(iss "error" "kg_object_shape" "assertion" a.id
+          "object must be exactly one of entity reference or literal")]])
+      (if is-ref
+        [
+          if ((eindex get obj.entity_id) is None)
+            [[(iss "error" "kg_dangling_object" "assertion" a.id
+              `object entity ${obj.entity_id} is not a known entity`)]]
+            [[]]
+        ]
+        [[]])
+      (if is-lit
+        [
+          if (KgSchema.term-approved (KgUtil.get-or obj "datatype" "") KgSchema.datatypes)
+            [[]]
+            [[(iss "error" "kg_unknown_datatype" "assertion" a.id
+              `unknown literal datatype ${KgUtil.get-or obj "datatype" ""}`)]]
+        ]
+        [[]])
+      (if ((evs size) eq 0)
+        [[(iss "error" "kg_no_provenance" "assertion" a.id "assertion has no evidence")]]
+        [[]])
+      (flatten (each [var [[ev]
+        def src (sindex get ev.source_id)
+        def src-is-text (if (src is None) [false] [src.kind eq "text"])
+        flatten [
+          (if (src is None)
+            [[(iss "error" "kg_dangling_source" "assertion" a.id
+              `evidence source ${ev.source_id} is not a listed source`)]]
+            [[]])
+          (if (src-is-text and (ev.quote is None))
+            [[(iss "warning" "kg_text_quote_missing" "assertion" a.id
+              `evidence from text source ${ev.source_id} carries no exact quote`)]]
+            [[]])
+          (if ((ev.extraction_method eq "model") and (ev.quote is None))
+            [[(iss "warning" "kg_model_quote_missing" "assertion" a.id
+              "model-extracted evidence carries no supporting quote; needs review")]]
+            [[]])
+        ]
+      ]] evs))
+      (if (in-range a.confidence) [[]]
+        [[(iss "error" "kg_confidence_range" "assertion" a.id
+          `confidence ${a.confidence} outside [0.0, 1.0]`)]])
+      (if (KgSchema.term-approved a.status KgSchema.assertion-statuses) [[]]
+        [[(iss "error" "kg_assertion_status" "assertion" a.id `unknown assertion status ${a.status}`)]])
+      (if ((a.valid_from is None) or (a.valid_to is None)) [[]] [
+        if (a.valid_from lte a.valid_to) [[]]
+          [[(iss "error" "kg_interval_order" "assertion" a.id
+            `valid_from ${a.valid_from} is later than valid_to ${a.valid_to}`)]]
+      ])
+      (if ((a.status eq "inferred") and (a.rule is None))
+        [[(iss "error" "kg_inferred_rule_missing" "assertion" a.id
+          "inferred assertion does not record its rule")]]
+        [[]])
+      (if ((a.status eq "disputed") and ((claim-groups get `${a.subject_id}|${a.predicate}`) eq 1))
+        [[(iss "warning" "kg_disputed_alone" "assertion" a.id
+          "disputed assertion has no competing assertion on the same subject and predicate")]]
+        [[]])
+    ]
+  ]] assertions))
+  flatten [dups per]
+]]
+
+# ---- identity decisions -------------------------------------------------
+
+def check-identities fn [[decisions:List entities:List] [List] [
+  def eindex (KgEnt.index-by-id entities)
+  def dups (each [var [[id]
+    iss "error" "kg_duplicate_identity_id" "identity_decision" id `duplicate identity-decision id ${id}`
+  ]] (dup-ids (each [dot id] decisions)))
+  def per (flatten (each [var [[d]
+    def l (eindex get d.left_entity_id)
+    def r (eindex get d.right_entity_id)
+    def l-merged-into (if (l is None) [none] [l.attributes get "merged_into"])
+    def r-merged-into (if (r is None) [none] [r.attributes get "merged_into"])
+    def pair-merged ((l-merged-into eq d.right_entity_id) or (r-merged-into eq d.left_entity_id))
+    flatten [
+      (if (l is None)
+        [[(iss "error" "kg_identity_dangling" "identity_decision" d.id
+          `left entity ${d.left_entity_id} is not a known entity`)]] [[]])
+      (if (r is None)
+        [[(iss "error" "kg_identity_dangling" "identity_decision" d.id
+          `right entity ${d.right_entity_id} is not a known entity`)]] [[]])
+      (if (d.left_entity_id eq d.right_entity_id)
+        [[(iss "error" "kg_identity_self" "identity_decision" d.id
+          "identity decision compares an entity with itself")]] [[]])
+      (if (KgSchema.term-approved d.decision KgSchema.identity-decisions) [[]]
+        [[(iss "error" "kg_identity_decision" "identity_decision" d.id
+          `unknown decision ${d.decision}`)]])
+      (if (in-range d.confidence) [[]]
+        [[(iss "error" "kg_confidence_range" "identity_decision" d.id
+          `confidence ${d.confidence} outside [0.0, 1.0]`)]])
+      (if (((d.decision eq "same_entity") and pair-merged) and (d.confidence lt 0.95))
+        [[(iss "error" "kg_merge_threshold" "identity_decision" d.id
+          `automatic merge below the 0.95 same_entity threshold (${d.confidence})`)]]
+        [[]])
+      (if (((d.decision eq "same_entity") and pair-merged) and ((d.supporting_evidence size) eq 0))
+        [[(iss "error" "kg_merge_unsupported" "identity_decision" d.id
+          "automatic merge carries no supporting evidence")]]
+        [[]])
+      (if (((d.decision eq "possible_match") or (d.decision eq "insufficient_evidence")) and pair-merged)
+        [[(iss "error" "kg_merge_illegal" "identity_decision" d.id
+          `entities merged under a ${d.decision} decision — only same_entity may merge`)]]
+        [[]])
+    ]
+  ]] decisions))
+  flatten [dups per]
+]]
+
+# ---- proposals and collisions ------------------------------------------
+
+def check-proposals fn [[proposals:List] [List] [
+  flatten (each [var [[p]
+    flatten [
+      (if (p.status eq "requires_approval") [[]]
+        [[(iss "error" "kg_proposal_status" "schema_proposal" p.id
+          `schema proposal has status ${p.status}; only requires_approval is allowed in a bundle`)]])
+      (if (KgSchema.term-approved p.term_kind KgSchema.proposal-term-kinds) [[]]
+        [[(iss "error" "kg_proposal_term_kind" "schema_proposal" p.id
+          `unknown proposal term kind ${p.term_kind}`)]])
+    ]
+  ]] proposals)
+]]
+
+# Fingerprint-collision issues over every deterministic id family.
+def check-collisions fn [[bundle:Map] [List] [
+  def claims (flatten [
+    (each [var [[s] KgUtil.as-map {id: s.id canon: `${s.locator}|${s.content_hash}`}]]
+      (KgUtil.list-at bundle "sources"))
+    (each [var [[e] KgUtil.as-map {id: e.id canon: `${e.type}|${e.normalized_label}`}]]
+      (KgUtil.list-at bundle "entities"))
+    (each [var [[a] KgUtil.as-map {id: a.id canon: (KgId.canon-of {s: a.subject_id p: a.predicate o: a.object f: a.valid_from t: a.valid_to e: (sort (each [dot source_id] a.evidence))})}]]
+      (KgUtil.list-at bundle "assertions"))
+  ])
+  each [var [[c]
+    iss "error" "kg_id_collision" "bundle" (KgUtil.get-or c "id" "")
+      `fingerprint collision: id claimed by ${(KgUtil.list-at c "canons") size} distinct canonical inputs`
+  ]] (KgId.collisions claims)
+]]
+
+# ---- the whole bundle ---------------------------------------------------
+
+def validate-bundle fn [[bundle:Map] [List] [
+  def sources (KgUtil.list-at bundle "sources")
+  def entities (KgUtil.list-at bundle "entities")
+  def assertions (KgUtil.list-at bundle "assertions")
+  def decisions (KgUtil.list-at bundle "identity_decisions")
+  def proposals (KgUtil.list-at bundle "schema_proposals")
+  flatten [
+    (check-sources sources)
+    (check-entities entities)
+    (check-assertions assertions entities sources)
+    (check-identities decisions entities)
+    (check-proposals proposals)
+    (check-collisions bundle)
+  ]
+]]
+
+export "KgValidate" {
+  iss: iss/r
+  dup-ids: dup-ids/r
+  in-range: in-range/r
+  check-sources: check-sources/r
+  check-entities: check-entities/r
+  check-assertions: check-assertions/r
+  check-identities: check-identities/r
+  check-proposals: check-proposals/r
+  check-collisions: check-collisions/r
+  validate-bundle: validate-bundle/r
+}

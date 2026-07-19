@@ -14,6 +14,12 @@ ships as a single `aql` binary that includes a REPL, a type checker, a
 formatter, an LSP server, a registry client, a secrets vault, and a
 multi-service supervisor.
 
+> **The repo as data.** A machine-readable, evidence-backed knowledge
+> graph of this repository — its modules, docs, tools, and concepts —
+> lives at [`kg/out/graph.json`](kg/out/graph.json), built in AQL by the
+> pipeline in [`kg/`](kg/README.md). Refresh it whenever a PR changes
+> the repository's structure or documentation (`make -C kg graph`).
+
 > **Notation.** In code, a trailing `# returns …` comment shows what an
 > expression evaluates to (`square 4  # returns 16`); in prose we say
 > "`square 4` returns `16`". The comment is ordinary documentation — `#`
@@ -134,6 +140,7 @@ learning need, plus a CLI reference and the architecture record:
 | **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
 | **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `aql describe`/`aql help`. |
+| **[Project knowledge graph](kg/README.md)** | You want the repository as data: modules, docs, tools, and concepts with evidence-backed relations, in [`kg/out/graph.json`](kg/out/graph.json) — built (and dog-fooded) in AQL. Keep it updated with each PR. |
 
 Suggested reading orders:
 
@@ -160,6 +167,7 @@ Suggested reading orders:
 | `calc/go/` | A small calculator built directly on `eng` (learning example). |
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP test fixtures. |
+| `kg/` | The project knowledge graph: an AQL-built, evidence-backed map of the repo (pipeline + committed bundle). |
 | `docs/` | The bundled wasm playground (`index.html`). |
 | `lang/spec/` | Engine spec TSV files (the language's executable spec). |
 | `design/` | Internal design notes and proposals. |
