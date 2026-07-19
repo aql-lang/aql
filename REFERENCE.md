@@ -168,6 +168,24 @@ explicitly first. For the same reason `convert BigInteger 3.14` and
 and to/from `Integer`/`String` is exact, and `convert Float 0d2.5` is
 allowed but documented as a lossy projection.
 
+**Opting in to `Float → BigDecimal`.** Because a binary `Float` is
+inexact, the plain refusal above is the default — but a 3-arg `convert`
+with an `accuracy` option lets you take the conversion anyway, once
+you state *which* reading of the inexact value you want:
+
+| Option | Meaning | `3.14159` → |
+| --- | --- | --- |
+| `{accuracy:'shortest'}` | shortest decimal that round-trips to the same `Float` — what the literal reads as | `0d3.14159` |
+| `{accuracy:'exact'}` | the true dyadic value the `float64` holds | `0d3.141589999999999882618340052431449294...` |
+| `{accuracy:'round' places:N}` | the exact value rounded to `N` decimal places, half away from zero | `0d3.14` (`places:2`) |
+
+The option applies only to a `Float → BigDecimal` conversion (it is
+inert for any other source/target, like `truthy` on a non-Boolean);
+`Float → BigInteger` stays refused (convert to `Integer` first). A
+non-finite `Float` (`nan`/`inf`), an unknown mode, `round` without
+`places`, `exact`/`shortest` *with* `places`, and a negative `places`
+are all rejected.
+
 **Division.** `BigInteger div BigInteger` truncates toward zero and
 returns a BigInteger (with `mod`), like `Integer div`. `BigDecimal div
 BigDecimal` returns a BigDecimal rounded to the active decimal context —
