@@ -915,6 +915,16 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,
 	"analysis_truncated":    SeverityInfo,
+	// Advisory (non-gating) enum/closed-disjunct coverage lints, emitted by
+	// checkCaseCoverage (lang/go/native/conditional.go). A `case` over a
+	// closed set of concrete alternatives that omits a member and has no
+	// default (case_nonexhaustive), or a concrete match arm that matches no
+	// member of the set (case_unreachable_clause). Landed at SeverityInfo so
+	// they cannot retroactively gate the existing corpus; the partial-coverage
+	// family (partial_dispatch) is SeverityWarning and is the promotion target
+	// once the corpus is known clean. See design/ENUM-EXHAUSTIVENESS.0.md.
+	"case_nonexhaustive":      SeverityInfo,
+	"case_unreachable_clause": SeverityInfo,
 	// Every emit site (CheckListIndex / CheckAtIndices / the module
 	// insert-at/remove-at mirrors) fires only on a PROVABLY out-of-range
 	// index over a statically-known length, and every consuming word

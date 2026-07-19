@@ -1,5 +1,7 @@
 package native
 
+import "strings"
+
 // spliceArg returns tokens for a branch value. If the value is a list,
 // its elements are returned wrapped in parens so the main engine evaluates
 // them as a sub-expression. Scalars are returned as-is.
@@ -219,6 +221,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		return dynAny
 	}
 	elems := lst.Slice()
+	// Advisory coverage lint (side-effect only; never changes the return
+	// type). When the scrutinee is a closed set of concrete alternatives,
+	// flag members no arm covers and arms that match no member. See
+	// design/ENUM-EXHAUSTIVENESS.0.md.
+	checkCaseCoverage(r, v, elems)
 	// At least one clause pair. A trailing default (odd length) makes the
 	// innermost else a definite value; WITHOUT one (even length) the innermost
 	// `if guard [block]` has no else and the chain is variadic (0-or-1), which
@@ -281,6 +288,123 @@ func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 		return []Value{NewDynamicCarrier(TAny)}
 	}
 	return []Value{out}
+}
+
+// checkCaseCoverage emits advisory diagnostics when a `case` dispatches on a
+// CLOSED set — a Disjunct scrutinee whose alternatives are ALL concrete
+// values (an enum, or a hand-written `a/q tor b/q` union). It is a pure
+// side-effect: it never changes the case result type, and the runtime
+// caseHandler is untouched.
+//
+//   - case_nonexhaustive: no trailing default, no undecidable arm, and ≥1
+//     member matched by no arm — the omitted members are listed.
+//   - case_unreachable_clause: a concrete match arm matches no member of the
+//     set (an out-of-set / typo'd constant).
+//
+// A predicate arm (`[gt 3]`, isCodeBody) or a ParenExpr arm makes coverage
+// undecidable, so it suppresses the exhaustiveness verdict; unreachable
+// detection still runs for the concrete arms. A trailing default makes the
+// case exhaustive by construction. Modelled on the redundant_guard lint
+// (eng ApplyGuardNarrowing). See design/ENUM-EXHAUSTIVENESS.0.md.
+func checkCaseCoverage(r *Registry, v Value, elems []Value) {
+	if r == nil || !r.Check.IsActive() {
+		return
+	}
+	// Only DisjunctInfo-carrying values (a Disjunct or its Enum subtype) reach
+	// the analysis; every other scrutinee (a concrete atom, a scalar) fails
+	// AsDisjunct and is skipped. An empty alternative set carries no coverage
+	// obligation.
+	di, err := AsDisjunct(v)
+	if err != nil || len(di.Alternatives) == 0 {
+		return
+	}
+	for _, alt := range di.Alternatives {
+		if !IsConcrete(alt) {
+			return // an open alternative (bare type literal) — not a closed set
+		}
+	}
+	hasDefault := len(elems)%2 == 1
+	nPairs := len(elems) / 2
+	covered := make([]bool, len(di.Alternatives))
+	undecidable := false
+	for i := 0; i < nPairs; i++ {
+		match := elems[i*2]
+		if isCodeBody(match) || IsParenExpr(match) {
+			undecidable = true // a predicate / computed arm may cover any subset
+			continue
+		}
+		arm := resolveCaseMatch(r, match)
+		armCovers := false
+		for j, alt := range di.Alternatives {
+			if _, ok := UnifyR(arm, alt, r); ok {
+				covered[j] = true
+				armCovers = true
+			}
+		}
+		if !armCovers && IsConcrete(arm) {
+			addCaseDiag(r, "case_unreachable_clause",
+				"case clause "+arm.String()+" matches no member of "+
+					caseMemberList(di.Alternatives),
+				match.Pos().Row, match.Pos().Col)
+		}
+	}
+	if hasDefault || undecidable {
+		return // exhaustive by default, or coverage cannot be decided
+	}
+	var missing []Value
+	for j, alt := range di.Alternatives {
+		if !covered[j] {
+			missing = append(missing, alt)
+		}
+	}
+	if len(missing) > 0 {
+		addCaseDiag(r, "case_nonexhaustive",
+			"case does not cover "+caseMemberList(missing)+
+				" — add clauses or a trailing default",
+			v.Pos().Row, v.Pos().Col)
+	}
+}
+
+// resolveCaseMatch resolves a bare-word match to its bound value / type or an
+// Atom, mirroring caseClauses' value/type-match arm so `red` and `red/q`
+// behave identically in coverage analysis.
+func resolveCaseMatch(r *Registry, match Value) Value {
+	if IsWord(match) {
+		w, _ := AsWord(match)
+		if bound, ok := r.ResolveTypedName(w.Name); ok {
+			return bound
+		}
+		return ResolveWordValue(match)
+	}
+	return match
+}
+
+// caseMemberList renders alternatives as a comma-separated member list for a
+// coverage diagnostic.
+func caseMemberList(alts []Value) string {
+	parts := make([]string, len(alts))
+	for i, a := range alts {
+		parts[i] = a.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// addCaseDiag emits a coverage advisory, de-duplicated by (code, detail) so a
+// fn body re-analysed per call-shape reports each finding once (the
+// redundant_guard dedup pattern).
+func addCaseDiag(r *Registry, code, detail string, row, col int) {
+	for _, d := range r.Check.Diagnostics {
+		if d.Code == code && d.Detail == detail {
+			return
+		}
+	}
+	r.Check.AddDiagnostic(CheckDiagnostic{
+		Code:   code,
+		Detail: detail,
+		Word:   "case",
+		Row:    row,
+		Col:    col,
+	})
 }
 
 // caseGuardTokens builds the guard body for one clause: a code-body
