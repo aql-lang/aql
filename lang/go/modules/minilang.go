@@ -731,7 +731,7 @@ func micronLitStateFor(r *native.Registry, create bool) *micronLitState {
 // the builder form is registry state, runtime-only). In lenient mode
 // a non-concrete value is skipped, never flagged. Registrations key
 // on the IMPORTING registry (captured at module build, like
-// Parse.register).
+// Parse.parser).
 func miniMicronLitValidate(args []native.Value, r *native.Registry, lenient bool) (*native.Type, native.Value, error) {
 	kindV := args[0]
 	var kind *native.Type
@@ -856,7 +856,7 @@ func micronSpecMapCheck(spec native.Value, r *native.Registry, lenient bool) err
 // kind's grammar builder: a concrete Map is the declarative
 // GrammarSpec form (applied via the Parse.spec machinery onto a fresh
 // builder tagged with the kind name); a ParseGrammar carrier is the
-// aql:parse builder form, consumed here exactly as Parse.register
+// aql:parse builder form, consumed here exactly as Parse.parser
 // consumes it. Anything else — including the RETIRED regexp-pattern
 // String — is a loud error with a migration hint.
 func micronGrammarFor(kind *native.Type, shape native.Value, r *native.Registry) (*parseGrammar, error) {
@@ -937,7 +937,7 @@ func micronGrammarFinalize(st *micronLitState, kind *native.Type, g *parseGramma
 		}
 	}
 	g.applyMatchers()
-	g.registered = true // consumed — single-use, like Parse.register
+	g.registered = true // consumed — single-use, like Parse.parser
 
 	opts := g.j.Options()
 	if opts.Tag != kind.Name() {

@@ -802,9 +802,20 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// bound-variable reconstruction. A registered kind wins a collision
 		// (checked above); an unbound name or a non-Function binding keeps
 		// the unknown-kind handling below, so `parse nope 'x'` still raises
-		// parse_unknown_lang unchanged.
-		if top, ok := r.Defs.Top(kind); ok &&
-			(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		// parse_unknown_lang unchanged. A name def-bound to a COMPUTED fn
+		// (`def op (Parse.parser g)`) has no Defs binding under analysis —
+		// installDef declines so the compiled closure machinery owns the
+		// name — and resolves through the per-pass fn-carrier side table
+		// (checkFnCarrierBind) instead.
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
+			}
+		}
+		if bound {
 			// The /q-captured word bypassed stepWord's use tracking, so an
 			// only-used-as-a-parser fn would be falsely flagged unused_def.
 			r.Check.RecordUse(kind)
@@ -825,31 +836,6 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			}
 			// A non-concrete non-carrier Function binding (the bare Function
 			// type literal): not a parser — fall through to unknown-kind.
-		}
-		if r.Check.IsActive() && parseKindDeferred(r, kind) {
-			// A Parse.register kind (aql:parse): its grammar is built by Parse
-			// builder words whose result is NOT a concrete value during analysis,
-			// so the parser can't be installed for the checker — but it IS
-			// registered at run time by the Parse.register call. Degrade to a
-			// dynamic value WITHOUT a trap (unlike the unbound-namespace case
-			// below): the runtime resolves the kind, so the compiled program must
-			// NOT raise parse_unknown_lang. The check-mode hook that records the
-			// deferral is aql:parse's parse-register ReturnsFn.
-			macroDegradedAdvisory(r, "parse", "the "+kind+" grammar is built at run time (Parse.register)", args[0].Pos())
-			// COMPILE pass (Phase 6 M3): record the runtime deferred dispatch —
-			// a CALL_NATIVE of parselang-deferred-dispatch — so the parse
-			// result has provenance and the program compiles. At run time the
-			// op resolves parse_<kind> against the LIVE export map (populated
-			// by the compiled Parse.register call) and dispatches it, or
-			// raises the byte-identical parse_unknown_lang when a
-			// runtime-conditional registration did not execute. The check pass
-			// itself installs NOTHING into the export map (the reverted
-			// register-ReturnsFn leak stays closed); pure check keeps the
-			// dynamic degrade below unchanged.
-			if out, ok := recordDeferredParseDispatch(r, args); ok {
-				return []Value{out}, nil
-			}
-			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		if r.Check.IsActive() && !parseNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
@@ -1023,102 +1009,11 @@ func parseNamespaceBound(r *Registry) bool {
 	return ok
 }
 
-// parseKindRegistered reports whether `parse_<kind>` is an export of the
-// bound ParseLang namespace.
-// capParseDeferredKinds holds the set of parse-kind names a Parse.register call
-// will install at RUNTIME — recorded in check mode so `parse <kind>` resolves
-// leniently during analysis even though the built grammar isn't concrete yet.
-const capParseDeferredKinds = "engine.parse.deferred-kinds"
-
-// MarkParseKindDeferred records (during check) that `kind` is registered at run
-// time by an aql:parse `Parse.register <kind> <built-grammar>` call. The grammar
-// is constructed by Parse builder words whose result is not a concrete value
-// under static analysis, so the parser can't be installed for the checker; the
-// `parse` macro therefore degrades `parse <kind>` to a dynamic value (no
-// parse_unknown_lang, no trap) for a deferred kind. Called from aql:parse's
-// parse-register check-mode ReturnsFn.
-func MarkParseKindDeferred(r *Registry, kind string) {
-	if r == nil || kind == "" {
-		return
-	}
-	if m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds); ok && m != nil {
-		m[kind] = true
-		return
-	}
-	_ = r.Capabilities.Set(capParseDeferredKinds, map[string]bool{kind: true})
-}
-
-// ResetParseDeferredKinds clears the deferred parse-kind set so it is scoped to
-// a single check pass. The set lives in the persistent Capabilities store, so a
-// reused AQL instance would otherwise carry a prior pass's `Parse.register`
-// kinds into a later Check: `parse <kind>` for that kind would silently degrade
-// to a dynamic value (no parse_unknown_lang) even though the kind is no longer
-// registered. Called at the start of every check pass (see lang.(*AQL).Check /
-// CompileCheck) so deferral is per-check-run, not per-instance lifetime.
-func ResetParseDeferredKinds(r *Registry) {
-	if r == nil || r.Capabilities == nil {
-		return
-	}
-	_, _ = r.Capabilities.Delete(capParseDeferredKinds)
-}
-
-// parseKindDeferred reports whether `kind` was marked as a runtime-registered
-// Parse.register kind (see MarkParseKindDeferred).
-func parseKindDeferred(r *Registry, kind string) bool {
-	m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds)
-	return ok && m != nil && m[kind]
-}
-
-// capParseDeferredDispatch holds the parselang-deferred-dispatch *Signature —
-// the runtime resolver a compiled `parse <deferred-kind>` call dispatches
-// through. Installed once per registry when aql:parselang is built; static
-// module wiring, so it is NOT reset per check pass (unlike the deferred-kind
-// SET above, which is per-pass state).
-const capParseDeferredDispatch = "engine.parse.deferred-dispatch"
-
-// InstallParseDeferredDispatch records the parselang-side deferred-dispatch
-// signature so the `parse` macro's compile branch can record calls against
-// it. Called from BuildParseLangModule with the importing registry.
-func InstallParseDeferredDispatch(r *Registry, sig *Signature) {
-	if r == nil || sig == nil {
-		return
-	}
-	_ = r.Capabilities.Set(capParseDeferredDispatch, sig)
-}
-
-// recordDeferredParseDispatch records the ONE runtime call a compiled
-// `parse <kind>` deferred dispatch lowers to (Phase 6 M3): CALL_NATIVE
-// parselang-deferred-dispatch(kind, source, opts) with a dynamic(Any) result
-// registered as the event's output, so the parse result reaches downstream
-// consumers (the residual, a def) with provenance instead of refusing
-// "residual value of unknown provenance". Returns (out, true) only when the
-// recording pass is live and the dispatcher is installed; every other case —
-// pure check, suspended analysis, no aql:parselang import — declines and the
-// caller keeps today's unrecorded dynamic degrade. forceDynOut is proven
-// here: the declared return IS Any (the parser's output is genuinely runtime
-// data), and the VM pushes the real dispatched value.
-func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
-	rec := r.Check.Recorder()
-	if !r.Check.Compiling || !rec.Active() {
-		return Value{}, false
-	}
-	sig, ok, _ := eng.Cap[*Signature](r, capParseDeferredDispatch)
-	if !ok || sig == nil {
-		return Value{}, false
-	}
-	// Same surface→call mapping as the registered-kind expansion.
-	source, opts := parseSurfaceOperands(args)
-	outs := []Value{NewDynamicCarrier(TAny)}
-	rec.RecordCall("parselang-deferred-dispatch", sig,
-		[]Value{args[0], source, opts}, outs, args[0].Pos(), true, false)
-	return outs[0], true
-}
-
 // capParseLangFnDispatch holds the parselang-fn-dispatch *Signature — the
 // runtime resolver a compiled `parse <fn>` VALUE-form call dispatches
 // through when the parser operand is not concrete under analysis (a
-// computed parser, a Function-typed binding). Installed once per registry
-// when aql:parselang is built, like capParseDeferredDispatch.
+// computed parser, a Function-typed binding, a Parse.parser grammar
+// parser). Installed once per registry when aql:parselang is built.
 const capParseLangFnDispatch = "engine.parse.fn-dispatch"
 
 // InstallParseLangFnDispatch records the parselang-side fn-dispatch
@@ -1138,9 +1033,8 @@ func InstallParseLangFnDispatch(r *Registry, sig *Signature) {
 // OPERAND's provenance is its own producing event — the recorded call that
 // computed it — so the parse result reaches downstream consumers with
 // provenance instead of refusing "residual value of unknown provenance".
-// The exact mirror of recordDeferredParseDispatch with the fn value in
-// place of the kind atom; declines (pure check, suspended analysis, no
-// aql:parselang import) leave the caller on the unrecorded dynamic degrade.
+// Declines (pure check, suspended analysis, no aql:parselang import) leave
+// the caller on the unrecorded dynamic degrade.
 func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool) {
 	rec := r.Check.Recorder()
 	if !r.Check.Compiling || !rec.Active() {
@@ -1164,6 +1058,8 @@ func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool
 	return outs[0], true
 }
 
+// parseKindRegistered reports whether `parse_<kind>` is an export of the
+// bound ParseLang namespace.
 func parseKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("ParseLang")
 	if !ok {

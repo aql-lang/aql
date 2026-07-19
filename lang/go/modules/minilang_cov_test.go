@@ -258,7 +258,7 @@ func TestMiniCovMicronRuledGrammar(t *testing.T) {
 }
 
 // TestMiniCovMicronBuilderForm covers the aql:parse builder form of
-// MiniLang.micron — a Parse.grammar value consumed like Parse.register
+// MiniLang.micron — a Parse.grammar value consumed like Parse.parser
 // consumes one.
 func TestMiniCovMicronBuilderForm(t *testing.T) {
 	r := mcovReg(t)
@@ -279,7 +279,7 @@ func TestMiniCovMicronBuilderNegatives(t *testing.T) {
 	fn := ` ([s:String] => [make Baron {v:s}])`
 
 	if err := mcovErr(t, mcovReg(t), pre+
-		`def g (Parse.grammar)  Parse.abnf g 'x = "a"' {start:'x'}  Parse.register used g  end  `+
+		`def g (Parse.grammar)  Parse.abnf g 'x = "a"' {start:'x'}  def used (Parse.parser g)  end  `+
 		`MiniLang.micron Baron g`+fn); err == nil ||
 		!strings.Contains(err.Error(), "parse_grammar_done") {
 		t.Errorf("a consumed builder should be refused, got %v", err)

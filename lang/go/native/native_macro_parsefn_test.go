@@ -58,6 +58,31 @@ func TestParseFnNameBoundCarrier(t *testing.T) {
 	}
 }
 
+// TestCheckFnCarrierBindTable drives the per-pass fn-carrier side table's
+// arms directly: nil/absent guards, the create and reuse write arms, hit and
+// miss lookups, and the per-pass reset. (The corpus covers the production
+// flow — `def op (Parse.parser g)  parse op '…'` — end to end.)
+func TestCheckFnCarrierBindTable(t *testing.T) {
+	ResetCheckFnCarrierBinds(nil)
+	r := seam5Reg(t)
+	ResetCheckFnCarrierBinds(r) // absent table: no-op
+	if _, hit := checkFnCarrierBind(r, "x"); hit {
+		t.Fatal("empty table must miss")
+	}
+	noteCheckFnCarrierBind(r, "a", NewCarrier(TFunction)) // create arm
+	noteCheckFnCarrierBind(r, "b", NewCarrier(TFunction)) // reuse arm
+	if _, hit := checkFnCarrierBind(r, "a"); !hit {
+		t.Fatal("noted name must resolve")
+	}
+	if _, hit := checkFnCarrierBind(r, "zz"); hit {
+		t.Fatal("an un-noted name must miss")
+	}
+	ResetCheckFnCarrierBinds(r)
+	if _, hit := checkFnCarrierBind(r, "a"); hit {
+		t.Fatal("reset must clear the table")
+	}
+}
+
 // --- recordParseLangFnDispatch (compile-recorder arms; mirrors the W9
 // recordDeferredParseDispatch tests) ---
 

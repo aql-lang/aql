@@ -258,11 +258,8 @@ func (a *AQL) Check(src string) (CheckResult, error) {
 
 	a.registry.Source = src
 	defer a.registry.Check.Begin()()
-	// Deferred parse kinds are per-check-run state: clear any left over from a
-	// prior Check on this reused instance so a now-unregistered `parse <kind>`
-	// reports parse_unknown_lang instead of silently degrading to dynamic.
-	native.ResetParseDeferredKinds(a.registry)
 	native.ResetModuleExportGrowth(a.registry)
+	native.ResetCheckFnCarrierBinds(a.registry)
 
 	eng := native.NewTop(a.registry)
 	eng.SetSource(src)
@@ -393,10 +390,8 @@ func (a *AQL) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	// BeginCompilePass arms the shared compile-pass ritual (fresh
 	// EmitState, Compiling flag, fn-memo drop) in one place.
 	defer a.registry.Check.BeginCompilePass()()
-	// Per-check-run reset (see Check): a reused instance must not inherit a
-	// prior pass's deferred parse kinds.
-	native.ResetParseDeferredKinds(a.registry)
 	native.ResetModuleExportGrowth(a.registry)
+	native.ResetCheckFnCarrierBinds(a.registry)
 
 	engine := native.NewTop(a.registry)
 	engine.SetSource(src)

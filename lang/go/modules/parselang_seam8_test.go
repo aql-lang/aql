@@ -196,31 +196,9 @@ func TestW8ParseRegisterReturnsGuards(t *testing.T) {
 	}
 }
 
-// TestW8DeferredDispatchArms drives parseDeferredDispatchHandler's kind (586),
-// sub.Run error (599) and result-count (602) arms.
-func TestW8DeferredDispatchArms(t *testing.T) {
-	r := mcovReg(t)
-	exports := native.NewOrderedMap()
-	h := parseDeferredDispatchHandler(exports, r)
-	opts := s7bMap()
-
-	// 586: a non-concrete kind atom.
-	if _, err := h([]native.Value{native.NewTypeLiteral(native.TAtom), native.NewString("s"), opts}, nil, nil, r); err == nil {
-		t.Error("deferred dispatch: non-concrete kind should error")
-	}
-
-	// 599: a registered value that raises when stepped (an undefined word).
-	exports.Set("parse_werr", native.NewWord("w8_undefined_xyz"))
-	if _, err := h([]native.Value{native.NewAtom("werr"), native.NewString("s"), opts}, nil, nil, r); err == nil {
-		t.Error("deferred dispatch: a run error should propagate")
-	}
-
-	// 602: a registered value whose run leaves != 1 result.
-	exports.Set("parse_wtwo", native.NewInteger(5))
-	if _, err := h([]native.Value{native.NewAtom("wtwo"), native.NewString("s"), opts}, nil, nil, r); err == nil {
-		t.Error("deferred dispatch: a non-single result should error")
-	}
-}
+// (parselang-deferred-dispatch was deleted with Parse.register: grammar
+// parsers are Parse.parser Function VALUES dispatched through
+// parselang-fn-dispatch, whose arms TestFnDispatchArms drives.)
 
 // TestW8AontuAndTabnasSrcErrors drives the src refusal arms of the aontu (666)
 // and tabnas (687) built-in parser handlers.

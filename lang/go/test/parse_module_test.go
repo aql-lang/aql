@@ -9,9 +9,9 @@ import (
 
 // The aql:parse module lets an AQL author DEFINE a custom parser — from an
 // ABNF grammar, a declarative rule map, custom lex matchers, and semantic
-// actions that build custom data types — and register it as a `parse <name>`
-// kind (aql:parselang), run via the ordinary `parse` macro. These tests pin
-// each capability and its loud failures.
+// actions that build custom data types — and finalize it into a ParseLang
+// Function VALUE (Parse.parser), run via the ordinary `parse` macro's value
+// form. These tests pin each capability and its loud failures.
 
 const parseImports = `import "aql:parse"  import "aql:parselang"  `
 
@@ -53,7 +53,7 @@ def g Parse.grammar
 Parse.action g '@op:o:INC' ([nd:Any] => [{kind:'inc' delta:1}])
 Parse.action g '@op:o:DEC' ([nd:Any] => [{kind:'dec' delta:-1}])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register op g
+def op (Parse.parser g)
 end  `
 
 	if got := runParseLast(t, build+`(parse op 'inc').kind`); got != "inc" {
@@ -74,7 +74,7 @@ func TestParseABNFScalarResult(t *testing.T) {
 def g Parse.grammar
 Parse.action g '@op:o:INC' ([nd:Any] => [42])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register opv g
+def opv (Parse.parser g)
 end  `
 	if got := runParseLast(t, build+`parse opv 'inc'`); got != int64(42) {
 		t.Errorf("parse opv 'inc' = %v, want 42", got)
@@ -88,7 +88,7 @@ func TestParseABNFBaseline(t *testing.T) {
 	build := parseImports + `
 def g Parse.grammar
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register opb g
+def opb (Parse.parser g)
 end  `
 	// A well-formed input parses without error (the exact node shape is the
 	// converter's; we only assert it succeeds and is non-error).
@@ -103,17 +103,18 @@ end  `
 	}
 }
 
-// TestParseDesugarsToParseMacro proves a Parse-built kind is reachable both via
-// the `parse` macro and the underlying ParseLang.parse_<kind> call.
+// TestParseDesugarsToParseMacro proves a Parse-built parser is reachable both
+// via the `parse` macro's value form and by invoking the bound fn directly —
+// the value IS the standard-call target (`opd 'inc' {} end`).
 func TestParseDesugarsToParseMacro(t *testing.T) {
 	build := parseImports + `
 def g Parse.grammar
 Parse.action g '@op:o:INC' ([nd:Any] => [7])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register opd g
+def opd (Parse.parser g)
 end  `
 	sugar := runParseLast(t, build+`parse opd 'inc'`)
-	desugared := runParseLast(t, build+`ParseLang.parse_opd 'inc' {} end`)
+	desugared := runParseLast(t, build+`opd 'inc' {} end`)
 	if sugar != desugared || sugar != int64(7) {
 		t.Fatalf("sugar=%v desugared=%v: must agree (=7)", sugar, desugared)
 	}
@@ -127,7 +128,7 @@ func TestParseMatcherCoexists(t *testing.T) {
 def g Parse.grammar
 Parse.matcher g decline 1000000 ([rest:String] => [None])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register opm g
+def opm (Parse.parser g)
 end  `
 	if err := runParseErr(t, build+`parse opm 'inc'`); err != nil {
 		t.Errorf("declining matcher should not disturb the parse, got %v", err)
@@ -141,7 +142,7 @@ func TestParseMatcherBadShape(t *testing.T) {
 def g Parse.grammar
 Parse.matcher g bad 1000000 ([rest:String] => [999])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register opx g
+def opx (Parse.parser g)
 end  `
 	// Parse a token the grammar's own fixed literals do not claim, so the
 	// custom matcher is consulted (and returns its bad shape).
@@ -160,7 +161,7 @@ func TestParseDeclarativeRuleInstalls(t *testing.T) {
 	ok := parseImports + `
 def g Parse.grammar
 Parse.rule g val {open:[{s:'#NR'}]}
-Parse.register decl g
+def decl (Parse.parser g)
 end  parse decl '1'`
 	if err := runParseErr(t, ok); err != nil {
 		t.Errorf("declarative rule should install and parse, got %v", err)
@@ -169,7 +170,7 @@ end  parse decl '1'`
 	bad := parseImports + `
 def g Parse.grammar
 Parse.rule g val {open:'nope'}
-Parse.register decl2 g
+def decl2 (Parse.parser g)
 end`
 	if err := runParseErr(t, bad); err == nil {
 		t.Error("Parse.rule with a non-list open should error")
@@ -199,19 +200,18 @@ func TestParseGrammarSubtypeExports(t *testing.T) {
 	}
 }
 
-// TestParseRegisterContract pins the register failures, reusing aql:parselang's
-// kind-name and collision rules.
-func TestParseRegisterContract(t *testing.T) {
+// TestParseParserContract pins the finalizer failures — there is no kind
+// name any more (the parse kind namespace is fixed; a finalized parser is a
+// ParseLang Function VALUE), so the contract is grammar-shaped: single-use
+// finalization and loud non-grammar refusals.
+func TestParseParserContract(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{
-			"collides with built-in kind",
-			parseImports + `def g Parse.grammar  Parse.abnf g "x = \"a\"" {start:'x'}  Parse.register json g`,
-			"already registered",
-		},
-		{
-			"capitalised name rejected",
-			parseImports + `def g Parse.grammar  Parse.register Foo g`,
-			"lowercase",
+			// The finalized parser closes over the grammar — a second
+			// finalize must refuse rather than mutate a live parser.
+			"double finalize rejected",
+			parseImports + `def g Parse.grammar  Parse.abnf g "x = \"a\"" {start:'x'}  def p (Parse.parser g)  Parse.parser g`,
+			"parse_grammar_done",
 		},
 		{
 			// An Integer where a Grammar is required is rejected at dispatch
@@ -235,12 +235,12 @@ func TestParseRegisterContract(t *testing.T) {
 }
 
 // TestParseMalformedABNF pins that a malformed ABNF grammar is a loud error at
-// register time, not a panic.
+// finalize time, not a panic.
 func TestParseMalformedABNF(t *testing.T) {
-	src := parseImports + `def g Parse.grammar  Parse.abnf g "= = = ="  Parse.register broke g`
+	src := parseImports + `def g Parse.grammar  Parse.abnf g "= = = ="  def broke (Parse.parser g)`
 	err := runParseErr(t, src)
 	if err == nil {
-		t.Fatal("malformed ABNF should error at register")
+		t.Fatal("malformed ABNF should error at finalize")
 	}
 	if !strings.Contains(err.Error(), "parse_bad_grammar") {
 		t.Errorf("error %q should be parse_bad_grammar", err.Error())
@@ -249,14 +249,14 @@ func TestParseMalformedABNF(t *testing.T) {
 
 // TestParseDeclarativeStringRefAction pins that a declarative rule may
 // reference an action registered via Parse.action by its string ref (a:'@hit')
-// — the ref is wired into the grammar's Ref map, so Parse.register succeeds
+// — the ref is wired into the grammar's Ref map, so Parse.parser succeeds
 // rather than failing with an unresolved-ref error.
 func TestParseDeclarativeStringRefAction(t *testing.T) {
 	src := parseImports + `
 def g Parse.grammar
 Parse.action g '@hit' ([nd:Any] => [nd])
 Parse.rule g doc {open:[{s:'#TX' a:'@hit'}]}
-Parse.register srefkind g
+def srefkind (Parse.parser g)
 end`
 	if err := runParseErr(t, src); err != nil {
 		t.Fatalf("string-ref action should register without error, got %v", err)
@@ -271,10 +271,10 @@ func TestParseGrammarSingleUse(t *testing.T) {
 	base := parseImports + `
 def g Parse.grammar
 Parse.abnf g 'op = "inc" / "dec"' {start:'op'}
-Parse.register one g
+def one (Parse.parser g)
 end  `
 	cases := []struct{ name, tail string }{
-		{"second register", `Parse.register two g`},
+		{"second register", `def two (Parse.parser g)`},
 		{"builder word after register", `Parse.abnf g 'x = "a"' {start:'x'}`},
 	}
 	for _, c := range cases {

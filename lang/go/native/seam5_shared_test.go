@@ -42,8 +42,8 @@ func seam5Check(r *Registry, src string) ([]Value, error) {
 	}
 	r.Source = src
 	defer r.Check.Begin()()
-	ResetParseDeferredKinds(r)
 	ResetModuleExportGrowth(r)
+	ResetCheckFnCarrierBinds(r)
 	e := NewTop(r)
 	e.SetSource(src)
 	return e.Run(toks)
@@ -59,8 +59,8 @@ func seam5CompileCheck(r *Registry, src string) ([]Value, error) {
 	}
 	r.Source = src
 	defer r.Check.Begin()()
-	ResetParseDeferredKinds(r)
 	ResetModuleExportGrowth(r)
+	ResetCheckFnCarrierBinds(r)
 	r.Check.Emit = NewEmitState()
 	r.Check.Compiling = true
 	r.Check.FnSummaries = nil

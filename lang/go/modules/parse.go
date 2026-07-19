@@ -22,24 +22,24 @@ import (
 // data types. It is built on github.com/tabnas/parser/go (the engine under
 // the jsonic layer) and github.com/tabnas/abnf/go (ABNF → grammar).
 //
-// The module is REGISTER-ONLY: there is no standalone run word. Building a
-// grammar culminates in `Parse.register <name> <grammar>`, which registers a
-// `parse <name>` kind via aql:parselang's host-parser framework
-// (RegisterHostParser). The user then runs it with the ordinary `parse`
-// macro:
+// The module is BUILD-ONLY: there is no standalone run word. Building a
+// grammar culminates in `Parse.parser <grammar>`, which finalizes it into a
+// ParseLang Function VALUE (the aql:parselang framework shell around the
+// grammar's parse handler). The user binds or passes the value and runs it
+// with the ordinary `parse` macro's value form:
 //
 //	import "aql:parse"
 //	import "aql:parselang"
 //	def g Parse.grammar                              # mint a builder, bind it
 //	Parse.action g '@op:o:INC' ([nd:Any] => [1])     # custom data via a mark
 //	Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-//	Parse.register op g                              # → a `parse op` kind
+//	def op (Parse.parser g)                          # → a ParseLang value
 //	parse op 'inc'                                   # → 1
 //
 // The Grammar carrier is a shared pointer (mutated in place, like Store /
 // Array), so it is bound to a `def` and threaded through each builder word as
 // the first argument; the builder words return nothing. Building is deferred:
-// tokens, declarative rules and ABNF installs are replayed at Parse.register
+// tokens, declarative rules and ABNF installs are replayed at Parse.parser
 // (when every mark action is known), and custom matchers are applied last.
 
 // parseGrammar is the host-backed builder a Parse.grammar call mints. It
@@ -52,14 +52,14 @@ type parseGrammar struct {
 	inlineSeq   int                   // counter for generated declarative action refs
 
 	// steps are the deferred grammar-building operations (tokens, declarative
-	// rules, ABNF installs) in call order. They run at Parse.register, when
+	// rules, ABNF installs) in call order. They run at Parse.parser, when
 	// every mark action is known. matchers are applied LAST, after every
 	// grammar step, so an ABNF install (which can rebuild the lexer) cannot
 	// drop a custom lex matcher.
 	steps    []func() error
 	matchers []pendingMatcher
 
-	// registered marks the builder as consumed by Parse.register. The carrier
+	// registered marks the builder as consumed by Parse.parser. The carrier
 	// is a shared pointer and the registered parser handler closes over g/g.j,
 	// so the builder is SINGLE-USE: any further builder word or a second
 	// register on a consumed grammar raises rather than mutating a finalized
@@ -93,7 +93,7 @@ func (g *parseGrammar) setErr(err error) {
 func (g *parseGrammar) ensureOpen(word string, r *native.Registry) error {
 	if g.registered {
 		return r.AqlErrorHint("parse_grammar_done",
-			word+": this grammar was already registered as a parse kind", word,
+			word+": this grammar was already finalized into a parser", word,
 			"a Parse.grammar builder is single-use — build a fresh one for another parser")
 	}
 	return nil
@@ -178,7 +178,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	exports.Set("grammar", wrapMiniFnDef("parse-grammar", [][]native.FnParam{{}},
 		[]*native.Type{gT}, nil, subReg))
 
-	// ---- abnf — install an ABNF grammar (deferred to register) ---------
+	// ---- abnf — install an ABNF grammar (deferred to the finalizer) ----
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-abnf",
 		Signatures: []native.Signature{
@@ -281,26 +281,32 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: gT}, {Type: native.TString}, {Type: native.TFunction}},
 	}, []*native.Type{}, nil, subReg))
 
-	// ---- register — finalize + register as a `parse <name>` kind -------
+	// ---- parser — finalize into a ParseLang Function VALUE --------------
+	// Parse.parser <grammar> → Function. The fn-returning finalizer: it
+	// replays the deferred grammar steps and yields a ParseLang value — a
+	// fn carrying the standard [source opts] prefix — for the caller to
+	// bind (`def calc (Parse.parser g)  parse calc 'src'`) or pass directly
+	// (`parse (Parse.parser g) 'src'`). The parse kind namespace is FIXED
+	// (built-in kinds only), so a grammar parser is never installed under a
+	// kind name; the value form is its whole surface, and the compiled path
+	// dispatches it through the recorded parselang-fn-dispatch — the fn
+	// operand's producing event (this call) is the provenance.
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: "parse-register",
+		Name: "parse-parser",
 		Signatures: []native.Signature{{
-			Args:       []*native.Type{native.TAtom, gT},
-			QuoteArgs:  map[int]bool{0: true},
-			Returns:    []*native.Type{},
+			Args:       []*native.Type{gT},
+			Returns:    []*native.Type{native.TFunction},
 			BarrierPos: -1,
-			Impl:       native.Go(parseRegisterHandlerFor(parent)),
-			// Check-mode hook: mark the kind as registered-at-runtime so a later
-			// fn body that calls `parse <name>` resolves leniently instead of
-			// raising parse_unknown_lang. The grammar (args[1]) is not concrete
-			// under analysis, so the real parser is installed only by the Handler
-			// at run time; the checker just needs the kind to resolve.
-			ReturnsFn: parseRegisterDeferReturns,
+			Impl:       native.Go(parseParserHandlerFor(subReg)),
+			// Check-mode: the grammar carrier is never concrete under
+			// analysis, so the parser is always a dynamic Function — the
+			// `parse` macro's carrier branch handles the dispatch.
+			ReturnsFn: parseParserReturns,
 		}},
 	})
-	exports.Set("register", wrapMiniFnDef("parse-register", [][]native.FnParam{
-		{{Type: native.TAtom, Quote: true}, {Type: gT}},
-	}, []*native.Type{}, map[int]bool{0: true}, subReg))
+	exports.Set("parser", wrapMiniFnDef("parse-parser", [][]native.FnParam{
+		{{Type: gT}},
+	}, []*native.Type{native.TFunction}, nil, subReg))
 
 	// ---- type exports: the grammar-as-Map-subtypes --------------------
 	// Parse.RuleSpec / Parse.AltSpec are Map-subtype (Options) type literals
@@ -380,7 +386,7 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 	return nil, nil
 }
 
-// addAbnfStep defers an ABNF install to Parse.register (when every mark
+// addAbnfStep defers an ABNF install to Parse.parser (when every mark
 // action is known). Shared by Parse.abnf and the abnf section of
 // Parse.spec.
 func (g *parseGrammar) addAbnfStep(src string, o *tabnasabnf.AbnfConvertOptions) {
@@ -413,7 +419,7 @@ func (g *parseGrammar) addAbnfStep(src string, o *tabnasabnf.AbnfConvertOptions)
 // Every section is optional; an unknown section key is a loud error.
 // Sections apply in tabnas' order — options (with v) first, then refs,
 // rules, ABNF — regardless of key order, and matchers are collected
-// for the apply-last pass Parse.register runs (exactly as with the
+// for the apply-last pass Parse.parser runs (exactly as with the
 // chained builder words, which this form is equivalent to and composes
 // with). ref entries feed the same named-action table Parse.action
 // fills, so they serve both ABNF marks ('@rule:phase' /
@@ -747,63 +753,69 @@ func parseActionHandler(args []native.Value, _ map[string]native.Value, _ []nati
 	return nil, nil
 }
 
-// parseRegisterHandlerFor builds the terminal register word. It finalizes the
-// builder (applies the deferred ABNF installs with the now-complete actions)
-// and registers a `parse <name>` kind via the aql:parselang host framework.
-// parseRegisterDeferReturns is parse-register's check-mode hook: it records the
-// kind atom (args[0]) as a deferred parse kind so `parse <name>` resolves during
-// analysis (the built grammar in args[1] is not concrete under the checker, so the
-// real parser installs only at run time via the Handler). Returns no value, like
-// the Handler.
-func parseRegisterDeferReturns(args []native.Value, r *native.Registry) []native.Value {
-	if len(args) >= 1 && native.IsConcrete(args[0]) {
-		if name, err := args[0].AsConcreteAtom(); err == nil {
-			native.MarkParseKindDeferred(r, name)
-		}
-	}
-	return nil
-}
-
-func parseRegisterHandlerFor(_ *native.Registry) native.Handler {
+// parseParserHandlerFor builds the terminal finalizer word. It finalizes
+// the builder — replaying the deferred grammar steps (tokens, rules, ABNF
+// installs) now that every mark action is known, then applying custom
+// matchers LAST (priority-sorted) so a grammar install cannot drop or
+// reorder them — and returns the parser as a ParseLang Function VALUE: the
+// source-resolving framework shell (parseSourceShell) over the grammar's
+// parse handler, wrapped as a trivial-delegation FnDef in the aql:parse
+// sub-registry so it dispatches exactly like a ParseLang.parse_<kind>
+// export does (and satisfies ParseLangFnSigWhy for the `parse` value form).
+func parseParserHandlerFor(subReg *native.Registry) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		name, err := args[0].AsConcreteAtom()
-		if err != nil {
-			return nil, r.AqlError("parse_bad_name", fmt.Sprintf("Parse.register: %v", err), "Parse.register")
-		}
-		g, err := asParseGrammar(args[1], "Parse.register", r)
+		g, err := asParseGrammar(args[0], "Parse.parser", r)
 		if err != nil {
 			return nil, err
 		}
-		if err := g.ensureOpen("Parse.register", r); err != nil {
+		if err := g.ensureOpen("Parse.parser", r); err != nil {
 			return nil, err
 		}
-
-		// Replay the deferred grammar steps (tokens, rules, ABNF installs) now
-		// that every mark action is known, then apply custom matchers LAST
-		// (priority-sorted) so a grammar install cannot drop or reorder them.
 		for _, step := range g.steps {
 			if serr := step(); serr != nil {
 				return nil, r.AqlErrorHint("parse_bad_grammar",
-					fmt.Sprintf("Parse.register %q: %s", name, serr.Error()),
-					"Parse.register", "check the grammar is well-formed")
+					fmt.Sprintf("Parse.parser: %s", serr.Error()),
+					"Parse.parser", "check the grammar is well-formed")
 			}
 		}
 		g.applyMatchers()
-
-		spec := ParseLangSpec{
-			Name:    name,
-			Returns: []*native.Type{native.TAny},
-			Handler: g.parseHandler(name),
-		}
-		if rerr := RegisterHostParser(r, spec); rerr != nil {
-			return nil, r.AqlError("parse_register_error",
-				fmt.Sprintf("Parse.register: %v", rerr), "Parse.register")
-		}
 		// Single-use: the finalized parser closes over g/g.j; further builder
-		// words or a second register must not mutate it.
+		// words or a second finalize must not mutate it.
 		g.registered = true
-		return nil, nil
+
+		// Uniquely named per finalize: two parsers carry different grammars,
+		// and downstream identity keys on the name. (Hyphen-digits, not the
+		// mini-partial `#N` convention — this name IS a registered word and
+		// must pass ValidateWordName.)
+		parseParserSeq++
+		inner := fmt.Sprintf("parse-parser-%d", parseParserSeq)
+		subReg.RegisterNativeFunc(native.NativeFunc{
+			Name: inner,
+			Signatures: []native.Signature{{
+				Args:       []*native.Type{native.TAny, native.TMap},
+				Returns:    []*native.Type{native.TAny},
+				BarrierPos: -1,
+				Impl:       native.Go(parseSourceShell(g.parseHandler("parser"))),
+			}},
+		})
+		return []native.Value{wrapMiniFnDef(inner, [][]native.FnParam{
+			{{Type: native.TAny}, {Type: native.TMap}},
+		}, []*native.Type{native.TAny}, nil, subReg)}, nil
 	}
+}
+
+// parseParserSeq disambiguates finalized-parser names process-wide.
+var parseParserSeq int
+
+// parseParserReturns is parse-parser's check-mode value: the grammar
+// carrier is never concrete under analysis, so the parser is an abstract
+// Function carrier — PLAIN, not dynamic: the declared return type is exact
+// (the finalizer always yields a conforming parser fn), and a plain typed
+// carrier is what lets the compile pass record both this call and the
+// downstream parselang-fn-dispatch without tripping the dynamic-operand
+// refusals. The `parse` macro's carrier branch handles the dispatch.
+func parseParserReturns(_ []native.Value, _ *native.Registry) []native.Value {
+	return []native.Value{native.NewCarrier(native.TFunction)}
 }
 
 // parseHandler builds the ParseLang (the ParseLangSpec handler) that runs

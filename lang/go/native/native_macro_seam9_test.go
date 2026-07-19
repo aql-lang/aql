@@ -146,66 +146,7 @@ func TestW9EmitKindRegisteredNonModuleExport(t *testing.T) {
 	}
 }
 
-func TestW9MarkParseKindDeferredGuards(t *testing.T) {
-	// Nil registry and empty kind are no-ops.
-	MarkParseKindDeferred(nil, "x")
-	r := seam5Reg(t)
-	MarkParseKindDeferred(r, "")
-	if parseKindDeferred(r, "") {
-		t.Fatal("empty kind must not be recorded")
-	}
-	// First call creates the set; second call reuses the existing map.
-	MarkParseKindDeferred(r, "k1")
-	MarkParseKindDeferred(r, "k2")
-	if !parseKindDeferred(r, "k1") || !parseKindDeferred(r, "k2") {
-		t.Fatal("both deferred kinds must be recorded")
-	}
-}
-
-func TestW9ResetParseDeferredKindsGuard(t *testing.T) {
-	// Nil registry is a no-op (no panic).
-	ResetParseDeferredKinds(nil)
-}
-
-func TestW9InstallParseDeferredDispatchGuard(t *testing.T) {
-	// Nil registry / nil sig are no-ops (no panic).
-	InstallParseDeferredDispatch(nil, nil)
-	r := seam5Reg(t)
-	InstallParseDeferredDispatch(r, nil)
-}
-
-// --- recordDeferredParseDispatch (compile-recorder arms) ---
-
-func TestW9RecordDeferredParseDispatchNoDispatcher(t *testing.T) {
-	r := seam5Reg(t)
-	cleanup := r.Check.Begin()
-	defer cleanup()
-	r.Check.Emit = NewEmitState()
-	r.Check.Compiling = true
-	// No dispatcher installed → the sig lookup fails and recording declines.
-	if _, ok := recordDeferredParseDispatch(r, []Value{NewAtom("calc"), NewString("x")}); ok {
-		t.Fatal("recordDeferredParseDispatch must decline without an installed dispatcher")
-	}
-}
-
-func TestW9RecordDeferredParseDispatchThreeArgs(t *testing.T) {
-	r := seam5Reg(t)
-	cleanup := r.Check.Begin()
-	defer cleanup()
-	r.Check.Emit = NewEmitState()
-	r.Check.Compiling = true
-	InstallParseDeferredDispatch(r, &Signature{
-		Args:       []*Type{TAtom, TAny, TAny},
-		Returns:    []*Type{TAny},
-		BarrierPos: -1,
-	})
-	// Three args → the opts-middle / source-last split branch.
-	out, ok := recordDeferredParseDispatch(r,
-		[]Value{NewAtom("calc"), NewMap(NewOrderedMap()), NewString("x + y")})
-	if !ok {
-		t.Fatal("recordDeferredParseDispatch should record with a dispatcher installed")
-	}
-	if !out.Dynamic {
-		t.Fatalf("deferred parse result should be a dynamic carrier, got %s", out.String())
-	}
-}
+// (The deferred parse-KIND machinery — MarkParseKindDeferred and the
+// parselang-deferred-dispatch recorder — was deleted with Parse.register:
+// grammar parsers are now Parse.parser Function VALUES dispatched through
+// parselang-fn-dispatch; see native_macro_parsefn_test.go.)
