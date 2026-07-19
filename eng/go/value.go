@@ -1222,6 +1222,18 @@ type Value struct {
 	// slot) at a typed use so a later provably-disjoint use of the same
 	// name is caught. Read via DynFrom() (nil-safe), set via SetDynFrom.
 	dynFrom *string
+	// elem is the retained ELEMENT constraint of a concrete typed container
+	// ({:T} map / [:T] list), behind a pointer so its Value doesn't ride on
+	// every runtime copy (nil for the overwhelming majority — everything that
+	// is not a concrete typed container). Construction (unifyTyped*WithConcrete)
+	// is the sole origin; it lets a concrete {:T} value stay CONCRETE (Data is
+	// still the MapPayload/ListPayload, AsMap/AsList/IsConcrete unchanged) while
+	// carrying the element type that write-enforcement (set/setpath/merge) and
+	// strict reads consult. The constraint is the child Value verbatim — a bare
+	// type literal, a disjunct ({:(A tor B)}), or a nested typed-container
+	// literal ({:[:Integer]}). Read via ElemConstraint() (nil-safe), set via
+	// SetElemConstraint. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+	elem *Value
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1358,6 +1370,29 @@ func (v *Value) SetDynFrom(name string) {
 		return
 	}
 	v.dynFrom = &name
+}
+
+// ElemConstraint returns the retained element constraint of a concrete
+// typed container ({:T} map / [:T] list) and true, or a zero Value and
+// false when v carries no tag (the common case). Nil-safe read of the
+// pointer. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func (v Value) ElemConstraint() (Value, bool) {
+	if v.elem == nil {
+		return Value{}, false
+	}
+	return *v.elem, true
+}
+
+// SetElemConstraint attaches (c present) or clears (c a zero/bare-Any
+// literal) the element constraint carried by a concrete typed container.
+// Construction (unifyTyped*WithConcrete) is the sole caller; an Any child
+// clears the tag (an untyped container is not element-constrained).
+func (v *Value) SetElemConstraint(c Value) {
+	if c.Parent == nil || c.Parent.Equal(TAny) {
+		v.elem = nil
+		return
+	}
+	v.elem = &c
 }
 
 // Name is the nil-safe read of the type-node leaf name — "" for an

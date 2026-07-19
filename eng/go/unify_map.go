@@ -156,9 +156,17 @@ func unifyConcreteMaps(aMap, bMap ReadMap) (Value, *UnifyError) {
 }
 
 // unifyTypedMapWithConcrete unifies a child type constraint against
-// each value of a concrete map. Every value must unify.
+// each value of a concrete map. Every value must unify. The concrete
+// result RETAINS childType as its element tag (Value.elem) so writes can
+// be enforced and reads narrowed — the map stays concrete (MapPayload),
+// the tag rides alongside. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
 func unifyTypedMapWithConcrete(childType Value, m ReadMap) (Value, *UnifyError) {
-	return unifyMapValues(m, func(string) Value { return childType })
+	res, err := unifyMapValues(m, func(string) Value { return childType })
+	if err != nil {
+		return Value{}, err
+	}
+	res.SetElemConstraint(childType)
+	return res, nil
 }
 
 // unifyFieldBags unifies two field-schema maps key-by-key. Both must

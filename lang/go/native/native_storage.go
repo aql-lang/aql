@@ -47,15 +47,17 @@ var storageNatives = []NativeFunc{
 			// a NEW map with the key bound and leaves the receiver
 			// untouched — the same contract as push / StructUtil.setpath.
 			{
-				Args:    []*Type{TString, TAny, TMap},
-				Impl:    Go(setMapHandler),
-				Returns: []*Type{TMap}, BarrierPos: -1,
+				Args:      []*Type{TString, TAny, TMap},
+				Impl:      Go(setMapHandler),
+				Returns:   []*Type{TMap},
+				ReturnsFn: setMapTypedReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TMap},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(setMapHandler),
-				Returns:   []*Type{TMap}, BarrierPos: -1,
+				Returns:   []*Type{TMap},
+				ReturnsFn: setMapTypedReturns, BarrierPos: -1,
 			},
 
 			// List (immutable — copy-returning, completing the column
@@ -256,6 +258,54 @@ func stripQuoteArgs(sigs []Signature) []Signature {
 
 // ---- kernel-container handlers (Node / Store / Class / None) ----
 
+// d2WriteConforms reports whether writing `v` into a typed container whose
+// element constraint is `elem` is permitted — the SAME per-element unify the
+// construction check runs (unifyMapValues: unifyInner(childType, val)). The
+// element order (elem first) mirrors construction exactly. A carrier/dynamic
+// written value can't be statically judged, so it conforms (gradual — the
+// runtime handler re-checks the concrete value). See
+// design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func d2WriteConforms(elem, v Value) bool {
+	if !IsConcrete(v) {
+		return true
+	}
+	_, ok := Unify(elem, v)
+	return ok
+}
+
+// d2WriteRuntimeError is the runtime write-enforcement for a typed container
+// (R2): a concrete write that does not conform to the retained element tag is
+// a type_error. Returns nil when the receiver carries no tag (untyped
+// container — unchanged) or the write conforms. word is "set"/"setpath"/…
+func d2WriteRuntimeError(r *Registry, recv, v Value, word string) error {
+	elem, ok := recv.ElemConstraint()
+	if !ok || d2WriteConforms(elem, v) {
+		return nil
+	}
+	return r.AqlError("type_error",
+		fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
+		word)
+}
+
+// d2CheckWrite is the check-mode mirror of d2WriteRuntimeError: at the
+// top-level straight line, a provably-non-conforming CONCRETE write into a
+// tagged container is flagged as the type_error the runtime raises identically
+// (a RuntimeMirror — the program compiles and raises). Inside a fn body the
+// runtime still enforces (both compiled and interpreted raise), but the
+// checker stays conservative here, matching setClassInstanceReturns.
+func d2CheckWrite(r *Registry, recv, v Value, word string, pos SrcPos) {
+	if !atUncaughtTopLevel(r) {
+		return
+	}
+	elem, ok := recv.ElemConstraint()
+	if !ok || d2WriteConforms(elem, v) {
+		return
+	}
+	eng.CheckAddUniqueDiagnostic(r, "type_error",
+		fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
+		word, pos)
+}
+
 // setMapHandler is the Map form of set. A Map stays immutable: the
 // handler returns a NEW map with the key bound (overwriting an existing
 // entry), leaving the receiver untouched. This is the language's rule
@@ -263,7 +313,7 @@ func stripQuoteArgs(sigs []Signature) []Signature {
 // mutate in place and return nothing; immutable values return the
 // updated copy. Keys are strings or atoms, computed keys via parens:
 // `m set (k) v`.
-func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func setMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, err := RequireConcreteMap(args[2], "set")
 	if err != nil {
 		return nil, err
@@ -277,13 +327,23 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
+	// R2: a write into a typed container ({:T}) must conform to the element
+	// tag, at runtime as well as check. The result KEEPS the tag so a chained
+	// write / read stays enforced and precise.
+	if werr := d2WriteRuntimeError(r, args[2], val, "set"); werr != nil {
+		return nil, werr
+	}
 	out := NewOrderedMap()
 	for _, k := range m.Keys() {
 		v, _ := m.Get(k)
 		out.Set(k, v)
 	}
 	out.Set(key, val)
-	return []Value{NewMap(out)}, nil
+	res := NewMap(out)
+	if elem, ok := args[2].ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return []Value{res}, nil
 }
 
 // setClassInstanceHandler is the sealed in-place write for class
@@ -534,6 +594,35 @@ func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
 	return []Value{NewDynamicCarrier(ft)}
 }
 
+// d2TypedContainerBound is the D2 (read-type precision) narrowing: a read over a
+// TYPED-container CARRIER ({:T} map / [:T] list) narrows to a DYNAMIC carrier of
+// the declared element type instead of dynamic(Any). Returns (_, false) when the
+// container carries no narrower-than-Any element type (an untyped Map/List keeps
+// dynamic(Any)). See design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part B.
+//
+// The bound is DYNAMIC (gradual) — a read is only a claim the write-enforcement
+// (Part C) backs. What the narrower bound buys: a provably-DISJOINT dispatch (a
+// {:Boolean} read reaching an Integer|String word) refuses at compile time, while
+// a COVERED read commits or polys exactly as the element type warrants, and an
+// UNTYPED read is unchanged.
+func d2TypedContainerBound(container Value) (Value, bool) {
+	ci, err := AsChildType(container)
+	if err != nil {
+		return Value{}, false
+	}
+	child := ci.Child
+	if child.Parent == nil || child.Parent.Equal(TAny) {
+		return Value{}, false
+	}
+	// A disjunct element ({:(String tor Integer)}) keeps its DisjunctInfo bound;
+	// clone for a fresh identity (the shared child ID would collide in operand-
+	// provenance tracking). A single-type element takes a fresh dynamic carrier.
+	if IsDisjunct(child) {
+		return NewDynamicCarrierValue(CloneValue(child)), true
+	}
+	return NewDynamicCarrier(child.Parent), true
+}
+
 func getNodeReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
@@ -584,6 +673,14 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	if container.Carrier && container.Parent != nil {
 		if rt, ok := container.Parent.Data.(RecordTypeInfo); ok && rt.Fields != nil {
 			return recordSchemaFieldReturns(rt, key)
+		}
+	}
+	// D2 Part B: a TYPED-map carrier ({:T}) narrows the read to its declared
+	// element type. A concrete map falls through to the exact per-key narrowing
+	// below; an untyped carrier keeps dynamic(Any).
+	if !IsConcrete(container) && IsTypedMap(container) {
+		if b, ok := d2TypedContainerBound(container); ok {
+			return []Value{b}
 		}
 	}
 	if !IsConcrete(container) || !container.Parent.ConformsTo(TMap) {
@@ -673,6 +770,14 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 // mistyped a parselang `get 1` over a list as None).
 func getIntKeyReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
+	// D2 Part B: an index read over a TYPED-list carrier ([:T]) narrows to its
+	// declared element type. A concrete list falls through to the exact per-index
+	// narrowing below; an untyped carrier keeps dynamic(Any).
+	if len(args) == 2 && IsConcrete(args[0]) && !IsConcrete(args[1]) && IsTypedList(args[1]) {
+		if b, ok := d2TypedContainerBound(args[1]); ok {
+			return []Value{b}
+		}
+	}
 	if len(args) != 2 || !IsConcrete(args[0]) || !IsConcrete(args[1]) ||
 		!args[1].Parent.ConformsTo(TList) {
 		return dyn
@@ -975,8 +1080,20 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 func setListIndexReturns(args []Value, r *Registry) []Value {
 	if len(args) == 3 {
 		CheckListIndex(r, args[0], args[2], "set")
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // R2: [:T] write enforcement
 	}
 	return []Value{NewCarrier(TList)}
+}
+
+// setMapTypedReturns is the check-mode mirror of setMapHandler's typed-container
+// write enforcement (R2): a non-conforming concrete write into a {:T} map is the
+// type_error the runtime raises. The residual is the declared updated-copy Map
+// (unchanged) — the receiver's tag drives the check, not the residual.
+func setMapTypedReturns(args []Value, r *Registry) []Value {
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+	}
+	return []Value{NewCarrier(TMap)}
 }
 
 func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -1000,10 +1117,19 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
+	// R2: a typed list ([:T]) enforces its element tag on write and keeps it
+	// on the returned copy — see setMapHandler.
+	if werr := d2WriteRuntimeError(r, args[2], val, "set"); werr != nil {
+		return nil, werr
+	}
 	out := make([]Value, n)
 	for i := 0; i < n; i++ {
 		out[i] = lst.Get(i)
 	}
 	out[idx] = val
-	return []Value{NewList(out)}, nil
+	res := NewList(out)
+	if elem, ok := args[2].ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return []Value{res}, nil
 }

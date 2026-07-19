@@ -111,5 +111,10 @@ func unifyTypedListWithConcrete(childType Value, elems []Value) (Value, *UnifyEr
 	if err != nil {
 		return Value{}, err
 	}
-	return NewList(result), nil
+	// Retain childType as the element tag on the concrete result so writes
+	// can be enforced and reads narrowed — the list stays concrete
+	// (ListPayload). See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+	out := NewList(result)
+	out.SetElemConstraint(childType)
+	return out, nil
 }

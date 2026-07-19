@@ -597,7 +597,7 @@ WORD set
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Node/Xml/FlexXml] barrier=3 returns=[Node/Xml/FlexXml]
   [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap] +returnsfn
-  [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map]
+  [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map] +returnsfn
   [Scalar/String Any Scalar/Micron] barrier=3 +returnsfn
   [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList]
   [Scalar/Number/Integer Any Node/List] barrier=3 returns=[Node/List] +returnsfn
@@ -605,7 +605,7 @@ WORD set
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Node/Xml/FlexXml] barrier=3 quote={0} returns=[Node/Xml/FlexXml]
   [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap] +returnsfn
-  [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map]
+  [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map] +returnsfn
   [Scalar/Atom Any Scalar/Micron] barrier=3 quote={0} +returnsfn
 WORD setpath
   [Ideal/Reach Any Any] barrier=3 returns=[Any] +returnsfn

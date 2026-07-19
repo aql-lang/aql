@@ -520,6 +520,41 @@ func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
 	return Value{}, false
 }
 
+// typedContainerCarrier generalises a TYPED-container param ({:T} map / [:T] list)
+// to a carrier that PRESERVES its declared ELEMENT type — the D2 read-precision
+// foundation (design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part A). The element
+// type rides on p.Pattern (a typed-map/list value carrying a ChildTypeInfo), NOT
+// p.Type (which generalises to bare Node), so mirror recordSchemaCarrier: read the
+// pattern and mint a FRESH ID so each typed-container param keys a DISTINCT
+// frame-local slot (StartFnCompile → RegisterLocal; a zero ID collapses two
+// params onto one slot). Without this, NewCarrier(a.Parent) collapses the child to
+// Any and the body reads the container back as dynamic(Any). {:Any} (child Any)
+// falls through so its reads stay dynamic(Any), unchanged. The CONTAINER carrier
+// stays a plain (non-dynamic) typed carrier — the accessor makes the READ dynamic
+// (Part B), keeping the container's own dispatch (`m size`) unchanged.
+func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
+	if p.Pattern == nil || a.Parent == nil {
+		return Value{}, false
+	}
+	pat := *p.Pattern
+	ci, err := AsChildType(pat)
+	if err != nil || ci.Child.Parent == nil || ci.Child.Parent.Equal(TAny) {
+		return Value{}, false
+	}
+	if IsTypedMap(pat) && (a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
+		v := NewTypedMap(ci.Child)
+		v.ID = GenerateID(IDPrefixForType(TMap))
+		v.Carrier = true
+		return v, true
+	}
+	if IsTypedList(pat) && (a.Parent.ConformsTo(TList) || a.Parent.Equal(TAny)) {
+		v := NewCarrierTypedListValue(ci.Child)
+		v.ID = GenerateID(IDPrefixForType(TList))
+		return v, true
+	}
+	return Value{}, false
+}
+
 func narrowArgsToParams(args []Value, params []FnParam) []Value {
 	var out []Value
 	for i := range args {
@@ -1149,6 +1184,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				if i < len(sigParams) {
 					if rc, ok := recordSchemaCarrier(sigParams[i], a); ok {
 						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
+						continue
+					}
+					if tc, ok := typedContainerCarrier(sigParams[i], a); ok {
+						genArgs[i] = tc // D2 Part A: preserve {:T} element type into the body carrier
 						continue
 					}
 					// A RECOVERED call: an Any arg flowed into a CONCRETELY-typed
