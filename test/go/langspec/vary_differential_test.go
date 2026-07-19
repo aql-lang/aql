@@ -128,6 +128,7 @@ const defaultVarySeeds = 32
 // census (2026-07-13, 32 seeds): pass=384 refused=42 islanded=0.
 var varyRefusalLedger = map[string]string{
 	"check diagnostics (wrapped-context false positive)": "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
+	"conditional fn shadow (branch/loop)":                "a user fn REDEFINED inside a conditionally-reached body (if/case arm, for/each loop) overlap-removes the enclosing overload in place, so the branch/loop def rollback cannot restore it and compiled resolution bakes the shadow while the interpreter keeps the outer fn when the branch is not taken (or the loop runs zero times) — sound refusal (design/frontier: frontier-conditional-fn-shadow.tsv)",
 	"for: body nets multiple values per iteration":       "NARROWED (net drivers landed): only Function-bearing multi-value loop regions keep this refusal — the parked-fn cross-iteration auto-apply hazard; const/computed regions compile",
 	"operand provenance":                                 "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
 	"residual lowering (Stage 1 limit)":                  "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",

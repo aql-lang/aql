@@ -50,6 +50,13 @@ func NewPid(p *eng.Process) Value {
 	return eng.NewExtension(TPid, p)
 }
 
+// PidProcess unwraps a Pid value to its process — the hook a Go
+// driver uses to deliver messages to an AQL-held pid (aql:tui's
+// deliver-events). The bool is false for non-Pid values.
+func PidProcess(v Value) (*eng.Process, bool) {
+	return asPid(v)
+}
+
 func asPid(v Value) (*eng.Process, bool) {
 	ep, ok := v.Data.(eng.ExtensionPayload)
 	if !ok {

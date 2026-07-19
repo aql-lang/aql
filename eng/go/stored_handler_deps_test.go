@@ -6,8 +6,9 @@ import "testing"
 // PR #243 comment-#2 fix: storedHandlerDeps records exactly the body words bound
 // as a user def at the store site (so a later NotifyNameRebound can poison a stale
 // ref). It walks every guard — nil / reg-less receiver, an empty-name word, a
-// repeat, and a word that is NOT a user def (a kernel native) — plus storedFnDeps
-// over a fn value with and without an own sig.
+// repeat, and a word that is NOT a user def (a kernel native). (The per-fd
+// storedFnDeps wrapper retired with the §7b per-sig stamps — every caller now
+// passes the stamped sig's own body directly.)
 func TestStoredHandlerDepsBranches(t *testing.T) {
 	var nilES *EmitState
 	if nilES.storedHandlerDeps([]Value{NewWord("x")}) != nil {
@@ -32,15 +33,6 @@ func TestStoredHandlerDepsBranches(t *testing.T) {
 	// A body reading no user def yields nil.
 	if d := es.storedHandlerDeps([]Value{NewWord("zzznotdef")}); d != nil {
 		t.Fatalf("deps = %v, want nil (no user-def reads)", d)
-	}
-
-	// storedFnDeps: no own sig → nil; an own AQL body sig → its body's deps.
-	if es.storedFnDeps(FnDefInfo{}) != nil {
-		t.Fatal("storedFnDeps with no own sig must be nil")
-	}
-	fd := FnDefInfo{Signatures: []Signature{{Impl: &AQLImpl{Body: []Value{NewWord("helper")}}}}}
-	if d := es.storedFnDeps(fd); d == nil || !d["helper"] {
-		t.Fatalf("storedFnDeps = %v, want {helper}", d)
 	}
 }
 

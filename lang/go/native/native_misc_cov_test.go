@@ -545,7 +545,7 @@ func TestMiscCovReadOptsRev(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	out, rerr := NewTop(r).Run([]Value{NewString("f.txt"), NewMap(opts), NewWord("read")})
+	out, rerr := NewTop(r).Run([]Value{pathV("f.txt"), NewMap(opts), NewWord("read")})
 	if rerr != nil {
 		t.Fatalf("stack-first read: %v", rerr)
 	}
@@ -820,7 +820,7 @@ func TestMiscCovWriteFormatGates(t *testing.T) {
 
 	// The happy path through writeAnyOptsHandler upgrades text to jsonic.
 	opts2 := NewOrderedMap()
-	out, herr := writeAnyOptsHandler([]Value{NewString("o.j"), NewInteger(5), NewMap(opts2)}, nil, nil, r)
+	out, herr := writeAnyOptsHandler([]Value{pathV("o.j"), NewInteger(5), NewMap(opts2)}, nil, nil, r)
 	if herr != nil || len(out) != 1 {
 		t.Fatalf("writeAnyOptsHandler happy path = %v, %v", out, herr)
 	}

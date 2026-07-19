@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
+	"github.com/aql-lang/aql/cmd/go/internal/attach"
 	"github.com/aql-lang/aql/cmd/go/internal/build"
 	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
@@ -203,6 +204,7 @@ func buildRegistry() *command.Registry {
 	// Commands: cross-process debugging (serve introspection / attach).
 	r.Register(debugcmd.New())
 	// Commands: supervisor control plane client.
+	r.Register(attach.New())
 	r.Register(ctl.New())
 	// Services: long-running input loops.
 	r.Register(repl.New())

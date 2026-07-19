@@ -507,6 +507,15 @@ func makePathon(srcVal Value, abs bool) ([]Value, error) {
 	}
 }
 
+// NewPathonFromString parses a path string into a Pathon value with the
+// same rules as `make Pathon "<s>"` (a Windows drive prefix switches on
+// drive parsing; anything else is POSIX). Host code that surfaces OS
+// paths as values uses this — the aql:io watch events in particular,
+// whose records must carry Pathon microns, never bare strings.
+func NewPathonFromString(s string) Value {
+	return NewValueRaw(TPathon, PathonPayload{Info: parsePathonString(s)})
+}
+
 // isPathonSep reports whether c is a Pathon path separator. Both the POSIX
 // "/" and the Windows "\" separate segments, so a Windows path spelled
 // with either slash parses the same way.
@@ -1076,23 +1085,15 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		return NewInteger(n), nil
 
 	case targetType.ConformsTo(TBoolean):
-		switch {
-		case src.Parent.ConformsTo(TBoolean):
-			return src, nil
-		case src.Parent.ConformsTo(TNumber):
-			_as0, _ := AsNumber(src)
-			return NewBoolean(_as0 != 0), nil
-		default:
-			text := ValToString(src)
-			switch text {
-			case "true":
-				return NewBoolean(true), nil
-			case "false":
-				return NewBoolean(false), nil
-			default:
-				return NewBoolean(text != ""), nil
-			}
-		}
+		// Boolean is a COERCION, not a parse — identical to the truthiness
+		// rule `if` and friends apply (CoerceBoolean), and identical to the
+		// `convert` word: a value is false iff it is absent/empty (empty
+		// String, 0, none, empty collection) and true otherwise. String
+		// CONTENT is never inspected, so "false"/"true" are ordinary
+		// non-empty strings that both coerce to true. Parsing the literal
+		// words "true"/"false" into booleans is a separate operation that
+		// lives elsewhere, not in make/field coercion.
+		return NewBoolean(CoerceBoolean(src)), nil
 
 	case targetType.Equal(TAtom):
 		return NewAtom(ValToString(src)), nil

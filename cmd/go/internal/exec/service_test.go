@@ -164,6 +164,26 @@ func TestServerStopReportsShutdownTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer: %s", err)
 	}
+	// Deterministic accept barrier: Shutdown only waits on connections the
+	// http.Server has ACCEPTED into its tracked set. A dialed conn still in
+	// the kernel backlog when Stop closes the listener never blocks the
+	// shutdown, so the short-deadline Stop "succeeds" and the assertion
+	// below loses a scheduling race (Dial returns on the kernel handshake,
+	// well before Serve's Accept runs — reliably so on a loaded machine).
+	// Hook ConnState before Start and wait for StateNew, so Stop always
+	// races a TRACKED connection; a tracked conn — StateNew or StateActive
+	// — keeps Shutdown polling until the deadline expires. This test's only
+	// connection is the hanging one (waitExecState polls the atomic), so
+	// the signal is unambiguous.
+	accepted := make(chan struct{}, 1)
+	s.srv.ConnState = func(_ net.Conn, st http.ConnState) {
+		if st == http.StateNew {
+			select {
+			case accepted <- struct{}{}:
+			default:
+			}
+		}
+	}
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.Start(context.Background()) }()
 	waitExecState(t, s, service.StateRunning)
@@ -177,6 +197,11 @@ func TestServerStopReportsShutdownTimeout(t *testing.T) {
 	defer conn.Close()
 	if _, err := conn.Write([]byte("GET /healthz HTTP/1.1\r\n")); err != nil {
 		t.Fatalf("write partial request: %s", err)
+	}
+	select {
+	case <-accepted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("server never accepted the hanging connection")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

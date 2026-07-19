@@ -111,6 +111,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Ideal/Service":      5008, // service/endpoint — lang/go/native/native_service.go
 		"Ideal/Socket":       5009, // connection handle — lang/go/modules/net_socket.go
 		"Ideal/Listener":     5010, // listening socket — lang/go/modules/net_socket.go
+		"Ideal/Terminal":     5011, // terminal handle — lang/go/modules/tui.go
 		"Word/__IS":          51,
 		"Word/__XI":          109, // interpolated XML literal skeleton
 		"Type/Disjunct/Enum": 62,

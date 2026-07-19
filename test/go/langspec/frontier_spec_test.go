@@ -143,6 +143,16 @@ const docMod = `import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [
 // refusal reason substring (stable core only); "" is the bootstrap sentinel.
 // Signatures transcribed from the 2026-07-13 bootstrap run.
 var frontierCompileLedger = map[string]frontierEntryLS{
+	// Conditional fn-shadow — a MISCOMPILE (variation sweep,
+	// forward-barrier.tsv:73); now a SOUND REFUSAL: a user fn redefined
+	// inside a conditionally-reached body overlap-removes the enclosing
+	// overload in place, so the branch/loop def rollback cannot restore it and
+	// compiled resolution bakes the shadow while the interpreter keeps the
+	// outer fn on the not-taken / zero-iteration path. Refused CondBodyDepth-
+	// gated (eng/go/core_helpers.go). Full graduation = a runtime dispatch
+	// respecting the conditional binding compiles these rows.
+	`def g fn [[x:Any] [Integer] [x add 100]] if false [def g fn [[x:Any] [Integer] [x add 1]]] g 1`: {why: "conditional fn redefinition shadows an outer overload; compiled bake would diverge from the interpreter on the not-taken branch", failsWith: "redefined inside a conditional body"},
+
 	// L-DO — plan Phase 5: the body nets N values on no-raise but 1 Error on
 	// raise; needs OpStackMark/OpDropToMark variable arity across the catch
 	// merge. One entry per fallibility route (Reach raise, no-raise-at-input,

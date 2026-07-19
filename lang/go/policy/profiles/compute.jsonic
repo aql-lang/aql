@@ -39,6 +39,7 @@
     sqlite:  { install: false }
     process: { install: false }
     env:     { install: false }
+    terminal: { install: false }
     formats: { words: { default: "allow" } }
     clock:   { words: { default: "allow" } }
   }

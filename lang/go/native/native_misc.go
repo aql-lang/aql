@@ -233,31 +233,25 @@ func init() {
 
 // ---- file I/O handlers ----
 
-// extractPath returns the routing path from a Stream handle, Path, or
-// String value. A Stream atom (stdin/stdout/stderr) resolves to its
-// internal stream sentinel so doRead/doWrite route to the host stream.
+// extractPath returns the routing path from a Stream handle or a Pathon. A
+// Stream atom (stdin/stdout/stderr) resolves to its internal stream sentinel
+// so doRead/doWrite route to the host stream; a Pathon renders to its path
+// string. File I/O is Pathon-only — string paths are not accepted — so these
+// are the only two shapes reaching here.
 func extractPath(v Value) string {
 	if sentinel, ok := streamSentinel(v); ok {
 		return sentinel
 	}
-	if IsPathon(v) {
-		_as5, _ := AsPathon(v)
-		return _as5.String()
-	}
-	_as6, _ := AsString(v)
-	return _as6
+	_as5, _ := AsPathon(v)
+	return _as5.String()
 }
 
-// returnPath wraps the result: a Stream handle or Path returns itself;
-// a String path returns the resolved string.
-func returnPath(v Value, pathStr string) Value {
-	if _, ok := streamSentinel(v); ok {
-		return v
-	}
-	if IsPathon(v) {
-		return v
-	}
-	return NewString(pathStr)
+// returnPath is the value a filesystem word hands back: the Pathon or Stream
+// handle the caller passed. Every io target is now a value-carrying micron or
+// stream handle, so the input is returned verbatim — the resolved path string
+// is used only for the operation itself, never as the return.
+func returnPath(v Value) Value {
+	return v
 }
 
 func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -272,6 +266,14 @@ func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	enc, format, _, nl, fmtExplicit, parserOpts := parseFileOpts(args[1])
+	// Binary ({enc:'bytes'}) and positioned ({offset}/{length}) reads bypass
+	// format decoding; anything else falls through to the normal decode path.
+	if res, handled, err := tryBinaryRead(r, path, enc, args[1]); handled {
+		if err != nil {
+			return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+		}
+		return res, nil
+	}
 	if !fmtExplicit {
 		if extFmt := formatFromExt(r, path); extFmt != "" {
 			format = extFmt
@@ -289,11 +291,11 @@ func readOptsRevHandler(args []Value, ctx map[string]Value, stack []Value, r *Re
 func writeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	content, _ := args[1].AsConcreteString()
-	result, err := doWrite(r, path, content, "utf8", "text", "write", "lf")
+	result, err := doWrite(r, path, content, "utf8", "text", "write", "lf", false, false)
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -303,11 +305,11 @@ func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err := checkWritableFormat(r, format, fmtExplicit); err != nil {
 		return nil, err
 	}
-	result, err := doWrite(r, path, content, enc, format, mode, nl)
+	result, err := doWrite(r, path, content, enc, format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false))
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // checkWritableFormat rejects a write whose explicit {fmt:…} resolves to a
@@ -336,11 +338,11 @@ func checkWritableFormat(r *Registry, format string, fmtExplicit bool) error {
 func writeAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	content := valueToJsonic(args[1])
-	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf")
+	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf", false, false)
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // write: [path/string, any, map] -> [path/string] (for non-string data with fmt)
@@ -354,11 +356,11 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		format = "jsonic"
 	}
 	content := valueToJsonic(args[1])
-	result, err := doWrite(r, path, content, "utf8", format, mode, nl)
+	result, err := doWrite(r, path, content, "utf8", format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false))
 	if err != nil {
 		return result, err
 	}
-	return []Value{returnPath(args[0], path)}, nil
+	return []Value{returnPath(args[0])}, nil
 }
 
 // ---- help / describe handlers ----

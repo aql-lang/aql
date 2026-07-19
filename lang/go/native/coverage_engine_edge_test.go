@@ -783,10 +783,11 @@ func TestMakeConvertToBoolFromString(t *testing.T) {
 	if !_as42 {
 		t.Error("expected true")
 	}
+	// A non-empty String coerces to true — content is not parsed.
 	v2, _ := makeConvert(NewString("false"), TBoolean)
 	_as43, _ := AsBoolean(v2)
-	if _as43 {
-		t.Error("expected false")
+	if !_as43 {
+		t.Error("expected true for non-empty string \"false\"")
 	}
 	v3, _ := makeConvert(NewString(""), TBoolean)
 	_as44, _ := AsBoolean(v3)

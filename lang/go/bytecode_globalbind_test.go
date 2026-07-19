@@ -161,20 +161,22 @@ func TestGlobalBindEnvelope(t *testing.T) {
 		t.Errorf("fn-body def must not persist cross-request, got err=%v", err)
 	}
 
-	// The residual refusal shape: a def of a VARIADIC loop collect has no
-	// single value to peek and no promotable home — it must REFUSE (Stage J:
-	// compile_refused), and the program stays serviceable via RunInterp.
+	// GRADUATED (REFUSAL-CLOSURE S5, 2026-07-17): a def of a STATICALLY-
+	// COUNTED variadic loop collect binds the region's first value via the
+	// splice-at-depth OpBindGlobal and spills the rest — compiled parity
+	// with the interpreter. A DYNAMIC count keeps the refusal (the split
+	// needs the static region size) — the zzRefusingRow fixture.
 	b := mustNew(t)
-	_, _, err := b.RunCompiled(`def xs (for 3 [1]) xs`)
-	if codeOf(err) != "compile_refused" {
-		t.Errorf("variadic loop def: err=[%s] %v, want compile_refused", codeOf(err), err)
+	gotC, compiledB, err := b.RunCompiled(`def xs (for 3 [1]) xs`)
+	if !compiledB || err != nil {
+		t.Errorf("S5 static loop def: compiled=%v err=%v, want a compiled run", compiledB, err)
 	}
 	c := mustNew(t)
 	out, ierr := c.RunInterp(`def xs (for 3 [1]) xs`)
 	if ierr != nil {
 		t.Fatalf("variadic loop def must interpret cleanly: %v", ierr)
 	}
-	if fmt.Sprint(out) != "[1 1 1]" {
-		t.Errorf("variadic loop def interp = %v", out)
+	if fmt.Sprint(out) != "[1 1 1]" || fmt.Sprint(gotC) != fmt.Sprint(out) {
+		t.Errorf("S5 parity: compiled=%v interp=%v, want [1 1 1] both", gotC, out)
 	}
 }

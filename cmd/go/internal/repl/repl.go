@@ -14,6 +14,8 @@ import (
 	"github.com/aql-lang/aql/eng/go/parser"
 	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/modules"
+
+	"github.com/aql-lang/aql/cmd/go/internal/termback"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "github.com/voxgig/udk/go"
@@ -36,6 +38,10 @@ var newRegistry = func() (*native.Registry, error) {
 	// prompt (and so `describe` can load and document modules) — the same
 	// wiring lang.New does for one-shot runs.
 	modules.InstallResolver(reg)
+	// The real-TTY tuikit backend, so aql:tui words reach the terminal
+	// from the prompt too (a duplicate registration is the only failure
+	// and means the backend is already there).
+	_ = modules.RegisterHostTui(reg, termback.Spec())
 	return reg, nil
 }
 

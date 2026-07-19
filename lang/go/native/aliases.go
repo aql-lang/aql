@@ -424,6 +424,8 @@ var (
 	IsSealedWord              = eng.IsSealedWord
 	HasLockedSigs             = eng.HasLockedSigs
 	NewWordExtension          = eng.NewWordExtension
+	NewPathonFromString       = eng.NewPathonFromString
+	NewWordExtensionAnchored  = eng.NewWordExtensionAnchored
 	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete
@@ -448,6 +450,7 @@ var (
 	ApplyGuardNarrowing       = eng.ApplyGuardNarrowing
 	ApplyComplementNarrowing  = eng.ApplyComplementNarrowing
 	RunCarrierBodyWithDefs    = eng.RunCarrierBodyWithDefs
+	RunCarrierCondBody        = eng.RunCarrierCondBody
 	InstallJoinedDefs         = eng.InstallJoinedDefs
 	New                       = eng.New
 	RunPooled                 = eng.RunPooled

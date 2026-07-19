@@ -395,12 +395,14 @@ func TestEngineCoreMakeToBoolean(t *testing.T) {
 		t.Errorf("make Boolean 'true' = %v, want true", result)
 	}
 
+	// make Boolean coerces by presence, not content — a non-empty String
+	// is true, so the text "false" is true.
 	result = runAQL(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("false"),
 	})
 	_as20, _ := AsBoolean(result[0])
-	if len(result) != 1 || _as20 {
-		t.Errorf("make Boolean 'false' = %v, want false", result)
+	if len(result) != 1 || !_as20 {
+		t.Errorf("make Boolean 'false' = %v, want true", result)
 	}
 
 	result = runAQL(t, r, []Value{

@@ -223,34 +223,88 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 }
 
 // A multi-overload fn DEF'D INSIDE an enclosing fn body, called over a
-// gradual (Dynamic) arg: the poly re-match cannot compile it — the body-local
-// binding is popped before the VM runs, so a runtime Lookup could never
-// resolve it (tryCompileUserPolyArms' baseline-depth guard). The refusal is
-// sound; the interpreter owns body-local multi-overload fns.
-func TestBodyLocalMultiOverloadPolyRefuses(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+// gradual (Dynamic) arg — GRADUATED 2026-07-16 (REFUSAL-CLOSURE.0 §6b): the
+// body-local binding is popped before the VM runs, so instead of a live name
+// Lookup the plan FREEZES the dispatch table at record time
+// (UserPolyRef.Sigs) and the VM's runtime re-match runs over the stored
+// subset — the same MatchSignature first-match the interpreter takes over
+// its per-call construction (source-determined, so the tables agree). Both
+// arms dispatch by runtime value through ONE compiled program; a no-match
+// defers to the interpreter's canonical signature_error; and the one shape
+// whose live table CAN drift from the freeze — a callee whose own body
+// rebinds the same name (the dynamic-scope in-place overlap-replace, which
+// survives the callee's teardown) — keeps a sound refusal via the FnBinders
+// gate.
+func TestBodyLocalMultiOverloadPolyStored(t *testing.T) {
 	src := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:3}`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	prog, reason, _, cerr := a.CompileCheck(src)
-	if cerr != nil || prog != nil {
-		t.Fatalf("expected a sound refusal, got prog=%v err=%v (reason=%q)", prog != nil, cerr, reason)
+	if cerr != nil || prog == nil {
+		t.Fatalf("§6b: expected a stored-sig poly compile, refused: reason=%q err=%v", reason, cerr)
 	}
-	if !strings.Contains(reason, "inner") {
-		t.Errorf("refusal %q should name the body-local fn", reason)
+	if !strings.Contains(prog.Disassemble(), "CALL_USER_POLY") {
+		t.Errorf("expected a CALL_USER_POLY lowering:\n%s", prog.Disassemble())
 	}
 	gotC, compiled, errC, gotI, errI := runBothEngines(t, src)
-	if compiled {
-		t.Error("the refused program must take the interpreter fallback")
+	if !compiled {
+		t.Errorf("the stored-sig poly program must run compiled (errC=%v)", errC)
 	}
 	requireParity(t, src, gotC, errC, gotI, errI)
 	if fmt.Sprint(gotC) != "[6]" {
 		t.Errorf("result = %v, want [6]", gotC)
+	}
+
+	// BOTH arms dispatch by runtime value through one compiled program: the
+	// Integer arm doubles, the String arm returns 7.
+	both := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] [(outer {k:3}) (outer {k:'s'})]`
+	gotC, compiled, errC, gotI, errI = runBothEngines(t, both)
+	if !compiled || errC != nil {
+		t.Errorf("both-arms run: compiled=%v err=%v", compiled, errC)
+	}
+	requireParity(t, both, gotC, errC, gotI, errI)
+	if fmt.Sprint(gotC) != "[[6 7]]" {
+		t.Errorf("both-arms result = %v, want [[6 7]]", gotC)
+	}
+
+	// A runtime value NO arm matches defers to the interpreter, which raises
+	// the canonical signature_error — code parity, never a stored-mode raise
+	// of its own.
+	nomatch := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:[1 2]}`
+	_, compiled, errC, _, errI = runBothEngines(t, nomatch)
+	if compiled {
+		t.Error("the no-match run must defer to the interpreter")
+	}
+	if codeOf(errC) != "signature_error" || codeOf(errC) != codeOf(errI) {
+		t.Errorf("no-match parity: compiled=[%s]%v interp=[%s]%v", codeOf(errC), errC, codeOf(errI), errI)
+	}
+
+	// NEGATIVE (the freeze's soundness fence): another fn whose body rebinds
+	// the same local name can mutate the live table between the def and the
+	// call — the in-place overlap-replace survives its teardown, so the
+	// frozen table would diverge. The FnBinders gate keeps the refusal and
+	// the interpreter owns it (parity via fallback).
+	mutator := `def h fn [[x:Integer][Integer][ def g fn [[a:Integer][Integer][a add 100] [a:String][Integer][88]] x ]]
+def f2 fn [[m:Any] [Integer] [
+	def g fn [[a:Integer][Integer][a add 1] [a:String][Integer][99]]
+	def u (h 5)
+	g (m get "k")
+]]
+f2 (flex {k:41})`
+	if prog, reason, _, _ := mustNew(t).CompileCheck(mutator); prog != nil {
+		t.Errorf("the dynamic-scope mutator shape must keep its refusal (reason=%q):\n%s", reason, prog.Disassemble())
+	}
+	_, compiled, errC, gotI, errI = runBothEngines(t, mutator)
+	if compiled {
+		t.Error("the mutator shape must not run compiled")
+	}
+	if codeOf(errC) != "compile_refused" {
+		t.Errorf("mutator: RunCompiled err=[%s]%v, want compile_refused (Stage J)", codeOf(errC), errC)
+	}
+	if errI != nil || fmt.Sprint(gotI) != "[141]" {
+		t.Errorf("mutator interp = %v (err=%v), want [141] — h's g wins the dispatch, which the frozen table (42) could not model", gotI, errI)
 	}
 }
 

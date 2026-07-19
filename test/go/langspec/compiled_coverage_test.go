@@ -89,6 +89,8 @@ func normaliseReason(reason string) string {
 		return "stack discipline (lowering)"
 	case strings.HasPrefix(reason, "operand shape at"):
 		return "operand shape (Stage 1 limit)"
+	case strings.Contains(reason, "redefined inside a conditional body"):
+		return "conditional fn shadow (branch/loop)"
 	default:
 		return "other: " + reason
 	}
@@ -115,7 +117,8 @@ func rootCause(bucket string) string {
 		return "correct-error"
 	case "dynamic input", "dynamic/opaque output", "fn-value-call boundary",
 		"dispatch recovery (best guess)", "operand provenance",
-		"function value reaches word (Stage 3)", "context-dependent word (args/__pa)":
+		"function value reaches word (Stage 3)", "context-dependent word (args/__pa)",
+		"conditional fn shadow (branch/loop)":
 		return "soundness"
 	case "residual lowering (Stage 1 limit)", "stack discipline (lowering)",
 		"operand shape (Stage 1 limit)", "if-branch lowering", "multi-result call":

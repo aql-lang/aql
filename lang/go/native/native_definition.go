@@ -244,6 +244,17 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// preserved (prevUsed stays true); a fresh def's self-use is undone.
 	checking := r.Check.IsActive()
 	prevUsed := checking && r.Check.DefsUsed != nil && r.Check.DefsUsed[name]
+	// S5 (REFUSAL-CLOSURE): a top-level def of a STATICALLY-COUNTED variadic
+	// loop region binds the region's FIRST value — the interpreter's pending
+	// forward collects the first-arrived value and the rest spill. The
+	// binding takes the element carrier; the region carrier itself returns
+	// to the check stack as the N-1 REST residual (still produced by the
+	// loop event, so the variadic disposition owns it as today).
+	var outs []Value
+	if elem, split := r.Check.Recorder().SplitLoopRegionBind(name, value); split {
+		outs = []Value{value}
+		value = elem
+	}
 	InstallDef(r, name, value, stackOnly...)
 	r.Check.RecordDef(name, pos)
 	if checking {
@@ -276,7 +287,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// installs a registry-visible OpBindDynScope twin here so the runtime
 	// lookup finds the binding the interpreter's def stack would hold.
 	r.Check.Recorder().RecordDynBind(name, value, pos)
-	return nil, nil
+	return outs, nil
 }
 
 // defKeywordConstructors is the CLOSED SET of constructor words whose

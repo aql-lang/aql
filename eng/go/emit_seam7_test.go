@@ -44,7 +44,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive RecordPolyCall should refuse")
 	}
 	e.RecordUserCall(0, nil, nil, SrcPos{})
-	e.RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, SrcPos{})
+	e.RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, nil, SrcPos{})
 	if e.RecordDynApply(nil, Value{}, Value{}, SrcPos{}) {
 		t.Fatal("inactive RecordDynApply should refuse")
 	}
@@ -74,7 +74,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive RecordInterp should refuse")
 	}
 	e.RegisterTrailingApply("id", 1)
-	e.noteMemberFnRead("id")
+	e.noteMemberFnRead("id", Value{})
 	if e.memberFnRead("id") {
 		t.Fatal("inactive memberFnRead should be false")
 	}
@@ -109,7 +109,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive TakeFragment should be nil")
 	}
 	e.RecordBranch(BranchRecord{})
-	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "it", Value{}, SrcPos{})
+	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "it", Value{}, 0, SrcPos{})
 	e.BeginLoopCarried()
 	e.EndLoopCarried()
 	e.NoteLoopCarried("n", Value{}, Value{})
@@ -373,10 +373,10 @@ func inactiveEmitState() *EmitState {
 
 func TestRecordUserPolyCallGuards(t *testing.T) {
 	// Inactive → no-op.
-	inactiveEmitState().RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, SrcPos{})
+	inactiveEmitState().RecordUserPolyCall("w", nil, nil, nil, nil, nil, nil, nil, SrcPos{})
 	// Active with an unresolvable operand → uncompilable.
 	es := NewEmitState()
-	es.RecordUserPolyCall("w", nil, nil, nil, nil, []Value{carrierVal(TInteger)}, []Value{NewInteger(1)}, SrcPos{})
+	es.RecordUserPolyCall("w", nil, nil, nil, nil, nil, []Value{carrierVal(TInteger)}, []Value{NewInteger(1)}, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unresolvable poly operand should refuse")
 	}
@@ -426,13 +426,13 @@ func TestRecordDynApplyPendingConsume(t *testing.T) {
 func TestRecordLoopRefusals(t *testing.T) {
 	// body == nil.
 	es := NewEmitState()
-	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), nil, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), nil, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("nil loop body should refuse")
 	}
 	// range of unknown provenance (start unresolvable).
 	es = NewEmitState()
-	es.RecordLoop(carrierVal(TInteger), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(carrierVal(TInteger), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unresolvable range should refuse")
 	}
@@ -440,13 +440,13 @@ func TestRecordLoopRefusals(t *testing.T) {
 	es = NewEmitState()
 	start := NewCarrier(TInteger)
 	seedProduced(es, start, 1)
-	es.RecordLoop(start, NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(start, NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("computed loop start should refuse")
 	}
 	// iterator slot not registered (all-const range, empty body).
 	es = NewEmitState()
-	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), SrcPos{})
+	es.RecordLoop(NewInteger(0), NewInteger(5), NewInteger(1), &EmitFragment{}, nil, "it", NewInteger(0), 0, SrcPos{})
 	if es.Compilable {
 		t.Fatal("unregistered iterator should refuse")
 	}
@@ -631,10 +631,10 @@ func mapOfFields() *OrderedMap {
 }
 
 func TestNoteMemberFnReadGuards(t *testing.T) {
-	NewEmitState().noteMemberFnRead("") // empty id → no-op
-	inactiveEmitState().noteMemberFnRead("id")
+	NewEmitState().noteMemberFnRead("", Value{}) // empty id → no-op
+	inactiveEmitState().noteMemberFnRead("id", Value{})
 	es := NewEmitState()
-	es.noteMemberFnRead("id")
+	es.noteMemberFnRead("id", Value{})
 	if !es.memberFnRead("id") {
 		t.Fatal("a noted member-fn read should be readable")
 	}
@@ -1500,5 +1500,53 @@ func TestFinalizeResidualArms(t *testing.T) {
 	es.fnRecs = []*fnUnitRec{{name: "ghost"}}
 	if _, why, ok := es.Finalize(nil); ok || why == "" {
 		t.Fatal("an unfinished fn unit should refuse")
+	}
+}
+
+// readFnMemberValue / memberFnReadValue arm coverage (REFUSAL-CLOSURE.0 §3):
+// the pinpointing walk's decline arms, each unreachable-by-shape from the
+// lang fixtures alone — a carrier arg is skipped, a nil-backed map arg is
+// skipped, a non-fn member misses, and a bool-only tag (zero member) reports
+// no pinpointed value.
+func TestReadFnMemberValueArms(t *testing.T) {
+	fn := Value{Parent: TFunction, Data: FnDefInfo{Name: "d", Signatures: []Signature{{Impl: AQL([]Value{NewInteger(1)})}}}}
+	om := NewOrderedMap()
+	om.Set("f", fn)
+	fnMap := NewMap(om)
+	key := NewAtom("f")
+
+	// Positive: concrete map + concrete key pinpoints the member.
+	if got, ok := readFnMemberValue([]Value{fnMap, key}); !ok {
+		t.Fatalf("concrete map+key must pinpoint the member, got ok=false (%v)", got)
+	}
+	// A carrier arg is skipped (the walk continues past it to the map).
+	if _, ok := readFnMemberValue([]Value{carrierVal(TMap), fnMap, key}); !ok {
+		t.Errorf("a leading carrier arg must be skipped, not decline the walk")
+	}
+	// A nil-backed map payload is skipped.
+	nilMap := Value{Parent: TMap, Data: MapPayload{M: nil}}
+	if _, ok := readFnMemberValue([]Value{nilMap, key}); ok {
+		t.Errorf("a nil-backed map cannot pinpoint a member")
+	}
+	// A non-fn member misses.
+	om2 := NewOrderedMap()
+	om2.Set("f", NewInteger(5))
+	if _, ok := readFnMemberValue([]Value{NewMap(om2), key}); ok {
+		t.Errorf("a non-fn member must not pinpoint")
+	}
+
+	// memberFnReadValue: a bool-only tag (zero member — the computed-key
+	// scan) reports no pinpointed value; an untagged id likewise.
+	es := NewEmitState()
+	es.noteMemberFnRead("tagged-only", Value{})
+	if _, ok := es.memberFnReadValue("tagged-only"); ok {
+		t.Errorf("a zero-member tag must not report a pinpointed value")
+	}
+	if _, ok := es.memberFnReadValue("never-tagged"); ok {
+		t.Errorf("an untagged id must not report a pinpointed value")
+	}
+	es.noteMemberFnRead("rich", fn)
+	if got, ok := es.memberFnReadValue("rich"); !ok || !IsConcrete(got) {
+		t.Errorf("a rich tag must report the member")
 	}
 }

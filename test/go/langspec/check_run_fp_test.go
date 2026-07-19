@@ -29,7 +29,16 @@ import (
 // `[1 2 "s"] each [1 add]` heterogeneous-element FP was exactly such a
 // class, invisible to the spec-corpus FP pin) and must be triaged, never
 // waved through.
-const pinnedCheckRunDivergent = 104 // measured June 2026; all 104 contain a case/if (hand-verified: zero non-branch hits)
+// was 104 (measured June 2026; all case/if dead-branch hits). +78 July 2026:
+// case exhaustiveness (design/case-exhaustiveness.0.md) made a default-less
+// `case` whose clauses don't cover the scrutinee a deliberate check ERROR,
+// while the runtime keeps the spec-pinned produce-nothing no-match (and a
+// predicate clause like `[lt 5]` may match at runtime but proves no static
+// coverage) — so every generated default-less case that runs clean is now a
+// SANCTIONED check-vs-run divergence, not a checker false positive.
+// Triaged: 178 of the 182 contain a case (the exhaustiveness class), the
+// other 4 are the pre-existing if dead-branch residue.
+const pinnedCheckRunDivergent = 182
 
 // TestCheckRunFalsePositive generates the property fuzzer's program corpus
 // and ratchets the count of check-rejected-but-running programs.

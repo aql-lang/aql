@@ -2909,8 +2909,16 @@ func (e *Engine) stepWord(val Value) error {
 	// (the dynamic carrier blocks that overload's stack slot) reached PAST the
 	// dynamic value to a deeper leading residual (`add` over [dyn, 5] → 5+7).
 	// The residual-window operand accounting across the reified-error / island
-	// boundary is unsound, so refuse in compile mode and fall back. The
+	// boundary is unsound as a STATIC record — but a TERMINAL window models it
+	// faithfully as a runtime island (tryRecordDriftWindow, REFUSAL-CLOSURE §1):
+	// the window re-steps [residual, dynamic value, word, forward literal]
+	// verbatim, so the island's own dispatch performs the interpreter's
+	// forward collection. Shapes the window declines (non-terminal, variadic
+	// operands, non-contiguous) keep the refusal and fall back. The
 	// interpreter and plain check mode are untouched (recorder inactive).
+	if e.tryRecordDriftWindow(w, sig, positions) {
+		return nil
+	}
 	e.refuseForwardStackDrift(sig, positions)
 
 	// Immediate execution: read args from recorded positions.
@@ -3336,6 +3344,16 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		match.Args[i].Eval = false
 		match.Args[i].Undefined = false
+		// Materialize concrete Options defaults into the map the handler /
+		// fn param will receive: a field whose schema declares a real
+		// default value, omitted by the caller, is filled in so the
+		// consumer sees a complete map (quality DX — no re-deriving
+		// defaults). Optional `T tor None` fields carry no concrete value
+		// and stay absent. No-op unless this slot's pattern is an Options
+		// type and the arg is a plain concrete map.
+		if pat, ok := sigPattern(match.Sig, i); ok {
+			match.Args[i] = FillConcreteOptionDefaults(pat, match.Args[i])
+		}
 	}
 	// Arg evaluation done — the dispatched word's handler is the
 	// intended consumer of any suspended gen spec.
@@ -3883,6 +3901,15 @@ func (e *Engine) stepLiteral() error {
 		// Declines (leaving today's paths untouched) outside a live compile
 		// pass and for any window/match shape it cannot prove.
 		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
+			return nil
+		}
+		// Container-member fn arrival-apply (REFUSAL-CLOSURE.0 §3): a
+		// pinpointed member-fn read carrier whose single signature's arity
+		// of inert tokens follows — model the interpreter's auto-dispatch
+		// mid-expression (`m.double 21 eq 42` applies BEFORE `eq`). Declines
+		// leave the carrier to today's paths (the statement-tail Finalize
+		// apply, refuseStrandedMemberFn's sound refusal).
+		if e.registry.Check.IsActive() && e.tryMemberFnArrivalDispatch(valIdx) {
 			return nil
 		}
 		// General dynamic-fn-value dispatch (method_shape.go): a DYNAMIC carrier
@@ -8376,7 +8403,9 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 //     values, so its static failure replays verbatim; one whose window
 //     cannot even fill (arity shortfall over the same tape) fails
 //     deterministically too;
-//   - a DYNAMIC operand (no static type at all);
+//   - a DYNAMIC operand (no static type at all) — routed to the runtime
+//     rematch alongside carriers (REFUSAL-CLOSURE.0 §2): the rematch reads
+//     only the operand's live runtime value, never the static tag;
 //   - an UNDEFINED-word placeholder (the interpreter raises undefined_word,
 //     a different taxonomy — and the pass already carries an error diagnostic
 //     that refuses the program before Finalize);
@@ -8464,7 +8493,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			}
 		}
 		vals = append(vals, v)
-		if v.Dynamic || v.Undefined {
+		if v.Undefined {
 			return false
 		}
 		// A deferred-expression token (a reach path, an unexpanded paren
@@ -8492,7 +8521,17 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 		// classifies as rematchable below, and the compiled program
 		// re-runs the match over the CONCRETE values and builds the same
 		// rich diagnostic at run time (or defers when it matches).
-		if v.Carrier {
+		//
+		// A DYNAMIC operand (statically-unknown type — an evaluated flex
+		// read, a do-result) classifies the same way (REFUSAL-CLOSURE.0 §2):
+		// the rematch never reads the static tag, only the operand's LIVE
+		// runtime value — which is exactly what the interpreter's dispatch
+		// examines — so a bounded-dynamic that failed the static match
+		// re-matches faithfully (defer on match, the byte-identical rich
+		// raise on no-match). The provenance requirement still gates: a
+		// dynamic with no compiled home fails RecordDispatchRematchValues'
+		// operand resolution and the refusal stands.
+		if v.Carrier || v.Dynamic {
 			hasCarrier = true
 		}
 	}

@@ -1047,8 +1047,26 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Independent of how the read itself
 	// records — the tag rides the result ID onto the tape.
 	if len(out) == 1 && (isGetWord(word) || isGetrWord(word)) {
-		if es := r.Check.Recorder(); es.active() && readsFnMember(args) {
-			es.noteMemberFnRead(out[0].ID)
+		if es := r.Check.Recorder(); es.active() {
+			if readsFnMember(args) {
+				// The member VALUE rides the tag when the read pinpoints it (a
+				// concrete container + key) so the §3 arrival-apply model can
+				// claim its signature's window; a computed-key read tags alone
+				// and the model declines (the stranded-fn refusal stands).
+				member, _ := readFnMemberValue(args)
+				es.noteMemberFnRead(out[0].ID, member)
+			} else if rec, isEmit := es.(*EmitState); isEmit {
+				// A CONSTRUCTED-instance receiver is a carrier here (the make
+				// result — payload inspection sees only the schema), so the
+				// member rides the construction-time fnMemberFields note
+				// instead: tagging it routes the landing through the same §3
+				// model / stranded-fn guard as a concrete-container read —
+				// the fix for the pre-existing `o.f 21 eq 42` stranded-apply
+				// miscompile.
+				if member, ok := rec.instanceFnMember(args); ok {
+					rec.noteMemberFnRead(out[0].ID, member)
+				}
+			}
 		}
 	}
 	if !tryRecordMethodApply(r, word, args, out, pos) &&
@@ -1559,15 +1577,17 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	}
 	body := args[bp]
 	// A concrete body must be sentinel-free (break/continue target an
-	// enclosing loop the handler boundary cannot cross). A computed body's
-	// tokens are unknowable — the interpreter faces the same tokens through
-	// the same sub-engine, so a runtime sentinel behaves identically there;
-	// what differs is only tape-coupled RE-STEPPING, which the sub-run
-	// contains entirely. It must also be replay-hazard-free: a capitalised
-	// def / import inside the baked body re-runs a registry mutation the
-	// check pass already applied and half-rolled-back (the do-unit
-	// registry-replay miscompile — see bodyHasReplayHazard).
-	if IsConcrete(body) && (bodyHasSentinel(body) || bodyHasReplayHazard(body)) {
+	// enclosing loop the handler boundary cannot cross) — including
+	// TRANSITIVELY through resolvable callees (bodyHasSentinelDeep: a called
+	// user fn's bare break unwinds the CALLER's loop in the interpreter). A
+	// computed body's tokens are unknowable — the interpreter faces the same
+	// tokens through the same sub-engine, so a runtime sentinel behaves
+	// identically there; what differs is only tape-coupled RE-STEPPING, which
+	// the sub-run contains entirely. It must also be replay-hazard-free: a
+	// capitalised def / import inside the baked body re-runs a registry
+	// mutation the check pass already applied and half-rolled-back (the
+	// do-unit registry-replay miscompile — see bodyHasReplayHazard).
+	if IsConcrete(body) && (bodyHasSentinelDeep(r, body) || bodyHasReplayHazard(body)) {
 		return false
 	}
 	// Every operand must have a compiled home: the body rides as a threaded
@@ -1899,14 +1919,207 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 // threads an enclosing-fn binding as a capture, and the probe compile refuses
 // anything it cannot resolve.
 func bodyHasSentinel(body Value) bool {
-	found := false
-	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
-		switch w.Name {
-		case "break", "continue", "return":
-			found = true
+	return valueHasSentinel(body)
+}
+
+// valueHasSentinel reports whether a code-BODY value contains a live
+// break/continue/return that would run when the body executes. It differs
+// from WalkBodyWords (capture analysis) in one load-bearing way: it does NOT
+// honour the .Quoted flag. A `quote`d list handed to `do`/`each`/… runs ALL
+// its tokens as CODE — quote marks the LIST as data, not its tokens as
+// non-executable — so a quoted `break` inside is a live sentinel (verified:
+// `def b (quote [break]) for 5 [do b i]` breaks the loop in the interpreter).
+// WalkBodyWords skipped it, letting the const-folded do-body compile past the
+// sentinel gate; the escaped break then reached the loop epilogue as "flow
+// signal with no enclosing loop" and was caught as a value — a miscompile.
+// Nested fn bodies are still skipped: their sentinel targets their own scope.
+func valueHasSentinel(v Value) bool {
+	if _, ok := v.Data.(FnDefInfo); ok {
+		return false
+	}
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		return w.Name == "break" || w.Name == "continue" || w.Name == "return"
+	}
+	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
+		lst, _ := AsList(v)
+		for i := 0; i < lst.Len(); i++ {
+			if valueHasSentinel(lst.Get(i)) {
+				return true
+			}
 		}
+		return false
+	}
+	return scanBodyContainers(v, valueHasSentinel)
+}
+
+// scanBodyContainers applies scan to every code-position element of v's
+// container families and reports the first hit: list elements, paren-expr
+// tokens, interpolated-string ${...} expression parts, XML-interpolation
+// attribute/child holes (recursing into nested child templates), and map
+// values (keys are strings, inert). Every one of these runs as CODE when
+// the container materialises in a body — verified: an interp-string
+// `${break}` / a `{k: break}` map value in a quoted do-body breaks the
+// loop in the interpreter. A non-container value returns false — leaf
+// classification (words, fn payloads) belongs to the caller's scan.
+func scanBodyContainers(v Value, scan func(Value) bool) bool {
+	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
+		lst, _ := AsList(v)
+		for i := 0; i < lst.Len(); i++ {
+			if scan(lst.Get(i)) {
+				return true
+			}
+		}
+		return false
+	}
+	if IsParenExpr(v) {
+		toks, _ := AsParenExpr(v)
+		for _, t := range toks {
+			if scan(t) {
+				return true
+			}
+		}
+		return false
+	}
+	if IsInterpString(v) {
+		parts, _ := AsInterpString(v)
+		for _, p := range parts {
+			for _, t := range p.Expr {
+				if scan(t) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if IsXmlInterp(v) {
+		tmpl, _ := AsXmlInterp(v)
+		return xmlTmplScan(tmpl, scan)
+	}
+	if v.Parent != nil && v.Parent.Equal(TMap) && v.Data != nil {
+		m, _ := AsMap(v)
+		if m == nil {
+			return false
+		}
+		for _, key := range m.Keys() {
+			mv, _ := m.Get(key)
+			if scan(mv) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// xmlTmplScan applies scan to every ${...} expression token in an XML
+// interpolation skeleton — attribute values and child holes, recursing
+// into nested child templates (mirrors walkXmlTmplExprs).
+func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
+	for _, a := range t.Attr {
+		for _, p := range a.Parts {
+			for _, tok := range p.Expr {
+				if scan(tok) {
+					return true
+				}
+			}
+		}
+	}
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case XmlCrenExpr:
+			for _, tok := range c.Expr {
+				if scan(tok) {
+					return true
+				}
+			}
+		case XmlCrenChild:
+			if c.Child != nil && xmlTmplScan(*c.Child, scan) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// bodyHasSentinelDeep is bodyHasSentinel plus a TRANSITIVE callee scan: a
+// body word resolving to a user fn (registry-installed or a def-bound fn
+// value) whose body — transitively through further calls — holds a bare
+// break/continue leaks that signal through the call into the CALLER's loop
+// (probe-verified: the interpreter unwinds `def f fn [.. [break 7]] .. do
+// [f 1]` to the enclosing for), while a compiled closure boundary starts a
+// fresh loop stack and surfaces "flow signal with no enclosing loop" error
+// values — a miscompile. `return` is deliberately NOT counted in callees:
+// the fn boundary consumes it. The scan is conservative — a break consumed
+// by the callee's OWN loop still declines; the body then falls back with
+// parity, so the cost is speed, never correctness.
+//
+// The closure-compile gates with a Registry in hand ride this deep variant:
+// the token-list callable gate (which owns `do <body>` — the proven
+// divergence) and the dyn-body bake gate. Where the interpreter does not
+// thread a callee's break through the boundary anyway (each/filter callbacks
+// raise `break outside loop` — probe-verified), the deep decline is still
+// parity-safe: the fallback interpreter run raises identically. The
+// const-bake gates (the noEvalBodiesInert twins) and the lambda gates keep
+// the syntactic scan — no divergence reproduced there.
+func bodyHasSentinelDeep(r *Registry, body Value) bool {
+	if bodyHasSentinel(body) {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	return calleeValueLeaksFlow(r, body, map[string]bool{})
+}
+
+// calleeValueLeaksFlow is the transitive-scan walker: bare break/continue
+// count as leaks, other words resolve to callee fn bodies (recursively,
+// cycle-guarded by seen), and containers recurse. Constructed fn payloads
+// scan too — an APPLIED fn value's break escapes to the caller (only raw
+// tokens reach the direct scanner; a constructed FnDefInfo in a body is
+// treated as potentially applied).
+func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
+	if fd, ok := v.Data.(FnDefInfo); ok {
+		return fnDefLeaksFlow(r, &fd, seen)
+	}
+	if IsWord(v) {
+		w, _ := AsWord(v)
+		if w.Name == "break" || w.Name == "continue" {
+			return true
+		}
+		return calleeLeaksFlow(r, w.Name, seen)
+	}
+	return scanBodyContainers(v, func(e Value) bool {
+		return calleeValueLeaksFlow(r, e, seen)
 	})
-	return found
+}
+
+// calleeLeaksFlow resolves name to its aggregated dispatch table (Lookup
+// unions every FnDefInfo binding on the name's def stack — exactly what a
+// call would dispatch over) and scans the overload bodies. Native (Go-impl)
+// sigs have no AQL body and contribute nothing.
+func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
+	if name == "" || seen[name] {
+		return false
+	}
+	seen[name] = true
+	fd := r.Lookup(name)
+	return fd != nil && fnDefLeaksFlow(r, fd, seen)
+}
+
+// fnDefLeaksFlow scans every overload body of fd for a leaking
+// break/continue. A module fn's body words resolve in its OWN registry.
+func fnDefLeaksFlow(r *Registry, fd *FnDefInfo, seen map[string]bool) bool {
+	if fd.Registry != nil {
+		r = fd.Registry
+	}
+	for i := range fd.Signatures {
+		for _, t := range fd.Signatures[i].Body() {
+			if calleeValueLeaksFlow(r, t, seen) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // disjunctPartitionCap bounds the alternative cross product a
@@ -3116,17 +3329,28 @@ func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
 func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
-	stk, adds := runCarrierBodyDefsAdds(r, body, false)
+	stk, adds := runCarrierBodyDefsAdds(r, body, false, false)
+	return stk, adds
+}
+
+// RunCarrierCondBody is RunCarrierBodyWithDefs for an `if` CONDITION or a
+// `case` code-body scrutinee: the fragment runs unconditionally exactly
+// once BEFORE the branch decision, so it does NOT raise CondBodyDepth —
+// an in-place fn redefinition there is not path-dependent and stays
+// compilable (the paren-`do` condition twin compiles it with parity).
+// Defs still roll back keep=false-style, exactly as before.
+func RunCarrierCondBody(r *Registry, body Value) ([]Value, map[string]Value) {
+	stk, adds := runCarrierBodyDefsAdds(r, body, false, true)
 	return stk, adds
 }
 
 // runCarrierBodyDefs is the keep-defs entry over the shared body run.
 func runCarrierBodyDefs(r *Registry, body Value, keep bool) []Value {
-	stk, _ := runCarrierBodyDefsAdds(r, body, keep)
+	stk, _ := runCarrierBodyDefsAdds(r, body, keep, false)
 	return stk
 }
 
-func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[string]Value) {
+func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Value, map[string]Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
@@ -3161,8 +3385,23 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep bool) ([]Value, map[st
 	// Every body through here is a NESTED region (branch / loop /
 	// quotation) — reached-conditionally by construction. Mark the depth
 	// so unconditional-only diagnostics (unconditional_raise) stay silent.
+	// A def-rolled-back body (keep=false — a branch arm or loop body) also
+	// raises CondBodyDepth: unlike `do` (keep=true, which leaks its defs
+	// unconditionally), its bindings are conditional, so an in-place fn
+	// redefinition that clobbers an enclosing overload there is unsound to
+	// compile (installDef consults CondBodyDepth to refuse it). Condition/
+	// scrutinee fragments (condFrag — RunCarrierCondBody) are exempt: they
+	// run unconditionally exactly once before the branch decision, so a
+	// redefinition there is not path-dependent.
 	r.Check.NestedBodyDepth++
+	raiseCond := !keep && !condFrag
+	if raiseCond {
+		r.Check.CondBodyDepth++
+	}
 	result, err := sub.Run(tokens)
+	if raiseCond {
+		r.Check.CondBodyDepth--
+	}
 	r.Check.NestedBodyDepth--
 	if err != nil {
 		r.Check.AddDiagnostic(CheckDiagnostic{

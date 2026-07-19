@@ -22,7 +22,7 @@ func registerIOWords(reg *native.Registry) {
 		return
 	}
 	moved := [][]native.NativeFunc{
-		native.IOModuleNativeFuncs(native.MintStreamKind(reg)),
+		native.IOModuleNativeFuncs(native.IOModuleTypes{StreamKind: native.MintStreamKind(reg), FileType: native.MintFileType(reg), Watcher: native.MintWatcherType(reg), File: native.MintFileHandleType(reg), Lock: native.MintLockType(reg), Mmap: native.MintMmapType(reg)}),
 		native.StructModuleNatives,
 		native.NetModuleNatives(native.MintFetchTypes(reg)),
 		native.BitwiseModuleNatives,
@@ -84,7 +84,7 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 func TestDefListAll(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`list foo`,
 	})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestDefListAll(t *testing.T) {
 func TestDefListFilterPrefix(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo list {age:"30" city:"London"}`,
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func TestDefListFilterPrefix(t *testing.T) {
 func TestDefListFilterParens(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`(read "data.csv") list {age:"30" city:"London"}`,
+		`(read (make Pathon "data.csv")) list {age:"30" city:"London"}`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestDefListFilterParens(t *testing.T) {
 func TestDefListFilterParensDef(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`(foo) list {age:"30" city:"London"}`,
 	})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestDefListFilterParensDef(t *testing.T) {
 func TestDefParensListFilter(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo list {age:"30" city:"London"}`,
 	})
 	if err != nil {
@@ -201,7 +201,7 @@ func TestDefParensListFilter(t *testing.T) {
 func TestDefParensListAll(t *testing.T) {
 	csv := "name,age,city\nAlice,30,London\nBob,30,Paris\nCharlie,30,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`list foo`,
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func TestDefParensListAll(t *testing.T) {
 func TestDefParensCreate(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo create {id:"4" name:"Dave" city:"Berlin"}`,
 	})
 	if err != nil {
@@ -241,7 +241,7 @@ func TestDefParensCreate(t *testing.T) {
 func TestDefParensLoad(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo load {id:"2"}`,
 	})
 	if err != nil {
@@ -262,7 +262,7 @@ func TestDefParensLoad(t *testing.T) {
 func TestDefParensUpdate(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo update {id:"1" city:"Berlin"}`,
 	})
 	if err != nil {
@@ -290,7 +290,7 @@ func TestDefParensUpdate(t *testing.T) {
 func TestDefParensRemove(t *testing.T) {
 	csv := "id,name,city\n1,Alice,London\n2,Bob,Paris\n3,Charlie,London\n"
 	result, err := runNativeSteps(t, map[string]string{"data.csv": csv}, []string{
-		`def foo (read "data.csv")`,
+		`def foo (read (make Pathon "data.csv"))`,
 		`foo remove {id:"2"}`,
 	})
 	if err != nil {

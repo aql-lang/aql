@@ -168,6 +168,24 @@ explicitly first. For the same reason `convert BigInteger 3.14` and
 and to/from `Integer`/`String` is exact, and `convert Float 0d2.5` is
 allowed but documented as a lossy projection.
 
+**Opting in to `Float → BigDecimal`.** Because a binary `Float` is
+inexact, the plain refusal above is the default — but a 3-arg `convert`
+with an `accuracy` option lets you take the conversion anyway, once
+you state *which* reading of the inexact value you want:
+
+| Option | Meaning | `3.14159` → |
+| --- | --- | --- |
+| `{accuracy:'shortest'}` | shortest decimal that round-trips to the same `Float` — what the literal reads as | `0d3.14159` |
+| `{accuracy:'exact'}` | the true dyadic value the `float64` holds | `0d3.141589999999999882618340052431449294...` |
+| `{accuracy:'round' places:N}` | the exact value rounded to `N` decimal places, half away from zero | `0d3.14` (`places:2`) |
+
+The option applies only to a `Float → BigDecimal` conversion (it is
+inert for any other source/target, like `truthy` on a non-Boolean);
+`Float → BigInteger` stays refused (convert to `Integer` first). A
+non-finite `Float` (`nan`/`inf`), an unknown mode, `round` without
+`places`, `exact`/`shortest` *with* `places`, and a negative `places`
+are all rejected.
+
 **Division.** `BigInteger div BigInteger` truncates toward zero and
 returns a BigInteger (with `mod`), like `Integer div`. `BigDecimal div
 BigDecimal` returns a BigDecimal rounded to the active decimal context —
@@ -1567,7 +1585,7 @@ before the call.
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
-| `case` | Dispatch on a value: match/block pairs + optional default | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
+| `case` | Dispatch on a value: match/block pairs + optional default. `aql check` requires the clauses to cover the scrutinee's static type (`case_not_exhaustive` error); the default is not needed when the type disjunctions are met | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [add 1 2]` returns `3` |
 | `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
@@ -1581,14 +1599,205 @@ For `if`, the canonical form is all-forward `if cond [then] [else]`
 expects. See
 **[Tutorial §3](TUTORIAL.md#the-argument-order-rule)**.
 
-`if` coerces its condition to a boolean (the same rule as `convert
-boolean`). The values that count as **false** are: `false`, `0` (and
-`0.0`), `none`, the empty list `[]`/empty map `{}`, the empty string
-`""`, and — as a special case — the exact string `"false"`.
-**Everything else is true**, including non-empty strings that look
-falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
-`"false"` is special). A condition that produces *no* value at all
-(e.g. an empty block `[]` as the condition) is an error, not a false.
+`if` coerces its condition to a boolean — the exact same rule as
+`convert Boolean` and `make Boolean`. Coercion is by **presence, not
+content**: the values that count as **false** are `false`, `0` (and
+`0.0`), `none`, the empty list `[]`/empty map `{}`, and the empty
+string `""`. **Everything else is true**, including non-empty strings
+that look falsy: `"false"`, `"FALSE"`, `"0"`, and `"no"` are all
+truthy — a String's characters are never inspected. (Parsing the words
+`"true"`/`"false"` into booleans is a separate operation, not part of
+coercion.) A condition that produces *no* value at all (e.g. an empty
+block `[]` as the condition) is an error, not a false.
+
+#### `case` — dispatch and exhaustiveness
+
+`case <value> [m1 b1 m2 b2 … default]` walks match/block pairs in
+order; the first match wins, and a trailing odd element is the default.
+A match unifies with the value (equal scalars/atoms; a type literal
+matches its members), or — when the match is a code-body list — runs as
+a predicate with the value on the stack:
+
+```
+case 2 [1 "one" 2 "two" "many"]           # 'two'  — an equal scalar matches
+case 5 [[gt 3] "big" "small"]             # 'big'  — [gt 3] runs as `5 gt 3`
+case "x" [Integer "int" String "str"]     # 'str'  — a type literal matches its members
+```
+
+**`case` is statically exhaustive.** `aql check` requires the clauses
+to cover the scrutinee's static type: a default-less `case` with a
+provably-uncoverable value is an error, `case_not_exhaustive`, which
+fails the check and refuses `aql run` at preflight. Coverage is proven
+in the sound direction only — a clause counts only when every runtime
+value of an alternative provably matches it — so the checker may
+conservatively demand a default it cannot prove unnecessary, but it
+never wrongly proves a `case` exhaustive. Three coverage channels
+compose: value/type matches (with a nominal newtype boundary),
+`[is T]` predicates, and comparison predicates / `refine`d ranges via
+interval union. The default is **not** required when the type
+disjunctions are met:
+
+**A declared union, covered alternative by alternative** (or by the
+union type itself in match position):
+
+```
+def IS (Integer tor String)
+def f fn [[x:IS][String][case x [Integer "i" String "s"]]]
+f 5                       # 'i' — exhaustive over IS, no default needed
+f "hi"                    # 's'
+
+def g fn [[x:IS][String][case x [IS "either"]]]
+g 5                       # 'either' — the union type covers all its members
+
+def h fn [[x:IS][Integer][case x [Integer 1]]]
+# check error: case_not_exhaustive — uncovered: String
+```
+
+**Boolean, by `true` and `false`** (or the `Boolean` literal):
+
+```
+def f fn [[b:Boolean][Integer][case b [true 1 false 0]]]
+f false                   # 0 — true+false cover Boolean
+
+def g fn [[b:Boolean][Integer][case b [true 1]]]
+# check error: case_not_exhaustive — uncovered: false
+```
+
+**An enum, member by member** (or by a covering type literal such as
+`Atom`):
+
+```
+def Color (red/q tor green/q tor blue/q)
+def f fn [[c:Color][String][case c [red/q "warm" green/q "calm" blue/q "cool"]]]
+f green/q                 # 'calm' — every member listed
+
+def g fn [[c:Color][String][case c [red/q "warm" green/q "calm"]]]
+# check error: case_not_exhaustive — uncovered: blue
+```
+
+**An optional, by the base type plus `none`:**
+
+```
+def MaybeInt (Integer tor none)
+def f fn [[x:MaybeInt][Integer][case x [Integer 1 none 0]]]
+f 5                       # 1
+```
+
+**A plain type, by itself or an ancestor** — concrete value clauses can
+never cover an infinite type:
+
+```
+def f fn [[x:Integer][String][case x [Number "some number"]]]
+f 7                       # 'some number' — the ancestor covers Integer
+
+def g fn [[x:Integer][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — uncovered: Integer
+```
+
+**A concrete scrutinee is value-precise** — a clause that provably
+matches is enough:
+
+```
+case 2 [1 "one" 2 "two"]  # 'two' — 2 provably matches, no default needed
+case 9 [1 "one" 2 "two"]  # check error: case_not_exhaustive — uncovered: 9
+case 9 [1 "one" "many"]   # 'many' — a trailing default always satisfies the check
+```
+
+**Comparison predicates prove coverage by interval union** — with
+EXACT `int64` bounds over the Integer domain (which is exactly int64),
+merged with ℤ-adjacency; a genuine gap is caught and an `[eq …]` point
+bridges it. **Float and Number are never interval-total**: `nan` is a
+Float inhabitant and every ordered comparison against it is false, so a
+comparison-only clause list cannot cover them (a concrete non-`nan`
+float is still point-checked against the intervals):
+
+```
+def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]]
+f 5                       # 1 — (3,∞) ∪ (-∞,3] covers Integer, no default needed
+
+def g fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2]]]
+# check error: case_not_exhaustive — uncovered: Integer (3 itself is missed)
+
+def h fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2 [eq 3] 3]]]
+h 3                       # 3 — the [eq 3] point closes the gap
+
+def k fn [[x:Float][Integer][case x [[gte 3.0] 1 [lt 3.0] 2]]]
+# check error: case_not_exhaustive — uncovered: Float (nan matches no comparison)
+
+case 5.0 [[gt 3.0] "big"] # 'big' — a concrete float is point-checked
+case nan [[lte 0.0] "x"]  # check error — nan is admitted by no interval
+```
+
+A `refine`d range type used as a match contributes its bounds the same
+way — restricted to its BASE family (`Big` below admits no Float at
+runtime, so its interval never counts toward a Float scrutinee) — and
+its complement predicate completes the domain:
+
+```
+def Big (Integer gt 10)
+def f fn [[x:Integer][String][case x [Big "big" [lte 10] "small"]]]
+f 50                      # 'big' — (10,∞) ∪ (-∞,10] covers Integer
+```
+
+An unrecognized predicate shape (anything but `[gt/gte/lt/lte/eq N]`
+or `[is T]`) stays opaque and proves nothing.
+
+**A dynamic scrutinee requires a default** — with no static type to
+prove coverage against, the clause list must carry its own catch-all: a
+trailing default or an `Any` clause. A code-body scrutinee computes its
+value, so the same rule applies to it:
+
+```
+def f fn [[x:Any][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — the scrutinee is dynamic
+
+def g fn [[x:Any][String][case x [1 "one" "other"]]]
+g 9                       # 'other' — the default satisfies the check
+
+def h fn [[x:Any][String][case x [1 "one" Any "other"]]]
+h 9                       # 'other' — an Any clause is the written catch-all
+
+case [1 add 1] [2 "two"]  # check error — a computed scrutinee is dynamic too
+```
+
+(The historical no-match/no-default produce-nothing behaviour is
+therefore no longer expressible in a check-clean program; the engine
+still produces nothing when an unchecked run falls through.)
+
+**The newtype boundary is nominal in both directions** — a base-type
+clause does not cover a user-minted newtype alternative, and a newtype
+clause does not cover its base. A `Pos` scrutinee demands a `Pos`
+clause, an `[is Pos]` predicate, an `Any` clause, or a default:
+
+```
+def Pos refine Integer
+def f fn [[x:Pos][String][case x [Pos "p"]]]
+def y:Pos 5
+f y                       # 'p' — the newtype's own clause covers it
+
+def g fn [[x:Pos][String][case x [[is Pos] "p"]]]
+                          # checks clean — [is T] covers nominally too
+
+def h fn [[x:Pos][String][case x [Integer "i"]]]
+# check error: case_not_exhaustive — uncovered: Pos (the base does not cover it)
+
+def k fn [[x:Integer][String][case x [Pos "p"]]]
+# check error: case_not_exhaustive — uncovered: Integer (nor the reverse)
+```
+
+The same coverage computation yields two info-severity advisories
+(never gating): `case_unreachable_clause`, for a clause an earlier
+clause fully subsumes, and `case_redundant_default`, for a default made
+dead by full coverage of a declared union:
+
+```
+def f fn [[x:Integer][Integer][case x [Number 1 Integer 2 3]]]
+# info: case_unreachable_clause — Integer can never match after Number
+
+def IS (Integer tor String)
+def g fn [[x:IS][String][case x [Integer "i" String "s" "d"]]]
+# info: case_redundant_default — the clauses already cover IS
+```
 
 #### `for` forms
 
@@ -1962,6 +2171,19 @@ converts back through validation.
 > `convert`: a `:Number` record field accepts a numeric **string** and
 > coerces it (`make Point ["1" "2"]` returns `{x:1 y:2}`).
 
+> **`convert Boolean` is presence coercion; `{truthy: true}` opts into
+> YAML parsing.** By default `convert Boolean` (like `if`-truthiness)
+> judges only presence — empty String / `0` / `none` / empty collection
+> are false, everything else is true, so `convert Boolean "false"` is
+> **true**. Pass the options map `{truthy: true}` to parse a String
+> YAML-style first: `yes`/`no`/`true`/`false`/`on`/`off` (case-
+> insensitive, surrounding whitespace trimmed) map to their booleans,
+> e.g. `convert Boolean {truthy: true} "no"` returns `false`. Any string
+> that is **not** a recognised token falls back to presence coercion
+> (`convert Boolean {truthy: true} "maybe"` returns `true`), and a
+> non-String source is coerced normally — `truthy` never raises. The
+> option is inert for any non-Boolean target.
+
 Named types are introduced by pairing `def` with a `refine`
 expression: `def Point refine Record [x:Number y:Number]`,
 `def Counter class {count: 0}`, `def Inventory refine Table
@@ -2135,7 +2357,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File and stream I/O — `read`, `write`, `stdin`, `stdout`, `trace` (only `print` stays in core). |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2149,6 +2371,160 @@ modules keep plain names.
 > sibling structures. For a single-field edit, use the copy-returning
 > `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
+
+> **`aql:io` filesystem surface.** File I/O is **Pathon-only**: every
+> target is a `Scalar/Micron/Pathon` built with `make Pathon "…"` — a bare
+> string is refused, so a file target is type-distinct from an arbitrary
+> string and from a stream handle, and one polymorphic verb dispatches on
+> the argument's type. A word that returns its target returns that Pathon,
+> so `IO.read (IO.write p x)` threads through. Beyond `read`/`write`, the
+> module covers the full batch API, each word collapsing several operations
+> via options: `IO.stat p {follow, resolve, xattr}` returns a FileInfo record
+> (`name`/`path`/`type`/`size`/`mode`/`mtime`/`owner`/`group` — ownership is
+> the uid/gid or -1 where unknowable; `{xattr:true}` attaches an `xattr`
+> sub-map of extended attributes, host-namespaced `user.<name>` on Linux —
+> where `type` is an `IO.FileType` atom `file`/`dir`/`symlink`/`other`) or
+> `none` when absent; `IO.touch` additionally sets `{owner group}` (chown —
+> root-only for real id changes) and `{xattr:{k:v}}`;
+> `IO.move src dst`, `IO.copy src dst {recursive}`, `IO.link src dst
+> {hard}`, and `IO.touch p {mode, mtime, atime, size}`. `read`/`write` also
+> do binary (`read {enc:'bytes'}` returns `Bytes`; a `Bytes` payload writes
+> verbatim) and positioned (`read {offset, length}`, `write {offset}`) I/O,
+> plus explicit text encodings — `{enc: 'utf8'|'utf16le'|'utf16be'|'latin1'}`
+> (utf16 writes a BOM and strips a matching one on read; latin1 is strict —
+> a rune outside ISO 8859-1 refuses to encode; there is no BOM sniffing and
+> an unknown enc is a hard error). `copy`/`move` take `{overwrite:false}` to
+> refuse an existing destination (a best-effort pre-check, like Java's
+> `StandardCopyOption`, not an atomic guarantee). `write {atomic:true}`
+> stages the bytes in a temp file in the target's own directory and renames
+> it into place, so a concurrent reader never observes a half-written file
+> (it cannot combine with a positioned `{offset}`).
+>
+> **Temp files & disk info.** `IO.temp {dir, in, prefix, suffix}` creates a
+> unique file (a directory with `{dir:true}`) under `{in:Pathon}` (the
+> system temp root by default), named `{prefix}…{suffix}`, and returns its
+> Pathon — the file is `0600`, the directory `0700`, and an absent `{in}`
+> errors (the `os.CreateTemp` contract). `IO.space p` reports the volume
+> holding a path as `{total free available bsize type}` (byte counts, the
+> block size, and a filesystem-type name — the in-memory FS reports a
+> synthetic 1 GiB `mem` volume).
+>
+> **Stateful file handles.** `IO.open p {mode, create, exclusive,
+> truncate, perm}` returns an `IO.File` handle over a path — `{mode:
+> 'read'|'write'|'append'|'rw'}` picks the base access (write is
+> create+truncate, append is create+append, rw is read+write), refined by
+> `{create}`, `{exclusive}` (O_EXCL — fail if it exists), `{truncate}`, and
+> `{perm}`. `read`/`write` gain File overloads: `read f {length, offset,
+> enc}` reads from the cursor (or positioned with `{offset}`, `'bytes'`
+> returning `Bytes`), and `write f data {offset}` writes at the cursor (or
+> positioned) and returns the handle for threading. `IO.seek f n {from:
+> 'start'|'current'|'end'}` moves the cursor and returns the new offset;
+> `IO.flush f` syncs; and `IO.close` releases the handle — polymorphic over
+> a `File` or a `Watcher` (the twin of `IO.unwatch`). A handle shares its
+> backend's store, so on the OS and in-memory filesystems a handle write is
+> visible to a stateless read before close; an `IO.mount` handle buffers and
+> flushes on sync/close (writes are not visible until then). Unclosed
+> handles are not finalized automatically (Java's posture) — pair every
+> `open` with a `close`. Separately, `write p data {exclusive:true}` is the
+> stateless O_EXCL create: it makes a new file and refuses an existing one
+> with no check-then-write race (it cannot combine with append or a
+> positioned `{offset}`).
+>
+> **Advisory locks & memory-mapped files.** `IO.lock p {shared, block}`
+> takes an advisory lock — exclusive by default, `{shared:true}` for a read
+> lock; `{block:false}` returns `none` on contention rather than waiting.
+> `IO.unlock l` (or the polymorphic `IO.close`) releases it. On the OS
+> backend the lock is a crash-safe `flock`; the in-memory model is a
+> canonical-path reader/writer table (stricter than `flock` — a same-process
+> re-lock blocks). `IO.mmap p {offset, length, writable}` maps a file's
+> bytes into an `IO.Mmap` region: `read region {offset, length, enc}` COPIES
+> bytes out (so a later close can never invalidate the value), `write region
+> bytes {offset}` splices into the mapping in place (it cannot grow — the
+> write must fit), `IO.flush` makes writes durable, and `IO.close` unmaps.
+> The mount bridge refuses both (a lock over a value-based filesystem locks
+> nothing). The portable mmap contract promises no live sharing — `flush` is
+> what makes a writable region's changes durable.
+>
+> **Watching.** `IO.watch p [body]` subscribes to change events on a
+> Pathon — a file, or a directory's direct children (non-recursive,
+> inotify semantics) — and runs the body once per event, push style
+> (like `TimeUtil.interval` runs its callback per tick), with the event
+> record `{op: create/write/remove/rename/chmod atom, path: Pathon}` on
+> the stack. It returns an `IO.Watcher` handle; `IO.unwatch w` stops it.
+> A third options map tunes the subscription: `{recursive:true}` watches
+> the whole subtree (the OS side auto-adds newly created subdirectories;
+> the mem side matches by path prefix), and `{match:"*.txt"}` filters
+> events by a path glob (word-side, the same `policy.Glob` vocabulary as
+> `list {match}`). When a slow consumer overruns the buffer, drops are
+> coalesced into a single `{op: overflow, path: <root>}` marker that
+> always bypasses the `{match}` filter — a missed event is never hidden.
+> The backend follows the effective FileOps: fsnotify (inotify/FSEvents/
+> kqueue) on the real filesystem, a synchronous in-memory event source
+> under `{mem}`, and the merged union of both layers under `{overlay}` —
+> so watch behaviour is part of the same real/mem parity surface as every
+> other io word.
+>
+> **Mounting an AQL-implemented filesystem.** `IO.mount {read: fn, …}`
+> installs a map of AQL handler functions as the host filesystem — every
+> io word then routes through them, so AQL code can expose any backing
+> (a flex map, a table, a service) as a filesystem:
+>
+> ```
+> import "aql:io"
+> def files (flex {})
+> IO.mount {
+>   read:  (p:Pathon => [files get `${p}`])
+>   write: ([p:Pathon data:Any] => [files set `${p}` data drop])
+> }
+> IO.write (make Pathon "notes/a.txt") "hello" drop
+> IO.read (make Pathon "notes/a.txt")        # returns 'hello'
+> ```
+>
+> Core handlers: `read` (required; return a String/Bytes, or `none` for
+> absent), `write`, `stat` (return a `{name size mode mtime type target}`
+> map or `none`), `list` (names or stat maps), `remove` (`[p opts]`).
+> Optional: `mkdir`, `rename`, `symlink`, `link`, `chmod`, `chtimes`,
+> `truncate`, `resolve`. An operation with no handler refuses cleanly, a
+> mounted filesystem is not watchable, and the `{mem}`/`{overlay}` context
+> toggles still take precedence. `IO.unmount` restores the previous
+> filesystem.
+>
+> **Mounting a ZIP archive.** `IO.mount` also accepts a **Pathon**: a
+> `.zip` path (or any path with `{zip:true}`) mounts the archive as a
+> read-only filesystem, read through the effective FileOps — so an archive
+> staged in `{mem}` is itself mountable, and policy gates the read. Every
+> mutation on a mounted archive refuses read-only; directory entries the
+> zip omits are synthesised, and a read-only `IO.open` handle supports
+> `IO.seek`/positioned reads. `{writable:true}` layers the archive as the
+> read-only lower of a fresh in-memory overlay — a copy-on-write "editable
+> zip" whose edits live only in memory (the archive on disk never changes):
+>
+> ```
+> import "aql:io"
+> IO.mount (make Pathon "bundle.zip")        # read-only
+> IO.read (make Pathon "manifest.json")      # served from the archive
+> IO.unmount
+> IO.mount (make Pathon "bundle.zip") {writable:true}
+> IO.write (make Pathon "scratch.txt") "x" drop   # lands in the mem upper
+> ```
+>
+> `list` and `remove` are different: rather than a namespaced `IO.list` /
+> `IO.remove`, importing `aql:io` **extends the core `list` / `remove`
+> words** with a Pathon overload (design/OPEN-WORDS.0.md), so the BARE words
+> gain filesystem behaviour — `list p {detail, recursive, match}` enumerates a
+> directory, `remove p {recursive, force}` deletes a path. The overload
+> registers only on import and coexists with the core table/collection
+> meanings (its Pathon argument is type-disjoint), so `list [1 2 3]` still
+> works. Every op routes through the swappable `FileOps` capability:
+> `context.__sys.fs set mem true` runs them against a fully in-memory
+> filesystem (a strict-fidelity model of the real one — hard links share
+> storage, symlinks resolve component-wise, permission bits enforce
+> euid-aware; a differential harness pins mem/real parity), and
+> `context.__sys.fs set overlay true` runs them against a UNION of a
+> writable in-memory upper over the host filesystem — reads fall through
+> to real files, writes land only in memory, deletes are whiteouts — the
+> partially-in-memory configuration for unit tests over real fixtures
+> ({mem} wins if both flags are set).
 
 
 ## Diagnostic reports

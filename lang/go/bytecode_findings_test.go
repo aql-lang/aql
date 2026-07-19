@@ -2709,8 +2709,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.txt") "hi"`, "[mem:/b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write (make Pathon "mem://a.txt") "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
@@ -3921,22 +3921,57 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 			t.Errorf("%s: defer value=%v interp value=%v (should agree)", c.name, gotC, gotI)
 		}
 	}
+	// GRADUATED 2026-07-16 (REFUSAL-CLOSURE.0 §2 — the dynamic-operand
+	// rematch): the flex-cell Reach shape `f m.a` no longer declines. By
+	// dispatch-recovery time the check pass has EVALUATED the reach in place
+	// (the recorded poly-dot event), so the failed window holds an
+	// event-produced DYNAMIC carrier, not a raw Reach token — and the
+	// definiteness screen now routes dynamics to the runtime rematch
+	// alongside carriers (the rematch reads only the operand's LIVE value,
+	// exactly what the interpreter's dispatch examines). The compiled
+	// program re-matches at run time: a no-match raises the interpreter's
+	// byte-identical rich signature_error (pinned here); a match defers.
+	rematchRaises := []struct{ name, src string }{
+		{"flex-reach dynamic operand rematch raises",
+			`def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`},
+		{"flex-list dynamic operand rematch raises",
+			`def f fn [[x:Integer][Integer][x add 1]] def m (flex {a:[9]}) f m.a`},
+	}
+	for _, c := range rematchRaises {
+		prog, reason, _, _ := mustNew(t).CompileCheck(c.src)
+		if prog == nil {
+			t.Fatalf("%s: refused (%q); want a runtime-rematch compile", c.name, reason)
+		}
+		if !strings.Contains(prog.Disassemble(), "DISPATCH_REMATCH") {
+			t.Errorf("%s: expected a DISPATCH_REMATCH lowering:\n%s", c.name, prog.Disassemble())
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(c.src)
+		gotI, errI := mustNew(t).Run(c.src)
+		if !compiled {
+			t.Errorf("%s: the runtime NO-MATCH must raise compiled, not defer", c.name)
+		}
+		if fmt.Sprint(errC) != fmt.Sprint(errI) {
+			t.Errorf("%s: raise parity —\n  compiled: %v\n  interp:   %v", c.name, errC, errI)
+		}
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("%s: value parity: compiled=%v interp=%v", c.name, gotC, gotI)
+		}
+	}
 	refusals := []struct{ name, src, want string }{
 		// (The variadic-if shape that used to sit here GRADUATED 2026-07-15
 		// — the branch merge seats the 1-vs-2 residual and the terminal
 		// rematch seats its const under the live region top; pinned
-		// positively in TestDispatchRematchVariadicIfGraduated.)
-		// A RAW deferred-expression token in the failed window — a flex-cell
-		// Reach the static match sees unresolved but the runtime EVALUATES
-		// (to 1 here) before dispatching: neither a serialized trap nor a
-		// rematch can model the evaluation, so the definiteness screen
-		// declines and the program falls back whole. (The word-splice decline
-		// that used to sit here GRADUATED 2026-07-14 — a PARKED __SP marker
-		// is identical at run time; pinned positively in
-		// TestUnmatchedDispatchTrapSpliceGraduated below. The splice was the
-		// screen's only corpus reach, so this row is now its coverage.)
-		{"flex-reach operand declines",
-			`def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`,
+		// positively in TestDispatchRematchVariadicIfGraduated. The
+		// flex-cell Reach shape graduated 2026-07-16 — the §2 dynamic-
+		// operand rematch, pinned positively in rematchRaises above.)
+		// The class's REMAINING refusal: the failed window's dynamic sits
+		// under a leading stack residual (g's Integer result), so the
+		// written-tuple render bound cannot prove a contiguous slice and the
+		// rematch declines — the program falls back whole, and the
+		// interpreter (which mutated the cell to a List through the opaque
+		// fn param) runs it fine.
+		{"dynamic under a stack residual declines",
+			`def f fn [[x:List][List][x]] def m (flex {a:1}) def g fn [[s:Node][Integer][set a/q [7] s drop 0]] g m f m.a`,
 			"unmatched dispatch recovered at f"},
 	}
 	for _, c := range refusals {

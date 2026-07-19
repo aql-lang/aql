@@ -2,10 +2,12 @@ package modules
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/lang/go/capabilities"
@@ -285,7 +287,37 @@ func TestModelWave4NewHandlerRejections(t *testing.T) {
 // model_io arms of the inline-source scratch setup.
 type failOpsWave4 struct{ failMkdir bool }
 
-func (f *failOpsWave4) ReadFile(string) ([]byte, error) { return nil, errors.New("read refused") }
+func (f *failOpsWave4) ReadFile(string) ([]byte, error)    { return nil, errors.New("read refused") }
+func (f *failOpsWave4) Chown(string, int, int, bool) error { return errors.New("chown refused") }
+func (f *failOpsWave4) XattrGet(string, string) ([]byte, error) {
+	return nil, errors.New("xattr refused")
+}
+func (f *failOpsWave4) XattrSet(string, string, []byte) error { return errors.New("xattr refused") }
+func (f *failOpsWave4) XattrList(string) ([]string, error) {
+	return nil, errors.New("xattr refused")
+}
+func (f *failOpsWave4) XattrRemove(string, string) error { return errors.New("xattr refused") }
+func (f *failOpsWave4) TempFile(string, string) (string, error) {
+	return "", errors.New("temp refused")
+}
+func (f *failOpsWave4) TempDir(string, string) (string, error) {
+	return "", errors.New("temp refused")
+}
+func (f *failOpsWave4) Statfs(string) (capabilities.FsInfo, error) {
+	return capabilities.FsInfo{}, errors.New("statfs refused")
+}
+func (f *failOpsWave4) Watch(string, capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
+	return nil, nil, errors.New("watch refused")
+}
+func (f *failOpsWave4) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, errors.New("open refused")
+}
+func (f *failOpsWave4) Lock(string, bool, bool) (io.Closer, error) {
+	return nil, errors.New("lock refused")
+}
+func (f *failOpsWave4) Mmap(string, int64, int, bool) (capabilities.MmapRegion, error) {
+	return nil, errors.New("mmap refused")
+}
 func (f *failOpsWave4) WriteFile(string, []byte, os.FileMode) error {
 	return errors.New("write refused")
 }
@@ -296,6 +328,22 @@ func (f *failOpsWave4) MkdirAll(string, os.FileMode) error {
 	return nil
 }
 func (f *failOpsWave4) ResolvePath(string) (string, error) { return "", errors.New("no resolve") }
+
+func (f *failOpsWave4) Stat(string, bool) (capabilities.FileInfo, error) {
+	return capabilities.FileInfo{}, errors.New("stat refused")
+}
+func (f *failOpsWave4) ReadDir(string) ([]capabilities.FileInfo, error) {
+	return nil, errors.New("readdir refused")
+}
+func (f *failOpsWave4) Remove(string, bool) error       { return errors.New("remove refused") }
+func (f *failOpsWave4) Rename(string, string) error     { return errors.New("rename refused") }
+func (f *failOpsWave4) Symlink(string, string) error    { return errors.New("symlink refused") }
+func (f *failOpsWave4) Link(string, string) error       { return errors.New("link refused") }
+func (f *failOpsWave4) Chmod(string, os.FileMode) error { return errors.New("chmod refused") }
+func (f *failOpsWave4) Chtimes(string, time.Time, time.Time) error {
+	return errors.New("chtimes refused")
+}
+func (f *failOpsWave4) Truncate(string, int64) error { return errors.New("truncate refused") }
 
 // TestModelWave4InlineIOFailures pins the model_io arms: a failing MkdirAll
 // and a failing WriteFile during inline scratch setup are loud errors.

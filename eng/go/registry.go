@@ -677,6 +677,19 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
+	// CondBodyDepth, when > 0, marks analysis running inside a
+	// CONDITIONALLY-reached, def-rolled-back body — an if/case branch arm
+	// or a loop body (the `keep=false` bodies of runCarrierBodyDefsAdds,
+	// whose net def growth is snapshot-restored). It EXCLUDES `do`
+	// (keep=true — always executes, leaks its defs by design). The compiler
+	// consults it to refuse a fn REDEFINITION that clobbers an enclosing
+	// binding in-place (the overlap-removal drops the outer overload without
+	// growing depth, so the branch rollback can't restore it): compiled
+	// resolution would statically bake the conditional shadow while the
+	// interpreter keeps the outer fn when the branch is not taken. Refusing
+	// keeps compiled == interpreter (slow, not wrong).
+	CondBodyDepth int
+
 	// InflightBails counts Any-placeholder bail-outs taken by
 	// recursive calls of UNCHECKED fns (declared returns use the
 	// declaration instead and don't count). AnalyseFnBody compares
@@ -1018,6 +1031,23 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// readers about reachable states (completion plan 2.3; the article's
 	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
 	"redundant_guard": SeverityInfo,
+	// Case exhaustiveness (design/case-exhaustiveness.0.md). A default-less
+	// `case` whose clause matches do not provably cover the scrutinee's
+	// static type is an ERROR: the uncovered value silently produces
+	// nothing at runtime. Coverage is proven in the sound direction only
+	// (opaque predicate matches never count), a gradual dynamic(T)
+	// scrutinee skips the check, and the trailing default stays optional
+	// exactly when the type disjunction is fully met — so the finding
+	// fires only where a genuinely uncoverable value exists. NOT a
+	// RuntimeMirror: no-match is not a runtime error, so the compile
+	// pipeline refuses on it like any other model-level error.
+	"case_not_exhaustive": SeverityError,
+	// The advisory duals of the same coverage computation (info,
+	// non-gating, per the redundant_guard precedent): a trailing default
+	// made unreachable because the clauses already cover every
+	// alternative, and a clause subsumed by the clauses before it.
+	"case_redundant_default":  SeverityInfo,
+	"case_unreachable_clause": SeverityInfo,
 	// RESERVED — no emit site yet (completion plan 4.4 / G6). The general
 	// "options-looking map literal flows into a slot with no Options schema"
 	// lint is BLOCKED ON PRECISION: atom-spelled and string-spelled map keys

@@ -23,19 +23,20 @@ func TestRunCompiledReason(t *testing.T) {
 
 	// POSITIVE — a genuine whole-program refusal reports ran=false and names
 	// the first offending construct. Every CORPUS refusal has graduated, so
-	// the pin rides an off-corpus shape: a raw flex-cell Reach in the failed
-	// dispatch window (the definiteness screen's deferred-token decline)
-	// refuses "unmatched dispatch recovered at f" and falls back to the
-	// interpreter, which raises.
+	// the pin rides an off-corpus shape: a `def` consuming a variadic loop
+	// region with a DYNAMIC count (the S5 split needs the static region
+	// size; a runtime-only count keeps the refusal) — it falls back to the
+	// interpreter, which runs it fine. (The statically-counted fixture
+	// graduated 2026-07-17 — the S5 first-value split compiles it.)
 	t.Run("refusal names the offender", func(t *testing.T) {
-		const src = `def f fn [[x:List][List][x]] def m (flex {a:1}) f m.a`
+		const src = `def m {n: 3} def xs (for (m get "n") [1]) xs`
 		a, _ := New()
 		_, ran, reason, err := a.RunCompiledReason(src)
 		if ran {
 			t.Fatalf("expected no compiled run (ran=false), got ran=true")
 		}
-		if !strings.Contains(reason, "unmatched dispatch recovered at f") {
-			t.Fatalf("refusal reason %q does not name the offending dispatch", reason)
+		if !strings.Contains(reason, "def `xs` consumes loop results") {
+			t.Fatalf("refusal reason %q does not name the offending construct", reason)
 		}
 		if codeOf(err) != "compile_refused" {
 			t.Fatalf("Stage J: refusal must return compile_refused, got [%s] %v", codeOf(err), err)

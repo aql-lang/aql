@@ -101,25 +101,40 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	// Capturing bodies COMPILE post the capture-slot landing (plan Phase
 	// 6.3 — fd.Captured rides the closure compile; the ref carries the
 	// values; see lang/go/stamp_capture_test.go for the end-to-end pin).
-	// This eng-level fixture still declines on the NARROWER gate: its
-	// capture value is runtime-minted with no compile identity, so the
-	// closure compile refuses it — recorded, so -compile-report attributes.
+	// An IDENTITY-LESS capture value (runtime-minted under the mode-gated
+	// ID elision) STAMPS too since the §7a landing (2026-07-16): the
+	// detached compile mints a fresh identity on a CLONE of the captured
+	// slice — the frozen snapshot keys its slot like any other capture,
+	// and the input value stays untouched (no shared-value mutation).
 	captured := aqlBodyFd(NewInteger(1))
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
-	if _, ok := StampDetachedFn(r, captured, SrcPos{}); ok {
-		t.Fatalf("identity-less capture must decline")
+	ref, ok := StampDetachedFn(r, captured, SrcPos{})
+	if !ok || ref == nil {
+		t.Fatalf("identity-less capture must stamp (§7a), got %+v", r.StampEvents())
 	}
-	events := r.StampEvents()
-	if len(events) == 0 || !strings.Contains(events[len(events)-1].Reason, "closure captures a runtime-minted value") {
-		t.Fatalf("want the runtime-minted-capture reason recorded, got %+v", events)
+	if n, err := AsInteger(ref.Captures[0]); len(ref.Captures) != 1 || err != nil || n != 9 {
+		t.Fatalf("ref must carry the frozen capture value, got %+v", ref.Captures)
+	}
+	if captured.Captured[0].Value.ID != "" {
+		t.Fatalf("the INPUT capture value must stay identity-less (clone, not mutate), got %q", captured.Captured[0].Value.ID)
 	}
 
+	// A multi-own-sig fn stamps PER SIG since the §7b landing: the
+	// single-sig entry takes the first stampable sig, and StampDetachedSig
+	// reaches each remaining overload — MatchFnSig at the invoke seam picks
+	// the sig, whose own Impl ref then runs.
 	multi := FnDefInfo{Signatures: []Signature{
 		{Impl: AQL([]Value{NewInteger(1)})},
 		{Impl: AQL([]Value{NewInteger(2)})},
 	}}
-	if _, ok := StampDetachedFn(r, multi, SrcPos{}); ok {
-		t.Fatalf("multi-own-sig fn must decline (MatchFnSig picks at runtime)")
+	if ref0, ok := StampDetachedFn(r, multi, SrcPos{}); !ok || ref0 == nil {
+		t.Fatalf("multi-own-sig first overload must stamp (§7b)")
+	}
+	if ref1, ok := StampDetachedSig(r, multi, 1, SrcPos{}); !ok || ref1 == nil {
+		t.Fatalf("multi-own-sig second overload must stamp (§7b)")
+	}
+	if _, ok := StampDetachedSig(r, multi, 9, SrcPos{}); ok {
+		t.Fatalf("an out-of-range sig index must decline")
 	}
 
 	if _, ok := StampDetachedFn(r, aqlBodyFd(), SrcPos{}); ok {
@@ -334,32 +349,41 @@ func TestStampReportCollector(t *testing.T) {
 	if _, ok := StampFnValue(r, v); !ok {
 		t.Fatalf("stamp failed")
 	}
-	// A capturing fn records its refusal reason.
+	// A capturing fn — even with an identity-less capture value — STAMPS
+	// since the §7a landing (the detached compile mints an identity on a
+	// clone), recording Stamped=true under its name.
 	captured := aqlBodyFd(NewInteger(1))
 	captured.Name = "grabby"
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
-	if _, ok := StampDetachedFn(r, captured, SrcPos{Row: 3, Col: 7}); ok {
-		t.Fatalf("capturing fn must decline")
+	if _, ok := StampDetachedFn(r, captured, SrcPos{Row: 2, Col: 1}); !ok {
+		t.Fatalf("capturing fn must stamp (§7a): %+v", r.StampEvents())
 	}
-	// Shape noise (multi-own-sig) records NOTHING.
-	multi := FnDefInfo{Signatures: []Signature{
-		{Impl: AQL([]Value{NewInteger(1)})},
-		{Impl: AQL([]Value{NewInteger(2)})},
-	}}
-	if _, ok := StampDetachedFn(r, multi, SrcPos{}); ok {
-		t.Fatalf("multi-sig must decline")
+	// A body the unit compile REFUSES (the context-dependent `args`, which
+	// reads the interpreter's per-call args stack) records its reason.
+	argsy := aqlBodyFd(NewWord("args"))
+	argsy.Name = "argsy"
+	if _, ok := StampDetachedFn(r, argsy, SrcPos{Row: 3, Col: 7}); ok {
+		t.Fatalf("args-reading fn must decline")
+	}
+	// Shape noise (a fallback-only fn) records NOTHING.
+	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: AQL([]Value{NewInteger(1)})}}}
+	if _, ok := StampDetachedFn(r, noise, SrcPos{}); ok {
+		t.Fatalf("a fallback-only fn must decline")
 	}
 
 	events := r.StampEvents()
-	if len(events) != 2 {
-		t.Fatalf("got %d events, want 2 (stamped + capture refusal): %v", len(events), events)
+	if len(events) != 3 {
+		t.Fatalf("got %d events, want 3 (stamped + capture stamped + args refusal): %v", len(events), events)
 	}
 	if !events[0].Stamped || events[0].Reason != "" {
 		t.Fatalf("first event must be the successful stamp: %+v", events[0])
 	}
-	if events[1].Stamped || events[1].Name != "grabby" ||
-		events[1].Pos.Row != 3 || events[1].Reason == "" {
-		t.Fatalf("second event must be grabby's capture refusal: %+v", events[1])
+	if !events[1].Stamped || events[1].Name != "grabby" {
+		t.Fatalf("second event must be grabby's capture STAMP (§7a): %+v", events[1])
+	}
+	if events[2].Stamped || events[2].Name != "argsy" ||
+		events[2].Pos.Row != 3 || events[2].Reason == "" {
+		t.Fatalf("third event must be argsy's refusal: %+v", events[2])
 	}
 
 	// Forks and module-style inheritance feed the SAME log.
@@ -376,8 +400,8 @@ func TestStampReportCollector(t *testing.T) {
 	if _, ok := StampFnValue(child, Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(3))}); !ok {
 		t.Fatalf("inherited-child stamp failed")
 	}
-	if got := len(r.StampEvents()); got != 4 {
-		t.Fatalf("shared log must hold 4 events, got %d", got)
+	if got := len(r.StampEvents()); got != 5 {
+		t.Fatalf("shared log must hold 5 events, got %d", got)
 	}
 
 	// Inheriting from an UNARMED parent is a no-op.
@@ -511,5 +535,95 @@ func TestInterpMemberInertMapArms(t *testing.T) {
 	}
 	if interpMemberInert(NewParenExpr([]Value{NewCarrier(TInteger)})) {
 		t.Error("a paren-expr bearing a non-inert token is NOT interp-inert")
+	}
+}
+
+// The §7c JIT re-stamp (REFUSAL-CLOSURE.0): a detached ref whose dep was
+// REBOUND after the stamp re-compiles against the live binding at invoke
+// time — the fresh twin runs on the VM with the NEW value (parity with the
+// interpreter's live resolution) — instead of degrading permanently to
+// CallAQL. A second invoke under the same binding REUSES the twin (no
+// second compile); the try budget bounds a hot rebinding loop; and a
+// declined re-stamp (stamping disarmed) takes the interpreter.
+func TestInvokeCallbackJITRestamp(t *testing.T) {
+	r := stampReg(t)
+	r.EnableRuntimeStamping()
+	r.Defs.Push("dep", NewInteger(1))
+
+	fd := aqlBodyFd(NewWord("dep"))
+	fd.Name = "reader"
+	ref, ok := StampDetachedFn(r, fd, SrcPos{Row: 1, Col: 1})
+	if !ok {
+		t.Fatalf("initial stamp declined: %+v", r.StampEvents())
+	}
+	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
+
+	// Fresh: the frozen unit returns the stamp-time binding.
+	out, err := InvokeCallback(r, sig, nil, nil)
+	if err != nil {
+		t.Fatalf("fresh invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 1 {
+		t.Fatalf("fresh unit must return the stamp-time value 1, got %v", out[0])
+	}
+
+	// Rebind dep → the old snapshot is stale → the seam re-stamps and the
+	// twin returns the LIVE value, exactly as the interpreter resolves it.
+	r.Defs.Pop("dep")
+	r.Defs.Push("dep", NewInteger(2))
+	stampsBefore := len(r.StampEvents())
+	out, err = InvokeCallback(r, sig, nil, nil)
+	if err != nil {
+		t.Fatalf("restamped invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 2 {
+		t.Fatalf("re-stamped unit must return the live value 2, got %v", out[0])
+	}
+	if got := len(r.StampEvents()); got != stampsBefore+1 {
+		t.Fatalf("the re-stamp must record one stamp event, got %d new", got-stampsBefore)
+	}
+
+	// Same binding, second invoke: the twin is fresh — REUSED, no compile.
+	stampsBefore = len(r.StampEvents())
+	if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+		t.Fatalf("reuse invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 2 {
+		t.Fatalf("twin reuse must return 2, got %v", out[0])
+	}
+	if got := len(r.StampEvents()); got != stampsBefore {
+		t.Fatalf("twin reuse must not re-compile, got %d new events", got-stampsBefore)
+	}
+
+	// The try budget: each further rebind pays one re-stamp until the budget
+	// (restampMaxTries, one already spent) exhausts; after that the seam
+	// stays on CallAQL — which STILL resolves the live binding, so values
+	// keep matching the interpreter (slow, not wrong).
+	for i := 3; i <= 6; i++ {
+		r.Defs.Pop("dep")
+		r.Defs.Push("dep", NewInteger(int64(i)))
+		if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+			t.Fatalf("rebind %d invoke: %v", i, err)
+		}
+		if n, _ := AsInteger(out[0]); n != int64(i) {
+			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallAQL alike)", i, out[0])
+		}
+	}
+	if tries := ref.restamp.tries; tries != restampMaxTries {
+		t.Fatalf("try budget must exhaust at %d, got %d", restampMaxTries, tries)
+	}
+
+	// A declined re-stamp (stamping disarmed mid-life) takes the interpreter:
+	// reset the budget to isolate the decline arm from the exhausted arm.
+	ref.restamp.tries = 0
+	ref.restamp.cur = nil
+	r.DisableRuntimeStamping()
+	r.Defs.Pop("dep")
+	r.Defs.Push("dep", NewInteger(9))
+	if out, err = InvokeCallback(r, sig, nil, nil); err != nil {
+		t.Fatalf("disarmed invoke: %v", err)
+	}
+	if n, _ := AsInteger(out[0]); n != 9 {
+		t.Fatalf("disarmed re-stamp must fall to CallAQL's live resolution (9), got %v", out[0])
 	}
 }

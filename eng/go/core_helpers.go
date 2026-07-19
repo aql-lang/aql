@@ -137,6 +137,22 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 				filtered = append(filtered, entry)
 			}
 			if changed {
+				// A fn REDEFINITION whose overlap-removal drops an existing
+				// overload inside a CONDITIONALLY-reached body (an if/case arm
+				// or a loop body — CondBodyDepth) clobbers the enclosing
+				// binding in-place: the drop-then-push leaves the def depth
+				// UNCHANGED, so the branch/loop def rollback (which restores by
+				// depth growth) cannot revert it, and compiled resolution bakes
+				// the conditional shadow. The interpreter keeps the outer fn
+				// when the branch is not taken (or the loop runs zero times), so
+				// the two diverge. Refuse — MarkUncompilable is a no-op off the
+				// compile pass, so plain check and the interpreter are unaffected
+				// and the program runs correctly (slow, not wrong). An
+				// UNCONDITIONAL redefinition (top level or inside `do`) is sound
+				// and keeps compiling: CondBodyDepth is 0 there.
+				if r.Check.CondBodyDepth > 0 {
+					r.Check.Recorder().MarkUncompilable("fn '" + name + "' redefined inside a conditional body (branch/loop) shadows an outer overload")
+				}
 				r.Defs.Set(name, filtered)
 			}
 		}
@@ -1412,7 +1428,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
-				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, out, pos)
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, polyPlan.sigs, args, out, pos)
 			}
 			return out
 		}
@@ -1444,7 +1460,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
-				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, args, nil, pos)
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, polyPlan.sigs, args, nil, pos)
 				return nil
 			}
 			// The 0-net / undeclared call whose body unit declined leaves a
@@ -1651,10 +1667,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	r.Defs.Set(name, stack)
 }
 
-// CoerceBoolean converts any value to a boolean using the same rules
-// as `convert boolean`: booleans pass through, numbers are non-zero,
-// none is false, lists/maps are non-empty, "true"/"false" parse
-// literally, all other values are non-empty.
+// CoerceBoolean converts any value to a boolean by presence, not by
+// parsing content — the same rule `convert Boolean` and `make Boolean`
+// apply: booleans pass through, numbers are non-zero, none is false,
+// lists/maps are non-empty, and a String is false only when empty (its
+// characters are never inspected, so "false" and "true" both coerce to
+// true). The sole content check is the tail carve-out below: a non-String
+// value that RENDERS as "false" is an unresolved boolean literal reaching
+// truthiness as a Word/Atom (a bare `false` clause, a quoted `false`
+// atom) and keeps its boolean reading.
 func CoerceBoolean(v Value) bool {
 	switch {
 	case ValueType(v).ConformsTo(TBoolean):

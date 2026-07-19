@@ -293,7 +293,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.jsonic"),
+		NewWord("read"), pathV("data.jsonic"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -321,7 +321,7 @@ func TestReadWriteJSON(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("data.json"),
+		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -342,7 +342,7 @@ func TestReadWriteLines(t *testing.T) {
 	opts.Set("fmt", NewString("lines"))
 	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewMap(opts), NewString("hello\nworld"), NewString("out.txt"), NewWord("write"),
+		NewMap(opts), NewString("hello\nworld"), pathV("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -360,7 +360,7 @@ func TestReadWriteText(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	result := runAQL(t, r, []Value{
-		NewWord("read"), NewString("hello.txt"),
+		NewWord("read"), pathV("hello.txt"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -383,7 +383,7 @@ func TestWriteStdout(t *testing.T) {
 
 	// write to stdout using the explicit "<stdout>" path.
 	result := runAQL(t, r, []Value{
-		NewWord("write"), NewString("<stdout>"), NewString("hello"),
+		NewWord("write"), NewAtom("stdout"), NewString("hello"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
@@ -407,7 +407,7 @@ func TestWriteAppendMode(t *testing.T) {
 	opts.Set("mode", NewString("append"))
 	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
 	result := runAQL(t, r, []Value{
-		NewMap(opts), NewString("second"), NewString("out.txt"), NewWord("write"),
+		NewMap(opts), NewString("second"), pathV("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))

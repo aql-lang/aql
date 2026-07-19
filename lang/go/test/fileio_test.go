@@ -76,7 +76,7 @@ func runWithMem(t *testing.T, files map[string]string, expr string) (*capabiliti
 func TestReadBasic(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"hello.txt": "hello world",
-	}, `read "hello.txt"`)
+	}, `read (make Pathon "hello.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestReadBasic(t *testing.T) {
 func TestReadPrefix(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"data.txt": "abc",
-	}, `"data.txt" read`)
+	}, `(make Pathon "data.txt") read`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestReadPrefix(t *testing.T) {
 }
 
 func TestReadMissingFile(t *testing.T) {
-	_, err := runWithFiles(t, nil, `read "nope.txt"`)
+	_, err := runWithFiles(t, nil, `read (make Pathon "nope.txt")`)
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -113,7 +113,7 @@ func TestReadNormalizesLineEndings(t *testing.T) {
 	// Default nl:"lf" should convert \r\n to \n.
 	got, err := runWithFiles(t, map[string]string{
 		"crlf.txt": "line1\r\nline2\r\n",
-	}, `read "crlf.txt"`)
+	}, `read (make Pathon "crlf.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestReadNormalizesLineEndings(t *testing.T) {
 func TestReadNormalizesCR(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"cr.txt": "a\rb\r",
-	}, `read "cr.txt"`)
+	}, `read (make Pathon "cr.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestReadNormalizesCR(t *testing.T) {
 func TestReadRawLineEndings(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"raw.txt": "a\r\nb\r",
-	}, `read "raw.txt" {nl:"raw"}`)
+	}, `read (make Pathon "raw.txt") {nl:"raw"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestReadRawLineEndings(t *testing.T) {
 func TestReadLines(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"lines.txt": "aaa\nbbb\nccc",
-	}, `read "lines.txt" {fmt:"lines"}`)
+	}, `read (make Pathon "lines.txt") {fmt:"lines"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestReadLines(t *testing.T) {
 func TestReadJSON(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"data.json": `{"x":1,"y":"hello"}`,
-	}, `read "data.json" {fmt:"json"}`)
+	}, `read (make Pathon "data.json") {fmt:"json"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestReadJSON(t *testing.T) {
 func TestReadJSONArray(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"arr.json": `[1,2,3]`,
-	}, `read "arr.json" {fmt:"json"}`)
+	}, `read (make Pathon "arr.json") {fmt:"json"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestReadJSONArray(t *testing.T) {
 func TestReadJsonic(t *testing.T) {
 	got, err := runWithFiles(t, map[string]string{
 		"config.jsonic": `{x:1, y:hello}`,
-	}, `read "config.jsonic" {fmt:"jsonic"}`)
+	}, `read (make Pathon "config.jsonic") {fmt:"jsonic"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,12 +203,12 @@ func TestReadJsonic(t *testing.T) {
 // --- write tests ---
 
 func TestWriteBasic(t *testing.T) {
-	mem, got, err := runWithMem(t, nil, `write "out.txt" "hello"`)
+	mem, got, err := runWithMem(t, nil, `write (make Pathon "out.txt") "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "'out.txt'" {
-		t.Errorf("return: got %s, want 'out.txt'", got)
+	if got != "out.txt" {
+		t.Errorf("return: got %s, want out.txt (Pathon)", got)
 	}
 	content := string(mem.Files["out.txt"])
 	if content != "hello" {
@@ -218,12 +218,12 @@ func TestWriteBasic(t *testing.T) {
 
 func TestWriteForward(t *testing.T) {
 	// write path content — both forward
-	mem, got, err := runWithMem(t, nil, `write "out.txt" "hello"`)
+	mem, got, err := runWithMem(t, nil, `write (make Pathon "out.txt") "hello"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "'out.txt'" {
-		t.Errorf("return: got %s, want 'out.txt'", got)
+	if got != "out.txt" {
+		t.Errorf("return: got %s, want out.txt (Pathon)", got)
 	}
 	content := string(mem.Files["out.txt"])
 	if content != "hello" {
@@ -233,12 +233,12 @@ func TestWriteForward(t *testing.T) {
 
 func TestWriteWithExprContent(t *testing.T) {
 	// write path (expression) — content from paren expression
-	mem, got, err := runWithMem(t, nil, `write "out.txt" (upper "hello")`)
+	mem, got, err := runWithMem(t, nil, `write (make Pathon "out.txt") (upper "hello")`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "'out.txt'" {
-		t.Errorf("return: got %s, want 'out.txt'", got)
+	if got != "out.txt" {
+		t.Errorf("return: got %s, want out.txt (Pathon)", got)
 	}
 	content := string(mem.Files["out.txt"])
 	if content != "HELLO" {
@@ -249,7 +249,7 @@ func TestWriteWithExprContent(t *testing.T) {
 func TestWriteAppend(t *testing.T) {
 	mem, _, err := runWithMem(t, map[string]string{
 		"log.txt": "line1\n",
-	}, `write "log.txt" "line2\n" {mode:"append"}`)
+	}, `write (make Pathon "log.txt") "line2\n" {mode:"append"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,12 +260,12 @@ func TestWriteAppend(t *testing.T) {
 }
 
 func TestWriteReturnsPath(t *testing.T) {
-	_, got, err := runWithMem(t, nil, `write "result.txt" "data"`)
+	_, got, err := runWithMem(t, nil, `write (make Pathon "result.txt") "data"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "'result.txt'" {
-		t.Errorf("got %s, want 'result.txt'", got)
+	if got != "result.txt" {
+		t.Errorf("got %s, want result.txt (Pathon)", got)
 	}
 }
 
@@ -284,7 +284,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	registerIOWords(reg)
 
 	// Write with all forward args to be explicit
-	values, err := parser.Parse(`write "dst.txt" (read "src.txt")`)
+	values, err := parser.Parse(`write (make Pathon "dst.txt") (read (make Pathon "src.txt"))`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,8 +296,8 @@ func TestReadWriteRoundtrip(t *testing.T) {
 	}
 
 	got := formatStack(result)
-	if got != "'dst.txt'" {
-		t.Errorf("return: got %s, want 'dst.txt'", got)
+	if got != "dst.txt" {
+		t.Errorf("return: got %s, want dst.txt (Pathon)", got)
 	}
 
 	content := string(mem.Files["dst.txt"])
@@ -309,7 +309,7 @@ func TestReadWriteRoundtrip(t *testing.T) {
 // --- write with crlf ---
 
 func TestWriteCRLF(t *testing.T) {
-	mem, _, err := runWithMem(t, nil, `write "out.txt" "a\nb\n" {nl:"crlf"}`)
+	mem, _, err := runWithMem(t, nil, `write (make Pathon "out.txt") "a\nb\n" {nl:"crlf"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
