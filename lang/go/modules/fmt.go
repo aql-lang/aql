@@ -41,12 +41,12 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 // every signature is BarrierPos -1 (all-forward eligible), the rule module
 // wrappers must follow so the swap form `src Fmt.format` still dispatches
 // (lang/go/CLAUDE.md, "Module FnDef Wrappers").
-var FmtNatives = []native.NativeFunc{
+var FmtNatives = append([]native.NativeFunc{
 	stringFormatterNative("format", formatter.Format),
 	stringFormatterNative("format-markdown", formatter.FormatMarkdown),
 	stringFormatterNative("format-html", formatter.FormatHTML),
 	renderDocNative(),
-}
+}, fmtRuleNatives...)
 
 // stringFormatterNative builds a String -> String native named name whose
 // handler applies fn to a concrete source string, rejecting a non-concrete

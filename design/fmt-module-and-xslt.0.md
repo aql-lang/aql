@@ -1,9 +1,10 @@
 # `aql:fmt` — a formatter as a core module, and the XSLT question
 
-Status: Phases 1, 3-rules, 4-embedded, and the Phase-2 seam have **landed**;
-the trivia-preserving tabnas CST (Phase 2 front end) and the full
-declarative rule-set conversion (Phase 3) remain. See "Phased plan" for the
-per-phase state. This is a discovery/design note, not an ADR (see
+Status: Phases 1, 3-rules, 3-vocabulary, 4-embedded, and the Phase-2 seam
+have **landed**; the trivia-preserving tabnas CST (Phase 2 front end) and the
+final declarative rule-set conversion — retiring the Go layout code by
+routing `Fmt.format` through AQL rules (Phase 3) — remain. See "Phased plan"
+for the per-phase state. This is a discovery/design note, not an ADR (see
 `lang/go/CLAUDE.md`, "ADRs — only on explicit instruction").
 
 ## Context
@@ -181,13 +182,39 @@ proposed `Fmt.*` vocabulary (the "formatting words"):
 - `Fmt.line` / `Fmt.softline` / `Fmt.hardline` — a space-or-break / nothing-or-break / forced break.
 - `Fmt.concat [d …]`, `Fmt.group d` (flatten if it fits ≤ width, else break),
   `Fmt.indent n d`, `Fmt.nest d`.
-- `Fmt.rule kind (node => document)` — register a template; `Fmt.apply node`
-  — dispatch + recurse; `Fmt.children node` — the child sequence.
+- `Fmt.kind node` — the node's dispatch key (an XSLT match pattern): a
+  `$kind`-tagged Map's tag, else `map` / `list` / `scalar`. **LANDED.**
+- `Fmt.children node` — the child sequence (apply-templates' node list): a
+  Map's `{$kind:'entry' key value}` entry nodes, a List's elements, else
+  `[]`. **LANDED.**
 
 A Go (or AQL) `Fmt.render width doc` prints the document, and `width` defaults
 to **72**, with `Fmt.verbatim` spans passed through untouched (the
 backtick-verbatim rule falls out of the algebra, not a special case in every
 wrapper).
+
+`Fmt.kind` and `Fmt.children` are deliberately **pure value→value
+transforms** — classification and child-exposure only. Dispatch and recursion
+stay in ordinary AQL: fetch the rule fn from a table keyed by kind, apply it,
+recurse on children. So the rule engine itself is AQL (no fn-invocation or
+registry-threading in Go), and a whole formatter reads like an XSLT
+stylesheet — a rule table plus a one-line `apply` driver:
+
+```
+import "aql:fmt"
+def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def rules {
+  scalar: (nd:Any => (canon nd))
+  entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (apply nd.value)]}))
+  map:    (nd:Any => ({fmt:'group' body:{fmt:'concat' parts:((Fmt.children nd) each [apply])}}))
+}
+Fmt.render 72 (apply {a:1 b:{c:2}})    # → "a:1b:c:2"  (nested map recursed)
+```
+
+The `apply` driver applies a fn fetched from the table (a dynamic dispatch the
+bytecode compiler leaves to the interpreter). See
+`modules/fmtrule.go`, the `module-fmt.tsv` rows, and the end-to-end
+`TestFmtDeclarativeFormatter`.
 
 ## Existing rules → declarative form
 
@@ -232,10 +259,16 @@ these as `Fmt.*` AQL):
   Wadler/Prettier document algebra (`formatter.Doc`/`RenderDoc`) exposed as
   the runtime word **`Fmt.render`**, driven by an AQL doc tree
   (`{fmt:'group' body:…}` etc.) — "formatting words in the fmt module,
-  expressed as AQL data". REMAINING: express the rule table above as AQL
-  template rules on this substrate and route `Fmt.format` through them,
-  retiring the Go rule code (the largest piece — a full rule-set port under
-  the coverage gate).
+  expressed as AQL data". The XSLT-style **rule vocabulary** is now also DONE:
+  the two pure words **`Fmt.kind`** (node → dispatch key) and
+  **`Fmt.children`** (node → child sequence) make a declarative rule table +
+  a one-line `apply` driver the natural AQL expression of a formatter
+  (`modules/fmtrule.go`, demonstrated end-to-end by
+  `TestFmtDeclarativeFormatter` — see "The output side" above). REMAINING: port
+  the built-in AQL-source layout rules (the table above) onto this vocabulary
+  and route `Fmt.format` through them, retiring the Go rule code (the largest
+  piece — a full rule-set port under the coverage gate, and the one that must
+  reconcile with the lexical formatter, R4).
 - **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
   examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
   `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI

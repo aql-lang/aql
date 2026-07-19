@@ -18,3 +18,17 @@ import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x
 import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest
 import "aql:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width
 import "aql:fmt" end Fmt.render 1 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a\nb'	Fmt.render breaks a doc that does not fit the width
+#
+# The XSLT-style rule vocabulary: Fmt.kind supplies a node's dispatch key
+# (an XSLT match pattern) and Fmt.children its child sequence
+# (apply-templates' node list). Both are pure value->value transforms, so a
+# declarative rule table + a four-line apply driver — the whole formatter —
+# is ordinary AQL (see the end-to-end loop in modules/fmtrule_test.go).
+#
+import "aql:fmt" end {a:1} Fmt.kind	map/q	Fmt.kind classifies an untagged Map as 'map'
+import "aql:fmt" end [1 2] Fmt.kind	list/q	Fmt.kind classifies a List as 'list'
+import "aql:fmt" end 5 Fmt.kind	scalar/q	Fmt.kind classifies a scalar leaf as 'scalar'
+import "aql:fmt" end {$kind:'entry' key:'a'} Fmt.kind	entry/q	Fmt.kind reports a $kind-tagged Map's own tag
+import "aql:fmt" end {a:1 b:2} Fmt.children	[{$kind:entry/q key:'a' value:1} {$kind:entry/q key:'b' value:2}]	Fmt.children yields one entry node per Map key
+import "aql:fmt" end [7 8] Fmt.children	[7 8]	Fmt.children yields a List's elements verbatim
+import "aql:fmt" end 5 Fmt.children	[]	Fmt.children yields no children for a scalar leaf
