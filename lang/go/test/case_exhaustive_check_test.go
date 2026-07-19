@@ -196,14 +196,15 @@ func TestCaseExhaustivePredicates(t *testing.T) {
 	wantCase(t,
 		`def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2 [eq 3] 3]]] f 5`,
 		"case_not_exhaustive", false)
-	// Floats use the ℝ rule: an open point at the shared bound is a gap,
-	// a closed one is not.
+	// Float is NEVER interval-total: nan is a Float inhabitant that no
+	// ordered comparison matches, so even a bound-sharing pair leaves
+	// the domain uncovered.
 	wantCase(t,
 		`def f fn [[x:Float][Integer][case x [[gt 3.0] 1 [lt 3.0] 2]]] f 5.0`,
 		"case_not_exhaustive", true, "uncovered", "Float")
 	wantCase(t,
 		`def f fn [[x:Float][Integer][case x [[gte 3.0] 1 [lt 3.0] 2]]] f 5.0`,
-		"case_not_exhaustive", false)
+		"case_not_exhaustive", true, "uncovered", "Float")
 	// A lone half-line still demands a default…
 	wantCase(t,
 		`def f fn [[x:Integer][Integer][case x [[gt 3] 1]]] f 5`,
@@ -399,17 +400,20 @@ func TestCaseExhaustiveIntervalMachinery(t *testing.T) {
 	wantCase(t,
 		`def f fn [[x:Integer][Integer][case x [[lte 3] 1 [gte 0] 2 [gte 10] 3]]] f 1`,
 		"case_not_exhaustive", false)
-	// Reals: an inclusive twin extends an open end at the same bound…
+	// A Float scrutinee is never interval-total (nan matches no
+	// comparison) — even a full-looking span errs…
 	wantCase(t,
 		`def f fn [[x:Float][Integer][case x [[lt 3.0] 1 [lte 3.0] 2 [gt 3.0] 3]]] f 1.0`,
-		"case_not_exhaustive", false)
-	// …a real gap is caught, and a lone half-line stays partial.
-	wantCase(t,
-		`def f fn [[x:Float][Integer][case x [[lt 3.0] 1 [gt 4.0] 2]]] f 1.0`,
 		"case_not_exhaustive", true, "uncovered", "Float")
 	wantCase(t,
 		`def f fn [[x:Float][Integer][case x [[gt 3.0] 1]]] f 5.0`,
 		"case_not_exhaustive", true)
+	// …but a concrete non-nan float IS point-checked against intervals…
+	wantCase(t, `case 5.0 [[gt 3.0] "big"]`, "case_not_exhaustive", false)
+	wantCase(t, `case inf [[gt 0.0] "up"]`, "case_not_exhaustive", false)
+	// …while nan is admitted by no interval (P1 review finding).
+	wantCase(t, `case nan [[lte 0.0] "x"]`, "case_not_exhaustive", true, "uncovered")
+	wantCase(t, `case nan [[lte 0.0] "x" "d"]`, "case_not_exhaustive", false)
 	// An integer-empty point predicate ([eq 3.5] admits no integer) is
 	// simply no coverage — the default keeps the case legal.
 	wantCase(t,
@@ -423,6 +427,24 @@ func TestCaseExhaustiveIntervalMachinery(t *testing.T) {
 	wantCase(t,
 		`def IS (Integer tor String) def f fn [[x:IS][Integer][case x [[gt 3] 1 [lte 3] 2]]] f 5`,
 		"case_not_exhaustive", true, "uncovered", "String")
+	// Integer bounds are EXACT int64 — float64 would collapse values
+	// above 2^53 and wrongly accept this (P2 review finding)…
+	wantCase(t,
+		`case 9007199254740992 [[lte 9007199254740991] "lo" [gte 9007199254740993] "hi"]`,
+		"case_not_exhaustive", true, "uncovered", "9007199254740992")
+	// …while exact adjacency at the same magnitude still proves total…
+	wantCase(t,
+		`def f fn [[x:Integer][Integer][case x [[lte 9007199254740991] 1 [gte 9007199254740992] 2]]] f 5`,
+		"case_not_exhaustive", false)
+	// …and a single interval reaching MinInt64 covers the whole int64 domain.
+	wantCase(t,
+		`def f fn [[x:Integer][Integer][case x [[gte -9223372036854775808] 1]]] f 5`,
+		"case_not_exhaustive", false)
+	// A DepScalar interval applies only within its BASE family: Big
+	// (Integer gt 10) admits no Float at runtime (P2 review finding).
+	wantCase(t,
+		`def Big (Integer gt 10) def f fn [[x:Float][String][case x [Big "big" [lte 10.0] "small"]]] f 11.0`,
+		"case_not_exhaustive", true, "uncovered", "Float")
 	// A hi-bounded refinement contributes its Hi bound.
 	wantCase(t,
 		`def Small (Integer lte 10) def f fn [[x:Integer][String][case x [Small "s" [gt 10] "b"]]] f 5`,
@@ -476,10 +498,39 @@ func TestCaseUnreachableIntervalAdvisories(t *testing.T) {
 	wantCase(t,
 		`def f fn [[x:Integer][Integer][case x [[lt 5] 1 [gt 3] 2 3]]] f 1`,
 		"case_unreachable_clause", false)
-	// Real-domain sweep with several bounded-lo spans: total coverage is
-	// still proven once the merged span reaches +∞.
+	// Float bounds over an INTEGER scrutinee floor/ceil exactly, in
+	// both inclusivity directions.
 	wantCase(t,
-		`def f fn [[x:Float][Integer][case x [[lt 4.0] 1 [gte 3.0] 2 [gte 5.0] 3]]] f 1.0`,
+		`def f fn [[x:Integer][Integer][case x [[lt 3.5] 1 [gte 3.5] 2]]] f 1`,
+		"case_not_exhaustive", false)
+	wantCase(t,
+		`def f fn [[x:Integer][Integer][case x [[gt 3.5] 1 [lte 3.5] 2]]] f 1`,
+		"case_not_exhaustive", false)
+	// Saturation at the int64 rim: strict bounds beyond the domain edge
+	// admit no Integer, and out-of-range float bounds empty out — the
+	// defaults keep these legal, the checker just earns no coverage.
+	wantCase(t,
+		`def f fn [[x:Integer][String][case x [[gt 9223372036854775807] "x" [lte 9223372036854775806] "y"]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "Integer")
+	wantCase(t,
+		`def f fn [[x:Integer][String][case x [[lt -9223372036854775808] "x" "d"]]] f 1`,
+		"case_not_exhaustive", false)
+	wantCase(t,
+		`def f fn [[x:Integer][String][case x [[gte 10000000000000000000.0] "x" "d"]]] f 1`,
+		"case_not_exhaustive", false)
+	wantCase(t,
+		`def f fn [[x:Integer][String][case x [[lte -10000000000000000000.0] "x" "d"]]] f 1`,
+		"case_not_exhaustive", false)
+	// A float point below the interval's low bound is not admitted.
+	wantCase(t, `case 2.0 [[gt 3.0] "big" "d"]`, "case_not_exhaustive", false)
+	// The base-family filter applies on both interval passes: a
+	// Float-based refinement earns nothing toward an Integer domain…
+	wantCase(t,
+		`def BigF (Float gt 10.0) def f fn [[x:Integer][String][case x [BigF "f" [lte 10] "lo"]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "Integer")
+	// …and an Integer-based refinement never admits a concrete float.
+	wantCase(t,
+		`def Big (Integer gt 10) case 11.0 [Big "big" "d"]`,
 		"case_not_exhaustive", false)
 	// [is T] containment: [is Pos] after [is Integer] is dead.
 	wantCase(t,

@@ -1683,10 +1683,13 @@ case 9 [1 "one" 2 "two"]  # check error: case_not_exhaustive — uncovered: 9
 case 9 [1 "one" "many"]   # 'many' — a trailing default always satisfies the check
 ```
 
-**Comparison predicates prove coverage by interval union** — a total
-pair covers the whole numeric domain, with ℤ-adjacency for Integer and
-open/closed-point precision for Float; a genuine gap is caught and an
-`[eq …]` point bridges it:
+**Comparison predicates prove coverage by interval union** — with
+EXACT `int64` bounds over the Integer domain (which is exactly int64),
+merged with ℤ-adjacency; a genuine gap is caught and an `[eq …]` point
+bridges it. **Float and Number are never interval-total**: `nan` is a
+Float inhabitant and every ordered comparison against it is false, so a
+comparison-only clause list cannot cover them (a concrete non-`nan`
+float is still point-checked against the intervals):
 
 ```
 def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]]
@@ -1697,10 +1700,18 @@ def g fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2]]]
 
 def h fn [[x:Integer][Integer][case x [[gt 3] 1 [lt 3] 2 [eq 3] 3]]]
 h 3                       # 3 — the [eq 3] point closes the gap
+
+def k fn [[x:Float][Integer][case x [[gte 3.0] 1 [lt 3.0] 2]]]
+# check error: case_not_exhaustive — uncovered: Float (nan matches no comparison)
+
+case 5.0 [[gt 3.0] "big"] # 'big' — a concrete float is point-checked
+case nan [[lte 0.0] "x"]  # check error — nan is admitted by no interval
 ```
 
 A `refine`d range type used as a match contributes its bounds the same
-way, so its complement predicate completes the domain:
+way — restricted to its BASE family (`Big` below admits no Float at
+runtime, so its interval never counts toward a Float scrutinee) — and
+its complement predicate completes the domain:
 
 ```
 def Big (Integer gt 10)

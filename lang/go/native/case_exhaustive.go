@@ -27,10 +27,14 @@ import (
 //   - [is T] predicates, via the runtime is-relation (the plain lattice
 //     walk — [is Integer] is the explicit family check);
 //   - comparison predicates ([gt 3], [lte 3], [eq 0]) and DepScalar
-//     refinement matches, via interval-union analysis over numeric
-//     domains (ℤ-adjacency for the Integer family, the ℝ rule
-//     otherwise) — a total pair like [gt 3]/[lte 3] proves Integer
-//     covered.
+//     refinement matches, via interval-union analysis with EXACT int64
+//     bounds — a total pair like [gt 3]/[lte 3] proves Integer covered
+//     (the domain is exactly int64, merged with ℤ-adjacency). Float and
+//     Number are never interval-total: nan is a Float inhabitant no
+//     ordered comparison matches, so a comparison-only clause list
+//     cannot cover them (concrete float values are still point-checked
+//     against the intervals). A DepScalar interval applies only within
+//     its refinement's base family.
 //
 // Unrecognized predicates and paren expressions stay opaque (no credit),
 // so "cannot prove exhaustive" findings can be conservative. A gradual
@@ -138,13 +142,30 @@ func normalizeCaseNone(v Value) Value {
 	return v
 }
 
+// caseIvalBound is one EXACT interval endpoint. Integer bounds keep
+// their int64 (float64 collapses distinct integers above 2^53, which
+// would let a non-exhaustive case slip through); f always carries the
+// float64 projection — the same lossy projection the runtime's
+// cross-leaf Number comparison uses — for mixed int/float compares.
+type caseIvalBound struct {
+	present bool
+	incl    bool
+	isInt   bool
+	i       int64
+	f       float64
+}
+
 // caseIval is the numeric set a comparison predicate or a DepScalar
 // refinement covers: the values v with lo ≤/< v ≤/< hi. An absent end is
 // unbounded; a point predicate ([eq c]) sets both ends to c inclusive.
 type caseIval struct {
-	lo, hi         float64
-	hasLo, hasHi   bool
-	loIncl, hiIncl bool
+	lo, hi caseIvalBound
+	// base restricts a DepScalar-derived interval to its refinement's
+	// base family: `Big` (Integer gt 10) admits NO Float at runtime, so
+	// its interval must not be credited against a Float alternative.
+	// nil for plain comparison predicates, which run on the value
+	// itself and apply to any numeric scrutinee.
+	base *Type
 }
 
 // caseClauseMatch is one resolved clause match of the static pass.
@@ -250,21 +271,23 @@ func parseCaseCmpPred(m Value) (caseIval, bool) {
 	if err != nil { //covergate:allow IsWord already proved the WordInfo payload
 		return caseIval{}, false
 	}
-	bound, ok := caseNumericLiteral(arg)
+	bound, ok := caseBoundLiteral(arg)
 	if !ok {
 		return caseIval{}, false
 	}
+	incl := bound
+	incl.incl = true
 	switch w.Name {
 	case "gt":
-		return caseIval{lo: bound, hasLo: true}, true
+		return caseIval{lo: bound}, true
 	case "gte":
-		return caseIval{lo: bound, hasLo: true, loIncl: true}, true
+		return caseIval{lo: incl}, true
 	case "lt":
-		return caseIval{hi: bound, hasHi: true}, true
+		return caseIval{hi: bound}, true
 	case "lte":
-		return caseIval{hi: bound, hasHi: true, hiIncl: true}, true
+		return caseIval{hi: incl}, true
 	case "eq":
-		return caseIval{lo: bound, hi: bound, hasLo: true, hasHi: true, loIncl: true, hiIncl: true}, true
+		return caseIval{lo: incl, hi: incl}, true
 	}
 	return caseIval{}, false
 }
@@ -311,30 +334,47 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 	return Value{}, false
 }
 
-// caseNumericLiteral reads a concrete Integer or Float literal as the
-// float64 bound of a comparison predicate.
-func caseNumericLiteral(v Value) (float64, bool) {
+// caseNumericValue reads a concrete Integer or Float value exactly:
+// isInt distinguishes the exact int64 from the float64 (which also
+// carries the runtime's cross-leaf projection float64(i) for integers).
+// NaN and infinities are returned as-is — the CALLERS decide (a NaN
+// scrutinee is uncoverable by comparisons; a non-finite BOUND makes the
+// predicate unrecognizable).
+func caseNumericValue(v Value) (isInt bool, i int64, f float64, ok bool) {
 	if !IsConcrete(v) {
-		return 0, false
+		return false, 0, 0, false
 	}
 	if v.Parent.ConformsTo(TInteger) {
 		if n, err := AsInteger(v); err == nil {
-			return float64(n), true
+			return true, n, float64(n), true
 		}
-		return 0, false //covergate:allow a concrete Integer always reads as an int64
+		return false, 0, 0, false //covergate:allow a concrete Integer always reads as an int64
 	}
 	if v.Parent.ConformsTo(TFloat) {
-		if f, err := AsFloat(v); err == nil {
-			return f, true
+		if fv, err := AsFloat(v); err == nil {
+			return false, 0, fv, true
 		}
-		return 0, false //covergate:allow a concrete Float always reads as a float64
+		return false, 0, 0, false //covergate:allow a concrete Float always reads as a float64
 	}
-	return 0, false
+	return false, 0, 0, false
+}
+
+// caseBoundLiteral reads a comparison-predicate bound. A non-finite
+// float bound (nan, inf) is rejected — ordered comparisons against nan
+// are always false, so such a predicate is not an interval.
+func caseBoundLiteral(v Value) (caseIvalBound, bool) {
+	isInt, i, f, ok := caseNumericValue(v)
+	if !ok || (!isInt && (math.IsNaN(f) || math.IsInf(f, 0))) {
+		return caseIvalBound{}, false
+	}
+	return caseIvalBound{present: true, isInt: isInt, i: i, f: f}, true
 }
 
 // depScalarIval converts a DepScalar refinement body (`Integer gt 10`)
-// into the numeric set it admits. ok=false when a bound is not a plain
-// numeric literal or the base family is not numeric.
+// into the numeric set it admits, tagged with the refinement's BASE
+// family — the interval applies only to alternatives inside that family
+// (Big admits no Float at runtime). ok=false when a bound is not a
+// plain numeric literal or the base family is not numeric.
 func depScalarIval(v Value) (caseIval, bool) {
 	if !v.Parent.ConformsTo(TNumber) {
 		return caseIval{}, false
@@ -343,20 +383,22 @@ func depScalarIval(v Value) (caseIval, bool) {
 	if err != nil { //covergate:allow IsDepScalar already proved the DepScalarInfo payload
 		return caseIval{}, false
 	}
-	var iv caseIval
+	iv := caseIval{base: v.Parent}
 	if info.Lo != nil {
-		b, ok := caseNumericLiteral(info.Lo.Value)
-		if !ok { //covergate:allow a numeric DepScalar bound is always a plain Integer/Float literal — an arbitrary-precision literal cannot be written (integer_overflow at parse)
+		b, ok := caseBoundLiteral(info.Lo.Value)
+		if !ok { //covergate:allow a numeric DepScalar bound is always a plain finite Integer/Float literal — an arbitrary-precision literal cannot be written (integer_overflow at parse)
 			return caseIval{}, false
 		}
-		iv.lo, iv.hasLo, iv.loIncl = b, true, info.Lo.Inclusive
+		b.incl = info.Lo.Inclusive
+		iv.lo = b
 	}
 	if info.Hi != nil {
-		b, ok := caseNumericLiteral(info.Hi.Value)
-		if !ok { //covergate:allow a numeric DepScalar bound is always a plain Integer/Float literal — an arbitrary-precision literal cannot be written (integer_overflow at parse)
+		b, ok := caseBoundLiteral(info.Hi.Value)
+		if !ok { //covergate:allow a numeric DepScalar bound is always a plain finite Integer/Float literal — an arbitrary-precision literal cannot be written (integer_overflow at parse)
 			return caseIval{}, false
 		}
-		iv.hi, iv.hasHi, iv.hiIncl = b, true, info.Hi.Inclusive
+		b.incl = info.Hi.Inclusive
+		iv.hi = b
 	}
 	return iv, true
 }
@@ -448,135 +490,154 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 }
 
 // caseIvalsCover reports whether the union of the clause intervals
-// covers every value of the numeric alternative type at. Integer-family
-// alternatives merge with ℤ-adjacency ((-∞,3] ∪ [4,∞) covers ℤ); every
-// other numeric family uses the ℝ rule, which is also the conservative
-// answer for Number as a whole (ℝ coverage implies every numeric leaf).
+// covers every value of the numeric alternative type at. ONLY the
+// Integer family can be interval-total: AQL's Integer is exactly int64,
+// so totality is covering [MinInt64, MaxInt64] with ℤ-adjacency
+// ((-∞,3] ∪ [4,∞) covers it). Float and Number can NEVER be proven
+// total by comparisons — nan is a Float inhabitant and every ordered
+// comparison against nan is false, so a nan scrutinee falls through any
+// comparison-only clause list.
 func caseIvalsCover(ivals []caseIval, at *Type) bool {
-	if len(ivals) == 0 || !at.ConformsTo(TNumber) {
+	if !at.ConformsTo(TInteger) {
 		return false
 	}
-	if at.ConformsTo(TInteger) {
-		return caseIvalsCoverInts(ivals)
-	}
-	return caseIvalsCoverReals(ivals)
-}
-
-// caseIntBounds normalizes one interval to closed INTEGER ends: the
-// integers admitted are [lo, hi] (ok=false for an empty integer set).
-func caseIntBounds(iv caseIval) (lo, hi float64, hasLo, hasHi, ok bool) {
-	lo, hi, hasLo, hasHi = iv.lo, iv.hi, iv.hasLo, iv.hasHi
-	if hasLo {
-		// v > 3 → v ≥ 4; v > 3.5 → v ≥ 4; v ≥ 3.5 → v ≥ 4; v ≥ 3 → v ≥ 3.
-		if iv.loIncl {
-			lo = math.Ceil(lo)
-		} else {
-			lo = math.Floor(lo) + 1
-		}
-	}
-	if hasHi {
-		if iv.hiIncl {
-			hi = math.Floor(hi)
-		} else {
-			hi = math.Ceil(hi) - 1
-		}
-	}
-	if hasLo && hasHi && lo > hi {
-		return 0, 0, false, false, false
-	}
-	return lo, hi, hasLo, hasHi, true
-}
-
-// caseIvalsCoverInts merges ℤ-normalized intervals and reports whether
-// they span every integer.
-func caseIvalsCoverInts(ivals []caseIval) bool {
-	type span struct {
-		lo, hi       float64
-		hasLo, hasHi bool
-	}
+	type span struct{ lo, hi int64 }
 	spans := make([]span, 0, len(ivals))
 	for _, iv := range ivals {
-		lo, hi, hasLo, hasHi, ok := caseIntBounds(iv)
+		if iv.base != nil && !at.ConformsTo(iv.base) {
+			continue // a DepScalar interval outside its base family
+		}
+		lo, hi, ok := caseIntSpan(iv)
 		if ok {
-			spans = append(spans, span{lo, hi, hasLo, hasHi})
+			spans = append(spans, span{lo, hi})
 		}
 	}
 	if len(spans) == 0 {
 		return false
 	}
-	sort.Slice(spans, func(i, j int) bool {
-		if spans[i].hasLo != spans[j].hasLo {
-			return !spans[i].hasLo
-		}
-		return spans[i].lo < spans[j].lo
-	})
+	sort.Slice(spans, func(i, j int) bool { return spans[i].lo < spans[j].lo })
 	cur := spans[0]
-	if cur.hasLo {
-		return false // no interval reaches -∞
+	if cur.lo != math.MinInt64 {
+		return false
 	}
 	for _, s := range spans[1:] {
-		if !cur.hasHi {
+		if cur.hi == math.MaxInt64 {
 			return true
 		}
-		if s.hasLo && s.lo > cur.hi+1 {
+		if s.lo > cur.hi+1 {
 			return false // an integer gap
 		}
-		if !s.hasHi {
-			cur.hasHi = false
-		} else if s.hi > cur.hi {
+		if s.hi > cur.hi {
 			cur.hi = s.hi
 		}
 	}
-	return !cur.hasHi
+	return cur.hi == math.MaxInt64
 }
 
-// caseIvalsCoverReals merges intervals with open/closed ends and reports
-// whether they span all of ℝ.
-func caseIvalsCoverReals(ivals []caseIval) bool {
-	spans := make([]caseIval, len(ivals))
-	copy(spans, ivals)
-	sort.Slice(spans, func(i, j int) bool {
-		if spans[i].hasLo != spans[j].hasLo {
-			return !spans[i].hasLo
-		}
-		if spans[i].lo != spans[j].lo {
-			return spans[i].lo < spans[j].lo
-		}
-		return spans[i].loIncl && !spans[j].loIncl
-	})
-	cur := spans[0]
-	if cur.hasLo {
-		return false
-	}
-	for _, s := range spans[1:] {
-		if !cur.hasHi {
-			return true
-		}
-		if s.hasLo {
-			if s.lo > cur.hi {
-				return false
+// caseIntSpan converts one interval to the CLOSED int64 range it covers
+// over AQL's Integer domain (exactly int64 — so an absent end saturates
+// to MinInt64/MaxInt64). Integer bounds stay exact; float bounds
+// floor/ceil onto the neighbouring integer with explicit range guards
+// (float64(MaxInt64) is 2^63, above every Integer). ok=false → the
+// interval admits no integer.
+func caseIntSpan(iv caseIval) (lo, hi int64, ok bool) {
+	const twoTo63 = 9223372036854775808.0 // 2^63 == float64(MaxInt64) rounded up
+	lo, hi = math.MinInt64, math.MaxInt64
+	if iv.lo.present {
+		if iv.lo.isInt {
+			lo = iv.lo.i
+			if !iv.lo.incl {
+				if lo == math.MaxInt64 {
+					return 0, 0, false // v > MaxInt64: no Integer qualifies
+				}
+				lo++
 			}
-			if s.lo == cur.hi && !s.loIncl && !cur.hiIncl {
-				return false // both ends open at the same point: it is missed
+		} else {
+			f := iv.lo.f
+			if iv.lo.incl {
+				f = math.Ceil(f)
+			} else {
+				f = math.Floor(f) + 1
 			}
-		}
-		if !s.hasHi {
-			cur.hasHi = false
-		} else if s.hi > cur.hi || (s.hi == cur.hi && s.hiIncl && !cur.hiIncl) {
-			cur.hi, cur.hiIncl = s.hi, s.hiIncl
+			if f >= twoTo63 {
+				return 0, 0, false // above every Integer
+			}
+			if f >= -twoTo63 {
+				lo = int64(f)
+			}
 		}
 	}
-	return !cur.hasHi
+	if iv.hi.present {
+		if iv.hi.isInt {
+			hi = iv.hi.i
+			if !iv.hi.incl {
+				if hi == math.MinInt64 {
+					return 0, 0, false // v < MinInt64: no Integer qualifies
+				}
+				hi--
+			}
+		} else {
+			f := iv.hi.f
+			if iv.hi.incl {
+				f = math.Floor(f)
+			} else {
+				f = math.Ceil(f) - 1
+			}
+			if f < -twoTo63 {
+				return 0, 0, false // below every Integer
+			}
+			if f < twoTo63 {
+				hi = int64(f)
+			}
+		}
+	}
+	if lo > hi {
+		return 0, 0, false
+	}
+	return lo, hi, true
 }
 
-// caseIvalContainsPoint reports whether one interval admits the value x —
-// the coverage question for a CONCRETE numeric alternative.
-func caseIvalContainsPoint(iv caseIval, x float64) bool {
-	if iv.hasLo && (x < iv.lo || (x == iv.lo && !iv.loIncl)) {
+// caseBoundCmp orders a numeric value (exact int64 or float64) against
+// one interval endpoint: -1 below, 0 equal, +1 above. Two integers
+// compare EXACTLY (int64); a mixed pair compares in float64 — the same
+// lossy projection the runtime's cross-leaf Number comparison applies,
+// so the static answer mirrors the runtime one.
+func caseBoundCmp(isInt bool, i int64, f float64, b caseIvalBound) int {
+	if isInt && b.isInt {
+		switch {
+		case i < b.i:
+			return -1
+		case i > b.i:
+			return 1
+		}
+		return 0
+	}
+	switch {
+	case f < b.f:
+		return -1
+	case f > b.f:
+		return 1
+	}
+	return 0
+}
+
+// caseIvalContainsValue reports whether one interval admits a concrete
+// numeric value — the coverage question for a CONCRETE numeric
+// alternative. nan is admitted by NO interval (every ordered comparison
+// against it is false at runtime).
+func caseIvalContainsValue(iv caseIval, isInt bool, i int64, f float64) bool {
+	if !isInt && math.IsNaN(f) {
 		return false
 	}
-	if iv.hasHi && (x > iv.hi || (x == iv.hi && !iv.hiIncl)) {
-		return false
+	if iv.lo.present {
+		if c := caseBoundCmp(isInt, i, f, iv.lo); c < 0 || (c == 0 && !iv.lo.incl) {
+			return false
+		}
+	}
+	if iv.hi.present {
+		if c := caseBoundCmp(isInt, i, f, iv.hi); c > 0 || (c == 0 && !iv.hi.incl) {
+			return false
+		}
 	}
 	return true
 }
@@ -703,9 +764,11 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 		}
 	}
 	// Interval-union pass: the comparison predicates and DepScalar
-	// matches jointly cover a numeric alternative when their intervals
-	// span its whole domain ([gt 3] and [lte 3] together cover Integer),
-	// or admit the concrete alternative's exact value.
+	// matches jointly cover an Integer-family alternative when their
+	// intervals span all of int64 ([gt 3] and [lte 3] together cover
+	// Integer), or admit the concrete alternative's exact value. A
+	// DepScalar interval applies only within its base family, and a nan
+	// alternative is admitted by no interval.
 	if len(ivals) > 0 {
 		for ai, alt := range alts {
 			if covered[ai] {
@@ -715,9 +778,12 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 				covered[ai] = caseIvalsCover(ivals, CanonicalType(r, &alt))
 				continue
 			}
-			if x, ok := caseNumericLiteral(alt); ok {
+			if isInt, i, x, ok := caseNumericValue(alt); ok {
 				for _, iv := range ivals {
-					if caseIvalContainsPoint(iv, x) {
+					if iv.base != nil && !alt.Is(iv.base) {
+						continue
+					}
+					if caseIvalContainsValue(iv, isInt, i, x) {
 						covered[ai] = true
 						break
 					}
@@ -820,21 +886,27 @@ func caseClauseSubsumes(r *Registry, prev, cur caseClauseMatch) bool {
 	return caseMatchCovers(r, prev.resolved, cur.resolved, caseAltExpandDepth)
 }
 
-// caseIvalContains reports a ⊇ b for two numeric sets.
+// caseIvalContains reports a ⊇ b for two numeric sets — the
+// unreachable-clause relation for interval clauses. Conservative on the
+// base tag: a base-restricted earlier clause only subsumes a clause at
+// least as restricted.
 func caseIvalContains(a, b caseIval) bool {
-	if a.hasLo {
-		if !b.hasLo {
+	if a.base != nil && (b.base == nil || !b.base.ConformsTo(a.base)) {
+		return false
+	}
+	if a.lo.present {
+		if !b.lo.present {
 			return false
 		}
-		if b.lo < a.lo || (b.lo == a.lo && b.loIncl && !a.loIncl) {
+		if c := caseBoundCmp(b.lo.isInt, b.lo.i, b.lo.f, a.lo); c < 0 || (c == 0 && b.lo.incl && !a.lo.incl) {
 			return false
 		}
 	}
-	if a.hasHi {
-		if !b.hasHi {
+	if a.hi.present {
+		if !b.hi.present {
 			return false
 		}
-		if b.hi > a.hi || (b.hi == a.hi && b.hiIncl && !a.hiIncl) {
+		if c := caseBoundCmp(b.hi.isInt, b.hi.i, b.hi.f, a.hi); c > 0 || (c == 0 && b.hi.incl && !a.hi.incl) {
 			return false
 		}
 	}

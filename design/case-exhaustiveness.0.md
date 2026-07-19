@@ -53,13 +53,22 @@ alternative provably matches it. Three coverage channels compose:
   lattice walk): `[is Pos]` covers a `Pos` alternative nominally, and
   `[is Integer]` is the explicit family check.
 - **comparison predicates and DepScalar refinement matches** cover
-  numeric domains by **interval union**: `[gt 3]` and `[lte 3]`
-  together cover Integer, `Big` (`Integer gt 10`) plus `[lte 10]`
-  complete the domain, an `[eq c]` point bridges a single gap.
-  ℤ-adjacency merges integer bounds ((-∞,3] ∪ [4,∞) covers ℤ); every
-  other numeric family uses the ℝ rule (an open point at a shared
-  bound is a gap). Recognized shapes: `[gt/gte/lt/lte/eq <numeric
-  literal>]` and DepScalar Lo/Hi bounds.
+  numeric domains by **interval union with EXACT int64 bounds** (a
+  float64 representation collapses integers above 2^53 — PR #287 P2):
+  `[gt 3]` and `[lte 3]` together cover Integer, `Big` (`Integer gt
+  10`) plus `[lte 10]` complete the domain, an `[eq c]` point bridges
+  a single gap. The Integer domain is exactly int64, so totality is
+  covering [MinInt64, MaxInt64] with ℤ-adjacency. **Float and Number
+  are never interval-total** — `nan` is a Float inhabitant no ordered
+  comparison matches (PR #287 P1) — though a concrete non-`nan` float
+  is still point-checked against the intervals (mixed int/float
+  comparisons use the float64 projection, mirroring the runtime's
+  cross-leaf Number comparison). A DepScalar interval is tagged with
+  its refinement's BASE family and never credited outside it (`Big`
+  admits no Float at runtime — PR #287 P2). Recognized shapes:
+  `[gt/gte/lt/lte/eq <finite numeric literal>]` and DepScalar Lo/Hi
+  bounds; non-finite bounds are rejected (a `[gt nan]` predicate is
+  not an interval).
 
 Unrecognized predicates and paren expressions stay opaque (no credit),
 so "cannot prove exhaustive" findings can be conservative (they demand
