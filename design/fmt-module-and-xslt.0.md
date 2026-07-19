@@ -264,12 +264,30 @@ these as `Fmt.*` AQL):
     `eng/go/parser/grammar.go`), not by a bare lexer. A raw-lex front end
     would mis-tokenise exactly the spans the new rules must keep verbatim.
     The two honest options: (a) the `formatter` package takes a dependency
-    on `eng/go/parser` to reuse the configured instance — abandoning its
-    engine-dep-free leaf status (F3), which would move doc-example
-    formatting and the import graph; or (b) the trivia-lexer lives in a new
-    leaf package that re-declares AQL's backtick/minilang lex customisations
-    independently — duplicating grammar knowledge. Pick (a) or (b) before
-    writing the front end; both are viable, neither is mechanical.
+    on `eng/go/parser` to reuse the configured instance — no import CYCLE
+    (`formatter → eng/parser → eng`, and eng/parser imports neither back),
+    but it abandons the package's engine-dep-free leaf status (F3); or (b)
+    the trivia-lexer lives in a new leaf package that re-declares AQL's
+    backtick/minilang lex customisations independently — duplicating grammar
+    knowledge. Pick (a) or (b) before writing the front end; both are viable,
+    neither is mechanical.
+  - **The configured lexer's token stream is PROVEN (probe run).** Driving
+    the AQL-configured jsonic (`setupBaseTokens` + the template / bignum /
+    minilang / xml matchers) via `jsonic.NewLex(src, j.Config())` with
+    `lex.Config.IgnoreSet = {}` yields a clean, workable stream: `#TX` word,
+    `#NR`/`#BD` number, `#ST` string, `#CM` whole line comment, `#LN`/`#SP`
+    trivia, `#OS`/`#CS`/`#OB`/`#CB`/`#OP`/`#CP` brackets, `#DT` dot — and
+    crucially **`#ML` captures a whole `+re/[a-z]+/` minilang literal** and
+    `#CM` a whole comment, so those need NO special handling. Only two spans
+    need reconstruction to match the hand-lexer's Node model: a backtick
+    literal (lexed as `#BT` … inner tokens … `#BT`; rejoin verbatim by byte
+    span) and a DOTTED word (`foo` `.` `bar` arrive as `#TX #DT #TX`;
+    coalesce adjacent — no `#SP` between — into one `foo.bar` word token, as
+    the hand-lexer does). The remaining risk is purely matching the
+    hand-lexer BYTE-FOR-BYTE so the golden tests and fmt-clean-pinned doc
+    blocks don't churn — the front end has, by construction, no functional
+    benefit (identical output) against real regression risk, which is why it
+    is a maintainer priorities call, not a mechanical task.
   Until then keep the current lossless hand-lexer as `DefaultParse` — it
   already preserves comments/newlines/backticks — so fmt stays correct.
 - **Phase 3 — rules.** Rule behaviour DONE in the Go formatter: 72-col,
