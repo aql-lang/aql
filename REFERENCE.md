@@ -1590,6 +1590,145 @@ falsy: `"FALSE"`, `"0"`, and `"no"` are all truthy (only lowercase
 `"false"` is special). A condition that produces *no* value at all
 (e.g. an empty block `[]` as the condition) is an error, not a false.
 
+#### `case` — dispatch and exhaustiveness
+
+`case <value> [m1 b1 m2 b2 … default]` walks match/block pairs in
+order; the first match wins, and a trailing odd element is the default.
+A match unifies with the value (equal scalars/atoms; a type literal
+matches its members), or — when the match is a code-body list — runs as
+a predicate with the value on the stack:
+
+```
+case 2 [1 "one" 2 "two" "many"]           # 'two'  — an equal scalar matches
+case 5 [[gt 3] "big" "small"]             # 'big'  — [gt 3] runs as `5 gt 3`
+case "x" [Integer "int" String "str"]     # 'str'  — a type literal matches its members
+```
+
+**`case` is statically exhaustive.** `aql check` requires the clauses
+to cover the scrutinee's static type: a default-less `case` with a
+provably-uncoverable value is an error, `case_not_exhaustive`, which
+fails the check and refuses `aql run` at preflight. Coverage is proven
+in the sound direction only — a clause counts only when every runtime
+value of an alternative provably matches it — so the checker may
+conservatively demand a default it cannot prove unnecessary, but it
+never wrongly proves a `case` exhaustive. The default is **not**
+required when the type disjunctions are met:
+
+**A declared union, covered alternative by alternative** (or by the
+union type itself in match position):
+
+```
+def IS (Integer tor String)
+def f fn [[x:IS][String][case x [Integer "i" String "s"]]]
+f 5                       # 'i' — exhaustive over IS, no default needed
+f "hi"                    # 's'
+
+def g fn [[x:IS][String][case x [IS "either"]]]
+g 5                       # 'either' — the union type covers all its members
+
+def h fn [[x:IS][Integer][case x [Integer 1]]]
+# check error: case_not_exhaustive — uncovered: String
+```
+
+**Boolean, by `true` and `false`** (or the `Boolean` literal):
+
+```
+def f fn [[b:Boolean][Integer][case b [true 1 false 0]]]
+f false                   # 0 — true+false cover Boolean
+
+def g fn [[b:Boolean][Integer][case b [true 1]]]
+# check error: case_not_exhaustive — uncovered: false
+```
+
+**An enum, member by member** (or by a covering type literal such as
+`Atom`):
+
+```
+def Color (red/q tor green/q tor blue/q)
+def f fn [[c:Color][String][case c [red/q "warm" green/q "calm" blue/q "cool"]]]
+f green/q                 # 'calm' — every member listed
+
+def g fn [[c:Color][String][case c [red/q "warm" green/q "calm"]]]
+# check error: case_not_exhaustive — uncovered: blue
+```
+
+**An optional, by the base type plus `none`:**
+
+```
+def MaybeInt (Integer tor none)
+def f fn [[x:MaybeInt][Integer][case x [Integer 1 none 0]]]
+f 5                       # 1
+```
+
+**A plain type, by itself or an ancestor** — concrete value clauses can
+never cover an infinite type:
+
+```
+def f fn [[x:Integer][String][case x [Number "some number"]]]
+f 7                       # 'some number' — the ancestor covers Integer
+
+def g fn [[x:Integer][String][case x [1 "one" 2 "two"]]]
+# check error: case_not_exhaustive — uncovered: Integer
+```
+
+**A concrete scrutinee is value-precise** — a clause that provably
+matches is enough:
+
+```
+case 2 [1 "one" 2 "two"]  # 'two' — 2 provably matches, no default needed
+case 9 [1 "one" 2 "two"]  # check error: case_not_exhaustive — uncovered: 9
+case 9 [1 "one" "many"]   # 'many' — a trailing default always satisfies the check
+```
+
+**Predicate matches prove nothing** (the match-guard rule): a total
+pair like `[gt 3]`/`[lte 3]` still needs a default, because the checker
+cannot prove predicate totality:
+
+```
+def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]]
+# check error: case_not_exhaustive — uncovered: Integer
+
+def g fn [[x:Integer][Integer][case x [[gt 3] 1 2]]]
+g 5                       # 1 — the default restores exhaustiveness
+```
+
+**A dynamic (untyped) scrutinee opts out** — the check needs a static
+type, so an `:Any` param skips it. This is the one remaining home of
+the historical no-match/no-default behaviour (the `case` produces
+nothing, like `if` without an else):
+
+```
+def f fn [[x:Any][][case x [1 "one" 2 "two"]]]
+f 9                       # produces nothing — checks clean (dynamic scrutinee)
+```
+
+**A bare-refine newtype is covered by its base, not vice versa** — the
+checker deliberately does not credit a newtype clause with covering its
+base type, even though unification admits base values at runtime:
+
+```
+def Pos refine Integer
+def f fn [[x:Pos][String][case x [Integer "int-family"]]]
+f (def y:Pos 5 y)         # 'int-family' — the base covers the newtype
+
+def g fn [[x:Integer][String][case x [Pos "p"]]]
+# check error: case_not_exhaustive — uncovered: Integer (conservative)
+```
+
+The same coverage computation yields two info-severity advisories
+(never gating): `case_unreachable_clause`, for a clause an earlier
+clause fully subsumes, and `case_redundant_default`, for a default made
+dead by full coverage of a declared union:
+
+```
+def f fn [[x:Integer][Integer][case x [Number 1 Integer 2 3]]]
+# info: case_unreachable_clause — Integer can never match after Number
+
+def IS (Integer tor String)
+def g fn [[x:IS][String][case x [Integer "i" String "s" "d"]]]
+# info: case_redundant_default — the clauses already cover IS
+```
+
 #### `for` forms
 
 ```

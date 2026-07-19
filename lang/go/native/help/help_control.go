@@ -102,9 +102,15 @@ func init() {
 		Examples: []string{
 			`case 2 [1 "one" 2 "two" "many"]            ;# 'two'`,
 			`case 5 [[gt 3] "big" "small"]              ;# 'big'`,
-			`case "x" [Integer "int" String "str"]      ;# 'str'`,
+			`case "x" [Integer "int" String "str"]      ;# 'str' — String provably covers "x", so no default is needed`,
 			`case 5 [Integer [mul 10] "other"]          ;# 50 — the block sees the value`,
 			`do [risky] error [get code case [bad_input/q "rejected" "unexpected"]]`,
+			`case 9 [1 "one" 2 "two"]                   ;# check ERROR case_not_exhaustive — 9 matches no clause; add a default`,
+			`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] ;# exhaustive over IS — no default needed`,
+			`def f fn [[x:IS][Integer][case x [Integer 1]]] ;# check ERROR case_not_exhaustive — uncovered: String`,
+			`def f fn [[b:Boolean][Integer][case b [true 1 false 0]]] ;# true+false cover Boolean`,
+			`def f fn [[x:Integer][Integer][case x [[gt 3] 1 [lte 3] 2]]] ;# check ERROR — predicates prove no coverage`,
+			`def f fn [[x:Any][][case x [1 "one" 2 "two"]]] ;# a dynamic scrutinee skips the check (no-match produces nothing)`,
 		},
 	})
 
