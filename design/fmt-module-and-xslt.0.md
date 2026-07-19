@@ -337,6 +337,42 @@ these as `Fmt.*` AQL):
   and route `Fmt.format` through them, retiring the Go rule code (the largest
   piece — a full rule-set port under the coverage gate, and the one that must
   reconcile with the lexical formatter, R4).
+  - **R4 RESOLVED (concrete finding) — the substrate does NOT reproduce the
+    current output; the two use different layout models.** The Go emitter
+    (`emitList`/`emitStatement`/`wrapStatement`) does **greedy fill-wrapping**:
+    an overflowing list keeps words flowing across continuation lines
+    (`[alpha … kilo` / `      lima mike november oscar` / `  ]`). The
+    `formatter.Doc`/`RenderDoc` document algebra behind `Fmt.render` does
+    **all-or-nothing Wadler/Prettier group breaking**: an overflowing group
+    breaks *every* line point (one item per line). They are not the same
+    formatter, and no rule set emitting into today's Doc algebra can reproduce
+    the emitter's output. Consequence: routing `Fmt.format` through the
+    declarative Doc-algebra rules — Phase 3-full as written — is **NOT
+    output-preserving**. It re-flows the ENTIRE `.aql` corpus and every
+    fmt-clean-pinned example/doc block from the emitter's fill style to the
+    document algebra's per-line style, colliding with the byte-identical /
+    corruption-free / 100%-gate discipline every other phase held to (Phases
+    3-rules and 5 pinned that exact output). So Phase 3-full cannot be
+    "completed" the output-preserving way the others were; it forks on a
+    maintainer decision:
+    - **(a) Accept the reflow.** Adopt the document-algebra layout as the
+      canonical style, port the rules onto `Fmt.render`, regenerate every
+      golden test and re-pin every example/doc block. Genuinely declarative
+      and the design's intent — but a repo-wide, user-visible formatting
+      change requiring explicit sign-off.
+    - **(b) Preserve the output.** Reimplement the emitter's exact greedy-fill
+      + fn/trailing-container/statement strategies as AQL rules that emit
+      strings directly (bypassing the generic Doc algebra), plus a
+      source-`*Node` → AQL-value bridge and engine-driven `Fmt.format`. Keeps
+      byte-identity but is a large multi-session port; the layout rules being
+      AQL (not Go) sit outside the Go coverage gate, only the bridge/driver
+      need Go coverage.
+    - **(c) Extend the algebra with a `fill` primitive** matching the
+      emitter's greedy wrap, then port onto it (still large; the fn/container
+      strategies remain to encode).
+    The declarative substrate (Phase 3-vocabulary) is built and correct; what
+    remains is this fork, which changes either the output or the effort
+    envelope materially and is the maintainer's call.
 - **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
   examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
   `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI
