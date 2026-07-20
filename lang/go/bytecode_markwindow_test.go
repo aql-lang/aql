@@ -91,9 +91,15 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
 	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	// Re-diagnosed 2026-07-20 (PR #280 review): the promotion itself is now
+	// the refusal — a variadic catch region's stores would pop success-arity
+	// values the raising run never produced — caught at lowerCall's
+	// store-prologue gate, one stage before the window's own "residual shape
+	// beyond Stage 1 (call result above a literal)" decline this row used to
+	// surface. Same sound refusal, earlier and truer diagnosis.
 	mwRefusedWithParity(t,
 		mwDocMod+`def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
-		"residual shape beyond Stage 1 (call result above a literal)")
+		"do: variadic result promoted to frame slots (runtime count differs from the static seat)")
 	// GRADUATED 2026-07-17 (§9.1): the module-export-in-region row compiles —
 	// the identity-less ExtensionPayload out mints an ID at the dyn-body
 	// record, restoring its event linkage, so the mark window owns the

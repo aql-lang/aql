@@ -668,16 +668,21 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
-	// LoopBodyDepth, when > 0, marks analysis running inside a counted-for
-	// LOOP body (AnalyseLoopBody brackets each round's body run). Unlike the
+	// LoopBodyDepth, when > 0, marks analysis running inside a PROVEN
+	// counted-for LOOP body (AnalyseLoopBody brackets each round's body run,
+	// gated on its provenTrips arg AND a sentinel-free body). Unlike the
 	// other NestedBodyDepth contributors (branch arms, quotation bodies), a
-	// loop body executes UNCONDITIONALLY once per iteration — so when
-	// NestedBodyDepth == LoopBodyDepth every enclosing body is a loop body
-	// and a per-iteration binding is definitely reached. The S5 first-value
-	// loop split (SplitLoopRegionBind) consults exactly that equality for
-	// the loop-carried variadic def (REFUSAL-CLOSURE S9.2a); a branch arm
-	// keeps the decline (a conditionally-reached split would leak the
-	// analysis-only binding — PR #278 review P1-b).
+	// proven loop body executes UNCONDITIONALLY once per iteration AND at
+	// least once — so when NestedBodyDepth == LoopBodyDepth every enclosing
+	// body is such a loop body and a per-iteration binding is definitely
+	// reached with its residual intact. The S5 first-value loop split
+	// (SplitLoopRegionBind) consults exactly that equality for the
+	// loop-carried variadic def (REFUSAL-CLOSURE S9.2a); a branch arm keeps
+	// the decline (a conditionally-reached split would leak the
+	// analysis-only binding — PR #278 review P1-b), and a computed-count or
+	// break/continue-bearing loop body never stamps (a zero-trip run leaks
+	// the binding; loop control bypasses the site or discards its values —
+	// PR #280 review).
 	LoopBodyDepth int
 
 	// CondBodyDepth, when > 0, marks analysis running inside a

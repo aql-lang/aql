@@ -1858,6 +1858,23 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	// top — so the residual re-pushes them in idx order. Nothing is left on the
 	// simulated stack either way.
 	if slot, ok := lw.promoted[ev.seq]; ok {
+		// A MULTI-OUT VARIADIC call result has no fixed arity to seat: the
+		// stores pop exactly nout values while the runtime count is
+		// variable — a fallible catch region delivers ONE caught Error on
+		// the raise path (probe-pinned: `def x (do [(0 div 0) "a" "b"]
+		// error [dot code]) x` underflowed STORE_LOCAL at run time — PR
+		// #280 review, whether latched (L-DO) or dyn-body-marked), and a
+		// splice-dyn spread's count is payload-sized. lw.variadic covers
+		// only LOOP regions, so the record-side mark must gate here;
+		// refusing at the promotion is the earliest true diagnosis, so the
+		// frontier pins that used to surface later-stage reasons re-pinned
+		// to this one. A SINGLE-out variadic (`def ok (do b error [drop
+		// false])` — the dyn-env stored-handler shape) keeps its promotion:
+		// its one store matches the one value BOTH the success and the
+		// caught path deliver.
+		if lw.es != nil && c.nout >= 2 && lw.es.eventInfo[ev.seq].variadicResult {
+			return c.word + ": variadic result promoted to frame slots (runtime count differs from the static seat)"
+		}
 		for i := c.nout - 1; i >= 0; i-- {
 			lw.emit(OpStoreLocal, slot+i, c.pos)
 		}

@@ -784,7 +784,10 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	// so mirror the read here: strip Quoted from the applied copy (probe-
 	// found off-corpus divergence: `[1 2] each [(1 2 c)]` with c bound from
 	// `(…)/r` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
-	// the interpreter's [[3 3]]).
+	// the interpreter's [[3 3]]). The strip is sound ONLY for a substituted
+	// arrival: RecordDynApply declines an EVENT-provenance fn (a direct call
+	// result, which the interpreter does NOT substitute and whose runtime
+	// quote must survive — PR #280 review), so it never reaches this op.
 	fnVal.Quoted = false
 	base := top - n
 	// The args sit BELOW the fn in stack order (deepest first). The interpreter

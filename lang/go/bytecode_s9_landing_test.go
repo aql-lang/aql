@@ -39,6 +39,24 @@ func TestS9LoopCarriedVariadicStore(t *testing.T) { // §9.2a — LANDED
 		`for 2 [ if true [ def acc (for 2 [5]) acc ] [0] ]`, "")
 	mustRefuseWithParity(t,
 		`for 2 [ for 2 [ def acc (for 2 [5]) acc ] ]`, "")
+
+	// PR #280 review reachability fences: the depth equality proves the BODY
+	// runs per iteration, not that the SPLIT SITE is reached with its
+	// residual intact — so LoopBodyDepth now stamps only under a STATIC
+	// >= 1-trip count and a sentinel-free body (AnalyseLoopBody provenTrips).
+	// A COMPUTED trip count declines (a runtime count of 0 leaked the
+	// analysis-only binding: compiled 0 vs interp undefined_word), as does an
+	// upstream `continue` (the bind is bypassed: compiled 0 vs undefined_word)
+	// and a downstream `break` (a discarded iteration's spill survived:
+	// compiled [5 5] vs interp [5]).
+	mustRefuseWithParity(t,
+		`def m {n:0} for (m get "n") [ def acc (for 2 [5]) ] acc`, "consumes loop results")
+	mustRefuseWithParity(t,
+		`def m {n:1} for (m get "n") [ def acc (for 2 [5]) ] acc`, "consumes loop results")
+	mustRefuseWithParity(t,
+		`for 1 [if true [continue] [] def acc (for 2 [5])] acc`, "consumes loop results")
+	mustRefuseWithParity(t,
+		`for 3 [def acc (for 2 [5]) break] acc`, "consumes loop results")
 }
 
 func TestS9SpliceComputedPayload(t *testing.T) { // §9.2b
@@ -139,6 +157,28 @@ func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — LAND
 			t.Errorf("two-split program compiled — graduate this fence")
 		}
 	}
+
+	// PR #280 review fences. The split seats exactly the TWO-value region
+	// (nout != 2 declines — a wider one used to underflow BIND_GLOBAL's
+	// splice at run time); an INFALLIBLE wider region still compiles through
+	// the aligned generic promotion. A FALLIBLE region's promotion refuses:
+	// its event carries the variadic mark (the L-DO latch or the dyn-body
+	// record), and lowerCall's store-prologue gate rejects the seat whose
+	// raise path delivers ONE caught Error where nout success values were
+	// promoted (STORE_LOCAL underflow, probe-pinned on raise, div, and a
+	// fallible user fn).
+	mustCompileWithParity(t,
+		`def x (do [(1 add 2) "a" "b"] error [dot code]) x`, "[a b 3]")
+	mustRefuseWithParity(t,
+		`def x (do [(0 div 0) "a" "b"] error [dot code]) x`, "variadic result promoted")
+	mustRefuseWithParity(t,
+		`def x (do [(raise aa "m") "a" "b"] error [dot code]) x`, "variadic result promoted")
+	mustRefuseWithParity(t,
+		`def f fn [[n:Integer][Integer][if (n gt 0) [raise aa "m"] [n]]] def x (do [(f 1) "a" "b"] error [dot code]) x`,
+		"variadic result promoted")
+	// The BARE multi-value raising region keeps native parity — no seat, no
+	// stores: the caught Error lands where the handler consumes it.
+	mustCompileWithParity(t, `do [(0 div 0) "a" "b"] error [dot code]`, "")
 }
 
 func TestS9FrontierModuleExportInRegion(t *testing.T) { // §9.1 row 3

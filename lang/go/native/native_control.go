@@ -1089,7 +1089,15 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	if lowerable {
 		es.ArmLoopCapture()
 	}
-	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter})
+	// provenTrips: the loop provably runs at least once (all three bounds
+	// static, count >= 1 — the statically-zero prune above already returned
+	// for a static zero-trip). It arms the S9.2a LoopBodyDepth stamp inside
+	// AnalyseLoopBody; a COMPUTED count must not (a runtime count of 0 runs
+	// the body zero times and would leak an admitted split's analysis-only
+	// binding — PR #280 review).
+	provenTrips := staticBounds &&
+		loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)) >= 1
+	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter}, provenTrips)
 	out := NewCarrier(TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]

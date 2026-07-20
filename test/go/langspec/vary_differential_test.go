@@ -108,6 +108,10 @@ func varyBucket(detail string) string {
 		return "do: fallible multi-value body under a catch"
 	case strings.HasPrefix(detail, "for: body nets multiple values"):
 		return "for: body nets multiple values per iteration"
+	case strings.Contains(detail, "variadic result promoted to frame slots"):
+		// Contains, not HasPrefix: the detail leads with the refusing word
+		// (`do:`, `__splicedyn:`) — one bucket regardless.
+		return "variadic result promoted (exact-arity frame seat)"
 	case strings.HasPrefix(detail, "program embeds an OpFallback island"):
 		return "islanded"
 	default:
@@ -133,6 +137,7 @@ var varyRefusalLedger = map[string]string{
 	"operand provenance":                                 "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
 	"residual lowering (Stage 1 limit)":                  "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
 	"stack discipline (lowering)":                        "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
+	"variadic result promoted (exact-arity frame seat)":  "a MULTI-OUT variadic call result (a fallible or branch-variant do region) promoted to frame slots has no fixed arity to store — the raise/short path delivers fewer values than the static seat popped (PR #280 review; lowerCall's store-prologue gate, representative row in frontier-do-catch.tsv)",
 }
 
 // Graduated 2026-07-14 (do-def leak fidelity): "code-body word

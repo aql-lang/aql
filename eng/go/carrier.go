@@ -3556,7 +3556,21 @@ const FnAnalysisQuota = 64
 // The joined post-loop bindings are left installed (they ARE the
 // post-loop environment); the loop-local binds are popped. Returns
 // the final round's residual carrier stack.
-func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value) []Value {
+//
+// provenTrips asserts the CALLER's proof that the loop executes at least
+// once at run time — a static trip count >= 1 (forCarrierAnalyse's
+// staticBounds). Combined with the body carrying no flow-control sentinel
+// (bodyHasSentinel — a break/continue/return can bypass a site or discard
+// an iteration's spilled values), it gates the LoopBodyDepth stamp the
+// S9.2a first-value split consults: the split's soundness argument is
+// "every enclosing body runs unconditionally per iteration AND the split
+// site is reached with its residual intact", which a computed count (zero
+// trips leak the analysis-only binding) or loop control (PR #280 review:
+// `continue` bypassed the bind, `break` kept a discarded iteration's
+// value) breaks. A non-proven loop body still analyses identically — it
+// just declines the split (NestedBodyDepth != LoopBodyDepth).
+func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value, provenTrips bool) []Value {
+	proven := provenTrips && !bodyHasSentinel(body)
 	// Loop-lowering hook (`for`): when armed, register the loop
 	// bindings as VM locals and capture each round's events as a
 	// fragment — the final round's capture (the stable one) is what
@@ -3598,9 +3612,13 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 			es.ArmBranchCapture()
 		}
 		var adds map[string]Value
-		r.Check.LoopBodyDepth++
+		if proven {
+			r.Check.LoopBodyDepth++
+		}
 		stk, adds = RunCarrierBodyWithDefs(r, body)
-		r.Check.LoopBodyDepth--
+		if proven {
+			r.Check.LoopBodyDepth--
+		}
 		for i := len(bindNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(bindNames[i])
 		}

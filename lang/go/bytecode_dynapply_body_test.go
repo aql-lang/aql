@@ -126,4 +126,17 @@ func TestTrailingApplyQuoteDiscipline(t *testing.T) {
 	mustCompileWithParity(t,
 		`(1 2 (quote (fn [[a:Integer b:Integer][Integer][a add b]])))`,
 		"[1 2 fn (Integer, Integer)]")
+	// An EVENT-provenance fn (a direct call result) has NO read substitution,
+	// so its runtime quote state is unknowable at check time: a QUOTED
+	// return stays inert in the interpreter (the strip would wrongly apply
+	// it — PR #280 review: compiled 3 vs interp [1 2 fn]) while an UNQUOTED
+	// return auto-applies (the un-collapsed model would wrongly stay
+	// residual). RecordDynApply REFUSES both — the interpreter owns the
+	// shape, parity through the fallback.
+	mustRefuseWithParity(t,
+		`def choose fn [[][Function][quote (fn [[a:Integer z:Integer][Integer][a add z]])]] (1 2 choose)`,
+		"trailing fn-value apply over a call result")
+	mustRefuseWithParity(t,
+		`def mk fn [[][Function][fn [[a:Integer z:Integer][Integer][a add z]]]] (1 2 (mk))`,
+		"trailing fn-value apply over a call result")
 }

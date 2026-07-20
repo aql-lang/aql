@@ -1398,13 +1398,16 @@ func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
 	}
 	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
 		es.reg.Check.NestedBodyDepth != es.reg.Check.LoopBodyDepth {
-		// The split lowers at the top level (0 == 0) and inside LOOP bodies
-		// (S9.2a — NestedBodyDepth == LoopBodyDepth means every enclosing
-		// body analysis is an unconditional-per-iteration loop body). A
-		// BRANCH/QUOTATION body keeps the decline: a conditionally-reached
-		// split would leak the analysis-only binding (PR #278 review P1-b),
-		// and its fragment owns different depth accounting (probe-pinned:
-		// the pre-gate widening miscompiled [5 0 5 0] vs [5 5 5 5]).
+		// The split lowers at the top level (0 == 0) and inside PROVEN loop
+		// bodies (S9.2a — NestedBodyDepth == LoopBodyDepth means every
+		// enclosing body analysis is a statically-counted >= 1-trip,
+		// sentinel-free loop body: AnalyseLoopBody stamps LoopBodyDepth only
+		// under that proof, so a computed-count or break/continue-bearing
+		// loop declines here too — PR #280 review). A BRANCH/QUOTATION body
+		// keeps the decline: a conditionally-reached split would leak the
+		// analysis-only binding (PR #278 review P1-b), and its fragment owns
+		// different depth accounting (probe-pinned: the pre-gate widening
+		// miscompiled [5 0 5 0] vs [5 5 5 5]).
 		return Value{}, false
 	}
 	pr, ok := es.producedBy[v.ID]
@@ -1461,7 +1464,15 @@ func (es *EmitState) SplitEventRegionBind(name string, v Value) (Value, bool) {
 	}
 	f := es.eventInfo[pr.seq]
 	ev := es.eventBySeq(pr.seq)
-	if f.variadicResult || ev == nil || ev.kind != evCall || ev.call.nout < 2 {
+	// EXACTLY two outputs: the splice lowering's stack model is proven only
+	// for the two-value region (rows 1-2's shape — the bound first value plus
+	// ONE spilled rest). A wider region's rest values need not all be SEATED
+	// on the runtime stack when the bind executes (consts re-push at their
+	// consumers, not eagerly), so SpliceFromTop = nout-1 reaches below the
+	// live stack (probe-pinned: the three-value `do [(1 add 2) "a" "b"]`
+	// region underflowed BIND_GLOBAL at run time — PR #280 review). nout != 2
+	// keeps the decline until a general multi-value seating exists.
+	if f.variadicResult || ev == nil || ev.kind != evCall || ev.call.nout != 2 {
 		return Value{}, false
 	}
 	// The parked-fn screen: a Function among the SPILLED rest auto-applies in
@@ -3575,16 +3586,41 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	// collapsed the tape — the event now owns the apply, so consume the
 	// pending entry rather than leaving it to refuse the unit at finish, and
 	// lower with the apply word's UNQUOTE semantics (OpCallDynApplyTop).
-	unquote := false
+	applyIdx := -1
 	if len(es.units) > 0 {
 		u := es.units[len(es.units)-1]
 		for i, id := range u.pendingApply {
 			if id == fn.ID {
-				u.pendingApply = append(u.pendingApply[:i], u.pendingApply[i+1:]...)
-				unquote = true
+				applyIdx = i
 				break
 			}
 		}
+	}
+	// An EVENT-provenance fn — the direct result of a compiled call — arrives
+	// WITHOUT the interpreter's read substitution, so its runtime quote state
+	// is unknowable here: a callee returning `quote (fn …)` stays INERT in
+	// the interpreter while OpCallDynTrailTop's read-mirror strip would apply
+	// it (probe-pinned: `def choose fn [[][Function][quote (fn …)]]
+	// (1 2 choose)` compiled 3 vs the interpreter's [1 2 fn] residual — PR
+	// #280 review). REFUSE, never plain-decline: on a decline the caller
+	// leaves the un-collapsed [args, fn] residual as the model, which
+	// miscompiles the mirror case (an UNQUOTED call result the interpreter
+	// DOES apply — `(1 2 (mk))` modelled [1 2 fn] vs the interpreter's 3).
+	// Only the apply WORD may own an event-provenance fn: applyHandler
+	// unquotes the VALUE regardless of arrival, which OpCallDynApplyTop
+	// mirrors. A local / const / dyn-scope arrival keeps the lowering — a
+	// stored read IS substituted (the strip's contract) — and a
+	// returned-closure operand pushes construction-fresh (never quoted), so
+	// the strip is a no-op there.
+	if fnOp.kind == opEvent && applyIdx < 0 {
+		es.MarkUncompilable("trailing fn-value apply over a call result (runtime quote state unknown)")
+		return false
+	}
+	unquote := false
+	if applyIdx >= 0 {
+		u := es.units[len(es.units)-1]
+		u.pendingApply = append(u.pendingApply[:applyIdx], u.pendingApply[applyIdx+1:]...)
+		unquote = true
 	}
 	es.SiteCounts[SiteMono]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
