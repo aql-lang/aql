@@ -105,3 +105,73 @@ func TestRecordSpliceDynDeclines(t *testing.T) {
 		t.Error("an unresolvable payload must decline")
 	}
 }
+
+// SplitEventRegionBind's guard-owned decline arms (S9.1), white-box: the
+// parked-fn screen (a Function-typed idx-0 result — the spilled rest would
+// auto-apply it in the interpreter) and eventBySeq's closed-frame miss (a
+// producing seq recorded in a fragment frame that has since closed).
+func TestSplitEventRegionBindDeclines(t *testing.T) {
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es := r.Check.Emit.(*EmitState)
+	es.bindRegistry(r)
+
+	// A 2-out call event whose idx-0 result is Function-typed.
+	fnOut := NewCarrier(TFunction)
+	fnOut.ID = GenerateID(IDPrefixForType(TFunction))
+	other := NewCarrier(TString)
+	other.ID = GenerateID(IDPrefixForType(TString))
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "zz", nout: 2}})
+	es.setProduced(fnOut, seq)
+	es.producedBy[other.ID] = producer{seq: seq, idx: 1}
+	if _, ok := es.SplitEventRegionBind("zzf", fnOut); ok {
+		t.Error("a Function-typed first result must decline (parked-fn screen)")
+	}
+
+	// A seq living in a CLOSED fragment frame: record the event inside a
+	// fragment, close it, then ask for the split — eventBySeq misses.
+	closeFrag := es.beginFragment()
+	iOut := NewCarrier(TInteger)
+	iOut.ID = GenerateID(IDPrefixForType(TInteger))
+	fseq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: "zz2", nout: 2}})
+	es.setProduced(iOut, fseq)
+	closeFrag()
+	es.TakeFragment()
+	if _, ok := es.SplitEventRegionBind("zzg", iOut); ok {
+		t.Error("a closed-fragment producer must decline (eventBySeq miss)")
+	}
+}
+
+// recordCallRefusal's computed-range-list classifier (white-box): a `for`
+// whose range arg carries an OpMakeList producer refuses with the dedicated
+// reason. Source shapes rarely reach this arm since the start/step widening
+// (RecordLoop owns the const/local/event partition), but the classifier
+// stays for the lowerable=false paths where the runtime-assembled range
+// diverges under the CALL_NATIVE for-handler.
+func containsStr(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRecordCallRefusalComputedRangeList(t *testing.T) {
+	r := covRegistry(t, nil)
+	done := w8ArmCompile(t, r)
+	defer done()
+	es := r.Check.Emit.(*EmitState)
+	es.bindRegistry(r)
+	lst := NewCarrier(TList)
+	lst.ID = GenerateID(IDPrefixForType(TList))
+	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordMakeList, nout: 1, makeList: true}})
+	es.setProduced(lst, seq)
+	if !es.recordCallRefusal("for", &Signature{}, []Value{lst}, nil, SrcPos{}, false, false) {
+		t.Fatal("the computed-range-list arm must classify the refusal")
+	}
+	if es.Compilable || !containsStr(es.Reason, "computed range list") {
+		t.Errorf("want the computed-range-list reason, got compilable=%v reason=%q", es.Compilable, es.Reason)
+	}
+}

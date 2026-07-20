@@ -21,7 +21,15 @@ func mergeHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 	if err != nil {
 		return nil, fmt.Errorf("merge: %w", err)
 	}
-	return []Value{val}, nil
+	// #2: a merge INTO a typed container ({:T}) enforces its element type on
+	// every merged value and retains the tag — the deep merge otherwise drops
+	// `elem` (valueToAny/structConvert rebuild a plain node) and would accept a
+	// non-conforming value, bypassing the invariant `set` enforces.
+	tagged, terr := d2ReTagContainer(r, d2typedMergeOperand(args[0], args[1]), val, "merge")
+	if terr != nil {
+		return nil, terr
+	}
+	return []Value{tagged}, nil
 }
 
 // mergeListMapHandler creates a new list with map's integer keys replacing
@@ -59,7 +67,15 @@ func mergeListMapHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 		// idx > len(result): gap, ignore
 	}
 
-	return []Value{NewList(result)}, nil
+	// The result is a LIST built from args[0] (the list operand), so the LIST's
+	// [:T] governs — every merged value must conform to it. Re-tag against args[0]
+	// (NOT d2typedMergeOperand, which would pick the map patch's tag and validate
+	// the list result against the wrong contract — Codex round 7).
+	out, terr := d2ReTagContainer(r, args[0], NewList(result), "merge")
+	if terr != nil {
+		return nil, terr
+	}
+	return []Value{out}, nil
 }
 
 // mergeMapListHandler creates a new list from the list argument, with
@@ -99,5 +115,14 @@ func mergeMapListHandler(args []Value, ctx map[string]Value, stack []Value, r *R
 		// idx > len(result): gap, ignore
 	}
 
-	return []Value{NewList(result)}, nil
+	// The result is a LIST built from args[1] (the list operand), so the LIST's
+	// [:T] governs — the map patch's integer-keyed values are written INTO it and
+	// must conform to it. Re-tag against args[1] (NOT d2typedMergeOperand, which
+	// picks args[0], the map patch, and validates against the wrong contract —
+	// `{:String}{"0":"bad"} merge [:Integer][1]` must reject; Codex round 7).
+	out, terr := d2ReTagContainer(r, args[1], NewList(result), "merge")
+	if terr != nil {
+		return nil, terr
+	}
+	return []Value{out}, nil
 }

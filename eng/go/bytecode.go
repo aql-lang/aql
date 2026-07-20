@@ -624,6 +624,11 @@ type ClosurePayload struct {
 	Unit     int
 	Captures []Value
 	InShape  ClosureInShape
+	// Render is the interpreter's formatFnDef string for the source fn this
+	// closure compiled from (CompiledFn.Render, copied at OpPushClosure): a
+	// closure VALUE then renders byte-identically to the interpreter's fn
+	// value. Empty keeps the default rendering.
+	Render string
 }
 
 // NewClosure builds a closure Value over a compiled body unit (default value
@@ -1024,6 +1029,9 @@ type CompiledFn struct {
 	// fn the captures still ride as trailing CALL_USER args, so NCaptures
 	// stays 0 there — it is closure-specific.)
 	NCaptures int
+	// Render is the interpreter's formatFnDef string for a returned-closure
+	// unit (empty otherwise) — see ClosurePayload.Render.
+	Render string
 	// NArgs is the fn's REAL argument count — the sig-matched args, excluding
 	// the trailing capture slots a user fn's call site pushes (NParams
 	// includes them; NCaptures stays 0 for user fns). The DynEnv args bracket

@@ -5805,6 +5805,10 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// below, which pops the baseline.
 	e.registry.PushFnBaseline(e.registry.Defs.Snapshot())
 
+	// Retag typed-container args so the args stack (args.N) and unnamed body
+	// pushes carry the {:T}/[:T] tag too, not just the named binding — a body
+	// write via args.N must enforce the same contract (Codex round 4).
+	args = RetagTypedContainerArgs(sig.Params, args)
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
@@ -5835,7 +5839,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			InstallFrameBinding(e.registry, p.Name, args[i])
+			InstallFrameBinding(e.registry, p.Name, RetagTypedContainerParam(p, args[i]))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
@@ -8217,6 +8221,24 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// recording landed (carrier_ljoin_test.go drives the recovery arm).
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
+		}
+		// A MULTI-overload user fn over a strict-disjunct operand (`g (h true)`
+		// where h returns `(Integer tor String)` and g has an Integer and a
+		// String arm): the operand is a runtime disjunct the checker cannot
+		// pin to one arm, but every same-arity arm sharing the committed
+		// return bakes to OpCallUserPoly, and the VM re-matches the concrete
+		// alternative at run time — the same §6b machinery the gradual-Any
+		// clusterC path uses, here reached through the disjunct partition
+		// (REFUSAL-CLOSURE §9.4 union-return poly). tryCompileUserPolyArms
+		// declines (keeping the refusal) for divergent-return or
+		// non-plain-param arm sets.
+		if es := e.registry.Check.Recorder(); es.active() {
+			sw := sigOrderArgs(args, nStack)
+			if plan := tryCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
+				e.spliceCheckResults(positions, out)
+				return nil
+			}
 		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)

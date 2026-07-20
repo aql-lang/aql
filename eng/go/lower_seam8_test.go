@@ -693,3 +693,28 @@ func TestW8MarkTailCallsBothArmsTail(t *testing.T) {
 		t.Fatal("a branch whose arms both tail-call should report no residual out")
 	}
 }
+
+// --- lowerBothComputedMatCond (S9.4 both-computed non-event cond) ----------
+
+func TestW8LowerBothComputedMatCondLayout(t *testing.T) {
+	lw := w8lw() // empty sim can't hold the [then, else] pair
+	ev := &emitEvent{seq: 1, kind: evBranch, br: &emitBranch{
+		cond: localOperand(0), thenVal: eventOperand(2, 0), elsVal: eventOperand(1, 0),
+	}}
+	if reason := lw.lowerBothComputedMatCond(ev); !strings.Contains(reason, "both-computed stack layout") {
+		t.Fatalf("mat-cond layout reason = %q", reason)
+	}
+}
+
+func TestW8LowerBothComputedMatCondVariadicArm(t *testing.T) {
+	lw := w8lw()
+	// Sim holds [then, else] (else on top); a then arm is a variadic loop value.
+	lw.vm = []vmSlot{{seq: 2, idx: 0}, {seq: 1, idx: 0}}
+	lw.variadic = map[int]bool{2: true}
+	ev := &emitEvent{seq: 9, kind: evBranch, br: &emitBranch{
+		cond: localOperand(0), thenVal: eventOperand(2, 0), elsVal: eventOperand(1, 0),
+	}}
+	if reason := lw.lowerBothComputedMatCond(ev); !strings.Contains(reason, "both-computed arm is a variadic") {
+		t.Fatalf("mat-cond variadic reason = %q", reason)
+	}
+}

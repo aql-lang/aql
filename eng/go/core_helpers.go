@@ -322,6 +322,11 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			}
 			return target.CallAQL(&s, args, fnDefCopy.Captured)
 		}
+		// Retag typed-container args up front so EVERY access path in the body —
+		// named binding, the args stack (args.N), and unnamed body-token pushes —
+		// sees the tagged value and enforces the {:T}/[:T] param contract (a write
+		// via args.N must not bypass what a write via the named param enforces).
+		args = RetagTypedContainerArgs(s.Params, args)
 		// Leaf fast path: per-call work is registry installs plus ONE
 		// slice copy of the memoized skeleton with the arg cells patched
 		// (see the construction-time comment above).
@@ -348,7 +353,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 					if arg.Parent.Equal(TList) && !arg.Quoted {
 						arg.Quoted = true
 					}
-					InstallFrameBinding(r, p.Name, arg)
+					InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 				}
 			}
 			out := make([]Value, len(skeleton))
@@ -409,7 +414,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 				if arg.Parent.Equal(TList) && !arg.Quoted {
 					arg.Quoted = true
 				}
-				InstallFrameBinding(r, p.Name, arg)
+				InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 				names = append(names, p.Name)
 			} else {
 				// Unnamed parameter: push value back for the body to use
@@ -518,6 +523,194 @@ func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
 		return Value{ID: GenerateID(IDPrefixForType(TMap)), Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
 	}
 	return Value{}, false
+}
+
+// typedContainerCarrier generalises a TYPED-container param ({:T} map / [:T] list)
+// to a carrier that PRESERVES its declared ELEMENT type — the D2 read-precision
+// foundation (design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part A). The element
+// type rides on p.Pattern (a typed-map/list value carrying a ChildTypeInfo), NOT
+// p.Type (which generalises to bare Node), so mirror recordSchemaCarrier: read the
+// pattern and mint a FRESH ID so each typed-container param keys a DISTINCT
+// frame-local slot (StartFnCompile → RegisterLocal; a zero ID collapses two
+// params onto one slot). Without this, NewCarrier(a.Parent) collapses the child to
+// Any and the body reads the container back as dynamic(Any). {:Any} (child Any)
+// falls through so its reads stay dynamic(Any), unchanged. The CONTAINER carrier
+// stays a plain (non-dynamic) typed carrier — the accessor makes the READ dynamic
+// (Part B), keeping the container's own dispatch (`m size`) unchanged.
+func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
+	if p.Pattern == nil || a.Parent == nil {
+		return Value{}, false
+	}
+	pat := *p.Pattern
+	ci, err := AsChildType(pat)
+	if err != nil || ci.Child.Parent == nil || ci.Child.Parent.Equal(TAny) {
+		return Value{}, false
+	}
+	if IsTypedMap(pat) && (a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
+		v := NewTypedMap(ci.Child)
+		v.ID = GenerateID(IDPrefixForType(TMap))
+		v.Carrier = true
+		v.Dynamic = true // a {:T} param admits a flex arg — in-place mutation must runtime-rematch, not preselect the immutable handler
+		return v, true
+	}
+	if IsTypedList(pat) && (a.Parent.ConformsTo(TList) || a.Parent.Equal(TAny)) {
+		v := NewCarrierTypedListValue(ci.Child)
+		v.ID = GenerateID(IDPrefixForType(TList))
+		v.Dynamic = true
+		return v, true
+	}
+	return Value{}, false
+}
+
+// RetagTypedContainerParam retags a CONCRETE runtime arg bound to a {:T}/[:T]
+// param with the param's element constraint, so typed-container PARAM writes are
+// enforced in the body. The arg is otherwise bound untagged — a caller's plain
+// `{a:1}` for `m:{:Integer}` would let `(m set b/q "bad")` reach the write path
+// with no ElemConstraint and bypass enforcement. Unify against the pattern both
+// VALIDATES (the sig already admitted the arg, so it conforms) and recursively
+// tags; a non-container param or a non-concrete arg passes through. Applied at
+// every param-binding site (execFnDefSig / CallAQL / InstallFnDef).
+func RetagTypedContainerParam(p FnParam, arg Value) Value {
+	if p.Pattern == nil || !IsConcrete(arg) {
+		return arg
+	}
+	return RetagTypedContainerValue(*p.Pattern, arg)
+}
+
+// RetagTypedContainerValue is the shared retag core used by BOTH the interpreter
+// (RetagTypedContainerParam) and the compiled entry guard (checkParamContract),
+// so the two paths agree. It tags a concrete {:T}/[:T] arg with the pattern's
+// element constraint; a non-typed-container pattern or a non-flex/non-container
+// arg passes through.
+//
+// A flex container is a REFERENCE type: Unify would deep-copy its backing store
+// (NewFlexList/NewFlexMap) and detach the body binding, so a body write would
+// mutate a copy and leave the caller's flex untouched. Retag the header in place
+// — the FlexListData/FlexMapData pointer stays shared. Dispatch has already
+// element-checked the arg (a non-conforming flex is rejected before binding), so
+// its elements conform; no re-validate, no rebuild. A plain (immutable) arg is
+// re-unified — that validates AND recursively re-tags nested containers.
+func RetagTypedContainerValue(pat, arg Value) Value {
+	if !IsTypedMap(pat) && !IsTypedList(pat) {
+		return arg
+	}
+	if IsFlexList(arg) || IsFlexMap(arg) {
+		ci, err := AsChildType(pat)
+		if err != nil { //covergate:allow pat is IsTypedMap/IsTypedList (checked above) so it carries ChildTypeInfo; AsChildType cannot fail
+			return arg
+		}
+		return RetagFlexElem(arg, ci.Child)
+	}
+	unified, ok := Unify(pat, arg)
+	if !ok { //covergate:allow dispatch (matchSignature/checkParamContract) element-checks the concrete arg against pat and rejects any non-conformer with no_signature BEFORE param binding, so an arg reaching here always satisfies pat and Unify cannot fail
+		return arg
+	}
+	unified.Quoted = arg.Quoted // preserve the list-arg no-auto-eval quote
+	return unified
+}
+
+// RetagFlexElem retags a flex container v so its element type is elemType,
+// returning v's header with the tag set (the FlexListData/FlexMapData pointer
+// stays shared — identity preserved). When elemType is itself a typed container
+// (a nested {:{:T}} / [:[:T]] flex), v's EXISTING children are recursively
+// retagged IN PLACE so a nested write enforces the contract at every depth
+// (FlexDeepCopy makes the whole tree flex, so every child is a mutable flex
+// container). Fixes the nested-container invariant hole (#8, Codex round 8).
+func RetagFlexElem(v Value, elemType Value) Value {
+	out := v
+	out.SetElemConstraint(elemType)
+	if IsTypedMap(elemType) || IsTypedList(elemType) {
+		if ci, err := AsChildType(elemType); err == nil {
+			retagFlexChildrenInPlace(v, ci.Child)
+		}
+	}
+	return out
+}
+
+// retagFlexChildrenInPlace retags every existing child of the flex container v so
+// each child's element type is grandElem, writing the retagged child header back
+// into v's shared store (a mutation of the shared FlexMapData/FlexListData, which
+// is exactly what preserves the caller's flex identity).
+func retagFlexChildrenInPlace(v Value, grandElem Value) {
+	if IsFlexMap(v) {
+		if om, _ := AsMutableMap(v); om != nil {
+			for _, k := range om.Keys() {
+				e, _ := om.Get(k)
+				om.Set(k, RetagFlexElem(e, grandElem))
+			}
+		}
+		return
+	}
+	if fd, _ := AsFlexList(v); fd != nil {
+		for i := range fd.Elems {
+			fd.Elems[i] = RetagFlexElem(fd.Elems[i], grandElem)
+		}
+	}
+}
+
+// isTypedContainerParam reports whether p's pattern is a {:T} map / [:T] list —
+// the only params RetagTypedContainerParam acts on.
+func isTypedContainerParam(p FnParam) bool {
+	if p.Pattern == nil {
+		return false
+	}
+	pat := *p.Pattern
+	return IsTypedMap(pat) || IsTypedList(pat)
+}
+
+// RetagTypedContainerArgs retags every concrete {:T}/[:T] argument with its
+// param's element constraint, returning a slice where EVERY body access path —
+// the named binding, the args stack (`args.N`), and unnamed body-token pushes —
+// sees the tagged value. Retagging only the named binding (RetagTypedContainerParam
+// at the InstallFrameBinding site) left `args.N` and unnamed params reading the raw
+// untagged arg, so a body write through them bypassed enforcement and diverged from
+// the compiled path (which retags its locals in checkParamContract). Copy-on-write:
+// returns args unchanged (no allocation) when no param is a typed container — the
+// common case, keeping the leaf fn-dispatch fast path allocation-free.
+func RetagTypedContainerArgs(params []FnParam, args []Value) []Value {
+	out := args
+	cloned := false
+	for i := 0; i < len(args) && i < len(params); i++ {
+		if !IsConcrete(args[i]) || !isTypedContainerParam(params[i]) {
+			continue
+		}
+		if !cloned {
+			out = make([]Value, len(args))
+			copy(out, args)
+			cloned = true
+		}
+		out[i] = RetagTypedContainerParam(params[i], args[i])
+	}
+	return out
+}
+
+// paramBodyCarrier builds a fn-body INPUT carrier for a param when no call-site
+// arg is available: a pattern-aware typed-container carrier for a {:T}/[:T]
+// param (so body reads narrow and disjoint uses are diagnosed), else the plain
+// ParamInputCarrier(p.Type). The main genArgs path uses typedContainerCarrier
+// with the actual arg; the poly-arm (user_poly.go) and construction-check
+// (buildFnBodyReturnsFn) body builders have only the param, so they route
+// here — otherwise `m:{:Integer}`'s `p.Type` is bare Map and reads stay Any.
+func paramBodyCarrier(p FnParam) Value {
+	if p.Pattern != nil {
+		pat := *p.Pattern
+		if ci, err := AsChildType(pat); err == nil && ci.Child.Parent != nil && !ci.Child.Parent.Equal(TAny) {
+			if IsTypedMap(pat) {
+				v := NewTypedMap(ci.Child)
+				v.ID = GenerateID(IDPrefixForType(TMap))
+				v.Carrier = true
+				v.Dynamic = true
+				return v
+			}
+			if IsTypedList(pat) {
+				v := NewCarrierTypedListValue(ci.Child)
+				v.ID = GenerateID(IDPrefixForType(TList))
+				v.Dynamic = true
+				return v
+			}
+		}
+	}
+	return ParamInputCarrier(p.Type)
 }
 
 func narrowArgsToParams(args []Value, params []FnParam) []Value {
@@ -1151,6 +1344,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 						genArgs[i] = rc // preserve record schema into the armed compile + closure capture
 						continue
 					}
+					if tc, ok := typedContainerCarrier(sigParams[i], a); ok {
+						genArgs[i] = tc // D2 Part A: preserve {:T} element type into the body carrier
+						continue
+					}
 					// A RECOVERED call: an Any arg flowed into a CONCRETELY-typed
 					// param (matchSignature couldn't statically commit, so dispatch
 					// recovered — tryRecordRecoveredUserFn). Compile the body against
@@ -1600,7 +1797,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		genArgs := make([]Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
-			genArgs[j] = ParamInputCarrier(p.Type)
+			genArgs[j] = paramBodyCarrier(p)
 		}
 		var declared []*Type
 		if !fnDef.Anonymous {

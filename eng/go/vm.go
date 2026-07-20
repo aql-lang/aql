@@ -776,6 +776,19 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
+	// The op stands for a READ-SUBSTITUTED trailing fn (RecordDynApply fires
+	// at the paren collapse of a WORD-read arrival, where the interpreter's
+	// substitution strips one quote level before the auto-apply). A compiled
+	// LOCAL push carries the STORED value verbatim — including the
+	// construction-time quote of a `/r` reference or a `quote (fn …)` arg —
+	// so mirror the read here: strip Quoted from the applied copy (probe-
+	// found off-corpus divergence: `[1 2] each [(1 2 c)]` with c bound from
+	// `(…)/r` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
+	// the interpreter's [[3 3]]). The strip is sound ONLY for a substituted
+	// arrival: RecordDynApply declines an EVENT-provenance fn (a direct call
+	// result, which the interpreter does NOT substitute and whose runtime
+	// quote must survive — PR #280 review), so it never reaches this op.
+	fnVal.Quoted = false
 	base := top - n
 	// The args sit BELOW the fn in stack order (deepest first). The interpreter
 	// binds a trailing fn's args TOP-DOWN (the top arg → the fn's first param);
@@ -1486,7 +1499,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape}
+			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
 			stack = append(stack, Value{Parent: TFunction, Data: cl})
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
@@ -2081,6 +2094,14 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		}
 		if !ok {
 			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
+		}
+		// Retag a {:T}/[:T] param's concrete runtime arg with its element type so
+		// compiled body writes enforce it — the compiled mirror of the
+		// interpreter's RetagTypedContainerParam. Uses the SAME shared core, so a
+		// flex arg is retagged in place (reference identity preserved) and a plain
+		// arg is re-unified — both paths agree with the interpreter (no divergence).
+		if IsConcrete(v) {
+			locals[i] = RetagTypedContainerValue(pat, v)
 		}
 	}
 	return nil

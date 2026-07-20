@@ -120,6 +120,7 @@ func (c *CheckState) Begin() func() {
 	c.CaughtBodyDepth = 0
 	c.NestedBodyDepth = 0
 	c.CondBodyDepth = 0
+	c.LoopBodyDepth = 0
 	c.ArgsFrameUnnamed = false
 	// Compiling marks a REAL compile pass; the compile entry points set it
 	// true AFTER this Begin (via BeginCompilePass). Reset it here so it is

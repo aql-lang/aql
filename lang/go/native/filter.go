@@ -93,7 +93,9 @@ func filterHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}
-	return []Value{val}, nil
+	// #4 (round 3): filter keeps a subset of unchanged elements — retain the
+	// source list's [:T] tag so downstream reads/writes stay enforced.
+	return []Value{d2RetainElem(val, args[1])}, nil
 }
 
 // filterMapFunction is the Function form of filter over a map: it calls the
@@ -124,7 +126,9 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 			out.Set(k, v)
 		}
 	}
-	return []Value{NewMap(out)}, nil
+	// #4 (round 3): filter (Function map form) keeps a subset of entries —
+	// retain the source map's {:T} tag.
+	return []Value{d2RetainElem(NewMap(out), mapVal)}, nil
 }
 
 // runFilterCallback invokes filter's Function-form callback once for one entry,
@@ -194,7 +198,8 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 				out = append(out, elem)
 			}
 		}
-		return []Value{NewList(out)}, nil
+		// #4 (round 3): filter (quotation list form) — retain the source [:T] tag.
+		return []Value{d2RetainElem(NewList(out), args[1])}, nil
 	case args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]):
 		data, _ := AsMap(args[1])
 		out := NewOrderedMap()
@@ -208,7 +213,8 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 				out.Set(k, v)
 			}
 		}
-		return []Value{NewMap(out)}, nil
+		// #4 (round 3): filter (quotation map form) — retain the source {:T} tag.
+		return []Value{d2RetainElem(NewMap(out), args[1])}, nil
 	default:
 		return nil, r.AqlError("filter_error", "filter: quotation form expects a concrete list or map", "filter")
 	}
@@ -249,7 +255,8 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 				out = append(out, elem)
 			}
 		}
-		return []Value{NewList(out)}, nil
+		// #4 (round 3): filter (lens list form) — retain the source [:T] tag.
+		return []Value{d2RetainElem(NewList(out), args[1])}, nil
 	case args[1].Parent.ConformsTo(TMap) && IsConcrete(args[1]):
 		data, _ := AsMap(args[1])
 		out := NewOrderedMap()
@@ -263,7 +270,8 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 				out.Set(k, v)
 			}
 		}
-		return []Value{NewMap(out)}, nil
+		// #4 (round 3): filter (lens map form) — retain the source {:T} tag.
+		return []Value{d2RetainElem(NewMap(out), args[1])}, nil
 	default:
 		return nil, r.AqlError("filter_error", "filter: lens form expects a concrete list or map", "filter")
 	}

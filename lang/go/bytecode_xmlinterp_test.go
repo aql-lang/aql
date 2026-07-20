@@ -48,14 +48,16 @@ func TestXmlInterpComputedCompiles(t *testing.T) {
 	mustRefuseWithParity(t,
 		`def f fn [[x:Integer] [Xml] [<p>${[x (x add 1)]}</p>]] f 7`,
 		"interpolated XML with a runtime-computed part")
-	// A FUNCTION-valued hole keeps the refusal: a compiled closure's
-	// ValToString renders VM internals (`Function({…})`) while the
-	// interpreter renders the source `fn (Integer)` (PR #279 review). Both
-	// the XML and string interpolation paths decline it.
-	mustRefuseWithParity(t,
+	// A FUNCTION-valued hole GRADUATED (2026-07-17): the compiled closure
+	// carries its source fn's interpreter rendering (CompiledFn.Render →
+	// ClosurePayload.Render via OpPushClosure), so stringification is
+	// byte-identical (`fn (Integer)`, not the former VM-internal
+	// `Function({…})` the PR #279 review flagged) and both interpolation
+	// paths compile.
+	mustCompileWithParity(t,
 		`def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] <p>${mk 1}</p>`,
-		"interpolated XML with a runtime-computed part")
-	mustRefuseWithParity(t,
+		"[<p>fn (Integer)</p>]")
+	mustCompileWithParity(t,
 		"def mk fn [[a:Integer] [Function] [([b:Integer] => [a add b])]] `${mk 1}`",
-		"interpolated string with a runtime-computed part")
+		"[fn (Integer)]")
 }
