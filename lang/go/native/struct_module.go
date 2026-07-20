@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"strings"
 
 	eng "github.com/aql-lang/aql/eng/go"
 )
@@ -49,8 +50,8 @@ var StructModuleNatives = []NativeFunc{
 		Name: "merge",
 		Signatures: []Signature{
 			// Both index-merge forms always build a NewList.
-			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), Returns: []*Type{TList}, BarrierPos: -1},
-			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList, TMap}, Impl: Go(mergeListMapHandler), Returns: []*Type{TList}, ReturnsFn: mergeListMapReturns, BarrierPos: -1},
+			{Args: []*Type{TMap, TList}, Impl: Go(mergeMapListHandler), Returns: []*Type{TList}, ReturnsFn: mergeMapListReturns, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(mergeHandler), Returns: []*Type{TAny}, ReturnsFn: mergeReturns, BarrierPos: -1},
 		},
 	},
@@ -194,6 +195,32 @@ func dynamicContainerKind(v Value) Value {
 	}
 }
 
+// d2DynamicTypedResidual is dynamicContainerKind PLUS the element tag when data
+// is a typed container: the element rides in BOTH the carrier's child payload
+// (so a read from a typed setpath/merge result narrows via getIntKeyReturns /
+// getNodeReturns instead of degrading to dynamic(Any)) AND the elem pointer (so a
+// chained write stays enforced — d2CheckWrite reads ElemConstraint). Preserves
+// the dynamic modality of the base carrier (#5, Codex round 5).
+func d2DynamicTypedResidual(data Value) Value {
+	base := dynamicContainerKind(data)
+	elem, ok := data.ElemConstraint()
+	if !ok {
+		return base
+	}
+	// elem is set only on a Map/List container, and dynamicContainerKind reflects
+	// that kind, so base is Map or List here — not-Map is List (no unreachable arm).
+	var typed Value
+	if base.Parent.ConformsTo(TMap) {
+		typed = eng.NewTypedMap(elem)
+		typed.Carrier = true
+	} else {
+		typed = eng.NewCarrierTypedListValue(elem)
+	}
+	typed.Dynamic = true
+	typed.SetElemConstraint(elem)
+	return typed
+}
+
 // mergeReturns: voxgigstruct.Merge over two same-kind containers yields
 // that kind; a mixed or scalar pair is value-dependent (later node wins)
 // and stays dynamic(Any).
@@ -206,20 +233,41 @@ func mergeReturns(args []Value, _ *Registry) []Value {
 	if a == nil || b == nil {
 		return dyn
 	}
-	switch {
-	case a.ConformsTo(TMap) && b.ConformsTo(TMap):
-		return []Value{NewDynamicCarrier(TMap)}
-	case a.ConformsTo(TList) && b.ConformsTo(TList):
-		return []Value{NewDynamicCarrier(TList)}
+	// A same-kind merge yields that kind; retain the governing operand's element
+	// tag (d2DynamicTypedResidual) so a chained write after a typed merge is
+	// diagnosed in check — the residual otherwise loses child + elem (#7, round 7).
+	if (a.ConformsTo(TMap) && b.ConformsTo(TMap)) || (a.ConformsTo(TList) && b.ConformsTo(TList)) {
+		return []Value{d2DynamicTypedResidual(d2typedMergeOperand(args[0], args[1]))}
 	}
 	return dyn
+}
+
+// mergeListMapReturns / mergeMapListReturns are the check residuals for the two
+// index-merge overloads, whose result is a LIST governed by the LIST operand's
+// [:T] (the runtime handlers re-tag against it — round 7). The residual carries
+// child + elem so a chained write after an index merge is diagnosed in check
+// (#8, Codex round 8). List operand: args[0] for list-map, args[1] for map-list.
+func mergeListMapReturns(args []Value, _ *Registry) []Value {
+	res := NewDynamicCarrier(TList)
+	if len(args) == 2 {
+		res = d2DynamicTypedResidual(args[0])
+	}
+	return []Value{res}
+}
+
+func mergeMapListReturns(args []Value, _ *Registry) []Value {
+	res := NewDynamicCarrier(TList)
+	if len(args) == 2 {
+		res = d2DynamicTypedResidual(args[1])
+	}
+	return []Value{res}
 }
 
 // setpathReturns mirrors setpathHandler's data-operand selection (the
 // position-agnostic path/data/newVal heuristic) and claims the data
 // container's kind — setReachNative always returns an updated copy of the
 // SAME top-level container.
-func setpathReturns(args []Value, _ *Registry) []Value {
+func setpathReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	pathIdx := -1
 	for i := range args {
@@ -238,12 +286,19 @@ func setpathReturns(args []Value, _ *Registry) []Value {
 		}
 	}
 	a, b := args[others[0]], args[others[1]]
-	data := a
+	data, newVal := a, b
 	if !(a.Parent.ConformsTo(TMap) || a.Parent.ConformsTo(TList)) &&
 		(b.Parent.ConformsTo(TMap) || b.Parent.ConformsTo(TList)) {
-		data = b
+		data, newVal = b, a
 	}
-	return []Value{dynamicContainerKind(data)}
+	// R3: a SHALLOW (single-segment) write into a top-level typed container
+	// mirrors the runtime element-tag check (setReachNative). A deep path is
+	// enforced at runtime only — sound because the compiled + interpreted runs
+	// raise the identical type_error (the census stays byte-identical).
+	if s, err := AsString(args[pathIdx]); err == nil && !strings.Contains(s, ".") {
+		d2CheckWrite(r, data, newVal, "setpath", args[pathIdx].Pos())
+	}
+	return []Value{d2DynamicTypedResidual(data)}
 }
 
 // reifyReturns claims the hydrated instance's type from the TARGET

@@ -276,11 +276,11 @@ var Natives = []NativeFunc{
 		Name: "push",
 
 		Signatures: []Signature{
-			{Args: []*Type{TAny, TFlexList}, Impl: Go(pushFlexHandler), Returns: []*Type{TFlexList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TFlexList}, Impl: Go(pushFlexHandler), Returns: []*Type{TFlexList}, ReturnsFn: flexGrowReturns("push"), BarrierPos: -1},
 			// Returns a List (was undeclared → Any, which widened a fold/scan
 			// accumulator to Any on the second round and then wrongly rejected the
 			// next `push` — `[] fold [push] xs`). Mirrors unshift's List overload.
-			{Args: []*Type{TAny, TList}, Impl: Go(pushHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(pushHandler), Returns: []*Type{TList}, ReturnsFn: plainListGrowReturns("push"), BarrierPos: -1},
 		},
 	},
 	{
@@ -295,8 +295,8 @@ var Natives = []NativeFunc{
 		Name: "unshift",
 
 		Signatures: []Signature{
-			{Args: []*Type{TAny, TFlexList}, Impl: Go(unshiftFlexHandler), Returns: []*Type{TFlexList}, BarrierPos: -1},
-			{Args: []*Type{TAny, TList}, Impl: Go(unshiftHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TAny, TFlexList}, Impl: Go(unshiftFlexHandler), Returns: []*Type{TFlexList}, ReturnsFn: flexGrowReturns("unshift"), BarrierPos: -1},
+			{Args: []*Type{TAny, TList}, Impl: Go(unshiftHandler), Returns: []*Type{TList}, ReturnsFn: plainListGrowReturns("unshift"), BarrierPos: -1},
 		},
 	},
 	{
@@ -375,11 +375,11 @@ func stringSliceNative() NativeFunc {
 
 		Signatures: []Signature{
 			{Args: []*Type{TInteger, TInteger, TString}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TInteger, TList}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TInteger, TList}, Impl: Go(sliceStartEndHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(2), BarrierPos: -1},
 			{Args: []*Type{TInteger, TString}, Impl: Go(sliceStartHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TInteger, TList}, Impl: Go(sliceStartHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TInteger, TList}, Impl: Go(sliceStartHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(1), BarrierPos: -1},
 			{Args: []*Type{TString}, Impl: Go(sliceAllHandler), Returns: []*Type{TString}, BarrierPos: -1},
-			{Args: []*Type{TList}, Impl: Go(sliceAllHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TList}, Impl: Go(sliceAllHandler), Returns: []*Type{TList}, ReturnsFn: sliceListReturns(0), BarrierPos: -1},
 		},
 	}
 }
@@ -394,7 +394,8 @@ func sliceStartEndHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 	end := int(_as1)
 	data := valueToSliceArg(args[2])
 	result := voxgigstruct.Slice(data, start, end)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[2])
 }
 
 // sliceStartHandler implements `slice start data` (forward-first:
@@ -405,7 +406,8 @@ func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	s := int(_as0)
 	data := valueToSliceArg(args[1])
 	result := voxgigstruct.Slice(data, s)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[1])
 }
 
 // sliceAllHandler implements `slice data` — the identity/copy form that
@@ -413,7 +415,8 @@ func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 func sliceAllHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	data := valueToSliceArg(args[0])
 	result := voxgigstruct.Slice(data)
-	return sliceResult(result)
+	res, err := sliceResult(result)
+	return sliceRetain(res, err, args[0])
 }
 
 // ---- handlers extracted from per-word RegisterFoo closures ----

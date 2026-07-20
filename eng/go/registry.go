@@ -677,6 +677,23 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
+	// LoopBodyDepth, when > 0, marks analysis running inside a PROVEN
+	// counted-for LOOP body (AnalyseLoopBody brackets each round's body run,
+	// gated on its provenTrips arg AND a sentinel-free body). Unlike the
+	// other NestedBodyDepth contributors (branch arms, quotation bodies), a
+	// proven loop body executes UNCONDITIONALLY once per iteration AND at
+	// least once — so when NestedBodyDepth == LoopBodyDepth every enclosing
+	// body is such a loop body and a per-iteration binding is definitely
+	// reached with its residual intact. The S5 first-value loop split
+	// (SplitLoopRegionBind) consults exactly that equality for the
+	// loop-carried variadic def (REFUSAL-CLOSURE S9.2a); a branch arm keeps
+	// the decline (a conditionally-reached split would leak the
+	// analysis-only binding — PR #278 review P1-b), and a computed-count or
+	// break/continue-bearing loop body never stamps (a zero-trip run leaks
+	// the binding; loop control bypasses the site or discards its values —
+	// PR #280 review).
+	LoopBodyDepth int
+
 	// CondBodyDepth, when > 0, marks analysis running inside a
 	// CONDITIONALLY-reached, def-rolled-back body — an if/case branch arm
 	// or a loop body (the `keep=false` bodies of runCarrierBodyDefsAdds,
@@ -1872,6 +1889,10 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// identify enclosing-fn-local bindings.
 	r.PushFnBaseline(r.Defs.Snapshot())
 
+	// Retag typed-container args so the args stack (args.N) and unnamed body
+	// pushes carry the {:T}/[:T] tag too, not just the named binding — a body
+	// write via args.N must enforce the same contract (Codex round 4).
+	args = RetagTypedContainerArgs(sig.Params, args)
 	// Push args list onto the args stack.
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
@@ -1906,7 +1927,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			if arg.Parent.Equal(TList) && !arg.Quoted {
 				arg.Quoted = true
 			}
-			InstallFrameBinding(r, p.Name, arg)
+			InstallFrameBinding(r, p.Name, RetagTypedContainerParam(p, arg))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])

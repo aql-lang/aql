@@ -346,10 +346,9 @@ func doBodyMayRaise(body Value, r *Registry) bool {
 // tokensMayRaise recursively scans body tokens for a fallible invocation,
 // descending into PAREN-EXPRESSIONS and nested lists so a fallible call buried
 // in a group is not missed. A token is fallible if it is a REACH (`m.decode` —
-// a dot/method/module dispatch), or a word bound to something fallible
-// (wordMayRaise). Pure literals, plain value reads, and infallible core natives
-// (`add`/`mul`/stack/accessor words) cannot raise, so an all-such multi-value
-// body stays natively seatable.
+// a dot/method/module dispatch), or a word that resolves to ANY callable
+// (wordMayRaise). Only pure literals and plain value reads cannot raise, so a
+// WORDLESS multi-value body (`do [10 20 30]`) keeps its native fixed seating.
 func tokensMayRaise(toks []Value, r *Registry) bool {
 	for i := range toks {
 		t := toks[i]
@@ -375,13 +374,25 @@ func tokensMayRaise(toks []Value, r *Registry) bool {
 }
 
 // wordMayRaise reports whether the word `name` resolves to something that can
-// raise: a MODULE-export value, or a callable (a `Function`/`FnDef` value whose
-// FnDefInfo is fallible — see fnDefMayRaise). A plain value read (`x` → 5) or an
-// unbound name (which would error at dispatch anyway) cannot raise here.
+// raise: a MODULE-export value, a REGISTERED word, or a callable def binding
+// (fnDefMayRaise). A plain value read (`x` → 5) cannot raise; an unbound name
+// cannot raise HERE either — it raises undefined_word at dispatch, which the
+// check mirrors as its own model-undermining diagnostic, refusing the program
+// before any seat is laid.
 func wordMayRaise(name string, r *Registry) bool {
 	v, ok := r.Defs.Top(name)
 	if !ok {
-		return false
+		// A REGISTERED word (a core native) is not a def-stack binding, so
+		// the FnDefInfo scan below never saw it. Any registered word counts
+		// FALLIBLE: every Go handler can return an error the type system
+		// does not see — integer overflow (`add`), a strict-accessor miss
+		// (`getr`), a cross-family order (`cmp`) — and the pre-PR-#280
+		// under-approximation (only div/mod/raise via their divergence
+		// flags, and only when def-bound) statically seated catch regions
+		// whose raise path underflowed the seat at run time (probe-pinned:
+		// maxint `add` 1 and `m getr "zz"` inside `do [… "a" "b"] error
+		// […]`).
+		return r.Lookup(name) != nil
 	}
 	if p := v.Parent; p != nil && p.ConformsTo(TModuleExport) {
 		return true
@@ -393,17 +404,18 @@ func wordMayRaise(name string, r *Registry) bool {
 	return fnDefMayRaise(&fd)
 }
 
-// fnDefMayRaise reports whether invoking fd can raise: a USER fn (any sig carries an AQL body — Go natives have none), or a native
-// that diverges always (CompileDiverges: `raise`) or value-dependently
-// (CompileValueDiverges: `div`/`mod` by zero).
+// fnDefMayRaise reports whether invoking fd can raise. EVERY callable is
+// fallible: a USER fn body can `raise` (or dispatch a word that does), and a
+// NATIVE Go handler can return an error the type system does not see —
+// integer overflow (`add`), a strict-accessor miss (`getr`), a cross-family
+// order (`cmp`). The pre-PR-#280 flag test (a body, or
+// CompileDiverges|CompileValueDiverges) under-approximated exactly there,
+// statically seating multi-value catch regions whose raise path delivered
+// ONE caught Error where N success values were promoted — an internal
+// underflow at run time. Only a degenerate zero-sig value (nothing to
+// invoke) stays infallible.
 func fnDefMayRaise(fd *FnDefInfo) bool {
-	for i := range fd.Signatures {
-		s := &fd.Signatures[i]
-		if len(s.Body()) > 0 || s.CompileEffect.Has(CompileDiverges|CompileValueDiverges) {
-			return true
-		}
-	}
-	return false
+	return len(fd.Signatures) > 0
 }
 
 func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -1093,7 +1105,15 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	if lowerable {
 		es.ArmLoopCapture()
 	}
-	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter})
+	// provenTrips: the loop provably runs at least once (all three bounds
+	// static, count >= 1 — the statically-zero prune above already returned
+	// for a static zero-trip). It arms the S9.2a LoopBodyDepth stamp inside
+	// AnalyseLoopBody; a COMPUTED count must not (a runtime count of 0 runs
+	// the body zero times and would leak an admitted split's analysis-only
+	// binding — PR #280 review).
+	provenTrips := staticBounds &&
+		loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)) >= 1
+	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter}, provenTrips)
 	out := NewCarrier(TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]
@@ -1179,18 +1199,18 @@ const loopSpreadResidualCap = 256
 // ok=false when start or step is not a concrete integer (RecordLoop refuses a
 // computed start/step) or the arity is not 1–3.
 func computedRangeBounds(elems []Value) (startV, endV, stepV Value, ok bool) {
-	isInt := func(v Value) bool { return IsConcrete(v) && v.Parent.ConformsTo(TInteger) }
+	// Every bound may be computed (carrier / event values returned AS-IS so
+	// resolveOperand finds their homes): RecordLoop admits const AND local
+	// operands for start/step and keeps refusing event-produced ones — the
+	// VM's opForSetup pops the full triple generically with the
+	// interpreter's own runtime Integer/zero-step taxonomy either way.
 	switch len(elems) {
 	case 1:
 		return NewInteger(0), elems[0], NewInteger(1), true
 	case 2:
-		if isInt(elems[0]) {
-			return elems[0], elems[1], NewInteger(1), true
-		}
+		return elems[0], elems[1], NewInteger(1), true
 	case 3:
-		if isInt(elems[0]) && isInt(elems[2]) {
-			return elems[0], elems[1], elems[2], true
-		}
+		return elems[0], elems[1], elems[2], true
 	}
 	return Value{}, Value{}, Value{}, false
 }

@@ -3881,7 +3881,17 @@ func (e *Engine) stepLiteral() error {
 				!IsConcrete(info.Data) && !IsBareTypeNode(info.Data) &&
 				(info.Data.Dynamic || info.Data.Parent == nil ||
 					TList.ConformsTo(info.Data.Parent) || info.Data.Parent.ConformsTo(TList)) {
-				rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
+				// REFUSAL-CLOSURE §9.2b: record the spread as an OpSpliceDyn
+				// event over the payload operand — the VM spreads a DATA
+				// payload exactly as the marker re-step (spliceExpand) and
+				// DEFERS to the interpreter for a code-bearing one. The
+				// result count is runtime-variable, so the event is variadic
+				// (only the program residual absorbs it; fixed-arity
+				// consumers keep refusing). An unresolvable payload keeps
+				// the refusal.
+				if !rec.RecordSpliceDyn(info.Data, e.tape.At(valIdx).Pos()) {
+					rec.MarkUncompilable("splice over a computed payload (runtime spread unknown at compile time)")
+				}
 			}
 			e.tape.Splice(valIdx, 1, spliceExpand(info.Data)...)
 			return nil
@@ -4247,7 +4257,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	result, dynamic, err := e.buildXmlFromTmpl(tmpl)
+	result, dynamic, holes, holesOK, err := e.buildXmlFromTmpl(tmpl)
 	if err != nil {
 		return Value{}, err
 	}
@@ -4259,12 +4269,19 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 		// constant: baking the check-mode tree would freeze a wrong child (a
 		// carrier renders as its type tag, e.g. "Xml") and diverge from the
 		// interpreter, which builds the real tree at run time. When recording,
-		// refuse — the VM has no XML-interpolation op, so the program falls back
-		// to the interpreter (mirrors evalInterpString). At run time there are no
-		// carriers, so this never fires and the concrete element below is returned.
+		// lower it to OpInterpXml (REFUSAL-CLOSURE §9.2c): the hole
+		// expressions already recorded their own dispatch events in traversal
+		// order, and the op pops their results and rebuilds the element at
+		// run time (rebuildXmlFromTmpl — byte-identical to this build). The
+		// rare unlowerable shape (a 0-or-many-valued hole) keeps the refusal
+		// and falls back, exactly as the string sibling.
 		if es := e.registry.Check.Recorder(); es.active() {
-			es.MarkUncompilable("interpolated XML with a runtime-computed part")
-			return NewCarrier(TXml), nil
+			out := NewCarrier(TXml)
+			out.ID = GenerateID(IDPrefixForType(TXml))
+			if !holesOK || !es.RecordInterpXml(tmpl, holes, out, val.Pos()) {
+				es.MarkUncompilable("interpolated XML with a runtime-computed part")
+			}
+			return out, nil
 		}
 	}
 	return result, nil
@@ -4282,20 +4299,32 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 // expression, or a nested template) evaluated to a NON-CONCRETE value — a
 // carrier seen only under static analysis. evalXmlInterp uses it to refuse
 // const-folding while recording (the InterpString contract).
-func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
+// buildXmlFromTmpl additionally collects the per-hole single result values
+// in TRAVERSAL order (attrs first, then children left-to-right, depth-first
+// through nested elements) with holesOK reporting every hole produced
+// exactly one value — the precondition RecordInterpXml needs to lower the
+// element to OpInterpXml (one operand-stack value per hole), mirroring
+// evalInterpParts' holes contract.
+func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, []Value, bool, error) {
 	dynamic := false
+	holesOK := true
+	var holes []Value
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
-		s, dyn, _, _, err := e.evalInterpParts(a.Parts)
+		s, dyn, aHoles, aOK, err := e.evalInterpParts(a.Parts)
 		if err != nil {
-			return Value{}, false, err
+			return Value{}, false, nil, false, err
 		}
 		if dyn {
 			dynamic = true
 		}
+		if !aOK {
+			holesOK = false
+		}
+		holes = append(holes, aHoles...)
 		attr.Set(a.Name, NewString(s))
 		if e.registry.FlowCtrl != FlowNone {
-			return NewXmlElement(t.Tag, attr, nil), dynamic, nil
+			return NewXmlElement(t.Tag, attr, nil), dynamic, holes, false, nil
 		}
 	}
 
@@ -4352,28 +4381,40 @@ func (e *Engine) buildXmlFromTmpl(t XmlTmpl) (Value, bool, error) {
 			if c.Child == nil {
 				continue
 			}
-			child, dyn, err := e.buildXmlFromTmpl(*c.Child)
+			child, dyn, cHoles, cOK, err := e.buildXmlFromTmpl(*c.Child)
 			if err != nil {
-				return Value{}, false, err
+				return Value{}, false, nil, false, err
 			}
 			if dyn {
 				dynamic = true
 			}
+			if !cOK {
+				holesOK = false
+			}
+			holes = append(holes, cHoles...)
 			cren = append(cren, child)
 		case XmlCrenExpr:
 			results, err := runPooledSub(e.registry, c.Expr, false)
 			if err != nil {
-				return Value{}, false, err
+				return Value{}, false, nil, false, err
+			}
+			if len(results) == 1 {
+				holes = append(holes, results[0])
+			} else {
+				// A 0-or-many-valued child hole cannot map to one stack
+				// slot for OpInterpXml; the element is still built below,
+				// but the template is not lowerable (the caller falls back).
+				holesOK = false
 			}
 			for _, r := range results {
 				addChild(r)
 			}
 			if e.registry.FlowCtrl != FlowNone {
-				return NewXmlElement(t.Tag, attr, cren), dynamic, nil
+				return NewXmlElement(t.Tag, attr, cren), dynamic, holes, false, nil
 			}
 		}
 	}
-	return NewXmlElement(t.Tag, attr, cren), dynamic, nil
+	return NewXmlElement(t.Tag, attr, cren), dynamic, holes, holesOK, nil
 }
 
 // expandParenExpr returns a ParenExpr's tokens wrapped in OpenParen …
@@ -5788,6 +5829,10 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// below, which pops the baseline.
 	e.registry.PushFnBaseline(e.registry.Defs.Snapshot())
 
+	// Retag typed-container args so the args stack (args.N) and unnamed body
+	// pushes carry the {:T}/[:T] tag too, not just the named binding — a body
+	// write via args.N must enforce the same contract (Codex round 4).
+	args = RetagTypedContainerArgs(sig.Params, args)
 	argsCopy := make([]Value, len(args))
 	copy(argsCopy, args)
 	if err := e.registry.Args.Push(NewList(argsCopy)); err != nil {
@@ -5818,7 +5863,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
-			InstallFrameBinding(e.registry, p.Name, args[i])
+			InstallFrameBinding(e.registry, p.Name, RetagTypedContainerParam(p, args[i]))
 			names = append(names, p.Name)
 		} else {
 			tokens = append(tokens, args[i])
@@ -6660,6 +6705,47 @@ func (e *Engine) stepPastOpenParen(val Value) {
 
 // stepCloseParen handles the ")" word. It resolves any pending forwards
 // inside the paren scope via implicit end, then collapses the sub-expression.
+// recordParenLeadingApply records a leading-dynamic fn-value apply bounded
+// by a paren (REFUSAL-CLOSURE §9.2e): the value at `first` IS the fn being
+// applied to the values after it — `((m get "f") x)`. Recorded as a guarded
+// OpCallDynMethod (the §3 arrival chassis): the VM applies the RUNTIME value
+// to the args exactly as the interpreter's paren auto-dispatch and DEFERS on
+// a non-callable value or a result-count mismatch (interpreter re-run —
+// never a wrong stack). The window collapses to the one modeled carrier, so
+// a trailing consumer (`add 1 (...)`) seats the apply's RESULT — the
+// paren-unaware reorder the old refusal guarded against cannot happen. Only
+// a CONTAINER MEMBER read models here (memberFnRead provenance); any other
+// leading dynamic keeps its existing paths, as the old refusal did. Returns
+// the possibly-shrunk closeIdx (args spliced out).
+func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeIdx int) int {
+	fnVal := e.tape.At(first)
+	if !es.memberFnRead(fnVal.ID) {
+		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+		return closeIdx
+	}
+	var argVals []Value
+	var argIdxs []int
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if isRecordableLiteral(e.tape.At(i)) && i != first {
+			argVals = append(argVals, e.tape.At(i))
+			argIdxs = append(argIdxs, i)
+		}
+	}
+	out := NewCarrier(TAny)
+	out.ID = GenerateID(IDPrefixForType(TAny))
+	out.pos = fnVal.pos
+	if es.RecordDynMethod(fnVal, argVals, []Value{out}, "(paren apply)", fnVal.Pos()) {
+		e.tape.Set(first, out)
+		for j := len(argIdxs) - 1; j >= 0; j-- {
+			e.tape.Remove(argIdxs[j])
+			closeIdx--
+		}
+	} else { //covergate:allow RecordDynMethod resolves fnVal (a member-read EVENT, gated above) and each argVal (an isRecordableLiteral — a concrete const or an event-backed carrier resolveOperand handles), so it cannot decline here — the belt keeps the sound refusal if a future window shape breaks that invariant (§compiler)
+		es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+	}
+	return closeIdx
+}
+
 func (e *Engine) stepCloseParen() error {
 	closeIdx := e.pointer
 
@@ -6924,7 +7010,9 @@ func (e *Engine) stepCloseParen() error {
 				es.RegisterTrailingApply(last.ID, count-1)
 			}
 		case first >= 0 && count >= 2:
-			es.MarkUncompilable("fn-value application bounded by a paren (dynamic value precedes args)")
+			// LEADING dynamic apply (REFUSAL-CLOSURE §9.2e) — extracted to
+			// recordParenLeadingApply for the stepCloseParen complexity cap.
+			closeIdx = e.recordParenLeadingApply(es, first, openIdx, closeIdx)
 		}
 	}
 
@@ -8161,6 +8249,24 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// recording landed (carrier_ljoin_test.go drives the recovery arm).
 		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
+		}
+		// A MULTI-overload user fn over a strict-disjunct operand (`g (h true)`
+		// where h returns `(Integer tor String)` and g has an Integer and a
+		// String arm): the operand is a runtime disjunct the checker cannot
+		// pin to one arm, but every same-arity arm sharing the committed
+		// return bakes to OpCallUserPoly, and the VM re-matches the concrete
+		// alternative at run time — the same §6b machinery the gradual-Any
+		// clusterC path uses, here reached through the disjunct partition
+		// (REFUSAL-CLOSURE §9.4 union-return poly). tryCompileUserPolyArms
+		// declines (keeping the refusal) for divergent-return or
+		// non-plain-param arm sets.
+		if es := e.registry.Check.Recorder(); es.active() {
+			sw := sigOrderArgs(args, nStack)
+			if plan := tryCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
+				e.spliceCheckResults(positions, out)
+				return nil
+			}
 		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		e.spliceCheckResults(positions, out)

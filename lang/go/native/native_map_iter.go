@@ -317,7 +317,20 @@ func valsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		v, _ := data.Get(k)
 		out[i] = v
 	}
-	return []Value{NewList(out)}, nil
+	// #5 (Codex round 5): a {:T} map's values are all element-typed, so the
+	// values-list projection is [:T] — retain the tag (elem is container-kind
+	// agnostic). keys stays untagged (keys are always String).
+	return []Value{d2RetainElem(NewList(out), args[0])}, nil
+}
+
+// valsReturns is the check-mode mirror: a `{:T}` map projects to a `[:T]` list,
+// so a read from `(vals m)` narrows and a write into it stays enforced.
+func valsReturns(args []Value, _ *Registry) []Value {
+	res := NewCarrier(TList)
+	if len(args) == 1 {
+		res = d2TypedListResidual(args[0])
+	}
+	return []Value{res}
 }
 
 // mapNatives are the standalone map-projection words. The each / for-each /
@@ -333,7 +346,7 @@ var mapNatives = []NativeFunc{
 	{
 		Name: "vals",
 		Signatures: []Signature{
-			{Args: []*Type{TMap}, Impl: Go(valsHandler), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TMap}, Impl: Go(valsHandler), Returns: []*Type{TList}, ReturnsFn: valsReturns, BarrierPos: -1},
 		},
 	},
 }

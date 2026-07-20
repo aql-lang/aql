@@ -7,13 +7,23 @@ import (
 	"testing"
 )
 
-// check-prop's gen/property bodies compile as same-program stored-param-body
-// units (Signature.StoredBodies → compileStoredParamBody) and run nested on
-// the VM via InvokeCallback. The sharp pin: ITERATION COUNT ADDS NO
-// INTERPRETER ENTRIES — every unattributed entry left is module-load AQL
-// (invariant in the run count; the Phase 10 attribution seam owns those).
-// The fn-scope ${frame-local} guard (TestCheckPropInterpStringFnScopeRefuses)
-// is the standing negative: stored-param-body compiles are module-scope only.
+// A COMPILABLE check-prop gen/property body compiles as a same-program
+// stored-param-body unit (Signature.StoredBodies → compileStoredParamBody)
+// and runs nested on the VM via InvokeCallback. The sharp pin: ITERATION
+// COUNT ADDS NO INTERPRETER ENTRIES — every unattributed entry left is
+// module-load AQL (invariant in the run count).
+//
+// The gen body here is `[ 3 4 add ]` (a compilable constant expression), NOT
+// a direct rand call `[r.int 1 9]`: a member-fn read from the opaque Map
+// param `r` applied to forward args (`r.int LO HI`) is the fn-value-call
+// boundary — it cannot compile correctly as a unit and MUST DECLINE to the
+// interpreter (TestCheckPropMemberFnGenVariesNotConstant pins that; before
+// the decline fix the unit silently returned the trailing arg — a CONSTANT
+// generator, the r.int→9 miscompile the trie/sort PBT suites tripped over).
+// So the invariance holds only for bodies that genuinely compile; the
+// member-fn gen is ledgered red (p6/check-prop-body-on-vm). The fn-scope
+// ${frame-local} guard (TestCheckPropInterpStringFnScopeRefuses) is the
+// standing negative: stored-param-body compiles are module-scope only.
 func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 	entryCensus := func(runs int) map[string]int {
 		t.Helper()
@@ -32,7 +42,7 @@ func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 			}
 		})
 		defer disarm()
-		src := fmt.Sprintf("import \"aql:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ 0 gte ] %d 1 0)\nres get \"ok\"", runs)
+		src := fmt.Sprintf("import \"aql:test\" end\ndef res (Test.check-prop \"x\" [ 3 4 add ] [ drop true ] %d 1 0)\nres get \"ok\"", runs)
 		if _, err := a.RunCompiledStrict(src); err != nil {
 			t.Fatalf("run (%d iterations): %v", runs, err)
 		}
@@ -53,6 +63,43 @@ func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 	// per iteration.
 	if few["CallAQL"] != 0 || many["CallAQL"] != 0 {
 		t.Errorf("per-iteration CallAQL entries present (2 runs: %d, 60 runs: %d) — the throwaway-sig path is back", few["CallAQL"], many["CallAQL"])
+	}
+}
+
+// TestCheckPropMemberFnGenVariesNotConstant — the regression pin for the
+// generator miscompile (bisected to 853dcaa4, fixed 2026-07-18). A direct
+// rand-call gen body `[r.int 1 9]` reads a member fn from the opaque Map
+// param `r` and applies it to the forward args. The stored-param unit
+// silently RET'd the trailing arg (`9`) instead of applying `r.int` — a
+// CONSTANT generator that turned every PBT suite using the member-call gen
+// form vacuous (weak `is Integer` properties passed on the constant) or
+// broke it (trie/sort properties sensitive to the value). The decline fix
+// makes the gen body interpret, producing genuine varying values.
+func TestCheckPropMemberFnGenVariesNotConstant(t *testing.T) {
+	// `n eq 9` is true iff the generator returns the trailing arg 9 every
+	// run. A correct varying generator refutes it (ok=false); the miscompile
+	// left it un-refuted (ok=true — always 9). Pinned under BOTH pipelines.
+	src := `import "aql:test" end
+def res (Test.check-prop "varies" [r.int 1 9] [ var [[n] (n eq 9) ] ] 12 1 0)
+res get "ok"`
+	for _, mode := range []string{"compiled", "interp"} {
+		a, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.SetOutput(&bytes.Buffer{})
+		var got []any
+		if mode == "compiled" {
+			got, _, err = a.RunCompiled(src)
+		} else {
+			got, err = a.RunInterp(src)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", mode, err)
+		}
+		if fmt.Sprint(got) == "[true]" {
+			t.Errorf("%s: the generator is CONSTANT (always the trailing arg 9) — the r.int→9 miscompile is back", mode)
+		}
 	}
 }
 

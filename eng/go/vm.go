@@ -776,6 +776,19 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 	}
 	top := len(stack) - 1
 	fnVal := stack[top]
+	// The op stands for a READ-SUBSTITUTED trailing fn (RecordDynApply fires
+	// at the paren collapse of a WORD-read arrival, where the interpreter's
+	// substitution strips one quote level before the auto-apply). A compiled
+	// LOCAL push carries the STORED value verbatim — including the
+	// construction-time quote of a `/r` reference or a `quote (fn …)` arg —
+	// so mirror the read here: strip Quoted from the applied copy (probe-
+	// found off-corpus divergence: `[1 2] each [(1 2 c)]` with c bound from
+	// `(…)/r` islanded the still-quoted fn as INERT and compiled [[1 1]] vs
+	// the interpreter's [[3 3]]). The strip is sound ONLY for a substituted
+	// arrival: RecordDynApply declines an EVENT-provenance fn (a direct call
+	// result, which the interpreter does NOT substitute and whose runtime
+	// quote must survive — PR #280 review), so it never reaches this op.
+	fnVal.Quoted = false
 	base := top - n
 	// The args sit BELOW the fn in stack order (deepest first). The interpreter
 	// binds a trailing fn's args TOP-DOWN (the top arg → the fn's first param);
@@ -1436,6 +1449,32 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if stack, err = vmInterp(p, stack, in.Arg, curDebug, pc); err != nil {
 				return nil, err
 			}
+		case OpSpliceDyn:
+			// Spread a runtime splice payload (§9.2b): a DATA payload
+			// contributes spliceExpand's values verbatim; a code-bearing or
+			// fn-valued one defers — the marker re-step dispatches against
+			// the live stack, which only the interpreter owns.
+			if len(stack) < 1 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+				return nil, vmErrAt(curDebug, pc, "SPLICE_DYN underflow")
+			}
+			payload := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			elems := spliceExpand(payload)
+			for _, el := range elems {
+				if IsWord(el) || IsParenExpr(el) || IsReach(el) || IsInterpString(el) || IsSplice(el) ||
+					IsForward(el) || IsOpenParen(el) || IsCloseParen(el) || isAppliableFn(el) {
+					return nil, vmDefer(vc.r, curDebug, pc, "vm:splice-active-payload",
+						"splice of a code-bearing payload; deferring to the interpreter")
+				}
+			}
+			stack = append(stack, elems...)
+		case OpInterpXml:
+			// Assemble an interpolated XML element from its computed holes
+			// (`<p>${x}</p>`, §9.2c) — the tree twin of OpInterp.
+			var err error
+			if stack, err = vmInterpXml(p, stack, in.Arg, curDebug, pc); err != nil {
+				return nil, err
+			}
 		case OpTrap:
 			// A check-mode-suppressed runtime error compiled in place: raise the
 			// byte-identical AQL error (the interpreter errors at this same point),
@@ -1465,7 +1504,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				copy(caps, stack[len(stack)-nc:])
 				stack = stack[:len(stack)-nc]
 			}
-			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape}
+			cl := ClosurePayload{Unit: int(in.Arg), Captures: caps, InShape: p.Fns[in.Arg].InShape, Render: p.Fns[in.Arg].Render}
 			stack = append(stack, Value{Parent: TFunction, Data: cl})
 		case OpPushType:
 			// Resolve the CANONICAL node at run time — never a pooled
@@ -2061,6 +2100,14 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		if !ok {
 			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
+		// Retag a {:T}/[:T] param's concrete runtime arg with its element type so
+		// compiled body writes enforce it — the compiled mirror of the
+		// interpreter's RetagTypedContainerParam. Uses the SAME shared core, so a
+		// flex arg is retagged in place (reference identity preserved) and a plain
+		// arg is re-unified — both paths agree with the interpreter (no divergence).
+		if IsConcrete(v) {
+			locals[i] = RetagTypedContainerValue(pat, v)
+		}
 	}
 	return nil
 }
@@ -2228,6 +2275,24 @@ func vmInterp(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]V
 		}
 	}
 	return append(stack[:len(stack)-n], NewString(sb.String())), nil
+}
+
+// vmInterpXml executes OpInterpXml: pop the template's holes (deepest = hole
+// 0, the traversal order buildXmlFromTmpl evaluates in) and rebuild the
+// element via rebuildXmlFromTmpl — byte-identical to the interpreter's build
+// over the same hole values.
+func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]Value, error) {
+	spec := &p.XmlInterps[arg]
+	n := spec.NHoles
+	if len(stack) < n {
+		return nil, vmErrAt(debug, pc, "INTERP_XML stack underflow")
+	}
+	holes := stack[len(stack)-n:]
+	out, used := rebuildXmlFromTmpl(spec.Tmpl, holes)
+	if used != n { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+		return nil, vmErrAt(debug, pc, "INTERP_XML hole count mismatch")
+	}
+	return append(stack[:len(stack)-n], out), nil
 }
 
 // vmErrAt builds an internal_error AqlError for a VM-internal soundness

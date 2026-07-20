@@ -254,6 +254,12 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	if elem, split := r.Check.Recorder().SplitLoopRegionBind(name, value); split {
 		outs = []Value{value}
 		value = elem
+	} else if elem, split := r.Check.Recorder().SplitEventRegionBind(name, value); split {
+		// The S9.1 static-region twin: a def binding the FIRST result of a
+		// fallible do-catch's multi-value region. The event's rest results
+		// stay on the check stack by construction (only idx 0 binds), so no
+		// outs push — the splice lowering removes the bound value at depth.
+		value = elem
 	}
 	InstallDef(r, name, value, stackOnly...)
 	r.Check.RecordDef(name, pos)
@@ -694,6 +700,22 @@ func reservedWordError(r *Registry, op, name string) error {
 // body whose operand has no resolvable provenance, where compiling would have
 // to guess the stack layout. Object / alias / schema typed-defs do not route
 // here.
+// markTypedContainerDefUncompilable refuses compilation of a typed-container
+// def (`def m:{:T} …` / `def xs:[:T] …`) whose body is NON-concrete (a flex /
+// carrier body). Such a body's element validation and tag-minting happen at
+// runtime only (Unify over the concrete value); the compiled path has no
+// typed-container bind to mirror that, so it would silently drop the tag and
+// skip enforcement. Falling back to the interpreter keeps the two surfaces in
+// agreement. A concrete body validates statically and compiles faithfully.
+func markTypedContainerDefUncompilable(r *Registry, name string, body, constraint Value) {
+	if IsConcrete(body) || (!IsTypedMap(constraint) && !IsTypedList(constraint)) {
+		return
+	}
+	if es := r.Check.Recorder(); es.Active() {
+		es.MarkUncompilable("typed-def `" + name + "`: a {:T}/[:T] constraint over a non-concrete (flex) body validates + tags at runtime only")
+	}
+}
+
 func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	// A STATIC (concrete) refinement value's reparent rides the const pool and
 	// compiles faithfully — `def p:Pt 5` (a const) folds to a Pt-tagged const, so
@@ -1132,6 +1154,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
 	}
+	// A typed-container constraint ({:T}/[:T]) over a NON-CONCRETE body — a flex
+	// carrier whose concrete elements are unknown at check time — validates its
+	// elements and mints the element tag only at RUNTIME (Unify over the concrete
+	// flex body). There is no compiled typed-container bind that re-runs that
+	// element check + preserves flex-ness, so the compiled path would drop the
+	// tag and skip enforcement. Refuse compilation → the def falls back to the
+	// interpreter, which enforces. A CONCRETE body is validated statically above
+	// and compiles faithfully (the plain {:T} map case is unaffected).
+	markTypedContainerDefUncompilable(r, name, body, constraint)
 	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
 	// confirms the function shape matches Mapper, rewrap the
 	// Parent so dispatch keys off Mapper rather than the generic

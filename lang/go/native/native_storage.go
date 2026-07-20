@@ -47,15 +47,17 @@ var storageNatives = []NativeFunc{
 			// a NEW map with the key bound and leaves the receiver
 			// untouched — the same contract as push / StructUtil.setpath.
 			{
-				Args:    []*Type{TString, TAny, TMap},
-				Impl:    Go(setMapHandler),
-				Returns: []*Type{TMap}, BarrierPos: -1,
+				Args:      []*Type{TString, TAny, TMap},
+				Impl:      Go(setMapHandler),
+				Returns:   []*Type{TMap},
+				ReturnsFn: setMapTypedReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TMap},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(setMapHandler),
-				Returns:   []*Type{TMap}, BarrierPos: -1,
+				Returns:   []*Type{TMap},
+				ReturnsFn: setMapTypedReturns, BarrierPos: -1,
 			},
 
 			// List (immutable — copy-returning, completing the column
@@ -106,9 +108,10 @@ var storageNatives = []NativeFunc{
 			// FlexList (in-place index set; 0..len-1 only — sparse is
 			// an error, growth is append's job)
 			{
-				Args:    []*Type{TInteger, TAny, TFlexList},
-				Impl:    Go(setFlexListHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TInteger, TAny, TFlexList},
+				Impl:      Go(setFlexListHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: setFlexListReturns, BarrierPos: -1,
 			},
 
 			// FlexXml (in-place attribute set; name → value, like the DOM
@@ -256,6 +259,180 @@ func stripQuoteArgs(sigs []Signature) []Signature {
 
 // ---- kernel-container handlers (Node / Store / Class / None) ----
 
+// d2WriteConforms reports whether writing `v` into a typed container whose
+// element constraint is `elem` is permitted — the SAME per-element unify the
+// construction check runs (unifyMapValues: unifyInner(childType, val)). The
+// element order (elem first) mirrors construction exactly. A carrier/dynamic
+// written value can't be statically judged, so it conforms (gradual — the
+// runtime handler re-checks the concrete value). See
+// design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func d2WriteConforms(elem, v Value) bool {
+	if !IsConcrete(v) {
+		return true
+	}
+	_, ok := Unify(elem, v)
+	return ok
+}
+
+// d2AdoptTyped is the runtime write-adoption for a typed container: it both
+// ENFORCES the element tag AND recursively RE-TAGS the stored value, mirroring
+// construction (unifyTyped{Map,List}WithConcrete). Returns the value to store
+// (unchanged for an untyped container / a scalar element / a non-concrete
+// value) or a type_error. The re-tag is the fix for the nested-container hole:
+// writing an UNTYPED `{y:2}` into a `{:{:Integer}}` must leave `{y:2}` tagged
+// `{:Integer}` so a later write into IT is enforced — construction tags nested
+// containers recursively, and writes must too. Scoped to CONTAINER element
+// types: a scalar element (`{:Integer}`) needs no tag, so the value is returned
+// byte-identical (no stored-representation churn).
+func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
+	elem, ok := container.ElemConstraint()
+	if !ok {
+		return v, nil
+	}
+	unified, uok := Unify(elem, v)
+	if !uok {
+		return Value{}, r.AqlError("type_error",
+			fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
+			word)
+	}
+	if IsTypedMap(elem) || IsTypedList(elem) {
+		// Nested typed container — store the recursively-tagged value. A FLEX child
+		// is by-reference: Unify above validated it but rebuilt a DETACHED copy
+		// (unifyTyped*WithConcrete's flex branch allocates a fresh store), so a
+		// later mutation through the original child would not be visible through
+		// the container. Keep the caller's flex value and retag it IN PLACE
+		// instead (#9, Codex round 9) — validation already passed via Unify.
+		if IsFlexMap(v) || IsFlexList(v) {
+			if ci, cerr := AsChildType(elem); cerr == nil {
+				return eng.RetagFlexElem(v, ci.Child), nil
+			}
+		}
+		return unified, nil
+	}
+	return v, nil
+}
+
+// setFlexListReturns mirrors setFlexListHandler's [:T] write enforcement in
+// check mode (the FlexList set sig otherwise has no ReturnsFn). args are
+// [index, value, FlexList].
+func setFlexListReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TFlexList)
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+		res = d2RetainElem(res, args[2])
+	}
+	return []Value{res}
+}
+
+// flexGrowReturns builds the check-mode mirror for a flex GROW word
+// (append/push/unshift over a FlexList): args are [value, FlexList], so a
+// non-conforming top-level grow into a typed flex list is flagged at check time
+// the same way the runtime raises. word rides in the diagnostic.
+func flexGrowReturns(word string) func([]Value, *Registry) []Value {
+	return func(args []Value, r *Registry) []Value {
+		res := NewCarrier(TFlexList)
+		if len(args) == 2 {
+			d2CheckWrite(r, args[1], args[0], word, args[0].Pos())
+			res = d2RetainElem(res, args[1])
+		}
+		return []Value{res}
+	}
+}
+
+// d2ReTagContainer enforces + re-tags a whole rebuilt container (a merge result
+// that lost its tag through valueToAny/structConvert) against a typed operand's
+// element constraint: every entry must conform, and the result carries the tag.
+// Returns the result unchanged when neither operand is a typed container. word
+// rides in the diagnostic.
+func d2ReTagContainer(r *Registry, typedSrc, result Value, word string) (Value, error) {
+	elem, ok := typedSrc.ElemConstraint()
+	if !ok {
+		return result, nil
+	}
+	var constraint Value
+	switch {
+	case result.Parent.ConformsTo(TMap):
+		constraint = eng.NewTypedMap(elem)
+	case result.Parent.ConformsTo(TList):
+		constraint = eng.NewCarrierTypedListValue(elem)
+	default:
+		return result, nil
+	}
+	unified, uok := Unify(constraint, result)
+	if !uok {
+		return Value{}, r.AqlError("type_error",
+			fmt.Sprintf("%s: a merged value does not conform to element type %s", word, elem.String()), word)
+	}
+	return unified, nil
+}
+
+// d2typedMergeOperand returns whichever of a/b carries an element tag (a first),
+// or a when neither does (d2ReTagContainer then no-ops).
+func d2typedMergeOperand(a, b Value) Value {
+	if _, ok := a.ElemConstraint(); ok {
+		return a
+	}
+	return b
+}
+
+// d2RetainElem copies src's element tag (if any) onto res and returns res — a
+// rebuilt map/list copy (the immutable list mutators, and the set/setpath
+// check-mode residuals) must carry the {:T}/[:T] tag so downstream reads narrow
+// and downstream writes stay enforced (the checker mirrors the runtime).
+func d2RetainElem(res, src Value) Value {
+	if elem, ok := src.ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return res
+}
+
+// d2TypedListResidual / d2TypedMapResidual build a set-copy check residual as a
+// PROPER typed carrier when the receiver is tagged: the element type rides in
+// BOTH the carrier's ChildTypeInfo.Child (so a READ from `(xs set i v)` narrows
+// to the element bound via getIntKeyReturns instead of degrading to dynamic(Any)
+// — Codex round 4) AND the `elem` pointer (so a CHAINED write into the residual
+// stays enforced — d2CheckWrite reads ElemConstraint, round-3 #3). An untyped
+// receiver keeps the bare carrier.
+func d2TypedListResidual(src Value) Value {
+	elem, ok := src.ElemConstraint()
+	if !ok {
+		return NewCarrier(TList)
+	}
+	v := eng.NewCarrierTypedListValue(elem)
+	v.SetElemConstraint(elem)
+	return v
+}
+
+func d2TypedMapResidual(src Value) Value {
+	elem, ok := src.ElemConstraint()
+	if !ok {
+		return NewCarrier(TMap)
+	}
+	v := eng.NewTypedMap(elem)
+	v.Carrier = true
+	v.SetElemConstraint(elem)
+	return v
+}
+
+// d2CheckWrite is the check-mode mirror of the write enforcement: at the
+// top-level straight line, a provably-non-conforming CONCRETE write into a
+// tagged container is flagged as the type_error the runtime raises identically
+// (a RuntimeMirror — the program compiles and raises). Inside a fn body the
+// runtime still enforces (both compiled and interpreted raise), but the
+// checker stays conservative here, matching setClassInstanceReturns.
+func d2CheckWrite(r *Registry, recv, v Value, word string, pos SrcPos) {
+	if !atUncaughtTopLevel(r) {
+		return
+	}
+	elem, ok := recv.ElemConstraint()
+	if !ok || d2WriteConforms(elem, v) {
+		return
+	}
+	eng.CheckAddUniqueDiagnostic(r, "type_error",
+		fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
+		word, pos)
+}
+
 // setMapHandler is the Map form of set. A Map stays immutable: the
 // handler returns a NEW map with the key bound (overwriting an existing
 // entry), leaving the receiver untouched. This is the language's rule
@@ -263,7 +440,7 @@ func stripQuoteArgs(sigs []Signature) []Signature {
 // mutate in place and return nothing; immutable values return the
 // updated copy. Keys are strings or atoms, computed keys via parens:
 // `m set (k) v`.
-func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func setMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, err := RequireConcreteMap(args[2], "set")
 	if err != nil {
 		return nil, err
@@ -273,7 +450,13 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	// flex inside is snapshot to its plain shape (eng.AdoptIntoNode),
 	// so the "immutable" result can never change underneath through a
 	// live flex handle. Flex-free values pass through untouched.
-	val, aerr := eng.AdoptIntoNode(args[1])
+	// R2: a write into a typed container ({:T}) must conform to the element tag
+	// and store the recursively re-tagged value (nested {:{:T}} stays enforced).
+	tagged, werr := d2AdoptTyped(r, args[2], args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
+	val, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
@@ -283,7 +466,11 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 		out.Set(k, v)
 	}
 	out.Set(key, val)
-	return []Value{NewMap(out)}, nil
+	res := NewMap(out)
+	if elem, ok := args[2].ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return []Value{res}, nil
 }
 
 // setClassInstanceHandler is the sealed in-place write for class
@@ -389,10 +576,17 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("set_error", "set: expected a FlexMap, got "+container.Parent.String(), "set")
 	}
+	// A typed flex map ({:T}) enforces its element tag on an IN-PLACE write and
+	// stores the recursively re-tagged value — flex only toggles mutability, it
+	// never drops the element contract (incl. nested {:{:T}}).
+	tagged, werr := d2AdoptTyped(r, container, args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
 	// A flex tree stays ENTIRELY mutable: a plain Node value is deep-
 	// flexed on the way in — otherwise a later write into the immutable
 	// inner is copy-returning and silently lost. Flex handles share.
-	val, aerr := eng.AdoptIntoFlex(args[1])
+	val, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("set_error", aerr.Error(), "set")
 	}
@@ -416,8 +610,13 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 			fmt.Sprintf("set: index %d out of bounds for FlexList (length %d)", idx, len(fd.Elems)),
 			"set", "use append to grow a FlexList; sparse FlexLists are an error")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on an in-place write.
+	tagged, werr := d2AdoptTyped(r, container, args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
-	val, aerr := eng.AdoptIntoFlex(args[1])
+	val, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("set_error", aerr.Error(), "set")
 	}
@@ -534,6 +733,42 @@ func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
 	return []Value{NewDynamicCarrier(ft)}
 }
 
+// d2TypedContainerBound is the D2 (read-type precision) narrowing: a read over a
+// TYPED-container CARRIER ({:T} map / [:T] list) narrows to a DYNAMIC carrier of
+// the declared element type instead of dynamic(Any). Returns (_, false) when the
+// container carries no narrower-than-Any element type (an untyped Map/List keeps
+// dynamic(Any)). See design/TYPED-CONTAINER-ELEMENT-PRECISION.0.md, Part B.
+//
+// The bound is DYNAMIC (gradual) — a read is only a claim the write-enforcement
+// (Part C) backs. What the narrower bound buys: a provably-DISJOINT dispatch (a
+// {:Boolean} read reaching an Integer|String word) refuses at compile time, while
+// a COVERED read commits or polys exactly as the element type warrants, and an
+// UNTYPED read is unchanged.
+func d2TypedContainerBound(container Value) (Value, bool) {
+	ci, err := AsChildType(container)
+	if err != nil {
+		return Value{}, false
+	}
+	child := ci.Child
+	if child.Parent == nil || child.Parent.Equal(TAny) {
+		return Value{}, false
+	}
+	// A disjunct element ({:(String tor Integer)}) keeps its DisjunctInfo bound;
+	// clone for a fresh identity (the shared child ID would collide in operand-
+	// provenance tracking). A single-type element takes a fresh dynamic carrier
+	// of child.Parent — the element's lattice SUPERTYPE (Integer→Number). This
+	// is imprecise (R4 attempted the exact type via DenotedTypeNode) BUT
+	// load-bearing: narrowing to the exact element type diverged the compiled
+	// vs interpreted runs (edge-containers-1.tsv:L114 — a `(r get 0) eq
+	// (r get 1)` over an each-produced typed list folded differently). The
+	// exact narrowing needs the downstream dispatch fixed first; kept at the
+	// supertype until then. See design/TYPED-CONTAINER-TAG-RETENTION.0.md (R4).
+	if IsDisjunct(child) {
+		return NewDynamicCarrierValue(CloneValue(child)), true
+	}
+	return NewDynamicCarrier(child.Parent), true
+}
+
 func getNodeReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
@@ -584,6 +819,14 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	if container.Carrier && container.Parent != nil {
 		if rt, ok := container.Parent.Data.(RecordTypeInfo); ok && rt.Fields != nil {
 			return recordSchemaFieldReturns(rt, key)
+		}
+	}
+	// D2 Part B: a TYPED-map carrier ({:T}) narrows the read to its declared
+	// element type. A concrete map falls through to the exact per-key narrowing
+	// below; an untyped carrier keeps dynamic(Any).
+	if !IsConcrete(container) && IsTypedMap(container) {
+		if b, ok := d2TypedContainerBound(container); ok {
+			return []Value{b}
 		}
 	}
 	if !IsConcrete(container) || !container.Parent.ConformsTo(TMap) {
@@ -673,6 +916,14 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 // mistyped a parselang `get 1` over a list as None).
 func getIntKeyReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
+	// D2 Part B: an index read over a TYPED-list carrier ([:T]) narrows to its
+	// declared element type. A concrete list falls through to the exact per-index
+	// narrowing below; an untyped carrier keeps dynamic(Any).
+	if len(args) == 2 && IsConcrete(args[0]) && !IsConcrete(args[1]) && IsTypedList(args[1]) {
+		if b, ok := d2TypedContainerBound(args[1]); ok {
+			return []Value{b}
+		}
+	}
 	if len(args) != 2 || !IsConcrete(args[0]) || !IsConcrete(args[1]) ||
 		!args[1].Parent.ConformsTo(TList) {
 		return dyn
@@ -952,6 +1203,9 @@ func contextReturns(_ []Value, r *Registry) []Value {
 // legacy fresh FlexMap carrier, so nothing changes where the shape
 // machinery is not in play.
 func setFlexMapReturns(args []Value, r *Registry) []Value {
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // flex {:T} write mirror
+	}
 	// len guard: the no-signature recovery can assume this sig with a
 	// short arg window (defensive — panic prevention).
 	if r != nil && !r.Check.Compiling && len(args) >= 3 {
@@ -960,7 +1214,11 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 			return []Value{args[2]}
 		}
 	}
-	return []Value{NewCarrier(TFlexMap)}
+	res := NewCarrier(TFlexMap)
+	if len(args) == 3 {
+		res = d2RetainElem(res, args[2]) // chained/bound flex writes stay checked
+	}
+	return []Value{res}
 }
 
 // setListHandler is the List form of set: copy-returning, like Map —
@@ -973,10 +1231,26 @@ func setFlexMapReturns(args []Value, r *Registry) []Value {
 // CheckListIndex flags it. The result model is the declared updated-copy
 // List either way (soundness: an unknown length or index stays silent).
 func setListIndexReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TList)
 	if len(args) == 3 {
 		CheckListIndex(r, args[0], args[2], "set")
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos()) // R2: [:T] write enforcement
+		res = d2TypedListResidual(args[2])
 	}
-	return []Value{NewCarrier(TList)}
+	return []Value{res}
+}
+
+// setMapTypedReturns is the check-mode mirror of setMapHandler's typed-container
+// write enforcement (R2): a non-conforming concrete write into a {:T} map is the
+// type_error the runtime raises. The residual is the declared updated-copy Map
+// (unchanged) — the receiver's tag drives the check, not the residual.
+func setMapTypedReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TMap)
+	if len(args) == 3 {
+		d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+		res = d2TypedMapResidual(args[2]) // typed carrier: chained writes + read narrowing
+	}
+	return []Value{res}
 }
 
 func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -994,9 +1268,15 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		return nil, r.AqlError("index_out_of_range",
 			fmt.Sprintf("set: index %d out of range for list of length %d", idx, n), "set")
 	}
+	// R2: a typed list ([:T]) enforces + recursively re-tags on write (see
+	// setMapHandler) and keeps the tag on the returned copy.
+	tagged, werr := d2AdoptTyped(r, args[2], args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
 	// Entirely-immutable invariant for the copy-returning column: see
 	// setMapHandler.
-	val, aerr := eng.AdoptIntoNode(args[1])
+	val, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		return nil, aerr
 	}
@@ -1005,5 +1285,9 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		out[i] = lst.Get(i)
 	}
 	out[idx] = val
-	return []Value{NewList(out)}, nil
+	res := NewList(out)
+	if elem, ok := args[2].ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return []Value{res}, nil
 }

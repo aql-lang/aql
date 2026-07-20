@@ -32,6 +32,11 @@ var behaveNative = NativeFunc{
 	Name: "behave",
 
 	Signatures: []Signature{
+		// behave STORES its fn for later invocation through the type's
+		// Behavior wrapper (never re-stepped on the VM tape) — the store-fn
+		// pattern log/patrun/service already carry, so a capture-free fn
+		// operand bakes as an inert const instead of refusing "function-
+		// valued operand" (probe-verified: `behave "compare" (… /r)`).
 		{
 			Args:      []*Type{TAtom, TFunction},
 			QuoteArgs: map[int]bool{0: true},
@@ -40,12 +45,14 @@ var behaveNative = NativeFunc{
 
 			// String form for the behavior name (`behave "compare" fn […]`).
 			-1,
+			CompileEffect: CompileStoresFn,
 		},
 
 		{
 			Args:    []*Type{TString, TFunction},
 			Impl:    Go(behaveHandler),
 			Returns: []*Type{}, BarrierPos: -1,
+			CompileEffect: CompileStoresFn,
 		},
 	},
 }

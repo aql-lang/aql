@@ -101,3 +101,42 @@ func TestClosureBodyUnappliedFnValueSound(t *testing.T) {
 		}
 	})
 }
+
+// The trailing-apply QUOTE discipline (probe-found off-corpus divergence,
+// 2026-07-17): a compiled LOCAL push carries the stored value VERBATIM —
+// including the construction-time quote of a `/r` reference — while the
+// interpreter's per-read word substitution strips one quote level before the
+// paren auto-apply. callDynTrailTop now strips Quoted from the applied copy
+// (the op stands for a READ-substituted arrival), and RecordDynApply fences
+// an INLINE-quoted fn (the interpreter keeps that paren un-collapsed).
+func TestTrailingApplyQuoteDiscipline(t *testing.T) {
+	// The miscompile shape: a captured `/r` comparator applied in an each
+	// body compiled [[1 1]] (the still-quoted fn islanded as inert) vs the
+	// interpreter's [[3 3]].
+	mustCompileWithParity(t,
+		`def g fn [[c:Function][List][[1 2] each [(1 2 c)]]] g (([a:Integer b:Integer]=>[a add b])/r)`,
+		"[[3 3]]")
+	// A quote-wrapped ARGUMENT: the param read strips one level, so it
+	// applies identically.
+	mustCompileWithParity(t,
+		`def g fn [[c:Function][Integer][(1 2 c)]] g (quote (fn [[a:Integer b:Integer][Integer][a add b]]))`,
+		"[3]")
+	// An INLINE quote at the trailing position stays inert in BOTH engines
+	// (no read strips it): the record fence keeps the paren un-collapsed.
+	mustCompileWithParity(t,
+		`(1 2 (quote (fn [[a:Integer b:Integer][Integer][a add b]])))`,
+		"[1 2 fn (Integer, Integer)]")
+	// An EVENT-provenance fn (a direct call result) has NO read substitution,
+	// so its runtime quote state is unknowable at check time: a QUOTED
+	// return stays inert in the interpreter (the strip would wrongly apply
+	// it — PR #280 review: compiled 3 vs interp [1 2 fn]) while an UNQUOTED
+	// return auto-applies (the un-collapsed model would wrongly stay
+	// residual). RecordDynApply REFUSES both — the interpreter owns the
+	// shape, parity through the fallback.
+	mustRefuseWithParity(t,
+		`def choose fn [[][Function][quote (fn [[a:Integer z:Integer][Integer][a add z]])]] (1 2 choose)`,
+		"trailing fn-value apply over a call result")
+	mustRefuseWithParity(t,
+		`def mk fn [[][Function][fn [[a:Integer z:Integer][Integer][a add z]]]] (1 2 (mk))`,
+		"trailing fn-value apply over a call result")
+}

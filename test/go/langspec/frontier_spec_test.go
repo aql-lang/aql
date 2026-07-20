@@ -165,9 +165,24 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// variadic region's top needs the part-2 region-top lowering
 	// (strip-input over a variadic region; see the L-DO implementation map
 	// in the completion plan).
-	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:  {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding", failsWith: "residual shape beyond Stage 1"},
-	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`: {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input", failsWith: "residual shape beyond Stage 1"},
-	docMod + `do [M 3] error [dot code]`:                                       {why: "plan Phase 5 (L-DO part 2): a module-export VALUE in the variadic region is not event-produced, so the mark-window probe declines and the residual materialise arm refuses", failsWith: "residual value not statically materialisable"},
+	// Re-diagnosed 2026-07-20 (PR #280 review): the def-bound variadic
+	// region now refuses at lowerCall's store-prologue gate — a promoted
+	// variadic result's stores pop success-arity values the raise path
+	// never delivers — one stage before the "residual shape beyond Stage 1"
+	// decline these rows used to surface. Same sound refusal, earlier and
+	// truer diagnosis.
+	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:  {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding", failsWith: "variadic result promoted to frame slots"},
+	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`: {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input", failsWith: "variadic result promoted to frame slots"},
+	// PR #280 review's promotion-gate representative (the variation
+	// differential's prefix-stack find): a BRANCH-VARIANT multi-out do body
+	// (0-or-2 values per arm) is variadic without any raise in sight, and a
+	// dirty-stack prefix forces its promotion — the same exact-arity seat
+	// hazard as the fallible regions.
+	`7 def b true  do [1 2 (if b [] [9 9])]`: {why: "PR #280 review: branch-variant multi-out do region promoted under a dirty-stack prefix", failsWith: "variadic result promoted to frame slots"},
+	// GRADUATED 2026-07-17 (§9.1): the `do [M 3] error [dot code]` row
+	// compiles — an identity-less dyn-body out (the module-export instance)
+	// now mints a fresh ID at the record, restoring its tape placement and
+	// event linkage, so the mark-window island owns the region as usual.
 	// GRADUATED 2026-07-14 (the mark-window island, L-DO part 2b): the
 	// error-over-the-variadic-region rows — do [(M.boom 5) "x"] / the [Any]
 	// user-fn twin / the branch-arm nesting / the StructUtil.parse chained

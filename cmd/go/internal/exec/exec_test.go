@@ -270,7 +270,7 @@ func TestExecRefusingProgramFallsBack(t *testing.T) {
 	defer srv.Close()
 
 	var got execResponse
-	post(t, srv, "/v1/exec", execRequest{Code: `def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)`}, &got)
+	post(t, srv, "/v1/exec", execRequest{Code: `def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"X"} s)`}, &got)
 	if got.Error != "" {
 		t.Fatalf("refusing program must fall back to the interpreter: %s", got.Error)
 	}

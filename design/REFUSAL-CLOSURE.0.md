@@ -389,44 +389,40 @@ completion plan's Phase-5 "L-DO part 2b" (see
 RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md); those landings flip the
 frontierCompileLedger rows. Until then the closure claim excludes them.
 
-### 9.2 Probe-verified expressible shapes with no section
+### 9.2 Probe-verified expressible shapes — RESOLVED 2026-07-17
 
-- **Splice over a computed payload** (engine.go:3852) — `def xs (range
-  1 3) def d word xs d` (pinned in multiout_closure_test.go). Candidate:
-  the §4 dyn-body / mixed re-step island generalised beyond branch arms.
-- **Interpolated XML with a runtime-computed part** (engine.go:4225) —
-  the string sibling already compiles via RecordInterp/OpInterp; mirror
-  it (an OpInterpXml rebuilding the tree per run, or a re-step island).
-- **Loop-carried store of a variadic result** (lower.go:246) —
-  `for 3 [ def acc (for 2 [1]) ]`. §5 covers only the top-level
-  def-of-loop-collect; this needs a STORE_LOCAL_FROM_MARK sibling — and
-  inherits §5's check-mode blocker.
-- **Curried-factory body provenance** (emit.go:2959, "fn mk: body result
-  of unknown provenance") — `((mk 1) 2) 3`. Candidate: extend
-  tryReturnedClosure to capturing/nested closures via §7a's
-  unpooled-const capture mechanism. Note emit.go:6343 ("fn-value apply
-  arity mismatch — curried chain or partial apply", currently ZERO test
-  pins) is shadowed upstream by :2959 for this shape and remains the
-  backstop once :2959 graduates — pin both.
-- **Paren-bounded fn-value application** (engine.go:6882, "fn-value
-  application bounded by a paren (dynamic value precedes args)") —
-  `add 1 ((m get "f") 5)`, the stamp suite's canonical refusing fixture.
-  Distinct from §3 (a paren-close guard on a LEADING dynamic carrier,
-  not the arrival-loop member event; the trailing arm already compiles
-  via RecordDynApply). Candidates: extend RecordDynApply to the leading
-  case with the paren as the event boundary, or a §1-style mark-bounded
-  island over the paren window. Retiring the AQL_COMPILE_FALLBACK hatch
-  (Sequencing) requires re-pointing or graduating the two stamp-suite
-  pins whose fixture this is — the same bookkeeping as zzRefusingRow.
-- **Surface-shape typed dispatch** (engine.go:7857) — the S2 generic
-  surface call (`g (make Circle {})` over `gen [(T extends Shape)]`).
-  Candidate: runtime re-match over the exposer's registered op (the
-  §2/§6b precedent), or a designed opt-out.
-- **fn/afn construction over a computed operand**
-  (native_definition.go:1282/:1446) — `fn Integer (mk [String])
-  ['five']`. Either a §8-style designed opt-out (the site's rationale:
-  the compiled unit would bake the check-time placeholder) or a runtime
-  re-construction op in the OpBindTyped style.
+- **9.2b Splice over a computed payload** — **LANDED** (b0689cb8):
+  RecordSpliceDyn / OpSpliceDyn spreads a DATA payload verbatim and
+  DEFERS a code-bearing one to the interpreter; top-frame only.
+- **9.2c Interpolated XML with a runtime-computed part** — **LANDED**
+  (00de15df): OpInterpXml, the tree twin of OpInterp — buildXmlFromTmpl
+  collects holes in traversal order, rebuildXmlFromTmpl re-assembles.
+- **9.2d Curried-factory body provenance** — **LANDED** (944e0c65):
+  tryReturnedClosure now admits any NAMELESS fn value (the `=>` form
+  already compiled; the verbose `fn` form just lacked the Anonymous
+  flag). Three-level currying remains open (§9.4 emit.go:3068).
+- **9.2e Paren-bounded LEADING fn-value application** — **LANDED**
+  (ba3cca94): a guarded OpCallDynMethod at the paren boundary (the §3
+  chassis) gated on member-read provenance; the window collapses to one
+  carrier before any trailing op. Unmasked + fixed a latent service
+  capturing-handler miscompile (CompileFnHandlerStrict).
+- **9.2f Surface-shape typed dispatch** — CONFIRMED already compiles:
+  the documented fixture (`def g gen [(T extends Comparable)] …`)
+  compiles with parity; the engine.go:7956 refusal is the S2 GENERIC
+  SURFACE CALL (`g (make Circle {})` over an exposer op) — a DIFFERENT,
+  still-open shape (§9.4 open list). Pinned in TestS9SurfaceTypedDispatch.
+- **9.2a Loop-carried store of a variadic result** — **DESIGNED
+  FOLLOW-ON**: the §5 first-value split one frame down, but the
+  splice-at-depth bind is stack-top-relative while a loop-body fragment
+  needs FRAGMENT-base-relative depth (the naive splice miscompiled
+  [5 0 5 0]). Needs a fragment-relative splice + the spilled rest
+  flowing as the enclosing loop's variadic body — its own landing.
+  Pinned refusing with parity (TestS9LoopCarriedVariadicStore).
+- **9.2g fn/afn construction over a computed operand** — **DESIGNED
+  KEEP**: the param PATTERN is the runtime value, so a compiled unit
+  bakes the check-time carrier; a per-evaluation FnDefInfo
+  re-construction op is unjustified for so exotic a shape (§8-class).
+  Pinned refusing (TestS9FnComputedOperand).
 
 ### 9.3 Residual guard-owned declines
 
@@ -434,26 +430,56 @@ The typed-def RecordTypedBind decline arms (native_definition.go:646
 dynamic-refinement reparent, :717 fn-predicate bind, :998 DepScalar
 validation — the first two pinned) and the shaped-method guards
 (method_shape.go:213 zero-arg landing, :482 operand of unknown
-provenance — both pinned) stay interpreter-owned; each should be marked
-expressible-keep or defensive-only as it is audited.
-(callable_words.go:250's gradual-Any collection ambiguity is
-DEFENSIVE-ONLY — every shipping Callable word carries CompileDynBody or
-CrossCollectionTokenShape; pinned white-box in dynbody_unit_test.go.)
+provenance — both pinned) stay interpreter-owned. AUDITED 2026-07-17:
+the RecordTypedBind arms and method_shape.go:482 are DESIGNED-KEEP
+(no-compile-home operand provenance / a validate-reparent the runtime
+OpBindTyped already mirrors where compilable); method_shape.go:213 is
+OPEN (a 0-arg member auto-apply before a non-inert window — a §3
+extension). callable_words.go:250's gradual-Any collection ambiguity is
+DEFENSIVE-ONLY (every shipping Callable word carries CompileDynBody or
+CrossCollectionTokenShape; pinned white-box in dynbody_unit_test.go).
+See design/REFUSAL-CLOSURE-S94-AUDIT.10.md for the full per-site table.
 
-### 9.4 The Stage-2/3 raise-site tail
+### 9.4 The Stage-2/3 raise-site tail — AUDITED 2026-07-17
 
-~50 further MarkUncompilable sites (clusters in emit.go 2294–4360 and
-lower.go) carry neither a section nor an unreachability argument.
-Several are PINNED reachable: "branch reads enclosing computation"
-(lower.go:528), the fn-body residual family ("body leaves extra values"
-/ "result is a variadic loop value" / "result above a literal",
-lower.go:1677), "apply of a dynamic fn value not at the body tail"
-(emit.go:3015), "anonymous function dispatch" (emit.go:4002). Where one
-of these is subsumed by a §-mechanism (e.g. dynamic-apply-not-at-tail
-under a generalised §1 body-window re-step), the subsumption must be
-stated when that mechanism lands and the corresponding pins flipped;
-where it is a designed keep (as lower.go:1108's consumed side-effect
-loop already is, per §5), say so; the remainder need the audit.
+A parallel audit classified all **71** MarkUncompilable / refusal
+raise-sites across emit.go / engine.go / lower.go / carrier.go /
+callable_words.go / core_helpers.go / method_shape.go / user_poly.go.
+Verdict split: **5 subsumed, 23 designed-keep, 16 defensive-only, 27
+open** (a genuinely-compilable shape with no landed mechanism yet). No
+hidden miscompiles surfaced — every open site is a known Stage-3
+higher-order gap or an unknown-provenance residual tail, each refusing
+soundly with interpreter parity today. The groups:
+
+- **subsumed** (5) — a landed mechanism now compiles the shape; the site
+  survives only as the mechanism's own decline backstop: emit.go:3026
+  (§7a capture mint), emit.go:4193 (§2 rematch / §1 drift), engine.go:3869
+  (§9.2b splice), engine.go:4158 (OpInterp), engine.go:4258 (§9.2c
+  OpInterpXml). The section-level graduations engine.go:3110 (§1), :3161
+  (§3), :6959 (§9.2e) narrow to their non-terminal / non-member residue.
+
+- **designed-keep** (23) — permanent refusals by design (the compiled
+  form would diverge, no runtime op fixes it): context-dependent words
+  (`args`/`__pa`), full-stack words (depth/pick/roll), compile-time
+  (check-pass) words, container-fn auto-dispatch (miscompile-E belt),
+  frozen-module-rebind (§8-class), undef of a loop-carried def, the
+  per-call-spine-over-shared-member identity, closure body-count taxonomy
+  mismatch, and the operand/capture no-compile-home guards.
+
+- **defensive-only** (16) — unreachable belts (cannot fire without a
+  bytecode-level fault); most already carry `//covergate:allow`.
+
+- **open** (27) — the honest remaining frontier, in clusters: the
+  higher-order / fn-value-in-body family (emit.go:3124/3157/3176 apply /
+  unapplied-fn residual, :4114 anonymous dispatch, :4326/:4336 a fn value
+  reaching an invoking native), the if-arm / condition unknown-provenance
+  tail (emit.go:2419-2539), the loop-carried fn-rebind (:2843/:2848), the
+  unmatched-dispatch recovery sites (engine.go:8219/8286/8351), the
+  poly-decline funnel (core_helpers.go:1032/1034 — §6's fn-predicate /
+  gradual-Any hazards), the computed-range-list loop (emit.go:4215), and
+  the S2 generic surface call (engine.go:7956). Each needs its own
+  mechanism + battery; none is a quick win.
+
 
 ## Sequencing and gates
 

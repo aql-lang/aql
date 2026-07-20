@@ -412,20 +412,17 @@ func TestBothComputedIfLowers(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE: both arms computed with a NON-event (list-form) condition needs
-	// the cond materialised above two eager values, which lowerBothComputed does
-	// not model — it stays refused and falls back with the interpreter's result.
+	// GRADUATED 2026-07-17 (the S9.4 probe sweep): both arms computed with a
+	// NON-event cond now compiles — lowerBothComputedMatCond materialises the
+	// cond above the two eager values exactly as the single-computed
+	// lowerComputedCond does, then JMP_IF_FALSE selects.
 	const listCond = `if [1 eq 1] (add 1 2) (sub 9 4)`
-	n, _ := New()
-	if np, _, _, _ := n.CompileCheck(listCond); np != nil {
-		t.Errorf("%q: both-computed with a list-form cond must NOT compile natively", listCond)
-	}
 	nb, _ := New()
-	gotC, _, errC := nb.RunCompiled(listCond)
+	gotC, compiled, errC := nb.RunCompiled(listCond)
 	nbi, _ := New()
 	gotI, _ := nbi.RunInterp(listCond)
-	if errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
-		t.Errorf("%q: fallback parity broke: gotC=%v errC=%v gotI=%v", listCond, gotC, errC, gotI)
+	if !compiled || errC != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotC) != "[3]" {
+		t.Errorf("%q: want native compile with parity [3], got compiled=%v gotC=%v errC=%v gotI=%v", listCond, compiled, gotC, errC, gotI)
 	}
 }
 
@@ -1425,39 +1422,31 @@ func TestOpMakeListCompiles(t *testing.T) {
 
 // Paren-bounded fn-value application — a method-field fn dispatch whose result
 // is consumed across a paren boundary. `m.g` is a dynamic method-field get the
-// checker cannot dispatch in place; it would otherwise flow to the residual's
-// paren-UNAWARE OpCallDynamic, which reorders a trailing op ahead of the apply
-// and miscomputes (`((m.g 3) add 1)` lowered `m.g(3 add 1)=8` instead of
-// `(m.g 3) add 1=7`). The paren-barrier guard refuses the shape so the
-// interpreter — which dispatches the concrete fn AT the paren — runs it
-// faithfully. Pairs the negative (hazard refuses + correct fallback) with the
-// positive (a simple method dispatch and a bare-word call still compile).
+// checker cannot dispatch in place. GRADUATED (REFUSAL-CLOSURE §9.2e,
+// 2026-07-17): the leading-dynamic paren apply records a guarded
+// OpCallDynMethod that COLLAPSES the window to one carrier BEFORE any
+// trailing op, so `(m.g 3) add 1` seats the apply RESULT (7) instead of the
+// old paren-unaware OpCallDynamic reorder that lowered `m.g(3 add 1)=8`. The
+// member-read provenance gate keeps a non-member leading dynamic refusing.
 func TestParenBoundedFnValueApplyFallsBack(t *testing.T) {
-	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
-	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
 	const def = `def m {g: (fn [[x:Integer][Integer][x mul 2]])} `
 
-	// NEGATIVE: the paren-bounded apply must NOT compile native (it would
-	// miscompile); RunCompiled falls back to the faithful interpreter result.
-	for _, neg := range []struct{ src, want string }{
+	// GRADUATED: the paren-bounded member-read apply now compiles natively to
+	// an OpCallDynMethod, with the correct result.
+	for _, pos := range []struct{ src, want string }{
 		{def + `((m.g 3) add 1)`, "[7]"},
-		{def + `(m.g 3) add 1`, "[7]"}, // same hazard without the outer paren
+		{def + `(m.g 3) add 1`, "[7]"}, // same shape without the outer paren
 	} {
 		a, _ := New()
-		prog, _, _, _ := a.CompileCheck(neg.src)
-		if prog != nil && !strings.Contains(prog.Disassemble(), "FALLBACK") {
-			t.Errorf("%q: a paren-bounded fn-value apply must not compile native:\n%s", neg.src, prog.Disassemble())
+		gotC, compiled, errC := a.RunCompiled(pos.src)
+		if !compiled || errC != nil {
+			t.Errorf("%q: §9.2e must compile native, got compiled=%v err=%v", pos.src, compiled, errC)
 		}
-		b, _ := New()
-		gotC, compiled, errC := b.RunCompiled(neg.src)
 		c, _ := New()
-		gotI, _ := c.RunInterp(neg.src)
-		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != neg.want {
-			t.Errorf("%q: fallback parity: compiled=%v interp=%v want=%s (err %v)", neg.src, gotC, gotI, neg.want, errC)
+		gotI, _ := c.RunInterp(pos.src)
+		if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(gotI) != pos.want {
+			t.Errorf("%q: parity: compiled=%v interp=%v want=%s", pos.src, gotC, gotI, pos.want)
 		}
-		_ = compiled
 	}
 
 	// POSITIVE: a simple method dispatch (arg directly follows, no paren
@@ -1637,10 +1626,15 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 	}
 }
 
-// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free closure
-// (the factory pattern) compiles to OpPushClosure inside its unit, and a
-// [Function]-typed CARRIER leading the residual is applied to its trailing args
-// by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
+// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free fn
+// (the factory pattern) CONST-BAKES the real FnDefInfo inside its unit
+// (re-diagnosed 2026-07-20, PR #295 merge: a captureless returned fn keeps
+// the const bake so a native that validates its fn operand's signatures —
+// parselang-fn-dispatch's [source opts] contract — reads them, where an
+// OpPushClosure ClosurePayload was rejected as "not a usable function
+// value"; only a CAPTURING fn takes the closure unit), and a
+// [Function]-typed CARRIER leading the residual is applied to its trailing
+// args by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
 func TestFactoryApplyCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
 	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
@@ -1649,7 +1643,8 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
 
 	// POSITIVE — the factory result applied to an arg compiles natively to 11,
-	// with the closure push + dynamic apply in the stream.
+	// with the const-baked fn + dynamic apply in the stream (and NO closure
+	// unit: the captureless fn must keep its FnDefInfo).
 	apply := factory + `(mk2 5) 10`
 	a, _ := New()
 	prog, reason, _, cerr := a.CompileCheck(apply)
@@ -1657,8 +1652,8 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		t.Fatalf("factory-apply did not compile: reason=%q err=%v", reason, cerr)
 	}
 	dis := prog.Disassemble()
-	if !strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "CALL_DYNAMIC") {
-		t.Fatalf("factory-apply lowered without the closure/dynamic ops:\n%s", dis)
+	if strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "(Function)") || !strings.Contains(dis, "CALL_DYNAMIC") {
+		t.Fatalf("factory-apply must lower the captureless fn as a const FnDefInfo + dynamic apply:\n%s", dis)
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(apply)
 	gotI, _ := mustNew(t).Run(apply)
@@ -1676,6 +1671,14 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		// A bare closure RESULT must not compile — a VM closure prints
 		// differently from the interpreter's FnDefInfo, so it falls back.
 		{"bare closure residual", factory + `(mk2 5)`},
+		// A CAPTURING returned fn with MULTIPLE own sigs declines the
+		// closure model (FirstOwnSig is not the runtime MatchFnSig pick).
+		{"capturing multi-sig returned fn",
+			`def mk fn [[x:Integer][Function][(fn [[a:Integer][Integer][a add x] [b:String][String][b]])]] ((mk 1) 2)`},
+		// A CAPTURING returned fn with a value-PATTERN param (no bare type —
+		// fnValueInputs' Any default) reaches the probe and declines there.
+		{"capturing pattern-param returned fn",
+			`def mk fn [[x:Integer][Function][(fn [[0][Integer][x]])]] ((mk 5) 0)`},
 	} {
 		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
 		gI, eI := mustNew(t).Run(neg.src)

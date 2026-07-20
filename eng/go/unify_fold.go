@@ -62,6 +62,41 @@ func sliceAt(elems []Value) func(int) Value { return func(i int) Value { return 
 // unifyMapValues unifies the value at each key of m, sourcing the left side
 // from leftFor(key), and tags failures with "key:<k>". Backing the
 // typed-map-vs-concrete traversal: leftFor returns the shared child type.
+// unifyCarrierVsTyped handles an abstract CARRIER (ShapeCarrier — Data==nil,
+// Carrier=true) unified against a typed-container constraint (typedShape =
+// ShapeTypedList / ShapeTypedMap). The canonical case is a check-mode
+// `(flex […])` residual (a bare Flex{Map,List} carrier with no shape tracking)
+// meeting a `{:T}` / `[:T]` def annotation: accept GRADUALLY and tag the
+// carrier with the element type so the flex binding's reads narrow and writes
+// enforce; the concrete elements are re-validated at runtime (the flex body is
+// concrete there). Without this the carrier fails the IsListShape/IsMapShape
+// family guard — the flex-{:T} false-reject. Returns (_, false) when neither
+// side is that pair. Called from within a family handler, so the carrier's
+// Parent already conforms to that family. See TYPED-CONTAINER-TAG-RETENTION.0.md.
+func unifyCarrierVsTyped(a Value, sa ValueShape, b Value, sb ValueShape, typedShape ValueShape, flexType *Type) (Value, bool) {
+	var carrier, typed Value
+	switch {
+	case sa == ShapeCarrier && sb == typedShape:
+		carrier, typed = a, b
+	case sb == ShapeCarrier && sa == typedShape:
+		carrier, typed = b, a
+	default:
+		return Value{}, false
+	}
+	// Scope to a genuine FLEX-family carrier (Parent == FlexMap/FlexList). A
+	// general dynamic carrier (e.g. `context get`, whose bound may be provably
+	// disjoint from the container family) must fall through to the ordinary
+	// narrowing / disjointness rules, NOT be optimistically tagged here — that
+	// over-broad match suppressed the dynamic narrowing-through-use diagnostic.
+	if carrier.Parent == nil || !carrier.Parent.ConformsTo(flexType) {
+		return Value{}, false
+	}
+	ct, _ := AsChildType(typed)
+	out := carrier
+	out.SetElemConstraint(ct.Child)
+	return out, true
+}
+
 func unifyMapValues(m ReadMap, leftFor func(key string) Value) (Value, *UnifyError) {
 	result := NewOrderedMap()
 	for _, key := range m.Keys() {

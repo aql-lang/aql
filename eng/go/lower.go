@@ -197,6 +197,27 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 			lw.emit(OpBindGlobal, gi, d.pos)
 			lw.note()
 			return ""
+		case d.srcSeq >= 0 && !lw.variadic[d.srcSeq] && d.spliceDepth >= 0 && needGlobal:
+			// The S9.1 STATIC-region first-value bind (SplitEventRegionBind):
+			// the bound value is idx 0 of a multi-out event — stack-deepest of
+			// the region, at the STATIC depth nout-1 below its top. Same
+			// splice bind as the S5 arm, plus the SIM entry for (seq, 0) is
+			// removed: unlike the variadic region (one sim entry standing for
+			// the whole region), the static region's results each own a slot
+			// and the spliced value's slot is gone at run time.
+			gi := len(lw.p.GlobalBinds)
+			lw.p.GlobalBinds = append(lw.p.GlobalBinds, GlobalBindSpec{
+				Name: d.name, Depth: d.depth, Splice: true, SpliceFromTop: d.spliceDepth,
+			})
+			lw.emit(OpBindGlobal, gi, d.pos)
+			for i := len(lw.vm) - 1; i >= 0; i-- {
+				if lw.vm[i].seq == d.srcSeq && lw.vm[i].idx == 0 {
+					lw.vm = append(lw.vm[:i], lw.vm[i+1:]...)
+					break
+				}
+			}
+			lw.note()
+			return ""
 		case d.srcSeq >= 0 && lw.variadic[d.srcSeq]:
 			// A def of a VARIADIC producer (a loop collect) has no single
 			// value to bind — the same Stage-2 boundary every other consumer
@@ -1105,6 +1126,43 @@ func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
 	return storeSrc
 }
 
+// countRefsAndBurials runs planValueDefLocals' operand scans over the
+// top-level events, filling the caller's maps in place: refs counts each
+// producer's idx-0 consumptions (top-level + fragment); fragRef marks
+// producers referenced from INSIDE a branch/loop fragment (the reference
+// crosses the fragment's scope floor, so the producer is reachable there
+// only as a frame local — a single cross-floor read still needs the
+// local); buried marks producers consumed mid-body under an intervening
+// value-leaving event (the burial doc sits on the leaverPrefix
+// computation at the call site). Factored out of planValueDefLocals for
+// the lint complexity ceiling — one scan, no behavior change (PR #295
+// merge: main's burial triggers plus this branch's promotion triggers
+// crossed gocyclo's 70 in one function).
+func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, buryOK bool, refs map[int]int, fragRef, buried map[int]bool) {
+	for i := range events {
+		forEachOperand(&events[i], func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+				if es.eventInfo[op.idx].variadicResult {
+					return
+				}
+				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
+					buried[op.idx] = true
+				}
+			}
+		})
+		forEachFragmentOperand(&events[i], func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+				fragRef[op.idx] = true
+				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
+					buried[op.idx] = true
+				}
+			}
+		})
+	}
+}
+
 func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
@@ -1172,32 +1230,8 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	if buryOK {
 		storeSrc = collectStoreSourceSeqs(events)
 	}
-	for i := range events {
-		forEachOperand(&events[i], func(op emitOperand) {
-			if op.kind == opEvent && op.resIdx == 0 {
-				refs[op.idx]++
-				if es.eventInfo[op.idx].variadicResult {
-					return
-				}
-				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
-					buried[op.idx] = true
-				}
-			}
-		})
-		// A reference inside a body fragment crosses the fragment's scope floor:
-		// the producer is only reachable there as a frame local, so count it AND
-		// flag the producer for forced promotion regardless of the top-level
-		// count (a single cross-floor read still needs the local).
-		forEachFragmentOperand(&events[i], func(op emitOperand) {
-			if op.kind == opEvent && op.resIdx == 0 {
-				refs[op.idx]++
-				fragRef[op.idx] = true
-				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
-					buried[op.idx] = true
-				}
-			}
-		})
-	}
+	es.countRefsAndBurials(events, producerIndex, leaverPrefix, storeSrc, buryOK,
+		refs, fragRef, buried)
 	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
 	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
 	// But if its (zero-value) RESULT is CONSUMED — bound by `def x (for …)`
@@ -1250,6 +1284,25 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 				captured[op.idx] = true
 			}
 		})
+	}
+	// storeSource marks a producer whose result is the SOURCE of a loop-carried
+	// def rebind (an evStore — `def acc (nodes measure)` inside a for-arm, acc
+	// pre-declared and carried). lowerStore seats such a source directly OFF THE
+	// SIM TOP (OpStoreLocal pops it into the carried slot): the rebind's producing
+	// dispatch immediately precedes the store, so the value is already on top and
+	// needs no frame local. Promoting it to a value-def local instead would strand
+	// the store looking for its source on the sim (it is now in a slot), forcing
+	// the load-from-slot store path and — more to the point — an unnecessary local.
+	// So the single-use valueDef promotion below EXEMPTS a plain store source (the
+	// `def acc (nodes measure)` loop-carried rebind). A store source that is ALSO
+	// captured / cross-fragment / dyn-env still promotes via the explicit triggers
+	// (the capture or cross-fragment read genuinely needs the slot; the store then
+	// loads it) — only the general single-use trigger backs off.
+	storeSource := map[int]bool{}
+	for _, ev := range allEvents {
+		if ev.kind == evStore && ev.store.src.kind == opEvent {
+			storeSource[ev.store.src.idx] = true
+		}
 	}
 	for _, ev := range allEvents {
 		// A fragment's residual event (an `if` arm / loop body result) PRODUCED INSIDE
@@ -1344,11 +1397,29 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// unlike the uncounted harness/accumulation feed the single-use exclusion
 		// above guards — so the store never diverges. Gated on valueDef, keeping
 		// anonymous single-use harness feeds on the Stage-3 stack layout.
+		// A NAMED user-call value-def (`def x (f …)`, marked valueDef via
+		// MarkValueDef) promotes to a frame slot even when read ONCE: storing
+		// once and re-pushing per reference IS the interpreter's
+		// def-evaluates-once semantics, and a single-use def left LOOSE on the
+		// sim cannot be seated once another computed operand is pushed above it
+		// (`def a (nd g) … a b add c add` — the chained add's operands are "not
+		// adjacent"). This mirrors the native-op value-def, which already
+		// promotes unconditionally on valueDef below; the ANONYMOUS single-use
+		// harness/accumulation feed (NOT a valueDef) stays on the Stage-3
+		// layout, unaffected. EXCEPT a plain loop-carried store source
+		// (storeSource): lowerStore seats it off the sim top, so promoting it
+		// would strand the store and mint a needless local — the explicit
+		// dyn-env / captured / fragment triggers above still promote a store
+		// source that ALSO needs the slot for a capture or cross-fragment read.
+		// buried (main's mid-body burial promotion) joins the trigger list
+		// unchanged — its own storeSrc/variadic exclusions were applied at
+		// marking time.
 		promoteUser := isUser && (forceOrder[ev.seq] || refs[ev.seq] >= 2 || buried[ev.seq] ||
 			(es.dynEnv && es.eventInfo[ev.seq].valueDef) ||
 			(captured[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
 			(fragRef[ev.seq] && !fragInternal[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
-			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef))
+			(crossFragRef[ev.seq] && es.eventInfo[ev.seq].valueDef) ||
+			(es.eventInfo[ev.seq].valueDef && !es.eventInfo[ev.seq].variadicResult && !storeSource[ev.seq]))
 		// A DEAD value-def — `def _ (f …)` bound to a name referenced ZERO times —
 		// drops its result for a USER call too, not only a native. The interpreter
 		// binds the result to that name OFF the residual stack (the binding is the
@@ -1864,6 +1935,16 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 		mi := len(lw.p.MakeMaps)
 		lw.p.MakeMaps = append(lw.p.MakeMaps, MakeMapSpec{Keys: c.mapKeys, Implicit: c.mapImpl})
 		lw.emit(OpMakeMap, mi, c.pos)
+	} else if c.spliceDyn {
+		// Spread the laid-out payload at run time (§9.2b) — value payloads
+		// spread verbatim, code-bearing ones defer to the interpreter.
+		lw.emit(OpSpliceDyn, 0, c.pos)
+	} else if c.xmlTmpl != nil {
+		// Assemble the n laid-out hole operands into an interpolated XML
+		// element (§9.2c); the template skeleton rides in XmlInterps.
+		xi := len(lw.p.XmlInterps)
+		lw.p.XmlInterps = append(lw.p.XmlInterps, XmlInterpSpec{Tmpl: *c.xmlTmpl, NHoles: n})
+		lw.emit(OpInterpXml, xi, c.pos)
 	} else if c.interp {
 		// Assemble the n laid-out hole operands into a template string (a computed
 		// interpolation, `` `got ${x}` ``); the literal segments ride in Interps.
@@ -1894,6 +1975,23 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 	// top — so the residual re-pushes them in idx order. Nothing is left on the
 	// simulated stack either way.
 	if slot, ok := lw.promoted[ev.seq]; ok {
+		// A MULTI-OUT VARIADIC call result has no fixed arity to seat: the
+		// stores pop exactly nout values while the runtime count is
+		// variable — a fallible catch region delivers ONE caught Error on
+		// the raise path (probe-pinned: `def x (do [(0 div 0) "a" "b"]
+		// error [dot code]) x` underflowed STORE_LOCAL at run time — PR
+		// #280 review, whether latched (L-DO) or dyn-body-marked), and a
+		// splice-dyn spread's count is payload-sized. lw.variadic covers
+		// only LOOP regions, so the record-side mark must gate here;
+		// refusing at the promotion is the earliest true diagnosis, so the
+		// frontier pins that used to surface later-stage reasons re-pinned
+		// to this one. A SINGLE-out variadic (`def ok (do b error [drop
+		// false])` — the dyn-env stored-handler shape) keeps its promotion:
+		// its one store matches the one value BOTH the success and the
+		// caught path deliver.
+		if lw.es != nil && c.nout >= 2 && lw.es.eventInfo[ev.seq].variadicResult {
+			return c.word + ": variadic result promoted to frame slots (runtime count differs from the static seat)"
+		}
 		for i := c.nout - 1; i >= 0; i-- {
 			lw.emit(OpStoreLocal, slot+i, c.pos)
 		}
@@ -2710,6 +2808,9 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 // slot.
 func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
 	br := ev.br
+	if br.cond.kind != opEvent {
+		return lw.lowerBothComputedMatCond(ev)
+	}
 	if len(lw.vm) < 3 ||
 		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
 		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) ||
@@ -2736,6 +2837,48 @@ func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
 	(*lw.code)[jend].Arg = int32(len(*lw.code))
 	// Sim: the three input slots (cond/then/else) collapse to one merge slot.
 	lw.vm = lw.vm[:len(lw.vm)-3]
+	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
+	lw.note()
+	return ""
+}
+
+// lowerBothComputedMatCond lowers `if cond (a) (b)` when the cond has NO
+// eager stack home (a condFrag list body, or a const / local / type value —
+// computedArmCondOK's non-event shapes): the entry sim is [thenVal, elsVal]
+// and the cond MATERIALISES above them exactly as the single-computed
+// lowerComputedCond does, then JMP_IF_FALSE selects. TRUE/fall-through: the
+// result is thenVal, so DROP the elsVal on top; FALSE: SWAP + DROP leaves
+// elsVal. Both eagers evaluated in BOTH engines (paren eagerness), so the
+// selection-only lowering is the identical semantics the event-cond arm
+// already compiles.
+func (lw *lowerer) lowerBothComputedMatCond(ev *emitEvent) string {
+	br := ev.br
+	if len(lw.vm) < 2 ||
+		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
+		!slotIs(lw.vm[len(lw.vm)-2], br.thenVal) {
+		return "if: both-computed stack layout (Stage 2)"
+	}
+	if lw.variadic[br.thenVal.idx] || lw.variadic[br.elsVal.idx] {
+		return "if: both-computed arm is a variadic loop value (Stage 2)"
+	}
+	var jf int
+	if br.condFrag != nil {
+		if reason := lw.lowerFragment(br.condFrag, &br.condOut, false, br.pos); reason != "" { //covergate:allow the condFrag re-lowers after passing the recording pass's probe (RecordBranch), so a failure needs a bytecode-level fault; the single-computed twin (lowerComputedCond) carries the identical arm (§compiler)
+			return reason
+		}
+		jf = lw.emit(OpJmpIfFalse, 0, br.pos)
+	} else {
+		lw.pushOperand(br.cond, br.pos)
+		jf = lw.emit(OpJmpIfFalse, 0, br.pos)
+		lw.vm = lw.vm[:len(lw.vm)-1]
+	}
+	lw.emit(OpDrop, 0, br.pos)
+	jend := lw.emit(OpJmp, 0, br.pos)
+	(*lw.code)[jf].Arg = int32(len(*lw.code))
+	lw.emit(OpSwap, 0, br.pos)
+	lw.emit(OpDrop, 0, br.pos)
+	(*lw.code)[jend].Arg = int32(len(*lw.code))
+	lw.vm = lw.vm[:len(lw.vm)-2]
 	lw.vm = append(lw.vm, vmSlot{seq: ev.seq})
 	lw.note()
 	return ""

@@ -58,7 +58,9 @@ func sortListHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	sort.SliceStable(out, func(i, j int) bool {
 		return compareForSort(out[i], out[j]) < 0
 	})
-	return []Value{eng.NewList(out)}, nil
+	// #4 (round 3): sort reorders the list in place of a copy — retain the
+	// source [:T] tag so downstream reads/writes stay typed.
+	return []Value{d2RetainElem(eng.NewList(out), args[0])}, nil
 }
 
 func sortMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -86,7 +88,10 @@ func sortMapHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	for _, p := range pairs {
 		out.Set(p.k, p.v)
 	}
-	return []Value{eng.NewMap(out)}, nil
+	// #4 (round 3): sorting a {:T} map by value reorders its entries without
+	// changing them — the result is still {:T}, so retain the tag (a map DOES
+	// carry an element tag, symmetric with the list reorders above).
+	return []Value{d2RetainElem(eng.NewMap(out), args[0])}, nil
 }
 
 // compareForSort wraps eng.CompareValues with a string-form fallback

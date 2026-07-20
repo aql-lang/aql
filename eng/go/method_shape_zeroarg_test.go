@@ -250,15 +250,52 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 		t.Fatal("genuine-0-arg delegation member must be annotated")
 	}
 	e := z9Engine(t, r, []Value{carrier, NewWord("z9unmodelable")})
-	if e.tryShapedMethodDispatch(0) {
-		t.Fatal("an unclaimable landing must not be consumed")
-	}
+	// WIDENED 2026-07-17 (the S9.4 probe sweep): an ALL-0-ARG member skips
+	// the statement-window scan — it auto-fires with no operands, so the
+	// following token belongs to the NEXT dispatch and cannot decline this
+	// one. The MODEL is attempted regardless of the follower; this synthetic
+	// carrier has NO compiled home, so RecordDynMethod declines and the
+	// guard-owned refusal moves to the operand-provenance arm — still sound,
+	// still interpreter-owned.
+	e.tryShapedMethodDispatch(0)
 	es, ok := r.Check.Emit.(*EmitState)
 	if !ok {
 		t.Fatal("compile pass recorder missing")
 	}
-	if es.Compilable || !strings.Contains(es.Reason, "shaped 0-arg method landing not modelable at z9g") {
-		t.Errorf("want the guard-owned refusal, got compilable=%v reason=%q", es.Compilable, es.Reason)
+	if es.Compilable || !strings.Contains(es.Reason, "operand of unknown provenance at z9g") {
+		t.Errorf("want the operand-provenance refusal, got compilable=%v reason=%q", es.Compilable, es.Reason)
+	}
+
+	// A 0-arg member whose MODEL screens out (a NoEvalArgs sig — the arity-0
+	// apply cannot bake it) keeps the guard-owned 213 refusal: the model is
+	// attempted (the window scan is skipped for all-0-arg members) but the
+	// signature screen declines every sig, so the landing refuses rather
+	// than auto-dispatching as data (the miscompile-E belt, re-homed).
+	r2 := seam7Reg(t)
+	impl2 := Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{NewInteger(7)}, nil
+	})
+	r2.RegisterNativeFunc(NativeFunc{Name: "z9h", Signatures: []Signature{
+		{Returns: []*Type{TAny}, BarrierPos: -1, Impl: impl2, NoEvalArgs: map[int]bool{0: true}},
+	}})
+	if err := r2.Err(); err != nil {
+		t.Fatalf("register z9h: %v", err)
+	}
+	member2 := z9Member("z9h", r2, Signature{
+		Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewWord("z9h")}),
+	})
+	done2 := r2.Check.BeginCompilePass()
+	defer done2()
+	carrier2 := NewDynamicCarrier(TAny)
+	r2.Check.NoteMethodShape(carrier2, member2)
+	e2 := z9Engine(t, r2, []Value{carrier2, NewWord("z9unmodelable")})
+	e2.tryShapedMethodDispatch(0)
+	es2, ok2 := r2.Check.Emit.(*EmitState)
+	if !ok2 {
+		t.Fatal("compile pass recorder missing (z9h)")
+	}
+	if es2.Compilable || !strings.Contains(es2.Reason, "shaped 0-arg method landing not modelable at z9h") {
+		t.Errorf("want the 0-arg guard refusal, got compilable=%v reason=%q", es2.Compilable, es2.Reason)
 	}
 }
 
