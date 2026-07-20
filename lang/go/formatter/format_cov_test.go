@@ -441,8 +441,9 @@ func TestEmitNodeDirect(t *testing.T) {
 		{NdNewline, "", ""},
 		{NodeKind(99), "zz", ""},
 	}
+	r := newRenderer(DefaultRules())
 	for _, tt := range tests {
-		if got := emitNode(&Node{Kind: tt.kind, Text: tt.text}, 0); got != tt.want {
+		if got := r.emitNode(&Node{Kind: tt.kind, Text: tt.text}, 0); got != tt.want {
 			t.Errorf("emitNode(kind=%d) = %q, want %q", tt.kind, got, tt.want)
 		}
 	}

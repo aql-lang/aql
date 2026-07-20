@@ -30,12 +30,17 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 // Go-implemented words. Each wraps a function in lang/go/formatter so the
 // language-level word and the CLI share one driver:
 //
-//   - format          — format an AQL source string.
+//   - format          — format an AQL source string (canonical rule table).
 //   - format-markdown — reformat AQL inside ```aql fences and
 //     <!-- aqlfmt --> … <!-- /aqlfmt --> regions of a
 //     Markdown document, leaving the rest untouched.
 //   - format-html     — reformat AQL inside <!-- aqlfmt --> regions of an
 //     HTML document, leaving the rest untouched.
+//   - rules           — the canonical layout rule table as AQL data.
+//   - format-with     — format under a (partial) rule-table override.
+//   - tree            — the layout CST as a $kind-tagged value tree.
+//   - render          — the document algebra (see fmtdoc.go).
+//   - kind / children — the rule-dispatch vocabulary (see fmtrule.go).
 //
 // Registered into the module's isolated sub-registry by BuildFmtModule;
 // every signature is BarrierPos -1 (all-forward eligible), the rule module
@@ -47,6 +52,8 @@ var FmtNatives = append([]native.NativeFunc{
 	stringFormatterNative("format-html", formatter.FormatHTML),
 	renderDocNative(),
 	fmtTreeNative(),
+	fmtRulesNative(),
+	fmtFormatWithNative(),
 }, fmtRuleNatives...)
 
 // stringFormatterNative builds a String -> String native named name whose

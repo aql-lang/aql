@@ -180,20 +180,34 @@ func NodeKindName(k NodeKind) string {
 	return "unknown"
 }
 
-// FormatWith formats AQL source using the supplied parser, then applies
-// the (parser-independent) layout rules and emits. A nil parse falls back
-// to DefaultParse. This is the seam through which a tabnas-based,
-// trivia-preserving parser is injected — the layout rules
-// (capitalizeTypesInTree, elideFnBrackets) and the emitter operate on the
-// tree regardless of which front end produced it.
+// FormatWith formats AQL source using the supplied parser and the default
+// rule table. A nil parse falls back to DefaultParse. This is the seam
+// through which a tabnas-based, trivia-preserving parser is injected — the
+// layout rules and the emitter operate on the tree regardless of which
+// front end produced it.
 func FormatWith(src string, parse Parse) string {
+	return FormatRulesWith(src, DefaultRules(), parse)
+}
+
+// FormatRules formats AQL source under the supplied declarative rule table
+// (see Rules) with the default parser. `Fmt.format-with` is its AQL twin.
+func FormatRules(src string, ru Rules) string {
+	return FormatRulesWith(src, ru, nil)
+}
+
+// FormatRulesWith is the fully-parameterised formatter: BOTH the parser
+// (the tree front end) and the rule table (the layout stylesheet) are
+// parameters. The semantics-preserving canonicalisations
+// (capitalizeTypesInTree, elideFnBrackets) run on the tree, then the
+// processor interprets the rules over it.
+func FormatRulesWith(src string, ru Rules, parse Parse) string {
 	if parse == nil {
 		parse = DefaultParse
 	}
 	tree := parse(src)
 	capitalizeTypesInTree(tree)
 	elideFnBrackets(tree)
-	return emitRoot(tree, 0)
+	return newRenderer(ru).emitRoot(tree, 0)
 }
 
 // --- Tokenizer ---
@@ -823,7 +837,7 @@ func unbracketRet(ret *Node) *Node {
 
 // --- Emitter ---
 
-func emitRoot(n *Node, indent int) string {
+func (r *renderer) emitRoot(n *Node, indent int) string {
 	stmts := splitStatements(n.Children)
 	var lines []string
 	prevBlank := false
@@ -836,7 +850,7 @@ func emitRoot(n *Node, indent int) string {
 			continue
 		}
 		prevBlank = false
-		lines = append(lines, emitStatement(stmt, indent))
+		lines = append(lines, r.emitStatement(stmt, indent))
 	}
 	result := strings.Join(lines, "\n")
 	if result != "" && !strings.HasSuffix(result, "\n") {
@@ -862,54 +876,72 @@ func splitStatements(children []*Node) [][]*Node {
 	return stmts
 }
 
-func emitStatement(nodes []*Node, indent int) string {
+// emitStatement lays out one statement by trying the rule table's layout
+// STRATEGIES in their declared order — the XSLT-style template dispatch.
+// The first strategy that claims the statement produces it; an unknown
+// strategy name is inert; if none claims it, the statement stays inline.
+func (r *renderer) emitStatement(nodes []*Node, indent int) string {
 	if len(nodes) == 0 {
 		return ""
 	}
-	// A comment-only statement renders as just that comment. This must NOT
-	// fire when tokens follow the comment: a BLOCK comment (`## … ##`) is
-	// bounded, so `## bc ## foo` is a real statement whose `foo` would be
-	// dropped. (A LINE comment runs to end of line, so a statement starting
-	// with one is always comment-only anyway — len(nodes) == 1.)
-	if len(nodes) == 1 && nodes[0].Kind == NdComment {
-		return strings.Repeat(" ", indent) + nodes[0].Text
+	inline := pad(indent) + r.renderInline(nodes, indent)
+	for _, name := range r.ru.Strategies {
+		if s, ok := r.strategy(name, nodes, indent, inline); ok {
+			return s
+		}
 	}
-
-	line := strings.Repeat(" ", indent) + renderInline(nodes, indent)
-	if len(line) <= maxLineWidth {
-		return line
-	}
-
-	// A statement ending in a trailing comment stays on one line even when
-	// it overflows the width: the comment annotates the whole statement (as
-	// in `expr # returns X` doc examples) and must never be wrapped onto its
-	// own line, detached from what it annotates.
-	if last := nodes[len(nodes)-1]; last.Kind == NdComment {
-		return line
-	}
-
-	// Try fn-specific formatting first.
-	if fn := tryFnFormat(nodes, indent); fn != "" {
-		return fn
-	}
-
-	// If statement ends with a container (map/list), format it
-	// with the opening bracket on the same line.
-	if r := tryTrailingContainer(nodes, indent); r != "" {
-		return r
-	}
-
-	return wrapStatement(nodes, indent)
+	return inline
 }
 
-// tryFnFormat handles def name fn [[args] [returns] [body]] formatting.
+// strategy applies one named statement template. The bool reports whether
+// the template claimed the statement.
+func (r *renderer) strategy(name string, nodes []*Node, indent int, inline string) (string, bool) {
+	switch name {
+	case "comment-only":
+		// A comment-only statement renders as just that comment. This must
+		// NOT fire when tokens follow the comment: a statement whose first
+		// node is a comment but which carries more nodes is a real statement
+		// whose tail would be dropped. (A LINE comment runs to end of line,
+		// so a statement starting with one is always comment-only anyway —
+		// len(nodes) == 1.)
+		if len(nodes) == 1 && nodes[0].Kind == NdComment {
+			return pad(indent) + nodes[0].Text, true
+		}
+	case "inline":
+		if len(inline) <= r.ru.Width {
+			return inline, true
+		}
+	case "trailing-comment":
+		// A statement ending in a trailing comment stays on one line even
+		// when it overflows the width: the comment annotates the whole
+		// statement (as in `expr # returns X` doc examples) and must never
+		// be wrapped onto its own line, detached from what it annotates.
+		if nodes[len(nodes)-1].Kind == NdComment {
+			return inline, true
+		}
+	case "fn":
+		if s := r.stratFn(nodes, indent); s != "" {
+			return s, true
+		}
+	case "trailing-container":
+		if s := r.stratTrailingContainer(nodes, indent); s != "" {
+			return s, true
+		}
+	case "wrap":
+		return r.wrapStatement(nodes, indent), true
+	}
+	return "", false
+}
+
+// stratFn handles def name fn [[args] [returns] [body]] formatting.
 // The wrapper list contains three inner lists (one signature triple).
-// Returns "" if not applicable.
-func tryFnFormat(nodes []*Node, indent int) string {
+// Returns "" if not applicable. The trigger word and the wrapper brackets
+// come from the rule table (FnWord, ListOpen/ListClose).
+func (r *renderer) stratFn(nodes []*Node, indent int) string {
 	// Look for pattern: ... fn [wrapper]
 	fnIdx := -1
 	for i, n := range nodes {
-		if n.Kind == NdWord && n.Text == "fn" {
+		if n.Kind == NdWord && n.Text == r.ru.FnWord {
 			fnIdx = i
 			break
 		}
@@ -924,7 +956,7 @@ func tryFnFormat(nodes []*Node, indent int) string {
 	}
 
 	// Only the pristine case is handled here: the fn wrapper must be the LAST
-	// node of the statement. tryFnFormat renders just `header [args][ret][body]`,
+	// node of the statement. stratFn renders just `header [args][ret][body]`,
 	// so any node after the wrapper (a trailing `end`, a following statement on
 	// the same line, another call) would be SILENTLY DROPPED. Decline instead
 	// and let wrapStatement — which emits every node — format the whole thing.
@@ -947,19 +979,19 @@ func tryFnFormat(nodes []*Node, indent int) string {
 		return ""
 	}
 
-	prefix := strings.Repeat(" ", indent)
+	prefix := pad(indent)
 
 	// Header: everything before fn + fn + [args] [returns]
 	headerParts := nodes[:fnIdx+1]
-	headerStr := renderInline(headerParts, indent)
-	argsStr := emitNode(inner[0], indent)
-	retStr := emitNode(inner[1], indent)
-	header := prefix + headerStr + " [" + argsStr + " " + retStr
+	headerStr := r.renderInline(headerParts, indent)
+	argsStr := r.emitNode(inner[0], indent)
+	retStr := r.emitNode(inner[1], indent)
+	header := prefix + headerStr + " " + r.ru.ListOpen + argsStr + " " + retStr
 
 	body := inner[2]
 	bodyChildren := nonTrivial(body.Children)
 
-	// No single-line return here: tryFnFormat is reached only after
+	// No single-line return here: stratFn is reached only after
 	// emitStatement's renderInline of the whole statement already overflowed
 	// the width, and for this pristine single-overload shape that render
 	// equals the reconstructed `header [args][ret][body]` one-liner — so it
@@ -968,40 +1000,40 @@ func tryFnFormat(nodes []*Node, indent int) string {
 	// The body opens with " [". When the header line has room, keep the
 	// bracket on it; otherwise wrap the header, carrying the body-open
 	// bracket on the last wrapped piece so no line overflows the width.
-	openLine := header + " ["
-	if len(header)+2 > maxLineWidth {
-		openLine = wrapStatement(append(headerParts,
-			&Node{Kind: NdWord, Text: "[" + argsStr},
-			&Node{Kind: NdWord, Text: retStr + " ["},
+	openLine := header + " " + r.ru.ListOpen
+	if len(header)+1+len(r.ru.ListOpen) > r.ru.Width {
+		openLine = r.wrapStatement(append(headerParts,
+			&Node{Kind: NdWord, Text: r.ru.ListOpen + argsStr},
+			&Node{Kind: NdWord, Text: retStr + " " + r.ru.ListOpen},
 		), indent)
 	}
 
 	// Multi-line: header [
 	//   body
 	// ]]
-	bodyIndent := indent + 2
-	groups := splitIntoGroups(bodyChildren)
+	bodyIndent := indent + r.ru.Indent
+	groups := r.splitIntoGroups(bodyChildren)
 	var lines []string
 	lines = append(lines, openLine)
 	for _, grp := range groups {
-		grpLine := strings.Repeat(" ", bodyIndent) + renderInline(grp, bodyIndent)
-		if len(grpLine) <= maxLineWidth {
+		grpLine := pad(bodyIndent) + r.renderInline(grp, bodyIndent)
+		if len(grpLine) <= r.ru.Width {
 			lines = append(lines, grpLine)
 		} else {
-			lines = append(lines, wrapStatement(grp, bodyIndent))
+			lines = append(lines, r.wrapStatement(grp, bodyIndent))
 		}
 	}
-	lines = append(lines, prefix+"]]")
+	lines = append(lines, prefix+r.ru.ListClose+r.ru.ListClose)
 
 	return strings.Join(lines, "\n")
 }
 
 // renderInline renders nodes on a single line with proper attachment.
-func renderInline(nodes []*Node, indent int) string {
+func (r *renderer) renderInline(nodes []*Node, indent int) string {
 	var parts []string
 	for i, n := range nodes {
-		s := emitNode(n, indent)
-		if attach(nodes, i) && len(parts) > 0 {
+		s := r.emitNode(n, indent)
+		if r.attach(nodes, i) && len(parts) > 0 {
 			parts[len(parts)-1] += s
 			continue
 		}
@@ -1010,35 +1042,36 @@ func renderInline(nodes []*Node, indent int) string {
 	return strings.Join(parts, " ")
 }
 
-// attach returns true if node at index i should be attached to
-// the previous token (no space before it).
-func attach(nodes []*Node, i int) bool {
-	n := nodes[i]
-	// Comma, colon, question, dot attach to previous.
-	if n.Kind == NdComma || n.Kind == NdColon || n.Kind == NdQuestion || n.Kind == NdDot {
+// attach reports whether the node at index i glues to the previous token
+// (no space before it). The classes are DATA — the rule table's AttachPrev
+// / AttachNext kind sets plus the AttachDotSuffix word rule — so the
+// whitespace policy is part of the stylesheet, not the processor.
+func (r *renderer) attach(nodes []*Node, i int) bool {
+	if r.attachPrev[nodes[i].Kind] {
 		return true
 	}
-	// After colon or dot, attach to it.
-	if i > 0 && (nodes[i-1].Kind == NdColon || nodes[i-1].Kind == NdDot) {
+	// After an attach-next kind (colon, dot), glue to it.
+	if i > 0 && r.attachNext[nodes[i-1].Kind] {
 		return true
 	}
 	// If previous word ends with '.', attach (e.g., input.( → no space).
-	if i > 0 && nodes[i-1].Kind == NdWord && strings.HasSuffix(nodes[i-1].Text, ".") {
+	if r.ru.AttachDotSuffix && i > 0 && nodes[i-1].Kind == NdWord &&
+		strings.HasSuffix(nodes[i-1].Text, ".") {
 		return true
 	}
 	return false
 }
 
-func emitNode(n *Node, indent int) string {
+func (r *renderer) emitNode(n *Node, indent int) string {
 	switch n.Kind {
 	case NdRoot:
-		return emitRoot(n, indent)
+		return r.emitRoot(n, indent)
 	case NdList:
-		return emitList(n, indent)
+		return r.emitList(n, indent)
 	case NdMap:
-		return emitMap(n, indent)
+		return r.emitMap(n, indent)
 	case NdParen:
-		return emitParen(n, indent)
+		return r.emitParen(n, indent)
 	case NdWord, NdNumber, NdString:
 		return n.Text
 	case NdComment:
@@ -1063,9 +1096,9 @@ func emitNode(n *Node, indent int) string {
 	return ""
 }
 
-// tryTrailingContainer handles statements ending with a map or list.
+// stratTrailingContainer handles statements ending with a map or list.
 // Keeps the opening bracket on the same line as preceding tokens.
-func tryTrailingContainer(nodes []*Node, indent int) string {
+func (r *renderer) stratTrailingContainer(nodes []*Node, indent int) string {
 	if len(nodes) < 2 {
 		return ""
 	}
@@ -1074,67 +1107,74 @@ func tryTrailingContainer(nodes []*Node, indent int) string {
 		return ""
 	}
 
-	prefix := strings.Repeat(" ", indent)
+	prefix := pad(indent)
 	head := nodes[:len(nodes)-1]
-	headStr := renderInline(head, indent)
+	headStr := r.renderInline(head, indent)
 	container := last
 
 	if container.Kind == NdMap {
 		children := nonTrivial(container.Children)
 		entries := parseMapEntries(children)
 
-		// Try single line.
-		single := prefix + headStr + " {" + renderMapEntries(entries, indent) + "}"
-		if len(single) <= maxLineWidth { //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
+		// Try single line — but never with a line comment inside (it would
+		// swallow the closing brace). Under the canonical strategy order the
+		// `inline` template has already claimed anything that fits, so this
+		// fires only for rule tables that reorder or drop `inline`.
+		single := prefix + headStr + " " + r.ru.MapOpen + r.renderMapEntries(entries, indent) + r.ru.MapClose
+		if len(single) <= r.ru.Width && !hasLineComment(children) {
 			return single
 		}
 
 		// Multi-line with { on header line.
-		childIndent := indent + 2
-		childPfx := strings.Repeat(" ", childIndent)
+		childIndent := indent + r.ru.Indent
+		childPfx := pad(childIndent)
 		var lines []string
-		lines = append(lines, prefix+headStr+" {")
+		lines = append(lines, prefix+headStr+" "+r.ru.MapOpen)
 		for _, e := range entries {
-			lines = append(lines, childPfx+renderMapEntry(e, childIndent))
+			lines = append(lines, childPfx+r.renderMapEntry(e, childIndent))
 		}
-		lines = append(lines, prefix+"}")
+		lines = append(lines, prefix+r.ru.MapClose)
 		return strings.Join(lines, "\n")
 	}
 
 	if container.Kind == NdList {
 		children := nonTrivial(container.Children)
-		inner := renderInline(children, indent)
-		single := prefix + headStr + " [" + inner + "]"
-		if len(single) <= maxLineWidth { //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
+		inner := r.renderInline(children, indent)
+		single := prefix + headStr + " " + r.ru.ListOpen + inner + r.ru.ListClose
+		// Same comment guard and reachability as the map branch above.
+		if len(single) <= r.ru.Width && !hasLineComment(children) {
 			return single
 		}
 
 		// Multi-line with [ on header line.
-		groups := splitIntoGroups(children)
-		bodyIndent := indent + 2
+		groups := r.splitIntoGroups(children)
+		bodyIndent := indent + r.ru.Indent
 		var lines []string
-		lines = append(lines, prefix+headStr+" [")
+		lines = append(lines, prefix+headStr+" "+r.ru.ListOpen)
 		for _, grp := range groups {
-			grpLine := strings.Repeat(" ", bodyIndent) + renderInline(grp, bodyIndent)
-			if len(grpLine) <= maxLineWidth {
+			grpLine := pad(bodyIndent) + r.renderInline(grp, bodyIndent)
+			if len(grpLine) <= r.ru.Width {
 				lines = append(lines, grpLine)
 			} else {
-				lines = append(lines, wrapStatement(grp, bodyIndent))
+				lines = append(lines, r.wrapStatement(grp, bodyIndent))
 			}
 		}
-		lines = append(lines, prefix+"]")
+		lines = append(lines, prefix+r.ru.ListClose)
 		return strings.Join(lines, "\n")
 	}
 
 	return "" //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
 }
 
-// wrapStatement breaks a long statement across multiple lines.
-// It tries to break before container nodes (lists, maps, parens)
-// and keeps logical units together.
-func wrapStatement(nodes []*Node, indent int) string {
-	prefix := strings.Repeat(" ", indent)
-	contPrefix := strings.Repeat(" ", indent+2)
+// wrapStatement breaks a long statement across multiple lines with a
+// greedy fill: tokens flow onto the current line until the next one would
+// exceed the width, then continue on a hanging-indented line. This is the
+// `wrap` layout template — the fill-style whitespace the rules own (an
+// all-or-nothing group algebra cannot express it; a text-emitting template
+// trivially does).
+func (r *renderer) wrapStatement(nodes []*Node, indent int) string {
+	prefix := pad(indent)
+	contPrefix := pad(indent + r.ru.Indent)
 
 	var lines []string
 	var cur []string
@@ -1150,15 +1190,15 @@ func wrapStatement(nodes []*Node, indent int) string {
 	}
 
 	for i, n := range nodes {
-		s := emitNode(n, indent+2)
-		if attach(nodes, i) && len(cur) > 0 {
+		s := r.emitNode(n, indent+r.ru.Indent)
+		if r.attach(nodes, i) && len(cur) > 0 {
 			cur[len(cur)-1] += s
 			curLen += len(s)
 			continue
 		}
 
 		tokenLen := len(s) + 1
-		if curLen+tokenLen > maxLineWidth && len(cur) > 0 {
+		if curLen+tokenLen > r.ru.Width && len(cur) > 0 {
 			flush(contPrefix)
 		}
 		cur = append(cur, s)
@@ -1174,61 +1214,60 @@ func wrapStatement(nodes []*Node, indent int) string {
 }
 
 // emitList formats [...].
-func emitList(n *Node, indent int) string {
+func (r *renderer) emitList(n *Node, indent int) string {
 	children := nonTrivial(n.Children)
 	if len(children) == 0 {
-		return "[]"
+		return r.ru.ListOpen + r.ru.ListClose
 	}
 
 	// Try single line — but not when a line comment would swallow the `]`.
 	if !hasLineComment(children) {
-		inner := renderInline(children, indent)
-		single := "[" + inner + "]"
-		if len(single)+indent <= maxLineWidth {
+		inner := r.renderInline(children, indent)
+		single := r.ru.ListOpen + inner + r.ru.ListClose
+		if len(single)+indent <= r.ru.Width {
 			return single
 		}
 	}
 
 	// Multi-line. Split children into logical groups for wrapping.
-	groups := splitIntoGroups(children)
-	childIndent := indent + 2
-	childPfx := strings.Repeat(" ", childIndent)
+	groups := r.splitIntoGroups(children)
+	childIndent := indent + r.ru.Indent
+	childPfx := pad(childIndent)
 
 	var lines []string
 	for gi, grp := range groups {
-		line := renderInline(grp, childIndent)
+		line := r.renderInline(grp, childIndent)
 		full := childPfx + line
-		if len(full) <= maxLineWidth {
+		if len(full) <= r.ru.Width {
 			if gi == 0 {
-				lines = append(lines, "["+line)
+				lines = append(lines, r.ru.ListOpen+line)
 			} else {
 				lines = append(lines, full)
 			}
 		} else {
-			wrapped := wrapStatement(grp, childIndent)
+			wrapped := r.wrapStatement(grp, childIndent)
 			if gi == 0 {
 				// Put [ on first line of wrapped.
 				wlines := strings.Split(wrapped, "\n")
-				wlines[0] = "[" + strings.TrimLeft(wlines[0], " ")
+				wlines[0] = r.ru.ListOpen + strings.TrimLeft(wlines[0], " ")
 				lines = append(lines, strings.Join(wlines, "\n"))
 			} else {
 				lines = append(lines, wrapped)
 			}
 		}
 	}
-	lines = append(lines, strings.Repeat(" ", indent)+"]")
+	lines = append(lines, pad(indent)+r.ru.ListClose)
 	return strings.Join(lines, "\n")
 }
 
-// splitIntoGroups splits a list's children into logical statement
-// groups. A new group starts at statement-start words:
-// def, type, if, for, export, end.
-func splitIntoGroups(children []*Node) [][]*Node {
+// splitIntoGroups splits a list's children into logical statement groups.
+// A new group starts at the rule table's statement-start words.
+func (r *renderer) splitIntoGroups(children []*Node) [][]*Node {
 	var groups [][]*Node
 	var cur []*Node
 
 	for _, ch := range children {
-		if ch.Kind == NdWord && isStmtStart(ch.Text) && len(cur) > 0 {
+		if ch.Kind == NdWord && r.stmtStart[ch.Text] && len(cur) > 0 {
 			groups = append(groups, cur)
 			cur = nil
 		}
@@ -1249,40 +1288,38 @@ func splitIntoGroups(children []*Node) [][]*Node {
 	return groups
 }
 
-func isStmtStart(word string) bool {
-	switch word {
-	case "def", "refine", "if", "for", "export", "end", "make":
-		return true
-	}
-	return false
-}
-
 // emitMap formats {...}.
-func emitMap(n *Node, indent int) string {
+func (r *renderer) emitMap(n *Node, indent int) string {
 	children := nonTrivial(n.Children)
 	if len(children) == 0 {
-		return "{}"
+		return r.ru.MapOpen + r.ru.MapClose
 	}
 
 	// Parse key:value entries.
 	entries := parseMapEntries(children)
 
 	// Try single line — but not when a line comment would swallow the `}`.
-	single := "{" + renderMapEntries(entries, indent) + "}"
-	if len(single)+indent <= maxLineWidth && !hasLineComment(children) {
+	single := r.ru.MapOpen + r.renderMapEntries(entries, indent) + r.ru.MapClose
+	if len(single)+indent <= r.ru.Width && !hasLineComment(children) {
+		return single
+	}
+	// A comma-only map has children but no entries; there is nothing to lay
+	// out multi-line, so keep the single-line render (reachable only through
+	// a hostile rule table — e.g. width 0 — never at the canonical width).
+	if len(entries) == 0 {
 		return single
 	}
 
 	// Multi-line: first entry on { line, rest indented.
-	childIndent := indent + 2
-	childPfx := strings.Repeat(" ", childIndent)
+	childIndent := indent + r.ru.Indent
+	childPfx := pad(childIndent)
 	var lines []string
-	first := renderMapEntry(entries[0], childIndent)
-	lines = append(lines, "{"+first)
+	first := r.renderMapEntry(entries[0], childIndent)
+	lines = append(lines, r.ru.MapOpen+first)
 	for _, e := range entries[1:] {
-		lines = append(lines, childPfx+renderMapEntry(e, childIndent))
+		lines = append(lines, childPfx+r.renderMapEntry(e, childIndent))
 	}
-	lines = append(lines, strings.Repeat(" ", indent)+"}")
+	lines = append(lines, pad(indent)+r.ru.MapClose)
 	return strings.Join(lines, "\n")
 }
 
@@ -1403,57 +1440,52 @@ func parseMapEntries(children []*Node) []mapEntry {
 	return entries
 }
 
-func renderMapEntries(entries []mapEntry, indent int) string {
+func (r *renderer) renderMapEntries(entries []mapEntry, indent int) string {
 	var parts []string
 	for _, e := range entries {
-		parts = append(parts, renderMapEntry(e, indent))
+		parts = append(parts, r.renderMapEntry(e, indent))
 	}
 	return strings.Join(parts, " ")
 }
 
-func renderMapEntry(e mapEntry, indent int) string {
+func (r *renderer) renderMapEntry(e mapEntry, indent int) string {
 	if e.comment != nil {
 		return e.comment.Text
 	}
 	if e.key == "" {
-		return emitNode(e.value, indent)
+		return r.emitNode(e.value, indent)
 	}
 	opt := ""
 	if e.optional {
 		opt = "?"
 	}
-	return e.key + opt + ":" + emitNode(e.value, indent)
+	return e.key + opt + ":" + r.emitNode(e.value, indent)
 }
 
 // emitParen formats (...).
-func emitParen(n *Node, indent int) string {
+func (r *renderer) emitParen(n *Node, indent int) string {
 	children := nonTrivial(n.Children)
 	if len(children) == 0 {
-		return "()"
+		return r.ru.ParenOpen + r.ru.ParenClose
 	}
 
 	// A line comment inside the group forces multi-line: on one line the
 	// closing `)` would land after `# …` and be commented out.
 	if !hasLineComment(children) {
-		inner := renderInline(children, indent)
-		single := "(" + inner + ")"
-		if len(single)+indent <= maxLineWidth {
+		inner := r.renderInline(children, indent)
+		single := r.ru.ParenOpen + inner + r.ru.ParenClose
+		if len(single)+indent <= r.ru.Width {
 			return single
-		}
-		inner = renderInline(children, indent+2)
-		full := "(" + inner + ")"
-		if len(full)+indent <= maxLineWidth { //covergate:allow formatter inline/tokenizer defensive guard (§formatter)
-			return full
 		}
 	}
 
-	childIndent := indent + 2
+	childIndent := indent + r.ru.Indent
 	var lines []string
-	wrapped := wrapStatement(children, childIndent)
+	wrapped := r.wrapStatement(children, childIndent)
 	wlines := strings.Split(wrapped, "\n")
-	wlines[0] = "(" + strings.TrimLeft(wlines[0], " ")
+	wlines[0] = r.ru.ParenOpen + strings.TrimLeft(wlines[0], " ")
 	lines = append(lines, wlines...)
-	lines = append(lines, strings.Repeat(" ", indent)+")")
+	lines = append(lines, pad(indent)+r.ru.ParenClose)
 	return strings.Join(lines, "\n")
 }
 
@@ -1472,7 +1504,10 @@ func hasLineComment(nodes []*Node) bool {
 	return false
 }
 
-// nonTrivial filters out newlines and commas.
+// nonTrivial filters out newlines. Commas are KEPT — they are real layout
+// tokens (renderInline glues them to the previous token; parseMapEntries
+// skips them per-entry), which is why a comma-only map still has children
+// yet zero entries (see emitMap's empty-entries guard).
 func nonTrivial(nodes []*Node) []*Node {
 	var out []*Node
 	for _, n := range nodes {

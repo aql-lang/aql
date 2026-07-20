@@ -12,9 +12,16 @@ and is pinned **byte-identical** to the retained hand-lexer (`HandParse`)
 across the whole 73-file `.aql` corpus plus an edge-case battery
 (`formatter/format_tabnas_test.go`). The earlier "impedance mismatch → keep the
 hand-lexer" recommendation is thereby **superseded** — the conversion was
-worked all the way through (see the Phase-2 entry). One item remains open: the
-declarative rule-set conversion retiring the Go layout code (Phase 3-full) —
-it can now build on this CST. Phase 5's `describe`/help example canonicalisation
+worked all the way through (see the Phase-2 entry). **Phase 3-full is now also
+DONE**: the formatter's layout decisions live in a declarative RULE TABLE
+(`formatter.Rules`, exposed to AQL as **`Fmt.rules`** and consumed by
+**`Fmt.format-with`**) and the Go emitter is the generic PROCESSOR that
+interprets it — the XSLT split (templates are data, the processor is the
+engine). Whitespace is owned by the rules (attach classes, indent, width,
+fill strategies), which resolves the earlier "Doc algebra can't reproduce the
+output" fork: the rules emit their exact whitespace, so the output stays
+byte-identical while every layout decision became data (see the Phase-3
+entry). Phase 5's `describe`/help example canonicalisation
 is **DONE** (156 of 161 examples rewritten to fmt's canonical form, the other 5
 one-line and verified non-corrupted, pinned by `help/fmt_examples_test.go`); the
 only inline "prose examples" left are the Notation paragraph's snippets that
@@ -332,11 +339,47 @@ these as `Fmt.*` AQL):
   **`Fmt.children`** (node → child sequence) make a declarative rule table +
   a one-line `apply` driver the natural AQL expression of a formatter
   (`modules/fmtrule.go`, demonstrated end-to-end by
-  `TestFmtDeclarativeFormatter` — see "The output side" above). REMAINING: port
-  the built-in AQL-source layout rules (the table above) onto this vocabulary
-  and route `Fmt.format` through them, retiring the Go rule code (the largest
-  piece — a full rule-set port under the coverage gate, and the one that must
-  reconcile with the lexical formatter, R4).
+  `TestFmtDeclarativeFormatter` — see "The output side" above). **Phase 3-full
+  is DONE** — the built-in layout rules are now DATA and the Go emitter is the
+  processor that interprets them:
+  - **The rule table** (`formatter/rules.go::Rules`, canonical instance
+    `DefaultRules`) carries every layout decision the formatter makes: the
+    72-column width, the 2-space indent step, the statement-start grouping
+    words, the `fn` trigger, the attach classes (which token kinds glue to
+    which — the whitespace policy), the dot-suffix glue rule, the container
+    brackets, and the ordered STRATEGY list naming the statement templates
+    (`comment-only` → `inline` → `trailing-comment` → `fn` →
+    `trailing-container` → `wrap`). None of these lives in the walk any more;
+    `emitStatement` is a template dispatch over the strategy list, `attach`
+    reads the kind sets, every fit check reads the width, every bracket and
+    indent reads the table.
+  - **The AQL surface**: **`Fmt.rules`** returns the canonical table as AQL
+    data; **`Fmt.format-with <rules> <src>`** formats under a (partial)
+    override table — width, indent, attach, brackets, strategies,
+    statement-starts, fn-word are all overridable from AQL, each validated
+    (unknown keys/kinds/classes/strategies error). The AUTHORITY pin:
+    `Fmt.format-with (Fmt.rules) src == Fmt.format src` (spec row + Go
+    round-trip test) — the AQL table is the formatter's configuration, not
+    documentation of it.
+  - **How the whitespace question resolved.** The earlier "impedance" fork
+    asked how declarative rules could reproduce the emitter's greedy fill
+    when the Wadler Doc algebra breaks all-or-nothing. Answer: templates own
+    their whitespace — the XSLT model outputs TEXT, not groups. The rule
+    table's attach classes, indent, width, and the `wrap` fill template ARE
+    the whitespace policy, so the declarative formatter reproduces the
+    canonical output byte-for-byte (every golden test and corpus gate passes
+    unchanged) while a different table produces a genuinely different style.
+    No reflow happened and none was needed.
+  - **What stays in Go and why.** The processor (recursion, measurement,
+    template interpretation) is Go, exactly as an XSLT processor is not
+    written in XSLT — and it keeps `aql fmt`/LSP fast. The fully-AQL path
+    remains available and demonstrated for user-defined formatters:
+    `Fmt.tree` (the CST as a `$kind`-tagged value tree) + `Fmt.kind` /
+    `Fmt.children` dispatch + rule fns (`TestFmtTreeDeclarativeFormatter`
+    reproduces `Fmt.format` on the attachment-free core), and `sx` — the
+    structure-XPath minilang — selects into the same tree
+    (`(Fmt.tree src) mini sx '//text'`), giving XSLT-style match patterns
+    over the format CST.
   - **R4 RESOLVED (concrete finding) — the substrate does NOT reproduce the
     current output; the two use different layout models.** The Go emitter
     (`emitList`/`emitStatement`/`wrapStatement`) does **greedy fill-wrapping**:
@@ -370,9 +413,18 @@ these as `Fmt.*` AQL):
     - **(c) Extend the algebra with a `fill` primitive** matching the
       emitter's greedy wrap, then port onto it (still large; the fn/container
       strategies remain to encode).
-    The declarative substrate (Phase 3-vocabulary) is built and correct; what
-    remains is this fork, which changes either the output or the effort
-    envelope materially and is the maintainer's call.
+    **RESOLUTION (this fork is closed).** The maintainer's direction — the
+    XSLT-style algorithm should handle output whitespace — exposed the wrong
+    premise in the fork: the choice was never "Doc algebra or bust". XSLT
+    templates emit TEXT, whitespace included, so the rules can own the exact
+    current whitespace. Implemented as the rules-as-data / processor split
+    (see the Phase 3-full DONE entry above): every layout decision moved into
+    `formatter.Rules` (AQL-visible and overridable via `Fmt.rules` /
+    `Fmt.format-with`), the emitter became the table's interpreter, and the
+    output stayed byte-identical — no reflow, no imperative AQL
+    reimplementation of the walk, no algebra extension needed for the
+    default style. (A `fill` Doc primitive, option (c), remains a possible
+    future addition for Doc-DATA rule sets that want the greedy style.)
   - **Source bridge BUILT + declarative source formatter DEMONSTRATED.** The
     piece common to every fork — getting the AQL-source layout tree into AQL
     values so the rule vocabulary can reach it — is now done: **`Fmt.tree`**
@@ -406,14 +458,15 @@ these as `Fmt.*` AQL):
     (`TestFmtDeclarativeFormatter`) builds `{fmt:…}` Doc data via `each` and
     hits none of this. So fork (a) (emit Doc data, accept the reflow) is the
     AQL-*idiomatic* completion and fork (b) (byte-identical imperative port) is
-    the one that fights the tool — which sharpens, rather than resolves, the
-    maintainer decision.
-    Production `Fmt.format` deliberately stays on the fast Go emitter: an
-    engine-interpreted AQL formatter would be a large perf regression for
-    byte-identical output (fork (b)), and the clean document-algebra reflow
-    (fork (a)) is a user-visible output change needing sign-off — so retiring
-    the Go core is gated on that decision, while the declarative vocabulary is
-    fully available (and now source-capable) for user-defined formatters.
+    the one that fights the tool.
+    This finding stands as the reason the completion did NOT take fork (b)'s
+    shape (a byte-identical imperative port in AQL): that path fights the
+    interpreter. The landed resolution sidesteps it — the rules moved to
+    DATA and the fast Go processor interprets them, so production
+    `Fmt.format` keeps its performance, the canonical style is expressed as
+    an AQL-readable/overridable table, and the engine-scoping frictions
+    catalogued above never arise. The fully-AQL vocabulary stays available
+    (and source-capable) for user-defined formatters.
 - **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
   examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
   `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI

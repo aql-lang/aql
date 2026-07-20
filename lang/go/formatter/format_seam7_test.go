@@ -170,10 +170,11 @@ func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 		{Kind: NdNewline},
 		{Kind: NdWord, Text: "bye"},
 	}}
-	if got := emitNode(root, 0); got != "hi\nbye\n" {
+	r := newRenderer(DefaultRules())
+	if got := r.emitNode(root, 0); got != "hi\nbye\n" {
 		t.Errorf("emitNode(NdRoot) = %q, want %q", got, "hi\nbye\n")
 	}
-	if got := emitNode(&Node{Kind: NdComment, Text: "# c"}, 0); got != "# c" {
+	if got := r.emitNode(&Node{Kind: NdComment, Text: "# c"}, 0); got != "# c" {
 		t.Errorf("emitNode(NdComment) = %q, want %q", got, "# c")
 	}
 }
@@ -182,10 +183,11 @@ func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 // (format.go:456-458). emitRoot never calls it with an empty statement
 // (blank lines are handled earlier), so the guard is exercised directly.
 func TestEmitStatementEmptySeam7(t *testing.T) {
-	if got := emitStatement(nil, 0); got != "" {
+	r := newRenderer(DefaultRules())
+	if got := r.emitStatement(nil, 0); got != "" {
 		t.Errorf("emitStatement(nil) = %q, want empty", got)
 	}
-	if got := emitStatement([]*Node{}, 4); got != "" {
+	if got := r.emitStatement([]*Node{}, 4); got != "" {
 		t.Errorf("emitStatement([]) = %q, want empty", got)
 	}
 }
@@ -194,7 +196,8 @@ func TestEmitStatementEmptySeam7(t *testing.T) {
 // (format.go:795-797): with no children the loop appends nothing, so the
 // function returns a single group equal to the (empty) input slice.
 func TestSplitIntoGroupsEmptySeam7(t *testing.T) {
-	g := splitIntoGroups(nil)
+	r := newRenderer(DefaultRules())
+	g := r.splitIntoGroups(nil)
 	if len(g) != 1 {
 		t.Fatalf("splitIntoGroups(nil) len = %d, want 1", len(g))
 	}
@@ -203,7 +206,7 @@ func TestSplitIntoGroupsEmptySeam7(t *testing.T) {
 	}
 	// Boundary: a run with no statement-start word is one group holding
 	// all children (the other empty-groups return path).
-	one := splitIntoGroups([]*Node{{Kind: NdWord, Text: "x"}, {Kind: NdWord, Text: "y"}})
+	one := r.splitIntoGroups([]*Node{{Kind: NdWord, Text: "x"}, {Kind: NdWord, Text: "y"}})
 	if len(one) != 1 || len(one[0]) != 2 {
 		t.Errorf("splitIntoGroups(x y) = %d groups (want 1 of len 2)", len(one))
 	}
