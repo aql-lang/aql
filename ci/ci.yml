@@ -57,6 +57,19 @@ jobs:
       - name: Cover gate (ADR-008)
         run: make cover-gate
 
+      # The project knowledge graph (kg/) must stay in sync with the
+      # sources that generate it: type-check the AQL pipeline, run its
+      # test suite, rebuild the bundle, and fail if the committed
+      # kg/out/graph.json or kg/out/graph.sql drifts from the rebuild —
+      # the "keep the graph updated with each PR" rule, enforced. The
+      # build is deterministic, so an in-sync graph diffs empty.
+      - name: Knowledge graph (check, test, freshness)
+        run: |
+          make -C kg check
+          make -C kg test
+          make -C kg graph
+          git diff --exit-code kg/out
+
       # The bytecode compiler's correctness gates (differential,
       # whole-corpus parity, combination matrix, alloc ceilings) run as
       # part of `make test`. The race-detector gates do not, so run them

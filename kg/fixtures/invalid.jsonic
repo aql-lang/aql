@@ -1,0 +1,97 @@
+# invalid.jsonic — one planted defect per validation rule. The pipeline
+# must ingest what it structurally can, reject what it must, and report
+# EVERY defect as a validation issue — hiding none of them.
+#
+# Planted defects:
+#   entity "blank"      -> empty label / empty normalized label
+#   entity "alien"      -> unapproved entity type
+#   assertion 1         -> unapproved predicate
+#   assertion 2         -> dangling object entity reference
+#   assertion 3         -> confidence outside [0, 1] + inverted interval
+#   assertion 4         -> unapproved literal datatype
+#   assertion 5         -> evidence source not in the source list
+#   assertion 6         -> inferred status without a rule id
+#   assertion 7         -> no evidence at all (rejected at ingest)
+#   assertion 8         -> subject key that matches no entity (rejected)
+#   assertion 9         -> model-extracted evidence without a quote
+{
+  sources: [
+    {
+      id: "src:broken"
+      kind: "jsonic"
+      locator: "fixtures/invalid.jsonic"
+      title: "Deliberately Broken Feed"
+      retrieved_at: null
+      content_hash: "fixture-broken-v1"
+      authority: "unknown"
+      metadata: {}
+    }
+  ]
+  entities: [
+    { key: "blank", type: "Person", label: "" }
+    { key: "alien", type: "Alien", label: "Zz Kelvin" }
+    { key: "anchor", type: "Person", label: "Pat Anchor" }
+  ]
+  assertions: [
+    {
+      subject: "anchor"
+      predicate: "definitely_not_approved"
+      object: { kind: "literal", value: "x", datatype: "String" }
+      evidence: [{ source: "src:broken", locator: "a1" }]
+    }
+    {
+      subject: "anchor"
+      predicate: "works_for"
+      object: { kind: "entity", entity: "no-such-key" }
+      evidence: [{ source: "src:broken", locator: "a2" }]
+    }
+    {
+      subject: "anchor"
+      predicate: "has_attribute"
+      object: { kind: "literal", value: "late", datatype: "String" }
+      evidence: [{ source: "src:broken", locator: "a3" }]
+      confidence: 1.5
+      valid_from: "2026-01-01T00:00:00Z"
+      valid_to: "2024-01-01T00:00:00Z"
+    }
+    {
+      subject: "anchor"
+      predicate: "has_attribute"
+      object: { kind: "literal", value: "x", datatype: "Complex128" }
+      evidence: [{ source: "src:broken", locator: "a4" }]
+    }
+    {
+      subject: "anchor"
+      predicate: "mentions"
+      object: { kind: "entity", entity: "alien" }
+      evidence: [{ source: "src:ghost", locator: "a5" }]
+    }
+    {
+      subject: "anchor"
+      predicate: "has_role"
+      object: { kind: "literal", value: "auditor", datatype: "String" }
+      evidence: [{ source: "src:broken", locator: "a6" }]
+      status: "inferred"
+    }
+    {
+      subject: "anchor"
+      predicate: "owns"
+      object: { kind: "literal", value: "boat", datatype: "String" }
+      evidence: []
+    }
+    {
+      subject: "nobody-home"
+      predicate: "mentions"
+      object: { kind: "entity", entity: "anchor" }
+      evidence: [{ source: "src:broken", locator: "a8" }]
+    }
+    {
+      subject: "anchor"
+      predicate: "mentions"
+      object: { kind: "entity", entity: "alien" }
+      evidence: [
+        { source: "src:broken", locator: "a9", extraction_method: "model", extractor: "llm-x" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+# report.aql — pipeline orchestration, the competency-question report,
+# and the bundle summary.
+#
+# build-graph is the one-call pipeline: candidate bundles -> ingest ->
+# identity resolution -> conflict marking -> validation -> competency
+# report + human-review queue -> the finished aql-kg/1 bundle. Nothing
+# here fabricates an answer: each competency question is answered by the
+# query function named in its query_function field, and coverage is
+# downgraded when the graph lacks the data the question needs.
+
+import "aql:struct-util"
+import "./util.aql"
+import "./schema.aql"
+import "./identifiers.aql"
+import "./ingest.aql"
+import "./resolve.aql"
+import "./assertions.aql"
+import "./validate.aql"
+import "./queries.aql"
+import "./storage.aql"
+import "./entities.aql"
+
+# ---- summary ------------------------------------------------------------
+
+def mk-summary fn [[bundle:Map] [Map] [
+  def assertions (KgUtil.list-at bundle "assertions")
+  def issues (KgUtil.list-at bundle "validation_issues")
+  KgUtil.as-map {
+    source_count: ((KgUtil.list-at bundle "sources") size)
+    entity_count: ((KgUtil.list-at bundle "entities") size)
+    assertion_count: (assertions size)
+    accepted_assertion_count: ((filter [var [[a]
+      (a.status eq "asserted") or (a.status eq "inferred")
+    ]] assertions) size)
+    disputed_assertion_count: ((filter [dot status eq "disputed"] assertions) size)
+    unresolved_identity_count: ((KgQuery.unresolved-identities bundle) size)
+    error_count: ((filter [dot severity eq "error"] issues) size)
+    warning_count: ((filter [dot severity eq "warning"] issues) size)
+  }
+]]
+
+# ---- competency questions -----------------------------------------------
+
+def cq fn [[question:String coverage:String result:Any fnname:String missing:List notes:String] [Map] [
+  KgUtil.as-map {
+    question: question
+    coverage: coverage
+    result: result
+    missing_data: missing
+    query_function: fnname
+    notes: notes
+  }
+]]
+
+def coverage-when fn [[ok:Boolean] [String] [
+  if ok ["fully_answerable"] ["not_answerable"]
+]]
+
+# The twelve competency questions, answered against the finished graph.
+def competency-report fn [[bundle:Map] [List] [
+  def entities (KgUtil.list-at bundle "entities")
+  def assertions (KgUtil.list-at bundle "assertions")
+  def sources (KgUtil.list-at bundle "sources")
+  def canonical (filter [var [[e] not (e.status eq "merged")]] entities)
+  def has-entities ((entities size) gt 0)
+  def has-assertions ((assertions size) gt 0)
+  def sample-entity (if has-entities [(canonical get 0)] [none])
+  def sample-id (if (sample-entity is None) [""] [sample-entity.id])
+  def entity-pairs (KgQuery.edge-list bundle)
+  def sample-pair (if ((entity-pairs size) gt 0) [entity-pairs get 0] [none])
+  [
+    (cq "Which canonical entities occur in the supplied sources?"
+      (coverage-when has-entities)
+      (KgUtil.as-map {entity_ids: (sort (each [dot id] canonical))})
+      "entities-by-type / entity-by-id"
+      (if has-entities [[]] [["entities"]])
+      "canonical = every entity not folded away by a merge")
+    (cq "Which aliases and external identifiers refer to each entity?"
+      (coverage-when has-entities)
+      (each [var [[e]
+        KgUtil.as-map {id: e.id aliases: e.aliases external_ids: e.external_ids}
+      ]] canonical)
+      "entity-by-id"
+      (if has-entities [[]] [["entities"]])
+      "aliases fold in merged duplicates' labels")
+    (cq "What factual assertions connect the entities?"
+      (coverage-when ((entity-pairs size) gt 0))
+      (KgUtil.as-map {edges: (sort (each [var [[e] `${e.from} -[${e.predicate}]-> ${e.to}`]] entity-pairs))})
+      "edge-list"
+      (if ((entity-pairs size) gt 0) [[]] [["entity-to-entity assertions"]])
+      "entity-reference assertions, endpoints canonicalized")
+    (cq "What literal properties are asserted about each entity?"
+      (coverage-when has-assertions)
+      (sort (each [var [[a] `${a.subject_id} ${a.predicate} = ${KgId.canon-of (KgUtil.get-or a.object "value" none)}`]]
+        (filter [var [[a] KgSchema.is-literal a.object]] assertions)))
+      "assertions-for-subject"
+      (if has-assertions [[]] [["assertions"]])
+      "literal-object assertions only")
+    (cq "Which source passage or record supports each assertion?"
+      (coverage-when has-assertions)
+      (each [var [[a]
+        KgUtil.as-map {assertion_id: a.id evidence: (KgQuery.evidence-for-assertion bundle a.id)}
+      ]] assertions)
+      "evidence-for-assertion"
+      (if has-assertions [[]] [["assertions"]])
+      "every assertion carries its evidence records inline")
+    (cq "Which assertions conflict, supersede, or corroborate one another?"
+      "fully_answerable"
+      (KgUtil.as-map {
+        disputed: (sort (each [dot id] (KgQuery.conflicting-assertions bundle)))
+        superseded: (sort (each [dot id] (filter [dot status eq "superseded"] assertions)))
+      })
+      "conflicting-assertions"
+      []
+      "corroboration = duplicate canonical claims share one deterministic id")
+    (cq "Which possible entity matches remain unresolved?"
+      "fully_answerable"
+      (sort (each [dot id] (KgQuery.unresolved-identities bundle)))
+      "unresolved-identities"
+      []
+      "possible_match and insufficient_evidence decisions")
+    (cq "Which entities and assertions fail validation?"
+      "fully_answerable"
+      (sort (each [dot id] (KgQuery.validation-errors bundle)))
+      "validation-errors"
+      []
+      "error-severity issues; warnings excluded here")
+    (cq "What are the direct neighbors of a given entity?"
+      (coverage-when has-entities)
+      (KgUtil.as-map {entity: sample-id neighbors: (if has-entities [KgQuery.neighbors bundle sample-id] [[]])})
+      "neighbors"
+      (if has-entities [[]] [["entities"]])
+      "sampled on the first canonical entity; callable for any id")
+    (cq "Which assertions involve a given entity, predicate, source, or time range?"
+      (coverage-when (has-assertions and ((sources size) gt 0)))
+      (KgUtil.as-map {
+        by_subject: (sort (each [dot id] (if has-entities [KgQuery.assertions-for-subject bundle sample-id] [[]])))
+        by_source: (sort (each [dot id] (if ((sources size) gt 0) [KgQuery.assertions-by-source bundle ((sources get 0) get "id")] [[]])))
+      })
+      "assertions-for-subject / assertions-by-predicate / assertions-by-source / assertions-in-range"
+      (if (has-assertions and ((sources size) gt 0)) [[]] [["assertions" "sources"]])
+      "sampled on the first entity and source; callable for any value")
+    (cq "Which one-hop and two-hop paths connect two entities?"
+      (coverage-when (not (sample-pair is None)))
+      (if (sample-pair is None) [{}] [
+        KgUtil.as-map {
+          a: (sample-pair get "from")
+          b: (sample-pair get "to")
+          one_hop: (KgQuery.one-hop-paths bundle (sample-pair get "from") (sample-pair get "to"))
+          two_hop: (KgQuery.two-hop-paths bundle (sample-pair get "from") (sample-pair get "to"))
+        }
+      ])
+      "one-hop-paths / two-hop-paths"
+      (if (sample-pair is None) [["entity-to-entity assertions"]] [[]])
+      "traversal depth is bounded at two hops by design")
+    (cq "Which graph claims require human review?"
+      "fully_answerable"
+      (KgQuery.human-review-items bundle)
+      "human-review-items"
+      []
+      "identity reviews, disputed/unresolved and low-confidence assertions, error issues")
+  ]
+]]
+
+# ---- the pipeline -------------------------------------------------------
+
+# Build the finished bundle from a list of candidate bundles.
+# opts: {recorded_at generated_at proposals} — the two stamps are
+# explicit so a rebuild over identical input is byte-identical.
+def build-graph fn [[candidates:List opts:Map] [Map] [
+  def recorded_at (KgUtil.get-or opts "recorded_at" "1970-01-01T00:00:00Z")
+  def generated_at (KgUtil.get-or opts "generated_at" recorded_at)
+  def ingested (each [var [[c] KgIngest.ingest-bundle c recorded_at]] candidates)
+  def sources (KgStore.sort-by-id (KgEnt.dedupe-identical (flatten (each [var [[g] KgUtil.list-at g "sources"]] ingested))))
+  def entities0 (KgEnt.unify-by-id (flatten (each [var [[g] KgUtil.list-at g "entities"]] ingested)))
+  def assertions0 (KgEnt.dedupe-identical (flatten (each [var [[g] KgUtil.list-at g "assertions"]] ingested)))
+  def ingest-issues (flatten (each [var [[g] KgUtil.list-at g "issues"]] ingested))
+  def resolved (KgResolve.resolve-entities entities0 assertions0)
+  def entities (KgStore.sort-by-id (KgUtil.list-at resolved "entities"))
+  def decisions (KgStore.sort-by-id (KgUtil.list-at resolved "decisions"))
+  def conflicted (KgAst.mark-conflicts assertions0)
+  def assertions (KgStore.sort-by-id (KgUtil.list-at conflicted "assertions"))
+  def proposals (KgStore.sort-by-id (KgUtil.list-at opts "proposals"))
+  def draft (KgUtil.as-map {
+    schema_version: "aql-kg/1"
+    generated_at: generated_at
+    sources: sources
+    entities: entities
+    assertions: assertions
+    identity_decisions: decisions
+    validation_issues: []
+    schema_proposals: proposals
+    competency_results: []
+    human_review_queue: []
+    summary: {}
+  })
+  def issues (KgStore.sort-by-id (flatten [ingest-issues (KgValidate.validate-bundle draft)]))
+  def with-issues (draft set validation_issues issues)
+  def with-cq (with-issues set competency_results (competency-report with-issues))
+  def with-queue (with-cq set human_review_queue (KgQuery.human-review-items with-cq))
+  with-queue set summary (mk-summary with-queue)
+]]
+
+export "KgReport" {
+  mk-summary: mk-summary/r
+  competency-report: competency-report/r
+  build-graph: build-graph/r
+}

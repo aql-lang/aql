@@ -1,0 +1,81 @@
+# valid.jsonic — a clean candidate bundle: every object passes every
+# validation rule. Used by the positive-path tests.
+{
+  sources: [
+    {
+      id: "src:orbital-register"
+      kind: "jsonic"
+      locator: "fixtures/valid.jsonic"
+      title: "Orbital Staff Register"
+      retrieved_at: "2026-07-01T00:00:00Z"
+      content_hash: "fixture-orbital-register-v1"
+      authority: "official"
+      metadata: { publisher: "Orbital Dynamics Ltd" }
+    }
+  ]
+  entities: [
+    {
+      key: "meridian"
+      type: "Person"
+      label: "Ada Meridian"
+      aliases: ["A. Meridian"]
+      external_ids: { staffno: "OD-0042" }
+      attributes: { title: "Chief Engineer" }
+    }
+    {
+      key: "orbital"
+      type: "Organization"
+      label: "Orbital Dynamics Ltd"
+      external_ids: { companyno: "IE-778812" }
+    }
+    { key: "dublin", type: "Place", label: "Dublin" }
+  ]
+  assertions: [
+    {
+      subject: "meridian"
+      predicate: "works_for"
+      object: { kind: "entity", entity: "orbital" }
+      evidence: [
+        {
+          source: "src:orbital-register"
+          locator: "entities[0]"
+          quote: "Ada Meridian — Chief Engineer, Orbital Dynamics Ltd"
+          extraction_method: "direct_record"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.97
+      valid_from: "2024-03-01T00:00:00Z"
+    }
+    {
+      subject: "orbital"
+      predicate: "located_in"
+      object: { kind: "entity", entity: "dublin" }
+      evidence: [
+        {
+          source: "src:orbital-register"
+          locator: "entities[1]"
+          quote: "Registered office: Dublin"
+          extraction_method: "direct_record"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.95
+    }
+    {
+      subject: "meridian"
+      predicate: "has_attribute"
+      object: { kind: "literal", value: "Chief Engineer", datatype: "String" }
+      evidence: [
+        {
+          source: "src:orbital-register"
+          locator: "entities[0].attributes.title"
+          quote: "Chief Engineer"
+          extraction_method: "direct_record"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.97
+    }
+  ]
+}
