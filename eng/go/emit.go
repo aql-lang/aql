@@ -5471,6 +5471,18 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // top-frame guard does NOT apply (OpMakeList re-assembles from its operands per
 // run, exactly like OpMakeMap, so it is sound in a fn body / branch / loop).
 func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+	// SUSPENDED recording (a nested check-time shape analysis — e.g. a fold's
+	// foldAccumFixedPoint accumulator-shape rounds, analyseHigherOrderBodyVals'
+	// Suspend) must record NOTHING: its events are thrown away, and recording here
+	// while suspended leaked a `{key:[bodyLocal]}` map-value's OpLookupDynScope +
+	// dynScopeNames poison into the ENCLOSING fn unit (which never binds that
+	// fold-body local) → a runtime "dynamic-scope read miss". The sibling
+	// RecordMakeList / RecordMakeMap / RecordInterp wrappers already guard on
+	// active(); autoEvalMap/autoEvalList call this core directly (guarded only on
+	// Armed()), so the guard belongs here where every path passes through.
+	if !es.active() {
+		return false
+	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and

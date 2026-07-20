@@ -138,6 +138,51 @@ def r (iota m)
 	}
 }
 
+// TestBranchReadsEnclosingCrossFragment pins the crossFragRef fix: a branch
+// value-def computed in an OUTER arm and read ONCE from a DEEPER nested arm
+// crosses the fragment floor — the arm's own sim can't reach it, so it must be a
+// frame local. planBranchPromotion used to omit the crossFragRef trigger the
+// native/user-call promotion already has, refusing template's `compile-hb-seq`
+// `def helper (if …)` read from a nested arm ("branch reads enclosing
+// computation"). Now promoted symmetrically; compile == interpret MUST hold.
+func TestBranchReadsEnclosingCrossFragment(t *testing.T) {
+	strict := []struct{ name, src, want string }{
+		// The compile-hb-seq skeleton: h computed in the outer arm, read in a nested arm.
+		{"branch value-def read from a deeper fragment",
+			`def f fn [ [n:Integer] [Integer] [
+  if (n gt 0) [
+    def h (if (n gt 5) [n] [1])
+    if (n gt 10) [ h add 1 ] [ 0 ]
+  ] [ 0 ]
+] ]
+[(f 3) (f 12)]`, "[[0 13]]"},
+	}
+	for _, c := range strict {
+		t.Run(c.name, func(t *testing.T) {
+			a, _ := New()
+			prog, reason, _, _ := a.CompileCheck(c.src)
+			if prog == nil {
+				t.Fatalf("must compile natively, refused: %q", reason)
+			}
+			if strings.Contains(prog.Disassemble(), "FALLBACK") {
+				t.Errorf("%s must compile native (no island)", c.name)
+			}
+			got, err := a.RunCompiledStrict(c.src)
+			if err != nil {
+				t.Fatalf("RunCompiledStrict: %v", err)
+			}
+			b, _ := New()
+			want, _ := b.RunInterp(c.src)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
+			}
+			if fmt.Sprint(got) != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
+	}
+}
+
 // TestBranchArmResultSelfConsumed pins the fix for a value-def that is BOTH the
 // arm RESULT and consumed as an operand WITHIN the same arm — the todo-api PUT
 // handler shape `def t2 {…}; (todos set (id) t2) drop; t2`, where t2 is the

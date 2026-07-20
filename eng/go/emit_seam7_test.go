@@ -15,6 +15,33 @@ import "testing"
 // recorder. Each returns the inactive/none answer; the point is coverage of
 // the method bodies, plus a sanity check that the answers match the "recording
 // is not live" contract.
+// TestSuspendedRecordMakeListRefuses pins the suspend-guard fix. recordMakeListInner
+// is the guard-free core that autoEvalMap/autoEvalList call DIRECTLY for a
+// `{key:[expr]}` / `[expr]` list-value (the sibling RecordMakeList/RecordMakeMap
+// wrappers guard on active(); these two inline callers don't). While a nested
+// check-time shape analysis has SUSPENDED recording (armed + Compilable, but
+// suspended>0 — e.g. a fold's foldAccumFixedPoint accumulator rounds) it must
+// record NOTHING: the leak wrote a fold-body `{q:[q]}` do-map's OpLookupDynScope +
+// dynScopeNames poison into the ENCLOSING fn unit → template's runtime
+// `dynamic-scope read miss for q`.
+func TestSuspendedRecordMakeListRefuses(t *testing.T) {
+	es := NewEmitState() // armed, Compilable, active
+	if !es.active() {
+		t.Fatal("fresh EmitState should be active")
+	}
+	release := es.Suspend()
+	if es.active() {
+		t.Fatal("suspended EmitState should not be active")
+	}
+	if es.recordMakeListInner(nil, []Value{NewInteger(1)}, Value{}, SrcPos{}) {
+		t.Fatal("suspended recordMakeListInner must refuse (else the split-args dyn-scope leak)")
+	}
+	release()
+	if !es.active() {
+		t.Fatal("released EmitState should be active again")
+	}
+}
+
 func TestInactiveEmitMethods(t *testing.T) {
 	e := theInactiveEmit
 

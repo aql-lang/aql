@@ -1226,7 +1226,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 		// [arr])` pattern. Only a 2-ARM if (hasElse): a no-else if is already a variadic
 		// program-residual-only value the dead-drop must not touch.
 		if ev.kind == evBranch {
-			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, storeSource, buried, forceOrder, promoted, dead)
+			promoted, dead = es.planBranchPromotion(ev, unit, refs, fragRef, fragInternal, storeSource, buried, crossFragRef, forceOrder, promoted, dead)
 			continue
 		}
 		// A single-result native call (evCall) OR user-fn call (evCallUser) can be
@@ -1632,7 +1632,7 @@ func isProducingEvent(kind int) bool {
 	return false
 }
 
-func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, storeSource, buried, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
+func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, fragRef, fragInternal, storeSource, buried, crossFragRef, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
 	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
 		if dead == nil {
 			dead = map[int]bool{}
@@ -1640,24 +1640,28 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 		dead[ev.seq] = true
 		return promoted, dead
 	}
-	// A UNIT-LEVEL branch value-def (`def m (if …)` produced at the fn/program top
-	// level, not inside a branch/loop fragment) promotes even on a single read, the
-	// same as a unit-level native/user-call value-def: a binding may be consumed
-	// out-of-order or BURIED by a later-sibling computed operand (the trie
-	// `def m (if …); def res (do {…} (iota m) … fold)` — the do-init buries m's
-	// sim slot before `iota m` reads it → "result operand of iota is not on top").
-	// A unit-level branch value-def whose single-read result is BURIED by an
+	// A UNIT-LEVEL branch value-def whose single-read result is BURIED by an
 	// intervening computed producer before its consumer (buried[ev.seq]) can't be
-	// seated on the sim top — promote it to a frame local. Excludes a fragment-
-	// INTERNAL def (reachable on its own fragment sim; a cross-fragment read is the
-	// separate crossFragRef case) and a loop-carried STORE SOURCE (lowerStore seats
-	// it off the sim top, so promoting it strands the store — as the native
-	// value-def promotion excludes it at lower.go:1305). The buried gate is what
-	// keeps the common immediately-consumed `def y (if …) y mul 2` on the optimal
-	// sim-top consume (no intervening producer → not buried → not promoted).
+	// seated on the sim top — promote it to a frame local (the trie
+	// `def m (if …); def res (do {…} (iota m) … fold)`, where the do-init buries m
+	// before `iota m` → "result operand of iota is not on top"). Excludes a
+	// fragment-INTERNAL def (reachable on its own fragment sim) and a loop-carried
+	// STORE SOURCE (lowerStore seats it off the sim top, so promoting it strands the
+	// store — as the native value-def promotion excludes it at lower.go:1305). The
+	// buried gate keeps the common immediately-consumed `def y (if …) y mul 2` on
+	// the optimal sim-top consume (no intervening producer → not promoted).
 	unitBuriable := es.eventInfo[ev.seq].valueDef && !fragInternal[ev.seq] && !storeSource[ev.seq] && buried[ev.seq]
+	// A branch value-def read from a DIFFERENT (deeper) fragment — `def h (if …)`
+	// in an outer arm, read by a nested if's arm — crosses the fragment floor: the
+	// arm's own sim can't reach it, so the only sound delivery is a frame local
+	// (crossFragRef), exactly as the native/user-call value-def promotion admits it
+	// at lower.go:1304. Branch value-defs were left one notch stricter (no
+	// crossFragRef trigger), which refused template's compile-hb-seq
+	// `def helper/blockexpr (if …)` read from a nested arm ("branch reads enclosing
+	// computation"). (Requires the recordMakeListInner suspend-guard — emit.go — so
+	// the nested {key:[bodyLocal]} do-maps this newly compiles don't dyn-scope-miss.)
 	if branchSingleValue(ev.br) && (es.eventInfo[ev.seq].valueDef || forceOrder[ev.seq]) &&
-		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || unitBuriable || es.dynEnv) {
+		(refs[ev.seq] >= 2 || (fragRef[ev.seq] && !fragInternal[ev.seq]) || unitBuriable || crossFragRef[ev.seq] || es.dynEnv) {
 		if promoted == nil {
 			promoted = map[int]int{}
 		}
