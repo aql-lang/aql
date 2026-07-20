@@ -323,6 +323,21 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	if r.Check.Compiling {
 		r.Check.Recorder().SetCatchVariadic(len(stk) > 1 && doBodyMayRaise(body, r))
 	}
+	// A single-value FALLIBLE body's do-residual is scalar-OR-Error at run time: do
+	// CATCHES a body raise into an Error value (doListHandler's NewError), so a body
+	// whose declared happy-path residual is a SCALAR actually yields an Error when it
+	// raises. Widen the scalar to the (scalar tor Error) union so a downstream Error
+	// accessor (`.code`, `.message`, `convert Map e`) dispatches its Error overload
+	// instead of no_signature-ing on a bare scalar — the stats
+	// `((do [Stats.mean [] end]).code)` shape, which raised on empty input but typed
+	// the residual as the declared Float (#stats code-body refusal). Mirrors the
+	// `if [scalar] [raise]` arm-union, which already types (scalar tor Error) and
+	// compiles. Node/Error residuals already match the accessor sigs (excluded); an
+	// infallible body keeps its exact scalar (doBodyMayRaise false).
+	if len(stk) == 1 && doBodyMayRaise(body, r) &&
+		!stk[0].Parent.ConformsTo(TNode) && !stk[0].Parent.ConformsTo(TError) {
+		return []Value{NewDynamicCarrierValue(NewDisjunct([]Value{stk[0], NewTypeLiteral(TError)}))}
+	}
 	return stk
 }
 
