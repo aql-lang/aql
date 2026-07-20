@@ -1126,6 +1126,43 @@ func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
 	return storeSrc
 }
 
+// countRefsAndBurials runs planValueDefLocals' operand scans over the
+// top-level events, filling the caller's maps in place: refs counts each
+// producer's idx-0 consumptions (top-level + fragment); fragRef marks
+// producers referenced from INSIDE a branch/loop fragment (the reference
+// crosses the fragment's scope floor, so the producer is reachable there
+// only as a frame local — a single cross-floor read still needs the
+// local); buried marks producers consumed mid-body under an intervening
+// value-leaving event (the burial doc sits on the leaverPrefix
+// computation at the call site). Factored out of planValueDefLocals for
+// the lint complexity ceiling — one scan, no behavior change (PR #295
+// merge: main's burial triggers plus this branch's promotion triggers
+// crossed gocyclo's 70 in one function).
+func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, buryOK bool, refs map[int]int, fragRef, buried map[int]bool) {
+	for i := range events {
+		forEachOperand(&events[i], func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+				if es.eventInfo[op.idx].variadicResult {
+					return
+				}
+				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
+					buried[op.idx] = true
+				}
+			}
+		})
+		forEachFragmentOperand(&events[i], func(op emitOperand) {
+			if op.kind == opEvent && op.resIdx == 0 {
+				refs[op.idx]++
+				fragRef[op.idx] = true
+				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
+					buried[op.idx] = true
+				}
+			}
+		})
+	}
+}
+
 func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
@@ -1193,32 +1230,8 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	if buryOK {
 		storeSrc = collectStoreSourceSeqs(events)
 	}
-	for i := range events {
-		forEachOperand(&events[i], func(op emitOperand) {
-			if op.kind == opEvent && op.resIdx == 0 {
-				refs[op.idx]++
-				if es.eventInfo[op.idx].variadicResult {
-					return
-				}
-				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
-					buried[op.idx] = true
-				}
-			}
-		})
-		// A reference inside a body fragment crosses the fragment's scope floor:
-		// the producer is only reachable there as a frame local, so count it AND
-		// flag the producer for forced promotion regardless of the top-level
-		// count (a single cross-floor read still needs the local).
-		forEachFragmentOperand(&events[i], func(op emitOperand) {
-			if op.kind == opEvent && op.resIdx == 0 {
-				refs[op.idx]++
-				fragRef[op.idx] = true
-				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
-					buried[op.idx] = true
-				}
-			}
-		})
-	}
+	es.countRefsAndBurials(events, producerIndex, leaverPrefix, storeSrc, buryOK,
+		refs, fragRef, buried)
 	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
 	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
 	// But if its (zero-value) RESULT is CONSUMED — bound by `def x (for …)`
