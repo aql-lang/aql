@@ -100,19 +100,45 @@ func TestS9FnComputedOperand(t *testing.T) { // §9.2g — DESIGNED KEEP
 		"construction over a computed")
 }
 
-func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — LANDED
-	// A DEF binding the FIRST value of a fallible do-catch's multi-value
-	// region: SplitEventRegionBind (the S5/S9.2a split's STATIC-region twin)
-	// binds a fresh element carrier via the same splice-at-depth OpBindGlobal
+func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — NARROWED (PR #280 review)
+	// A DEF binding the FIRST value of a do-catch's multi-value region:
+	// SplitEventRegionBind (the S5/S9.2a split's STATIC-region twin) binds a
+	// fresh element carrier via the same splice-at-depth OpBindGlobal
 	// (SpliceFromTop = nout-1) and removes the spliced slot from the sim.
-	// Only the SUCCESS path executes the splice — the compiled catch path
-	// defers to the interpreter wholesale, so the static success count is
-	// the only count the lowering needs.
+	// NARROWED 2026-07-20 (PR #280 review): the split admits only a region
+	// the fallibility scan PROVES infallible — a wordless literal region, or
+	// one whose fallible call the check collapsed statically (the div rows
+	// below). Any callable in the region is fallible (integer overflow made
+	// even `add` so — probe-pinned: maxint add 1 through the original
+	// designed row underflowed BIND_GLOBAL's splice at run time, there IS no
+	// runtime wholesale-defer for a surprise raise), so the original
+	// `(1 add 2)` designed rows now REFUSE and fall back; re-landing them
+	// needs the variable-arity residual model (OpStackMark/OpDropToMark —
+	// the L-DO roadmap in frontier-do-catch.tsv).
 	mustCompileWithParity(t,
-		`def msg (do [(1 add 2) "no-raise"] error [dot code]) msg`, "[no-raise 3]")
-	// Double read re-resolves the live binding.
+		`def x (do [10 "x"] error [dot code]) x`, "[x 10]")
+	// Double read re-resolves the live binding (OpLookupDynScope).
 	mustCompileWithParity(t,
-		`def msg (do [(1 add 2) "a"] error [dot code]) msg msg`, "[a 3 3]")
+		`def x (do [10 "x"] error [dot code]) x x`, "[x 10 10]")
+	// The word-bearing designed rows: sound refusal + fallback parity.
+	mustRefuseWithParity(t,
+		`def msg (do [(1 add 2) "no-raise"] error [dot code]) msg`, "unpromoted computed value")
+	mustRefuseWithParity(t,
+		`def msg (do [(1 add 2) "a"] error [dot code]) msg msg`, "unpromoted computed value")
+	// The RUNTIME-SURPRISE raise that forced the narrowing, both arities.
+	mustRefuseWithParity(t,
+		`def msg (do [(9223372036854775807 add 1) "x"] error [dot code]) msg`, "unpromoted computed value")
+	mustRefuseWithParity(t,
+		`def x (do [(9223372036854775807 add 1) "a" "b"] error [dot code]) x`, "variadic result promoted")
+	// The unflagged-fallible-native twin (getr's not_found — the PR #280
+	// review follow-on this taxonomy closes).
+	mustRefuseWithParity(t,
+		`def m {a:1} def x (do [(m getr "zz") "a" "b"] error [dot code]) x`, "variadic result promoted")
+	// The fallibility scan descends into NESTED lists: the fallible call
+	// buried in the inner list marks the region exactly as a top-level one
+	// (here the refusal surfaces at the reorder stage, same sound fallback).
+	mustRefuseWithParity(t,
+		`def x (do [[1 add 2] "x"] error [dot code]) x`, "residual shape beyond Stage 1")
 	// The RAISING region rides the catch path: the compiled run defers and
 	// the interpreter owns the catch — value parity through the defer.
 	{
@@ -160,15 +186,16 @@ func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — LAND
 
 	// PR #280 review fences. The split seats exactly the TWO-value region
 	// (nout != 2 declines — a wider one used to underflow BIND_GLOBAL's
-	// splice at run time); an INFALLIBLE wider region still compiles through
-	// the aligned generic promotion. A FALLIBLE region's promotion refuses:
-	// its event carries the variadic mark (the L-DO latch or the dyn-body
-	// record), and lowerCall's store-prologue gate rejects the seat whose
-	// raise path delivers ONE caught Error where nout success values were
-	// promoted (STORE_LOCAL underflow, probe-pinned on raise, div, and a
-	// fallible user fn).
-	mustCompileWithParity(t,
-		`def x (do [(1 add 2) "a" "b"] error [dot code]) x`, "[a b 3]")
+	// splice at run time). A word-bearing region's promotion refuses: its
+	// event carries the variadic mark (the fallibility latch or the
+	// dyn-body record), and lowerCall's store-prologue gate rejects the
+	// seat whose raise path delivers ONE caught Error where nout success
+	// values were promoted (STORE_LOCAL underflow, probe-pinned on raise,
+	// div, add-overflow, and a fallible user fn). The `(1 add 2)` instance
+	// cannot ride on its benign operands — fallibility is the word's, not
+	// the call site's.
+	mustRefuseWithParity(t,
+		`def x (do [(1 add 2) "a" "b"] error [dot code]) x`, "variadic result promoted")
 	mustRefuseWithParity(t,
 		`def x (do [(0 div 0) "a" "b"] error [dot code]) x`, "variadic result promoted")
 	mustRefuseWithParity(t,
