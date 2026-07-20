@@ -376,9 +376,9 @@ these as `Fmt.*` AQL):
     remains available and demonstrated for user-defined formatters:
     `Fmt.tree` (the CST as a `$kind`-tagged value tree) + `Fmt.kind` /
     `Fmt.children` dispatch + rule fns (`TestFmtTreeDeclarativeFormatter`
-    reproduces `Fmt.format` on the attachment-free core), and `sx` — the
-    structure-XPath minilang — selects into the same tree
-    (`(Fmt.tree src) mini sx '//text'`), giving XSLT-style match patterns
+    reproduces `Fmt.format` on the attachment-free core), and `sp` — the
+    structure-path minilang — selects into the same tree
+    (`(Fmt.tree src) mini sp '//text'`), giving XSLT-style match patterns
     over the format CST.
   - **R4 RESOLVED (concrete finding) — the substrate does NOT reproduce the
     current output; the two use different layout models.** The Go emitter

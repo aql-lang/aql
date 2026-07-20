@@ -63,4 +63,4 @@ import "aql:fmt" end Fmt.format-with {brackets:{list:{open:'<' close:'>'}}} "[1 
 import "aql:fmt" end Fmt.format-with {strategies:['bogus']} "a"	ERROR:unknown strategy	an unknown statement strategy is rejected, not silently ignored
 import "aql:fmt" end Fmt.format-with {widht:72} "a"	ERROR:unknown rule key	a misspelled rule key is rejected (typo protection)
 import "aql:fmt" end Fmt.format-with {width:'x'} "a"	ERROR:width must be an Integer	a non-integer width is rejected
-import "aql:fmt" import "aql:minilang" end (Fmt.tree "def x 1") mini sx 'count(//children)' {}	[4]	sx (structure XPath) selects into the Fmt.tree CST — the xpath minilang over AQL structure
+import "aql:fmt" import "aql:minilang" end (Fmt.tree "def x 1") mini sp 'count(//children)' {}	[4]	sp (structure-path) selects into the Fmt.tree CST — the path minilang over AQL structure

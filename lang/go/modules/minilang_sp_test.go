@@ -6,11 +6,11 @@ import (
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// TestMiniSxHandler drives the sx handler over crafted subjects, covering
+// TestMiniSpHandler drives the sp handler over crafted subjects, covering
 // every result projection (node-set element, text node, string / boolean /
 // number scalar), the Map and List subject builders, and the three error
 // arms (non-string src, non-container subject, malformed XPath).
-func TestMiniSxHandler(t *testing.T) {
+func TestMiniSpHandler(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatalf("DefaultRegistry: %v", err)
@@ -27,13 +27,13 @@ func TestMiniSxHandler(t *testing.T) {
 
 	first := func(src string) native.Value {
 		t.Helper()
-		out, herr := miniSxHandler([]native.Value{native.NewString(src), opts, doc}, nil, nil, r)
+		out, herr := miniSpHandler([]native.Value{native.NewString(src), opts, doc}, nil, nil, r)
 		if herr != nil {
-			t.Fatalf("sx %q: %v", src, herr)
+			t.Fatalf("sp %q: %v", src, herr)
 		}
 		lst, lerr := native.AsList(out[0])
 		if lerr != nil || lst.Len() == 0 {
-			t.Fatalf("sx %q: no result (%v)", src, out)
+			t.Fatalf("sp %q: no result (%v)", src, out)
 		}
 		return lst.Get(0)
 	}
@@ -64,7 +64,7 @@ func TestMiniSxHandler(t *testing.T) {
 
 	// A List subject builds `item` elements.
 	lst := native.NewList([]native.Value{native.NewInteger(10), native.NewInteger(20)})
-	out, herr := miniSxHandler([]native.Value{native.NewString("//item"), opts, lst}, nil, nil, r)
+	out, herr := miniSpHandler([]native.Value{native.NewString("//item"), opts, lst}, nil, nil, r)
 	if herr != nil {
 		t.Fatalf("list subject: %v", herr)
 	}
@@ -73,13 +73,13 @@ func TestMiniSxHandler(t *testing.T) {
 	}
 
 	// Error arms.
-	if _, e := miniSxHandler([]native.Value{native.NewTypeLiteral(native.TString), opts, doc}, nil, nil, r); e == nil {
+	if _, e := miniSpHandler([]native.Value{native.NewTypeLiteral(native.TString), opts, doc}, nil, nil, r); e == nil {
 		t.Error("non-string src should error")
 	}
-	if _, e := miniSxHandler([]native.Value{native.NewString("/a"), opts, native.NewTypeLiteral(native.TMap)}, nil, nil, r); e == nil {
+	if _, e := miniSpHandler([]native.Value{native.NewString("/a"), opts, native.NewTypeLiteral(native.TMap)}, nil, nil, r); e == nil {
 		t.Error("non-container subject should error")
 	}
-	if _, e := miniSxHandler([]native.Value{native.NewString("//["), opts, doc}, nil, nil, r); e == nil {
+	if _, e := miniSpHandler([]native.Value{native.NewString("//["), opts, doc}, nil, nil, r); e == nil {
 		t.Error("malformed XPath should error")
 	}
 }

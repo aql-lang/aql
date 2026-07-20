@@ -372,41 +372,41 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("xp")
 
-	// ---- kind: sx — XPath query over AQL structure (Map/List) ----------
+	// ---- kind: sp — structure-path over AQL structure (Map/List) -------
 	// [src opts doc:Any] → [List]. Run an XPath expression over the stack
 	// Map/List subject and return the result as a List. Same engine as `xp`
 	// (github.com/antchfx/xpath), but over AQL native structure rather than
 	// Node/Xml — the XPath-shaped query layer for AQL data. A matched element
 	// comes back as its source AQL value; a text/scalar result as a
-	// String/Number/Boolean. See minilang_sx.go.
+	// String/Number/Boolean. See minilang_sp.go.
 	// Two overloads — a Map subject and a List subject — rather than one
 	// TAny: the `mini` filter partial (native_macro.go::miniPartialFn) takes
 	// its subject param type from the wrapper sig, and a lone TAny param does
 	// not auto-apply to a preceding stack value (TAny cannot distinguish "a
 	// subject is present" from "none"). Concrete TMap / TList params make the
-	// swap-form `doc mini sx '…'` dispatch, like `xp`'s TXml subject.
+	// swap-form `doc mini sp '…'` dispatch, like `xp`'s TXml subject.
 	subReg.RegisterNativeFunc(native.NativeFunc{
-		Name: "minilang-sx",
+		Name: "minilang-sp",
 		Signatures: []native.Signature{
 			{
 				Args:       []*native.Type{native.TString, native.TMap, native.TMap},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Impl:       native.Go(miniSxHandler),
+				Impl:       native.Go(miniSpHandler),
 			},
 			{
 				Args:       []*native.Type{native.TString, native.TMap, native.TList},
 				Returns:    []*native.Type{native.TList},
 				BarrierPos: -1,
-				Impl:       native.Go(miniSxHandler),
+				Impl:       native.Go(miniSpHandler),
 			},
 		},
 	})
-	exports.Set("lang_sx", wrapMiniFnDef("minilang-sx", [][]native.FnParam{
+	exports.Set("lang_sp", wrapMiniFnDef("minilang-sp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TMap}),
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TList}),
 	}, []*native.Type{native.TList}, nil, subReg))
-	mintMiniFnType("sx")
+	mintMiniFnType("sp")
 
 	// ---- out-of-band: register -----------------------------------------
 	// MiniLang.register <name> <fn> installs an AQL function as the

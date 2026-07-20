@@ -27,7 +27,7 @@ import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
 import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  register / kinds — out-of-band exports (not mini-callable)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sx/q]	the registered kind atoms, in registration order
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]	the registered kind atoms, in registration order
 import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}	106	an AQL-registered generator kind: named params via opts
 import "aql:minilang"  MiniLang.register count (fn [[src:String opts:Map subject:String] [Integer] [def m (subject mini re src)  m.n]]) end  "banana" mini count 'an'	2	an AQL-registered filter kind: subject from the stack (and a dynamic src)
 # Memoising an AQL kind: built-in re/xp cache their compiled artifact in a private
@@ -217,20 +217,20 @@ import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPa
 # parked shapes are Go tests, not spec rows, because the compiled pipeline does not
 # lower an UNCONSUMED spliced partial yet)
 #
-# §sx  XPath over AQL structure (Map/List) — the same antchfx engine as
+# §sp  XPath over AQL structure (Map/List) — the same antchfx engine as
 #      xp, but over native AQL data. A Map subject needs an explicit {} opts
 #      (a bare Map is otherwise claimed as opts); a List subject does not.
-import "aql:minilang"  {a:1 b:2} mini sx '/a' {}	[1]	sx runs XPath over an AQL Map; a Map subject needs the explicit {} opts
-import "aql:minilang"  [{n:'x'} {n:'y'}] mini sx '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
-import "aql:minilang"  {items:[{p:10} {p:30}]} mini sx '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
-import "aql:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sx 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
-import "aql:minilang"  {a:1 b:2 c:3} mini sx 'count(/*)' {}	[3]	count() of the top-level entries
-import "aql:minilang"  {items:[{p:10} {p:30}]} mini sx '//item[2]' {}	[{p:30}]	a matched element comes back as its source AQL value
-import "aql:minilang"  {a:1} MiniLang.lang_sx '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
-import "aql:minilang"  +sx|//n| is (MiniLang.Sx)	true	a stored sx query has its named type
+import "aql:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over an AQL Map; a Map subject needs the explicit {} opts
+import "aql:minilang"  [{n:'x'} {n:'y'}] mini sp '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
+import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
+import "aql:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sp 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
+import "aql:minilang"  {a:1 b:2 c:3} mini sp 'count(/*)' {}	[3]	count() of the top-level entries
+import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source AQL value
+import "aql:minilang"  {a:1} MiniLang.lang_sp '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
+import "aql:minilang"  +sp|//n| is (MiniLang.Sp)	true	a stored sp query has its named type
 #
-# §sx  negatives
-import "aql:minilang"  {a:1} mini sx '//[' {}	ERROR:mini_parse_error	a malformed XPath is a loud parse error
+# §sp  negatives
+import "aql:minilang"  {a:1} mini sp '//[' {}	ERROR:mini_parse_error	a malformed XPath is a loud parse error
 import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
 #
 # §mi2  MiniLang.micron — the OPT-IN user-Micron literal hook. A user kind
