@@ -448,6 +448,14 @@ Sub-stages, each independently gated, ordered by mechanism reuse:
 
 ### Stage M3 — DSL registration/provenance rows (module-parse 11 + minilang:320)
 
+> **Historical (2026-07):** the registration surfaces this stage compiled
+> (`Parse.register` / `MiniLang.register` / the deferred-kind dispatch)
+> have since been REMOVED — the kind namespaces are frozen and custom
+> languages are fn VALUES. The compile machinery described here was
+> replaced by `Parse.parser` + the recorded `parselang-fn-dispatch` call
+> (fn-value dispatch), and the minilang growth ledger now has an empty
+> growth set.
+
 `Parse.grammar/spec/action` and `MiniLang.register` produce values through
 handler-only natives whose results record nothing (the parselang:23 mechanism,
 solved for parselang by giving registration a sound check-mode twin — see the

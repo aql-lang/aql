@@ -5,8 +5,28 @@ func init() {
 		Word:    "convert",
 		Summary: "Convert a value to a different type.",
 		Description: "Converts the first argument to the target type. Supports integer, float, " +
-			"string, boolean conversions. An optional third argument provides settings " +
-			"like base for numeric conversions.",
+			"string, boolean conversions. An optional options Map provides settings: " +
+			"`base` (radix for numeric conversions, e.g. {base:'hex'}), `truthy` " +
+			"(when true, `convert Boolean` parses a String YAML-style — " +
+			"yes/no/true/false/on/off, case-insensitive — falling back to presence " +
+			"coercion for any other string), and `accuracy` (with the companion " +
+			"`places`) which opts in to the otherwise-refused `Float → BigDecimal` " +
+			"conversion. A binary Float is inexact, so `accuracy` states which reading " +
+			"you want: 'shortest' (the shortest decimal that round-trips — what the " +
+			"literal reads as), 'exact' (the true dyadic value the float64 holds), or " +
+			"'round' with `places:N` (the exact value rounded to N decimal places, " +
+			"half away from zero). It is inert for any non-Float / non-BigDecimal " +
+			"conversion. Boolean conversion is otherwise pure " +
+			"presence coercion: empty String / 0 / none / empty collection are false, " +
+			"everything else is true.",
+		Examples: []string{
+			`convert Integer "42"                        ;# 42`,
+			`convert Integer {base:'hex'} "ff"           ;# 255`,
+			`convert Boolean {truthy:true} "no"          ;# false (YAML token)`,
+			`convert Boolean {truthy:true} "meh"         ;# true  (not a token, non-empty)`,
+			`convert BigDecimal {accuracy:'shortest'} 3.14      ;# 0d3.14`,
+			`convert BigDecimal {accuracy:'round' places:2} 3.14159  ;# 0d3.14`,
+		},
 	})
 
 	register(&Entry{

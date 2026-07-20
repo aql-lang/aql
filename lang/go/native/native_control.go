@@ -99,7 +99,11 @@ var controlNatives = []NativeFunc{
 		// members). The first matching clause's block runs the same
 		// way — value pushed first, like the `error [handler]` block
 		// — and its result is case's result. No match and no default
-		// produces nothing, like `if` without an else.
+		// produces nothing, like `if` without an else — but the CHECKER
+		// requires the clauses to cover the scrutinee's static type
+		// (case_not_exhaustive, case_exhaustive.go): a default-less
+		// case reaches that produce-nothing path only for a dynamic
+		// (untyped) scrutinee.
 		Name:          "case",
 		CompileEffect: CompileFallbackBody,
 

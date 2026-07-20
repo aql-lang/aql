@@ -415,9 +415,10 @@ func DefaultFormats() map[string]Format {
 // RegisterFormat installs f under name on r's format registry and maps each
 // ext (leading dot optional, case-insensitive) to that format name. Once
 // registered the format is reachable from `read` by name (via the fmt
-// option) and by file extension. It pairs with the aql:parselang bridge
-// RegisterFormatParser, which additionally exposes the format as a `parse`
-// kind. Returns an error when the formats capability is not installed.
+// option) and by file extension. It pairs with the value constructor
+// NewFormatParserFn, which wraps the same format's Decode as a parser
+// Function value for `parse` (the parse kinds themselves are fixed).
+// Returns an error when the formats capability is not installed.
 func RegisterFormat(r *Registry, name string, f Format, exts ...string) error {
 	if name == "" {
 		return fmt.Errorf("register format: name must not be empty")

@@ -1,0 +1,118 @@
+# identifiers.aql — deterministic identifiers for graph objects.
+#
+# Policy (kg/README.md §identifiers):
+#   - Prefer stable external identifiers when a source supplies them;
+#     they live in KgEntity.external_ids and drive identity resolution.
+#   - Local identifiers are DETERMINISTIC: the same canonical input
+#     always produces the same id, so re-processing identical sources
+#     yields an identical graph (no random ids, ever).
+#   - Fingerprints use 64-bit FNV-1a (BinUtil.fnv64) over a CANONICAL
+#     string. A hash match alone is never proof of identity: collisions
+#     below detects fingerprint collisions (same id, different canonical
+#     input) so validation can report them instead of accepting the id.
+#
+# NOTE on formatting: `aql fmt` in the current build re-parses template
+# interpolations (`${expr}`) as map literals and corrupts them, so the
+# kg sources are hand-formatted and NOT run through the formatter — see
+# kg/README.md §known limitations.
+#
+# Id shapes:
+#   src:<fp>                      fingerprint of locator|content_hash
+#   ent:<Type>:<fp>               fingerprint of Type|normalized_label|key
+#   ast:<fp>                      fingerprint of subject|predicate|object
+#                                 |valid_from|valid_to|sorted source ids
+#   identity:<fp>                 fingerprint of left|right entity ids
+#   issue:<fp>                    fingerprint of rule|target|message
+
+import "aql:bin-util"
+import "aql:string-util"
+import "aql:struct-util"
+
+# 64-bit FNV-1a of a string, rendered as a decimal string.
+def fingerprint fn [[s:String] [String] [
+  convert String (BinUtil.fnv64 s)
+]]
+
+# Canonical text of an arbitrary value: JSON with sorted keys (AQL maps
+# render key-sorted), so structurally equal values canonicalize equally.
+def canon-of fn [[v:Any] [String] [StructUtil.jsonify v]]
+
+# `none` and strings need one unambiguous spelling inside fingerprints;
+# jsonify is total (none renders "null", strings render quoted).
+def canon-opt fn [[v:Any] [String] [StructUtil.jsonify v]]
+
+def source-id fn [[locator:String content_hash:String] [String] [
+  `src:${fingerprint `${locator}|${content_hash}`}`
+]]
+
+# The candidate KEY joins the fingerprint so that two same-named
+# candidate records stay DISTINCT entities at construction — identity is
+# decided by resolve.aql evidence, never by an id coincidence. Records
+# that share key, type, and label (the same record arriving twice) still
+# get the identical id and deduplicate.
+def entity-id fn [[etype:String normalized_label:String key:String] [String] [
+  `ent:${etype}:${fingerprint `${etype}|${normalized_label}|${key}`}`
+]]
+
+# The assertion fingerprint covers subject | predicate | canonical
+# object | valid_from | valid_to | the sorted evidence source ids.
+def assertion-id fn [
+  [subject_id:String predicate:String object:Map
+   valid_from:Any valid_to:Any
+   source_ids:List]
+  [String]
+  [
+    def parts [
+      subject_id predicate (canon-of object)
+      (canon-opt valid_from) (canon-opt valid_to)
+      (StringUtil.concat (sort source_ids) {sep: ","})
+    ]
+    `ast:${fingerprint (StringUtil.concat parts {sep: "|"})}`
+  ]
+]
+
+def identity-id fn [[left:String right:String] [String] [
+  `identity:${fingerprint `${left}|${right}`}`
+]]
+
+def issue-id fn [[rule:String target_id:String message:String] [String] [
+  `issue:${fingerprint `${rule}|${target_id}|${message}`}`
+]]
+
+def proposal-id fn [[term_kind:String term:String] [String] [
+  `schema-proposal:${fingerprint `${term_kind}|${term}`}`
+]]
+
+# Collision check. Input: a list of {id canon} claims (canon is the
+# canonical input text the id was derived from). Output: one collision
+# record {id canons} per id claimed for MORE THAN ONE distinct canonical
+# input — the never-trust-a-hash-alone guard. The same id claimed again
+# for the same canonical input is ordinary deduplication, not a
+# collision.
+def collisions fn [[claims:List] [List] [
+  def by-id (fold [var [[c acc]
+    def prev (acc get c.id)
+    def cur (if (prev eq none) [[]] [prev])
+    def hit (((filter [eq c.canon] cur) size) gt 0)
+    if hit [acc] [acc set (c.id) (push c.canon cur)]
+  ]] claims {})
+  fold [var [[id acc]
+    def canons (by-id get id)
+    if ((canons size) gt 1)
+      [push {id: id canons: canons} acc]
+      [acc]
+  ]] (sort (keys by-id)) []
+]]
+
+export "KgId" {
+  fingerprint: fingerprint/r
+  canon-of: canon-of/r
+  canon-opt: canon-opt/r
+  source-id: source-id/r
+  entity-id: entity-id/r
+  assertion-id: assertion-id/r
+  identity-id: identity-id/r
+  issue-id: issue-id/r
+  proposal-id: proposal-id/r
+  collisions: collisions/r
+}

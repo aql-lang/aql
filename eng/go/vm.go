@@ -1385,6 +1385,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			return nil, vmEvalLimitAt(curDebug, pc, r, vc.stepLimit)
 		}
 		in := curCode[pc]
+		// Line-coverage seam (coverage.go): the compiled twin of the interpreter
+		// step-site emit. noteVMCoverage short-circuits on the coverID field
+		// (untagged units — the ordinary case — cost one branch, no atomic load)
+		// and is small enough to inline, so the hot loop keeps its complexity.
+		curReg.noteVMCoverage(curDebug, pc)
 		switch in.Op {
 		case OpPushConst:
 			stack = append(stack, p.Consts[in.Arg])

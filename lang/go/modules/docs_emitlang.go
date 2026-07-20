@@ -20,8 +20,10 @@ func init() {
 		"emit_auto": "Emit a value using its natural format: Map/List/scalar/Error → json, Table → " +
 			"csv, Xml → xml. The backing word for a bare `emit <data>` (no kind). " +
 			"A value with no natural format raises emit_no_natural.",
-		"register": "Install an AQL fn as a new emitter: EmitLang.register <name> <fn>. " +
-			"Every fn signature must start with the standard prefix [value:Any opts:Map …] and return a value.",
-		"kinds": "List the registered emitter-kind atoms (emit_ stripped; emit_auto excluded).",
+		"register": "TOMBSTONE — raises emit_registry_frozen. The emit kind namespace is fixed " +
+			"(built-in kinds only); pass a custom emitter as a Function value instead: " +
+			"def mye (fn [[value:Any opts:Map] [String] [...]])  emit mye <data> — Go hosts " +
+			"build one with NewEmitLangFn.",
+		"kinds": "List the (fixed) emitter-kind atoms (emit_ stripped; emit_auto excluded).",
 	})
 }

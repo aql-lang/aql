@@ -2,6 +2,7 @@ package modules
 
 import (
 	"math"
+	"math/big"
 
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/cockroachdb/apd/v3"
@@ -350,8 +351,93 @@ var MathNatives = func() []native.NativeFunc {
 		}},
 	})
 
+	// BigInteger / BigDecimal coverage for the unary sign words and the
+	// binary min / max, so those math-util words are TOTAL over the whole
+	// Number family (they previously covered only Integer / Float, so a
+	// Big argument was an uncalled_function). These APPEND signatures to
+	// the words built above (RegisterNativeFunc merges by name).
+	out = append(out, bigUnarySignNatives()...)
+	out = append(out, bigMinMaxNative("min", false), bigMinMaxNative("max", true))
+
 	return out
 }()
+
+// bigUnarySignNatives adds the exact BigInteger / BigDecimal overloads to
+// abs / negate / sign. abs and negate return the same Big type; sign
+// returns an Integer (-1 / 0 / 1), matching the Integer / Float forms.
+func bigUnarySignNatives() []native.NativeFunc {
+	bigIntSig := func(fn func(*big.Int) native.Value) native.Signature {
+		return native.Signature{
+			Args: []*native.Type{native.TBigInteger},
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				n, err := native.AsBigInteger(args[0])
+				if err != nil {
+					return nil, err
+				}
+				return []native.Value{fn(n)}, nil
+			}),
+			BarrierPos: -1,
+		}
+	}
+	bigDecSig := func(fn func(*apd.Decimal) native.Value) native.Signature {
+		return native.Signature{
+			Args: []*native.Type{native.TBigDecimal},
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				d, err := native.AsBigDecimal(args[0])
+				if err != nil {
+					return nil, err
+				}
+				return []native.Value{fn(d)}, nil
+			}),
+			BarrierPos: -1,
+		}
+	}
+	withRet := func(s native.Signature, ret *native.Type) native.Signature {
+		s.Returns = []*native.Type{ret}
+		return s
+	}
+	return []native.NativeFunc{
+		{Name: "abs", Signatures: []native.Signature{
+			withRet(bigIntSig(func(n *big.Int) native.Value { return native.NewBigInteger(new(big.Int).Abs(n)) }), native.TBigInteger),
+			withRet(bigDecSig(func(d *apd.Decimal) native.Value { return native.NewBigDecimal(new(apd.Decimal).Abs(d)) }), native.TBigDecimal),
+		}},
+		{Name: "negate", Signatures: []native.Signature{
+			withRet(bigIntSig(func(n *big.Int) native.Value { return native.NewBigInteger(new(big.Int).Neg(n)) }), native.TBigInteger),
+			withRet(bigDecSig(func(d *apd.Decimal) native.Value { return native.NewBigDecimal(new(apd.Decimal).Neg(d)) }), native.TBigDecimal),
+		}},
+		{Name: "sign", Signatures: []native.Signature{
+			withRet(bigIntSig(func(n *big.Int) native.Value { return native.NewInteger(int64(n.Sign())) }), native.TInteger),
+			withRet(bigDecSig(func(d *apd.Decimal) native.Value { return native.NewInteger(int64(d.Sign())) }), native.TInteger),
+		}},
+	}
+}
+
+// bigMinMaxNative builds the [Number Number] fall-through overload for
+// min / max that covers the Big-bearing pairs the Integer/Float overloads
+// miss. It sorts AFTER those (less specific), so it fires ONLY for a pair
+// where neither operand is a Float and at least one is a Big (Big×Big,
+// Big×Integer) — a Float pairing is already claimed by the more specific
+// [Float …]/[Number Float] overloads. Those residual pairs are all exact
+// and same-family, so CompareValues cannot fault; the word returns the
+// selected OPERAND unchanged, preserving its exact type.
+func bigMinMaxNative(name string, wantMax bool) native.NativeFunc {
+	return native.NativeFunc{
+		Name: name,
+		Signatures: []native.Signature{{
+			Args: []*native.Type{native.TNumber, native.TNumber},
+			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
+				a, b := args[0], args[1]
+				c, _ := native.CompareValues(a, b)
+				// wantMax keeps the larger, min the smaller; ties keep b.
+				if (wantMax && c > 0) || (!wantMax && c < 0) {
+					return []native.Value{a}, nil
+				}
+				return []native.Value{b}, nil
+			}),
+			Returns: []*native.Type{native.TNumber}, BarrierPos: -1,
+		}},
+	}
+}
 
 // mergeBinaryNumNatives combines an integer-overload NativeFunc and a
 // number-overload NativeFunc (typically produced by BinaryIntOpNative

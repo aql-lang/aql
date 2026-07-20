@@ -293,7 +293,56 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// installs a registry-visible OpBindDynScope twin here so the runtime
 	// lookup finds the binding the interpreter's def stack would hold.
 	r.Check.Recorder().RecordDynBind(name, value, pos)
+	// A Function-FAMILY value with no FnDefInfo payload — a computed parser
+	// / transducer / emitter under analysis (`def op (Parse.parser g)`) —
+	// installs NO Defs binding (installDef's fn arm declines so the compiled
+	// closure machinery keeps sole ownership of the name). The parse / mini /
+	// emit value-form macros still need the NAME to resolve as
+	// "a function is bound here", so record the carrier in the per-pass
+	// fn-carrier side table they consult.
+	if checking && !IsConcrete(value) &&
+		(value.Parent.ConformsTo(TFunction) || value.Parent.ConformsTo(TFnDef)) {
+		noteCheckFnCarrierBind(r, name, value)
+	}
 	return outs, nil
+}
+
+// capCheckFnCarrierBinds is the per-check-pass side table of names def-bound
+// to a Function-family CARRIER (a computed fn the analysis cannot see).
+// installDef deliberately installs no Defs binding for those (the compiled
+// closure machinery owns the name), so the parse/mini/emit value-form macros
+// resolve the name here instead. Reset at the start of every check pass
+// (ResetCheckFnCarrierBinds) — like the module-export growth ledger.
+const capCheckFnCarrierBinds = "engine.check.fn-carrier-binds"
+
+// noteCheckFnCarrierBind records name → carrier in the per-pass table.
+func noteCheckFnCarrierBind(r *Registry, name string, v Value) {
+	if m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
+		m[name] = v
+		return
+	}
+	_ = r.Capabilities.Set(capCheckFnCarrierBinds, map[string]Value{name: v})
+}
+
+// checkFnCarrierBind returns the fn carrier def-bound to name during this
+// check pass, if any.
+func checkFnCarrierBind(r *Registry, name string) (Value, bool) {
+	m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds)
+	if !ok || m == nil {
+		return Value{}, false
+	}
+	v, hit := m[name]
+	return v, hit
+}
+
+// ResetCheckFnCarrierBinds clears the fn-carrier side table so it is scoped
+// to a single check pass (a reused instance must not resolve a stale name).
+// Called at the start of every check pass alongside ResetModuleExportGrowth.
+func ResetCheckFnCarrierBinds(r *Registry) {
+	if r == nil || r.Capabilities == nil {
+		return
+	}
+	_, _ = r.Capabilities.Delete(capCheckFnCarrierBinds)
 }
 
 // defKeywordConstructors is the CLOSED SET of constructor words whose

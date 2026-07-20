@@ -76,3 +76,22 @@ import "aql:math-util"  MathUtil.hypot 3.0 4.0	5.0	sqrt(3^2 + 4^2)
 import "aql:math-util"  MathUtil.exp 0.0	1.0	e^0
 import "aql:math-util"  MathUtil.e	2.718281828459045	Euler's number
 import "aql:math-util"  MathUtil.pi	3.141592653589793	the constant pi
+#
+# ─────────────────────────────────────────────────────────────────────
+# §9  BigInteger / BigDecimal coverage — abs / negate / sign and min / max
+# are TOTAL over the whole Number family (a Big argument previously raised
+# uncalled_function). abs / negate keep the exact Big type; sign yields an
+# Integer; min / max return the selected OPERAND unchanged.
+import "aql:math-util"  MathUtil.abs 0d-5	0d5	abs of a BigInteger stays BigInteger
+import "aql:math-util"  MathUtil.abs (MathUtil.negate 0d12.50)	0d12.50	abs of a BigDecimal stays BigDecimal
+import "aql:math-util"  MathUtil.negate 0d5	-0d5	negate a BigInteger
+import "aql:math-util"  MathUtil.negate 0d12.50	-0d12.50	negate a BigDecimal
+import "aql:math-util"  MathUtil.sign 0d-7	-1	sign of a BigInteger is an Integer
+import "aql:math-util"  MathUtil.sign 0d0	0	sign of a zero BigInteger
+import "aql:math-util"  MathUtil.sign (MathUtil.negate 0d3.14)	-1	sign of a BigDecimal
+import "aql:math-util"  typeof (MathUtil.abs 0d-5)	BigInteger	Big abs preserves the exact type
+import "aql:math-util"  MathUtil.min 0d5 0d3	0d3	min of two BigIntegers returns the operand
+import "aql:math-util"  MathUtil.max 0d5 0d3	0d5	max of two BigIntegers returns the operand
+import "aql:math-util"  MathUtil.max 0d5 3	0d5	max across BigInteger and Integer keeps the exact operand
+import "aql:math-util"  MathUtil.min 0d5 3	3	min across BigInteger and Integer keeps the exact operand
+import "aql:math-util"  typeof (MathUtil.min 0d5 0d3)	BigInteger	min preserves the operand's exact type

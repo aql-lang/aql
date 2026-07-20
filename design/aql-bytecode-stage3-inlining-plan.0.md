@@ -355,6 +355,11 @@ emitter; the work is feeding it the right carriers from carrier receivers.
 
 Each module row was traced to its single actual MARK this session:
 
+> **Historical (2026-07):** `ParseLang.register` (and the register-ReturnsFn
+> mechanism analysed below) has since been REMOVED — the kind namespaces are
+> frozen; custom parsers are fn VALUES (`def calc (fn …)` / `Parse.parser`)
+> whose dispatch compiles via the recorded `parselang-fn-dispatch` call.
+
 - **module-parselang:23** — ONE mark: `operand of unknown provenance … at get`.
   Everything before the final `get 1` compiles. But the get's RECEIVER resolves
   to an untracked **ModuleExport** (`ParseLang` itself, empty ID), NOT the parse

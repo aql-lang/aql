@@ -1566,6 +1566,27 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	if IsBareTypeNode(v) && v.ID != "" {
 		return typeOperand(es.internType(v)), true
 	}
+	// A MUTABLE reference value (a `flex` map/list, a Store) read from an
+	// ENCLOSING scope must NEVER bake as a PUSH_CONST: the constant is a frozen
+	// snapshot, so a compiled `set` and a compiled `get` over one module-scope
+	// flex would touch DIFFERENT instances (sift's kind catalog — a runtime
+	// Sift.define's registration was invisible to a later Sift.parse). Route it
+	// to the live dynamic-scope lookup (OpLookupDynScope) so every reference
+	// re-resolves the one shared binding, exactly as the interpreter reads the
+	// name against the live def stack. Gated inside a fn unit (dynScopeRescue
+	// self-guards on len(units) > 1); a top-level flex has no baking hazard (its
+	// single frame IS the live binding), so a failed rescue falls through
+	// unchanged. Scoped to the whole-program / module-load compile
+	// (storedGradualDepth == 0), where this rescue is validated and the sift
+	// module's own fns compile. A DETACHED stamp (StampDetachedFn's isolated
+	// one-unit fork, storedGradualDepth > 0) recompiles a runtime-constructed fn
+	// VALUE, which never reads the module flexes; it keeps its established
+	// lowering (a decline there is a sound per-body interpreter fallback).
+	if es.storedGradualDepth == 0 && (IsFlexMap(v) || IsFlexList(v) || IsStore(v)) {
+		if op, ok := es.dynScopeRescue(v); ok {
+			return op, true
+		}
+	}
 	lit, ok := es.materialise(v)
 	if !ok {
 		return es.dynScopeRescue(v)
@@ -1839,6 +1860,19 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	// returned closures; a NAMED fn value carries registry dispatch and
 	// recursion semantics this model does not own, so it declines.
 	if !ok || (!fd.Anonymous && fd.Name != "") {
+		return emitOperand{}, false
+	}
+	// CAPTURELESS values decline too — the const bake (the caller's
+	// materialise path) carries the REAL FnDefInfo, which a native that
+	// VALIDATES its fn operand's signatures (parselang-fn-dispatch's
+	// [source opts] contract, the service family's MatchFnSig) can read,
+	// where an OpPushClosure ClosurePayload carries only the unit ref and
+	// is rejected as "not a usable function value" (PR #295 merge: main's
+	// `parse (mk) 'hi'` corpus row met §9.2d's widening — the compiled
+	// closure return broke the dispatcher the interpreter satisfies). Only
+	// a CAPTURING fn — which cannot bake (its captures are runtime values)
+	// — takes the closure unit; that is §9.2d's genuine coverage.
+	if len(fd.Captured) == 0 {
 		return emitOperand{}, false
 	}
 	// Resolve the lambda's captures in the ENCLOSING (factory body) scope, the
@@ -4361,6 +4395,23 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
+	case sig.CoreDefault && anyNonConcreteOperand(args):
+		// A CoreDefault overload (the within-type scalar/Micron arithmetic
+		// defaults) is UNLOCKED: a runtime value whose tag is a strict
+		// SUBTYPE of the static carrier's type (the refinement escape —
+		// `def Flag (refine Boolean)` with a merged [Flag Flag] overload)
+		// re-matches to the more-specific user overload that sorts before
+		// it. The static CoreDefault match over a non-concrete operand is
+		// therefore not a dispatch proof. The dispatch-outcome chain routes
+		// this shape to OpCallNativePoly FIRST (tryRecordPoly's
+		// coreDefaultCarrier arm — the VM re-matches over the live table,
+		// exactly the interpreter's dispatch); this refusal is the safety
+		// net for the shapes poly declines. Concrete operands bake fine:
+		// their runtime tag IS the static tag. (Locked native sigs never
+		// need any of this: locked-first means no user overload can
+		// pre-empt them at runtime.)
+		es.SiteCounts[SiteDynamic]++
+		es.MarkUncompilable("core-default dispatch over a carrier operand at " + word)
 	case anyDynamicCarrier(args) && !shuffleOK && !es.dynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)

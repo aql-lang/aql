@@ -47,6 +47,7 @@ def R (refine Record [{pretty:Boolean}]) make R {prety:true}	ERROR:unknown field
 def R (refine Record [{n:Integer}]) make R {}	ERROR:missing field	a declared field cannot be omitted at make
 def R (refine Record [{pretty:Boolean}]) make R {pretty:1}	{pretty:true}	make COERCES a truthy Integer into the Boolean field
 def R (refine Record [{pretty:Boolean}]) make R {pretty:"yes"}	{pretty:true}	…and a yes-string too
+def R (refine Record [{pretty:Boolean}]) make R {pretty:"false"}	{pretty:true}	…even the text "false" — content is not parsed, any non-empty string → true
 def R (refine Record [{n:Integer}]) make R {n:"5"}	ERROR:not a number	but a non-numeric string cannot coerce into an Integer field
 # (dropped) refine-Record predicate field read compiles-refuses (falls back sound); a compiler-coverage gap, not pinned here to keep the frontier gate pure
 def R (refine Record [{pretty:Boolean}]) def f fn [[o:R][Boolean][o.pretty]] f {pretty:true}	true	a structurally-conforming plain map is admitted at the param

@@ -47,10 +47,11 @@ make Float '3.14'	3.14
 make Float '-2.5'	-2.5	
 make Float 7	7.0	Integer→Float goes through ValToString → ParseFloat → 7.0
 		
-# Boolean target — literal forms, numeric, fallback to non-empty.		
-make Boolean 'true'	true	
-make Boolean 'false'	false	
-make Boolean 'yes'	true	non-'true'/'false' non-empty → true
+# Boolean target — coercion by presence, not content: a String is false
+# only when empty, so 'true'/'false'/'yes' are all non-empty → true.
+make Boolean 'true'	true
+make Boolean 'false'	true	string content is not parsed — non-empty → true
+make Boolean 'yes'	true	any non-empty string → true
 make Boolean ''	false	empty string → false
 make Boolean 1	true	non-zero number → true
 make Boolean 0	false	zero → false

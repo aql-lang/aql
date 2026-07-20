@@ -65,43 +65,53 @@ func init() {
 
 	register(&Entry{
 		Word:    "mini",
-		Summary: "Call an embedded mini-language: mini <kind> <src> <opts?>.",
+		Summary: "Call an embedded mini-language: mini <kind|fn> <src> <opts?>.",
 		Description: "Conceptually every mini expansion produces a FUNCTION in place with src and opts bound. " +
 			"A value kind's function is called on the spot (+hb, math, micron, bf's generator form); a FILTER " +
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
 			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
-			"deliberately. Each filter kind's partial has a NAMED member type (MiniLang.Re, MiniLang.Gex, " +
-			"MiniLang.Jp, MiniLang.Jq, MiniLang.Xp — user kinds too) for `is` checks and typed fn params " +
+			"deliberately. Each built-in filter kind's partial has a NAMED member type (MiniLang.Re, " +
+			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
-			"Kinds live in the aql:minilang module (import it first; MiniLang.kinds lists them; " +
-			"register your own with MiniLang.register). An unknown kind is an expansion-time error. Note " +
+			"The built-in kinds live in the aql:minilang module (import it first; MiniLang.kinds lists " +
+			"them) and the kind set is FIXED — new kinds cannot be registered. " +
+			"An unknown kind is an expansion-time error. " +
+			"The first argument may instead BE the transducer — a fn (or a word bound to one) whose every " +
+			"signature starts with the standard [src:String opts:Map] prefix — called directly with no kind " +
+			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
 			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
 			`import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m          ;# => 'bc' — a stored matcher`,
 			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
+			`import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'  ;# => 'abab' — a fn as the transducer`,
 		},
 	})
 
 	register(&Entry{
 		Word:    "parse",
-		Summary: "Call a named parser: parse <kind> <opts?> <source>.",
+		Summary: "Call a parser: parse <kind|fn> <opts?> <source>.",
 		Description: "The sibling of `mini`: expands to the standard call " +
 			"`ParseLang.parse_<kind> <source> <opts> end` at the call site. The `source` is the " +
 			"required LAST argument — a String or a {src:…} Source map — and `opts` is the optional " +
 			"middle one. A parser returns whatever the language yields (an AST, a transduction, …), " +
-			"typed Any. Parsers live in the aql:parselang module (import it first; ParseLang.kinds " +
-			"lists them; register your own with ParseLang.register or the Go RegisterParser host API). " +
-			"An unknown kind is an expansion-time error.",
+			"typed Any. The built-in kinds live in the aql:parselang module (import it first; " +
+			"ParseLang.kinds lists them) and the kind set is FIXED — new kinds cannot be registered. " +
+			"An unknown kind is an expansion-time error. The first argument may instead BE the parser " +
+			"— a ParseLang value: a fn (or a word bound to one) whose every signature starts with the " +
+			"standard [source:String opts:Map] prefix — called directly with no kind lookup, so a " +
+			"parser works without being registered under a kind name.",
 		Examples: []string{
 			`import "aql:parselang"  parse calc 'x + y'        ;# => the parser's AST`,
 			`import "aql:parselang"  parse calc {src:'x + y'}  ;# a {src:…} source map`,
+			`import "aql:parselang"  parse (ParseLang.parse_json) '{"a":1}'  ;# a ParseLang value as the parser`,
+			`import "aql:parselang"  def myp fn [[source:String opts:Map] [Any] [...]]  parse myp 'x'  ;# a bound parser fn`,
 		},
 	})
 
 	register(&Entry{
 		Word:    "emit",
-		Summary: "Emit a value to a string: emit <kind> <opts?> <data> (kind optional — defaults to the value's natural format).",
+		Summary: "Emit a value to a string: emit <kind|fn> <opts?> <data> (kind optional — defaults to the value's natural format).",
 		Description: "The symmetric inverse of `parse`: expands to the standard call " +
 			"`EmitLang get emit_<kind> <data> <opts> end` at the call site. The `data` is the " +
 			"required LAST argument and `opts` is the optional middle one. The kind is OPTIONAL — " +
@@ -109,13 +119,17 @@ func init() {
 			"Table → csv, Xml → xml). Built-in kinds: json, jsonic, yaml, csv, tsv, toml, ini, xml " +
 			"(opts {pretty:true} / {indent:N} for json/jsonic/yaml/xml; {separation:sep} for csv). " +
 			"Every emitter traverses the value through the canonical walk engine — one code path " +
-			"for all formats. Emitters live in the aql:emitlang module (import it first; " +
-			"EmitLang.kinds lists them; register your own with EmitLang.register). An unknown " +
+			"for all formats. The built-in emitters live in the aql:emitlang module (import it " +
+			"first; EmitLang.kinds lists them) and the kind set is FIXED — new kinds cannot be " +
+			"registered. An unknown " +
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
-			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported.",
+			"`emit toml [1 2]`, `emit xml {a:1}`) raises emit_unsupported. The first argument may " +
+			"instead BE the emitter — a fn (or a word bound to one) whose every signature is " +
+			"[value:Any opts:Map] → [String] — called directly with no kind lookup.",
 		Examples: []string{
 			`import "aql:emitlang"  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
 			`import "aql:emitlang"  emit json {pretty:true} {a:1} ;# => indented json`,
+			`import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}  ;# => 'UP' — a fn as the emitter`,
 		},
 	})
 }

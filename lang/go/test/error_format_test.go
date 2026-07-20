@@ -213,9 +213,11 @@ func TestErrorFormatSignatureReceivedArg(t *testing.T) {
 func TestErrorFormatUndefinedWordDidYouMean(t *testing.T) {
 	err := runWithSource(t, "def counter 1\ncountr")
 	ae := assertAqlError(t, err, "undefined_word")
+	// The nearest binding leads the suggestion list; aql:io's `mount`
+	// (also edit-distance-close to "countr") may follow it.
 	assertErrorContains(t, err,
 		"undefined word: countr",
-		"did you mean `counter`?",
+		"did you mean `counter`",
 	)
 	if len(ae.Suggestions) == 0 {
 		t.Error("expected structured Suggestions")

@@ -48,7 +48,14 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 	r.Check.RecordFnBinder(name)
 
 	// FnDefInfo body (from fn word): install typed signatures.
-	// Only fn-based defs register functions; simple value defs just use DefStacks.
+	// Only fn-based defs register functions; simple value defs just use
+	// DefStacks. A Function-FAMILY body with no FnDefInfo payload — a
+	// CARRIER under analysis — installs NOTHING here: the compiled closure
+	// machinery (RecordDynBind / MarkValueDef / closure render) owns such
+	// names, and a visible Defs binding diverts its provenance modeling.
+	// The def word's handler records the carrier in the check-scoped
+	// fn-carrier side table instead (native installAndRecordDef), which the
+	// parse/mini/emit value-form macros consult for name resolution.
 	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
 		fnDef, ok := body.Data.(FnDefInfo)
 		if !ok {
@@ -1864,10 +1871,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 	r.Defs.Set(name, stack)
 }
 
-// CoerceBoolean converts any value to a boolean using the same rules
-// as `convert boolean`: booleans pass through, numbers are non-zero,
-// none is false, lists/maps are non-empty, "true"/"false" parse
-// literally, all other values are non-empty.
+// CoerceBoolean converts any value to a boolean by presence, not by
+// parsing content — the same rule `convert Boolean` and `make Boolean`
+// apply: booleans pass through, numbers are non-zero, none is false,
+// lists/maps are non-empty, and a String is false only when empty (its
+// characters are never inspected, so "false" and "true" both coerce to
+// true). The sole content check is the tail carve-out below: a non-String
+// value that RENDERS as "false" is an unresolved boolean literal reaching
+// truthiness as a Word/Atom (a bare `false` clause, a quoted `false`
+// atom) and keeps its boolean reading.
 func CoerceBoolean(v Value) bool {
 	switch {
 	case ValueType(v).ConformsTo(TBoolean):

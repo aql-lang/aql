@@ -33,6 +33,12 @@ func TestW9ModuleExportGrowthGuards(t *testing.T) {
 	if moduleExportAbsenceStable(r, absenceArgsW9(other, "seen")) {
 		t.Error("a noted key must decline the absence fold")
 	}
+
+	// Poisoning the registered ledger declines EVERY absence fold.
+	PoisonModuleExportGrowth(r, other)
+	if moduleExportAbsenceStable(r, absenceArgsW9(other, "unnoted")) {
+		t.Error("a poisoned ledger must decline every absence fold")
+	}
 }
 
 // exportCarrierW9 is a test ExportFieldsCarrier body for wrapping in an

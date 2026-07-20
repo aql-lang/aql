@@ -20,6 +20,20 @@ import "github.com/aql-lang/aql/eng/go"
 //
 // `print` is NOT here: it stays a core word so basic output needs no import.
 //
+// FILE I/O IS PATHON-ONLY. Every filesystem target is a `Scalar/Micron/Pathon`
+// — string paths are NOT accepted (write `IO.read (make Pathon "data.csv")`,
+// not `IO.read "data.csv"`). This keeps a file target type-distinct from an
+// arbitrary string and from a stream handle, so one polymorphic verb dispatches
+// unambiguously on the argument's TYPE. read / write additionally accept a
+// StreamKind handle (stdin / stdout / stderr).
+//
+// `list` and `remove` are NOT here: they are exported as POLYMORPHIC WORD
+// EXTENSIONS of the core `list` / `remove` words (built in modules/io.go via
+// NewWordExtensionAnchored), so after `import "aql:io"` the BARE words gain a
+// Pathon overload — `list somePath` / `remove somePath` — rather than a
+// separate IO.list / IO.remove. Their handlers (listHandler / doRemoveWord)
+// live in io_fs.go and are shared with those extensions.
+//
 // At dispatch the module FnDef wrapper short-circuits to the inner native's
 // handler, which runs against the LIVE engine registry (execMatch passes
 // e.registry, not the sub-registry) — so IO.read / IO.write reach the host
@@ -27,14 +41,41 @@ import "github.com/aql-lang/aql/eng/go"
 // exactly as the former core words did.
 //
 //	printstr  write a value's formatted form without a trailing newline
-//	read      read a file or stream (path/string/StreamKind; optional options map)
-//	write     write a file or stream (path/string/StreamKind; value; optional options map)
+//	read      read a file (Pathon) or stream (StreamKind); optional options map
+//	write     write a file (Pathon) or stream (StreamKind); value; optional options map
 //	stdin     the standard-input stream handle (a StreamKind atom)
 //	stdout    the standard-output stream handle (a StreamKind atom)
 //	stderr    the standard-error stream handle (a StreamKind atom)
 //	trace     run a list as a sub-program with step-by-step tracing
-//	folder    create / list a filesystem folder (Path; optional options)
-func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
+//	folder    create / list a filesystem folder (Pathon; optional options)
+//	stat      describe a Pathon, returning a FileInfo record or `none`
+//	move      rename/move a Pathon to a Pathon destination
+//	copy      copy a Pathon to a Pathon destination ({recursive} for a tree)
+//	link      create a symbolic (or {hard}) link at a Pathon destination
+//	touch     create/update a Pathon and apply {mode,mtime,atime,size}
+//	watch     run a body per change event on a Pathon (returns a Watcher)
+//	unwatch   stop a Watcher, closing its event stream
+//	mount     install a map of AQL handler fns as the filesystem
+//	unmount   restore the filesystem that was active before mount
+//
+// IOModuleTypes bundles the per-import module-minted types the io words
+// close over: StreamKind (stdin/stdout/stderr handle tag), FileType (the
+// file/dir/symlink/other stat-record atom enum), Watcher (a live watch
+// subscription), and File (a stateful open-file handle). P5 will add Lock
+// and Mmap here. Bundling them keeps IOModuleNativeFuncs' signature stable
+// as the resource surface grows.
+type IOModuleTypes struct {
+	StreamKind *Type
+	FileType   *Type
+	Watcher    *Type
+	File       *Type
+	Lock       *Type
+	Mmap       *Type
+}
+
+func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
+	streamKind, fileType, watcherType, handleType := t.StreamKind, t.FileType, t.Watcher, t.File
+	lockType, mmapType := t.Lock, t.Mmap
 	streamHandle := func(name string) NativeFunc {
 		return NativeFunc{
 			Name: name,
@@ -46,6 +87,61 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 				Returns: []*Type{streamKind}, BarrierPos: -1,
 			}},
 		}
+	}
+	// statImpl closes over fileType so the stat handler can tag records with
+	// the module's FileType atoms.
+	statImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			return statHandler(a, r, fileType, hasOpts)
+		}
+	}
+	// watchImpl closes over watcherType so each import's watch handles
+	// carry its own Watcher identity. watchOptsImpl threads the {recursive
+	// match} options map (the third arg) through to the same handler.
+	watchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doWatchWord(a, r, watcherType, Value{})
+	}
+	watchOptsImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doWatchWord(a, r, watcherType, a[2])
+	}
+	unwatchImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doUnwatchWord(a, r)
+	}
+	// openImpl closes over handleType so each import stamps its own File
+	// identity; seek/flush/close/read-handle/write-handle reach the handle
+	// payload structurally, so they need no type.
+	openImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doOpenWord(a, r, handleType)
+	}
+	seekImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doSeekWord(a, r)
+	}
+	flushImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doFlushWord(a, r)
+	}
+	closeImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doCloseWord(a, r)
+	}
+	readHandleImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return readHandleWord(a, r)
+	}
+	writeHandleImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return writeHandleWord(a, r)
+	}
+	lockImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doLockWord(a, r, lockType)
+	}
+	unlockImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doUnlockWord(a, r)
+	}
+	mmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doMmapWord(a, r, mmapType)
+	}
+	readMmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return readMmapWord(a, r)
+	}
+	writeMmapImpl := func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return writeMmapWord(a, r)
 	}
 	return []NativeFunc{
 		{
@@ -61,33 +157,46 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 			Signatures: []Signature{
 				{Args: []*Type{TPathon, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TPathon}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TString}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TMap}, Impl: Go(readOptsHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{streamKind}, Impl: Go(readHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+				// File-handle reads: {offset}/{length}/{enc} slice the handle.
+				{Args: []*Type{handleType, TMap}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{handleType}, Impl: Go(readHandleImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				// Mmap-region reads: {offset}/{length}/{enc} window the map.
+				{Args: []*Type{mmapType, TMap}, Impl: Go(readMmapImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(readMmapImpl), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, TPathon}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
-				{Args: []*Type{TMap, TString}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 				{Args: []*Type{TMap, streamKind}, Impl: Go(readOptsRevHandler), Returns: []*Type{TAny}, BarrierPos: -1},
 			},
 		},
 		{
-			// write returns the target it wrote to, tagged with the target's
-			// type (a file path, or the Stream handle for a standard stream),
-			// so the result can be threaded straight into read.
+			// write returns the target it wrote to (the Pathon, or the Stream
+			// handle for a standard stream), so the result can be threaded
+			// straight into read.
 			Name: "write",
 			Signatures: []Signature{
+				// Binary writes: a Bytes payload is written verbatim (more
+				// specific than the TAny/TString sigs, so it wins dispatch).
+				{Args: []*Type{TPathon, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TBytes, TMap}, Impl: Go(writeBytesOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				{Args: []*Type{streamKind, TBytes}, Impl: Go(writeBytesHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TString}, Impl: Go(writeHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 				{Args: []*Type{TPathon, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
-				{Args: []*Type{TString, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TString}, Impl: Go(writeHandler), Returns: []*Type{TString}, BarrierPos: -1},
-				{Args: []*Type{TString, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{TString}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString, TMap}, Impl: Go(writeOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TAny, TMap}, Impl: Go(writeAnyOptsHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TString}, Impl: Go(writeHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
 				{Args: []*Type{streamKind, TAny}, Impl: Go(writeAnyHandler), Returns: []*Type{streamKind}, BarrierPos: -1},
+				// File-handle writes return the handle (for threading); a Bytes
+				// payload writes verbatim, {offset} positions the write.
+				{Args: []*Type{handleType, TAny, TMap}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{handleType, TAny}, Impl: Go(writeHandleImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				// Mmap-region writes splice into the map in place ({offset}),
+				// returning the region.
+				{Args: []*Type{mmapType, TAny, TMap}, Impl: Go(writeMmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+				{Args: []*Type{mmapType, TAny}, Impl: Go(writeMmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
 			},
 		},
 		streamHandle("stdin"),
@@ -108,5 +217,219 @@ func IOModuleNativeFuncs(streamKind *Type) []NativeFunc {
 				{Args: []*Type{TPathon}, Impl: Go(folderHandler), Returns: []*Type{TList}, BarrierPos: -1},
 			},
 		},
+		{
+			// stat returns a FileInfo record (or none when absent). The
+			// target is a Pathon; an optional map carries {follow, resolve}.
+			Name: "stat",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(statImpl(true)), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(statImpl(false)), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
+			// move renames/moves src to dst (both Pathon), returning dst.
+			// {overwrite:false} refuses an existing destination.
+			Name: "move",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(moveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(moveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// copy copies src to dst (both Pathon), returning dst.
+			// {recursive:true} copies a directory tree.
+			Name: "copy",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(copyOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(copyHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// link creates a link at dst referring to src (both Pathon) — a
+			// symbolic link by default, a hard link with {hard:true}. Returns dst.
+			Name: "link",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TPathon, TMap}, Impl: Go(linkOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TPathon}, Impl: Go(linkHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// watch subscribes to change events on a Pathon (a file, a
+			// directory's direct children, or — with {recursive:true} — the
+			// whole subtree) and runs the body once per event with the {op,
+			// path} record on the stack. {match:"glob"} filters events by
+			// path; the coalesced overflow marker always gets through.
+			// Returns a Watcher.
+			Name: "watch",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TList, TMap}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(watchOptsImpl), Returns: []*Type{watcherType}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TList}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(watchImpl), Returns: []*Type{watcherType}, BarrierPos: -1},
+			},
+		},
+		{
+			// unwatch stops a Watcher, releasing the subscription.
+			Name: "unwatch",
+			Signatures: []Signature{
+				{Args: []*Type{watcherType}, Impl: Go(unwatchImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// open acquires a stateful File handle on a Pathon. The options
+			// map carries {mode:read|write|append|rw, create, exclusive,
+			// truncate, perm}; the default is a read-only open.
+			Name: "open",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(openImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+			},
+		},
+		{
+			// seek moves a File handle's cursor to n, relative to
+			// {from:start|current|end} (default start), and returns the new
+			// absolute offset.
+			Name: "seek",
+			Signatures: []Signature{
+				{Args: []*Type{handleType, TInteger, TMap}, Impl: Go(seekImpl), Returns: []*Type{TInteger}, BarrierPos: -1},
+				{Args: []*Type{handleType, TInteger}, Impl: Go(seekImpl), Returns: []*Type{TInteger}, BarrierPos: -1},
+			},
+		},
+		{
+			// flush syncs a File handle to its backend or flushes a writable
+			// Mmap region's changes, returning the handle (polymorphic).
+			Name: "flush",
+			Signatures: []Signature{
+				{Args: []*Type{handleType}, Impl: Go(flushImpl), Returns: []*Type{handleType}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(flushImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+			},
+		},
+		{
+			// close releases a resource handle — a File, Watcher, Lock, or
+			// Mmap. TYPED sigs (not one TAny) keep dispatch unambiguous under
+			// forward collection and give a static type error for a
+			// non-resource; the handler type-switches over all four.
+			Name: "close",
+			Signatures: []Signature{
+				{Args: []*Type{handleType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{watcherType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{lockType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{mmapType}, Impl: Go(closeImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// lock takes an advisory lock on a Pathon — {shared:true} for a
+			// read lock, {block:false} to return `none` on contention instead
+			// of waiting. Returns a Lock (or none).
+			Name: "lock",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(lockImpl), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
+			// unlock releases an advisory Lock (the Lock-specific twin of the
+			// polymorphic close).
+			Name: "unlock",
+			Signatures: []Signature{
+				{Args: []*Type{lockType}, Impl: Go(unlockImpl), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// mmap maps a file's bytes into a Mmap region; {offset, length,
+			// writable} shape the mapping. read/write/flush/close drive it.
+			Name: "mmap",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(mmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(mmapImpl), Returns: []*Type{mmapType}, BarrierPos: -1},
+			},
+		},
+		{
+			// mount installs a filesystem as the host FileOps; unmount
+			// restores the previous one. A handler MAP is the AQL→FileOps
+			// bridge; a Pathon (a ".zip" path or {zip:true}) mounts a
+			// read-only ZIP archive, or a copy-on-write overlay over it with
+			// {writable:true}. See io_mount.go for both contracts.
+			Name: "mount",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountWord(a, r)
+				}), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPathon, TMap}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountZipWord(a, r, a[1])
+				}), Returns: []*Type{}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doMountZipWord(a, r, Value{})
+				}), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			Name: "unmount",
+			Signatures: []Signature{
+				{Args: []*Type{}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+					return doUnmountWord(a, r)
+				}), Returns: []*Type{}, BarrierPos: -1},
+			},
+		},
+		{
+			// temp creates a unique temp file (or directory with {dir:true}),
+			// optionally inside {in:Pathon} named {prefix}…{suffix}, and
+			// returns its Pathon. The options map is REQUIRED ({} for the
+			// defaults): a 0-arg sig on a module word would fire eagerly on
+			// the dot-access value path before forward collection, stranding
+			// the options (the execFnDefLiteral data-vs-call gate).
+			Name: "temp",
+			Signatures: []Signature{
+				{Args: []*Type{TMap}, Impl: Go(tempOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+		{
+			// space reports the volume holding a Pathon: {total free
+			// available bsize type}. Numbers are backend-defined (the mem
+			// filesystem reports a synthetic volume).
+			Name: "space",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon}, Impl: Go(spaceHandler), Returns: []*Type{TAny}, BarrierPos: -1},
+			},
+		},
+		{
+			// touch creates a Pathon if absent and applies metadata options
+			// {mode, mtime, atime, size} (folding chmod/utimes/truncate).
+			// Returns the path.
+			Name: "touch",
+			Signatures: []Signature{
+				{Args: []*Type{TPathon, TMap}, Impl: Go(touchOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+				{Args: []*Type{TPathon}, Impl: Go(touchHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			},
+		},
+	}
+}
+
+// IOWordExtensions builds the WORD-EXTENSION clones the aql:io module exports
+// for the core `list` and `remove` words: after `import "aql:io"` the bare
+// words gain a Pathon overload so `list somePath` enumerates a directory and
+// `remove somePath` deletes a filesystem path — polymorphism over the existing
+// verbs rather than a separate IO.list / IO.remove.
+//
+// These anchor on Pathon, a KERNEL builtin type. The module-scope safety rule
+// (requireUserTypedSigs) normally refuses a core-word extension whose tuple has
+// no user-minted type; NewWordExtensionAnchored waives it because aql:io ships
+// and versions WITH the kernel (see eng/go/word_extend.go). The core `list` /
+// `remove` sigs match only Map/ResourceEntity/List, disjoint from Pathon, so
+// dispatch is unambiguous. listHandler closes over fileType so a
+// `list p {detail:true}` record's `type` field is an IO.FileType atom.
+func IOWordExtensions(fileType *Type) []FnDefInfo {
+	listImpl := func(hasOpts bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+		return func(a []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+			return listHandler(a, r, fileType, hasOpts)
+		}
+	}
+	return []FnDefInfo{
+		NewWordExtensionAnchored("list", []Signature{
+			{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
+			{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
+		}),
+		NewWordExtensionAnchored("remove", []Signature{
+			{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+			{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
+		}),
 	}
 }

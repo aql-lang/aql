@@ -1,0 +1,194 @@
+# ============================================================
+# todo-tui-client.aql — the same todo TUI, backed by the REAL REST
+# server (todo-api.aql, the NETWORK-SERVERS.0.md §6.4 verification
+# app). The literal "TUI version of the todo API server": the UI's
+# todo list is a cache of the server's; every mutation is a spawned
+# worker doing the HTTP round trip — the pragmatic-BEAM idiom of
+# TUI.0.md §2.3. update never blocks, the screen never freezes, and
+# results come back as ordinary mailbox messages. Graduated from the
+# speculative probe in ../tui/ onto the LANDED surface; exercised end
+# to end by lang/go/test/app_todo_tui_test.go.
+#
+#   import "./todo-api.aql"
+#   import "./todo-tui-client.aql"
+#   def ln (TodoApi.serve {port: 0})                     # in-process server
+#   def addr (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)])
+#   def final (TodoTuiClient.run {tcp: addr})            # …or a remote host
+#
+# Keys are identical to todo-tui.aql. The status line shows "syncing…"
+# while a worker round trip is in flight, and the last sync error if
+# any.
+# ============================================================
+
+import "aql:net"
+import "aql:tui"
+import "aql:math-util"
+import "aql:parselang"
+import "aql:emitlang"
+
+# --- HTTP workers -------------------------------------------------------
+# Each worker runs in its own process: do the verb, re-fetch the list,
+# send it home. The UI's pid and the endpoint handle are captured into
+# the spawned body (handles travel by identity, like Pid/Socket —
+# NETWORK-SERVERS.0.md §4.1). A failure becomes a {tag:"sync-error"}
+# message — the uniform failure contract, on screen. Workers return a
+# Pid; update arms drop it (statement residue is real — ../apps/README).
+
+def fetch-todos fn [[ep:Any] [List] [
+  def r (call {method: "GET"  path: "/todos"} ep {timeout: 5000})
+  parse json (convert String r.body)
+]]
+
+def sync fn [[ep:Any ui:Any] [Any] [
+  spawn [ do [
+      send {tag: "loaded"  todos: (fetch-todos ep)} ui
+      true                                # do must yield a value for `error`
+    ]
+    error [ def why (dot message)  send {tag: "sync-error"  why: why} ui ] ]
+]]
+
+def create-remote fn [[ep:Any ui:Any text:String] [Any] [
+  spawn [ do [
+      (call { method: "POST"  path: "/todos"
+              headers: {content-type: "application/json"}
+              body: (emit json {text: text}) } ep {timeout: 5000}) drop
+      send {tag: "loaded"  todos: (fetch-todos ep)} ui
+      true                                # do must yield a value for `error`
+    ]
+    error [ def why (dot message)  send {tag: "sync-error"  why: why} ui ] ]
+]]
+
+def toggle-remote fn [[ep:Any ui:Any t:Map] [Any] [
+  spawn [ do [
+      (call { method: "PUT"  path: (join "" ["/todos/" (t.id)])
+              headers: {content-type: "application/json"}
+              body: (emit json {done: ((t.done) not)}) } ep {timeout: 5000}) drop
+      send {tag: "loaded"  todos: (fetch-todos ep)} ui
+      true                                # do must yield a value for `error`
+    ]
+    error [ def why (dot message)  send {tag: "sync-error"  why: why} ui ] ]
+]]
+
+def delete-remote fn [[ep:Any ui:Any t:Map] [Any] [
+  spawn [ do [
+      (call {method: "DELETE"  path: (join "" ["/todos/" (t.id)])} ep {timeout: 5000}) drop
+      send {tag: "loaded"  todos: (fetch-todos ep)} ui
+      true                                # do must yield a value for `error`
+    ]
+    error [ def why (dot message)  send {tag: "sync-error"  why: why} ui ] ]
+]]
+
+# --- update -------------------------------------------------------------
+
+def clamp-sel fn [[sel:Integer n:Integer] [Integer] [
+  MathUtil.max 0 (MathUtil.min sel (n sub 1))
+]]
+
+def entry-key fn [[state:Map ev:Map] [Map] [
+  if (ev.key eq "enter") [
+    def text state.entry.value
+    if (text eq "") [ state ] [
+      (create-remote state.ep state.ui text) drop
+      def st2 (state set entry (Tui.input "" {placeholder: "what needs doing?"}))
+      st2 set syncing true
+    ]
+  ] [
+    state set entry (Tui.edit state.entry ev)
+  ]
+]]
+
+def list-key fn [[state:Map ev:Map] [Map] [
+  case ev.key [
+    "up"    [ drop state set sel (clamp-sel (state.sel sub 1) (size state.todos)) ]
+    "down"  [ drop state set sel (clamp-sel (state.sel add 1) (size state.todos)) ]
+    "space" [ drop
+      if ((size state.todos) eq 0) [ state ] [
+        (toggle-remote state.ep state.ui (state.todos get state.sel)) drop
+        state set syncing true
+      ] ]
+    "d"     [ drop
+      if ((size state.todos) eq 0) [ state ] [
+        (delete-remote state.ep state.ui (state.todos get state.sel)) drop
+        state set syncing true
+      ] ]
+    "q"     [ drop
+      # update may do I/O directly (§2.3): release the endpoint, then
+      # quit — the `;` stops close's forward collection at the statement
+      Net.close (state.ep);
+      Tui.quit state ]
+    state
+  ]
+]]
+
+def client-update fn [[state:Map ev:Map] [Map] [
+  case ev.tag [
+    # first event: learn our own pid, kick off the initial load (§2.4)
+    "init" [ drop
+      def st2 (state set ui (ev.ui))
+      (sync st2.ep st2.ui) drop
+      st2 set syncing true ]
+
+    # worker results — just more mailbox messages
+    "loaded" [ drop
+      def st2 ((state set todos (ev.todos)) set syncing false)
+      (st2 set err "") set sel (clamp-sel st2.sel (size (ev.todos))) ]
+    "sync-error" [ drop
+      (state set syncing false) set err (ev.why) ]
+
+    "key" [ drop
+      if (ev.key eq "tab") [
+        state set focus (if (state.focus eq "entry") ["list"] ["entry"])
+      ] [
+        if (state.focus eq "entry") [ entry-key state ev ] [ list-key state ev ]
+      ] ]
+
+    # resize/mouse/paste/focus — nothing to do here
+    state
+  ]
+]]
+
+# --- view (same shape as todo-tui.aql, plus sync status) ------------------
+
+def client-label fn [[t:Map] [String] [
+  join "" [(if t.done ["[x] "] ["[ ] "]) t.text]
+]]
+
+def client-view fn [[state:Map] [Map] [
+  def n (size state.todos)
+  def done-n (size (filter [ dot done ] state.todos))
+  def status (if ((state.err eq "") not)
+    [ join "" ["sync error: " state.err] ]
+    [ if state.syncing [ "syncing…" ] [ "in sync" ] ])
+  Tui.rows [
+    (Tui.box (state.entry set focus (state.focus eq "entry"))
+             {title: "new todo"  border: "round"  size: 3})
+    (Tui.box (Tui.list-view (each [ client-label ] state.todos) {cursor: state.sel})
+             {title: (join "" ["todos " (convert String done-n) "/" (convert String n)])
+              border: "round"  size: {flex: 1}})
+    (Tui.text (join "  ·  " [status "tab focus" "space toggle" "d delete" "q quit"])
+              {style: {fg: "grey"}  size: 1})
+  ]
+]]
+
+# --- app map + entry points ----------------------------------------------
+
+def client-app fn [[opts:Map] [Map] [
+  def ep (Net.connect {tcp: (opts.tcp)  codec: Net.http})
+  # bind the app map BEFORE returning it — a trailing map literal
+  # would resolve `ep` after local teardown (../apps/README gotcha)
+  def out { init: { todos: []  sel: 0  focus: "entry"  syncing: true  err: ""
+                    ui: none  ep: ep
+                    entry: (Tui.input "" {placeholder: "what needs doing?"}) }
+            update: client-update/r
+            view: client-view/r }
+  out
+]]
+
+def client-run fn [[opts:Map] [Map] [
+  Tui.run (client-app opts)
+]]
+
+export "TodoTuiClient" {
+  app: client-app/r
+  run: client-run/r
+}

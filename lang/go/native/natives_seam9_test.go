@@ -2,12 +2,52 @@ package native
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 )
+
+// w9ExtStub supplies erroring implementations of the extended FileOps surface
+// (Stat/ReadDir/Remove/Rename/Symlink/Link/Chmod/Chtimes/Truncate) so the
+// minimal folder-focused mocks below satisfy capabilities.FileOps. These
+// methods are not exercised by the doFolder tests that use these mocks.
+type w9ExtStub struct{}
+
+func (w9ExtStub) Stat(string, bool) (capabilities.FileInfo, error) {
+	return capabilities.FileInfo{}, fmt.Errorf("no")
+}
+func (w9ExtStub) ReadDir(string) ([]capabilities.FileInfo, error) { return nil, fmt.Errorf("no") }
+func (w9ExtStub) Remove(string, bool) error                       { return fmt.Errorf("no") }
+func (w9ExtStub) Rename(string, string) error                     { return fmt.Errorf("no") }
+func (w9ExtStub) Symlink(string, string) error                    { return fmt.Errorf("no") }
+func (w9ExtStub) Link(string, string) error                       { return fmt.Errorf("no") }
+func (w9ExtStub) Chmod(string, os.FileMode) error                 { return fmt.Errorf("no") }
+func (w9ExtStub) Chtimes(string, time.Time, time.Time) error      { return fmt.Errorf("no") }
+func (w9ExtStub) Truncate(string, int64) error                    { return fmt.Errorf("no") }
+func (w9ExtStub) Chown(string, int, int, bool) error              { return fmt.Errorf("no") }
+func (w9ExtStub) XattrGet(string, string) ([]byte, error)         { return nil, fmt.Errorf("no") }
+func (w9ExtStub) XattrSet(string, string, []byte) error           { return fmt.Errorf("no") }
+func (w9ExtStub) XattrList(string) ([]string, error)              { return nil, fmt.Errorf("no") }
+func (w9ExtStub) XattrRemove(string, string) error                { return fmt.Errorf("no") }
+func (w9ExtStub) TempFile(string, string) (string, error)         { return "", fmt.Errorf("no") }
+func (w9ExtStub) TempDir(string, string) (string, error)          { return "", fmt.Errorf("no") }
+func (w9ExtStub) Statfs(string) (capabilities.FsInfo, error) {
+	return capabilities.FsInfo{}, fmt.Errorf("no")
+}
+func (w9ExtStub) Watch(string, capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
+	return nil, nil, fmt.Errorf("no")
+}
+func (w9ExtStub) Open(string, capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	return nil, fmt.Errorf("no")
+}
+func (w9ExtStub) Lock(string, bool, bool) (io.Closer, error) { return nil, fmt.Errorf("no") }
+func (w9ExtStub) Mmap(string, int64, int, bool) (capabilities.MmapRegion, error) {
+	return nil, fmt.Errorf("no")
+}
 
 // Seam-9 coverage (W9_nativeC) for natives.go: reach / folder / cancel
 // handler error and edge arms, driven directly with crafted args and an
@@ -15,7 +55,7 @@ import (
 
 // w9FailResolveOps is a FileOps whose ResolvePath fails, so the
 // parents=false ResolvePath error arm in doFolder is reachable.
-type w9FailResolveOps struct{}
+type w9FailResolveOps struct{ w9ExtStub }
 
 func (w9FailResolveOps) ReadFile(string) ([]byte, error) { return nil, fmt.Errorf("no") }
 func (w9FailResolveOps) WriteFile(string, []byte, os.FileMode) error {
@@ -29,7 +69,7 @@ func (w9FailResolveOps) ResolvePath(string) (string, error) {
 // w9FailMkdirOps is a hermetic FileOps whose ResolvePath succeeds but
 // MkdirAll fails — exactly notInstalled's shape, injected so the doFolder
 // MkdirAll error arms are reachable without touching the real FS.
-type w9FailMkdirOps struct{}
+type w9FailMkdirOps struct{ w9ExtStub }
 
 func (w9FailMkdirOps) ReadFile(string) ([]byte, error)             { return nil, fmt.Errorf("no") }
 func (w9FailMkdirOps) WriteFile(string, []byte, os.FileMode) error { return fmt.Errorf("no") }

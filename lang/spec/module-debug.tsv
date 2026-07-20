@@ -45,7 +45,7 @@ import "aql:debug" Debug.gc typeof	Map	gc forces a collection and reports deltas
 #
 # §5  performance analysis (deterministic shapes under the fixed clock)
 import "aql:debug" [1 add 2] Debug.steps typeof	Integer	steps returns the engine step count
-import "aql:debug" ["a" "b" mul] Debug.steps	ERROR:signature_error	a type error in the body is caught (at check via ReturnsFn, and at runtime)
+import "aql:debug" [{a:1} {b:2} mul] Debug.steps	ERROR:signature_error	a dispatch error in the body is caught (at check via ReturnsFn, and at runtime; Map pairs have no mul — String pairs now do)
 import "aql:debug" ([1 add 2] Debug.time) typeof	Map	time returns {result, elapsed-ms, steps}
 import "aql:debug" (Debug.bench [1 add 2] 3) typeof	Map	bench returns timing stats over n runs
 import "aql:debug" [1 add 2] Debug.trace	3	trace prints the step trace and returns the body result

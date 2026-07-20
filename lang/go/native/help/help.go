@@ -670,8 +670,12 @@ func computeBinaryResult(name string, sig SigInfo, a, b string) string {
 		return formatResult(result, sig)
 	}
 
-	// String concat for add: handler does args[1] + args[0] = b + a
-	if name == "add" {
+	// String concat for add applies only when an operand is a quoted
+	// String (handler does args[1] + args[0] = b + a). Two non-String
+	// scalars — e.g. `add true false` — are a within-type op the heuristic
+	// cannot evaluate (Boolean arithmetic is a defined error), so show
+	// "..." rather than a bogus concatenation.
+	if name == "add" && (strings.HasPrefix(a, "'") || strings.HasPrefix(b, "'")) {
 		aStr := strings.Trim(a, "'")
 		bStr := strings.Trim(b, "'")
 		return "'" + bStr + aStr + "'"

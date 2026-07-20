@@ -1,5 +1,15 @@
 # MICRON-FORMATS — declarative `$parse` / `$emit` for user Micron kinds
 
+> **Caveat (2026-07): `MiniLang.micron` — the user-kind literal hook this
+> proposal builds on — has since been REMOVED.** The `+m` literal grammar
+> is fixed to the builtin Micron leaves (Emailon, Urlon, Pathon); the word
+> is a tombstone raising `mini_registry_frozen`, and the eng-side extras
+> merge (`MicronLiteralSpec` / `MicronGrammarWith`) went with it. User
+> Micron TYPES still exist (`def Nameon refine Micron {…}` + `make`);
+> custom sources are parsed by parser fn values. Any revival of this
+> proposal must first re-argue extensible `+m` dispatch against the frozen
+> un-namespaced-literal decision.
+
 **Status:** PROPOSAL (2026-07-15). Nothing here is landed. This note is a
 design record: it distinguishes, throughout, what is **verified in the code
 today** from what is **proposed**. The executable spec, when this lands, will

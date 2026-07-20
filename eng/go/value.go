@@ -377,6 +377,17 @@ type FnSig struct {
 	// arriving from a DIFFERENT module raises [aql/extend_conflict],
 	// while identical provenance (diamond re-import) is idempotent.
 	Origin string
+	// CoreDefault marks a core-provided UNLOCKED default overload that the
+	// kernel appends to a builtin word (RegisterCoreDefault) — the Micron
+	// field-wise arithmetic default is the sole user. Unlike a locked
+	// native sig it dispatches AFTER (is beaten by) any more-specific
+	// user/module overload, so a user's own `def add fn [[a:Kindon
+	// b:Kindon] …]` wins by specificity. Unlike an ordinary unlocked def it
+	// lives on the native FnDefInfo (so `undef` of the builtin still
+	// refuses) and is SKIPPED by the export transplant (so it never rides
+	// a module's word extension into an importer, where its builtin-only
+	// tuple would trip the module-scope user-type rule).
+	CoreDefault bool
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
@@ -739,6 +750,21 @@ type FnDefInfo struct {
 	// module import for the export transplant. Empty for every ordinary
 	// fn / native registration.
 	Extends string
+	// AllowBuiltinAnchor waives the requireUserTypedSigs safety rule for
+	// this extension clone: its added signatures may anchor on BUILTIN
+	// argument types (kernel or aql:-module) with no user-minted type.
+	// The rule normally refuses such tuples on a core word because a
+	// third-party module extending `add` with `[Integer Integer]` would
+	// change what core means for every importer and would break the day
+	// core claims that tuple. This flag is a FIRST-PARTY opt-in, set only
+	// by NewWordExtensionAnchored, which native module BUILDERS call: aql
+	// modules ship and version WITH the kernel, so the forward-compat
+	// rationale doesn't apply — aql:io deliberately extends the core
+	// `list`/`remove` words with Pathon-anchored signatures (Pathon is a
+	// kernel builtin), which the rule would otherwise refuse. Never set on
+	// a def-merge clone or a source-authored extension; a hand-built host
+	// clone that sets it is asserting the same first-party guarantee.
+	AllowBuiltinAnchor bool
 }
 
 // CapturedBinding is one lexically-captured name in a closure. The

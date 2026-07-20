@@ -40,7 +40,7 @@ add 'a' 'b'	'ba'	String + String concatenates in b++a order
 add true 'x'	'xtrue'	Boolean + String → the String operand admits concat, Boolean coerces
 add 'x' 2.5	'2.5x'	String + Float coerces the Float to its string form
 add true 1	ERROR:no signature matches	Boolean + Integer: neither is a String → no concat, type error
-add true false	ERROR:no signature matches	two Booleans: neither is a String → type error (was silently 'falsetrue')
+add true false	ERROR:arithmetic is not defined on Boolean	two Booleans: the within-type defined error, spec-pinned (was silently 'falsetrue'; see scalar-micron-ops.tsv)
 #
 # §4  numeric equivalence across leaves
 eq 1 1.0	true	Integer and Float of equal magnitude compare equal

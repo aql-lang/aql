@@ -163,37 +163,32 @@ func TestReadWithPathAndOptions(t *testing.T) {
 	}
 }
 
-// --- String paths still work (backward compat) ---
+// --- String paths are rejected: file I/O is Pathon-only ---
 
-func TestWriteStringPathStillWorks(t *testing.T) {
+func TestWriteStringPathRejected(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	mem := setupMemFSForIO(t, r)
+	setupMemFSForIO(t, r)
 
-	result := runAQL(t, r, []Value{
+	// A String target no longer matches any write signature — the caller
+	// must supply a Pathon (make Pathon "old.txt").
+	if err := runAQLError(t, r, []Value{
 		NewWord("write"), NewString("old.txt"), NewString("old style"),
-	})
-	_as6, _ := AsString(result[0])
-	if len(result) != 1 || _as6 != "old.txt" {
-		t.Fatalf("got %v, want 'old.txt'", result)
-	}
-	resolved, _ := mem.ResolvePath("old.txt")
-	if string(mem.Files[resolved]) != "old style" {
-		t.Errorf("content = %q", string(mem.Files[resolved]))
+	}); err == nil {
+		t.Error("expected a String write target to be rejected (Pathon-only)")
 	}
 }
 
-func TestReadStringPathStillWorks(t *testing.T) {
+func TestReadStringPathRejected(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	mem := setupMemFSForIO(t, r)
 	mem.Files["compat.txt"] = []byte("compat")
 
-	result := runAQL(t, r, []Value{
+	// A String target no longer matches any read signature.
+	if err := runAQLError(t, r, []Value{
 		NewWord("read"), NewString("compat.txt"),
-	})
-	_as7, _ := AsString(result[0])
-	if len(result) != 1 || _as7 != "compat" {
-		t.Fatalf("got %v, want 'compat'", result)
+	}); err == nil {
+		t.Error("expected a String read target to be rejected (Pathon-only)")
 	}
 }

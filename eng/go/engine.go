@@ -1248,6 +1248,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		val := e.tape.At(e.pointer)
 
+		// Line-coverage seam (coverage.go): record the executing token's source
+		// row when a coverage run has armed the hook AND this registry is a
+		// tagged coverage target. Inert (one atomic load) otherwise.
+		e.registry.noteCoverage(val.Pos())
+
 		if e.trace != nil {
 			snapshot := e.tape.Snapshot()
 			note := e.traceNote
@@ -1572,6 +1577,10 @@ func (e *Engine) resolveOrphanedForwards() error {
 				break
 			}
 			val := e.tape.At(e.pointer)
+			// Line-coverage seam (coverage.go): this forward-retry loop steps
+			// tokens (a paren/forward re-evaluated after curryOrStack) outside
+			// the main loop, so it mirrors the main loop's per-step emit.
+			e.registry.noteCoverage(val.Pos())
 			switch {
 			case IsWord(val):
 				if err := e.stepWord(val); err != nil {
@@ -2235,6 +2244,11 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 			break
 		}
 		v := e.tape.At(e.pointer)
+		// Line-coverage seam (coverage.go): a forward-arg paren group evaluates
+		// its inner tokens HERE, off the main loop — the dominant path for
+		// `def x (f …)`-style fn-body statements. Mirror the main loop's emit so
+		// nested fn-body rows attribute to the module-under-test.
+		e.registry.noteCoverage(v.Pos())
 
 		if IsOpenParen(v) {
 			depth++
@@ -3330,6 +3344,16 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		match.Args[i].Eval = false
 		match.Args[i].Undefined = false
+		// Materialize concrete Options defaults into the map the handler /
+		// fn param will receive: a field whose schema declares a real
+		// default value, omitted by the caller, is filled in so the
+		// consumer sees a complete map (quality DX — no re-deriving
+		// defaults). Optional `T tor None` fields carry no concrete value
+		// and stay absent. No-op unless this slot's pattern is an Options
+		// type and the arg is a plain concrete map.
+		if pat, ok := sigPattern(match.Sig, i); ok {
+			match.Args[i] = FillConcreteOptionDefaults(pat, match.Args[i])
+		}
 	}
 	// Arg evaluation done — the dispatched word's handler is the
 	// intended consumer of any suspended gen spec.
@@ -5303,7 +5327,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
 	// A NON-anonymous body-bearing fn VALUE reached as a CALL while the
 	// BYTECODE EMITTER is active (a `fn` literal resolved from a map / module
-	// export, e.g. `ParseLang.parse_calc 'x' {}`) is dispatched like a named
+	// export, e.g. `ParseLang.parse_json 'x' {}`) is dispatched like a named
 	// user fn: through buildFnBodyReturnsFn (spliceFnValueCheckResult), which
 	// arms the body compile so the per-call `__pa` tail is captured inside its
 	// own CALL_USER unit instead of leaking into the top-level residual.
@@ -5495,7 +5519,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 
 // spliceFnValueCheckResult is the check-mode dispatch for a NON-anonymous
 // body-bearing fn VALUE (a `fn` literal resolved from a map/module export and
-// then CALLED, e.g. `ParseLang.parse_calc 'x' {}`). Unlike a NAMED user fn
+// then CALLED, e.g. `ParseLang.parse_json 'x' {}`). Unlike a NAMED user fn
 // (which dispatches through stepWord → its registered ReturnsFn) and unlike an
 // anonymous lambda (spliceAnonCheckResult, analysis-only), a called fn value
 // previously fell through to execFnDefSig, whose inline body splice leaks the
@@ -6767,6 +6791,10 @@ func (e *Engine) stepCloseParen() error {
 				// Re-evaluate from current pointer up to closeIdx.
 				for e.pointer < closeIdx {
 					val := e.tape.At(e.pointer)
+					// Line-coverage seam (coverage.go): this nested forward-
+					// resolution loop steps tokens off the main loop; mirror
+					// its per-step emit.
+					e.registry.noteCoverage(val.Pos())
 					switch {
 					case IsWord(val):
 						if err := e.stepWord(val); err != nil {

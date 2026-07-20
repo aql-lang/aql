@@ -391,6 +391,49 @@ func TestNewWordExtensionAndTransplant(t *testing.T) {
 	}
 }
 
+func TestNewWordExtensionAnchoredWaivesUserTypeRule(t *testing.T) {
+	// The first-party anchor waiver: NewWordExtensionAnchored lets a
+	// builtin-only tuple transplant onto a core word, which the plain
+	// NewWordExtension path refuses (TestNewWordExtensionAndTransplant).
+	r := covRegistry(t, nil)
+
+	anchored := NewWordExtensionAnchored("cadd", []Signature{{
+		Args: []*Type{TBoolean, TBoolean},
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			a, _ := AsBoolean(args[0])
+			b, _ := AsBoolean(args[1])
+			return []Value{NewBoolean(a && b)}, nil
+		}),
+		Returns: []*Type{TBoolean}, BarrierPos: -1,
+	}})
+	if !anchored.AllowBuiltinAnchor {
+		t.Fatal("NewWordExtensionAnchored did not set AllowBuiltinAnchor")
+	}
+	if anchored.Extends != "cadd" {
+		t.Fatalf("anchored.Extends = %q", anchored.Extends)
+	}
+
+	// Transplant succeeds despite the all-builtin [Boolean Boolean] tuple.
+	if err := TransplantExtension(r, anchored, "cov:firstparty"); err != nil {
+		t.Fatalf("anchored transplant refused: %v", err)
+	}
+	out, err := NewTop(r).Run([]Value{NewWord("cadd"), NewBoolean(true), NewBoolean(true)})
+	if err != nil {
+		t.Fatalf("anchored overload call: %v", err)
+	}
+	if got, _ := AsBoolean(out[0]); !got {
+		t.Errorf("anchored overload result = %v", out[0])
+	}
+	// The locked Integer signature still dispatches unchanged.
+	out, err = NewTop(r).Run([]Value{NewWord("cadd"), NewInteger(2), NewInteger(3)})
+	if err != nil {
+		t.Fatalf("locked int call after anchored merge: %v", err)
+	}
+	if got, _ := AsInteger(out[0]); got != 5 {
+		t.Errorf("locked int overload result = %v", out[0])
+	}
+}
+
 // --- fn_capture.go --------------------------------------------------------
 
 func TestWalkBodyWords(t *testing.T) {

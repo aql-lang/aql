@@ -232,7 +232,7 @@ func TestStaleLedgerEffectDoesNotBlockFallback(t *testing.T) {
 func TestFileWriteNotesEffectLedger(t *testing.T) {
 	a := mustNew(t)
 	before := a.registry.Effects.Count()
-	got, err := a.RunInterp(`import "aql:io"  context dot __sys dot fs set mem true  IO.write "mem://a.txt" "hi"  IO.read "mem://a.txt"`)
+	got, err := a.RunInterp(`import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.txt") "hi"  IO.read (make Pathon "mem://a.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}

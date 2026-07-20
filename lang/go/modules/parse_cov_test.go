@@ -64,7 +64,7 @@ Parse.spec g {
   ref: {'@hit': ([nd:Any] => [7])}
   rule: {val:{open:[{s:'#PL' a:'@hit'}]}}
 }
-Parse.register sfull g
+def sfull (Parse.parser g)
 end
 parse sfull '+'`)
 	if len(out) != 1 {
@@ -89,7 +89,7 @@ Parse.spec g {
   ref: {'@two': [([nd:Any] => [1])/r ([nd:Any] => [2])/r]}
   rule: {val:{open:[{s:'#NR' a:'@two'}]}}
 }
-Parse.register stwo g
+def stwo (Parse.parser g)
 end
 parse stwo '5'`)
 	if n, err := out[0].AsConcreteInteger(); err != nil || n != 2 {
@@ -101,7 +101,7 @@ parse stwo '5'`)
 	if err := pcovErr(t, r2, pcovImports+`
 def g Parse.grammar
 Parse.spec g {abnf:{src:'op = "inc" / "dec"' start:'op'}}
-Parse.register smap g
+def smap (Parse.parser g)
 end
 parse smap 'inc'`); err != nil {
 		t.Errorf("abnf map entry should register and parse: %v", err)
@@ -112,7 +112,7 @@ parse smap 'inc'`); err != nil {
 	if err := pcovErr(t, r3, pcovImports+`
 def g Parse.grammar
 Parse.spec g {abnf:[{src:'op = "inc" / "dec"' start:'op'}]}
-Parse.register slist g
+def slist (Parse.parser g)
 end
 parse slist 'dec'`); err != nil {
 		t.Errorf("abnf list entry should register and parse: %v", err)
@@ -126,7 +126,7 @@ func TestParseCovSpecMatcherSection(t *testing.T) {
 	if err := pcovErr(t, r, pcovImports+`
 def g Parse.grammar
 Parse.spec g {matcher:{skip:{priority:1000000 fn:([rest:String] => [None])}}}
-Parse.register smtch g
+def smtch (Parse.parser g)
 end
 parse smtch '1'`); err != nil {
 		t.Errorf("a declining spec matcher should leave normal lexing intact: %v", err)
@@ -175,7 +175,7 @@ Parse.rule g val {open:[
   {s:'#NR' b:1 g:'gg' n:{k1:1} c:{k1:0} u:{ux:1 deep:{d:2} lx:[1 'a' 2.5]} k:{kx:'s'}}
   {s:'#TX' a:[([nd:Any] => [5])/r '@hit']}
 ]}
-Parse.register ralt g
+def ralt (Parse.parser g)
 end
 parse ralt 'xy'`)
 	if n, err := out[0].AsConcreteInteger(); err != nil || n != 5 {
@@ -190,7 +190,7 @@ func TestParseCovRuleBacktrackString(t *testing.T) {
 	err := pcovErr(t, r, pcovImports+`
 def g Parse.grammar
 Parse.rule g val {open:[{s:'#TX' b:'nosuch'}]}
-Parse.register pbk g`)
+def pbk (Parse.parser g)`)
 	if err == nil || !strings.Contains(err.Error(), "unknown backtrack") {
 		t.Errorf("unknown backtrack ref should fail register loudly, got %v", err)
 	}
@@ -228,7 +228,7 @@ func TestParseCovTokenAndInlineAction(t *testing.T) {
 def g Parse.grammar
 Parse.token g '#ZZ' 'zz'
 Parse.rule g val {open:[{s:'#ZZ' a:([nd:Any] => [3])}]}
-Parse.register tk g
+def tk (Parse.parser g)
 end
 parse tk 'zz'`)
 	if n, err := out[0].AsConcreteInteger(); err != nil || n != 3 {
@@ -246,7 +246,7 @@ func TestParseCovMatcherMatches(t *testing.T) {
 def g Parse.grammar
 Parse.matcher g zed 1000000 ([rest:String] => [if (rest eq 'zz') [{src:'zz' tin:'#ZED' val:9}] [None]])
 Parse.rule g val {open:[{s:'#ZED' a:([nd:Any] => ['ZED-HIT'])}]}
-Parse.register zk g
+def zk (Parse.parser g)
 end
 parse zk 'zz'`)
 	s, err := out[0].AsConcreteString()
@@ -260,7 +260,7 @@ parse zk 'zz'`)
 def g Parse.grammar
 Parse.matcher g zed 1000000 ([rest:String] => [if (rest eq 'zz') [{src:'zz' val:'ZED'}] [None]])
 Parse.rule g val {open:[{s:'#TX' a:([nd:Any] => ['TX-HIT'])}]}
-Parse.register zt g
+def zt (Parse.parser g)
 end
 parse zt 'zz'`)
 	s2, err2 := out2[0].AsConcreteString()
@@ -286,7 +286,7 @@ func TestParseCovMatcherContract(t *testing.T) {
 def g Parse.grammar
 Parse.matcher g m 1000000 `+c.matcher+`
 Parse.abnf g "op = \"inc\"" {start:'op'}
-Parse.register mk g
+def mk (Parse.parser g)
 end
 parse mk 'zzz'`)
 			if err == nil {
@@ -307,7 +307,7 @@ func TestParseCovActionRaises(t *testing.T) {
 def g Parse.grammar
 Parse.action g '@op:o:INC' ([nd:Any] => [raise "kaput"])
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
-Parse.register ar g
+def ar (Parse.parser g)
 end
 parse ar 'inc'`)
 	if err == nil {
@@ -338,7 +338,7 @@ def g Parse.grammar
 Parse.action g '@op:o:INC' ([nd:Any] => [1])
 Parse.action g '@op:o:INC' ([nd:Any] => [nd 10 add])
 Parse.abnf g "op = \"inc\"" {start:'op'}
-Parse.register comp g
+def comp (Parse.parser g)
 end
 parse comp 'inc'`)
 	if n, err := out[0].AsConcreteInteger(); err != nil || n != 11 {
@@ -352,7 +352,7 @@ func TestParseCovAbnfOpts(t *testing.T) {
 	if err := pcovErr(t, r, pcovImports+`
 def g Parse.grammar
 Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op' tag:'t1' builtins:true marks:false}
-Parse.register ao g
+def ao (Parse.parser g)
 end
 parse ao 'inc'`); err != nil {
 		t.Errorf("abnf with the full opts map should register and parse: %v", err)
@@ -365,7 +365,7 @@ func TestParseCovSingleUsePerWord(t *testing.T) {
 	base := pcovImports + `
 def g Parse.grammar
 Parse.abnf g 'op = "inc"' {start:'op'}
-Parse.register su g
+def su (Parse.parser g)
 end
 `
 	tails := []struct{ name, tail string }{
@@ -375,7 +375,7 @@ end
 		{"token", `Parse.token g '#ZZ' 'zz'`},
 		{"matcher", `Parse.matcher g m 1000000 ([x:String] => [None])`},
 		{"action", `Parse.action g '@a' ([nd:Any] => [nd])`},
-		{"second register", `Parse.register su2 g`},
+		{"second register", `def su2 (Parse.parser g)`},
 	}
 	for _, c := range tails {
 		t.Run(c.name, func(t *testing.T) {
@@ -393,17 +393,31 @@ end
 
 // TestParseCovRegisterFailures pins register-time refusals: a broken
 // deferred grammar step and a collision with an existing kind.
-func TestParseCovRegisterFailures(t *testing.T) {
+func TestParseCovParserFailures(t *testing.T) {
 	r := pcovReg(t)
-	err := pcovErr(t, r, pcovImports+`def g Parse.grammar  Parse.abnf g "= = ="  Parse.register broke g`)
+	err := pcovErr(t, r, pcovImports+`def g Parse.grammar  Parse.abnf g "= = ="  def broke (Parse.parser g)`)
 	if err == nil || !strings.Contains(err.Error(), "parse_bad_grammar") {
-		t.Errorf("malformed ABNF should fail register with parse_bad_grammar, got %v", err)
+		t.Errorf("malformed ABNF should fail the finalize with parse_bad_grammar, got %v", err)
 	}
 
+	// A Parse.spec options step whose token regexp cannot compile fails at
+	// the same replay (the deferred Grammar(gs) call's error arm).
+	rBad := pcovReg(t)
+	err = pcovErr(t, rBad, pcovImports+`def g Parse.grammar  Parse.spec g {options:{match:{token:{'#BX':'@/[[/'}}}}  def broke (Parse.parser g)`)
+	if err == nil || !strings.Contains(err.Error(), "parse_bad_grammar") {
+		t.Errorf("an invalid spec token regexp should fail the finalize with parse_bad_grammar, got %v", err)
+	}
+
+	// There is no kind-name collision any more — the parser is a def-scoped
+	// VALUE, and a built-in kind simply WINS the `parse <name>` lookup: the
+	// binding is legal, the sugar still reaches the built-in json.
 	r2 := pcovReg(t)
-	err2 := pcovErr(t, r2, pcovImports+`def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  Parse.register json g`)
-	if err2 == nil || !strings.Contains(err2.Error(), "already registered") {
-		t.Errorf("registering over the built-in json kind should collide, got %v", err2)
+	out := pcovRun(t, r2, pcovImports+`def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  def json (Parse.parser g)  end  (parse json '{"a":1}') get 'a'`)
+	if len(out) != 1 {
+		t.Fatalf("expected 1 result, got %v", out)
+	}
+	if n, err := out[0].AsConcreteInteger(); err != nil || n != 1 {
+		t.Errorf("a def named json must not shadow the built-in kind: got %v (err %v)", out[0], err)
 	}
 }
 
@@ -414,7 +428,7 @@ func TestParseCovSyntaxError(t *testing.T) {
 	err := pcovErr(t, r, pcovImports+`
 def g Parse.grammar
 Parse.abnf g 'op = "inc"' {start:'op'}
-Parse.register se g
+def se (Parse.parser g)
 end
 parse se 'nope'`)
 	if err == nil || !strings.Contains(err.Error(), "parse_syntax_error") {
@@ -486,18 +500,17 @@ func TestParseCovSpecReturnsLenient(t *testing.T) {
 	}
 }
 
-// TestParseCovRegisterDeferReturns covers parse-register's check hook:
-// a concrete atom marks the kind deferred; a non-concrete arg is a no-op.
-func TestParseCovRegisterDeferReturns(t *testing.T) {
+// TestParseCovParserReturns covers parse-parser's check hook: the grammar
+// carrier is never concrete under analysis, so the value is an abstract —
+// PLAIN, not dynamic (the declared return type is exact) — Function carrier.
+func TestParseCovParserReturns(t *testing.T) {
 	r := pcovReg(t)
 	done := r.Check.Begin()
 	defer done()
-	if out := parseRegisterDeferReturns([]native.Value{native.NewAtom("deferk"), native.NewInteger(0)}, r); out != nil {
-		t.Errorf("expected nil return, got %v", out)
-	}
-	// Non-concrete name: the guard arm.
-	if out := parseRegisterDeferReturns([]native.Value{native.NewTypeLiteral(native.TAtom)}, r); out != nil {
-		t.Errorf("expected nil return for a non-concrete name, got %v", out)
+	out := parseParserReturns([]native.Value{native.NewInteger(0)}, r)
+	if len(out) != 1 || out[0].Dynamic || native.IsConcrete(out[0]) ||
+		!out[0].Parent.ConformsTo(native.TFunction) {
+		t.Errorf("expected one plain Function carrier, got %v", out)
 	}
 }
 

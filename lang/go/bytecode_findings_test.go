@@ -1626,10 +1626,15 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 	}
 }
 
-// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free closure
-// (the factory pattern) compiles to OpPushClosure inside its unit, and a
-// [Function]-typed CARRIER leading the residual is applied to its trailing args
-// by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
+// Fn-values-on-the-stack: a fn that RETURNS an anonymous capture-free fn
+// (the factory pattern) CONST-BAKES the real FnDefInfo inside its unit
+// (re-diagnosed 2026-07-20, PR #295 merge: a captureless returned fn keeps
+// the const bake so a native that validates its fn operand's signatures —
+// parselang-fn-dispatch's [source opts] contract — reads them, where an
+// OpPushClosure ClosurePayload was rejected as "not a usable function
+// value"; only a CAPTURING fn takes the closure unit), and a
+// [Function]-typed CARRIER leading the residual is applied to its trailing
+// args by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
 func TestFactoryApplyCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
 	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
@@ -1638,7 +1643,8 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
 
 	// POSITIVE — the factory result applied to an arg compiles natively to 11,
-	// with the closure push + dynamic apply in the stream.
+	// with the const-baked fn + dynamic apply in the stream (and NO closure
+	// unit: the captureless fn must keep its FnDefInfo).
 	apply := factory + `(mk2 5) 10`
 	a, _ := New()
 	prog, reason, _, cerr := a.CompileCheck(apply)
@@ -1646,8 +1652,8 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		t.Fatalf("factory-apply did not compile: reason=%q err=%v", reason, cerr)
 	}
 	dis := prog.Disassemble()
-	if !strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "CALL_DYNAMIC") {
-		t.Fatalf("factory-apply lowered without the closure/dynamic ops:\n%s", dis)
+	if strings.Contains(dis, "PUSH_CLOSURE") || !strings.Contains(dis, "(Function)") || !strings.Contains(dis, "CALL_DYNAMIC") {
+		t.Fatalf("factory-apply must lower the captureless fn as a const FnDefInfo + dynamic apply:\n%s", dis)
 	}
 	gotC, compiled, errC := mustNew(t).RunCompiled(apply)
 	gotI, _ := mustNew(t).Run(apply)
@@ -1665,6 +1671,14 @@ func TestFactoryApplyCompiles(t *testing.T) {
 		// A bare closure RESULT must not compile — a VM closure prints
 		// differently from the interpreter's FnDefInfo, so it falls back.
 		{"bare closure residual", factory + `(mk2 5)`},
+		// A CAPTURING returned fn with MULTIPLE own sigs declines the
+		// closure model (FirstOwnSig is not the runtime MatchFnSig pick).
+		{"capturing multi-sig returned fn",
+			`def mk fn [[x:Integer][Function][(fn [[a:Integer][Integer][a add x] [b:String][String][b]])]] ((mk 1) 2)`},
+		// A CAPTURING returned fn with a value-PATTERN param (no bare type —
+		// fnValueInputs' Any default) reaches the probe and declines there.
+		{"capturing pattern-param returned fn",
+			`def mk fn [[x:Integer][Function][(fn [[0][Integer][x]])]] ((mk 5) 0)`},
 	} {
 		gC, comp, eC := mustNew(t).RunCompiled(neg.src)
 		gI, eI := mustNew(t).Run(neg.src)
@@ -2698,8 +2712,8 @@ func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
-		{imp + `context dot __sys dot fs set mem true  IO.write "mem://b.txt" "hi"`, "[mem://b.txt]"},
-		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write "mem://a.txt" "hello")`, "[hello]"},
+		{imp + `context dot __sys dot fs set mem true  IO.write (make Pathon "mem://b.txt") "hi"`, "[mem:/b.txt]"},
+		{imp + `context dot __sys dot fs set mem true  IO.read (IO.write (make Pathon "mem://a.txt") "hello")`, "[hello]"},
 	}
 	for _, c := range cases {
 		gotC, compiled, eC := mustNew(t).RunCompiled(c.src)
@@ -3161,28 +3175,22 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 	}
 }
 
-// TestParseLangFnValueDispatchCompiles pins the two sub-features that let an
-// AQL-registered parser (`ParseLang.register`) compile to bytecode
-// (design/aql-bytecode-stage3-inlining-plan.0.md, module-parselang:23):
-//
-//	A. SOUND check-mode registration — the register handler installs the
-//	   parser at check time (ReturnsFn) so `ParseLang.parse_<name>` resolves
-//	   statically, AND the runtime register handler is idempotent for the
-//	   compiled path's re-run of the SAME source call (so it does not raise
-//	   parse_kind_exists). A GENUINE double-register (different source Pos)
-//	   still errors — the negative below pins it.
-//	B. body-bearing fn-VALUE dispatch — the resolved parser fn value, called
-//	   with args, lowers to a CALL_USER unit (its `__pa` tail captured INSIDE
-//	   the unit) instead of leaking `__pa` into the top-level residual.
+// TestParseLangFnValueDispatchCompiles pins body-bearing fn-VALUE dispatch
+// for a def-bound AQL parser (module-parselang:23): the bound parser fn,
+// called with args — directly or through the `parse` sugar — lowers to a
+// CALL_USER unit (its `__pa` tail captured INSIDE the unit) instead of
+// leaking `__pa` into the top-level residual. (The former sub-feature A,
+// check-time registration, died with the frozen kind namespace — the
+// negative below pins the tombstone's cross-engine parity instead.)
 func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 	const reg = `"aql:parselang" import end  "aql:string-util" import end  ` +
-		`ParseLang.register calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]]) end  `
+		`def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  `
 
-	// POSITIVE: the desugared standard call (row 23) and the `parse` sugar
+	// POSITIVE: the desugared direct call (row 23) and the `parse` sugar
 	// (row 16) compile, run through the VM, and match the interpreter.
 	for _, c := range []struct{ src, want string }{
-		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 1`, "[+]"},
-		{reg + `(ParseLang.parse_calc 'x + y' {} end) get 0`, "[x]"},
+		{reg + `(calc 'x + y' {} end) get 1`, "[+]"},
+		{reg + `(calc 'x + y' {} end) get 0`, "[x]"},
 		{reg + `(parse calc 'x + y') get 1`, "[+]"},
 	} {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
@@ -3214,20 +3222,16 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 		}
 	}
 
-	// NEGATIVE (sub-feature A soundness): a GENUINE double-register of the same
-	// kind — two distinct `register` calls in the source — must still error
-	// `parse_kind_exists` in BOTH engines. The idempotency keys on the
-	// fn-value source Pos, so two different call sites are NOT treated as one.
-	dbl := `"aql:parselang" import end  ` +
-		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]]) end  ` +
-		`ParseLang.register calc (fn [[source:Any o:Map] [Any] [source]])`
+	// NEGATIVE: the registration surface is a TOMBSTONE — `ParseLang.register`
+	// raises parse_registry_frozen identically in BOTH engines.
+	dbl := `"aql:parselang" import end  ParseLang.register`
 	_, _, eC := mustNew(t).RunCompiled(dbl)
 	_, eI := mustNew(t).Run(dbl)
-	if codeOf(eC) != "parse_kind_exists" {
-		t.Errorf("double-register compiled: code=%q want parse_kind_exists (err=%v)", codeOf(eC), eC)
+	if codeOf(eC) != "parse_registry_frozen" {
+		t.Errorf("register tombstone compiled: code=%q want parse_registry_frozen (err=%v)", codeOf(eC), eC)
 	}
-	if codeOf(eI) != "parse_kind_exists" {
-		t.Errorf("double-register interp: code=%q want parse_kind_exists (err=%v)", codeOf(eI), eI)
+	if codeOf(eI) != "parse_registry_frozen" {
+		t.Errorf("register tombstone interp: code=%q want parse_registry_frozen (err=%v)", codeOf(eI), eI)
 	}
 }
 
@@ -3792,7 +3796,9 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		{"predicate refine boundary value", `def Big (Integer gt 10) def g fn [[n:Big] [Integer] [99]] 10 g`, "signature_error"},
 		{"arity modifier misses every sig", `add/3 2 3`, "signature_error"},
 		{"bare type-literal operand", `get 'a' Map`, "signature_error"},
-		{"undef leaves no overload", `def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false`, "signature_error"},
+		// (Boolean add is now a defined within-type error, so the popped-
+		// clone probe uses a Map tuple — still unmatched after the undef.)
+		{"undef leaves no overload", `def add fn [[a:Map b:Map] [Map] [a]]  undef add  add {a:1} {b:2}`, "signature_error"},
 		{"map-literal member dispatch (unfinished unit stubbed)", `def f fn [[x:Integer] [Integer] [add x 1]] {f}`, "signature_error"},
 		{"void arg group at def", `def f fn [[x:Integer] [] []] def r (f 1)`, "def_error"},
 		{"void arg group at consumer", `def f fn [[x:Integer] [] []] 3 add (f 1)`, "no_value_error"},
@@ -3879,14 +3885,32 @@ func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	// run time and DEFERS to the interpreter, which computes the value a
 	// static trap would have wrongly raised over. The deferred-token shapes
 	// keep the whole-program refusal.)
+	// The REFINEMENT ESCAPE (the original carrier hazard, in its live form):
+	// mkb's declared return is Boolean but the runtime value carries the
+	// Flag-reparented tag, so the merged [Flag Flag] overload MATCHES at run
+	// time. Since `add` gained its within-type CoreDefault overloads, the
+	// static Boolean carriers MATCH [Boolean Boolean] at check time — a
+	// match that is not a dispatch proof (a subtype-tagged runtime value
+	// re-matches the more-specific [Flag Flag]) — so the compile REFUSES up
+	// front (recordCallRefusal's core-default gate) instead of reaching the
+	// dispatch-recovery rematch; the interpreter owns the program and both
+	// paths agree on `true`.
+	{
+		src := `import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`
+		prog, reason, _, _ := mustNew(t).CompileCheck(src)
+		if prog != nil || !strings.Contains(reason, "core-default dispatch over a carrier operand") {
+			t.Errorf("refinement escape: want the core-default refusal, got prog=%v reason=%q", prog != nil, reason)
+		}
+		gotC, compiled, errC := mustNew(t).RunCompiled(src)
+		gotI, errI := mustNew(t).Run(src)
+		if compiled {
+			t.Errorf("refinement escape: must fall back to the interpreter")
+		}
+		if codeOf(errC) != codeOf(errI) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
+			t.Errorf("refinement escape: fallback=%v/%v interp=%v/%v (should agree)", gotC, errC, gotI, errI)
+		}
+	}
 	rematches := []struct{ name, src string }{
-		// The REFINEMENT ESCAPE (the original carrier hazard, in its live
-		// form): mkb's declared return is Boolean but the runtime value
-		// carries the Flag-reparented tag, so the merged [Flag Flag] overload
-		// MATCHES at run time — the rematch defers and the interpreter
-		// computes true.
-		{"refined-subtype carrier rematch defers",
-			`import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] def mkb fn [[b:Boolean] [Boolean] [def v:Flag b v]] export "M" {add: add/r mk: mk/r mkb: mkb/r}]  add (M.mkb true) (M.mk true)`},
 		// A value-sensitive predicate param (membershipBeyondNominal): the
 		// carrier's runtime VALUE decides membership — this variant PASSES at
 		// run time (f 5 → 11 ∈ Big), so the rematch matches and defers.

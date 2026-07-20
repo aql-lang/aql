@@ -39,7 +39,7 @@ type TabnasParser func(src string, opts map[string]any) (any, error)
 // TabnasKind describes one tabnas decoder: its parse fn, the Value
 // converter (generic vs xml), and its declared output type. Both
 // surfaces consume this descriptor — read wraps it as a TabnasFormat,
-// parse wraps it as a ParseLangSpec handler.
+// parse wraps it as a ParseLang (the ParseLangSpec handler).
 type TabnasKind struct {
 	// Name is the format / parser-kind atom ("ini", "xml", …).
 	Name string

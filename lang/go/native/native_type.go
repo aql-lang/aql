@@ -1022,11 +1022,57 @@ func tallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 // ---- convert ----
 
 // convertOptsPattern returns the Options pattern for the 3-arg
-// `convert` variant: {base?: String|None}.
+// `convert` variant:
+// {base?: String|None, truthy?: Boolean|None, accuracy?: String|None,
+//
+//	places?: Integer|None}.
+//
+// Every field is spelled `T|None` (not a bare type literal) so it is
+// OPTIONAL: a bare type literal has no options-default and would make
+// the key required (unify_options.go::optionsDefault), breaking every
+// 3-arg call that omits it. Absent keys simply do not appear in the
+// runtime map, so the handler's presence checks (`m.Get`) read them as
+// unset.
 func convertOptsPattern() Value {
 	baseOpts := NewOrderedMap()
 	baseOpts.Set("base", NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)}))
+	baseOpts.Set("truthy", NewDisjunct([]Value{NewTypeLiteral(TBoolean), NewTypeLiteral(TNone)}))
+	// accuracy enables (and disambiguates) the otherwise-refused
+	// Float → BigDecimal conversion — see floatToBigDecimal.
+	baseOpts.Set("accuracy", NewDisjunct([]Value{NewTypeLiteral(TString), NewTypeLiteral(TNone)}))
+	// places is the companion to accuracy:"round" — the number of
+	// decimal places to round the Float's exact value to.
+	baseOpts.Set("places", NewDisjunct([]Value{NewTypeLiteral(TInteger), NewTypeLiteral(TNone)}))
 	return NewOptionsType(baseOpts)
+}
+
+// yamlTruthy maps a string to a boolean using the YAML 1.1 boolean
+// token set (matched case-insensitively, surrounding whitespace
+// trimmed). It reports whether the string was a recognised token; a
+// caller that gets ok=false falls back to presence coercion.
+func yamlTruthy(s string) (val bool, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "y", "yes", "true", "on":
+		return true, true
+	case "n", "no", "false", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+// coerceBooleanTruthy is the `convert Boolean {truthy: true} <src>`
+// rule: a String is first matched against the YAML boolean tokens
+// (yamlTruthy); anything not a recognised token — and any non-String
+// source — falls back to the ordinary presence coercion (CoerceBoolean).
+// It never raises.
+func coerceBooleanTruthy(src Value) bool {
+	if src.Parent.ConformsTo(TString) {
+		if val, ok := yamlTruthy(ValToString(src)); ok {
+			return val
+		}
+	}
+	return CoerceBoolean(src)
 }
 
 // convertTo performs the actual scalar-type conversion.
@@ -1143,30 +1189,15 @@ func convertTo(src Value, targetType *Type, base string) (Value, error) {
 		return NewInteger(n), nil
 
 	case targetType.ConformsTo(TBoolean):
-		// Explicit conversion PARSES a String's content (mirroring make's
-		// MakeConvert): "true"/"false" map to the booleans, every other
-		// non-empty string is truthy. This is deliberately distinct from
-		// `if`-truthiness (CoerceBoolean), where a String is judged only by
-		// emptiness and "false" is truthy (WAT-AUDIT.5.md §E) — `convert
-		// Boolean` reads the text, `if` reads presence.
-		switch {
-		case src.Parent.ConformsTo(TBoolean):
-			return src, nil
-		case src.Parent.ConformsTo(TNumber):
-			n, _ := AsNumber(src)
-			return NewBoolean(n != 0), nil
-		case src.Parent.ConformsTo(TString):
-			switch ValToString(src) {
-			case "true":
-				return NewBoolean(true), nil
-			case "false":
-				return NewBoolean(false), nil
-			default:
-				return NewBoolean(ValToString(src) != ""), nil
-			}
-		default:
-			return NewBoolean(CoerceBoolean(src)), nil
-		}
+		// Boolean is a COERCION, not a parse — it is exactly the
+		// truthiness rule words like `if` apply (CoerceBoolean): a value
+		// is false iff it is absent/empty (empty String, 0, none, empty
+		// collection) and true otherwise. String CONTENT is never
+		// inspected, so "false" and "true" are ordinary non-empty strings
+		// and both coerce to true. Turning the literal words "true" /
+		// "false" into booleans is a separate parse operation that lives
+		// elsewhere, not here.
+		return NewBoolean(CoerceBoolean(src)), nil
 
 	case targetType.Equal(TAtom):
 		return NewAtom(ValToString(src)), nil
@@ -1302,6 +1333,104 @@ func bigDecimalToBigIntTrunc(src Value) (*big.Int, error) {
 	return n, nil
 }
 
+// floatToBigDecimal performs the opt-in Float → BigDecimal conversion
+// that convertToBigDecimal refuses by default. A binary Float is inexact,
+// so there is no single honest BigDecimal for it; the `accuracy` option
+// forces the caller to state which reading they want:
+//
+//   - "exact"    the true dyadic value the float64 holds. 0.1 becomes
+//     0d0.1000000000000000055511151231257827021181583404541015625.
+//   - "shortest" the shortest decimal that round-trips to the same
+//     float64 — what the literal reads as. 0.1 becomes 0d0.1.
+//   - "round"    the exact value rounded to `places` decimal places,
+//     half away from zero (the companion `places` option is
+//     required; e.g. 3.14159 with places 2 becomes 0d3.14).
+//
+// A non-finite Float (NaN / ±Inf) has no decimal expansion and is
+// refused. This is reached only from the 3-arg convert with an accuracy
+// option present — without it, Float → BigDecimal stays a hard error.
+//
+// `places` is carried as an int64 so an out-of-range request is caught
+// before any int narrowing (a 32-bit `int(places)` could otherwise wrap
+// a billion into a small or negative value and slip past the bound).
+func floatToBigDecimal(f float64, accuracy string, places int64, placesSet bool) (Value, error) {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return Value{}, fmt.Errorf("convert: cannot convert non-finite Float (%s) to BigDecimal", FormatFloat(f))
+	}
+	switch accuracy {
+	case "exact":
+		if placesSet {
+			return Value{}, fmt.Errorf("convert: accuracy %q does not take a places option", accuracy)
+		}
+		// The exact value of a binary float is dyadic (denominator a
+		// power of two), so it terminates as a finite decimal. big.Rat
+		// holds it exactly; FloatString(k) with k = log2(denominator)
+		// renders every fractional digit without rounding.
+		r := new(big.Rat).SetFloat64(f)
+		k := r.Denom().BitLen() - 1
+		d, _, err := apd.NewFromString(r.FloatString(k))
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
+		}
+		return NewBigDecimal(applyFloatSign(f, d)), nil
+	case "shortest":
+		if placesSet {
+			return Value{}, fmt.Errorf("convert: accuracy %q does not take a places option", accuracy)
+		}
+		// apd.SetFloat64 uses strconv's shortest round-tripping form
+		// (it already carries the sign bit, including a negative zero).
+		d := new(apd.Decimal)
+		if _, err := d.SetFloat64(f); err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
+		}
+		return NewBigDecimal(d), nil
+	case "round":
+		if !placesSet {
+			return Value{}, fmt.Errorf("convert: accuracy \"round\" requires a places option (the number of decimal places)")
+		}
+		if places < 0 {
+			return Value{}, fmt.Errorf("convert: places must be non-negative, got %d", places)
+		}
+		// A float64 has at most maxFloatFractionDigits fractional digits
+		// (the smallest subnormal, 2^-1074), so rounding to more places
+		// than that only appends zeros while FloatString would still
+		// materialise every one — an unbounded string from a small
+		// number. Reject the impractical request rather than hang.
+		if places > maxFloatFractionDigits {
+			return Value{}, fmt.Errorf("convert: places %d exceeds the maximum %d (a float64 has no more fractional digits)", places, maxFloatFractionDigits)
+		}
+		// FloatString rounds the exact rational value to `places` digits,
+		// half away from zero — so the rounding sees the true stored
+		// value, not the already-shortened display form.
+		r := new(big.Rat).SetFloat64(f)
+		d, _, err := apd.NewFromString(r.FloatString(int(places)))
+		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
+			return Value{}, fmt.Errorf("convert: cannot convert Float to BigDecimal")
+		}
+		return NewBigDecimal(applyFloatSign(f, d)), nil
+	default:
+		return Value{}, fmt.Errorf("convert: unknown accuracy %q (want \"exact\", \"shortest\", or \"round\")", accuracy)
+	}
+}
+
+// maxFloatFractionDigits is the most fractional decimal digits any finite
+// float64 can carry: the smallest positive subnormal is 2^-1074, whose
+// exact decimal expansion has exactly 1074 places.
+const maxFloatFractionDigits = 1074
+
+// applyFloatSign restores a negative sign bit that big.Rat drops for a
+// zero: big.Rat has no signed zero, so the exact/round expansions of
+// -0.0 (and of a negative value that rounds to zero) come back as a
+// positive 0d0. apd's BigDecimal can represent signed zero, and AQL
+// treats -0.0 as a first-class Float, so we preserve math.Signbit here
+// to stay consistent with the shortest mode (which keeps it natively).
+func applyFloatSign(f float64, d *apd.Decimal) *apd.Decimal {
+	if math.Signbit(f) && d.IsZero() {
+		d.Negative = true
+	}
+	return d
+}
+
 func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	target := args[0]
 	src := args[1]
@@ -1349,13 +1478,51 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 
 	base := ""
+	truthy := false
+	accuracy := ""
+	var places int64
+	placesSet := false
 	if opts.Data != nil {
 		m, _ := AsMap(opts)
 		if m != nil {
 			if bv, ok := m.Get("base"); ok {
 				base = ValToString(bv)
 			}
+			if tv, ok := m.Get("truthy"); ok {
+				truthy, _ = AsBoolean(tv)
+			}
+			if av, ok := m.Get("accuracy"); ok && av.Parent != nil && av.Parent.ConformsTo(TString) {
+				accuracy = ValToString(av)
+			}
+			if pv, ok := m.Get("places"); ok && pv.Parent != nil && pv.Parent.ConformsTo(TInteger) {
+				places, _ = AsInteger(pv)
+				placesSet = true
+			}
 		}
+	}
+
+	// `truthy: true` turns a Boolean conversion into a YAML-style parse
+	// (yes/no/true/false/on/off, then presence fallback). It only applies
+	// to a Boolean target; for any other target it is inert.
+	if truthy && ValueType(targetType).ConformsTo(TBoolean) {
+		return []Value{NewBoolean(coerceBooleanTruthy(src))}, nil
+	}
+
+	// `accuracy` is the explicit opt-in that lets a Float become a
+	// BigDecimal (convertToBigDecimal refuses it by default because a
+	// binary Float is inexact). It applies only to a Float → BigDecimal
+	// conversion; for any other source/target it is inert, exactly like
+	// truthy on a non-Boolean target.
+	if accuracy != "" && src.Parent.ConformsTo(TFloat) && ValueType(targetType).ConformsTo(TBigDecimal) {
+		f, err := src.AsConcreteFloat()
+		if err != nil {
+			return nil, fmt.Errorf("convert: Float source must be a concrete value, not a dependent-type constraint")
+		}
+		result, err := floatToBigDecimal(f, accuracy, places, placesSet)
+		if err != nil {
+			return nil, err
+		}
+		return []Value{result}, nil
 	}
 
 	result, err := convertTo(src, ValueType(targetType), base)

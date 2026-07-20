@@ -13,9 +13,27 @@ import (
 // sub-registry. The big bag of helpers (loadFileModule,
 // installExports, resolveBareModule, etc.) lives below.
 
+// ModuleInheritedCaps lists host-capability slots that module
+// sub-registries inherit by POINTER from their importing parent. A
+// host seam (RegisterHostX) appends its key via init() so file/inline
+// module bodies resolve the same host backends as the top level; the
+// snapshot is taken at import time, so such seams must be registered
+// BEFORE the importing program runs (embedders register at startup).
+var ModuleInheritedCaps []string
+
 // RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
 func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
+	return runModuleBodyCover(parent, elems, "", "")
+}
+
+// runModuleBodyCover is RunModuleBody with optional coverage tagging: when
+// coverID is non-empty AND a coverage run is armed, the module's sub-registry
+// is tagged so its module-load rows AND its later fn-body rows attribute to
+// coverID, and coverSrc is registered as the denominator source. A file import
+// under `Test.cover` passes the import string + file text; every other caller
+// passes "" (no tagging, no cost).
+func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc string) (ModuleDesc, error) {
 	modReg, err := newSubRegistry()
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
@@ -42,6 +60,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	// entries and runtime bails report to the request's observers.
 	modReg.Effects = parent.Effects
 	modReg.InheritObserveHooks(parent)
+	// Coverage (coverage.go): tag the module sub-registry BEFORE its body runs,
+	// so the module-load rows (def / export lines) attribute too — not just the
+	// fn-body rows exercised later. Gated on an armed coverage run (CoverageArmed
+	// via the just-inherited hook), so an ordinary import tags nothing.
+	if coverID != "" && parent.CoverageArmed() {
+		modReg.SetCoverID(coverID)
+		parent.RegisterCoverSource(coverID, coverSrc)
+	}
 	// A compiled execution arms runtime stamping on the top registry; module
 	// bodies (and the store words their fns execute later — service `add`,
 	// codec resolution) run on THIS sub-registry, so the policy must ride
@@ -60,6 +86,14 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 	if ok {
 		if err := modReg.Capabilities.Set(CapMemFileOps, mem); err != nil {
 			return ModuleDesc{}, err
+		}
+	}
+	// Host seams that opted in (ModuleInheritedCaps) ride into the module
+	// sub-registry by POINTER, so a module body resolves the same host
+	// backends as the top level (e.g. the aql:tui terminal backend).
+	for _, capName := range ModuleInheritedCaps {
+		if v, capOK, capErr := parent.Capabilities.Get(capName); capErr == nil && capOK {
+			_ = modReg.Capabilities.Set(capName, v)
 		}
 	}
 	// Overlay the parent's host-registered formats and extension mappings
@@ -363,7 +397,11 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	parent.BaseDir = modDir
 	parent.BaseFile = resolved
 	parent.Source = string(data)
-	desc, err := RunModuleBody(parent, parsed)
+	// Pass the import string + file text as the coverage id/source so a
+	// `Test.cover [ import "./mod.aql" … ]` body can report `Test.coverage
+	// "./mod.aql"` (the tagging happens BEFORE the body runs, inside the cover
+	// variant, and is a no-op unless a coverage run is armed).
+	desc, err := runModuleBodyCover(parent, parsed, path, string(data))
 	parent.BaseDir, parent.BaseFile, parent.Source = savedDir, savedFile, savedSrc
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)

@@ -91,6 +91,28 @@ convert Float 0d2.5	2.5	BigDecimal → Float (documented lossy)
 convert BigInteger 3.14	ERROR:cannot convert Float	Float → BigInteger refused
 convert BigDecimal 3.14	ERROR:cannot convert Float	Float → BigDecimal refused
 
+# ───────── accuracy option: opt-in Float → BigDecimal (Exhibit L, explicit) ─────────
+# The refusal above is the DEFAULT; a 3-arg convert with an `accuracy`
+# option lets the caller name which reading of the inexact Float they want.
+convert BigDecimal {accuracy:'shortest'} 3.14	0d3.14	shortest round-tripping decimal — what the literal reads as
+convert BigDecimal {accuracy:'exact'} 0.5	0d0.5	exact dyadic value (0.5 is binary-exact)
+convert BigDecimal {accuracy:'exact'} 3.0	0d3	a whole-number Float converts exactly
+convert BigDecimal {accuracy:'round' places:2} 3.14159	0d3.14	round the exact value to 2 decimal places
+convert BigDecimal {accuracy:'round' places:0} 2.5	0d3	round half away from zero
+convert Float (convert BigDecimal {accuracy:'shortest'} 3.14)	3.14	…and shortest round-trips back to the same Float
+convert BigDecimal {accuracy:'exact'} 42	0d42	accuracy is inert for a non-Float source
+convert String {accuracy:'exact'} 42	'42'	accuracy is inert for a non-BigDecimal target
+# NEGATIVE: the option is required, validated, and BigInteger stays refused.
+convert BigDecimal {accuracy:'foo'} 3.14	ERROR:unknown accuracy	an unrecognised accuracy mode is rejected
+convert BigDecimal {accuracy:'round'} 3.14	ERROR:requires a places option	round needs a places count
+convert BigDecimal {accuracy:'exact' places:2} 3.14	ERROR:does not take a places option	places only applies to round
+convert BigDecimal {accuracy:'round' places:-1} 3.14	ERROR:must be non-negative	places must be ≥ 0
+convert BigInteger {accuracy:'exact'} 3.14	ERROR:cannot convert Float	accuracy enables BigDecimal only, not BigInteger
+convert BigDecimal {accuracy:'shortest'} nan	ERROR:non-finite	NaN has no decimal expansion
+convert BigDecimal {accuracy:'exact'} (Float gt 0.0)	ERROR:concrete value	a dependent-type Float constraint is not a concrete value
+convert BigDecimal {accuracy:'exact'} -0.0	-0d0	exact preserves the Float negative-zero sign bit (like shortest)
+convert BigDecimal {accuracy:'round' places:1000000000} 1.0	ERROR:exceeds the maximum	an impractical places count is rejected up front (no unbounded work)
+
 # ───────── NEGATIVE: malformed 0d literals & zero divisor ─────────
 0d	ERROR:syntax_error	0d with no digits
 0d1__0	ERROR:syntax_error	repeated underscore

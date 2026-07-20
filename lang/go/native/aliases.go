@@ -425,6 +425,8 @@ var (
 	IsSealedWord              = eng.IsSealedWord
 	HasLockedSigs             = eng.HasLockedSigs
 	NewWordExtension          = eng.NewWordExtension
+	NewPathonFromString       = eng.NewPathonFromString
+	NewWordExtensionAnchored  = eng.NewWordExtensionAnchored
 	IsBareTypeNode            = eng.IsBareTypeNode
 	IsCapitalisedName         = eng.IsCapitalisedName
 	IsConcrete                = eng.IsConcrete

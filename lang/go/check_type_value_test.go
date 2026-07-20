@@ -149,15 +149,56 @@ func TestUnpackModuleCheck(t *testing.T) {
 	}
 }
 
-// A mini-language kind registered with a STATICALLY-PROVIDED fn
-// (`MiniLang.register poly (fn …)`) is now installed in check mode (an
-// idempotent ReturnsFn mirroring parselang-register), so a later
-// `mini poly …` resolves the kind instead of flagging "no mini-language is
-// registered". The registration is pure (the fn is literal) — not runtime-only.
+// A def-bound mini-language value (`def poly (fn …)`) resolves statically:
+// a later `mini poly …` expands through the binding instead of flagging
+// "no mini-language is registered". The register tombstone, by contrast,
+// is flagged AT CHECK TIME (its DryPassWrap ReturnsFn mirrors the
+// unconditional mini_registry_frozen raise).
 func TestMiniLangRegisterCheck(t *testing.T) {
-	clean := `import "aql:minilang"  MiniLang.register poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]]) end  mini poly 'x^2 + 3*y' {x:10, y:2}`
+	clean := `import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}`
 	if n := checkErrs(t, clean); n != 0 {
-		t.Errorf("minilang register then use: expected 0 errors, got %d", n)
+		t.Errorf("minilang value form: expected 0 errors, got %d", n)
+	}
+	// The tombstone surfaces statically as a guaranteed-error mirror
+	// diagnostic (its DryPassWrap ReturnsFn re-raises under the dry pass).
+	a, _ := lang.New()
+	cr, _ := a.Check(`import "aql:minilang"  MiniLang.register`)
+	found := false
+	for _, d := range cr.Diagnostics {
+		if d.Code == "mini_registry_frozen" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the register tombstone must be flagged statically (mini_registry_frozen)")
+	}
+}
+
+// A name def-bound to a COMPUTED fn value has no Defs binding under
+// analysis — it resolves through the per-pass fn-carrier side table. The
+// mini and emit bound-name paths must consult it like parse does, so a
+// valid computed-value program checks clean (degrading to a dynamic
+// carrier) instead of flagging <surface>_unknown_lang, and still runs.
+func TestMiniEmitComputedBindingCheck(t *testing.T) {
+	// NB the binding must not collide with a built-in kind name (a name
+	// like `m` is the micron short form, and a registered kind wins).
+	miniSrc := `import "aql:minilang"  def mk fn [[] [Function] [fn [[src:String opts:Map] [Any] [src add src]]]]  def myml (mk)  mini myml 'x'`
+	if n := checkErrs(t, miniSrc); n != 0 {
+		t.Errorf("computed mini binding: expected 0 check errors, got %d", n)
+	}
+	emitSrc := `import "aql:emitlang"  def mke fn [[] [Function] [fn [[value:Any opts:Map] [String] ['E']]]]  def mye (mke)  emit mye {a:1}`
+	if n := checkErrs(t, emitSrc); n != 0 {
+		t.Errorf("computed emit binding: expected 0 check errors, got %d", n)
+	}
+	// The interpreter runs both for real — the doubled source proves the
+	// BOUND fn ran (a fallthrough parse of 'x' could echo it unchanged).
+	a, _ := lang.New()
+	if got, err := a.Run(miniSrc); err != nil || len(got) != 1 || got[0] != "xx" {
+		t.Errorf("computed mini binding run = %v (err %v), want [xx]", got, err)
+	}
+	b, _ := lang.New()
+	if got, err := b.Run(emitSrc); err != nil || len(got) != 1 || got[0] != "E" {
+		t.Errorf("computed emit binding run = %v (err %v), want [E]", got, err)
 	}
 }
 

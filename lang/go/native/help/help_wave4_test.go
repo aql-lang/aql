@@ -360,6 +360,9 @@ func TestW4ComputeBinaryResult(t *testing.T) {
 		{"w4-unknown", sigInt, "2", "3", "..."},
 		{"add", sigFloat, "2.5", "3.25", "5.75"},
 		{"add", w4Sig([]string{"String", "String"}, []string{"String"}), "'a'", "'b'", "'ba'"},
+		// two non-String scalars: add does not concatenate (Boolean
+		// arithmetic is a defined error), so the heuristic yields "...".
+		{"add", w4Sig([]string{"Boolean", "Boolean"}, []string{"Boolean"}), "true", "false", "..."},
 		{"mul", sigInt, "'a'", "'b'", "..."},
 	}
 	for _, c := range cases {

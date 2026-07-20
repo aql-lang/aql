@@ -5,14 +5,16 @@ import (
 	"testing"
 
 	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
 )
 
-// Compiled mini-languages (design/MINILANG.5.md §13). A kind may register an
-// expansion-time compile hook alongside its runtime transducer; when src is
-// concrete, `mini` runs the hook at the call site and splices its tokens
-// instead of the standard call. The transducer stays the semantic reference,
-// the check-mode target, and the non-concrete-src fallback.
+// Compiled mini-languages (design/MINILANG.5.md §13). A BUILT-IN kind may
+// carry an expansion-time Go compile hook alongside its runtime transducer;
+// when src is concrete, `mini` runs the hook at the call site and splices
+// its tokens instead of the standard call. The transducer stays the
+// semantic reference, the check-mode target, and the non-concrete-src
+// fallback. (The custom-kind hook surfaces — MiniLangSpec.Compile and
+// MiniLang.register-compiled — died with the frozen kind namespace;
+// mini_hook_compile_test.go drives the Go-hook machinery directly.)
 
 const mcImp = `import "aql:minilang"  `
 
@@ -62,76 +64,22 @@ func TestMiniCompileReBadPattern(t *testing.T) {
 	}
 }
 
-// TestMiniCompileGoHostHook: the Go host API's Compile field runs at the call
-// site. `up`'s transducer returns src; its compile hook uppercases at compile.
-func TestMiniCompileGoHostHook(t *testing.T) {
-	a, err := lang.New()
-	if err != nil {
-		t.Fatalf("lang.New: %v", err)
-	}
-	err = a.RegisterMiniLang(lang.MiniLangSpec{
-		Name:    "up",
-		Returns: []*lang.Type{lang.TString},
-		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-			s, _ := args[0].AsConcreteString()
-			return []native.Value{native.NewString(s)}, nil // transducer: identity
-		},
-		Compile: func(src string, _ native.Value, _ *native.Registry) ([]native.Value, error) {
-			// compile-time: splice the uppercased src as an inert constant
-			return []native.Value{native.NewString(strings.ToUpper(src))}, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("RegisterMiniLang: %v", err)
-	}
-	if out, err := a.Run(mcImp + `mini up 'hi'`); err != nil {
-		t.Fatalf("run: %v", err)
-	} else if len(out) != 1 || out[0] != "HI" {
-		t.Fatalf("mini up 'hi' = %v, want HI (compile hook ran)", out)
-	}
-}
-
-// TestMiniCompileAQLHook: an AQL compile hook (a macro) installed via
-// register-compiled runs at the call site. `lit`'s transducer returns src; its
-// compiler uppercases at expansion via unquote.
-func TestMiniCompileAQLHook(t *testing.T) {
-	setup := mcImp + `import "aql:string-util"  ` +
-		`MiniLang.register lit (fn [[src:String opts:Map] [String] [src]]) end  ` +
-		`MiniLang.register-compiled lit (macro [[src opts] [ quote [ unquote (StringUtil.upper src) ] ]]) end  `
-	if got := mcRun(t, setup+`mini lit 'hello'`); got != "HELLO" {
-		t.Errorf("AQL-compiled lit = %v, want HELLO", got)
-	}
-}
-
 // --- negatives ------------------------------------------------------------
 
-// TestMiniCompileRegisterCompiledContract pins what register-compiled refuses.
-func TestMiniCompileRegisterCompiledContract(t *testing.T) {
-	cases := []struct{ name, prog, want string }{
-		{
-			"no transducer",
-			mcImp + `MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])`,
-			"mini_no_transducer",
-		},
-		{
-			"compiler must be a macro",
-			mcImp + `MiniLang.register lit (fn [[s:String o:Map] [String] [s]]) end  ` +
-				`MiniLang.register-compiled lit (fn [[s:String o:Map] [List] [ [s] ]])`,
-			"mini_bad_compiler",
-		},
-		{
-			"bad name",
-			mcImp + `MiniLang.register-compiled lang_x (macro [[s o] [ quote [ s ] ]])`,
-			"mini_bad_name",
-		},
-	}
-	for _, c := range cases {
+// TestMiniCompileRegisterTombstones pins the frozen registry on this
+// surface: both register words raise mini_registry_frozen unconditionally
+// (the custom-kind hook contract errors died with them).
+func TestMiniCompileRegisterTombstones(t *testing.T) {
+	for _, c := range []struct{ name, prog string }{
+		{"register", mcImp + `MiniLang.register`},
+		{"register-compiled", mcImp + `MiniLang.register-compiled ghost (macro [[s o] [ quote [ s ] ]])`},
+	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, _ := lang.New()
 			if _, err := a.Run(c.prog); err == nil {
-				t.Fatalf("%s: expected error", c.name)
-			} else if !strings.Contains(err.Error(), c.want) {
-				t.Fatalf("%s: error %q does not contain %q", c.name, err.Error(), c.want)
+				t.Fatalf("%s: expected mini_registry_frozen", c.name)
+			} else if !strings.Contains(err.Error(), "mini_registry_frozen") {
+				t.Fatalf("%s: error %q does not contain mini_registry_frozen", c.name, err.Error())
 			}
 		})
 	}

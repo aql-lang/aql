@@ -38,34 +38,24 @@ func init() {
 		"lang_micron": "Micron literal: `+m:alice@example.com` (≡ mini micron '…' ≡ mini m '…') — " +
 			"parse the source with the ONE merged tabnas grammar built from each builtin Micron leaf's literal grammar " +
 			"(Emailon, then Urlon, then Pathon) — the matching shape decides the type. Pathon accepts any " +
-			"whitespace-free source, so it is the catch-all (`+m:a/b` is a Pathon). User Microns join " +
-			"the merge via MiniLang.micron (see micron). URL sources " +
+			"whitespace-free source, so it is the catch-all (`+m:a/b` is a Pathon). The leaf set is " +
+			"FIXED — the merge is not extensible. URL sources " +
 			"contain `:` and `/` — pick a delimiter outside the source: `+m|https://x.com/a`.",
 		"lang_m": "Short form of the micron kind — see lang_micron. `+m:alice@example.com` " +
 			"parses as an Emailon; `+m|https://x.com/a` as an Urlon; `+m:a/b` as a Pathon.",
-		"micron": "OPT-IN user-Micron literal hook: `MiniLang.micron <Kind> <grammar> <fn>` registers " +
-			"a literal shape for a USER-defined Micron kind (def Nameon refine Micron {\u2026}). The shape " +
-			"is a whole tabnas GRAMMAR \u2014 a declarative spec Map (the same GrammarSpec document " +
-			"Parse.spec accepts: `{options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} rule:{\u2026} ref:{\u2026}}`) " +
-			"or an aql:parse Parse.grammar builder value (consumed, single-use). The grammar must " +
-			"declare \u22651 match token \u2014 the merged `+m` dispatch is token-driven, so the gate token(s) " +
-			"claim the kind's literal spans \u2014 and merges into the `+m` grammar BETWEEN the builtin " +
-			"leaves and the Pathon catch-all (registration order): Emailon/Urlon keep their spans, " +
-			"unclaimed spans still fall to Pathon. A token-only grammar's gates are auto-anchored to " +
-			"the whole literal; a grammar with its own val alternates/rules owns recognition verbatim " +
-			"(a claimed-then-rejected span is a loud mini_parse_error). The fn receives the grammar's " +
-			"parse RESULT (the matched span String for a plain gate; whatever the rules/ref actions " +
-			"produced otherwise) and must return one Kind instance \u2014 a failure or wrong-typed result " +
-			"is loud. One shape per kind; token names must be unique across the merge.",
-		"register": "Install an AQL fn as a new mini-language: MiniLang.register <name> <fn>. " +
-			"Every fn signature must start with the standard prefix [src:String opts:Map …]. " +
-			"A FILTER-shaped kind (exactly [src opts subject]) also exports a named member type " +
-			"for its partials (kind poly → MiniLang.Poly) — see MiniLang.Re for the convention.",
+		"micron": "TOMBSTONE — raises mini_registry_frozen. The +m literal grammar is fixed to the " +
+			"builtin Micron leaves (Emailon, Urlon, Pathon); the user-shape hook was removed. A user " +
+			"Micron TYPE (def Nameon refine Micron {…}) still works with make — parse custom sources " +
+			"with a parser fn value; only the literal sugar is builtin-only.",
+		"register": "TOMBSTONE — raises mini_registry_frozen. The mini kind namespace is fixed " +
+			"(built-in kinds only); pass a custom mini-language as a Function value instead: " +
+			"def myl (fn [[src:String opts:Map] [Any] [...]])  mini myl '...' — Go hosts build " +
+			"one with NewMiniLangFn.",
 		"Re": "The named type of a `re` partial — the Function a parked `+re/…/` (or " +
 			"`def f (+re/…/)`) produces. `typeof` still reports Function (a member type is a " +
 			"constraint, like a DepScalar); use `is` (`f/r is (MiniLang.Re)`) or a typed fn param " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`) to require specifically a regexp matcher. " +
-			"Every filter kind has one: Re, Gex, Jp, Jq, Xp, plus user kinds via MiniLang.register.",
+			"Every built-in filter kind has one: Re, Gex, Jp, Jq, Xp.",
 		"Gex": "The named type of a `gex` partial (a stored glob-expression matcher) — " +
 			"see MiniLang.Re for the convention.",
 		"Jp": "The named type of a `jp` partial (a stored JSONPath query) — " +
@@ -74,10 +64,10 @@ func init() {
 			"see MiniLang.Re for the convention.",
 		"Xp": "The named type of an `xp` partial (a stored XPath query) — " +
 			"see MiniLang.Re for the convention.",
-		"kinds": "List the registered mini-language kind atoms.",
-		"register-compiled": "Add an expansion-time compile hook (a macro) to a kind: " +
-			"MiniLang.register-compiled <name> (macro [[src opts] [ quote [ … ] ]]). The kind must " +
-			"already have a transducer; `mini` runs the compiler at the call site and splices its tokens.",
+		"kinds": "List the (fixed) mini-language kind atoms.",
+		"register-compiled": "TOMBSTONE — raises mini_registry_frozen. The AQL compile-hook " +
+			"surface died with the frozen kind namespace; pass a custom mini-language as a " +
+			"Function value (mini <fn> '...') and memoize any expensive compile inside the fn.",
 		"run-re": "Internal: the compiled-`re` consumer — matches a precompiled-pattern carrier " +
 			"(from the re compile hook) against the stack subject.",
 	})

@@ -147,33 +147,43 @@ type towerOps struct {
 //     int64 (unchanged), *big.Int, or *apd.Decimal at the decimal context.
 func numericBinaryHandler(ops towerOps) Handler {
 	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-		la, lb := numLeaf(args[0]), numLeaf(args[1])
-		if la == leafFloat || lb == leafFloat {
-			other := la
-			if la == leafFloat {
-				other = lb
-			}
-			if other == leafBigInteger || other == leafBigDecimal {
-				return nil, bigFloatMixError(r, args[0], args[1])
-			}
-			a, _ := AsNumber(args[0])
-			b, _ := AsNumber(args[1])
-			return singleResult(ops.fltFn(a, b))
+		return towerApply(ops, args[0], args[1], r)
+	}
+}
+
+// towerApply runs a binary math word's leaf tower over the two operands
+// in sig order (args[0], args[1]); like numericBinaryHandler each ops
+// closure computes `args[1] OP args[0]`. Split out from
+// numericBinaryHandler so the Micron field-wise default
+// (native_scalar_ops.go) can drive the exact same numeric semantics
+// per field without threading a Handler through.
+func towerApply(ops towerOps, a0, a1 Value, r *Registry) ([]Value, error) {
+	la, lb := numLeaf(a0), numLeaf(a1)
+	if la == leafFloat || lb == leafFloat {
+		other := la
+		if la == leafFloat {
+			other = lb
 		}
-		w := la
-		if lb > w {
-			w = lb
+		if other == leafBigInteger || other == leafBigDecimal {
+			return nil, bigFloatMixError(r, a0, a1)
 		}
-		switch w {
-		case leafBigDecimal:
-			return singleResult(ops.decFn(decimalContext(r), asApdOperand(args[0]), asApdOperand(args[1])))
-		case leafBigInteger:
-			return singleResult(ops.bigFn(asBigOperand(args[0]), asBigOperand(args[1])))
-		default:
-			a, _ := args[0].AsConcreteInteger()
-			b, _ := args[1].AsConcreteInteger()
-			return singleResult(ops.intFn(a, b))
-		}
+		a, _ := AsNumber(a0)
+		b, _ := AsNumber(a1)
+		return singleResult(ops.fltFn(a, b))
+	}
+	w := la
+	if lb > w {
+		w = lb
+	}
+	switch w {
+	case leafBigDecimal:
+		return singleResult(ops.decFn(decimalContext(r), asApdOperand(a0), asApdOperand(a1)))
+	case leafBigInteger:
+		return singleResult(ops.bigFn(asBigOperand(a0), asBigOperand(a1)))
+	default:
+		a, _ := a0.AsConcreteInteger()
+		b, _ := a1.AsConcreteInteger()
+		return singleResult(ops.intFn(a, b))
 	}
 }
 

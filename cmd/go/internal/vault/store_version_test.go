@@ -92,7 +92,7 @@ func TestLoadMigratesV2Golden(t *testing.T) {
 // TestLoadMigratesV3Golden loads a checked-in v3 store and asserts the
 // v3->v4 bump is a clean no-op: version advances, the alias expiry is
 // preserved (not invented or dropped), no password slots are conjured,
-// and the v3 capability stays valid. (Golden-per-version, ADR-004/006.)
+// and the v3 capability stays valid. (Golden-per-version, ADR-009/006.)
 func TestLoadMigratesV3Golden(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "vault.v3.jsonic"))
 	if err != nil {

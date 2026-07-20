@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 
 	"github.com/aql-lang/aql/cmd/go/internal/api"
+	"github.com/aql-lang/aql/cmd/go/internal/attach"
 	"github.com/aql-lang/aql/cmd/go/internal/build"
 	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
 	"github.com/aql-lang/aql/cmd/go/internal/check"
@@ -37,6 +38,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	"github.com/aql-lang/aql/cmd/go/internal/run"
 	"github.com/aql-lang/aql/cmd/go/internal/serve"
+	testcmd "github.com/aql-lang/aql/cmd/go/internal/test"
 	"github.com/aql-lang/aql/cmd/go/internal/tui"
 	"github.com/aql-lang/aql/cmd/go/internal/vault"
 )
@@ -179,6 +181,7 @@ func buildRegistry() *command.Registry {
 	r.Register(run.New())
 	r.Register(do.New())
 	r.Register(check.New())
+	r.Register(testcmd.New())
 	r.Register(help.New(provide))
 	r.Register(describe.New())
 	r.Register(aqlfmt.New())
@@ -201,6 +204,7 @@ func buildRegistry() *command.Registry {
 	// Commands: cross-process debugging (serve introspection / attach).
 	r.Register(debugcmd.New())
 	// Commands: supervisor control plane client.
+	r.Register(attach.New())
 	r.Register(ctl.New())
 	// Services: long-running input loops.
 	r.Register(repl.New())

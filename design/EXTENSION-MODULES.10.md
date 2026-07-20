@@ -1,5 +1,20 @@
 # Pluggable extension modules: coding, micro-format, number systems
 
+> **Caveat (2026-07): the parse/mini/emit registration surfaces this note
+> models itself on have since been REMOVED.** The `parse`/`mini`/`emit`
+> kind namespaces are frozen (the atom sugar is un-namespaced, so the kind
+> sets are fixed built-in lists; the `register` words are tombstones
+> raising `<surface>_registry_frozen`), and custom languages are Function
+> VALUES built with `NewParseLangFn` / `NewMiniLangFn` / `NewEmitLangFn`
+> and bound via `(*AQL).DefineValue` (or a `def`). Three capabilities were
+> retired without replacement: AQL-side mini compile hooks
+> (`register-compiled`), custom-kind member types (`MiniLang.<Name>`), and
+> `+kind/src/` sugar for custom kinds. The host-registration RECIPE below
+> (validate / store under a capability / gate on policy) is still the
+> template for capabilities with their OWN namespaces (log sinks, TUI
+> backends, and this note's proposals) — just no longer a description of
+> the parse/emit code.
+
 > **Status: design proposal, not implemented.** This note specifies three
 > new extensible capabilities — `aql:coding` (escaping / encoding),
 > `aql:micro-format` (email, iCal, vCard, …), and **higher-order number
@@ -49,7 +64,8 @@ Each extensible module owns a registry of named handlers with five parts,
 all already demonstrated by parselang/emitlang:
 
 1. **A `Spec` struct** — the registration envelope. parselang's is
-   `ParseLangSpec{Name string; Returns []*native.Type; Handler native.Handler}`
+   `ParseLangSpec{Name string; Returns []*native.Type; Handler ParseLang}`
+   (`ParseLang` is the exported named type of a parse_<lang> function)
    (`parselang.go:147`). Name is a **lowercase, unprefixed** kind atom;
    the framework adds the word prefix (`parse_`, `emit_`, …).
 2. **A `RegisterHostX(reg *native.Registry, spec XSpec) error`** entry

@@ -65,6 +65,15 @@ type Registry struct {
 	// InheritObserveHooks. Inert (one atomic load) unless a test arms them.
 	interpHook *interpEntryHook
 	bailHook   *bailHook
+	// coverHook is the arm-able AQL-source line-coverage seam (coverage.go),
+	// powering aql:test's coverage feature. Pointer-shared into forks and
+	// inherited by module sub-registries via InheritObserveHooks; inert (one
+	// atomic load) unless a coverage run arms it. coverID tags a registry as a
+	// coverage target (a module-under-test's sub-registry) — only a tagged
+	// registry emits, so recorded rows are unambiguously that module's.
+	coverHook    *coverHook
+	coverID      string
+	coverSources *coverSources
 	// interpAttribution is the C4 attribution context: a SANCTIONED
 	// interpreter re-run (the compiled-mode fallback arms) stamps its tag
 	// here for the duration, so every interpreter entry the re-run produces
@@ -994,12 +1003,6 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"parse_bad_matcher": SeverityError,
 	"parse_bad_abnf":    SeverityError,
 	"parse_bad_rule":    SeverityError,
-	// MiniLang.micron's check-mode dry pass (aql:minilang): a
-	// value-decidable registration shape error — a non-Micron or
-	// builtin kind, a non-Function builder, or a spec-Map grammar
-	// with a decidable document error (bad sections, no gate token,
-	// a user-set tag).
-	"micron_literal": SeverityError,
 	// Generics (design/GENERICS.10.md §9.2).
 	"constraint_violation": SeverityError,
 	"unbound_param":        SeverityError,
@@ -1039,6 +1042,23 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// readers about reachable states (completion plan 2.3; the article's
 	// "unnecessary defensive check" residue). Emitted by ApplyGuardNarrowing.
 	"redundant_guard": SeverityInfo,
+	// Case exhaustiveness (design/case-exhaustiveness.0.md). A default-less
+	// `case` whose clause matches do not provably cover the scrutinee's
+	// static type is an ERROR: the uncovered value silently produces
+	// nothing at runtime. Coverage is proven in the sound direction only
+	// (opaque predicate matches never count), a gradual dynamic(T)
+	// scrutinee skips the check, and the trailing default stays optional
+	// exactly when the type disjunction is fully met — so the finding
+	// fires only where a genuinely uncoverable value exists. NOT a
+	// RuntimeMirror: no-match is not a runtime error, so the compile
+	// pipeline refuses on it like any other model-level error.
+	"case_not_exhaustive": SeverityError,
+	// The advisory duals of the same coverage computation (info,
+	// non-gating, per the redundant_guard precedent): a trailing default
+	// made unreachable because the clauses already cover every
+	// alternative, and a clause subsumed by the clauses before it.
+	"case_redundant_default":  SeverityInfo,
+	"case_unreachable_clause": SeverityInfo,
 	// RESERVED — no emit site yet (completion plan 4.4 / G6). The general
 	// "options-looking map literal flows into a slot with no Options schema"
 	// lint is BLOCKED ON PRECISION: atom-spelled and string-spelled map keys
@@ -1135,6 +1155,8 @@ func NewRegistry() (*Registry, error) {
 		Effects:      &EffectLedger{},
 		interpHook:   &interpEntryHook{},
 		bailHook:     &bailHook{},
+		coverHook:    &coverHook{},
+		coverSources: &coverSources{},
 		SDKCache:     make(map[string]any),
 		// StepBudget uses -1 as the "unset, use the project default"
 		// sentinel. The Go zero (0) is honored as "abort on the first
@@ -1256,6 +1278,30 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
+}
+
+// RegisterCoreDefault appends UNLOCKED CoreDefault overloads onto an
+// already-registered builtin word's native FnDefInfo (it must already be a
+// builtin — Register must have run first). The sigs dispatch after every
+// more-specific overload (they are unlocked, so a user/module override
+// wins by specificity) yet live on the native definition, so `undef` of
+// the builtin still refuses and no def-clone is created. They carry the
+// CoreDefault flag so the export transplant skips them. The word stays in
+// builtinWords — this does NOT introduce a new dispatchable name.
+func (r *Registry) RegisterCoreDefault(name string, sigs ...Signature) {
+	if r == nil || !r.builtinWords[name] { //covergate:allow only ever invoked for a name Register already installed as a builtin word
+		return
+	}
+	stamped := make([]Signature, len(sigs))
+	for i := range sigs {
+		s := sigs[i]
+		s.Locked = false
+		s.CoreDefault = true
+		stamped[i] = s
+	}
+	// The word is already registered (Register fired any OnRegisterHook);
+	// this only appends overloads to its native definition.
+	r.upsertFnDef(name, stamped...)
 }
 
 // reservedLiterals are the value literals the parser produces directly

@@ -739,17 +739,19 @@ compile hooks never run in check mode), and the **fallback** when `src` is not
 concrete. So the immediate-transduction definition API is unchanged; compile
 hooks are layered on top.
 
-**Two registration paths, one discovery point** (`miniHandler`):
+**One registration path, one discovery point** (`miniHandler`):
 
-- **Go** — an optional `Compile native.MiniCompileHook` field on `MiniLangSpec`
-  / a built-in's `native.RegisterMiniCompileGoHook`. The hook is a Go func
-  `(src, opts, r) → []Value`. Stored in a per-registry table.
-- **AQL** — `MiniLang.register-compiled <name> (macro [[src opts] [quote […]]])`,
-  stored as the `compile_<name>` export and expanded via `eng.ExpandMacroWith`.
-  An AQL hook **must be a macro**: AQL list literals don't capture locals, so a
-  plain fn can't build a value-injected token list — the macro template
-  (`quote`/`unquote`) is the only vehicle. The kind must already have a
-  transducer (`mini_no_transducer` otherwise).
+- **Go** — a built-in's `native.RegisterMiniCompileGoHook`. The hook is a Go
+  func `(src, opts, r) → []Value`. Stored in a per-registry table.
+
+> **Retired (2026-07):** the AQL path — `MiniLang.register-compiled <name>
+> (macro …)` stored as `compile_<name>` — died with the frozen kind
+> namespace (`register-compiled` is a tombstone raising
+> `mini_registry_frozen`; an expansion-time macro rewrite is
+> unrepresentable as a runtime value, so it has no value-form successor).
+> The former `MiniLangSpec.Compile` field went with it: hooks are Go-only
+> BUILT-IN machinery now, and a custom fn-value mini-language memoizes any
+> expensive compile inside its own body.
 
 **Built-in demo — `re` (carrier + consumer):** `miniReCompile` compiles the
 pattern at the call site (memoized), wraps the `*regexp.Regexp` in an inert
