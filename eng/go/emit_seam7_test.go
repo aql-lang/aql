@@ -844,10 +844,32 @@ func TestRecordCallOperandsInertFnBake(t *testing.T) {
 // --- RecordPolyCall / RecordDynMethod guards ----------------------------
 
 func TestRecordPolyCallGuard(t *testing.T) {
+	// A multi-result poly (flex `pop` → [remaining, popped]) now RECORDS: each
+	// result seats under its own index, the event is marked generic, and the
+	// VM enforces the recorded result-count claim (PolyRef.NOut).
 	es := NewEmitState()
-	// more than one output → declines.
-	if es.RecordPolyCall("w", nil, []Value{NewInteger(1), NewInteger(2)}, SrcPos{}, nil, nil) {
-		t.Fatal("multi-out poly call should decline")
+	o1 := NewDynamicCarrier(TFlexList)
+	o2 := NewDynamicCarrier(TAny)
+	if !es.RecordPolyCall("pop", nil, []Value{o1, o2}, SrcPos{}, nil, nil) {
+		t.Fatal("multi-out poly call should record")
+	}
+	pr1, ok1 := es.producedBy[o1.ID]
+	pr2, ok2 := es.producedBy[o2.ID]
+	if !ok1 || !ok2 {
+		t.Fatal("both results should register in producedBy")
+	}
+	if pr1.idx != 0 || pr2.idx != 1 {
+		t.Errorf("result indices = %d,%d, want 0,1", pr1.idx, pr2.idx)
+	}
+	if pr1.seq != pr2.seq {
+		t.Errorf("results should share one event seq, got %d and %d", pr1.seq, pr2.seq)
+	}
+	if !es.eventInfo[pr1.seq].generic {
+		t.Error("a multi-result poly event should be marked generic")
+	}
+	// inactive recorder → declines.
+	if inactiveEmitState().RecordPolyCall("pop", nil, []Value{o1, o2}, SrcPos{}, nil, nil) {
+		t.Fatal("inactive multi-out poly call should decline")
 	}
 }
 

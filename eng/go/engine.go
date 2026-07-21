@@ -2343,15 +2343,18 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 
 	// Guard-fact attachment (A3): the group reduced to exactly one
 	// value and it is a Boolean carrier — keep the original tokens on
-	// it for guard narrowing. Booleans never carry another payload at
-	// this point (ChildTypeInfo is List/Map-only), so the write is
-	// non-destructive.
-	if groupSpan > 0 && len(guardToks) >= 3 {
+	// it for guard narrowing. A 2-token group (`(is-map x)`, a predicate
+	// guard) qualifies alongside the 3-token `x is T` triple. DYNAMIC
+	// Boolean carriers qualify too (a dynamic-binding guard still narrows
+	// its then-branch); the reduced payload is preserved in Prev so a
+	// statically-decided cond stays readable by the unreachable-branch
+	// analysis (LiteralCondValue).
+	if groupSpan > 0 && len(guardToks) >= 2 {
 		nResults := e.tape.Len() - lenBefore + groupSpan
 		if nResults == 1 && scanIdx < e.tape.Len() {
 			res := e.tape.At(scanIdx)
-			if res.Carrier && !res.Dynamic && res.Parent.ConformsTo(TBoolean) {
-				res.Data = GuardFactInfo{Toks: guardToks}
+			if res.Carrier && res.Parent.ConformsTo(TBoolean) {
+				res.Data = GuardFactInfo{Toks: guardToks, Prev: res.Data}
 				e.tape.Set(scanIdx, res)
 			}
 		}
@@ -3360,7 +3363,21 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 		}
 		match.Args[i].Eval = false
-		match.Args[i].Undefined = false
+		// A check-mode Undefined placeholder (a forward-referenced fn name, or
+		// an undefined word already diagnosed at its source) reaching a dispatch
+		// arg gradualizes to a dynamic Any carrier — otherwise the phantom
+		// concrete Atom drives a CASCADING false no_signature on the consuming
+		// word. The primary undefined_word diagnostic was already emitted at
+		// stepWord; note the def-read so the dynamic-scope rescue still
+		// attributes it. Undefined is only ever set in check mode (stepWord
+		// errors at runtime), so this never masks a runtime error.
+		if match.Args[i].Undefined {
+			c := NewDynamicCarrier(TAny)
+			if a, aerr := AsAtom(match.Args[i]); aerr == nil && a != "" {
+				e.registry.Check.Recorder().NoteDefRead(c.ID, a)
+			}
+			match.Args[i] = WithPos(c, match.Args[i])
+		}
 		// Materialize concrete Options defaults into the map the handler /
 		// fn param will receive: a field whose schema declares a real
 		// default value, omitted by the caller, is filled in so the

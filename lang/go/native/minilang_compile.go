@@ -62,6 +62,12 @@ const capMiniCompile = "engine.minilang.compile"
 type miniCompileState struct {
 	mu      sync.Mutex
 	goHooks map[string]MiniCompileHook
+	// faithful marks kinds whose compile hook is TRANSDUCER-FAITHFUL: the
+	// tokens the hook splices at compile time are the same standard call the
+	// interpreter's transducer would run, so a DYNAMIC-src invocation may
+	// record that call instead of refusing on the non-concrete src. Off by
+	// default — a hook that bakes a src-specific plan is NOT faithful.
+	faithful map[string]bool
 }
 
 func miniCompileStateFor(r *Registry, create bool) *miniCompileState {
@@ -71,7 +77,7 @@ func miniCompileStateFor(r *Registry, create bool) *miniCompileState {
 	if !create {
 		return nil
 	}
-	s := &miniCompileState{goHooks: map[string]MiniCompileHook{}}
+	s := &miniCompileState{goHooks: map[string]MiniCompileHook{}, faithful: map[string]bool{}}
 	_ = r.Capabilities.Set(capMiniCompile, s)
 	return s
 }
@@ -94,4 +100,28 @@ func miniGoHook(r *Registry, kind string) (MiniCompileHook, bool) {
 	defer s.mu.Unlock()
 	h, ok := s.goHooks[kind]
 	return h, ok
+}
+
+// MarkMiniCompileHookFaithful declares kind's compile hook transducer-faithful:
+// the compile-time splice IS the interpreter's standard call, so a dynamic-src
+// `mini kind` may record that call rather than refusing on the non-concrete
+// src. Only mark a kind that holds this by construction (see miniHookFaithful).
+func MarkMiniCompileHookFaithful(r *Registry, kind string) {
+	s := miniCompileStateFor(r, true)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.faithful[kind] = true
+}
+
+// miniHookFaithful reports whether kind's compile hook was declared
+// transducer-faithful. The refusal switch in native_macro consults it to let a
+// faithful kind compile a dynamic-src invocation.
+func miniHookFaithful(r *Registry, kind string) bool {
+	s := miniCompileStateFor(r, false)
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.faithful[kind]
 }
