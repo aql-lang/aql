@@ -358,7 +358,7 @@ const aqlTuiSource = `import "aql:vault-tui"  (VaultTui.run {dark: %v}) drop`
 var (
 	b8langNew      = lang.New
 	b8runSource    = func(a *lang.AQL, src string) error { _, err := a.RunInterp(src); return err }
-	b8termbackSpec = termback.Spec
+	b8termbackSpec = termback.SpecFor
 )
 
 // runInteractiveAQL launches the AQL implementation of the vault TUI
@@ -385,7 +385,7 @@ func runInteractiveAQL(homeDir string, stdin io.Reader, stdout, stderr io.Writer
 		return 1
 	}
 	reg := a.NativeRegistry()
-	registerAqlTuiBackends(reg, ctl)
+	registerAqlTuiBackends(reg, ctl, stdin, stdout)
 	if err := b8runSource(a, fmt.Sprintf(aqlTuiSource, lipgloss.HasDarkBackground())); err != nil {
 		fmt.Fprintf(stderr, "aql-tui: %s\n", err)
 		return 1
@@ -395,8 +395,11 @@ func runInteractiveAQL(homeDir string, stdin io.Reader, stdout, stderr io.Writer
 
 // registerAqlTuiBackends wires the two host seams the app dispatches
 // against. Registration MUST precede the program's import — the module
-// sub-registry snapshots the capability slots at import time.
-func registerAqlTuiBackends(reg *native.Registry, ctl *tuiController) {
-	_ = modules.RegisterHostTui(reg, b8termbackSpec())
+// sub-registry snapshots the capability slots at import time. The
+// terminal backend is bound to the CALLER's streams (not os.Stdin/
+// os.Stdout), matching the bubbletea launcher's tea.WithInput/WithOutput
+// so a programmatic invocation drives the terminal it was handed.
+func registerAqlTuiBackends(reg *native.Registry, ctl *tuiController, stdin io.Reader, stdout io.Writer) {
+	_ = modules.RegisterHostTui(reg, b8termbackSpec(stdin, stdout))
 	_ = modules.RegisterHostVault(reg, newAqlBridge(ctl).spec())
 }

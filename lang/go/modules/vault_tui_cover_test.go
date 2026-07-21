@@ -95,9 +95,8 @@ func TestBuildVaultTuiModulePreambleParseError(t *testing.T) {
 }
 
 // A parent whose module config carries an InitFunc has it applied to
-// the sub-registry; a parent without one drives the native.Register
-// fallback (both arms, as in sift_cover_test.go).
-func TestBuildVaultTuiModuleInitFuncArms(t *testing.T) {
+// the sub-registry (the InheritConfig + InitFunc arm).
+func TestBuildVaultTuiModuleUsesInheritedInitFunc(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +114,22 @@ func TestBuildVaultTuiModuleInitFuncArms(t *testing.T) {
 	}
 	if !called {
 		t.Error("inherited Modules.InitFunc was not applied to the sub-registry")
+	}
+}
+
+// A parent that explicitly cleared its module InitFunc drives the
+// native.Register fallback arm (InheritConfig copies the nil through;
+// the resolver still rides in from the parent's module config).
+func TestBuildVaultTuiModuleRegisterFallbackWithoutInitFunc(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	InstallResolver(reg)
+	reg.Modules.InitFunc = nil
+	if _, berr := BuildVaultTuiModule(reg); berr != nil {
+		t.Fatalf("BuildVaultTuiModule without InitFunc: %v", berr)
 	}
 }
 
