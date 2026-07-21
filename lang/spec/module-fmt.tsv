@@ -65,3 +65,14 @@ import "aql:fmt" end Fmt.format-with {strategies:['bogus']} "a"	ERROR:unknown st
 import "aql:fmt" end Fmt.format-with {widht:72} "a"	ERROR:unknown rule key	a misspelled rule key is rejected (typo protection)
 import "aql:fmt" end Fmt.format-with {width:'x'} "a"	ERROR:width must be an Integer	a non-integer width is rejected
 import "aql:fmt" import "aql:minilang" end (Fmt.tree "def x 1") mini sp 'count(//children)' {}	[4]	sp (structure-path) selects into the Fmt.tree CST — the path minilang over AQL structure
+
+# Stage-3 fn-value dispatch (landed 2026-07-21): the declarative-formatter
+# driver shape — a rule fn FETCHED from a Map at runtime and applied to the
+# waiting node — COMPILES via the whole-frame dynamic-apply replay
+# (OpCallDynFrame), where before it refused "result above a literal". These
+# rows use a CONCRETE string key (`m get "inc"`) so they also check clean; the
+# end-to-end dispatch-by-Fmt.kind demo (a dynamic ATOM key, which trips a
+# pre-existing `get (Map, dynamic(Atom))` checker false-positive) is pinned by
+# the Go parity test TestFmtDeclarativeFormatterCompiledParity instead.
+def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]] def rules {inc: ([x:Integer] => [x add 1])} app 5 rules	6	a fn fetched from a Map param and applied at the body tail compiles: the frame replay applies it exactly as the interpreter's pointer would (Stage-3 fn-value dispatch)
+def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]] def rules {inc: 42} app 5 rules	ERROR:expected 1 return value(s), got 2	a rule that is NOT callable stays data in both engines: the frame replay leaves it and the RET raises the interpreter's own count error

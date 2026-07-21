@@ -117,8 +117,10 @@ func TestFmtChildrenHandler(t *testing.T) {
 // so the nested `c` appears — end-to-end dispatch + recursion + layout.
 //
 // It runs via NewTop(reg).Run (no static pre-flight): the driver applies a
-// fn fetched from the rule table, a dynamic dispatch the compiler leaves to
-// the interpreter (design/fmt-module-and-xslt.0.md, Phase 3).
+// fn fetched from the rule table — a dynamic dispatch that ALSO compiles
+// (Stage-3 fn-value dispatch, the whole-frame OpCallDynFrame replay); the
+// compiled twin with byte-parity is TestFmtDeclarativeFormatterCompiledParity
+// (fmt_compiled_parity_test.go).
 func TestFmtDeclarativeFormatter(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {

@@ -110,6 +110,9 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	// This is the emitter's inline layer expressed as AQL data + a fold — it
 	// reproduces Fmt.format byte-for-byte for every statement that fits on one
 	// line (the wrapping strategies are the remaining, fork-gated piece).
+	// The whole program also COMPILES (Stage-3 fn-value dispatch); the
+	// compiled twin is TestFmtTreeDeclarativeFormatterCompiledParity
+	// (fmt_compiled_parity_test.go).
 	const rules = `import "aql:fmt"
 def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def ends-dot fn [nd:Any Any [

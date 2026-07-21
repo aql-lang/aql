@@ -455,6 +455,24 @@ stated when that mechanism lands and the corresponding pins flipped;
 where it is a designed keep (as lower.go:1108's consumed side-effect
 loop already is, per §5), say so; the remainder need the audit.
 
+**Subsumption (2026-07-21, Stage-3 fn-value dispatch):** the "result
+above a literal" arm is PARTIALLY subsumed for the fn-body BODY-TAIL
+dynamic-apply shape — a count-mismatched residual carrying a `Dynamic`
+value (the aql:fmt stylesheet driver `[nd (rules get (Fmt.kind nd))]`)
+now arms the whole-frame replay (`noteDynFrameReplay` widened to
+`Dynamic`; `replayForceOrder` re-pushes the out-of-order residual in
+token order; `replayIsBodyTail` proves the tail by recorded-trace seq)
+instead of refusing at seating. The arm remains reachable — and pinned —
+for non-armed shapes (variadic events, multi-result windows, plain
+out-of-order residuals the forceOrder bail keeps). The MID-BODY dynamic
+apply now refuses earlier, via "unapplied fn-value in body residual"
+(the replay's decline), pinned with the graduated shapes by
+`TestEdgeFindingDynamicFnValueApplyBodyTail`
+(lang/go/bytecode_edge_findings_test.go §6). No pre-existing pin
+covered the graduated shape, so no pin flips — the graduation adds
+pins (edge-findings §6, fmt_compiled_parity_test.go, module-fmt.tsv
+corpus rows).
+
 ## Sequencing and gates
 
 Cheapest-first, each with the standard battery + fullcorpus
