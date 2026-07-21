@@ -118,6 +118,7 @@ var KnownScopes = []string{
 	"clock",
 	"log",
 	"terminal",
+	"vault",
 }
 
 // WordChecker is the engine-side shim. Importing this interface
@@ -157,6 +158,15 @@ func GlobalsFor(scope, op string) []string {
 		return []string{"env"}
 	case "clock":
 		return []string{"clock"}
+	case "vault":
+		switch op {
+		case "read", "reveal":
+			return []string{"disk.read"}
+		case "mutate", "admin":
+			return []string{"disk.write"}
+		case "clipboard":
+			return []string{"process"}
+		}
 	}
 	return nil
 }

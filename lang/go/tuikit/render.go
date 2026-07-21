@@ -3,6 +3,8 @@ package tuikit
 import (
 	"fmt"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 )
 
 // The tree→Frame renderer of TUI.0.md §3: consumes the widget tree as
@@ -217,6 +219,14 @@ func measureFit(v any, availW int) (int, int, error) {
 		value, _, vErr := nodeStr(m, "value")
 		if vErr != nil {
 			return 0, 0, fmt.Errorf("bad widget: %v", vErr)
+		}
+		mask, _, mErr := nodeBool(m, "mask")
+		if mErr != nil {
+			return 0, 0, fmt.Errorf("bad widget: %v", mErr)
+		}
+		if mask {
+			// masked input paints one narrow bullet per rune
+			return utf8.RuneCountInString(value) + 1, 1, nil
 		}
 		return StringWidth(value) + 1, 1, nil
 	case "viewport":
@@ -651,8 +661,17 @@ func (rd *renderer) paintInput(m map[string]any, rect Rect, st Style) error {
 	if err != nil {
 		return fmt.Errorf("bad widget: %v", err)
 	}
+	mask, _, err := nodeBool(m, "mask")
+	if err != nil {
+		return fmt.Errorf("bad widget: %v", err)
+	}
 	shown, shownStyle := value, st
+	if mask {
+		// one narrow bullet per rune — the value itself never paints
+		shown = strings.Repeat("•", utf8.RuneCountInString(value))
+	}
 	if value == "" && placeholder != "" {
+		// the placeholder is a hint, not a secret — never masked
 		shown = placeholder
 		shownStyle.FG = "grey"
 	}
@@ -660,7 +679,11 @@ func (rd *renderer) paintInput(m map[string]any, rect Rect, st Style) error {
 	if focus {
 		rd.focused++
 		prefix := prefixByRunes(value, cursor)
-		x := rect.X + StringWidth(prefix)
+		w := StringWidth(prefix)
+		if mask {
+			w = utf8.RuneCountInString(prefix)
+		}
+		x := rect.X + w
 		if max := rect.X + rect.W - 1; x > max {
 			x = max
 		}

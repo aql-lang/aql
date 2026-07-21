@@ -21,7 +21,7 @@ func init() {
 		"box":            "Build a bordered box around a child widget (title, border, pad).",
 		"list-view":      "Build a scrolling list with a highlighted cursor row.",
 		"table":          "Build a table from column specs and data rows, with a cursor row.",
-		"input":          "Build a single-line input widget rendering state-owned text.",
+		"input":          "Build a single-line input widget rendering state-owned text; {mask: true} paints one bullet per rune (passphrases).",
 		"viewport":       "Build a scroll window over a child widget at an offset.",
 		"spacer":         "Build a flexible filler widget.",
 		"style":          "Merge a style-override map over a base style map.",

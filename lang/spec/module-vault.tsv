@@ -1,0 +1,60 @@
+# AQL Language Specification: the aql:vault module (host-vault bridge words)
+# Format: input<TAB>expected<TAB>description
+#
+# Loadable module bridging AQL to the host's secret vault
+# (design/VAULT-TUI-PORT.0.md §3). The words are reached only after
+# `import`, under the `Vault` namespace: `import "aql:vault" Vault.word args`.
+#
+#   Vault.status / secrets / secret / reveal      — reads
+#   Vault.add / rotate / remove / rename / …      — mutations
+#   Vault.grant / revoke / passwords / …          — access + passwords
+#   Vault.verify / scan / history / restore / …   — maintenance
+#   Vault.vaults / switch / create / …            — multi-vault index
+#   Vault.copy                                    — clipboard
+#
+# The spec harness registers NO vault backend (there is no vault on CI),
+# so every reachable word pins the first-class no_backend error, and the
+# usage contract is pinned BEFORE the backend lookup — malformed
+# arguments raise vault_usage headlessly. Live happy paths run in Go
+# against a scripted fake (lang/go/modules/vault_test.go), exactly how
+# module-tui.tsv leaves live terminals to Go.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  import binds the Vault namespace
+import "aql:vault" convert List Vault.$module	['Vault']	import binds the Vault namespace
+#
+# §2  negative — unbound without import
+Vault.status	ERROR:undefined_word	`Vault` is unbound without `import`
+#
+# §3  no backend registered → the first-class no_backend error, across
+#     the word groups (reads, reveal, mutation, settings, multi-vault,
+#     clipboard)
+import "aql:vault"  Vault.status	ERROR:no vault backend registered	status requires a registered backend
+import "aql:vault"  Vault.secrets	ERROR:no vault backend registered	secrets requires a registered backend
+import "aql:vault"  Vault.reveal "stripe"	ERROR:no vault backend registered	reveal requires a registered backend
+import "aql:vault"  Vault.add {alias: "a" value: "k"}	ERROR:no vault backend registered	a VALID add reaches the backend lookup
+import "aql:vault"  Vault.lock	ERROR:no vault backend registered	lock requires a registered backend
+import "aql:vault"  Vault.vaults	ERROR:no vault backend registered	vaults requires a registered backend
+import "aql:vault"  Vault.copy "text"	ERROR:no vault backend registered	copy requires a registered backend
+import "aql:vault"  Vault.scan ["src"]	ERROR:no vault backend registered	a valid scan reaches the backend lookup
+import "aql:vault"  Vault.restore 3	ERROR:no vault backend registered	a valid restore reaches the backend lookup
+#
+# §4  usage is validated BEFORE the backend lookup — malformed arguments
+#     raise vault_usage with no backend registered (the headless
+#     contract; positives for these shapes live in vault_test.go)
+import "aql:vault"  Vault.add {}	ERROR:alias: required	add requires an alias
+import "aql:vault"  Vault.add {alias: "a"}	ERROR:value: required	add requires a value
+import "aql:vault"  Vault.add {alias: "a" value: ""}	ERROR:value: must be a non-empty String	an empty secret value is refused
+import "aql:vault"  Vault.add {alias: "a" value: 5}	ERROR:value: must be a non-empty String	a non-String secret value is refused
+import "aql:vault"  Vault.rotate {alias: "a"}	ERROR:value: required	rotate requires the new value
+import "aql:vault"  Vault.rename {from: "a"}	ERROR:to: required	rename requires both ends
+import "aql:vault"  Vault.grant {}	ERROR:alias: required	grant requires an alias
+import "aql:vault"  Vault.password-add {name: "ci"}	ERROR:pass: required	password-add requires the pass
+import "aql:vault"  Vault.switch {}	ERROR:folder: required	switch requires a folder
+import "aql:vault"  Vault.create {folder: "/v"}	ERROR:backend: required	create requires a backend
+import "aql:vault"  Vault.scan [5]	ERROR:paths: elements must be Strings	scan paths must be Strings
+#
+# §5  negative — wrong-typed positional args fail dispatch
+import "aql:vault"  Vault.reveal 5	ERROR:uncalled_function	reveal requires a String alias
+import "aql:vault"  Vault.restore "x"	ERROR:uncalled_function	restore requires an Integer generation
+import "aql:vault"  Vault.set-expiry "a" 5	ERROR:uncalled_function	set-expiry requires String args

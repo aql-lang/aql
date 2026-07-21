@@ -746,6 +746,11 @@ secrets). `aql vault folder` prints the same list from the command line, and
 `aql vault [--suffix=NAME] folder add <dir>` registers a pre-existing vault
 (the suffix is auto-detected when the folder holds exactly one).
 
+`aql vault -i --aql` (experimental) runs the TUI's **AQL implementation** —
+the same vault driven by an AQL program (the `aql:vault-tui` module) over
+the `aql:vault` bridge words, per `design/VAULT-TUI-PORT.0.md`. The
+bubbletea TUI stays the default until the AQL port reaches full parity.
+
 The secret value is never taken as a command-line argument — that
 would leak it into your shell history and the process listing.
 `vault add` (and `vault rotate`) read it from `--from-clipboard`,

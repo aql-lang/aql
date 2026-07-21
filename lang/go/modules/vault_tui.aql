@@ -1,0 +1,225 @@
+# ============================================================
+# vault_tui.aql — the interactive vault TUI, written in AQL on the
+# aql:tui + aql:vault surfaces (design/VAULT-TUI-PORT.0.md §4).
+#
+# The AQL port of `aql vault -i`: one Elm-style app — a single
+# immutable state map folded by vt-update, rendered by the pure
+# vt-view — over the host vault reached through the aql:vault bridge
+# words. Screens are DATA on a stack in the state (§4.2): every stack
+# entry is {kind …} plus identity fields, folded by per-kind fns
+# dispatched with `case`. Navigation is plain list ops on the stack.
+#
+#   import "aql:vault-tui"
+#   def final (VaultTui.run {dark: true})    # blocks until quit
+#
+# Launched by `aql vault -i --aql`, which registers the terminal and
+# vault host backends before importing this module (the caps snapshot
+# at import — RegisterHostTui/RegisterHostVault must come first).
+#
+# Secret hygiene (§5.2): masked inputs for passphrases, revealed
+# values live only in the detail screen and are deleted on hide/pop,
+# the launcher drops the returned final state.
+# ============================================================
+
+import "aql:tui"
+import "aql:vault"
+import "aql:math-util"
+
+# --- small helpers ------------------------------------------------------
+
+def vt-clamp fn [[sel:Integer n:Integer] [Integer] [
+  MathUtil.max 0 (MathUtil.min sel (n sub 1))
+]]
+
+def vt-last fn [[items:List] [Map] [ items get ((size items) sub 1) ]]
+
+def vt-drop-last fn [[items:List] [List] [ take ((size items) sub 1) items ]]
+
+# --- theme palette (§4.6) -----------------------------------------------
+
+def vt-pal fn [[dark:Boolean] [Map] [
+  if dark [
+    { title: {fg: "bright-cyan"  bold: true}  dim: {fg: "grey"}
+      crumb: {fg: "bright-blue"}  err: {fg: "bright-red"}  ok: {fg: "green"} }
+  ] [
+    { title: {fg: "blue"  bold: true}  dim: {fg: "grey"}
+      crumb: {fg: "blue"}  err: {fg: "red"}  ok: {fg: "green"} }
+  ]
+]]
+
+# --- screens as data (§4.2) ---------------------------------------------
+# Builders fetch their rows via Vault.* so a reload is just re-running
+# the builder. Backend failures fold into the pager text rather than
+# aborting the app.
+
+def vt-err-text fn [[why:String] [String] [ join "" ["error: " why] ]]
+
+def vt-status-text fn [[] [String] [
+  # the handler runs with the error on the stack: read its message
+  # UNPARENTHESIZED (a paren would start a fresh collection context and
+  # `dot` would see no receiver), then feed it to the formatter
+  do [ Vault.status-text ] error [ dot message  vt-err-text ]
+]]
+
+def vt-home fn [[] [Map] [
+  { kind: "menu"  name: "home"  title: "Home"  sel: 0
+    items: ["Secrets" "Access" "Passwords" "Maintenance" "Settings"] }
+]]
+
+def vt-status-pager fn [[title:String] [Map] [
+  # bind the text BEFORE the map literal: a recovered raise inside a
+  # map-value ParenExpr tears down the enclosing fn's bindings
+  # mid-literal (engine gap G8, VAULT-TUI-PORT.0.md §2.4)
+  def txt (vt-status-text)
+  { kind: "pager"  name: "status"  title: title
+    text: txt  scroll: 0 }
+]]
+
+# --- navigation ----------------------------------------------------------
+
+def vt-push fn [[state:Map scr:Map] [Map] [
+  state set screens (push scr state.screens)
+]]
+
+def vt-pop fn [[state:Map] [Map] [
+  if ((size state.screens) lte 1) [ state ] [
+    state set screens (vt-drop-last state.screens)
+  ]
+]]
+
+def vt-top fn [[state:Map] [Map] [ vt-last state.screens ]]
+
+def vt-set-top fn [[state:Map scr:Map] [Map] [
+  state set screens (push scr (vt-drop-last state.screens))
+]]
+
+def vt-status-line fn [[state:Map text:String bad:Boolean] [Map] [
+  state set status {text: text  err: bad}
+]]
+
+# --- the vault header cache ---------------------------------------------
+
+def vt-vault-fail fn [[state:Map why:String] [Map] [
+  vt-status-line (state set vault {ok: false}) why true
+]]
+
+def vt-load-vault fn [[state:Map] [Map] [
+  do [ state set vault (Vault.status) ]
+  error [ dot message  vt-vault-fail state ]
+]]
+
+# --- update: per-kind key handlers (§4.3) --------------------------------
+
+def vt-menu-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  case ev.key [
+    "up"    [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel sub 1) (size scr.items))) ]
+    "down"  [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel add 1) (size scr.items))) ]
+    "enter" [ drop vt-push state (vt-status-pager (scr.items get scr.sel)) ]
+    state
+  ]
+]]
+
+def vt-pager-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  case ev.key [
+    "up"   [ drop vt-set-top state (scr set scroll (MathUtil.max 0 (scr.scroll sub 1))) ]
+    "down" [ drop vt-set-top state (scr set scroll (scr.scroll add 1)) ]
+    state
+  ]
+]]
+
+def vt-screen-key fn [[state:Map ev:Map] [Map] [
+  case (vt-top state).kind [
+    "menu"  [ drop vt-menu-key state ev ]
+    "pager" [ drop vt-pager-key state ev ]
+    state
+  ]
+]]
+
+def vt-global-key fn [[state:Map ev:Map] [Map] [
+  # multi-arg calls in a case DEFAULT slot must be parenthesized — the
+  # case machinery's own values sit on the stack and an open call would
+  # collect them as arguments
+  case ev.key [
+    "q"   [ drop if ((size state.screens) lte 1) [ Tui.quit state ] [ vt-pop state ] ]
+    "esc" [ drop vt-pop state ]
+    (vt-screen-key state ev)
+  ]
+]]
+
+def vt-update fn [[state:Map ev:Map] [Map] [
+  case ev.tag [
+    "init"   [ drop
+      vt-load-vault (((state set ui (ev.ui)) set cols (ev.cols)) set rows (ev.rows)) ]
+    "resize" [ drop (state set cols (ev.cols)) set rows (ev.rows) ]
+    "key"    [ drop vt-global-key state ev ]
+    state
+  ]
+]]
+
+# --- view: fixed chrome + per-kind body (§4.6) ---------------------------
+
+def vt-vault-line fn [[state:Map] [String] [
+  if state.vault.ok [
+    join "" ["vault: " state.vault.path "  ·  " state.vault.backend
+             (if state.vault.locked ["  ·  LOCKED"] [""])]
+  ] [ "no vault open" ]
+]]
+
+def vt-crumb fn [[state:Map] [String] [
+  join " › " (each [ dot title ] state.screens)
+]]
+
+def vt-body fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  case scr.kind [
+    "menu"  [ drop Tui.list-view scr.items {cursor: scr.sel} ]
+    "pager" [ drop Tui.viewport (Tui.text scr.text {wrap: "wrap"}) {offset: [0 scr.scroll]} ]
+    (Tui.text "" {})
+  ]
+]]
+
+def vt-footer fn [[state:Map] [String] [
+  case (vt-top state).kind [
+    "menu"  [ drop "↑/↓ move · enter open · q quit" ]
+    "pager" [ drop "↑/↓ scroll · esc back · q back" ]
+    ""
+  ]
+]]
+
+def vt-view fn [[state:Map] [Map] [
+  def pal state.pal
+  Tui.rows [
+    (Tui.text "aql vault" {style: pal.title  size: 1})
+    (Tui.text (vt-vault-line state) {style: pal.dim  size: 1})
+    (Tui.text (vt-crumb state) {style: pal.crumb  size: 1})
+    ((vt-body state) set size {flex: 1})
+    (Tui.text (vt-footer state) {style: pal.dim  size: 1})
+    (Tui.text state.status.text
+              {style: (if state.status.err [pal.err] [pal.ok])  size: 1})
+  ]
+]]
+
+# --- the app map + entry points (§4.1) -----------------------------------
+
+def vault-app fn [[opts:Map] [Map] [
+  def dark (if ((opts.dark) eq None) [true] [opts.dark])
+  def out { init: { ui: none  cols: 0  rows: 0  dark: dark
+                    theme: "auto"  pal: (vt-pal dark)
+                    vault: {ok: false}
+                    screens: [ (vt-home) ]
+                    status: {text: ""  err: false} }
+            update: vt-update/r
+            view: vt-view/r }
+  out
+]]
+
+def vault-run fn [[opts:Map] [Map] [
+  Tui.run (vault-app opts)
+]]
+
+export "VaultTui" {
+  app: vault-app/r
+  run: vault-run/r
+}
