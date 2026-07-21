@@ -98,7 +98,7 @@ def vt-load-vault fn [[state:Map] [Map] [
 # Builders fetch their rows via Vault.* so a reload is just re-running
 # the builder. Backend failures fold into text/rows/status rather than
 # aborting the app. Raise-capable expressions are def-bound BEFORE any
-# map literal (engine gap G8, VAULT-TUI-PORT.0.md §2.4).
+# map literal (engine gap G8, AQL-SHARP-EDGES.0.md).
 
 def vt-err-text fn [[why:String] [String] [ join "" ["error: " why] ]]
 
@@ -273,7 +273,7 @@ def vt-pass-fail fn [[state:Map why:String] [Map] [
 
 def vt-with-auth fn [[state:Map act:Map] [Map] [
   # act is a continuation MAP {run: <fn/r>}: an /r-parked fn does not
-  # match a Function-typed param (gap G12, VAULT-TUI-PORT.0.md §2.4),
+  # match a Function-typed param (gap G12, AQL-SHARP-EDGES.0.md),
   # so continuations travel inside maps and dispatch via dot-access
   def gate (do [ (Vault.needs-passphrase) and ((Vault.authed) not) ]
             error [ drop false ])
@@ -340,7 +340,7 @@ def vt-secret-cols fn [[] [List] [
 def vt-alias-row fn [[a:Map] [List] [
   # def-bind the row: a bare list literal returned from a fn evaluates
   # LAZILY, after body teardown, when `a` is gone (gap G11,
-  # VAULT-TUI-PORT.0.md §2.4) — def snapshots it eagerly
+  # AQL-SHARP-EDGES.0.md) — def snapshots it eagerly
   def row [ (vt-str a.name) (vt-str a.provider) (vt-str a.namespace) (vt-str a.expires-at) ]
   row
 ]]
@@ -879,7 +879,7 @@ def vt-palette-closed fn [[] [Map] [
   # def-bind before returning: a bare computed-map TAIL is a deferred
   # residual the bytecode compiler refuses ("unknown provenance"); a map
   # CONSUMED in-frame (bound + returned) records an OpMakeMap and
-  # compiles (VAULT-TUI-PORT.0.md §2.4, the same G8/G11 idiom)
+  # compiles (AQL-SHARP-EDGES.0.md, the same G8/G11 idiom)
   def m { open: false  input: (Tui.input "" {placeholder: ":command"}) }
   m
 ]]
@@ -1016,7 +1016,7 @@ def vt-captures fn [[state:Map] [Boolean] [
 def vt-global-key fn [[state:Map ev:Map] [Map] [
   # multi-arg calls in a case DEFAULT slot must be parenthesized — the
   # case machinery's own values sit on the stack and an open call would
-  # collect them as arguments (gap G9, VAULT-TUI-PORT.0.md §2.4)
+  # collect them as arguments (gap G9, AQL-SHARP-EDGES.0.md)
   if state.help.open [ vt-help-key state ev ] [
   if state.palette.open [ vt-palette-key state ev ] [
   if (vt-captures state) [ vt-screen-key state ev ] [

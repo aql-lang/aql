@@ -114,17 +114,31 @@ harness).
 
 ### 2.4 Gaps found while building (the dogfooding yield)
 
-Discovered by writing `vault_tui.aql` itself; each is worked around in
-the app and marked for language-level follow-up:
+Writing `vault_tui.aql` surfaced six language- and compiler-level sharp
+edges (G8–G13). Because those are findings *about AQL* rather than about
+the vault port, they are written up in their own language-scoped doc —
+**[AQL-SHARP-EDGES.0.md](AQL-SHARP-EDGES.0.md)** — with minimal repros,
+root-cause hypotheses, classifications (engine-bug / sharp-edge /
+latent-bug / compiler-limit), and a triage table. In brief:
 
-| # | Gap | Evidence / workaround |
-| --- | --- | --- |
-| G8 | **A recovered `raise` inside a map-literal value tears down the enclosing fn's bindings.** `def f fn [[t:String] [Map] [ {title: t text: (g)} ]]` where `g` internally catches a raise (`do … error`) → `undefined word: t` at the *other* map keys. | Engine bug (fn-body cleanup runs on the unwind even though `do` recovers). Workaround: `def`-bind any raise-capable expression BEFORE the map literal (`vt-status-pager`). |
-| G9 | **A multi-arg call in a `case` DEFAULT slot mis-collects.** The case machinery's own values sit on the stack, and an open call in the default position collects them as arguments (`expected Map, got fn __casematch(...)`), or silently folds the wrong value (the event became the app state). | Language sharp edge, at minimum a docs gap. Workaround: parenthesize call-form defaults — `(vt-screen-key state ev)`. |
-| G10 | **`def why (dot message)` in an error handler never works.** The paren opens a fresh collection context, so `dot` sees no receiver — yet this exact idiom appears in `design/examples/apps/todo-tui-client.aql` (its error arms are untested). | Use unparenthesized `dot message` then a helper fn that takes the message from the stack (`vt-err-text` / `vt-vault-fail`). The client example needs the same fix. |
-| G11 | **A list literal returned as a fn's result evaluates lazily — after body teardown.** `fn [[a:Map] [List] [ [ (f a.x) … ] ]]` raises `undefined word: a` at the *call site* that finally consumes the list, because auto-evaluation runs once the param binding is gone. | Language sharp edge (a docs gap at minimum; arguably the list should snapshot its lexical bindings). Workaround: `def`-bind the list inside the body — `def` evaluates eagerly — and return the name (`vt-alias-row`). |
-| G12 | **An `/r`-parked fn does not match a `Function`-typed param.** `wa {…} f2/r` with `wa fn [[s:Map act:Function] …]` fails dispatch with `got (Map, __FN)` — the parked value carries the dispatch-marker type, and the call fails silently at runtime (the check names it, the interpreter just leaves the args stranded). Yet the same value stored in a map (`{run: f2/r}`) and invoked by dot-access (`m.run s`) dispatches perfectly. | First-class-function ergonomics gap: either `__FN` should satisfy `Function` sigs or the parking should convert. Workaround: continuations travel inside maps — every form `submit` and auth `then` is `{run: <fn/r>}` invoked as `scr.submit.run state`. |
-| G13 | **A fn returning a bare computed-map TAIL refuses to bytecode-compile** ("body result of unknown provenance") — `fn [[] [Map] [ {k:(expr)} ]]` — because a bare map tail is a *deferred residual* the compiler cannot lower soundly. A spec-file row that reaches such a fn fails the compiled-census / no-refusals gates. | Known compiler limitation with a known cure (`bytecode_computedmap_test.go`): a map **consumed in-frame** (bound to a `def` and returned, or read downstream) records an `OpMakeMap` and compiles. Workaround = the same G8/G11 def-bind — every builder that returns a computed map binds it first (`vt-palette-closed` etc.). |
+- **G8** recovered-`raise`-in-a-map-value tears down the enclosing fn's
+  bindings (engine-bug candidate);
+- **G9** a call in a `case` default slot mis-collects the case machinery's
+  stack values (parenthesize defaults);
+- **G10** `def why (dot message)` in an `error` handler never works — a
+  latent bug in the shipped `todo-tui-client.aql`;
+- **G11** a returned list literal evaluates lazily, after body teardown
+  (def-bind eagerly);
+- **G12** an `/r`-parked fn does not satisfy a `Function`-typed param, yet
+  works via a `{run: fn/r}` map (engine-bug candidate);
+- **G13** the bytecode compiler refuses a single-token bare-computed-map
+  body (G13a) and a type-literal map value even when def-bound (G13b) —
+  the reason each builder def-binds its map.
+
+The app carries a workaround for each; the follow-ups are triaged in that
+doc. See also §3 there: `vault_tui.aql` runs **100% on the interpreter**
+(like every AQL app in the repo), so the compiler items have zero runtime
+impact.
 
 ### 2.5 Deferred gaps — the vault-logic-in-AQL phase (§7)
 
