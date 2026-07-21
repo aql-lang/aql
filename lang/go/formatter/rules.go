@@ -67,27 +67,10 @@ type Rules struct {
 	Strategies []string
 }
 
-// DefaultRules is the canonical AQL layout: the rule table whose
-// interpretation reproduces the formatter's established output
-// byte-for-byte. `Fmt.rules` exposes exactly this table to AQL.
-func DefaultRules() Rules {
-	return Rules{
-		Width:           maxLineWidth,
-		Indent:          2,
-		StmtStartWords:  []string{"def", "refine", "if", "for", "export", "end", "make"},
-		FnWord:          "fn",
-		AttachPrev:      []NodeKind{NdComma, NdColon, NdQuestion, NdDot},
-		AttachNext:      []NodeKind{NdColon, NdDot},
-		AttachDotSuffix: true,
-		ListOpen:        "[", ListClose: "]",
-		MapOpen: "{", MapClose: "}",
-		ParenOpen: "(", ParenClose: ")",
-		Strategies: []string{
-			"comment-only", "inline", "trailing-comment",
-			"fn", "trailing-container", "wrap",
-		},
-	}
-}
+// The canonical rule table is NOT defined here: it is EXPRESSED IN AQL in
+// fmt-rules.aql (the stylesheet, embedded and parsed at first use — see
+// rules_aql.go::DefaultRules). This Go struct is the stylesheet's compiled
+// form; the processor below interprets whichever table it is given.
 
 // StrategyNames lists the statement layout templates the processor knows,
 // in the canonical order. `Fmt.format-with` validates a rule table's

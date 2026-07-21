@@ -23,6 +23,13 @@ import (
 // (not the "*Util" form reserved for utility-helper libraries) — matching
 // aql:io -> IO and aql:net -> Net (lang/go/CLAUDE.md, "Naming rule").
 func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
+	// Surface a stylesheet-parse failure (the embedded fmt-rules.aql — the
+	// rules are EXPRESSED IN AQL, see formatter/rules_aql.go) at module
+	// construction rather than formatting with a zero table — the ADR-005
+	// recorded-error pattern (native.TypeInitError precedent).
+	if err := formatter.DefaultRulesInitError(); err != nil {
+		return native.ModuleDesc{}, err
+	}
 	return buildDelegatingModule(parent, "Fmt", FmtNatives)
 }
 

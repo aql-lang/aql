@@ -241,6 +241,29 @@ func TestValueToRulesRejects(t *testing.T) {
 	}
 }
 
+// TestBuildFmtModuleStylesheetError pins the surfaced-at-construction
+// path: a recorded stylesheet init error (the embedded fmt-rules.aql
+// failing to parse — a build defect) makes BuildFmtModule refuse loudly
+// instead of formatting with a zero table. Uses the formatter's test seam
+// (SwapDefaultRulesErr), mirroring the native.TypeInitError pattern.
+func TestBuildFmtModuleStylesheetError(t *testing.T) {
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry: %v", err)
+	}
+	prev := formatter.SwapDefaultRulesErr(errStylesheet)
+	defer formatter.SwapDefaultRulesErr(prev)
+	if _, berr := BuildFmtModule(reg); berr == nil {
+		t.Fatal("BuildFmtModule accepted a broken stylesheet; want error")
+	}
+}
+
+var errStylesheet = &stylesheetErr{}
+
+type stylesheetErr struct{}
+
+func (*stylesheetErr) Error() string { return "stylesheet parse failed" }
+
 // TestFormatWithHandlerErrors pins the handler-level rejections: a bad rule
 // table and a non-concrete source string both error rather than panic.
 func TestFormatWithHandlerErrors(t *testing.T) {

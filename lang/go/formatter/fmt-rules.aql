@@ -1,0 +1,32 @@
+# The AQL formatting STYLESHEET: the canonical layout rules `aql fmt` and
+# `Fmt.format` apply, expressed in AQL — as XSLT stylesheets are expressed
+# in XML. This file IS the definition of the canonical style: it is
+# embedded and parsed at build time, the Go emitter is only the processor
+# that interprets it, `Fmt.rules` returns it as data, and
+# `Fmt.format-with` overrides it per call. It is itself fmt-clean: the
+# stylesheet is laid out in the style it defines.
+
+{width:72
+    # the line-width limit layout templates fit within
+    indent:2
+    # the indentation step for container bodies and wrap continuations
+    fn-word:'fn'
+    # the function-definition trigger for the fn layout template
+    statement-starts:['def' 'refine' 'if' 'for' 'export' 'end' 'make']
+    # words that open a new group (a fresh line) in multi-line bodies
+    attach:{comma:'prev' colon:'both' question:'prev' dot:'both'}
+    # the whitespace-gluing policy: 'prev' glues to the previous token,
+    # 'both' glues on both sides, 'next' glues the following token
+    attach-dot-suffix:true
+    # a word ending in `.` glues the next token (input.(foo) stays solid)
+    brackets:{list:{open:'[' close:']'}
+      map:{open:'{' close:'}'}
+      paren:{open:'(' close:')'}
+    }
+    # the container glyphs, per container kind
+    strategies:['comment-only' 'inline' 'trailing-comment' 'fn'
+        'trailing-container' 'wrap'
+    ]
+    # the statement layout templates, tried in order; the first to claim a
+    # statement lays it out
+  }

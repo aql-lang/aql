@@ -14,10 +14,11 @@ across the whole 73-file `.aql` corpus plus an edge-case battery
 hand-lexer" recommendation is thereby **superseded** — the conversion was
 worked all the way through (see the Phase-2 entry). **Phase 3-full is now also
 DONE**: the formatter's layout decisions live in a declarative RULE TABLE
-(`formatter.Rules`, exposed to AQL as **`Fmt.rules`** and consumed by
-**`Fmt.format-with`**) and the Go emitter is the generic PROCESSOR that
-interprets it — the XSLT split (templates are data, the processor is the
-engine). Whitespace is owned by the rules (attach classes, indent, width,
+**expressed in AQL** — `formatter/fmt-rules.aql`, the stylesheet, embedded
+and parsed at build time exactly as an XSLT stylesheet is expressed in XML
+— and the Go emitter is the generic PROCESSOR that interprets it (the
+`formatter.Rules` struct is only the stylesheet's compiled form; `Fmt.rules`
+returns the table as data and `Fmt.format-with` overrides it per call). Whitespace is owned by the rules (attach classes, indent, width,
 fill strategies), which resolves the earlier "Doc algebra can't reproduce the
 output" fork: the rules emit their exact whitespace, so the output stays
 byte-identical while every layout decision became data (see the Phase-3
@@ -342,8 +343,15 @@ these as `Fmt.*` AQL):
   `TestFmtDeclarativeFormatter` — see "The output side" above). **Phase 3-full
   is DONE** — the built-in layout rules are now DATA and the Go emitter is the
   processor that interprets them:
-  - **The rule table** (`formatter/rules.go::Rules`, canonical instance
-    `DefaultRules`) carries every layout decision the formatter makes: the
+  - **The rule table is AQL source.** The canonical table is
+    `formatter/fmt-rules.aql` — a commented AQL stylesheet, embedded and
+    parsed at first use (`rules_aql.go::DefaultRules`); the file is itself
+    fmt-clean (laid out in the style it defines — pinned by
+    `TestRulesStylesheetFmtClean`), and a broken stylesheet surfaces at
+    module construction via `DefaultRulesInitError` (the ADR-005 pattern),
+    never as a panic or a silent zero table. The `formatter.Rules` struct
+    is the stylesheet's COMPILED form. It carries every layout decision
+    the formatter makes: the
     72-column width, the 2-space indent step, the statement-start grouping
     words, the `fn` trigger, the attach classes (which token kinds glue to
     which — the whitespace policy), the dot-suffix glue rule, the container

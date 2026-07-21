@@ -5,6 +5,9 @@ import (
 	"unicode"
 )
 
+// maxLineWidth mirrors the width the canonical stylesheet (fmt-rules.aql)
+// declares, for tests that assert line lengths. TestDefaultRulesFromAQL
+// pins the two equal — the stylesheet is the definition, this is the echo.
 const maxLineWidth = 72
 
 // knownTypes lists type names auto-capitalised to their canonical form when
