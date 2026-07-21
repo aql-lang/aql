@@ -2477,6 +2477,23 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	// value, type body) has no call/value asymmetry for /r to break,
 	// so referencing it is illegal.
 	if !IsFunctionRef(v) {
+		// Check-mode dynamic binding: a CARRIER whose type admits a
+		// Function (an Any-typed local, e.g. `def f (unwrap fw)` then
+		// `x f/r apply`) may well hold a real Function at runtime — the
+		// interpreter's IsFunctionRef sees the concrete value and
+		// passes. Surface the ref as a dynamic Function carrier and
+		// keep going; the illegal_ref diagnostic + terminal trap below
+		// are reserved for bindings that PROVABLY cannot be functions
+		// (a concrete plain value, a carrier of a disjoint type), where
+		// the runtime error is guaranteed.
+		if e.registry != nil && e.registry.Check.IsActive() &&
+			v.Carrier && TFunction.ConformsTo(v.Parent) {
+			fv := NewCarrier(TFunction)
+			fv.ID = v.ID
+			fv.pos = val.pos
+			e.tape.Set(e.pointer, fv)
+			return e.stepLiteral()
+		}
 		detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
 		if e.registry != nil && e.registry.Check.IsActive() {
 			e.registry.Check.AddDiagnostic(CheckDiagnostic{
