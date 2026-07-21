@@ -38,6 +38,40 @@ import "aql:vault"  Vault.vaults	ERROR:no vault backend registered	vaults requir
 import "aql:vault"  Vault.copy "text"	ERROR:no vault backend registered	copy requires a registered backend
 import "aql:vault"  Vault.scan ["src"]	ERROR:no vault backend registered	a valid scan reaches the backend lookup
 import "aql:vault"  Vault.restore 3	ERROR:no vault backend registered	a valid restore reaches the backend lookup
+import "aql:vault"  Vault.needs-passphrase	ERROR:no vault backend registered	needs-passphrase requires a registered backend
+import "aql:vault"  Vault.authed	ERROR:no vault backend registered	authed requires a registered backend
+import "aql:vault"  Vault.authenticate "p"	ERROR:no vault backend registered	authenticate requires a registered backend
+import "aql:vault"  Vault.status-text	ERROR:no vault backend registered	status-text requires a registered backend
+import "aql:vault"  Vault.providers-text	ERROR:no vault backend registered	providers-text requires a registered backend
+import "aql:vault"  Vault.config-text	ERROR:no vault backend registered	config-text requires a registered backend
+import "aql:vault"  Vault.secret "a"	ERROR:no vault backend registered	secret requires a registered backend
+import "aql:vault"  Vault.rotate {alias: "a" value: "v"}	ERROR:no vault backend registered	a valid rotate reaches the backend lookup
+import "aql:vault"  Vault.remove "a"	ERROR:no vault backend registered	remove requires a registered backend
+import "aql:vault"  Vault.rename {from: "a" to: "b"}	ERROR:no vault backend registered	a valid rename reaches the backend lookup
+import "aql:vault"  Vault.set-expiry "a" "2030-01-01"	ERROR:no vault backend registered	set-expiry requires a registered backend
+import "aql:vault"  Vault.clear-expiry "a"	ERROR:no vault backend registered	clear-expiry requires a registered backend
+import "aql:vault"  Vault.recipes "a"	ERROR:no vault backend registered	recipes requires a registered backend
+import "aql:vault"  Vault.capabilities	ERROR:no vault backend registered	capabilities requires a registered backend
+import "aql:vault"  Vault.grant {alias: "a"}	ERROR:no vault backend registered	a valid grant reaches the backend lookup
+import "aql:vault"  Vault.revoke "id"	ERROR:no vault backend registered	revoke requires a registered backend
+import "aql:vault"  Vault.passwords	ERROR:no vault backend registered	passwords requires a registered backend
+import "aql:vault"  Vault.password-add {name: "n" pass: "p"}	ERROR:no vault backend registered	a valid password-add reaches the backend lookup
+import "aql:vault"  Vault.password-remove "n"	ERROR:no vault backend registered	password-remove requires a registered backend
+import "aql:vault"  Vault.password-revoke-temp	ERROR:no vault backend registered	password-revoke-temp requires a registered backend
+import "aql:vault"  Vault.temp-password-count	ERROR:no vault backend registered	temp-password-count requires a registered backend
+import "aql:vault"  Vault.verify {}	ERROR:no vault backend registered	verify requires a registered backend
+import "aql:vault"  Vault.history	ERROR:no vault backend registered	history requires a registered backend
+import "aql:vault"  Vault.audit {}	ERROR:no vault backend registered	audit requires a registered backend
+import "aql:vault"  Vault.config-set "k" "v"	ERROR:no vault backend registered	config-set requires a registered backend
+import "aql:vault"  Vault.config-unset "k"	ERROR:no vault backend registered	config-unset requires a registered backend
+import "aql:vault"  Vault.unlock	ERROR:no vault backend registered	unlock requires a registered backend
+import "aql:vault"  Vault.locked	ERROR:no vault backend registered	locked requires a registered backend
+import "aql:vault"  Vault.prefs	ERROR:no vault backend registered	prefs requires a registered backend
+import "aql:vault"  Vault.set-prefs {}	ERROR:no vault backend registered	set-prefs requires a registered backend
+import "aql:vault"  Vault.switch {folder: "/v"}	ERROR:no vault backend registered	a valid switch reaches the backend lookup
+import "aql:vault"  Vault.create {folder: "/v" backend: "file"}	ERROR:no vault backend registered	a valid create reaches the backend lookup
+import "aql:vault"  Vault.set-default	ERROR:no vault backend registered	set-default requires a registered backend
+import "aql:vault"  Vault.prune-index {folder: "/v"}	ERROR:no vault backend registered	prune-index requires a registered backend
 #
 # §4  usage is validated BEFORE the backend lookup — malformed arguments
 #     raise vault_usage with no backend registered (the headless
