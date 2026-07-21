@@ -173,11 +173,13 @@ with any computed value refuses **even with the G13a def-bind cure** — the
 provenance gap is the type-literal, not the deferred residual. The lowercase
 `none` *value* is fine.
 
-- **Where it bites in the app:** `vt-detail` returns `{… revealed: None}` — the
-  **one** internal function still carrying a compile-refusing shape (§3).
+- **Where it bit the app:** `vt-detail` used to return `{… revealed: None}` —
+  the one internal function that carried a compile-refusing shape. It was
+  changed to the lowercase `none` value (`revealed: none`, with the reveal
+  toggle's `eq None` → `eq none`); `none` and `None` compare equal so behavior
+  is identical. The app now carries **zero** latent refusals (§3).
 - **Cure:** use the lowercase `none` value (or a non-type sentinel) as the
-  "nothing revealed" marker, and adjust the two `eq None` comparisons to
-  `eq none`.
+  sentinel, not the `None` type literal.
 - **Confirmed** (this repo, today): `{… r: None}` def-bound refuses;
   `{… r: none}` compiles.
 
@@ -221,13 +223,13 @@ reached only through dynamic dot-access dispatch, and force-compiling an
 by a paren") before any body is analyzed. A whole-app compile check is not
 expressible today.
 
-A static + empirical audit of the internal functions finds **exactly one**
-still carrying a compile-refusing shape: **`vt-detail`** (G13b, `revealed:
-None`). Six other functions carry the *structural* bare-map-tail shape but
+A static + empirical audit of the internal functions found one function
+carrying a compile-refusing shape — `vt-detail` (G13b, `revealed: None`) —
+**since fixed** to the `none` value, so the app now carries **zero** latent
+refusals. Seven functions carry the *structural* bare-map-tail shape but all
 compile fine under the post-2026-07-11 multi-token rule; every list builder
-already def-binds (zero G11-shape list tails). `vt-detail` would fall back to
-the interpreter *if* force-compiled — but it never is, so the runtime impact is
-**zero**.
+already def-binds (zero G11-shape list tails). The runtime impact of the
+compiler items was **zero** either way (nothing here is ever force-compiled).
 
 **Defensible one-liner:** *"The vault TUI does not fully bytecode-compile, and
 that is irrelevant — it runs entirely on the interpreter like every AQL app in
@@ -247,7 +249,7 @@ never exercised."*
 | G9  | `case` default slot collection | sharp-edge | doc in the `case` reference; consider isolating the default arm |
 | G11 | returned list literal laziness | sharp-edge | doc in the quotation/eval reference |
 | G13a| single-token bare-map body | compiler-limit | widen to single-token (multi-token already landed); low priority |
-| G13b| type-literal map value | compiler-limit | provenance for type-literal map values; or fix `vt-detail` to `none` |
+| G13b| type-literal map value | compiler-limit | teach provenance for type-literal map values (the app's one instance, `vt-detail`, is already fixed to `none`) |
 
 The two `engine-bug?` items (G8, G12) are the highest-value follow-ups: each
 is a small standalone repro, and if confirmed, each removes a workaround the

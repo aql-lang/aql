@@ -195,8 +195,12 @@ def vt-detail fn [[alias:String] [Map] [
   def found (do [ Vault.secret alias ] error [ drop None ])
   def meta (if (found eq None) [ {} ] [ found ])
   def recs (do [ Vault.recipes alias ] error [ drop [] ])
+  # `revealed` is the none VALUE (not the None type literal): a
+  # type-literal map value refuses to bytecode-compile even when the map
+  # is def-bound (gap G13b, AQL-SHARP-EDGES.0.md §2). none/None compare
+  # equal, so the `eq none` reveal toggle below is unaffected.
   { kind: "detail"  name: alias  title: alias  meta: meta
-    recipes: recs  rsel: 0  revealed: None }
+    recipes: recs  rsel: 0  revealed: none }
 ]]
 
 # --- the form framework (§4.5, the huh replacement) ----------------------
@@ -784,9 +788,9 @@ def vt-detail-key fn [[state:Map ev:Map] [Map] [
     "down" [ drop vt-set-top state (scr set rsel (vt-clamp (scr.rsel add 1) n)) ]
     "c"    [ drop vt-copy-recipe state ]
     "r"    [ drop
-      if ((scr.revealed) eq None)
+      if ((scr.revealed) eq none)
         [ vt-with-auth state {run: vt-do-reveal/r} ]
-        [ vt-set-top state (scr set revealed None) ] ]
+        [ vt-set-top state (scr set revealed none) ] ]
     "R"    [ drop vt-with-auth state {run: vt-open-rotate/r} ]
     "m"    [ drop vt-with-auth state {run: vt-open-rename/r} ]
     "e"    [ drop vt-with-auth state {run: vt-open-expiry/r} ]
@@ -1067,7 +1071,7 @@ def vt-crumb fn [[state:Map] [String] [
 
 def vt-detail-lines fn [[scr:Map] [String] [
   def m scr.meta
-  def val (if ((scr.revealed) eq None) [ "●●●●●●  (r reveals)" ] [ scr.revealed ])
+  def val (if ((scr.revealed) eq none) [ "●●●●●●  (r reveals)" ] [ scr.revealed ])
   join "\n" [
     (join "" ["alias:      " (vt-str m.name)])
     (join "" ["provider:   " (vt-str m.provider)])
