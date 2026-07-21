@@ -4022,7 +4022,18 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
-	if len(clauses) == 0 {
+	// Else-branch narrowing (and its dead-arm suppression) is sound only when
+	// the extracted clauses COMPLETELY characterise the condition — i.e. it is a
+	// single `x is T` guard. For a conjunction `A and B`, the else path is
+	// `notA or notB`: neither clause can be subtracted (either could be the
+	// false one), and one exhaustive clause does NOT make the else unreachable
+	// (it stays reachable whenever the other clause fails). So restrict to the
+	// single-clause case and leave a conjunction's else untouched. (In practice
+	// a compound condition's inner guards are captured as opaque ParenExpr
+	// values, so extractGuardClauses already returns 0 clauses for them; this
+	// guard makes the single-guard assumption explicit and sound-by-construction
+	// rather than reliant on that representation.)
+	if len(clauses) != 1 {
 		return noop
 	}
 	type applied struct{ name string }
@@ -4060,7 +4071,8 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			// Else branch is unreachable for x — the guard held for every value
 			// of x's type. Mark the arm dead (so its unreachable dispatch errors
 			// are suppressed) and leave the binding as-is rather than push a
-			// Never carrier that fails every later use.
+			// Never carrier that fails every later use. Sound because this is the
+			// sole clause of the condition (single-guard gate above).
 			deadArm = true
 			continue
 		}
