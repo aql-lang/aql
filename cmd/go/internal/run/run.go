@@ -42,6 +42,32 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Execute(args, stdin, stdout, stderr)
 }
 
+// splitEvalTail finds the `-e` / `--e` eval flag and splits its trailing
+// program arguments off the flag portion. When `-e` is present, `flagArgs`
+// runs up to and including its expression token (so the FlagSet parses the
+// flags and the expression normally) and `tail` is everything after — the
+// program's own argv, which `-e` ends option processing for. A `--`
+// separator seen BEFORE any `-e` means the `-e` is a positional, not the
+// eval flag, so parsing stays normal. No `-e` (script mode, or REPL) →
+// tail is nil and flagArgs is the whole slice.
+func splitEvalTail(args []string) (flagArgs, tail []string) {
+	for i, a := range args {
+		switch {
+		case a == "--":
+			return args, nil
+		case a == "-e" || a == "--e":
+			end := i + 2 // the flag plus its expression token
+			if end > len(args) {
+				end = len(args) // dangling `-e`; the FlagSet reports it
+			}
+			return args[:end], args[end:]
+		case strings.HasPrefix(a, "-e=") || strings.HasPrefix(a, "--e="):
+			return args[:i+1], args[i+1:]
+		}
+	}
+	return args, nil
+}
+
 // Execute is the legacy CLI body. It owns the flag set for the
 // no-subcommand invocation form (aql [-e expr] [script.aql]). When
 // no source is provided it starts the REPL, preserving the original
@@ -70,7 +96,16 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 
-	if err := fs.Parse(args); err != nil {
+	// `-e` ends option processing (the node -e / python -c convention): a
+	// program's own arguments — including a dash-prefixed first one, e.g.
+	// `aql -e '…' --fast` — must reach it via IO.args, not be swallowed by
+	// this FlagSet. Go's flag package otherwise keeps parsing flags after
+	// -e's expression (there is no non-flag positional to stop it), so the
+	// dash arg errors out. Split the eval tail off before parsing; a
+	// trailing script file already stops parsing naturally, so only -e
+	// needs this.
+	flagArgs, evalTail := splitEvalTail(args)
+	if err := fs.Parse(flagArgs); err != nil {
 		return 1
 	}
 
@@ -90,8 +125,14 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *evalExpr != "" {
 		source = *evalExpr
 		hasSource = true
-		// -e mode: every positional is a script argument (IO.args).
-		scriptArgs = fs.Args()
+		// -e mode: everything after the expression is a script argument
+		// (IO.args), dash-prefixed or not. A single leading `--` — the
+		// historical separator callers used to force the dash arg through —
+		// is stripped so `aql -e … -- --fast` and `aql -e … --fast` agree.
+		scriptArgs = evalTail
+		if len(scriptArgs) > 0 && scriptArgs[0] == "--" {
+			scriptArgs = scriptArgs[1:]
+		}
 	} else if fs.NArg() > 0 {
 		filename := pathutil.Expand(fs.Arg(0))
 		data, err := os.ReadFile(filename)
