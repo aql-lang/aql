@@ -1,4 +1,4 @@
-.PHONY: all build install test test-race test-ts vet fmt lint vuln bench clean cover cover-gate cover-html cover-html-open \
+.PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd release tags \
@@ -132,6 +132,16 @@ fmt:
 	  echo "==> fmt $$m"; \
 	  ( cd $$m && gofmt -w . ); \
 	done
+
+# fmt-docs applies `aql fmt` to the user-facing docs whose ```aql fenced
+# blocks are pinned fmt-clean by test/go/docexamples (DOC_FILES mirrors
+# its docFiles list). `aql fmt` rewrites only the fences and
+# <!-- aqlfmt --> regions, leaving the prose untouched — run this when
+# the fmt-clean gate flags a drifted block, or after editing examples.
+DOC_FILES := README.md REFERENCE.md TUTORIAL.md HOWTO.md EXPLANATION.md
+fmt-docs:
+	@echo "==> fmt-docs $(DOC_FILES)"
+	@cd cmd/go && go run ./aql fmt $(addprefix ../../,$(DOC_FILES))
 
 lint:
 	@set -e; for m in $(MODULES); do \

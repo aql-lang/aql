@@ -12,8 +12,9 @@ import (
 // in the prose docs is already fmt-formatted: FormatMarkdown — which only
 // touches ```aql fences and <!-- aqlfmt --> regions — must leave the file
 // unchanged. This is the "code examples in docs run through fmt" gate for
-// fenced blocks; `aql fmt <doc>.md` produces the canonical form, and this
-// keeps the blocks from drifting back out of it.
+// fenced blocks; `make fmt-docs` (root Makefile) applies the canonical
+// form to every gated doc, and this keeps the blocks from drifting back
+// out of it.
 func TestDocFencedBlocksFmtClean(t *testing.T) {
 	for _, name := range docFiles {
 		path := filepath.Join(docRoot(), name)
@@ -22,7 +23,7 @@ func TestDocFencedBlocksFmtClean(t *testing.T) {
 			t.Fatalf("read %s: %v", name, err)
 		}
 		if got := formatter.FormatMarkdown(string(body)); got != string(body) {
-			t.Errorf("%s: an ```aql block is not fmt-clean; run `aql fmt %s`", name, name)
+			t.Errorf("%s: an ```aql block is not fmt-clean; run `make fmt-docs` (or `aql fmt %s`)", name, name)
 		}
 	}
 }

@@ -104,6 +104,7 @@ they sound. The same rule is stated in the `ADR.md` header.
 make test         # from repo root: fans out across every module
 make vet          # vet across every module
 make fmt          # gofmt across every module
+make fmt-docs     # aql fmt over the gated user-facing docs' ```aql blocks
 make lint         # golangci-lint across every module — RUN BEFORE COMMIT
 
 cd cmd/go
