@@ -124,6 +124,16 @@ def vt-home fn [[] [Map] [
     items: ["Secrets" "Access" "Passwords" "Maintenance" "Settings"] }
 ]]
 
+def vt-maint-menu fn [[] [Map] [
+  { kind: "menu"  name: "maintenance"  title: "Maintenance"  sel: 0
+    items: ["Verify" "Scan" "History" "Audit"] }
+]]
+
+def vt-settings-menu fn [[] [Map] [
+  { kind: "menu"  name: "settings"  title: "Settings"  sel: 0
+    items: ["Config" "Providers" "Lock" "Unlock"] }
+]]
+
 def vt-info-pager fn [[name:String title:String] [Map] [
   def txt (vt-info-text name)
   { kind: "pager"  name: name  title: title
@@ -135,6 +145,50 @@ def vt-secrets fn [[] [Map] [
   { kind: "table"  name: "secrets"  title: "Secrets"
     items: rows  cursor: 0  filtering: false  filter: ""
     finput: (Tui.input "" {placeholder: "filter aliases"}) }
+]]
+
+def vt-caps fn [[] [Map] [
+  def res (do [ Vault.capabilities ] error [ drop {caps: []} ])
+  { kind: "rtable"  name: "access"  title: "Access"  rows: res.caps  cursor: 0 }
+]]
+
+def vt-cap-cols fn [[] [List] [
+  def cols [ {title: "id"  width: 14  key: "id"} {title: "alias"  width: 16  key: "alias"}
+             {title: "agent"  width: 12  key: "agent"} {title: "expires"  width: 20  key: "expires-at"}
+             {title: "active"  width: 6  key: "active"} ]
+  cols
+]]
+
+def vt-passwords fn [[] [Map] [
+  def rows (do [ Vault.passwords ] error [ drop [] ])
+  { kind: "rtable"  name: "passwords"  title: "Passwords"  rows: rows  cursor: 0 }
+]]
+
+def vt-pw-cols fn [[] [List] [
+  def cols [ {title: "name"  width: 18  key: "name"} {title: "scope"  width: 10  key: "scope"}
+             {title: "namespaces"  width: 16  key: "namespaces"} {title: "expires"  width: 20  key: "expires-at"} ]
+  cols
+]]
+
+def vt-rtable-cols fn [[name:String] [List] [
+  if (name eq "access") [ vt-cap-cols ] [ vt-pw-cols ]
+]]
+
+def vt-picker fn [[] [Map] [
+  def rows (do [ Vault.vaults ] error [ drop [] ])
+  { kind: "picker"  name: "vaults"  title: "Vaults"  rows: rows  cursor: 0 }
+]]
+
+def vt-picker-cols fn [[] [List] [
+  def cols [ {title: "folder"  width: 34  key: "folder"} {title: "suffix"  width: 10  key: "suffix"}
+             {title: "backend"  width: 12  key: "backend"} {title: "default"  width: 8  key: "default"}
+             {title: "active"  width: 7  key: "active"} ]
+  cols
+]]
+
+def vt-rrow fn [[cols:List rec:Map] [List] [
+  def row (each [ c:Map => [ vt-str (rec get c.key) ] ] cols)
+  row
 ]]
 
 def vt-detail fn [[alias:String] [Map] [
@@ -250,6 +304,12 @@ def vt-reload-top fn [[state:Map] [Map] [
       vt-set-top state (kept set cursor
         (vt-clamp scr.cursor (size (vt-visible kept.items scr.filter)))) ]
     "detail" [ drop vt-set-top state (vt-detail scr.name) ]
+    "rtable" [ drop
+      def fresh (if (scr.name eq "access") [ vt-caps ] [ vt-passwords ])
+      vt-set-top state (fresh set cursor (vt-clamp scr.cursor (size fresh.rows))) ]
+    "picker" [ drop
+      def fresh (vt-picker)
+      vt-set-top state (fresh set cursor (vt-clamp scr.cursor (size fresh.rows))) ]
     "pager"  [ drop
       if (scr.name eq "granted") [ state ]
         [ vt-set-top state (vt-info-pager scr.name scr.title) ] ]
@@ -443,6 +503,279 @@ def vt-grant-submit fn [[state:Map] [Map] [
   error [ dot message  vt-form-fail state ]
 ]]
 
+# --- maintenance operations ----------------------------------------------
+
+def vt-verify-pager fn [[state:Map prune:Boolean] [Map] [
+  do [ def res (Vault.verify {prune: prune})
+       def txt (if res.ok [res.text] [join "\n" [res.text "" "(verify reported problems)"]])
+       vt-push state {kind: "pager"  name: "verify"  title: "Verify"  text: txt  scroll: 0} ]
+  error [ dot message  vt-fail state ]
+]]
+
+def vt-open-scan fn [[state:Map] [Map] [
+  def fields [ (vt-field "paths" "paths to scan (space-separated, . default)" false ".") ]
+  vt-push state (vt-form "scan" "Scan for leaks" fields {run: vt-scan-submit/r} "")
+]]
+
+def vt-scan-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def raw (vt-fval scr 0)
+  def paths (filter [ x:String => [(x eq "") not] ] (StringUtil.split " " raw))
+  do [ def txt (Vault.scan (if ((size paths) eq 0) [["."]] [paths]))
+       vt-push (vt-pop state) {kind: "pager"  name: "scan"  title: "Scan"  text: txt  scroll: 0} ]
+  error [ dot message  vt-form-fail state ]
+]]
+
+# --- settings operations -------------------------------------------------
+
+def vt-open-config-set fn [[state:Map] [Map] [
+  def fields [ (vt-field "key" "config key (e.g. namespace.default)" false "")
+               (vt-field "value" "value" false "") ]
+  vt-push state (vt-form "config-set" "Set config" fields {run: vt-config-set-submit/r} "")
+]]
+
+def vt-config-set-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def k (vt-fval scr 0)
+  def v (vt-fval scr 1)
+  if (k eq "") [ vt-form-fail state "key is required" ] [
+    do [ Vault.config-set k v
+         def st2 (vt-reload-top (vt-load-vault (vt-pop state)))
+         vt-status-line st2 (join "" ["set " k]) false ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-open-config-unset fn [[state:Map] [Map] [
+  def fields [ (vt-field "key" "config key to unset" false "") ]
+  vt-push state (vt-form "config-unset" "Unset config" fields {run: vt-config-unset-submit/r} "")
+]]
+
+def vt-config-unset-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def k (vt-fval scr 0)
+  if (k eq "") [ vt-form-fail state "key is required" ] [
+    do [ Vault.config-unset k
+         def st2 (vt-reload-top (vt-load-vault (vt-pop state)))
+         vt-status-line st2 (join "" ["unset " k]) false ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-config-key fn [[state:Map ev:Map] [Map] [
+  # the config pager gains set/unset action keys
+  case ev.key [
+    "s" [ drop vt-with-auth state {run: vt-open-config-set/r} ]
+    "x" [ drop vt-with-auth state {run: vt-open-config-unset/r} ]
+    (vt-pager-key state ev)
+  ]
+]]
+
+# --- access: grant (from the table) + revoke -----------------------------
+
+def vt-open-access-grant fn [[state:Map] [Map] [
+  def fields [ (vt-field "alias" "secret alias" false "")
+               (vt-field "agent" "agent (optional)" false "")
+               (vt-field "ttl" "ttl (e.g. 2h, optional)" false "") ]
+  vt-push state (vt-form "grant" "Grant capability" fields {run: vt-access-grant-submit/r} "")
+]]
+
+def vt-access-grant-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def alias (vt-fval scr 0)
+  def agent (vt-fval scr 1)
+  def ttl (vt-fval scr 2)
+  if (alias eq "") [ vt-form-fail state "alias is required" ] [
+    do [ def out (Vault.grant {alias: alias  agent: agent  ttl: ttl})
+         def st2 (vt-reload-top (vt-load-vault (vt-pop state)))
+         vt-push (vt-status-line st2 "capability granted — token shown once" false)
+                 {kind: "pager"  name: "granted"  title: "Granted"  text: out  scroll: 0} ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-open-revoke fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.rows) eq 0) [ vt-fail state "no capabilities to revoke" ] [
+    def id ((scr.rows get scr.cursor).id)
+    def fields [ (vt-field "confirm" (join "" ["type " id " to revoke"]) false "") ]
+    vt-push state (vt-form "revoke" (join "" ["Revoke " id]) fields {run: vt-revoke-submit/r} id)
+  ]
+]]
+
+def vt-revoke-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((vt-fval scr 0) eq scr.arg) [
+    do [ Vault.revoke scr.arg
+         vt-after-op state (join "" ["revoked " scr.arg]) ]
+    error [ dot message  vt-form-fail state ]
+  ] [ vt-form-fail state "confirmation does not match" ]
+]]
+
+# --- passwords: add · remove · revoke-temp -------------------------------
+
+def vt-open-pw-add fn [[state:Map] [Map] [
+  def fields [ (vt-field "name" "slot name" false "")
+               (vt-field "pass" "password" true "")
+               (vt-field "scope" "scope (admin/read/write/move)" false "read")
+               (vt-field "ttl" "ttl (optional, e.g. 8h)" false "") ]
+  vt-push state (vt-form "pw-add" "Add password slot" fields {run: vt-pw-add-submit/r} "")
+]]
+
+def vt-pw-add-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def name (vt-fval scr 0)
+  def pass (vt-fval scr 1)
+  def scope (vt-fval scr 2)
+  def ttl (vt-fval scr 3)
+  if (name eq "") [ vt-form-fail state "name is required" ] [
+    if (pass eq "") [ vt-form-fail state "password is required" ] [
+      do [ Vault.password-add {name: name  pass: pass  scope: scope  ttl: ttl}
+           vt-after-op state (join "" ["added slot " name]) ]
+      error [ dot message  vt-form-fail state ]
+    ]
+  ]
+]]
+
+def vt-open-pw-remove fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.rows) eq 0) [ vt-fail state "no slots to remove" ] [
+    def name ((scr.rows get scr.cursor).name)
+    def fields [ (vt-field "confirm" (join "" ["type " name " to remove"]) false "") ]
+    vt-push state (vt-form "pw-remove" (join "" ["Remove " name]) fields {run: vt-pw-remove-submit/r} name)
+  ]
+]]
+
+def vt-pw-remove-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((vt-fval scr 0) eq scr.arg) [
+    do [ Vault.password-remove scr.arg
+         vt-after-op state (join "" ["removed slot " scr.arg]) ]
+    error [ dot message  vt-form-fail state ]
+  ] [ vt-form-fail state "confirmation does not match" ]
+]]
+
+def vt-pw-revoke-temp fn [[state:Map] [Map] [
+  # a DIRECT table action (no form was pushed) — reload in place, never
+  # pop (vt-after-op pops, which is only right after a form submit)
+  do [ def n (Vault.temp-password-count)
+       if (n eq 0) [ vt-fail state "no temporary passwords" ] [
+         (Vault.password-revoke-temp)
+         vt-status-line (vt-reload-top (vt-load-vault state))
+                        (join "" ["revoked " (vt-str n) " temporary password(s)"]) false ] ]
+  error [ dot message  vt-fail state ]
+]]
+
+# --- vault picker actions ------------------------------------------------
+
+def vt-picker-switch fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.rows) eq 0) [ vt-fail state "no vaults" ] [
+    def row (scr.rows get scr.cursor)
+    do [ Vault.switch {folder: (row.folder)  suffix: (row.suffix)}
+         # a switched vault gets a FRESH home stack (auth is per-vault)
+         def home-state (state set screens [ (vt-home) ])
+         vt-status-line (vt-load-vault home-state)
+                        (join "" ["switched to " row.folder]) false ]
+    error [ dot message  vt-fail state ]
+  ]
+]]
+
+def vt-picker-default fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.rows) eq 0) [ vt-fail state "no vaults" ] [
+    def row (scr.rows get scr.cursor)
+    do [ Vault.switch {folder: (row.folder)  suffix: (row.suffix)}
+         (Vault.set-default)
+         vt-status-line (vt-reload-top (vt-load-vault state))
+                        (join "" ["default set to " row.folder]) false ]
+    error [ dot message  vt-fail state ]
+  ]
+]]
+
+def vt-open-new-vault fn [[state:Map] [Map] [
+  def fields [ (vt-field "folder" "new vault folder" false "")
+               (vt-field "backend" "backend (file/keychain/…)" false "file")
+               (vt-field "pass" "passphrase (optional)" true "") ]
+  vt-push state (vt-form "new-vault" "New vault" fields {run: vt-new-vault-submit/r} "")
+]]
+
+def vt-new-vault-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def folder (vt-fval scr 0)
+  def backend (vt-fval scr 1)
+  def pass (vt-fval scr 2)
+  if (folder eq "") [ vt-form-fail state "folder is required" ] [
+    do [ Vault.create {folder: folder  backend: backend  pass: pass}
+         # create switches the active vault: fresh home stack
+         def home-state ((vt-pop state) set screens [ (vt-home) ])
+         vt-status-line (vt-load-vault home-state) (join "" ["created " folder]) false ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-open-prune fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.rows) eq 0) [ vt-fail state "no vaults" ] [
+    def row (scr.rows get scr.cursor)
+    def fields [ (vt-field "confirm" (join "" ["type " row.folder " to prune"]) false "") ]
+    def sc2 (vt-form "prune" (join "" ["Prune " row.folder]) fields {run: vt-prune-submit/r} row.folder)
+    vt-push state (sc2 set psuffix row.suffix)
+  ]
+]]
+
+def vt-prune-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((vt-fval scr 0) eq scr.arg) [
+    do [ Vault.prune-index {folder: (scr.arg)  suffix: (scr.psuffix)}
+         vt-after-op state (join "" ["pruned " scr.arg]) ]
+    error [ dot message  vt-form-fail state ]
+  ] [ vt-form-fail state "confirmation does not match" ]
+]]
+
+def vt-picker-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  def n (size scr.rows)
+  case ev.key [
+    "up"    [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor sub 1) n)) ]
+    "down"  [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor add 1) n)) ]
+    "enter" [ drop vt-picker-switch state ]
+    "n"     [ drop vt-open-new-vault state ]
+    "d"     [ drop vt-picker-default state ]
+    "D"     [ drop vt-open-prune state ]
+    state
+  ]
+]]
+
+# --- rtable key routing --------------------------------------------------
+
+def vt-access-key fn [[state:Map ev:Map] [Map] [
+  case ev.key [
+    "g" [ drop vt-with-auth state {run: vt-open-access-grant/r} ]
+    "D" [ drop vt-with-auth state {run: vt-open-revoke/r} ]
+    state
+  ]
+]]
+
+def vt-password-key fn [[state:Map ev:Map] [Map] [
+  case ev.key [
+    "a" [ drop vt-with-auth state {run: vt-open-pw-add/r} ]
+    "D" [ drop vt-with-auth state {run: vt-open-pw-remove/r} ]
+    "t" [ drop vt-with-auth state {run: vt-pw-revoke-temp/r} ]
+    state
+  ]
+]]
+
+def vt-rtable-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  def n (size scr.rows)
+  case ev.key [
+    "up"   [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor sub 1) n)) ]
+    "down" [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor add 1) n)) ]
+    (if (scr.name eq "access") [ vt-access-key state ev ] [ vt-password-key state ev ])
+  ]
+]]
+
 def vt-detail-key fn [[state:Map ev:Map] [Map] [
   def scr (vt-top state)
   def n (size scr.recipes)
@@ -465,15 +798,49 @@ def vt-detail-key fn [[state:Map ev:Map] [Map] [
 
 # --- update: routing (§4.3) ----------------------------------------------
 
+def vt-home-open fn [[state:Map item:String] [Map] [
+  case item [
+    "Secrets"     [ drop vt-push state (vt-secrets) ]
+    "Access"      [ drop vt-push state (vt-caps) ]
+    "Passwords"   [ drop vt-push state (vt-passwords) ]
+    "Maintenance" [ drop vt-push state (vt-maint-menu) ]
+    "Settings"    [ drop vt-push state (vt-settings-menu) ]
+    state
+  ]
+]]
+
+def vt-maint-open fn [[state:Map item:String] [Map] [
+  case item [
+    "Verify"  [ drop vt-verify-pager state false ]
+    "Scan"    [ drop vt-open-scan state ]
+    "History" [ drop vt-push state (vt-info-pager "history" "History") ]
+    "Audit"   [ drop vt-push state (vt-info-pager "audit" "Audit") ]
+    state
+  ]
+]]
+
+def vt-settings-open fn [[state:Map item:String] [Map] [
+  case item [
+    "Config"    [ drop vt-push state (vt-info-pager "config" "Config") ]
+    "Providers" [ drop vt-push state (vt-info-pager "providers" "Providers") ]
+    "Lock"      [ drop vt-lock-op state true ]
+    "Unlock"    [ drop vt-lock-op state false ]
+    state
+  ]
+]]
+
 def vt-menu-key fn [[state:Map ev:Map] [Map] [
   def scr (vt-top state)
   case ev.key [
     "up"    [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel sub 1) (size scr.items))) ]
     "down"  [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel add 1) (size scr.items))) ]
     "enter" [ drop
-      case (scr.items get scr.sel) [
-        "Secrets" [ drop vt-push state (vt-secrets) ]
-        (vt-push state (vt-info-pager "status" (scr.items get scr.sel)))
+      def item (scr.items get scr.sel)
+      case scr.name [
+        "home"        [ drop vt-home-open state item ]
+        "maintenance" [ drop vt-maint-open state item ]
+        "settings"    [ drop vt-settings-open state item ]
+        state
       ] ]
     state
   ]
@@ -491,8 +858,11 @@ def vt-pager-key fn [[state:Map ev:Map] [Map] [
 def vt-screen-key fn [[state:Map ev:Map] [Map] [
   case (vt-top state).kind [
     "menu"   [ drop vt-menu-key state ev ]
-    "pager"  [ drop vt-pager-key state ev ]
+    "pager"  [ drop
+      if ((vt-top state).name eq "config") [ vt-config-key state ev ] [ vt-pager-key state ev ] ]
     "table"  [ drop vt-table-key state ev ]
+    "rtable" [ drop vt-rtable-key state ev ]
+    "picker" [ drop vt-picker-key state ev ]
     "detail" [ drop vt-detail-key state ev ]
     "form"   [ drop vt-form-key state ev ]
     state
@@ -526,28 +896,28 @@ def vt-run-palette fn [[state:Map cmd:String] [Map] [
     "secrets"      [ drop vt-push (vt-pop-to-root state) (vt-secrets) ]
     "secret"       [ drop vt-push (vt-pop-to-root state) (vt-secrets) ]
     "s"            [ drop vt-push (vt-pop-to-root state) (vt-secrets) ]
-    "access"       [ drop vt-nav-pager state "status" "Access" ]
-    "caps"         [ drop vt-nav-pager state "status" "Access" ]
-    "capabilities" [ drop vt-nav-pager state "status" "Access" ]
-    "passwords"    [ drop vt-nav-pager state "status" "Passwords" ]
-    "password"     [ drop vt-nav-pager state "status" "Passwords" ]
-    "pw"           [ drop vt-nav-pager state "status" "Passwords" ]
-    "maintenance"  [ drop vt-nav-pager state "status" "Maintenance" ]
-    "maint"        [ drop vt-nav-pager state "status" "Maintenance" ]
-    "settings"     [ drop vt-nav-pager state "status" "Settings" ]
-    "set"          [ drop vt-nav-pager state "status" "Settings" ]
-    "vaults"       [ drop vt-nav-pager state "status" "Vaults" ]
-    "vault"        [ drop vt-nav-pager state "status" "Vaults" ]
-    "folder"       [ drop vt-nav-pager state "status" "Vaults" ]
-    "folders"      [ drop vt-nav-pager state "status" "Vaults" ]
-    "switch"       [ drop vt-nav-pager state "status" "Vaults" ]
+    "access"       [ drop vt-push (vt-pop-to-root state) (vt-caps) ]
+    "caps"         [ drop vt-push (vt-pop-to-root state) (vt-caps) ]
+    "capabilities" [ drop vt-push (vt-pop-to-root state) (vt-caps) ]
+    "passwords"    [ drop vt-push (vt-pop-to-root state) (vt-passwords) ]
+    "password"     [ drop vt-push (vt-pop-to-root state) (vt-passwords) ]
+    "pw"           [ drop vt-push (vt-pop-to-root state) (vt-passwords) ]
+    "maintenance"  [ drop vt-push (vt-pop-to-root state) (vt-maint-menu) ]
+    "maint"        [ drop vt-push (vt-pop-to-root state) (vt-maint-menu) ]
+    "settings"     [ drop vt-push (vt-pop-to-root state) (vt-settings-menu) ]
+    "set"          [ drop vt-push (vt-pop-to-root state) (vt-settings-menu) ]
+    "vaults"       [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
+    "vault"        [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
+    "folder"       [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
+    "folders"      [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
+    "switch"       [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
     "status"       [ drop vt-push state (vt-info-pager "status" "Status") ]
     "audit"        [ drop vt-push state (vt-info-pager "audit" "Audit") ]
     "history"      [ drop vt-push state (vt-info-pager "history" "History") ]
     "providers"    [ drop vt-push state (vt-info-pager "providers" "Providers") ]
     "config"       [ drop vt-push state (vt-info-pager "config" "Config") ]
     "add"          [ drop vt-with-auth state {run: vt-open-add/r} ]
-    "grant"        [ drop vt-fail state "grant: open a secret and press g" ]
+    "grant"        [ drop vt-with-auth state {run: vt-open-access-grant/r} ]
     "lock"         [ drop vt-lock-op state true ]
     "unlock"       [ drop vt-lock-op state false ]
     "home"         [ drop vt-pop-to-root state ]
@@ -578,7 +948,7 @@ def vt-help-text fn [[state:Map] [String] [
     ""
     "everywhere"
     "----------"
-    ": command palette   ? this help   T theme   esc back   q quit/back"
+    ": command palette   ? this help   o switch vault   T theme   esc back   q quit"
     ""
     "palette words"
     "-------------"
@@ -657,6 +1027,8 @@ def vt-global-key fn [[state:Map ev:Map] [Map] [
                 input: (Tui.input "" {placeholder: ":command"})} ]
       "?"   [ drop state set help {open: true  scroll: 0} ]
       "T"   [ drop vt-theme-cycle state ]
+      "o"      [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
+      "ctrl+o" [ drop vt-push (vt-pop-to-root state) (vt-picker) ]
       (vt-screen-key state ev)
     ]
   ]]]
@@ -665,8 +1037,10 @@ def vt-global-key fn [[state:Map ev:Map] [Map] [
 def vt-update fn [[state:Map ev:Map] [Map] [
   case ev.tag [
     "init"   [ drop
-      vt-apply-prefs (vt-load-vault
-        (((state set ui (ev.ui)) set cols (ev.cols)) set rows (ev.rows))) ]
+      def st1 (vt-apply-prefs (vt-load-vault
+        (((state set ui (ev.ui)) set cols (ev.cols)) set rows (ev.rows))))
+      # no vault to open → land on the picker so a vault can be created
+      if st1.vault.ok [ st1 ] [ vt-push st1 (vt-picker) ] ]
     "resize" [ drop (state set cols (ev.cols)) set rows (ev.rows) ]
     "key"    [ drop vt-global-key state ev ]
     state
@@ -718,6 +1092,12 @@ def vt-body fn [[state:Map] [Map] [
         Tui.rows [ ((scr.finput set focus true) set size 1)
                    (tbl set size {flex: 1}) ]
       ] [ tbl ] ]
+    "rtable" [ drop
+      def cols (vt-rtable-cols scr.name)
+      Tui.table cols (each [ rec:Map => [ vt-rrow cols rec ] ] scr.rows) {cursor: scr.cursor} ]
+    "picker" [ drop
+      def cols (vt-picker-cols)
+      Tui.table cols (each [ rec:Map => [ vt-rrow cols rec ] ] scr.rows) {cursor: scr.cursor} ]
     "detail" [ drop
       def hdr (Tui.text (vt-detail-lines scr) {wrap: "wrap"  size: 7})
       def recs (Tui.box (Tui.list-view (each [ dot cmd ] scr.recipes) {cursor: scr.rsel})
@@ -737,10 +1117,16 @@ def vt-footer fn [[state:Map] [String] [
   def scr (vt-top state)
   case scr.kind [
     "menu"   [ drop "↑/↓ move · enter open · q quit" ]
-    "pager"  [ drop "↑/↓ scroll · esc back · q back" ]
+    "pager"  [ drop
+      if (scr.name eq "config") [ "↑/↓ scroll · s set · x unset · esc back" ]
+        [ "↑/↓ scroll · esc back · q back" ] ]
     "table"  [ drop
       if scr.filtering [ "type to filter · enter apply · esc cancel" ]
         [ "↑/↓ move · enter detail · a add · / filter · esc back" ] ]
+    "rtable" [ drop
+      if (scr.name eq "access") [ "↑/↓ move · g grant · D revoke · esc back" ]
+        [ "↑/↓ move · a add · D remove · t revoke-temp · esc back" ] ]
+    "picker" [ drop "↑/↓ move · enter switch · n new · d default · D prune · esc back" ]
     "detail" [ drop "r reveal/hide · c copy · R rotate · m rename · e expiry · g grant · D delete · esc back" ]
     "form"   [ drop "tab/↑/↓ fields · enter submit · esc cancel" ]
     ""

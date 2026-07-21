@@ -420,14 +420,34 @@ Palette words (from `runPalette`): `secrets|secret|s`,
    backend) → `aql vault -i --aql`; walk this matrix; confirm plain
    `aql vault -i` is unchanged.
 
-### 6.3 Implementation phases
+### 6.3 Implementation phases — as built
 
-0. this RFC; 1a `aql:vault` bridge (green with fake host); 1b tuikit
-`mask`; 1c cmd adapter + `--aql`; 2A secrets core (forms framework built on
-the passphrase + add forms first); 2B palette/help/theme; 2C access +
-passwords; 2D maintenance + settings; 2E multi-vault. Every phase lands
-through `make fmt && make vet && make lint && make test && make
-cover-gate`; structure/doc phases also rebuild the kg bundle.
+All phases landed on `claude/aql-vault-tui-port-3uz9dx`, each through the
+full `make fmt && make vet && make lint && make test && make cover-gate`
+gate:
+
+0. this RFC + kg catalog entries.
+1a. `aql:vault` bridge — 43 words, one op table, `RegisterHostVault` seam,
+`vault` policy scope, fake-backend suite.
+1b. tuikit `mask` option on the input widget.
+1c. cmd adapter (`aqlbridge.go`, mutex-serialized over `tuiController`) +
+the `aql vault -i --aql` launcher.
+2A. secrets core — table + `/` filter, detail (reveal/hide/rotate/rename/
+expiry/delete/grant + recipe copy), the AQL form framework, passphrase gate.
+2B. `:` palette (the full `runPalette` word table), `?` help overlay,
+`T` theme cycle with pref persistence.
+2C. Access + Passwords record tables with per-row action keys.
+2D. Maintenance (verify/scan/history/audit) + Settings (config set/unset,
+providers, lock/unlock) sub-menus.
+2E. multi-vault picker (`o`/palette) — switch/new/default/prune — and
+launch-into-picker when no vault exists.
+
+Each phase carries a live-driven VirtualBackend e2e flow in
+`lang/go/test/app_vault_tui_test.go`. The one deliberate parity deviation:
+`aql vault -i` (bubbletea) opened section landing screens as status pagers
+in the skeleton, whereas the AQL app opens the real Access/Passwords tables
+and Maintenance/Settings sub-menus — i.e. the AQL port reaches *past* the
+skeleton to the same destinations the bubbletea TUI has.
 
 ## 7. Deferred: vault logic in AQL (spec sketch, not implemented)
 

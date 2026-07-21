@@ -108,11 +108,13 @@ func TestAppVaultTUI(t *testing.T) {
 			t.Errorf("init frame is missing %q:\n%s", want, first)
 		}
 	}
-	// move to Access and open its pager — a live bridge round trip
-	vb.Inject(tuikit.Event{Tag: "key", Key: "down", Char: ""})
-	vb.Inject(tuikit.Event{Tag: "key", Key: "enter", Char: ""})
+	// open the status pager via the palette — a live bridge round trip
+	typeKeys(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "status")
+	key(vb, "enter")
 	pollScreen(t, vb, "BACKEND file")
-	pollScreen(t, vb, "Home › Access")
+	pollScreen(t, vb, "Home › Status")
 	// back to Home, then quit
 	vb.Inject(tuikit.Event{Tag: "key", Key: "esc", Char: ""})
 	vb.Inject(tuikit.Event{Tag: "key", Key: "q", Char: "q"})
@@ -161,14 +163,16 @@ func TestAppVaultTUIBackendErrorsFold(t *testing.T) {
 	// launch folded the status failure into the header + status line
 	pollScreen(t, vb, "no vault open")
 	pollScreen(t, vb, "no vault backend registered")
-	// a pager built over the dead backend folds the failure into its
-	// text (Access still opens the status pager in this phase)
-	vb.Inject(tuikit.Event{Tag: "key", Key: "down", Char: ""})
-	vb.Inject(tuikit.Event{Tag: "key", Key: "enter", Char: ""})
+	// a status pager over the dead backend folds the failure into its
+	// text (opened via the palette, which needs no backend)
+	typeKeys(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "status")
+	key(vb, "enter")
 	pollScreen(t, vb, "error: ")
-	// pop the pager, then quit
-	vb.Inject(tuikit.Event{Tag: "key", Key: "q", Char: "q"})
-	vb.Inject(tuikit.Event{Tag: "key", Key: "q", Char: "q"})
+	// end the app (the no-vault launch left a picker on the stack, so a
+	// plain q would only pop — the Ctrl-C chord quits directly)
+	ctrlC(vb)
 
 	select {
 	case res := <-done:
@@ -204,6 +208,12 @@ func typeKeys(vb *tuikit.VirtualBackend, s string) {
 
 func key(vb *tuikit.VirtualBackend, name string) {
 	vb.Inject(tuikit.Event{Tag: "key", Key: name, Char: ""})
+}
+
+// ctrlC injects the Ctrl-C quit chord (the driver's default quit),
+// ending the app with its screen stack intact — unlike `q`, which pops.
+func ctrlC(vb *tuikit.VirtualBackend) {
+	vb.Inject(tuikit.Event{Tag: "key", Key: "c", Char: "c", Mods: []string{"ctrl"}})
 }
 
 // secretsFake is the scripted backend for the secrets flows: two
@@ -270,6 +280,32 @@ func (f *secretsFake) do(op string, params map[string]any) (any, error) {
 		return "CONFIG LISTING", nil
 	case "prefs":
 		return map[string]any{"theme": ""}, nil
+	case "capabilities":
+		return map[string]any{
+			"caps": []any{map[string]any{
+				"id": "cap-abc", "alias": "gh_token", "agent": "bot",
+				"expires-at": "", "active": true,
+			}},
+			"active": []any{"cap-abc"},
+		}, nil
+	case "passwords":
+		return []any{map[string]any{
+			"name": "ci", "scope": "read", "namespaces": "*", "expires-at": "",
+		}}, nil
+	case "temp-password-count":
+		return int64(2), nil
+	case "verify":
+		return map[string]any{"text": "VERIFY OK all 3 secrets", "ok": true}, nil
+	case "scan":
+		return "SCAN: no leaks found", nil
+	case "vaults":
+		return []any{map[string]any{
+			"folder": "/home/u/.aql", "suffix": "", "backend": "file",
+			"default": true, "active": true,
+		}, map[string]any{
+			"folder": "/work/vault", "suffix": "", "backend": "file",
+			"default": false, "active": false,
+		}}, nil
 	case "remove":
 		f.removed = true
 	}
@@ -600,6 +636,318 @@ func TestAppVaultTUIPaletteHelpTheme(t *testing.T) {
 	}
 	fake.opAndParams(t, "audit")
 	fake.opAndParams(t, "lock")
+}
+
+// The Access and Passwords record tables: rows over the bridge, grant
+// from the access table lands the one-time token pager, revoke and slot
+// add/remove run their typed-confirm / masked forms, revoke-temp reports
+// the count.
+func TestAppVaultTUIAccessPasswords(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(80, 20)
+	fake := &secretsFake{}
+	type result struct {
+		out []native.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
+			`import "aql:vault-tui"`,
+			`(VaultTui.run {dark: true}) drop`,
+		})
+		done <- result{out, err}
+	}()
+
+	// Home → Access (menu item 1)
+	pollScreen(t, vb, "Secrets")
+	key(vb, "down")
+	key(vb, "enter")
+	pollScreen(t, vb, "cap-abc")
+	pollScreen(t, vb, "gh_token")
+	// grant from the access table → token pager
+	key(vb, "g")
+	pollScreen(t, vb, "Grant capability")
+	typeKeys(vb, "gh_token")
+	key(vb, "enter") // to agent
+	typeKeys(vb, "bot2")
+	key(vb, "enter") // to ttl
+	typeKeys(vb, "1h")
+	key(vb, "enter") // submit
+	pollScreen(t, vb, "token: tok-12345")
+	if p := fake.opAndParams(t, "grant"); p["alias"] != "gh_token" || p["agent"] != "bot2" {
+		t.Fatalf("grant params = %#v", p)
+	}
+	key(vb, "esc") // pager → access table
+	// revoke the selected capability (typed confirm)
+	key(vb, "D")
+	pollScreen(t, vb, "Revoke cap-abc")
+	typeKeys(vb, "cap-abc")
+	key(vb, "enter")
+	pollScreen(t, vb, "revoked cap-abc")
+	if p := fake.opAndParams(t, "revoke"); p["id"] != "cap-abc" {
+		t.Fatalf("revoke params = %#v", p)
+	}
+
+	// jump to Passwords via the palette
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "passwords")
+	key(vb, "enter")
+	pollScreen(t, vb, "ci")
+	// add a slot (masked password field)
+	key(vb, "a")
+	pollScreen(t, vb, "Add password slot")
+	typeKeys(vb, "deploy")
+	key(vb, "enter")
+	typeKeys(vb, "s3cret")
+	pollScreen(t, vb, "••")
+	if strings.Contains(strings.Join(vb.Screen(), "\n"), "s3cret") {
+		t.Fatalf("slot password echoed unmasked:\n%s", strings.Join(vb.Screen(), "\n"))
+	}
+	key(vb, "enter") // to scope (prefilled "read")
+	key(vb, "enter") // to ttl
+	key(vb, "enter") // submit
+	pollScreen(t, vb, "added slot deploy")
+	if p := fake.opAndParams(t, "password-add"); p["name"] != "deploy" || p["pass"] != "s3cret" || p["scope"] != "read" {
+		t.Fatalf("password-add params = %#v", p)
+	}
+	// revoke-temp reports the count
+	key(vb, "t")
+	pollScreen(t, vb, "revoked 2 temporary")
+	// remove the selected slot (typed confirm)
+	key(vb, "D")
+	pollScreen(t, vb, "Remove ci")
+	typeKeys(vb, "ci")
+	key(vb, "enter")
+	pollScreen(t, vb, "removed slot ci")
+	if p := fake.opAndParams(t, "password-remove"); p["name"] != "ci" {
+		t.Fatalf("password-remove params = %#v", p)
+	}
+
+	key(vb, "q") // table → home
+	key(vb, "q") // quit
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the vault TUI never returned")
+	}
+}
+
+// The Maintenance and Settings sub-menus: verify runs and pages its
+// report, scan takes a paths form → pager, history/audit page the
+// captured logs; settings pages config with s/x set-unset action keys,
+// and lock/unlock run their ops.
+func TestAppVaultTUIMaintenanceSettings(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(80, 22)
+	fake := &secretsFake{}
+	type result struct {
+		out []native.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
+			`import "aql:vault-tui"`,
+			`(VaultTui.run {dark: true}) drop`,
+		})
+		done <- result{out, err}
+	}()
+
+	pollScreen(t, vb, "Secrets")
+	// Home → Maintenance (item 3)
+	key(vb, "down")
+	key(vb, "down")
+	key(vb, "down")
+	key(vb, "enter")
+	pollScreen(t, vb, "Verify")
+	pollScreen(t, vb, "Scan")
+	// Verify runs and pages its report
+	key(vb, "enter")
+	pollScreen(t, vb, "VERIFY OK")
+	fake.opAndParams(t, "verify")
+	key(vb, "esc") // pager → maintenance menu
+	// Scan: the paths form → pager
+	key(vb, "down") // Verify → Scan
+	key(vb, "enter")
+	pollScreen(t, vb, "Scan for leaks")
+	key(vb, "enter") // submit with the default "."
+	pollScreen(t, vb, "no leaks found")
+	if p := fake.opAndParams(t, "scan"); len(p["paths"].([]any)) == 0 {
+		t.Fatalf("scan params = %#v", p)
+	}
+	key(vb, "esc") // pager → maintenance menu
+	key(vb, "q")   // → home
+
+	// Settings → Config, with set/unset action keys
+	key(vb, "down")
+	key(vb, "down")
+	key(vb, "down")
+	key(vb, "down")
+	key(vb, "enter")
+	pollScreen(t, vb, "Config")
+	pollScreen(t, vb, "Providers")
+	key(vb, "enter") // Config pager
+	pollScreen(t, vb, "Home › Settings › Config")
+	key(vb, "s") // set-config form
+	pollScreen(t, vb, "Set config")
+	typeKeys(vb, "namespace.default")
+	key(vb, "enter")
+	typeKeys(vb, "team")
+	key(vb, "enter")
+	pollScreen(t, vb, "set namespace.default")
+	if p := fake.opAndParams(t, "config-set"); p["key"] != "namespace.default" || p["value"] != "team" {
+		t.Fatalf("config-set params = %#v", p)
+	}
+	key(vb, "esc") // config pager → settings menu
+	// Lock runs its op
+	key(vb, "down") // Config → Providers
+	key(vb, "down") // → Lock
+	key(vb, "enter")
+	pollScreen(t, vb, "locked")
+	fake.opAndParams(t, "lock")
+
+	key(vb, "q") // settings → home
+	key(vb, "q") // quit
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the vault TUI never returned")
+	}
+}
+
+// The multi-vault picker: `o` opens it from anywhere, the rows come
+// over the bridge, switch/default/prune drive their ops, and the new-
+// vault form creates one.
+func TestAppVaultTUIVaultPicker(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(80, 20)
+	fake := &secretsFake{}
+	type result struct {
+		out []native.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
+			`import "aql:vault-tui"`,
+			`(VaultTui.run {dark: true}) drop`,
+		})
+		done <- result{out, err}
+	}()
+
+	pollScreen(t, vb, "Secrets")
+	// `o` opens the picker from Home
+	key(vb, "o")
+	pollScreen(t, vb, "/work/vault")
+	pollScreen(t, vb, "Home › Vaults")
+	// set the second vault as default
+	key(vb, "down")
+	key(vb, "d")
+	pollScreen(t, vb, "default set to /work/vault")
+	if p := fake.opAndParams(t, "set-default"); p == nil {
+		t.Fatal("set-default not called")
+	}
+	// switch to it — a fresh home stack
+	key(vb, "o")
+	pollScreen(t, vb, "/work/vault")
+	key(vb, "down")
+	key(vb, "enter")
+	pollScreen(t, vb, "switched to /work/vault")
+	pollScreen(t, vb, "Home")
+	if p := fake.opAndParams(t, "switch"); p["folder"] != "/work/vault" {
+		t.Fatalf("switch params = %#v", p)
+	}
+	// create a new vault (masked passphrase field)
+	key(vb, "o")
+	pollScreen(t, vb, "Vaults")
+	key(vb, "n")
+	pollScreen(t, vb, "New vault")
+	typeKeys(vb, "/tmp/new")
+	key(vb, "enter") // to backend (prefilled "file")
+	key(vb, "enter") // to pass
+	typeKeys(vb, "pp")
+	key(vb, "enter") // submit
+	pollScreen(t, vb, "created /tmp/new")
+	if p := fake.opAndParams(t, "create"); p["folder"] != "/tmp/new" || p["backend"] != "file" {
+		t.Fatalf("create params = %#v", p)
+	}
+	// prune via typed confirm
+	key(vb, "o")
+	pollScreen(t, vb, "Vaults")
+	key(vb, "down")
+	key(vb, "D")
+	pollScreen(t, vb, "Prune /work/vault")
+	typeKeys(vb, "/work/vault")
+	key(vb, "enter")
+	pollScreen(t, vb, "pruned /work/vault")
+	if p := fake.opAndParams(t, "prune-index"); p["folder"] != "/work/vault" {
+		t.Fatalf("prune-index params = %#v", p)
+	}
+
+	key(vb, "q") // picker → home
+	key(vb, "q") // quit
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the vault TUI never returned")
+	}
+}
+
+// Launch with no vault: the app lands on the picker so a vault can be
+// created, and the header reads "no vault open".
+func TestAppVaultTUILaunchNoVault(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(80, 18)
+	// a backend whose status reports no vault, but vaults lists none
+	do := func(op string, params map[string]any) (any, error) {
+		switch op {
+		case "status":
+			return map[string]any{"ok": false}, nil
+		case "vaults":
+			return []any{}, nil
+		}
+		return nil, nil
+	}
+	type result struct {
+		out []native.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := runVaultTuiSteps(t, vb, do, []string{
+			`import "aql:vault-tui"`,
+			`def final (VaultTui.run {dark: true})`,
+			// the app is on the picker at quit time (depth 2): last screen is it
+			`def top (final.screens get ((size final.screens) sub 1))`,
+			`join "|" [(convert String (size final.screens)) (top.kind)]`,
+		})
+		done <- result{out, err}
+	}()
+
+	// launch landed on the picker over an empty vault
+	pollScreen(t, vb, "no vault open")
+	pollScreen(t, vb, "Home › Vaults")
+	// quit straight from the picker with Ctrl-C, leaving the launch
+	// stack intact for inspection (a plain q would pop the picker first)
+	ctrlC(vb)
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+		if got := appLastString(t, res.out); got != "2|picker" {
+			t.Fatalf("launch stack = %q, want 2|picker", got)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the vault TUI never returned")
+	}
 }
 
 // Without a terminal backend the app cannot start: Tui.run raises the
