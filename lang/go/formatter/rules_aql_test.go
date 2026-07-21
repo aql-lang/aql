@@ -77,8 +77,11 @@ func stylesheetSource(dropKey string) string {
 		"statement-starts":  "statement-starts:['def']",
 		"attach":            "attach:{comma:'prev'}",
 		"attach-dot-suffix": "attach-dot-suffix:true",
-		"brackets":          "brackets:{list:{open:'[' close:']'} map:{open:'{' close:'}'} paren:{open:'(' close:')'}}",
-		"strategies":        "strategies:['inline' 'wrap']",
+		"templates": "templates:{root:[statements/q] word:[text/q] string:[text/q]" +
+			" number:[text/q] comment:[text/q] comma:[','] colon:[':'] semicolon:[';']" +
+			" dot:['.'] question:['?'] bang:['!'] pipe:['|'] newline:[]" +
+			" list:['[' apply/q ']'] map:['{' entries/q '}'] paren:['(' apply/q ')']}",
+		"strategies": "strategies:['inline' 'wrap']",
 	}
 	var b strings.Builder
 	b.WriteString("{")
@@ -110,10 +113,24 @@ func TestParseRulesSourceStrict(t *testing.T) {
 		{"unparseable", "{width:", "fmt rules stylesheet"},
 		{"no table", "# just a comment\n", "no rule table"},
 		{"two tables", "{width:72} {indent:2}", "more than one rule table"},
-		{"brackets missing paren", strings.Replace(stylesheetSource(""),
-			" paren:{open:'(' close:')'}", "", 1), `brackets.paren missing "open"`},
-		{"brackets missing close", strings.Replace(stylesheetSource(""),
-			"list:{open:'[' close:']'}", "list:{open:'['}", 1), `brackets.list missing "close"`},
+		{"templates missing kind", strings.Replace(stylesheetSource(""),
+			" paren:['(' apply/q ')']", "", 1), `templates missing kind "paren"`},
+		{"template wrong op", strings.Replace(stylesheetSource(""),
+			"list:['[' apply/q ']']", "list:['[' entries/q ']']", 1), "templates.list needs the apply/q op"},
+		{"template missing op", strings.Replace(stylesheetSource(""),
+			"map:['{' entries/q '}']", "map:['{' '}']", 1), "templates.map needs the entries/q op"},
+		{"template double op", strings.Replace(stylesheetSource(""),
+			"list:['[' apply/q ']']", "list:[apply/q apply/q]", 1), "more than one op"},
+		{"punct with op", strings.Replace(stylesheetSource(""),
+			"comma:[',']", "comma:[apply/q]", 1), "templates.comma takes no op"},
+		{"value kind with literals", strings.Replace(stylesheetSource(""),
+			"word:[text/q]", "word:['<' text/q '>']", 1), "templates.word must be exactly [text/q]"},
+		{"template body not list", strings.Replace(stylesheetSource(""),
+			"comma:[',']", "comma:1", 1), "templates.comma must be a List"},
+		{"template part not literal", strings.Replace(stylesheetSource(""),
+			"comma:[',']", "comma:[1]", 1), "templates.comma[0] must be a String literal or an op atom"},
+		{"templates unknown kind", strings.Replace(stylesheetSource(""),
+			"comma:[',']", "comma:[','] blob:['x']", 1), `templates: unknown node kind "blob"`},
 	}
 	for _, key := range requiredRuleKeys() {
 		bad = append(bad, struct{ name, src, want string }{

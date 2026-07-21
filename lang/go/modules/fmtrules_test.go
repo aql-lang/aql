@@ -62,7 +62,7 @@ func TestFmtRulesValueShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rules not a map: %v", err)
 	}
-	wantKeys := []string{"width", "indent", "fn-word", "statement-starts", "attach", "attach-dot-suffix", "brackets", "strategies"}
+	wantKeys := []string{"width", "indent", "fn-word", "statement-starts", "attach", "attach-dot-suffix", "templates", "strategies"}
 	keys := m.Keys()
 	if len(keys) != len(wantKeys) {
 		t.Fatalf("rules keys = %v, want %v", keys, wantKeys)
@@ -178,10 +178,21 @@ func TestFormatWithOverrides(t *testing.T) {
 			ru.AttachDotSuffix = false
 			return formatter.FormatRules("input.(foo)", ru)
 		}},
-		{"brackets", ruleMap("brackets", ruleMap("list", ruleMap("open", native.NewString("<"), "close", native.NewString(">")))), "[1 2]", func() string {
+		// A template override: the list template's literals become the
+		// brackets; the semicolon template's literal becomes its glyph.
+		{"templates", ruleMap("templates", ruleMap(
+			"list", native.NewList([]native.Value{native.NewString("<"), native.NewAtom("apply"), native.NewString(">")}),
+			"semicolon", native.NewList([]native.Value{native.NewString("!!")}),
+		)), "[1 2] ; x", func() string {
 			ru := formatter.DefaultRules()
 			ru.ListOpen, ru.ListClose = "<", ">"
-			return formatter.FormatRules("[1 2]", ru)
+			g := map[formatter.NodeKind]string{}
+			for k, v := range ru.Glyphs {
+				g[k] = v
+			}
+			g[formatter.NdSemicolon] = "!!"
+			ru.Glyphs = g
+			return formatter.FormatRules("[1 2] ; x", ru)
 		}},
 		{"strategies", ruleMap("strategies", strList("inline")), "one two three four five six seven eight nine ten eleven twelve thirteen fourteen", func() string {
 			ru := formatter.DefaultRules()
@@ -219,11 +230,12 @@ func TestValueToRulesRejects(t *testing.T) {
 		{"attach class not string", ruleMap("attach", ruleMap("comma", native.NewInteger(1))), "attach.comma must be a String"},
 		{"attach unknown class", ruleMap("attach", ruleMap("comma", native.NewString("glue"))), "unknown class"},
 		{"attach-dot-suffix not bool", ruleMap("attach-dot-suffix", native.NewInteger(1)), "attach-dot-suffix must be a Boolean"},
-		{"brackets not map", ruleMap("brackets", native.NewInteger(1)), "brackets must be a Map"},
-		{"brackets unknown container", ruleMap("brackets", ruleMap("tuple", ruleMap())), "unknown container"},
-		{"brackets pair not map", ruleMap("brackets", ruleMap("list", native.NewInteger(1))), "brackets.list must be a Map"},
-		{"brackets side not string", ruleMap("brackets", ruleMap("list", ruleMap("open", native.NewInteger(1)))), "brackets.list.open must be a String"},
-		{"brackets unknown side", ruleMap("brackets", ruleMap("list", ruleMap("middle", native.NewString("|")))), "unknown side"},
+		{"templates not map", ruleMap("templates", native.NewInteger(1)), "templates must be a Map"},
+		{"templates unknown kind", ruleMap("templates", ruleMap("tuple", native.NewList([]native.Value{}))), "unknown node kind"},
+		{"template body not list", ruleMap("templates", ruleMap("list", native.NewInteger(1))), "templates.list must be a List"},
+		{"template wrong op", ruleMap("templates", ruleMap("list", native.NewList([]native.Value{native.NewAtom("entries")}))), "templates.list needs the apply/q op"},
+		{"template part not literal", ruleMap("templates", ruleMap("comma", native.NewList([]native.Value{native.NewInteger(1)}))), "must be a String literal or an op atom"},
+		{"template part atom literal", ruleMap("templates", ruleMap("list", native.NewList([]native.Value{native.NewTypeLiteral(native.TAtom)}))), "templates.list[0]"},
 		{"strategies not list", ruleMap("strategies", native.NewInteger(1)), "strategies must be a List"},
 		{"strategies elem", ruleMap("strategies", native.NewList([]native.Value{native.NewInteger(1)})), "strategies[0] must be a String"},
 		{"unknown strategy", ruleMap("strategies", strList("bogus")), "unknown strategy"},

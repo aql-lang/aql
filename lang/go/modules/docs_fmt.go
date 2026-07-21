@@ -9,7 +9,7 @@ func init() {
 		"kind":            "Classify a node for rule dispatch: a $kind-tagged Map's tag, else 'map' / 'list' / 'scalar'.",
 		"children":        "The child sequence a rule recurses over: a Map's {$kind:'entry' key value} entries, a List's elements, else [].",
 		"tree":            "Parse AQL source into its layout CST as a $kind-tagged value tree, so a formatter can be written as declarative AQL rules.",
-		"rules":           "The canonical layout rule table (width/indent/attach/brackets/strategies) — defined in AQL (formatter/fmt-rules.aql), the stylesheet Fmt.format interprets.",
-		"format-with":     "Format AQL source under a (partial) rule table: override width, indent, attach classes, brackets, statement strategies.",
+		"rules":           "The canonical layout rule table (width/indent/attach/templates/strategies) — defined in AQL (formatter/fmt-rules.aql), the stylesheet Fmt.format interprets.",
+		"format-with":     "Format AQL source under a (partial) rule table: override width, indent, attach classes, per-kind templates, statement strategies.",
 	})
 }

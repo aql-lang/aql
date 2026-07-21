@@ -59,7 +59,8 @@ import "aql:fmt" end Fmt.format-with {} "def  x  1"	'def x 1\n'	an empty overrid
 import "aql:fmt" end eq (Fmt.format-with (Fmt.rules) "a, b; c") (Fmt.format "a, b; c")	true	the AQL rule table is AUTHORITATIVE: feeding Fmt.rules back reproduces Fmt.format
 import "aql:fmt" end Fmt.format-with {width:20} "[alpha bravo charlie delta]"	'[alpha bravo\n      charlie delta\n  ]\n'	width is a rule: 20 columns wraps the list with the greedy fill
 import "aql:fmt" end Fmt.format-with {attach:{comma:'none'}} "a, b"	'a , b\n'	attachment is a rule: detaching comma spaces it like any word
-import "aql:fmt" end Fmt.format-with {brackets:{list:{open:'<' close:'>'}}} "[1 2]"	'<1 2>\n'	container brackets are rules
+import "aql:fmt" end Fmt.format-with {templates:{list:['<' apply/q '>']}} "[1 2]"	'<1 2>\n'	a TEMPLATE override: the literals around the apply/q recursion op are the list's brackets
+import "aql:fmt" end ((Fmt.rules) get "templates") get "list"	['[' apply/q ']']	the canonical list template — literals around the recursion op, the XSLT-template analogue
 import "aql:fmt" end Fmt.format-with {strategies:['bogus']} "a"	ERROR:unknown strategy	an unknown statement strategy is rejected, not silently ignored
 import "aql:fmt" end Fmt.format-with {widht:72} "a"	ERROR:unknown rule key	a misspelled rule key is rejected (typo protection)
 import "aql:fmt" end Fmt.format-with {width:'x'} "a"	ERROR:width must be an Integer	a non-integer width is rejected

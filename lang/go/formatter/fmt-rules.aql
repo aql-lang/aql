@@ -19,11 +19,30 @@
     # 'both' glues on both sides, 'next' glues the following token
     attach-dot-suffix:true
     # a word ending in `.` glues the next token (input.(foo) stays solid)
-    brackets:{list:{open:'[' close:']'}
-      map:{open:'{' close:'}'}
-      paren:{open:'(' close:')'}
+    templates:{root:[statements/q]
+      word:[text/q]
+      string:[text/q]
+      number:[text/q]
+      comment:[text/q]
+      comma:[',']
+      colon:[':']
+      semicolon:[';']
+      dot:['.']
+      question:['?']
+      bang:['!']
+      pipe:['|']
+      newline:[]
+      list:['[' apply/q ']']
+      map:['{' entries/q '}']
+      paren:['(' apply/q ')']
     }
-    # the container glyphs, per container kind
+    # the per-kind TEMPLATES (the XSLT-template analogue): each body is
+    # literals around one recursion op — text/q is the node's own text,
+    # apply/q the rendered children, entries/q the map's key:value entries,
+    # statements/q the statement sequence; a punctuation body is just the
+    # literal it emits. The literals around a container's op are its
+    # brackets; how an overflowing body breaks belongs to the width-driven
+    # strategies below (the output method), not to the template.
     strategies:['comment-only' 'inline' 'trailing-comment' 'fn'
         'trailing-container' 'wrap'
     ]

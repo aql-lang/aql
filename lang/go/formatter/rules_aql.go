@@ -106,7 +106,7 @@ const maxRuleMagnitude = 4096
 func requiredRuleKeys() []string {
 	return []string{
 		"width", "indent", "fn-word", "statement-starts",
-		"attach", "attach-dot-suffix", "brackets", "strategies",
+		"attach", "attach-dot-suffix", "templates", "strategies",
 	}
 }
 
@@ -155,9 +155,9 @@ func mergeRulesValue(base Rules, v eng.Value, requireAll bool) (Rules, error) {
 				return ru, berr
 			}
 			ru.AttachDotSuffix = b
-		case "brackets":
-			if berr := readBrackets(val, &ru, requireAll); berr != nil {
-				return ru, berr
+		case "templates":
+			if terr := readTemplates(val, &ru, requireAll); terr != nil {
+				return ru, terr
 			}
 		case "strategies":
 			names, lerr := stringListField(val, "strategies")
@@ -276,58 +276,117 @@ func readAttach(v eng.Value, ru *Rules) error {
 	return nil
 }
 
-// readBrackets reads the container-bracket map
-// ({list:{open:'[' close:']'} …}) into the Rules' bracket fields. In merge
-// mode each container and each of open/close is optional — omitted ones
-// keep the base glyphs. In strict (stylesheet) mode all three containers
-// and both sides are required, so the file fully defines every glyph.
-func readBrackets(v eng.Value, ru *Rules, requireAll bool) error {
+// templateOp names each kind's recursion op — the point in its template
+// body where the processor recurses (XSLT's <xsl:apply-templates/>):
+//
+//	text        the node's own source text (leaf value kinds)
+//	apply       the rendered children (list / paren)
+//	entries     the canonicalised key:value entries (map)
+//	statements  the statement sequence (root)
+//
+// Punctuation kinds have NO op — their body is the literal they emit
+// (newline's is empty). The map is the closed vocabulary readTemplates
+// validates against.
+var templateOp = map[string]string{
+	"root": "statements",
+	"word": "text", "string": "text", "number": "text", "comment": "text",
+	"list": "apply", "paren": "apply",
+	"map": "entries",
+}
+
+// readTemplates reads the per-kind template bodies — the stylesheet's
+// `templates` section, the XSLT-template analogue: each node kind maps to
+// a body of String LITERALS and at most one recursion-op ATOM
+// (`list:['[' apply/q ']']`). Containers compile their surrounding
+// literals into the open/close glyphs; punctuation kinds compile their
+// literal into the glyph they emit; value kinds and root must be exactly
+// their op. In merge mode a named kind's body replaces that kind's
+// compiled form; in strict (stylesheet) mode every kind is required, so
+// the file fully defines every template.
+func readTemplates(v eng.Value, ru *Rules, requireAll bool) error {
 	m, err := eng.RequireConcreteMap(v, "fmt rules")
 	if err != nil {
-		return fmt.Errorf("fmt rules: brackets must be a Map: %w", err)
+		return fmt.Errorf("fmt rules: templates must be a Map: %w", err)
 	}
-	seen := map[string]map[string]bool{}
+	// The Glyphs map may be shared with the base Rules (DefaultRules) —
+	// clone before writing so an override never mutates the canonical table.
+	glyphs := map[NodeKind]string{}
+	for k, g := range ru.Glyphs {
+		glyphs[k] = g
+	}
+	ru.Glyphs = glyphs
+
+	seen := map[string]bool{}
 	for _, name := range m.Keys() {
-		var open, close *string
+		kind, ok := KindByName(name)
+		if !ok {
+			return fmt.Errorf("fmt rules: templates: unknown node kind %q", name)
+		}
+		seen[name] = true
+		bv, _ := m.Get(name)
+		body, berr := eng.RequireConcreteList(bv, "fmt rules")
+		if berr != nil {
+			return fmt.Errorf("fmt rules: templates.%s must be a List: %w", name, berr)
+		}
+
+		// Split the body into literals around at most one op atom.
+		pre, post := "", ""
+		op := ""
+		for i := 0; i < body.Len(); i++ {
+			part := body.Get(i)
+			if part.Is(eng.TAtom) {
+				a, aerr := part.AsConcreteAtom()
+				if aerr != nil {
+					return fmt.Errorf("fmt rules: templates.%s[%d]: %w", name, i, aerr)
+				}
+				if op != "" {
+					return fmt.Errorf("fmt rules: templates.%s has more than one op (%s, %s)", name, op, a)
+				}
+				op = a
+				continue
+			}
+			s, serr := part.AsConcreteString()
+			if serr != nil {
+				return fmt.Errorf("fmt rules: templates.%s[%d] must be a String literal or an op atom: %w", name, i, serr)
+			}
+			if op == "" {
+				pre += s
+			} else {
+				post += s
+			}
+		}
+
+		want := templateOp[name]
+		if want == "" {
+			// Punctuation kind: literal-only body compiles to its glyph.
+			if op != "" {
+				return fmt.Errorf("fmt rules: templates.%s takes no op, got %s/q", name, op)
+			}
+			glyphs[kind] = pre
+			continue
+		}
+		if op != want {
+			return fmt.Errorf("fmt rules: templates.%s needs the %s/q op, got %q", name, want, op)
+		}
 		switch name {
 		case "list":
-			open, close = &ru.ListOpen, &ru.ListClose
+			ru.ListOpen, ru.ListClose = pre, post
 		case "map":
-			open, close = &ru.MapOpen, &ru.MapClose
+			ru.MapOpen, ru.MapClose = pre, post
 		case "paren":
-			open, close = &ru.ParenOpen, &ru.ParenClose
+			ru.ParenOpen, ru.ParenClose = pre, post
 		default:
-			return fmt.Errorf("fmt rules: brackets: unknown container %q (want list/map/paren)", name)
-		}
-		pv, _ := m.Get(name)
-		pm, perr := eng.RequireConcreteMap(pv, "fmt rules")
-		if perr != nil {
-			return fmt.Errorf("fmt rules: brackets.%s must be a Map: %w", name, perr)
-		}
-		seen[name] = map[string]bool{}
-		for _, side := range pm.Keys() {
-			sv, _ := pm.Get(side)
-			s, serr := sv.AsConcreteString()
-			if serr != nil {
-				return fmt.Errorf("fmt rules: brackets.%s.%s must be a String: %w", name, side, serr)
-			}
-			seen[name][side] = true
-			switch side {
-			case "open":
-				*open = s
-			case "close":
-				*close = s
-			default:
-				return fmt.Errorf("fmt rules: brackets.%s: unknown side %q (want open/close)", name, side)
+			// root and the value kinds carry no glyphs: their body is
+			// exactly the op.
+			if pre != "" || post != "" {
+				return fmt.Errorf("fmt rules: templates.%s must be exactly [%s/q]", name, want)
 			}
 		}
 	}
 	if requireAll {
-		for _, name := range []string{"list", "map", "paren"} {
-			for _, side := range []string{"open", "close"} {
-				if !seen[name][side] {
-					return fmt.Errorf("fmt rules stylesheet: brackets.%s missing %q", name, side)
-				}
+		for k := NdRoot; k <= NdNewline; k++ {
+			if !seen[NodeKindName(k)] {
+				return fmt.Errorf("fmt rules stylesheet: templates missing kind %q", NodeKindName(k))
 			}
 		}
 	}

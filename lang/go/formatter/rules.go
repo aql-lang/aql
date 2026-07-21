@@ -45,10 +45,18 @@ type Rules struct {
 	// (`input.(foo)` stays solid).
 	AttachDotSuffix bool
 
-	// Container brackets, per container kind.
+	// Container brackets — the COMPILED form of the container templates
+	// (`list:['[' apply/q ']']` etc. in the stylesheet's `templates`
+	// section): the literals before the recursion op become Open, the
+	// literals after it become Close.
 	ListOpen, ListClose   string
 	MapOpen, MapClose     string
 	ParenOpen, ParenClose string
+
+	// Glyphs is the compiled form of the punctuation templates
+	// (`comma:[',']` etc.): the literal each punctuation kind emits. A
+	// missing kind emits nothing.
+	Glyphs map[NodeKind]string
 
 	// Strategies is the ordered list of statement layout templates tried
 	// for an overflowing statement. Known names (see StrategyNames):
@@ -102,6 +110,13 @@ type renderer struct {
 	stmtStart  map[string]bool
 	attachPrev map[NodeKind]bool
 	attachNext map[NodeKind]bool
+}
+
+// glyph returns the punctuation template's compiled literal for kind — the
+// text the kind emits. A kind absent from the table emits nothing (total on
+// a zero-value Rules).
+func (r *renderer) glyph(k NodeKind) string {
+	return r.ru.Glyphs[k]
 }
 
 func newRenderer(ru Rules) *renderer {

@@ -1079,22 +1079,10 @@ func (r *renderer) emitNode(n *Node, indent int) string {
 		return n.Text
 	case NdComment:
 		return n.Text
-	case NdComma:
-		return ","
-	case NdColon:
-		return ":"
-	case NdSemicolon:
-		return ";"
-	case NdDot:
-		return "."
-	case NdQuestion:
-		return "?"
-	case NdBang:
-		return "!"
-	case NdPipe:
-		return "|"
-	case NdNewline:
-		return ""
+	case NdComma, NdColon, NdSemicolon, NdDot, NdQuestion, NdBang, NdPipe, NdNewline:
+		// Punctuation emits its TEMPLATE's literal (`comma:[',']` in the
+		// stylesheet); newline's template is empty.
+		return r.glyph(n.Kind)
 	}
 	return ""
 }
@@ -1460,9 +1448,9 @@ func (r *renderer) renderMapEntry(e mapEntry, indent int) string {
 	}
 	opt := ""
 	if e.optional {
-		opt = "?"
+		opt = r.glyph(NdQuestion)
 	}
-	return e.key + opt + ":" + r.emitNode(e.value, indent)
+	return e.key + opt + r.glyph(NdColon) + r.emitNode(e.value, indent)
 }
 
 // emitParen formats (...).

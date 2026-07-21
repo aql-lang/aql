@@ -21,8 +21,9 @@ import (
 // representation is authoritative (pinned by spec rows + Go tests). Two
 // keys differ in their inner granularity: `attach` REPLACES the whole
 // attachment policy (kinds absent from the map attach nothing — pinned by
-// the `x ? y` detachment in TestFormatWithOverrides), while `brackets`
-// MERGES per container/side (omitted glyphs stay canonical).
+// the `x ? y` detachment in TestFormatWithOverrides), while `templates`
+// replaces PER KIND (a named kind's body replaces that kind's template;
+// unnamed kinds keep their canonical bodies).
 //
 // Table shape (all keys optional):
 //
@@ -32,7 +33,7 @@ import (
 //	 statement-starts: ['def' …]  words opening a new group in bodies
 //	 attach: {comma:'prev' …}     kind → 'prev' | 'next' | 'both' | 'none'
 //	 attach-dot-suffix: true      a word ending '.' glues the next token
-//	 brackets: {list:{open:'[' close:']'} …}   container brackets
+//	 templates: {list:['[' apply/q ']'] …}     per-kind template bodies
 //	 strategies: ['comment-only' 'inline' …]}  statement templates, in order
 
 // fmtRulesNative implements Fmt.rules: the canonical layout rule table as
@@ -125,17 +126,7 @@ func rulesToValue(ru formatter.Rules) native.Value {
 	m.Set("attach", native.NewMap(attach))
 	m.Set("attach-dot-suffix", native.NewBoolean(ru.AttachDotSuffix))
 
-	brackets := native.NewOrderedMap()
-	pair := func(open, close string) native.Value {
-		p := native.NewOrderedMap()
-		p.Set("open", native.NewString(open))
-		p.Set("close", native.NewString(close))
-		return native.NewMap(p)
-	}
-	brackets.Set("list", pair(ru.ListOpen, ru.ListClose))
-	brackets.Set("map", pair(ru.MapOpen, ru.MapClose))
-	brackets.Set("paren", pair(ru.ParenOpen, ru.ParenClose))
-	m.Set("brackets", native.NewMap(brackets))
+	m.Set("templates", templatesToValue(ru))
 
 	strategies := make([]native.Value, len(ru.Strategies))
 	for i, s := range ru.Strategies {
@@ -143,6 +134,56 @@ func rulesToValue(ru formatter.Rules) native.Value {
 	}
 	m.Set("strategies", native.NewList(strategies))
 	return native.NewMap(m)
+}
+
+// templatesToValue renders the per-kind template bodies — the compiled
+// glyph/op state back in the stylesheet's `templates` shape (literals as
+// Strings, recursion ops as Atoms), so the round-trip through
+// valueToRules reproduces the table exactly.
+func templatesToValue(ru formatter.Rules) native.Value {
+	t := native.NewOrderedMap()
+	body := func(parts ...native.Value) native.Value {
+		if parts == nil {
+			// An empty template body (newline) must still be a CONCRETE
+			// list — NewList(nil) reads back as non-concrete.
+			parts = []native.Value{}
+		}
+		return native.NewList(parts)
+	}
+	op := func(name string) native.Value { return native.NewAtom(name) }
+	lit := func(s string) native.Value { return native.NewString(s) }
+	container := func(open, opName, close string) native.Value {
+		var parts []native.Value
+		if open != "" {
+			parts = append(parts, lit(open))
+		}
+		parts = append(parts, op(opName))
+		if close != "" {
+			parts = append(parts, lit(close))
+		}
+		return native.NewList(parts)
+	}
+
+	t.Set("root", body(op("statements")))
+	for _, name := range []string{"word", "string", "number", "comment"} {
+		t.Set(name, body(op("text")))
+	}
+	for _, kind := range []formatter.NodeKind{
+		formatter.NdComma, formatter.NdColon, formatter.NdSemicolon,
+		formatter.NdDot, formatter.NdQuestion, formatter.NdBang,
+		formatter.NdPipe, formatter.NdNewline,
+	} {
+		g := ru.Glyphs[kind]
+		if g == "" {
+			t.Set(formatter.NodeKindName(kind), body())
+		} else {
+			t.Set(formatter.NodeKindName(kind), body(lit(g)))
+		}
+	}
+	t.Set("list", container(ru.ListOpen, "apply", ru.ListClose))
+	t.Set("map", container(ru.MapOpen, "entries", ru.MapClose))
+	t.Set("paren", container(ru.ParenOpen, "apply", ru.ParenClose))
+	return native.NewMap(t)
 }
 
 // valueToRules reads a (partial) AQL rule table into a formatter.Rules,

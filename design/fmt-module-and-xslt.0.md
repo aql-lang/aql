@@ -351,16 +351,30 @@ these as `Fmt.*` AQL):
     module construction via `DefaultRulesInitError` (the ADR-005 pattern),
     never as a panic or a silent zero table. The `formatter.Rules` struct
     is the stylesheet's COMPILED form. It carries every layout decision
-    the formatter makes: the
-    72-column width, the 2-space indent step, the statement-start grouping
-    words, the `fn` trigger, the attach classes (which token kinds glue to
-    which — the whitespace policy), the dot-suffix glue rule, the container
-    brackets, and the ordered STRATEGY list naming the statement templates
-    (`comment-only` → `inline` → `trailing-comment` → `fn` →
-    `trailing-container` → `wrap`). None of these lives in the walk any more;
-    `emitStatement` is a template dispatch over the strategy list, `attach`
-    reads the kind sets, every fit check reads the width, every bracket and
-    indent reads the table.
+    the formatter makes: the 72-column width, the 2-space indent step, the
+    statement-start grouping words, the `fn` trigger, the attach classes
+    (which token kinds glue to which — the whitespace policy), the
+    dot-suffix glue rule, the per-kind TEMPLATES, and the ordered STRATEGY
+    list naming the statement-level templates (`comment-only` → `inline` →
+    `trailing-comment` → `fn` → `trailing-container` → `wrap`). None of
+    these lives in the walk any more; `emitStatement` is a template dispatch
+    over the strategy list, `attach` reads the kind sets, every fit check
+    reads the width, every glyph and indent reads the table.
+  - **The templates section IS the XSLT-template layer.** Every node kind
+    has a template BODY in the stylesheet — literals around one recursion
+    op, e.g. `list:['[' apply/q ']']`, `map:['{' entries/q '}']`,
+    `word:[text/q]`, `comma:[',']`, `root:[statements/q]` — the direct
+    analogue of `<xsl:template match="list">[<xsl:apply-templates/>]</…>`.
+    The ops are the closed recursion vocabulary (`text` the node's source
+    text, `apply` the rendered children, `entries` the map's canonicalised
+    key:value entries, `statements` the statement sequence); a punctuation
+    body is just the literal it emits. Container brackets and punctuation
+    glyphs are no longer parameters — they are the templates' literals
+    (the former `brackets` key is retired). How an overflowing body BREAKS
+    (fit checks, grouping, greedy fill) belongs to the width-driven
+    strategies — the output method, as xsl:output/indent is processor
+    machinery in XSLT — selected and ordered by the stylesheet's
+    `strategies` list.
   - **The AQL surface**: **`Fmt.rules`** returns the canonical table as AQL
     data; **`Fmt.format-with <rules> <src>`** formats under a (partial)
     override table — width, indent, attach, brackets, strategies,
