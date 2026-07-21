@@ -871,6 +871,39 @@ func TestRecordPolyCallGuard(t *testing.T) {
 	if inactiveEmitState().RecordPolyCall("pop", nil, []Value{o1, o2}, SrcPos{}, nil, nil) {
 		t.Fatal("inactive multi-out poly call should decline")
 	}
+
+	// De-collision: a later result whose ID collides with an EARLIER event's
+	// output (different seq) is re-minted so provenance lookups stay distinct —
+	// UNLESS that ID is an input passthrough (a receiver flowing straight
+	// through), which keeps its identity.
+	es2 := NewEmitState()
+	a := NewDynamicCarrier(TFlexList)
+	if !es2.RecordPolyCall("pop", nil, []Value{a, NewDynamicCarrier(TAny)}, SrcPos{}, nil, nil) {
+		t.Fatal("seed poly should record")
+	}
+	// A second poly whose first result reuses a's ID, with a NOT among the
+	// args → the colliding result is re-minted. (RecordPolyCall mutates the
+	// outs SLICE in place, so observe the element, not the local copy.)
+	c := NewDynamicCarrier(TFlexList)
+	c.ID = a.ID
+	outs2 := []Value{c, NewDynamicCarrier(TAny)}
+	if !es2.RecordPolyCall("shift", nil, outs2, SrcPos{}, nil, nil) {
+		t.Fatal("collision poly should record")
+	}
+	if outs2[0].ID == a.ID {
+		t.Error("a colliding non-passthrough result ID should be re-minted")
+	}
+	// A third poly whose result reuses a's ID WHILE a is passed as an arg →
+	// the passthrough exemption keeps the ID.
+	d := NewDynamicCarrier(TAny)
+	d.ID = a.ID
+	outs3 := []Value{d, NewDynamicCarrier(TAny)}
+	if !es2.RecordPolyCall("shift", []Value{a}, outs3, SrcPos{}, nil, nil) {
+		t.Fatal("passthrough poly should record")
+	}
+	if outs3[0].ID != a.ID {
+		t.Error("a passthrough result ID should be preserved")
+	}
 }
 
 func TestRecordDynMethodGuards(t *testing.T) {
