@@ -128,12 +128,12 @@ func TestAppVaultTUI(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("the vault TUI never returned")
 	}
-	// the backend saw the ops in order: the launch status load, then
-	// the pager's status-text capture
+	// the backend saw the ops in order: the launch status load, the
+	// saved-prefs read, then the pager's status-text capture
 	mu.Lock()
 	joined := strings.Join(ops, ",")
 	mu.Unlock()
-	if !strings.HasPrefix(joined, "status,status-text") {
+	if !strings.HasPrefix(joined, "status,prefs,status-text") {
 		t.Errorf("backend ops = %q", joined)
 	}
 }
@@ -258,6 +258,18 @@ func (f *secretsFake) do(op string, params map[string]any) (any, error) {
 		return "clip-tool", nil
 	case "grant":
 		return "token: tok-12345 (shown once)", nil
+	case "status-text":
+		return "STATUS PANEL", nil
+	case "audit":
+		return "AUDIT LOG LINES", nil
+	case "history":
+		return "HISTORY LINES", nil
+	case "providers-text":
+		return "PROVIDER CATALOG", nil
+	case "config-text":
+		return "CONFIG LISTING", nil
+	case "prefs":
+		return map[string]any{"theme": ""}, nil
 	case "remove":
 		f.removed = true
 	}
@@ -509,6 +521,85 @@ func TestAppVaultTUIPassphraseGate(t *testing.T) {
 	if auths != 2 {
 		t.Fatalf("authenticate calls = %d, want 2", auths)
 	}
+}
+
+// The `:` palette, the `?` help overlay, and the `T` theme cycle: the
+// palette navigates and runs ops, unknown words land in the status
+// line, help swaps the body and closes on any key, and the theme
+// persists through Vault.set-prefs.
+func TestAppVaultTUIPaletteHelpTheme(t *testing.T) {
+	vb := tuikit.NewVirtualBackend(76, 20)
+	fake := &secretsFake{}
+	type result struct {
+		out []native.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
+			`import "aql:vault-tui"`,
+			`def final (VaultTui.run {dark: true})`,
+			`final.theme`,
+		})
+		done <- result{out, err}
+	}()
+
+	pollScreen(t, vb, "Secrets")
+	// palette → audit pager (a real bridge capture)
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "audit")
+	key(vb, "enter")
+	pollScreen(t, vb, "Home › Audit")
+	key(vb, "esc")
+	// palette → lock runs the op and reports
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "lock")
+	key(vb, "enter")
+	pollScreen(t, vb, "locked")
+	// palette → unknown word lands in the status line
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "zzz")
+	key(vb, "enter")
+	pollScreen(t, vb, "unknown command: zzz")
+	// palette → secrets navigates from anywhere
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "secrets")
+	key(vb, "enter")
+	pollScreen(t, vb, "gh_token")
+	// help overlay swaps the body; any key closes it
+	key(vb, "?")
+	pollScreen(t, vb, "palette words")
+	key(vb, "x")
+	pollScreenGone(t, vb, "palette words")
+	// theme cycle persists and reports (auto → dark)
+	key(vb, "T")
+	pollScreen(t, vb, "theme: dark")
+	if p := fake.opAndParams(t, "set-prefs"); p["theme"] != "dark" {
+		t.Fatalf("set-prefs params = %#v", p)
+	}
+	// palette → quit ends the app
+	key(vb, ":")
+	pollScreen(t, vb, ":command")
+	typeKeys(vb, "quit")
+	key(vb, "enter")
+
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+		if got := appLastString(t, res.out); got != "dark" {
+			t.Fatalf("final theme = %q", got)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the vault TUI never returned")
+	}
+	fake.opAndParams(t, "audit")
+	fake.opAndParams(t, "lock")
 }
 
 // Without a terminal backend the app cannot start: Tui.run raises the
