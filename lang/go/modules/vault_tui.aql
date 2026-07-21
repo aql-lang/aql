@@ -16,14 +16,16 @@
 # vault host backends before importing this module (the caps snapshot
 # at import — RegisterHostTui/RegisterHostVault must come first).
 #
-# Secret hygiene (§5.2): masked inputs for passphrases, revealed
-# values live only in the detail screen and are deleted on hide/pop,
-# the launcher drops the returned final state.
+# Secret hygiene (§5.2): masked inputs for passphrases and secret
+# values, a revealed value lives only in the detail screen's map and
+# dies on hide/pop, the passphrase field clears on a failed attempt,
+# and the launcher drops the returned final state.
 # ============================================================
 
 import "aql:tui"
 import "aql:vault"
 import "aql:math-util"
+import "aql:string-util"
 
 # --- small helpers ------------------------------------------------------
 
@@ -35,6 +37,14 @@ def vt-last fn [[items:List] [Map] [ items get ((size items) sub 1) ]]
 
 def vt-drop-last fn [[items:List] [List] [ take ((size items) sub 1) items ]]
 
+def vt-replace-at fn [[items:List i:Integer t:Any] [List] [
+  flatten [ (take i items) [t] (shed (i add 1) items) ]
+]]
+
+def vt-str fn [[v:Any] [String] [
+  if (v eq None) [ "" ] [ convert String v ]
+]]
+
 # --- theme palette (§4.6) -----------------------------------------------
 
 def vt-pal fn [[dark:Boolean] [Map] [
@@ -45,34 +55,6 @@ def vt-pal fn [[dark:Boolean] [Map] [
     { title: {fg: "blue"  bold: true}  dim: {fg: "grey"}
       crumb: {fg: "blue"}  err: {fg: "red"}  ok: {fg: "green"} }
   ]
-]]
-
-# --- screens as data (§4.2) ---------------------------------------------
-# Builders fetch their rows via Vault.* so a reload is just re-running
-# the builder. Backend failures fold into the pager text rather than
-# aborting the app.
-
-def vt-err-text fn [[why:String] [String] [ join "" ["error: " why] ]]
-
-def vt-status-text fn [[] [String] [
-  # the handler runs with the error on the stack: read its message
-  # UNPARENTHESIZED (a paren would start a fresh collection context and
-  # `dot` would see no receiver), then feed it to the formatter
-  do [ Vault.status-text ] error [ dot message  vt-err-text ]
-]]
-
-def vt-home fn [[] [Map] [
-  { kind: "menu"  name: "home"  title: "Home"  sel: 0
-    items: ["Secrets" "Access" "Passwords" "Maintenance" "Settings"] }
-]]
-
-def vt-status-pager fn [[title:String] [Map] [
-  # bind the text BEFORE the map literal: a recovered raise inside a
-  # map-value ParenExpr tears down the enclosing fn's bindings
-  # mid-literal (engine gap G8, VAULT-TUI-PORT.0.md §2.4)
-  def txt (vt-status-text)
-  { kind: "pager"  name: "status"  title: title
-    text: txt  scroll: 0 }
 ]]
 
 # --- navigation ----------------------------------------------------------
@@ -97,6 +79,10 @@ def vt-status-line fn [[state:Map text:String bad:Boolean] [Map] [
   state set status {text: text  err: bad}
 ]]
 
+def vt-fail fn [[state:Map why:String] [Map] [
+  vt-status-line state why true
+]]
+
 # --- the vault header cache ---------------------------------------------
 
 def vt-vault-fail fn [[state:Map why:String] [Map] [
@@ -108,14 +94,376 @@ def vt-load-vault fn [[state:Map] [Map] [
   error [ dot message  vt-vault-fail state ]
 ]]
 
-# --- update: per-kind key handlers (§4.3) --------------------------------
+# --- screens as data (§4.2) ---------------------------------------------
+# Builders fetch their rows via Vault.* so a reload is just re-running
+# the builder. Backend failures fold into text/rows/status rather than
+# aborting the app. Raise-capable expressions are def-bound BEFORE any
+# map literal (engine gap G8, VAULT-TUI-PORT.0.md §2.4).
+
+def vt-err-text fn [[why:String] [String] [ join "" ["error: " why] ]]
+
+def vt-status-text fn [[] [String] [
+  # the handler runs with the error on the stack: read its message
+  # UNPARENTHESIZED (a paren would start a fresh collection context and
+  # `dot` would see no receiver — gap G10), then feed it to the formatter
+  do [ Vault.status-text ] error [ dot message  vt-err-text ]
+]]
+
+def vt-home fn [[] [Map] [
+  { kind: "menu"  name: "home"  title: "Home"  sel: 0
+    items: ["Secrets" "Access" "Passwords" "Maintenance" "Settings"] }
+]]
+
+def vt-status-pager fn [[title:String] [Map] [
+  def txt (vt-status-text)
+  { kind: "pager"  name: "status"  title: title
+    text: txt  scroll: 0 }
+]]
+
+def vt-secrets fn [[] [Map] [
+  def rows (do [ Vault.secrets ] error [ drop [] ])
+  { kind: "table"  name: "secrets"  title: "Secrets"
+    items: rows  cursor: 0  filtering: false  filter: ""
+    finput: (Tui.input "" {placeholder: "filter aliases"}) }
+]]
+
+def vt-detail fn [[alias:String] [Map] [
+  def found (do [ Vault.secret alias ] error [ drop None ])
+  def meta (if (found eq None) [ {} ] [ found ])
+  def recs (do [ Vault.recipes alias ] error [ drop [] ])
+  { kind: "detail"  name: alias  title: alias  meta: meta
+    recipes: recs  rsel: 0  revealed: None }
+]]
+
+# --- the form framework (§4.5, the huh replacement) ----------------------
+# A form is data: fields carry their own input widgets (focus rides on
+# the input), submit is an inert Function [[state] [state']] that reads
+# its values from the top screen, arg carries the acted-on alias.
+
+def vt-field fn [[name:String label:String mask:Boolean value:String] [Map] [
+  def inp (Tui.input value {mask: mask})
+  { name: name  label: label  input: inp }
+]]
+
+def vt-focus-field fn [[scr:Map i:Integer on:Boolean] [Map] [
+  def f (scr.fields get i)
+  def f2 (f set input ((f.input) set focus on))
+  scr set fields (vt-replace-at scr.fields i f2)
+]]
+
+def vt-form fn [[name:String title:String fields:List submit:Map arg:String] [Map] [
+  def scr { kind: "form"  name: name  title: title  fields: fields
+            focus: 0  error: ""  submit: submit  arg: arg }
+  vt-focus-field scr 0 true
+]]
+
+def vt-fval fn [[scr:Map i:Integer] [String] [
+  ((scr.fields get i).input).value
+]]
+
+def vt-form-fail fn [[state:Map why:String] [Map] [
+  def scr (vt-top state)
+  vt-set-top state (scr set error why)
+]]
+
+def vt-form-move fn [[state:Map delta:Integer] [Map] [
+  def scr (vt-top state)
+  def next (vt-clamp (scr.focus add delta) (size scr.fields))
+  if (next eq scr.focus) [ state ] [
+    def s2 (vt-focus-field scr scr.focus false)
+    def s3 (vt-focus-field s2 next true)
+    vt-set-top state (s3 set focus next)
+  ]
+]]
+
+def vt-form-edit fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  def f (scr.fields get scr.focus)
+  def f2 (f set input (Tui.edit f.input ev))
+  vt-set-top state (scr set fields (vt-replace-at scr.fields scr.focus f2))
+]]
+
+def vt-form-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  def last ((size scr.fields) sub 1)
+  case ev.key [
+    "esc"   [ drop vt-pop state ]
+    "tab"   [ drop vt-form-move state 1 ]
+    "down"  [ drop vt-form-move state 1 ]
+    "up"    [ drop vt-form-move state -1 ]
+    "enter" [ drop
+      if (scr.focus lt last) [ vt-form-move state 1 ] [ scr.submit.run state ] ]
+    (vt-form-edit state ev)
+  ]
+]]
+
+# --- passphrase gating (§4.5): with-auth wraps every secret action ------
+
+def vt-pass-fail fn [[state:Map why:String] [Map] [
+  # hygiene: the failed passphrase clears in the same update
+  def scr (vt-top state)
+  def f ((scr.fields get 0) set input (Tui.input "" {mask: true}))
+  def s2 (scr set fields (vt-replace-at scr.fields 0 f))
+  vt-set-top state ((vt-focus-field s2 0 true) set error why)
+]]
+
+def vt-with-auth fn [[state:Map act:Map] [Map] [
+  # act is a continuation MAP {run: <fn/r>}: an /r-parked fn does not
+  # match a Function-typed param (gap G12, VAULT-TUI-PORT.0.md §2.4),
+  # so continuations travel inside maps and dispatch via dot-access
+  def gate (do [ (Vault.needs-passphrase) and ((Vault.authed) not) ]
+            error [ drop false ])
+  if gate [
+    def fields [ (vt-field "pass" "vault passphrase" true "") ]
+    def scr ((vt-form "passphrase" "Passphrase" fields {run: vt-pass-run/r} "") set then act)
+    vt-push state scr
+  ] [ act.run state ]
+]]
+
+def vt-pass-run fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def pass (vt-fval scr 0)
+  def act scr.then
+  do [ (Vault.authenticate pass) drop
+       act.run (vt-pop state) ]
+  error [ dot message  vt-pass-fail state ]
+]]
+
+# --- op plumbing ---------------------------------------------------------
+
+def vt-reload-top fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  case scr.kind [
+    "table"  [ drop
+      def fresh (vt-secrets)
+      def kept ((fresh set filter (scr.filter)) set finput (scr.finput))
+      vt-set-top state (kept set cursor
+        (vt-clamp scr.cursor (size (vt-visible kept.items scr.filter)))) ]
+    "detail" [ drop vt-set-top state (vt-detail scr.name) ]
+    "pager"  [ drop
+      if (scr.name eq "status") [ vt-set-top state (vt-status-pager scr.title) ] [ state ] ]
+    state
+  ]
+]]
+
+# vt-after-op: pop the form, refresh the vault header + the revealed
+# screen, report. Every mutation lands here.
+def vt-after-op fn [[state:Map msg:String] [Map] [
+  vt-status-line (vt-reload-top (vt-load-vault (vt-pop state))) msg false
+]]
+
+# --- the secrets table ---------------------------------------------------
+
+def vt-visible fn [[items:List flt:String] [List] [
+  if (flt eq "") [ items ] [
+    filter [ dot name  StringUtil.lower  StringUtil.contains (StringUtil.lower flt) ] items
+  ]
+]]
+
+def vt-secret-cols fn [[] [List] [
+  def cols [ {title: "alias"  width: 24} {title: "provider"  width: 14}
+             {title: "namespace"  width: 14} {title: "expires"  width: 20} ]
+  cols
+]]
+
+def vt-alias-row fn [[a:Map] [List] [
+  # def-bind the row: a bare list literal returned from a fn evaluates
+  # LAZILY, after body teardown, when `a` is gone (gap G11,
+  # VAULT-TUI-PORT.0.md §2.4) — def snapshots it eagerly
+  def row [ (vt-str a.name) (vt-str a.provider) (vt-str a.namespace) (vt-str a.expires-at) ]
+  row
+]]
+
+def vt-open-add fn [[state:Map] [Map] [
+  def d state.add-defaults
+  def fields [ (vt-field "alias" "alias" false "")
+               (vt-field "value" "secret value" true "")
+               (vt-field "provider" "provider" false (vt-str d.provider))
+               (vt-field "namespace" "namespace" false (vt-str d.namespace))
+               (vt-field "expiry" "expiry (optional)" false (vt-str d.expiry)) ]
+  vt-push state (vt-form "add" "Add secret" fields {run: vt-add-submit/r} "")
+]]
+
+def vt-add-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def alias (vt-fval scr 0)
+  def value (vt-fval scr 1)
+  def provider (vt-fval scr 2)
+  def namespace (vt-fval scr 3)
+  def expiry (vt-fval scr 4)
+  if (alias eq "") [ vt-form-fail state "alias is required" ] [
+    if (value eq "") [ vt-form-fail state "value is required" ] [
+      do [ Vault.add { alias: alias  value: value  provider: provider
+                       namespace: namespace  expiry: expiry }
+           def st2 (state set add-defaults
+             {provider: provider  namespace: namespace  expiry: expiry})
+           vt-after-op st2 (join "" ["added " alias]) ]
+      error [ dot message  vt-form-fail state ]
+    ]
+  ]
+]]
+
+def vt-table-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  if scr.filtering [
+    case ev.key [
+      "esc"   [ drop vt-set-top state ((scr set filtering false)
+                  set finput (Tui.input scr.filter {placeholder: "filter aliases"})) ]
+      "enter" [ drop vt-set-top state (((scr set filtering false)
+                  set filter ((scr.finput).value)) set cursor 0) ]
+      (vt-set-top state (scr set finput (Tui.edit scr.finput ev)))
+    ]
+  ] [
+    def n (size (vt-visible scr.items scr.filter))
+    case ev.key [
+      "up"    [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor sub 1) n)) ]
+      "down"  [ drop vt-set-top state (scr set cursor (vt-clamp (scr.cursor add 1) n)) ]
+      "/"     [ drop vt-set-top state (scr set filtering true) ]
+      "a"     [ drop vt-with-auth state {run: vt-open-add/r} ]
+      "enter" [ drop
+        if (n eq 0) [ state ] [
+          vt-push state (vt-detail ((vt-visible scr.items scr.filter) get scr.cursor).name) ] ]
+      state
+    ]
+  ]
+]]
+
+# --- the secret detail page ----------------------------------------------
+
+def vt-do-reveal fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  do [ def v (Vault.reveal scr.name)
+       vt-set-top state (scr set revealed v) ]
+  error [ dot message  vt-fail state ]
+]]
+
+def vt-copy-recipe fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((size scr.recipes) eq 0) [ state ] [
+    def rec (scr.recipes get scr.rsel)
+    do [ def label (Vault.copy rec.cmd)
+         vt-status-line state (join "" ["copied via " label]) false ]
+    error [ dot message  vt-fail state ]
+  ]
+]]
+
+def vt-open-rotate fn [[state:Map] [Map] [
+  def alias (vt-top state).name
+  def fields [ (vt-field "value" "new secret value" true "") ]
+  vt-push state (vt-form "rotate" (join "" ["Rotate " alias]) fields {run: vt-rotate-submit/r} alias)
+]]
+
+def vt-rotate-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def value (vt-fval scr 0)
+  if (value eq "") [ vt-form-fail state "value is required" ] [
+    do [ Vault.rotate {alias: (scr.arg)  value: value}
+         vt-after-op state (join "" ["rotated " scr.arg]) ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-open-rename fn [[state:Map] [Map] [
+  def alias (vt-top state).name
+  def fields [ (vt-field "to" "new alias" false "") ]
+  vt-push state (vt-form "rename" (join "" ["Rename " alias]) fields {run: vt-rename-submit/r} alias)
+]]
+
+def vt-rename-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def to (vt-fval scr 0)
+  if (to eq "") [ vt-form-fail state "new alias is required" ] [
+    do [ Vault.rename {from: (scr.arg)  to: to}
+         # the detail beneath names the OLD alias — retarget it
+         def popped (vt-pop state)
+         def st2 (vt-set-top popped (vt-detail to))
+         vt-status-line (vt-load-vault st2) (join "" ["renamed to " to]) false ]
+    error [ dot message  vt-form-fail state ]
+  ]
+]]
+
+def vt-open-expiry fn [[state:Map] [Map] [
+  def alias (vt-top state).name
+  def fields [ (vt-field "when" "expiry (empty clears)" false "") ]
+  vt-push state (vt-form "expiry" (join "" ["Expiry for " alias]) fields {run: vt-expiry-submit/r} alias)
+]]
+
+def vt-expiry-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def when (vt-fval scr 0)
+  do [ (if (when eq "")
+        [ Vault.clear-expiry scr.arg ]
+        [ Vault.set-expiry scr.arg when ])
+       vt-after-op state "expiry updated" ]
+  error [ dot message  vt-form-fail state ]
+]]
+
+def vt-open-delete fn [[state:Map] [Map] [
+  def alias (vt-top state).name
+  def fields [ (vt-field "confirm" (join "" ["type " alias " to confirm"]) false "") ]
+  vt-push state (vt-form "delete" (join "" ["Delete " alias]) fields {run: vt-delete-submit/r} alias)
+]]
+
+def vt-delete-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  if ((vt-fval scr 0) eq scr.arg) [
+    do [ Vault.remove scr.arg
+         # pop the detail as well — its alias is gone
+         vt-after-op (vt-pop state) (join "" ["removed " scr.arg]) ]
+    error [ dot message  vt-form-fail state ]
+  ] [ vt-form-fail state "confirmation does not match" ]
+]]
+
+def vt-open-grant fn [[state:Map] [Map] [
+  def alias (vt-top state).name
+  def fields [ (vt-field "agent" "agent (optional)" false "")
+               (vt-field "ttl" "ttl (e.g. 2h, optional)" false "") ]
+  vt-push state (vt-form "grant" (join "" ["Grant for " alias]) fields {run: vt-grant-submit/r} alias)
+]]
+
+def vt-grant-submit fn [[state:Map] [Map] [
+  def scr (vt-top state)
+  def agent (vt-fval scr 0)
+  def ttl (vt-fval scr 1)
+  do [ def out (Vault.grant {alias: (scr.arg)  agent: agent  ttl: ttl})
+       def st2 (vt-reload-top (vt-load-vault (vt-pop state)))
+       vt-push (vt-status-line st2 "capability granted — token shown once" false)
+               {kind: "pager"  name: "granted"  title: "Granted"  text: out  scroll: 0} ]
+  error [ dot message  vt-form-fail state ]
+]]
+
+def vt-detail-key fn [[state:Map ev:Map] [Map] [
+  def scr (vt-top state)
+  def n (size scr.recipes)
+  case ev.key [
+    "up"   [ drop vt-set-top state (scr set rsel (vt-clamp (scr.rsel sub 1) n)) ]
+    "down" [ drop vt-set-top state (scr set rsel (vt-clamp (scr.rsel add 1) n)) ]
+    "c"    [ drop vt-copy-recipe state ]
+    "r"    [ drop
+      if ((scr.revealed) eq None)
+        [ vt-with-auth state {run: vt-do-reveal/r} ]
+        [ vt-set-top state (scr set revealed None) ] ]
+    "R"    [ drop vt-with-auth state {run: vt-open-rotate/r} ]
+    "m"    [ drop vt-with-auth state {run: vt-open-rename/r} ]
+    "e"    [ drop vt-with-auth state {run: vt-open-expiry/r} ]
+    "D"    [ drop vt-with-auth state {run: vt-open-delete/r} ]
+    "g"    [ drop vt-with-auth state {run: vt-open-grant/r} ]
+    state
+  ]
+]]
+
+# --- update: routing (§4.3) ----------------------------------------------
 
 def vt-menu-key fn [[state:Map ev:Map] [Map] [
   def scr (vt-top state)
   case ev.key [
     "up"    [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel sub 1) (size scr.items))) ]
     "down"  [ drop vt-set-top state (scr set sel (vt-clamp (scr.sel add 1) (size scr.items))) ]
-    "enter" [ drop vt-push state (vt-status-pager (scr.items get scr.sel)) ]
+    "enter" [ drop
+      case (scr.items get scr.sel) [
+        "Secrets" [ drop vt-push state (vt-secrets) ]
+        (vt-push state (vt-status-pager (scr.items get scr.sel)))
+      ] ]
     state
   ]
 ]]
@@ -131,20 +479,38 @@ def vt-pager-key fn [[state:Map ev:Map] [Map] [
 
 def vt-screen-key fn [[state:Map ev:Map] [Map] [
   case (vt-top state).kind [
-    "menu"  [ drop vt-menu-key state ev ]
-    "pager" [ drop vt-pager-key state ev ]
+    "menu"   [ drop vt-menu-key state ev ]
+    "pager"  [ drop vt-pager-key state ev ]
+    "table"  [ drop vt-table-key state ev ]
+    "detail" [ drop vt-detail-key state ev ]
+    "form"   [ drop vt-form-key state ev ]
     state
+  ]
+]]
+
+# vt-captures: a form (always) and a filtering table own the keyboard
+def vt-captures fn [[state:Map] [Boolean] [
+  def scr (vt-top state)
+  if (scr.kind eq "form") [ true ] [
+    if (scr.kind eq "table") [ scr.filtering ] [ false ]
   ]
 ]]
 
 def vt-global-key fn [[state:Map ev:Map] [Map] [
   # multi-arg calls in a case DEFAULT slot must be parenthesized — the
   # case machinery's own values sit on the stack and an open call would
-  # collect them as arguments
-  case ev.key [
-    "q"   [ drop if ((size state.screens) lte 1) [ Tui.quit state ] [ vt-pop state ] ]
-    "esc" [ drop vt-pop state ]
-    (vt-screen-key state ev)
+  # collect them as arguments (gap G9, VAULT-TUI-PORT.0.md §2.4)
+  if (vt-captures state) [ vt-screen-key state ev ] [
+    case ev.key [
+      "q"   [ drop if ((size state.screens) lte 1) [ Tui.quit state ] [ vt-pop state ] ]
+      "esc" [ drop
+        def scr (vt-top state)
+        if (if (scr.kind eq "table") [(scr.filter eq "") not] [false])
+          [ vt-set-top state ((scr set filter "")
+              set finput (Tui.input "" {placeholder: "filter aliases"})) ]
+          [ vt-pop state ] ]
+      (vt-screen-key state ev)
+    ]
   ]
 ]]
 
@@ -171,19 +537,63 @@ def vt-crumb fn [[state:Map] [String] [
   join " › " (each [ dot title ] state.screens)
 ]]
 
+def vt-detail-lines fn [[scr:Map] [String] [
+  def m scr.meta
+  def val (if ((scr.revealed) eq None) [ "●●●●●●  (r reveals)" ] [ scr.revealed ])
+  join "\n" [
+    (join "" ["alias:      " (vt-str m.name)])
+    (join "" ["provider:   " (vt-str m.provider)])
+    (join "" ["namespace:  " (vt-str m.namespace)])
+    (join "" ["created:    " (vt-str m.created-at)])
+    (join "" ["updated:    " (vt-str m.updated-at)])
+    (join "" ["expires:    " (vt-str m.expires-at)])
+    (join "" ["value:      " val])
+  ]
+]]
+
+def vt-field-view fn [[f:Map] [Map] [
+  Tui.rows [ (Tui.text f.label {style: {fg: "grey"}  size: 1})
+             ((f.input) set size 1) ]
+    {size: 2}
+]]
+
 def vt-body fn [[state:Map] [Map] [
   def scr (vt-top state)
   case scr.kind [
     "menu"  [ drop Tui.list-view scr.items {cursor: scr.sel} ]
     "pager" [ drop Tui.viewport (Tui.text scr.text {wrap: "wrap"}) {offset: [0 scr.scroll]} ]
+    "table" [ drop
+      def items (vt-visible scr.items scr.filter)
+      def tbl (Tui.table (vt-secret-cols) (each [ vt-alias-row ] items) {cursor: scr.cursor})
+      if scr.filtering [
+        Tui.rows [ ((scr.finput set focus true) set size 1)
+                   (tbl set size {flex: 1}) ]
+      ] [ tbl ] ]
+    "detail" [ drop
+      def hdr (Tui.text (vt-detail-lines scr) {wrap: "wrap"  size: 7})
+      def recs (Tui.box (Tui.list-view (each [ dot cmd ] scr.recipes) {cursor: scr.rsel})
+                        {title: "exec recipes (c copies)"  border: "round"  size: {flex: 1}})
+      Tui.rows [ hdr recs ] ]
+    "form"  [ drop
+      def body (Tui.rows (flatten [
+        (each [ vt-field-view ] scr.fields)
+        [ (Tui.text scr.error {style: {fg: "red"}  size: 1}) ]
+      ]))
+      Tui.box body {title: scr.title  border: "round"} ]
     (Tui.text "" {})
   ]
 ]]
 
 def vt-footer fn [[state:Map] [String] [
-  case (vt-top state).kind [
-    "menu"  [ drop "↑/↓ move · enter open · q quit" ]
-    "pager" [ drop "↑/↓ scroll · esc back · q back" ]
+  def scr (vt-top state)
+  case scr.kind [
+    "menu"   [ drop "↑/↓ move · enter open · q quit" ]
+    "pager"  [ drop "↑/↓ scroll · esc back · q back" ]
+    "table"  [ drop
+      if scr.filtering [ "type to filter · enter apply · esc cancel" ]
+        [ "↑/↓ move · enter detail · a add · / filter · esc back" ] ]
+    "detail" [ drop "r reveal/hide · c copy · R rotate · m rename · e expiry · g grant · D delete · esc back" ]
+    "form"   [ drop "tab/↑/↓ fields · enter submit · esc cancel" ]
     ""
   ]
 ]]
@@ -209,7 +619,8 @@ def vault-app fn [[opts:Map] [Map] [
                     theme: "auto"  pal: (vt-pal dark)
                     vault: {ok: false}
                     screens: [ (vt-home) ]
-                    status: {text: ""  err: false} }
+                    status: {text: ""  err: false}
+                    add-defaults: {provider: ""  namespace: ""  expiry: ""} }
             update: vt-update/r
             view: vt-view/r }
   out
