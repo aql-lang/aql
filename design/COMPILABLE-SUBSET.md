@@ -137,6 +137,21 @@ the interpreter then owns the whole program:
   value preceding residual args** (auto-dispatch boundary), and any operand
   shape beyond the lowerer's stack discipline (`layoutOperands` refusals).
 
+**Pinned over-refusals** — sound (fallback parity holds) but undesired,
+each carried by a flip-ready test that names the fix:
+
+- A **Map-typed local consumed by a user call inside an `if` branch**
+  loses its operand seat for any later user call after the join and
+  refuses "fn call operand of unknown provenance" — even with identical
+  branches, and with a single consuming branch. The boundary is pinned
+  three ways (scalar locals survive the same shape; the same map local
+  survives without the `if`; and without any post-join reuse):
+  `lang/go/bytecode_ifbranch_operand_test.go`, reduced from the alice
+  viewer's render fn (voxgig-aql/alice, dx-report 2026-07-21 "bytecode
+  status"). The fix is reseating container operands across branch-body
+  consumption; when it lands, move the refusal cases into the test's
+  compiling table.
+
 ---
 
 ## 6. The execution-environment seams
