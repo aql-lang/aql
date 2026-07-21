@@ -876,7 +876,12 @@ def vt-pop-to-root fn [[state:Map] [Map] [
 ]]
 
 def vt-palette-closed fn [[] [Map] [
-  { open: false  input: (Tui.input "" {placeholder: ":command"}) }
+  # def-bind before returning: a bare computed-map TAIL is a deferred
+  # residual the bytecode compiler refuses ("unknown provenance"); a map
+  # CONSUMED in-frame (bound + returned) records an OpMakeMap and
+  # compiles (VAULT-TUI-PORT.0.md §2.4, the same G8/G11 idiom)
+  def m { open: false  input: (Tui.input "" {placeholder: ":command"}) }
+  m
 ]]
 
 def vt-nav-pager fn [[state:Map name:String title:String] [Map] [
