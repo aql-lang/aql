@@ -7,7 +7,7 @@ and gets the things every CLI runtime owes its programs: arguments, an
 argument-parsing convention, environment access, exit codes, stream
 discipline, signals, and (policy-gated) subprocesses.
 
-The motivating client is the `av` file viewer (voxgig-aql/alice
+The motivating client is the `alice` file viewer (voxgig-aql/alice
 `viewer/`), the first substantial end-user program written in AQL. Its
 2026-07-21 DX round found the runtime strong exactly where AQL has
 invested — packaging (`aql build`/`pack`/`install`), per-invocation
@@ -416,13 +416,13 @@ C0 (≈60 lines + tests, one day including the gauntlet).
   color recipe. *Unblocks: filters and pipelines.*
 - **C3 — `aql:cli`** (M, AQL-side): parse/usage/main, flags tier;
   `module-cli.tsv`; HOWTO chapter. *Unblocks: conventional UX;
-  `av` migrates its launcher as the reference client.*
+  `alice` migrates its launcher as the reference client.*
 - **C4 — signals** (M): subscription word + mailbox delivery + driver
   integration (suspend/restore default handling); `Tui.run` apps get
   clean SIGTERM. *Unblocks: services and long-running tools.*
 - **C5 — `aql:proc`** (L): ProcOps seam + fake, run/spawn/write/kill,
   `proc.exec` policy inversion, streaming into mailboxes. *Unblocks:
-  orchestration tools; also the `av` clipboard-yank deviation.*
+  orchestration tools; also the `alice` clipboard-yank deviation.*
 - **C6 — `aql:cli` subcommands** (S, AQL-side): nested specs,
   per-command usage. *Unblocks: multi-verb tools.*
 
