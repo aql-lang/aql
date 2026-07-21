@@ -267,6 +267,37 @@ func TestS6aTryRecordPolyQuotedNonGetDeclines(t *testing.T) {
 	}
 }
 
+// TestS6aTryRecordPolyQuotedDelAdmits is the POSITIVE twin of the decline
+// test above: `del` sits in the get/getr/set exemption family (one QuoteArg
+// — the inert Atom key — baked as a const operand; an unshadowable builtin
+// mutator), so an identically-shaped sig REGISTERED UNDER THE NAME `del`
+// must pass the quoted-operand gate and record the poly. The pairing pins
+// the admitted arm the same way the decline test pins the refused arm — a
+// regression that drops del from the exemption fails here, not silently in
+// a compiled corpus somewhere.
+func TestS6aTryRecordPolyQuotedDelAdmits(t *testing.T) {
+	r := newTestRegistry(t)
+	armEmit(r)
+	r.RegisterNativeFunc(NativeFunc{
+		Name: "del",
+		Signatures: []Signature{{
+			Args:      []*Type{TAtom},
+			QuoteArgs: map[int]bool{0: true},
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+				return nil, nil
+			}),
+			Returns: []*Type{}, BarrierPos: -1,
+		}},
+	})
+	if err := r.Err(); err != nil {
+		t.Fatalf("registration: %v", err)
+	}
+	sig := &r.Lookup("del").Signatures[0]
+	if !tryRecordPoly(r, "del", sig, []Value{NewAtom("k")}, []Value{}, SrcPos{}, true, nil, false, nil) {
+		t.Error("del carries the get/getr/set quoted-operand exemption and must poly")
+	}
+}
+
 func TestS6aTryRecordPolyFnValuedArgDeclines(t *testing.T) {
 	r := newTestRegistry(t)
 	armEmit(r)

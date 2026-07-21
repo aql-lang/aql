@@ -1520,9 +1520,6 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if len(sig.QuoteArgs) > 0 && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" {
 		return false
 	}
-	if len(sig.QuoteArgs) > 0 {
-		println("INSTRUMENT-TRYRECORDPOLY-QUOTED-ADMIT word=" + word)
-	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
 	// (apply/usurp, an atom-keyed method get): the value would need dynamic
 	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.

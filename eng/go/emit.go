@@ -4310,9 +4310,6 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 // the enclosing loop's lowering turns these into jumps). It returns false for an
 // ordinary lowerable call, which RecordCall then records.
 func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) bool {
-	if sig != nil && hasUncoveredQuoteArg(sig) && word == "del" {
-		println("INSTRUMENT-EMIT-DEL-QUOTED-SEEN")
-	}
 	shuffleOK := es.dynamicStackShuffleOK(word, sig)
 	switch {
 	case sig == nil:
