@@ -85,10 +85,13 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	var source string
 	var hasSource bool
+	var scriptArgs []string
 
 	if *evalExpr != "" {
 		source = *evalExpr
 		hasSource = true
+		// -e mode: every positional is a script argument (IO.args).
+		scriptArgs = fs.Args()
 	} else if fs.NArg() > 0 {
 		filename := pathutil.Expand(fs.Arg(0))
 		data, err := os.ReadFile(filename)
@@ -98,6 +101,8 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		source = string(data)
 		hasSource = true
+		// Positionals after the script path reach the program as IO.args.
+		scriptArgs = fs.Args()[1:]
 	}
 
 	if hasSource {
@@ -121,7 +126,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol}
+		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs}
 		if *optionsStr != "" {
 			m, perr := lang.ParseOptions(*optionsStr)
 			if perr != nil {

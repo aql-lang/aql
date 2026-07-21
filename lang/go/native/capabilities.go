@@ -21,6 +21,7 @@ const (
 	CapClock          = "engine.clock"           // capabilities.Clock (the time source)
 	CapLogSinks       = "engine.logsinks"        // *LogSinkRegistry (aql:log fan-out sinks)
 	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
+	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
 )
 
 // EffectiveDebugOps returns the installed DebugOps capability, or (nil,
@@ -199,6 +200,26 @@ func SetHostExtensions(r *Registry, exts map[string]string) {
 		return
 	}
 	_ = r.Capabilities.Set(CapExtensions, exts)
+}
+
+// HostScriptArgs returns the script's positional arguments installed on
+// r (everything after the script path on the CLI), or nil when the host
+// set none — IO.args renders nil and empty identically, as an empty
+// list.
+func HostScriptArgs(r *Registry) []string {
+	args, _, _ := eng.Cap[[]string](r, CapScriptArgs)
+	return args
+}
+
+// SetHostScriptArgs installs the script's positional arguments. The CLI
+// calls it with everything after the script path; embedded hosts may
+// set whatever invocation vector fits. Nil clears the slot.
+func SetHostScriptArgs(r *Registry, args []string) {
+	if args == nil {
+		_, _ = r.Capabilities.Delete(CapScriptArgs)
+		return
+	}
+	_ = r.Capabilities.Set(CapScriptArgs, args)
 }
 
 // HostSQLite returns the SQLite store installed on r, or nil if none.
