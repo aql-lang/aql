@@ -4310,6 +4310,9 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 // the enclosing loop's lowering turns these into jumps). It returns false for an
 // ordinary lowerable call, which RecordCall then records.
 func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) bool {
+	if sig != nil && hasUncoveredQuoteArg(sig) && word == "del" {
+		println("INSTRUMENT-EMIT-DEL-QUOTED-SEEN")
+	}
 	shuffleOK := es.dynamicStackShuffleOK(word, sig)
 	switch {
 	case sig == nil:
@@ -4376,10 +4379,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
-		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
+		// re-steps. get/getr/set/del are exempt — plain accessors/mutators whose
 		// quoted key is an inert Atom const (its fn-valued module-resolution
 		// case is elided above; a dynamic or fn-valued result still refuses via
 		// the later cases). For `set` the quoted key is the atom field name of
@@ -4388,6 +4391,8 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
 		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
 		// so the word-name match admits only the real mutator, never a usurp.
+		// `del` is `set`'s inverse (atom-keyed map-entry removal, copy-return
+		// on Map / in-place on FlexMap) and inherits the same argument verbatim.
 		// quoteInertOK is the principled extension of that exemption to a MODULE
 		// INNER NATIVE whose quoted operands are inert Atom consts — the query
 		// DSL's table names (`Query.from people`, `Query.join visits`): the inner

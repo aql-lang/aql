@@ -263,7 +263,7 @@ func TestS6aTryRecordPolyQuotedNonGetDeclines(t *testing.T) {
 	}
 	sig := &r.Lookup("s6apolyq").Signatures[0]
 	if tryRecordPoly(r, "s6apolyq", sig, []Value{NewAtom("k")}, []Value{}, SrcPos{}, true, nil, false, nil) {
-		t.Error("a quoted-operand word other than get/getr/set must not poly")
+		t.Error("a quoted-operand word other than get/getr/set/del must not poly")
 	}
 }
 
