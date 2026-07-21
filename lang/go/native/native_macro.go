@@ -519,11 +519,20 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 					es.MarkUncompilable("mini " + kind + ": " + why)
 				}
 			}
-			switch {
-			case func() bool { _, serr := args[1].AsConcreteString(); return serr != nil }():
-				refuse("compile hook needs a concrete src at compile time")
-			case !IsConcrete(opts):
-				refuse("compile hook needs concrete opts at compile time")
+			// A TRANSDUCER-FAITHFUL kind (re) does not refuse a non-concrete
+			// src/opts: its hook and the standard transducer call share the same
+			// runtime (miniCompiledPattern + reMatchResult), so a dynamic-src
+			// invocation records the standard `lang_<kind>` call below and runs
+			// identically. Only a kind whose hook bakes a src-specific plan (the
+			// test `bf` uppercaser) refuses, since baking the transducer instead
+			// would drop the hook's semantics.
+			if !miniHookFaithful(r, kind) {
+				switch {
+				case func() bool { _, serr := args[1].AsConcreteString(); return serr != nil }():
+					refuse("compile hook needs a concrete src at compile time")
+				case !IsConcrete(opts):
+					refuse("compile hook needs concrete opts at compile time")
+				}
 			}
 		}
 		if hasGo {

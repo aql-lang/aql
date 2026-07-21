@@ -18,6 +18,10 @@ func TestMiniCompileNoStateArms(t *testing.T) {
 	if h, ok := miniGoHook(r, "re"); ok || h != nil {
 		t.Fatalf("miniGoHook with no state = %v/%v, want nil/false", h, ok)
 	}
+	// miniHookFaithful with no state → false (the s == nil arm).
+	if miniHookFaithful(r, "re") {
+		t.Fatal("miniHookFaithful with no state should be false")
+	}
 	// Positive pair: after registering, the hook is discoverable and state
 	// is created.
 	called := false
@@ -31,6 +35,14 @@ func TestMiniCompileNoStateArms(t *testing.T) {
 	}
 	if _, err := h("x", NewTypeLiteral(TNone), r); err != nil || !called {
 		t.Fatalf("hook call = %v, called=%v", err, called)
+	}
+	// With state now created, a hook is faithful only after it is marked.
+	if miniHookFaithful(r, "re") {
+		t.Fatal("hook should not be faithful until marked")
+	}
+	MarkMiniCompileHookFaithful(r, "re")
+	if !miniHookFaithful(r, "re") {
+		t.Fatal("a marked hook should be faithful")
 	}
 }
 

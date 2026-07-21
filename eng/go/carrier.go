@@ -1459,10 +1459,18 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 // dispatch tape state it recovered from; nil keeps the sound defer.
 func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos, disjunctStraddle bool, ownerReg *Registry, dynamicRecovery bool, noMatch *PolyNoMatchSpec) bool {
 	es := r.Check.Recorder()
-	// 0 outputs (a side-effect word like the test framework's `test-record`) or
-	// 1 output (the common get/size/is shape). A multi-result poly is beyond
-	// this path — the residual layout would need per-result seating.
-	if !es.active() || sig == nil || len(outs) > 1 {
+	// Any result count records. Multi-result seating rides the same per-index
+	// registration RecordCall's generic path uses (setProducedAt), and the VM
+	// enforces the recorded result-count claim (PolyRef.NOut) — so `pop`'s
+	// [remaining, popped] pair lands as faithfully as a 1-output get.
+	if !es.active() || sig == nil {
+		return false
+	}
+	// A pure stack-shuffle word (dup/swap/over/…) is owned by the shuffle-
+	// elision path (recordShuffleElided): it seats residual values by identity,
+	// and a poly event would mint fresh result IDs that break that residual
+	// identity. Decline here so the shuffle path keeps them.
+	if ems, ok := es.(*EmitState); ok && ems.dynamicStackShuffleOK(word, sig) {
 		return false
 	}
 	// matchReg is the registry whose signatures the VM re-matches over: a module
@@ -1511,13 +1519,13 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
-	// get/getr/set carry exactly ONE QuoteArg — the inert Atom key — which bakes
-	// as a const operand; the rest of the operands resolve normally. set's
-	// receiver mutation (Store/Object/Array) and copy-return (Map/List) are
-	// faithful under runtime re-match: callPoly runs the same handler over the
-	// same concrete receiver the interpreter would. Other quoted-operand words
-	// (usurp / ref-family meta) re-step tokens and stay out.
-	if len(sig.QuoteArgs) > 0 && !isGetWord(word) && !isGetrWord(word) && word != "set" {
+	// get/getr/set/del carry exactly ONE QuoteArg — the inert Atom key — which
+	// bakes as a const operand; the rest of the operands resolve normally. The
+	// receiver mutation (set: Store/Object/Array; del: FlexMap) and copy-return
+	// (Map/List) are faithful under runtime re-match: callPoly runs the same
+	// handler over the same concrete receiver the interpreter would. Other
+	// quoted-operand words (usurp / ref-family meta) re-step tokens and stay out.
+	if len(sig.QuoteArgs) > 0 && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
@@ -3715,12 +3723,25 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 // produces carriers.
 type GuardFactInfo struct {
 	Toks []Value
+	// Prev is the payload the group actually reduced to (a BoolPayload for a
+	// statically-decided cond), preserved so LiteralCondValue can still read
+	// the literal truth value through the wrapper. Without it, wrapping a
+	// decided cond in a GuardFactInfo carrier hid its value from the
+	// unreachable-branch analysis.
+	Prev Payload
 }
 
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
 	Type *Type
+	// ThenOnly marks a clause whose fact is sound only in the THEN branch —
+	// a predicate-derived fact (`if (param is T) …` in the predicate's own
+	// body, surfaced via a 2-token `pred x` guard). The complement (else)
+	// carries no information for these, so ApplyComplementNarrowing skips
+	// them; a direct `x is T` clause narrows both arms and stays ThenOnly
+	// false.
+	ThenOnly bool
 }
 
 // extractGuardClauses walks a condition list looking for triplets
@@ -3745,8 +3766,22 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		}
 		elems = list.Slice()
 	}
-	if len(elems) < 3 {
+	if len(elems) < 2 {
 		return nil
+	}
+	// A compound boolean condition (`(a is Map) or (b is Map)`, `not (x is T)`)
+	// does not license per-clause narrowing: under a disjunction either clause
+	// could be the true one, and a negation inverts the arm each fact holds in.
+	// Bail entirely — no component clause is sound — rather than narrow one.
+	for _, e := range elems {
+		if e.Parent.Equal(TWord) {
+			if w, werr := AsWord(e); werr == nil {
+				switch w.Name {
+				case "or", "nor", "xor", "xnor", "not":
+					return nil
+				}
+			}
+		}
 	}
 	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
@@ -3795,6 +3830,23 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		}
 		out = append(out, GuardClause{Name: wx.Name, Type: guardType})
 	}
+	// 2-token predicate guard: `if (is-map x) [then] [else]`. A user predicate
+	// whose body is itself an `x is T` test (predicateImpliedType) implies its
+	// argument is T in the THEN branch — but ONLY there (ThenOnly): a false
+	// return says nothing about which non-T shape x has. The variable must be a
+	// live binding; the predicate must reduce to a single `param is T` fact.
+	if len(out) == 0 && len(elems) == 2 &&
+		elems[0].Parent.Equal(TWord) && elems[1].Parent.Equal(TWord) {
+		wp, perr := AsWord(elems[0])
+		wx, xerr := AsWord(elems[1])
+		if perr == nil && xerr == nil {
+			if _, bound := r.Defs.Top(wx.Name); bound {
+				if t, tok := predicateImpliedType(r, wp.Name); tok {
+					out = append(out, GuardClause{Name: wx.Name, Type: t, ThenOnly: true})
+				}
+			}
+		}
+	}
 	return out
 }
 
@@ -3821,6 +3873,15 @@ func LiteralCondValue(condList Value) (bool, bool) {
 		return false, false
 	}
 	only := list.Get(0)
+	// A pre-evaluated paren cond arrives wrapped in a GuardFactInfo carrier
+	// (the A3 guard-fact attach); its Prev payload holds the value the group
+	// actually reduced to. Read a decided Boolean straight through the wrapper
+	// so the unreachable-branch analysis still fires.
+	if gf, gok := only.Data.(GuardFactInfo); gok {
+		if bp, bok := gf.Prev.(BoolPayload); bok {
+			return bp.B, true
+		}
+	}
 	// Bare true/false word (parser emits these as Word values that
 	// resolve to booleans in engine.stepWord; in check mode the
 	// words stay as Words until the branch runs).
@@ -3857,6 +3918,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 	if len(clauses) == 0 {
 		return noop
 	}
+	deadArm := false
 	for _, c := range clauses {
 		narrowed := NewCarrier(c.Type)
 		// is-narrowing is a static-only refinement: at runtime the binding is
@@ -3869,6 +3931,31 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		// binding, so no value-passing half is needed (unlike a closure capture).
 		if cur, ok := r.Defs.Top(c.Name); ok {
 			narrowed.ID = cur.ID
+			// MEET the guard type with the binding's current (abstract) carrier
+			// rather than overwriting it with a bare NewCarrier(c.Type): an
+			// incompatible pair collapses to Never — a DEAD then-arm the runtime
+			// never runs — and a compound meet keeps its payload. A concrete
+			// binding is a per-shape analysis artifact (see the redundant_guard
+			// note) whose lattice tag under-approximates predicate membership, so
+			// it keeps the plain NewCarrier form. A dynamic binding stays dynamic
+			// through the meet so the narrowed value still discharges downstream
+			// modality checks.
+			if cur.Carrier && !IsConcrete(cur) && c.Type != nil {
+				meet := TandValues(cur, NewTypeLiteral(c.Type))
+				if isNeverShape(meet) {
+					deadArm = true
+				} else if IsBareTypeNode(meet) {
+					narrowed = NewCarrier(ValueType(meet))
+					narrowed.ID = cur.ID
+				} else {
+					meet.Carrier = true
+					narrowed = meet
+					narrowed.ID = cur.ID
+				}
+				if cur.Dynamic && !deadArm {
+					narrowed.Dynamic = true
+				}
+			}
 			// Advisory (non-gating): the binding's STATIC type already
 			// entails the guard, so the check cannot fail — the residue the
 			// local-reasoning report calls the misleading defensive check
@@ -3908,7 +3995,15 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 		}
 		r.Defs.Push(c.Name, narrowed)
 	}
+	if deadArm {
+		// The guard can never hold for this arg shape — the then-arm is dead.
+		// Suppress its (unreachable) dispatch errors; the runtime never runs it.
+		r.Check.SuppressBodyErrors++
+	}
 	return func() {
+		if deadArm {
+			r.Check.SuppressBodyErrors--
+		}
 		for _, c := range clauses {
 			r.Defs.Pop(c.Name)
 		}
@@ -3927,14 +4022,38 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		return noop
 	}
 	clauses := extractGuardClauses(r, condList)
-	if len(clauses) == 0 {
+	// Else-branch narrowing (and its dead-arm suppression) is sound only when
+	// the extracted clauses COMPLETELY characterise the condition — i.e. it is a
+	// single `x is T` guard. For a conjunction `A and B`, the else path is
+	// `notA or notB`: neither clause can be subtracted (either could be the
+	// false one), and one exhaustive clause does NOT make the else unreachable
+	// (it stays reachable whenever the other clause fails). So restrict to the
+	// single-clause case and leave a conjunction's else untouched. (In practice
+	// a compound condition's inner guards are captured as opaque ParenExpr
+	// values, so extractGuardClauses already returns 0 clauses for them; this
+	// guard makes the single-guard assumption explicit and sound-by-construction
+	// rather than reliant on that representation.)
+	if len(clauses) != 1 {
 		return noop
 	}
 	type applied struct{ name string }
 	var pushed []applied
+	deadArm := false
 	for _, c := range clauses {
+		// A ThenOnly clause (a predicate-derived fact) carries no else-branch
+		// information: a false predicate says nothing about which non-T shape x
+		// has, so there is nothing to subtract.
+		if c.ThenOnly {
+			continue
+		}
 		cur, ok := r.Defs.Top(c.Name)
 		if !ok {
+			continue
+		}
+		// A DYNAMIC binding's else path stays gradual: the guard failed at
+		// runtime, but the binding's static type is Any (or a dynamic carrier),
+		// so subtracting T would wrongly forbid every later use. Leave it as-is.
+		if cur.Dynamic {
 			continue
 		}
 		// Else-branch narrowing: x had type `cur`; the guard `x is T`
@@ -3949,8 +4068,12 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		complement := NegateType(NewTypeLiteral(c.Type))
 		narrowed := TandValues(cur, complement)
 		if isNeverShape(narrowed) {
-			// Else branch is unreachable for x — leave the binding as-is
-			// rather than push a Never carrier that fails every later use.
+			// Else branch is unreachable for x — the guard held for every value
+			// of x's type. Mark the arm dead (so its unreachable dispatch errors
+			// are suppressed) and leave the binding as-is rather than push a
+			// Never carrier that fails every later use. Sound because this is the
+			// sole clause of the condition (single-guard gate above).
+			deadArm = true
 			continue
 		}
 		// Normalise to carrier form: a single surviving type becomes a
@@ -3976,10 +4099,18 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		r.Defs.Push(c.Name, narrowed)
 		pushed = append(pushed, applied{name: c.Name})
 	}
-	if len(pushed) == 0 {
+	if deadArm {
+		// The guard held for every value of x's type — the else-arm is dead.
+		// Suppress its (unreachable) dispatch errors; the runtime never runs it.
+		r.Check.SuppressBodyErrors++
+	}
+	if len(pushed) == 0 && !deadArm {
 		return noop
 	}
 	return func() {
+		if deadArm {
+			r.Check.SuppressBodyErrors--
+		}
 		for _, p := range pushed {
 			r.Defs.Pop(p.name)
 		}
@@ -4290,6 +4421,29 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		if n := len(r.Check.FnNameStack); n > 0 {
 			r.Check.recordCallEdge(r.Check.FnNameStack[n-1], name)
 		}
+	}
+	// A FORWARD-referenced fn name that isn't defined yet leaks into this
+	// per-call-site analysis as a concrete Undefined Atom argument. Gradualize
+	// it to a dynamic Any carrier at the analysis boundary — copy-on-write so
+	// the caller's slice is untouched — and note the def-read so the
+	// dynamic-scope undefined-word rescue still attributes it. Otherwise the
+	// phantom concrete value drives dispatch and memo keying as if it were a
+	// real Atom, a false no_signature on the forward-ref call. Mirrors the
+	// dispatch-arg gradualization in engine.go's match loop.
+	sanitized := false
+	for i := range args {
+		if !args[i].Undefined {
+			continue
+		}
+		if !sanitized {
+			args = append([]Value(nil), args...)
+			sanitized = true
+		}
+		c := NewDynamicCarrier(TAny)
+		if a, aerr := AsAtom(args[i]); aerr == nil && a != "" {
+			r.Check.Recorder().NoteDefRead(c.ID, a)
+		}
+		args[i] = WithPos(c, args[i])
 	}
 	key := FnAnalysisKey(r.AnalysisScopeID(), name, args, captures, body)
 
