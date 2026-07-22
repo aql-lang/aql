@@ -158,6 +158,13 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: tMini}, {Type: native.TMap}, {Type: native.TString}},
 	}, []*native.Type{native.TMap}, nil, subReg))
 	native.RegisterMiniCompileGoHook(parent, "re", miniReCompileFor(tMini))
+	// The `re` hook is transducer-faithful: whether the pattern compiles at
+	// build time (the hook) or dispatches the standard MiniLang.lang_re call
+	// (the transducer), both share miniCompiledPattern + reMatchResult — the
+	// same runtime. So a DYNAMIC-src `mini re (pat) {}` records the standard
+	// call instead of refusing. (`bf` and other plan-baking kinds stay
+	// unmarked — their hook semantics can't be reproduced by the transducer.)
+	native.MarkMiniCompileHookFaithful(parent, "re")
 	mintMiniFnType("re")
 
 	// ---- kind: bf — brainfuck ------------------------------------------

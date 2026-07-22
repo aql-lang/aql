@@ -46,6 +46,8 @@ var moduleCatalog = []ModuleInfo{
 	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
 	{"repl", "A socket REPL server and client, written in AQL over aql:net."},
 	{"fmt", "Source formatting: pretty-print AQL into canonical layout (shared with the `aql fmt` CLI)."},
+	{"vault", "Bridge to the host's secret vault: status, secrets, capabilities, passwords, maintenance, multi-vault — behind a host-injected backend."},
+	{"vault-tui", "The interactive vault TUI, written in AQL over aql:tui + aql:vault (the `aql vault -i --aql` app)."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

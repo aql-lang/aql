@@ -2045,6 +2045,7 @@ word — `size` subsumes it.
 | `getr` / `!.` | Strict lookup (errors if missing) | `{x:1} !. y` returns `error` |
 | `has` | Key/index presence as a Boolean — true when **bound**, even to `none`; total (never raises, `none` parent answers `false`) | `{a:None} has a` returns `true`; `{a:1} has b` returns `false`; `[10,20] has 1` returns `true` |
 | `set` | Set a key — in place on Store, class instances, and FlexMap / FlexList (see [Flex nodes](#flex-nodes--flexmap-and-flexlist)); copy-returning on Map | `{a:1} set b 2` returns `{a:1 b:2}`; `set a/q 1 (flex {})` |
+| `del` | Delete a key — in place on FlexMap (returns the node); copy-returning on Map; missing key is a no-op | `{a:1 b:2} del a` returns `{b:2}`; `(flex {a:1}) del a` |
 | `context` | Push the current context Store | `context` |
 
 > **`set` has two contracts, decided by the receiver's mutability.**
@@ -2160,6 +2161,7 @@ dispatch into `Map`/`List` signature slots — is inherited unchanged.
 | `node` | The inverse: deep immutable conversion (identity when nothing inside is flex) | `node (flex {a:1})` returns `{a:1}` |
 | `make FlexMap m` / `make FlexList l` | Same conversions via the universal constructor; `make Map v` / `make List v` are the inverse (and work symmetrically on plain literals) | `make FlexMap {a:1}`; `make Map (flex {a:1})` |
 | `set key val flexmap` | In-place key set (atom or string key); returns the node | `set b/q 2 (flex {a:1})` returns `(flex {a:1 b:2})` |
+| `del key flexmap` | In-place key delete (atom or string key); returns the node; missing key is a no-op. On a plain Map, `del` is copy-returning like `set` | `del a/q (flex {a:1 b:2})` returns `(flex {b:2})` |
 | `set idx val flexlist` | In-place index set, `0..len-1` only — out-of-range errors (**sparse FlexLists are an error**; use `append` to grow) | `set 1 99 (flex [1 2 3])` |
 | `append` | Grow a FlexList in place: a list argument concatenates its elements; anything else appends as one element; wrap to append a list *as* an element | `append 4 fl`; `append [3 4] fl`; `append [[3 4]] fl` |
 | `push` / `pop` / `unshift` / `shift` | On a FlexList: mutate in place and return the node (`pop`/`shift` also return the removed element). On a plain List: unchanged copy semantics | `push 3 (flex [1 2])`; `pop (flex [1 2])` returns `(flex [1]) 2` |

@@ -4429,10 +4429,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
-		// re-steps. get/getr/set are exempt — plain accessors/mutators whose
+		// re-steps. get/getr/set/del are exempt — plain accessors/mutators whose
 		// quoted key is an inert Atom const (its fn-valued module-resolution
 		// case is elided above; a dynamic or fn-valued result still refuses via
 		// the later cases). For `set` the quoted key is the atom field name of
@@ -4441,6 +4441,8 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// absent from isInertConst, exactly as the integer-keyed array `set 1 v
 		// a` already relies on), and `set` cannot be shadowed (it is a builtin),
 		// so the word-name match admits only the real mutator, never a usurp.
+		// `del` is `set`'s inverse (atom-keyed map-entry removal, copy-return
+		// on Map / in-place on FlexMap) and inherits the same argument verbatim.
 		// quoteInertOK is the principled extension of that exemption to a MODULE
 		// INNER NATIVE whose quoted operands are inert Atom consts — the query
 		// DSL's table names (`Query.from people`, `Query.join visits`): the inner
@@ -4763,7 +4765,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // for the runtime no-match arm (plan 3c) — the caller derived and gated it at
 // the failed-dispatch tape state; nil keeps the sound defer.
 func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool {
-	if !es.active() || len(outs) > 1 {
+	if !es.active() {
 		return false
 	}
 	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
@@ -4809,10 +4811,38 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 	}
 	es.SiteCounts[SiteDynamic]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg, polyNoMatch: noMatch}})
-	// A 0-output poly (a side-effect word like the test framework's
-	// `test-record`) produces no stack value to register.
-	if len(outs) == 1 {
+	switch len(outs) {
+	case 0:
+		// A 0-output poly (a side-effect word like the test framework's
+		// `test-record`) produces no stack value to register.
+	case 1:
 		es.setProduced(outs[0], seq)
+	default:
+		// A multi-result poly (flex `pop` → [remaining, popped]) seats each
+		// result under its own index — the same per-index registration the
+		// generic RecordCall path uses, which the VM's PolyRef.NOut claim
+		// enforces. Mark the event generic (no structured hook ran) and
+		// de-collide result IDs: two results can share an ID (a value the
+		// handler hands back in more than one slot, or a stale ID colliding
+		// with an earlier event's output), which would make provenance lookups
+		// alias one producer. Mint a fresh ID for a colliding result UNLESS it
+		// is an input passthrough — a receiver flowing straight through keeps
+		// its identity so downstream reads still resolve to it.
+		gf := es.eventInfo[seq]
+		gf.generic = true
+		es.eventInfo[seq] = gf
+		argIDs := make(map[string]bool, len(args))
+		for i := range args {
+			if args[i].ID != "" {
+				argIDs[args[i].ID] = true
+			}
+		}
+		for i := range outs {
+			if pr, ok := es.producedBy[outs[i].ID]; ok && pr.seq != seq && !argIDs[outs[i].ID] {
+				outs[i].ID = GenerateID(IDPrefixForType(outs[i].Parent))
+			}
+			es.setProducedAt(outs[i], seq, i)
+		}
 	}
 	return true
 }

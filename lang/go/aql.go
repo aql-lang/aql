@@ -114,6 +114,11 @@ type Options struct {
 	// the CLI's --options flag (e.g. `--options tape:initial:65536`) or
 	// directly by a host.
 	Tape TapeOptions
+	// ScriptArgs is the script's positional-argument vector, surfaced to
+	// programs as `IO.args` (a List of Strings). The CLI passes
+	// everything after the script path; nil leaves the slot uninstalled,
+	// which IO.args renders as an empty list.
+	ScriptArgs []string
 }
 
 // TapeOptions configures the execution tape's bounded growth — see
@@ -152,6 +157,9 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.TapeConfig = o.Tape
+	if o.ScriptArgs != nil {
+		native.SetHostScriptArgs(reg, o.ScriptArgs)
+	}
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 

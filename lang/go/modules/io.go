@@ -67,6 +67,14 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	exports := delegatingExports(ioNatives, subReg)
+	// The script-argument word is exported as IO.args, but its inner
+	// native is "script-args": the core fn-arguments word `args` lives in
+	// the sub-registry too, and sharing its name would merge signature
+	// sets (see native/io_module.go).
+	if w, ok := exports.Get("script-args"); ok {
+		exports.Set("args", w)
+		exports.Delete("script-args")
+	}
 	exports.Set("StreamKind", native.NewTypeLiteral(streamKind))
 	exports.Set("FileType", native.NewTypeLiteral(fileType))
 	exports.Set("Watcher", native.NewTypeLiteral(watcherType))

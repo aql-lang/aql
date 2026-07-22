@@ -29,20 +29,27 @@ value-dependent errors that are the runtime's job, not statically flaggable.
 This was a single global pin; the aggregate evolution is recorded here, and the
 count is now tracked per spec file in `unflaggedPins`.
 
+2026-07-22, PR #298 merge with main — two adjustments.
+`module-minilang.tsv: 19 → 20` (+1): this branch's new `sp` (structure-path)
+built-in kind adds one runtime-only `mini_parse_error` row (`{a:1} mini sp
+'//['` — a malformed XPath fails only when the kind compiles the path in the
+shell, the exact twin of the `xp`/`jp`/`jq` runtime rows main already pins).
+`module-fmt.tsv: 4 → 3` (−1): main's newer `checkBodyReturnConformance` now
+statically flags the Stage-3 not-callable row (`def app fn […] def rules
+{inc:42} app 5 rules` → `expected 1 return value(s), got 2`) — a sound coverage
+gain, so the row moved unflagged→flagged and its entry drops. False positives
+untouched (still 0).
+
 2026-07-21, PR #298 (aql:fmt module) — one entry: `module-fmt.tsv: 4`.
 `module-fmt.tsv` is new on this branch, so all four of its `ERROR:` rows enter
 the per-file map at once (the pre-refactor single-const chain had counted them
 as `+3` rule-table validations then `+1` Stage-3, but that global const was
-discarded in the split). All four are runtime-only: the three
-`Fmt.format-with` rule-table validations (unknown strategy, unknown rule key,
-non-Integer width) validate a Map argument's CONTENTS in the handler, which the
-static checker does not interpret; and the Stage-3 fn-value dispatch row
-(`def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]] def rules {inc:42} app 5
-rules` → `expected 1 return value(s), got 2`) carries an UNAPPLIED fn-value
-residual (a Map-get result that might be callable), which
-`checkBodyReturnConformance`'s count mirror deliberately skips — the compiled
-path lands the same error via `OpCallDynFrame` + `RetReplay`. False positives
-untouched (still 0).
+discarded in the split). The three `Fmt.format-with` rule-table validations
+(unknown strategy, unknown rule key, non-Integer width) validate a Map
+argument's CONTENTS in the handler, which the static checker does not
+interpret; the fourth (the Stage-3 fn-value dispatch not-callable row) was
+initially unflagged but became statically flagged after the main merge (see
+the 2026-07-22 entry above). False positives untouched (still 0).
 
 2026-07-19, PR #292 (within-type scalar/Micron operations) — three entries:
 `scalar-micron-ops.tsv: 8`, `module-time.tsv: 2`, `open-words.tsv: 3`. The

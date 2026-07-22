@@ -90,6 +90,31 @@ func New() *Backend {
 	return &Backend{in: in, inFD: inFD, out: out, outFD: outFD}
 }
 
+// streamFD returns the OS file descriptor behind a caller-supplied
+// stream, or -1 when it is not a real file — Open then rejects it with
+// not_a_tty rather than silently driving the process TTY instead.
+func streamFD(v any) int {
+	if f, ok := v.(*os.File); ok {
+		return int(f.Fd())
+	}
+	return -1
+}
+
+// NewFor builds a backend over the caller's OWN streams and their file
+// descriptors, not the process TTY — so a vault TUI launched with
+// stdin/stdout that differ from os.Stdin/os.Stdout (a pty, a test
+// harness, a programmatic embed) drives the right terminal. New() stays
+// the process-TTY constructor behind the ttyIn/ttyOut seams.
+func NewFor(in io.Reader, out io.Writer) *Backend {
+	return &Backend{in: in, inFD: streamFD(in), out: out, outFD: streamFD(out)}
+}
+
+// SpecFor is Spec bound to caller-supplied streams — the launch path for
+// callers whose terminal is not the process stdin/stdout.
+func SpecFor(in io.Reader, out io.Writer) modules.TuiSpec {
+	return modules.TuiSpec{Name: "tty", Open: func() (tuikit.Backend, error) { return NewFor(in, out), nil }}
+}
+
 const (
 	seqAltScreenOn  = "\x1b[?1049h"
 	seqAltScreenOff = "\x1b[?1049l"

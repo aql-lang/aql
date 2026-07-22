@@ -64,6 +64,9 @@ import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "x" char: "x" mods:
 import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "left" char: "" mods: []}	{w:'input' value:'ab' cursor:1 placeholder:'' focus:false}	edit moves the cursor left
 import "aql:tui"  Tui.edit (Tui.edit (Tui.input "ab") {tag: "key" key: "home" char: "" mods: []}) {tag: "key" key: "delete" char: "" mods: []}	{w:'input' value:'b' cursor:0 placeholder:'' focus:false}	home then delete removes the character under the cursor
 import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "resize" cols: 1 rows: 1}	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	a non-key event leaves the input unchanged
+import "aql:tui"  Tui.input "pw" {mask: true}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:true}	the mask option rides the widget map (the renderer paints bullets)
+import "aql:tui"  Tui.edit (Tui.input "pw" {mask: true}) {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'pwx' cursor:3 placeholder:'' focus:false mask:true}	edit preserves the mask across folds
+import "aql:tui"  Tui.input "pw" {mask: 5}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:5}	options pass through the constructor; the renderer refuses a non-Boolean mask
 import "aql:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	focusable walks ids in document order
 import "aql:tui"  Tui.focusable (Tui.spacer)	[]	a tree without ids has no focusables
 import "aql:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String

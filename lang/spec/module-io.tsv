@@ -275,6 +275,19 @@ import "aql:io"  context dot __sys dot fs set mem true  IO.watch (make Pathon "m
 import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://w.txt") "x" drop  IO.unwatch (IO.watch (make Pathon "mem://w.txt") [drop])		unwatch stops the watcher, leaving no value
 import "aql:io"  context dot __sys dot fs set mem true  IO.unwatch 42	ERROR:signature	unwatch of a non-Watcher is refused statically — its sole signature takes a Watcher
 #
+# §18  args — the script's command-line arguments (everything after the
+#      script path), surfaced by the host through SetHostScriptArgs /
+#      lang.Options.ScriptArgs as a List of Strings. The spec runner
+#      installs none, so the deterministic surface is the EMPTY list —
+#      set vectors, ordering, and the CLI plumbing are pinned in
+#      lang/go/test/script_args_test.go and cmd/go/internal/run/
+#      run_args_test.go. The inner native is named script-args (the core
+#      fn-arguments word `args` shares the sub-registry), renamed to
+#      IO.args on export.
+import "aql:io"  IO.args	[]	with no host-installed vector, args is an empty list — never none, never an error
+import "aql:io"  typeof (IO.args)	List	the args surface is a List
+import "aql:io"  size (IO.args)	0	and the uninstalled default has no elements
+#
 # §16  overlay filesystem — `context dot __sys dot fs set overlay true`
 #      switches the FileOps capability to a UNION: a writable in-memory
 #      upper over the host filesystem as a read-only lower. Reads fall

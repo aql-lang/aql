@@ -165,6 +165,11 @@ WORD def
 WORD default
   [Any Type/GenParam] barrier=1 runcheck returns=[Type/GenParam]
   [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
+WORD del
+  [Scalar/String Node/Map/FlexMap] barrier=2 returns=[Node/Map/FlexMap] +returnsfn
+  [Scalar/String Node/Map] barrier=2 returns=[Node/Map] +returnsfn
+  [Scalar/Atom Node/Map/FlexMap] barrier=2 quote={0} returns=[Node/Map/FlexMap] +returnsfn
+  [Scalar/Atom Node/Map] barrier=2 quote={0} returns=[Node/Map] +returnsfn
 WORD depth
   [] barrier=0 fullstack
 WORD deq
@@ -651,6 +656,8 @@ WORD scan
   [Type/Function Node/Map] barrier=2 returns=[Node/Map]
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD script-args
+  [] barrier=0 returns=[Node/List]
 WORD seek
   [Ideal/File Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/Number/Integer]
   [Ideal/File Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]

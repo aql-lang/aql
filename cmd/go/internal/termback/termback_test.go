@@ -59,6 +59,44 @@ func TestSpecShape(t *testing.T) {
 	}
 }
 
+// SpecFor / NewFor bind the CALLER's streams and their own fds (a real
+// *os.File → its Fd; a non-file → -1, which Open rejects as not_a_tty
+// rather than falling back to the process TTY).
+func TestSpecForBindsCallerStreams(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close(); w.Close() })
+
+	if got := streamFD(r); got != int(r.Fd()) {
+		t.Errorf("streamFD(*os.File) = %d, want %d", got, r.Fd())
+	}
+	if got := streamFD(&bytes.Buffer{}); got != -1 {
+		t.Errorf("streamFD(non-file) = %d, want -1", got)
+	}
+
+	b := NewFor(r, w)
+	if b.in != r || b.out != w || b.inFD != int(r.Fd()) || b.outFD != int(w.Fd()) {
+		t.Fatalf("NewFor bound the wrong streams/fds: %+v", b)
+	}
+
+	spec := SpecFor(r, w)
+	if spec.Name != "tty" || spec.Open == nil {
+		t.Fatalf("spec = %+v", spec)
+	}
+	backend, err := spec.Open()
+	if err != nil || backend == nil {
+		t.Fatalf("spec.Open = %v, %v", backend, err)
+	}
+
+	// a non-file stream fails Open cleanly (never the process TTY)
+	nb := NewFor(&bytes.Buffer{}, &bytes.Buffer{})
+	if _, err := nb.Open(tuikit.OpenOpts{}); err == nil || !strings.Contains(err.Error(), "not_a_tty") {
+		t.Fatalf("non-file Open = %v, want not_a_tty", err)
+	}
+}
+
 func TestOpenLifecycleAndRejections(t *testing.T) {
 	in, out := &bytes.Buffer{}, &bytes.Buffer{}
 	raws, restores := swapSeams(t, in, out)

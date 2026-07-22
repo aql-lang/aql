@@ -58,6 +58,7 @@
     sqlite:  { install: false }
     process: { install: false }
     terminal: { install: false }
+    vault:   { install: false }
 
     formats: { words: { default: "allow" } }
     env:     { words: { default: "deny" } }

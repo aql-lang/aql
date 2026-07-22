@@ -21,6 +21,24 @@ func init() {
 	})
 
 	register(&Entry{
+		Word:    "del",
+		Summary: "Delete a key from a map (in place on FlexMap; copy-returning on Map).",
+		Description: "Removes a key. On a FlexMap del deletes IN PLACE and RETURNS THE NODE, " +
+			"so deletes chain and every alias observes the removal: `f del a del b`. On an " +
+			"immutable MAP del returns a NEW map without the key and leaves the receiver " +
+			"untouched (the same copy-returning contract as set). A missing key is a no-op " +
+			"in both forms — deletion is idempotent, like has it never raises on absence. " +
+			"Keys are strings or atoms; wrap a variable in parens for a computed key: " +
+			"`m del (k)`. List element removal is the list words' job (pop / shift / " +
+			"ArrayUtil.remove-at) — del has no List form.",
+		Examples: []string{
+			`{a:1 b:2} del a ; # => {b:2} — new map; {a:1 b:2} is unchanged`,
+			`(flex {a:1 b:2}) del a ; # => (flex {b:2}) — in place, returns the node`,
+			`{a:1} del missing ; # => {a:1} — absent key: no-op`,
+		},
+	})
+
+	register(&Entry{
 		Word:    "get",
 		Summary: "Retrieve a value by an EVALUATED key from a Store, Map, List, class instance, or flex node.",
 		Description: "Retrieves a value by key from a Store (with prototype chain resolution), " +

@@ -56,6 +56,19 @@ simulated stack *exactly once*; a value referenced more than once is either a
 re-pushable operand (const/local/type) or gets promoted to a value-def local
 (`planValueDefLocals` → `STORE_LOCAL`).
 
+**Provenance across a branch join.** An enclosing local merely READ inside
+an `if` arm is narrowed-through-use, which preserves its `Value.ID` — but
+`RunCarrierBodyWithDefs` reports the narrowed binding as an arm `add`, and
+`InstallJoinedDefs` must NOT re-seat it as a fresh-ID `JoinCarriers` result
+(that would strand every reference after the join as an unseated dynamic
+carrier — "fn call operand of unknown provenance"). `joinBranchDef` keeps
+the shared ID when both arm carriers are the same identity (a narrow-only,
+identity no-op merge), preserving the seat; a GENUINE reassignment gives
+the arms differing IDs and keeps the fresh-ID join (a branch RESULT must
+not collide with an arm's live local). Pinned by
+`lang/go/bytecode_ifbranch_operand_test.go` (reduced from the alice
+viewer's render fn — voxgig-aql/alice, dx-report 2026-07-21).
+
 ---
 
 ## 3. What compiles (by construct)
@@ -142,6 +155,10 @@ the interpreter then owns the whole program:
   the apply window's producer (`[nd (m get "k") print "after"]`), whose
   effects a RET-time replay would reorder — pinned by
   `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings).
+
+The **branch-join narrow-preservation** rule (§2) removed a former
+over-refusal here — an enclosing local read inside both `if` arms and
+reused after the join now compiles.
 
 ---
 
