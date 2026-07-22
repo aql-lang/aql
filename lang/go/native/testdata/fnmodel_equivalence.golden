@@ -656,6 +656,8 @@ WORD scan
   [Type/Function Node/Map] barrier=2 returns=[Node/Map]
   [Node/List Node/Map] barrier=2 noeval={0} returns=[Node/Map]
   [Node/List Node/List] barrier=2 noeval={0} +returnsfn
+WORD script-args
+  [] barrier=0 returns=[Node/List]
 WORD seek
   [Ideal/File Scalar/Number/Integer Node/Map] barrier=3 returns=[Scalar/Number/Integer]
   [Ideal/File Scalar/Number/Integer] barrier=2 returns=[Scalar/Number/Integer]

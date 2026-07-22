@@ -203,6 +203,21 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		streamHandle("stdout"),
 		streamHandle("stderr"),
 		{
+			// script-args (exported as IO.args) returns the host-installed
+			// script positional arguments — everything after the script
+			// path on the CLI — as a List of Strings; an empty list when
+			// the host set none (REPL, -e, embedded). The inner name is
+			// NOT "args": the core fn-arguments word `args` lives in the
+			// module's sub-registry too, and sharing its name would merge
+			// signature sets; BuildIOModule renames on export.
+			Name: "script-args",
+			Signatures: []Signature{{
+				Args:    []*Type{},
+				Impl:    Go(scriptArgsHandler),
+				Returns: []*Type{TList}, BarrierPos: -1,
+			}},
+		},
+		{
 			Name: "trace",
 			Signatures: []Signature{{
 				Args:    []*Type{TList},
@@ -432,4 +447,16 @@ func IOWordExtensions(fileType *Type) []FnDefInfo {
 			{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 		}),
 	}
+}
+
+// scriptArgsHandler renders the host-installed script arguments
+// (SetHostScriptArgs) as a List of Strings. No host installation reads
+// as an empty list — a script can always iterate IO.args.
+func scriptArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	hostArgs := HostScriptArgs(r)
+	vals := make([]Value, len(hostArgs))
+	for i, a := range hostArgs {
+		vals[i] = NewString(a)
+	}
+	return []Value{NewList(vals)}, nil
 }

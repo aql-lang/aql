@@ -3479,9 +3479,31 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	return result, adds
 }
 
+// joinBranchDef merges a name's per-arm carriers for InstallJoinedDefs.
+// When both inputs carry the SAME identity — the arms only NARROWED the
+// enclosing binding (narrowDynamicUses preserves the value's ID; a read
+// like `mkm (tab)` narrows-through-use without reassigning), never
+// rebound it — the merge is an identity no-op, so KEEP that ID. The
+// binding's value is genuinely unchanged across the branch, and
+// preserving its ID keeps its compile seat (producing event / frame
+// local) reachable for references AFTER the join. JoinCarriers otherwise
+// mints a fresh ID — correct for a genuine if-RESULT (it must not
+// collide with an arm's live local, JoinCarriers' own §), but for a
+// merely-narrowed enclosing def that fresh ID strands every later
+// reference as an unseated dynamic carrier ("fn call operand of unknown
+// provenance"; the alice viewer's render fn hit exactly this). A GENUINE
+// reassignment gives the arms DIFFERING IDs and keeps the fresh-ID join.
+func joinBranchDef(a, b Value) Value {
+	out := JoinCarriers(a, b)
+	if a.ID != "" && a.ID == b.ID {
+		out.ID = a.ID
+	}
+	return out
+}
+
 // InstallJoinedDefs merges the `adds` maps from two branches back
 // into r.DefStacks. If both branches defined the same name, their
-// carriers are joined via JoinCarriers and the joined carrier is
+// carriers are joined via joinBranchDef and the joined carrier is
 // pushed. If only one branch defined it, that def is pushed back —
 // but joined with the pre-branch carrier (if any) since the other
 // branch's path kept the original binding.
@@ -3490,12 +3512,12 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 	for k, tv := range then {
 		seen[k] = true
 		if ev, ok := else_[k]; ok {
-			r.Defs.Push(k, JoinCarriers(tv, ev))
+			r.Defs.Push(k, joinBranchDef(tv, ev))
 			continue
 		}
 		// then-only: join with the pre-branch top-of-stack if any.
 		if pre, ok := r.Defs.Top(k); ok {
-			r.Defs.Push(k, JoinCarriers(tv, pre))
+			r.Defs.Push(k, joinBranchDef(tv, pre))
 		} else {
 			r.Defs.Push(k, tv)
 		}
@@ -3506,7 +3528,7 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 		}
 		// else-only: join with pre-branch top-of-stack.
 		if pre, ok := r.Defs.Top(k); ok {
-			r.Defs.Push(k, JoinCarriers(ev, pre))
+			r.Defs.Push(k, joinBranchDef(ev, pre))
 		} else {
 			r.Defs.Push(k, ev)
 		}
