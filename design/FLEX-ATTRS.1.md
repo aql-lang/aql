@@ -317,22 +317,80 @@ by `Get(k)`). The sound design:
   map can never bake as an immortal const (which would pin its
   contents forever — the opposite of weak).
 
-### 4.4 The weak domain (the Lua carve-out, forced)
+### 4.4 The weak domain — DECIDED (maintainer, 2026-07-22): Python-style refusal
 
-Weakly holdable = **reference cells the caller retains another handle
-to**: flex nodes, Store instances, class instances. Scalars are
-per-copy value boxes with no GC identity (even Lua carves them out);
-BigInt/Decimal are pointer-backed but semantically scalar — strong;
-`ExtensionPayload{Body any}` cannot be generically weak. And
-`AdoptIntoFlex` deep-copies plain containers on store — the copy is
-slot-only-reachable, **dead on arrival** as a weak entry. Policy
-options at the weak `set`: (a) store adopted copies STRONG ("no
-external identity → strong", composing with the scalar carve-out —
-least surprise); (b) refuse non-handle values with a teachable error
-(most in the ADR-005 grain; converges toward the registry design);
-(c) document immediate collectability (Java's answer). Leaning: (a),
-but silence is not an option — this is the single most user-visible
-weak semantic.
+The value domain follows Python's weakref rule (weakness requires
+reference identity; the rest is refused, not silently reinterpreted):
+
+| Stored value | Fate |
+|---|---|
+| Scalar branch (incl. BigInt/Decimal, Time, Microns) | accepted, **strong** — no GC identity, nothing to track |
+| Mutables: flex nodes (incl. WeakFlexMap), Store, Resource, class instances | accepted, **weak** — dropping the handle is the eviction event |
+| Immutable Nodes (Map, List, Xml) | **refused** — value-semantic, no coherent referent |
+| fn values, type literals, Error, ExtensionPayload | **refused** (v1; fn values revisited if observer registries demand, Extension via per-host opt-in) |
+
+This DISSOLVES the dead-on-arrival axis: `AdoptIntoFlex` never runs
+at the weak funnel — no adopted copy can enter, every container value
+in a weak map is a shared live handle. Construction
+(`make WeakFlexMap {…}`) applies the same classification. The recipe:
+*cache it evictably → `flex` it and hold the handle; keep it until
+`del` → scalar, or an ordinary FlexMap.*
+
+**Enforcement is check-time, with one wrinkle**: a narrow ACCEPTING
+sig alone cannot refuse — a plain-Map value that fails it falls
+through to the inherited `[.., TFlexMap]` sig (the weak map conforms
+at the receiver slot) and dies in `AsMutableMap` with a baffling
+message. So the kernel ships explicit REFUSAL sigs
+(`set [Key, Map|List|Xml, WeakFlexMap]` raising the teachable error —
+the Micron erroring-`set` precedent, native_storage.go:131-148).
+Per-position specificity orders the ladder for free (flex-value
+accepts above Map-refusals above the classifying Any-fallback), and
+the static half costs nothing new: a matched sig that unconditionally
+raises is exactly what the check-mode guaranteed-error mirror
+machinery reports (`CheckDiagnostic.RuntimeMirror`) — flagged at
+check time whenever the value's type is statically known, the same
+message at runtime otherwise. Export the accept-union as a named type
+(`Weakable`) so params and `describe set` can state the domain in one
+word. Bonus: the refusal rows are deterministically spec-able —
+proper positive+negative TSV pairs at the domain boundary.
+
+**The refusal error is fully customisable** — the diagnostic
+machinery is multi-channel (`AqlError.Notes` → `= note:` lines,
+`Suggestions` → `= help:` fixes, primary caret + secondary labeled
+spans; `eng/go/aql_error.go:18-53`, `diag_render.go`), with live
+precedents of the teachable-refusal pattern at the FlexList bounds
+error ("use append to grow a FlexList; sparse FlexLists are an
+error", `native_storage.go:608-612`, via `r.AqlErrorHint`) and the
+Micron erroring sigs. Proposed rendering, pinned by a negative spec
+row per refused kind:
+
+```
+error: [aql/weak_value_error]: set: cannot store an immutable Map in a WeakFlexMap
+  --> 2:11
+  2 | set cfg/q {mode:'fast'} w
+    |           ^^^^^^^^^^^^^ this Map is a value, not a handle
+  = note: weak entries live only while the program keeps another
+          handle to the stored value alive
+  = note: an immutable Map is a value — it has no independent
+          identity the collector could track, so a weak entry for
+          it could never be kept alive by anything you hold
+  = help: store a mutable handle: set cfg/q (flex {mode:'fast'}) w
+  = help: or keep it in an ordinary FlexMap if it should live until
+          deleted — scalars (42, 'text') are stored strongly and
+          are fine here
+```
+
+The check-mode mirror carries the same rendering statically, and the
+Any-slot fallback sig classifies-and-raises, so EVERY refused kind
+(Map, List, Xml, fn values, type literals, Error, Extension) gets its
+tailored variant — nothing falls through to a bare `no_signature`
+candidate dump.
+
+Residual asymmetry, to be stated in bold in the docs: in a mixed
+cache, handle entries evict and scalar entries are immortal-until-
+`del` — the one cell where lifetime still depends on stored kind.
+(Full-Python — refusing scalars too — was considered and set aside:
+scalars cannot dangle, and refusing them only forces boxing.)
 
 ### 4.5 What is spec-able (and what never will be)
 
@@ -372,7 +430,7 @@ violation; record this reasoning, it is load-bearing.)
 | Axis | Status under D3 |
 |---|---|
 | 1. No referent for scalars | Unchanged in substance; now LEGISLABLE — one deterministic decision point (the weak `set`) and a nominal name under which to document the carve-out |
-| 2. Adoption makes plain stores dead-on-arrival | Unchanged mechanically; mitigated by an explicit policy (§4.4) |
+| 2. Adoption makes plain stores dead-on-arrival | **Cured by the §4.4 refusal decision** — plain containers never enter; no adopted copy can exist in a weak slot |
 | 3. Reachability = interpreter internals; run/check/compiled divergence | Unchanged; bounded (lazy sweep: entries vanish only at observation points) but not cured — contract must say "MAY be absent; neither removal nor retention guaranteed" |
 | 4. No deterministic spec row | Unchanged for collection (no vanish rows, ever); CURED for the entire non-collection surface (§4.5) |
 | 5. deq time-dependence | Mid-comparison corruption CURED (snapshot funnel); between-call instability remains — Java-equals semantics, documented |
@@ -590,8 +648,19 @@ D3 — WeakFlexMap:
    (registry now, subtype only if programs demonstrate the need)?
 6. **Weak values only** — confirmed? (Keys are OrderedMap strings;
    weak keys would be a different container.)
-7. **Adoption policy** at the weak `set` — adopted deep-copies stored
-   strong (leaning), refused loudly, or documented dead-on-arrival?
+7. **Adoption policy** at the weak `set` — RESOLVED (2026-07-22):
+   Python-style refusal, per §4.4 — scalars strong, mutable handles
+   weak, immutable Nodes and other value-like data refused via
+   erroring sigs mirrored at check time.
+7b. **`del` leniency (new, from the operation walkthrough)** —
+   collected ≡ absent at every surface, so `del` of a collected key
+   and of a never-present key must behave identically; a strict
+   missing-key error would raise or not depending on GC timing (a
+   nondeterministic error path). WeakFlexMap therefore forces
+   `del`-on-missing to be a silent no-op; does the whole map column
+   adopt lenient `del` for uniformity (leaning — with a strict
+   variant possible later), or is a documented weak-only asymmetry
+   accepted?
 8. **Atomicity** — accept that the type lands only together with the
    full family-widening bill (§4.2), given a partial ship leaves
    silent pointer-identity `deq` in a release?
