@@ -49,7 +49,36 @@ commit.
 
 | # | Title | Surfaced by |
 |---|-------|-------------|
-| *(none)* | | |
+| [NUR005](#nur005) | String `add` crosses scalar types; Atom/Bytes do not mirror it | 2026-07-22 uniformity review |
+| [NUR006](#nur006) | Integer `div` MinInt64 ÷ −1 silently wraps — the one unguarded overflow | 2026-07-22 uniformity review |
+| [NUR007](#nur007) | Two units of "character" in the String words: bytes vs runes | 2026-07-22 uniformity review |
+| [NUR008](#nur008) | Rounding words are Float-only behind a `[Number]` facade | 2026-07-22 uniformity review |
+| [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
+| [NUR010](#nur010) | Integer `pow` negative-exponent error carries no `[aql/…]` code | 2026-07-22 uniformity review |
+| [NUR011](#nur011) | `eq` is identity for compounds, value for scalars | 2026-07-22 uniformity review |
+| [NUR012](#nur012) | Pathon orders segments in reverse lexical order | 2026-07-22 uniformity review |
+| [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
+| [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
+| [NUR015](#nur015) | Collection words dedup/group/member on rendered form — a third equality | 2026-07-22 uniformity review |
+| [NUR016](#nur016) | Sort stability differs across the sorting words | 2026-07-22 uniformity review |
+| [NUR017](#nur017) | `TIdeal`'s Behavior is assigned by two competing `init()`s | 2026-07-22 uniformity review |
+| [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
+| [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
+| [NUR020](#nur020) | The `print` core exception is asserted, never argued | 2026-07-22 uniformity review |
+| [NUR021](#nur021) | Accessor-family container coverage is asymmetric | 2026-07-22 uniformity review |
+| [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
+| [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
+| [NUR024](#nur024) | Ordering words are family-restricted; equality is total | 2026-07-22 uniformity review |
+| [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
+| [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
+| [NUR027](#nur027) | Invalid modifier combos fall through silently, two different ways | 2026-07-22 uniformity review |
+| [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
+| [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
+
+Pending records use a compact form (rule / divergence / evidence /
+documentation status, plus a proposed verdict where one is obvious);
+they are expanded to the full argued form when the maintainer issues
+the verdict.
 
 ---
 
@@ -246,3 +275,498 @@ dispatch by specificity like any refinement.
   supported DepScalar bases; `lang/spec/compare.tsv` and
   `lang/spec/case.tsv` exercise the value-level machinery that stands in
   for subtypes.
+
+---
+
+## NUR005 — String `add` crosses scalar types; Atom/Bytes do not mirror it {#nur005}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** arithmetic is "applied within a type, never across it (a
+cross-type pair is a `[aql/type_error]`)" — REFERENCE.md §"Within-type
+operations".
+**Divergence:** `add` carries `[String Scalar]` / `[Scalar String]`
+overloads that stringify the non-String operand (`add "x" 5` → `'5x'`,
+verified live), while its occurrence-package siblings stay within-type:
+Atom `add` is `[Atom Atom]`-only (`add red/q 5` is a signature error,
+verified) and Bytes `add` is `[Bytes Bytes]`-only. One member of the
+mirrored String/Atom/Bytes trio crosses types; two do not.
+**Evidence:** `lang/go/native/native_math.go:311-312,434-436`;
+`native_scalar_ops.go:538-547,661-662`; `native_bytes.go:249`.
+**Documentation status:** the String concat rule itself is documented
+(REFERENCE.md:981-984, with the `add true 1` negative), but it sits 60
+lines from the "never across it" rule it contradicts, and the
+Atom/Bytes asymmetry is noted only in a code comment.
+
+---
+
+## NUR006 — Integer `div` MinInt64 ÷ −1 silently wraps — the one unguarded overflow {#nur006}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** integer arithmetic that crosses the int64 range raises
+`[aql/integer_overflow]` "rather than silently wrapping two's-
+complement… The policy is uniform across every integer arithmetic
+word" — `lang/go/native/native_math.go:33-36`.
+**Divergence:** `divTowerOps.intFn` guards only the zero divisor;
+`-9223372036854775808 div -1` returns `-9223372036854775808` silently
+(verified live) — the sole overflow case in integer division, wrapped
+where add/sub/mul/pow raise. The check-mode mirror (`returnsDivMod`)
+mirrors division-by-zero only, so the wrap is invisible statically too.
+**Evidence:** `native_math.go:213-219` (unguarded) vs `:71-73`
+(`checkedMulInt` guards the same pair for mul); `:351`;
+`design/INTEGER-OVERFLOW-STRATEGY.5.md:114-118` (root-cause table
+omits div).
+**Documentation status:** undocumented; contradicts the stated uniform
+policy. **Proposed verdict:** resolve by fix (guard + mirror + spec
+row), not allow.
+
+---
+
+## NUR007 — Two units of "character" in the String words: bytes vs runes {#nur007}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one string model per family — a word set should agree on what
+a "character" is.
+**Divergence:** `size`/`slice`/`StringUtil.indexof` are byte-oriented
+(`size "héllo"` → 6; `"héllo" slice 1 2` yields a broken half-rune,
+producing invalid UTF-8; `indexof "l" "héllo"` → 3, a byte index — all
+verified live) while the occurrence-package `mul`/`pow` are
+rune-oriented (`"ab" mul "é"` → `'aébé'`; `"ab" pow "é"` → `'ab'`,
+one repetition for one character — verified). The kernel size docstring
+says "character length", the check-mode comment says "rune count", the
+implementation counts bytes.
+**Evidence:** `eng/go/size.go:14-16,44-48,58-62`;
+`lang/go/native/size.go:17-18`; `native_scalar_ops.go:155,176`
+(`[]rune`, `utf8.RuneCountInString`); REFERENCE.md:2027 ("length in
+bytes") vs REFERENCE.md:1058 ("once per character").
+**Documentation status:** REFERENCE documents the byte rule for `size`
+only; the split itself and the invalid-UTF-8 slice edge are
+undocumented.
+
+---
+
+## NUR008 — Rounding words are Float-only behind a `[Number]` facade {#nur008}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the aql:math-util unary words were made "TOTAL over the whole
+Number family" (`lang/go/modules/math.go:354-358`), declared with a
+`[Number] -> [Number]` facade (`math.go:32-39`).
+**Divergence:** `ceil`/`floor`/`round`/`round-even`/`trunc` register a
+single `[Float]` runtime signature; `MathUtil.ceil 5` (Integer) is an
+`uncalled_function` while `MathUtil.ceil 5.4` → 6 (verified live), and
+the Big leaves have no overload either. Every sibling unary
+(`abs`/`negate`/`sign`, `sqrt`/`exp`/`log`, trig) covers
+Integer+Float+Big.
+**Evidence:** `math.go:459-475` vs `:72-168,368-413`;
+`native_helpers.go:329-357`.
+**Documentation status:** undocumented; contradicts the module's own
+totality comment. **Proposed verdict:** resolve by fix (add the
+Integer/Big overloads), not allow.
+
+---
+
+## NUR009 — Bytes excluded from the DepScalar refinement bases {#nur009}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the comparison words double as refinement constructors over
+the well-known ordered scalar bases (`Integer gte 0`, `String lt "z"`,
+`Boolean gte true` — one shared resolver, `canonicalBaseType`).
+**Divergence:** `canonicalBaseType` admits Integer/Float/Number/String/
+Boolean/Atom and omits Bytes — the one ordered scalar leaf (full
+byte-lexicographic Comparer, Sizer, complete occurrence package) denied
+refinement construction.
+**Evidence:** `eng/go/depscalar.go:157-175`;
+`lang/go/native/native_bytes.go:13,138-163`.
+**Documentation status:** not found in REFERENCE/ADR/design — either an
+unstated deliberate scoping or an omission; needs a verdict.
+
+---
+
+## NUR010 — Integer `pow` negative-exponent error carries no `[aql/…]` code {#nur010}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** every arithmetic fault carries a coded AQL error —
+div/mod-by-zero raise `[aql/arith_error]`, range faults
+`[aql/integer_overflow]`.
+**Divergence:** `2 pow -1` fails with the bare `error: pow: negative
+exponent -1` (verified live) — a `fmt.Errorf`, no `[aql/…]` code, so it
+is invisible to code-based error handling that every sibling fault
+supports. (The partiality itself — Integer pow rejecting negative
+exponents while Float pow computes `0.5` — is documented in
+design/LANGREF.10.md:780.)
+**Evidence:** `native_math.go:252-254` and mirror `:161` vs `:216,235`
+(coded siblings).
+**Documentation status:** partiality documented; the code-less error is
+not. **Proposed verdict:** resolve by fix (give it an `arith_error`
+code); the partiality itself needs its own verdict.
+
+---
+
+## NUR011 — `eq` is identity for compounds, value for scalars {#nur011}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one word, one equality principle.
+**Divergence:** `eq` compares scalars by value but lists/maps/XML by
+container identity (`["a"] eq ["a"]` → false); `deq` is structural
+throughout. Consequence: `eq` disagrees with `cmp`-equality on
+compounds (structurally-equal lists are `cmp`-equal but not `eq`).
+**Evidence:** `eng/go/compare.go:326-384`; REFERENCE.md:1174-1181.
+**Documentation status:** argued in `design/LISP-ANALYSIS.5.md` (the
+Scheme eq?/equal? trichotomy) and accepted in the DX reports; stated in
+REFERENCE; absent from EXPLANATION's equality discussion.
+**Proposed verdict:** allow (argued design), plus a doc task to surface
+the argument in EXPLANATION.
+
+---
+
+## NUR012 — Pathon orders segments in reverse lexical order {#nur012}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** name-like scalars order forward-lexicographically (String,
+Atom, Word).
+**Divergence:** Pathon orders fewer-segments-first, then segment-by-
+segment in REVERSE lexical order (`sort [b/a a/z]` keeps `b/a` first —
+verified live), then relative-before-absolute; the same function orders
+DepScalar pairs forward-lex, so one comparator houses both directions.
+**Evidence:** `eng/go/compare_scalar_behaviors.go:359-413` (reverse at
+`:398`, forward DepScalar tail at `:366`).
+**Documentation status:** stated as fact (design/TYPE-ORDERING.10.md:74,
+REFERENCE.md:728 — which calls it "historical"); the rationale for
+reverse is argued nowhere.
+
+---
+
+## NUR013 — NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt {#nur013}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one ordering answer per value pair within one word family.
+**Divergence:** `cmp`/`tcmp`/`sort` give NaN a defined slot (sorts
+greatest; two NaNs tie) while `lt`/`lte`/`gt`/`gte` apply the IEEE
+unordered rule (always false); also `nan eq nan` is false while
+`nan cmp nan` is 0.
+**Evidence:** `compare_scalar_behaviors.go:152-171`;
+`compare.go:590-624`; `compare_nan_test.go`; `lang/spec/float-special.tsv`.
+**Documentation status:** extensively argued
+(design/TYPE-ORDERING.10.md §"NaN in the total order",
+design/IEEE-754-COMPLIANCE.8.md Tier 0). **Proposed verdict:** allow —
+IEEE-754 compliance for the relationals plus a lawful total order for
+sort is the standard resolution of an unsatisfiable constraint set.
+
+---
+
+## NUR014 — Cross-leaf numeric magnitude equality is leaf-pair-dependent {#nur014}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** "leaves of the same family compare by magnitude"
+(`1 cmp 1.0` → 0, `1 eq 1.0` → true).
+**Divergence:** the collapse holds for Integer↔Float and Integer↔Big
+but NOT Float↔BigDecimal: `Float 0.1 ≠ 0d0.1` (exact big.Rat compare of
+the float's true binary value). Magnitude equality is thus a per-pair
+property, not a family invariant.
+**Evidence:** `compare_scalar_behaviors.go:111-179,195-226`.
+**Documentation status:** deliberate (in-code rationale cites Python's
+`Decimal('0.1') == 0.1 → False`); user-facing at REFERENCE.md:197,501.
+**Proposed verdict:** allow — mathematically honest; the alternative
+(rounding Big to float64) silently collapses distinct values.
+
+---
+
+## NUR015 — Collection words dedup/group/member on rendered form — a third equality {#nur015}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the language defines two equality notions (`eq` identity/
+value, `deq` structural) and one order (`cmp`/`tcmp`); collection
+words should use one of them.
+**Divergence:** `ArrayUtil.unique`/`member`/`indices`/`group` key on
+the rendered `Value.String()` — a third notion agreeing with none:
+`unique [1 1.0]` keeps both (though `1 eq 1.0`, `deq [1] [1.0]`, and
+`cmp 1 1.0 = 0` all say equal — verified live) while
+`unique [["a"] ["a"]]` dedups lists that `eq` calls distinct
+(verified).
+**Evidence:** `native_array.go:935,1129,1156,1163,1191,1212`.
+**Documentation status:** undocumented — REFERENCE and
+design/ARRAYIFICATION.6.md give examples but never state the equality
+basis.
+
+---
+
+## NUR016 — Sort stability differs across the sorting words {#nur016}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one sorting contract across the sorting vocabulary.
+**Divergence:** `sort` (list & map) and `sortby` (reach form) are
+stable (`sort.SliceStable`); `sortby` (two-list form) and `grade` are
+unstable (`sort.Slice`) — one word stable in one overload and unstable
+in the other. Observable whenever elements compare equal (cross-leaf
+magnitudes, structurally-equal compounds).
+**Evidence:** `native_sort.go:58,84`; `native_array.go:1432` vs
+`:1105,961`.
+**Documentation status:** undocumented. **Proposed verdict:** resolve
+by fix (SliceStable everywhere), not allow.
+
+---
+
+## NUR017 — `TIdeal`'s Behavior is assigned by two competing `init()`s {#nur017}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one Behavior struct per type node, composing capabilities,
+assigned once (every other kernel type: e.g. `listFormatBehavior`
+carries Format+Size in one struct).
+**Divergence:** `TIdeal.Behavior` is assigned by `convert_ideal.go`'s
+init (`idealConvertBehavior` — IdealConverter, no Sizer) and again by
+`size.go`'s init (`idealSizeBehavior` — Sizer, no IdealConverter);
+lexical filename order decides, `size.go` wins, and the convert
+fallback the first file documents is never installed (conversion
+survives only because both terminal defaults coincide). Renaming a
+file silently breaks `size` on Class/Store/Table/Resource/Error.
+**Evidence:** `eng/go/convert_ideal.go:66-78,260-269`;
+`eng/go/size.go:99-124`; no test pins the resolved Behavior.
+**Documentation status:** undocumented; the two files' comments
+contradict each other. **Proposed verdict:** resolve by fix (one Ideal
+behavior struct implementing both capabilities + a pinning test).
+
+---
+
+## NUR018 — Store and Error are excluded from `make` {#nur018}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** TYPE-UNIFORM — `make` instantiates the structural
+type-kinds; the kernel guide groups Record, Options, Table, Class,
+Store, Error and the Micron family together as the `make`/`record`/
+`class` structural set (eng/go/CLAUDE.md §"Where a Type Lives" rule 4).
+**Divergence:** `make Store {}` and `make Error {message:"x"}` raise
+`[aql/unsupported]: make: unsupported target type` (verified live)
+while Record/Options/Table/Class/Micron are `make` targets — Store and
+Error construct only through their dedicated words.
+**Evidence:** `eng/go/core_make.go:31-37` (`isTypeLike`).
+**Documentation status:** likely deliberate but stated nowhere; needs a
+one-line verdict.
+
+---
+
+## NUR019 — `slice` is the String family's core straggler {#nur019}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the string vocabulary moved to `aql:string-util`; moved
+words are not available unqualified (lang/go/CLAUDE.md §"Package
+layout").
+**Divergence:** `slice` alone stays core — REFERENCE's string table
+lists it unqualified between two `StringUtil.*` rows — and `aql
+describe` files it under `list`, not `string`. The likely reason
+(it is polymorphic over String and List, i.e. a sequence word) is
+stated nowhere.
+**Evidence:** `lang/go/native/natives.go:372-382`; REFERENCE.md:1117;
+`help_categories.go:40-49`.
+**Documentation status:** undocumented rationale.
+
+---
+
+## NUR020 — The `print` core exception is asserted, never argued {#nur020}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the IO vocabulary moved to `aql:io`; "only `print` stays in
+core".
+**Divergence:** the exception is repeated in four places with only a
+one-line "so basic output needs no import" rationale; ADR-004 argues
+print's *forwardness*, not its placement. One IO word unqualified, the
+rest namespaced, with the boundary un-argued.
+**Evidence:** `lang/go/CLAUDE.md:82`; `native_print.go:6-7`;
+`io_module.go:21`; `register.go:123-127`; ADR-004 §Consequences.
+**Documentation status:** deliberate but asserted, not argued.
+**Proposed verdict:** allow with the argument written down (or resolve
+by moving print — a breaking change).
+
+---
+
+## NUR021 — Accessor-family container coverage is asymmetric {#nur021}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** `get`/`getr`/`has` (and the dot/dotr sugar) are one
+strict/lenient/presence family sharing signature sets.
+**Divergence:** the members cover different containers: `getr`/`dotr`
+lack the Store rows `get`/`has` carry; only `get`/`dot` know the Xml
+well-known fields — live, `m.tag` reads the tag, `m!.tag` errors, and
+`m has tag/q` answers **false** for a field `dot` successfully reads
+(the presence predicate contradicts the reader); `has` also lacks the
+ModuleExport/Module rows both getters carry.
+**Evidence:** `native_accessor.go:61-129` vs
+`native_storage.go:243-282`.
+**Documentation status:** the strict/lenient/total *behavior* split is
+documented; the container-coverage gaps are not. **Proposed verdict:**
+resolve by fix (fill the missing rows), not allow.
+
+---
+
+## NUR022 — `del` covers a fraction of `set`'s containers {#nur022}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** paired reader/writer words cover the same containers.
+**Divergence:** `set` dispatches over Store, Map, List, Class, FlexMap,
+FlexList, FlexXml (and errors on Micron); `del` covers Map and FlexMap
+only. The List exclusion is documented (pointing at pop/shift/
+remove-at); the Store/Class/FlexList/FlexXml absences are not.
+**Evidence:** `native_storage.go:24-149` vs `:151-194`.
+**Documentation status:** partially documented.
+
+---
+
+## NUR023 — Stack-only registrations outside ADR-004's closed list {#nur023}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** ADR-004 — every word ships forward-eligible
+(`BarrierPos: -1`); the only stack-only words are the traditional
+Forth vocabulary, pinned as a closed list in REFERENCE; a new
+stack-only word "needs the same justification weight as a new
+init-time panic".
+**Divergence:** `apply`'s `[Function]` signature is `BarrierPos: 0`
+(stack-only) with a code-comment-only rationale — it is not in the
+pinned list. Secondarily, 0-arg words split between `BarrierPos: 0`
+(`now`, `math-pi`, the clock words, `break`/`continue`, `gensym`) and
+`-1` (`stdin`/`stdout`/`stderr`) against the stated "MUST use -1" rule
+— inert at zero args, but a literal deviation.
+**Evidence:** `native_ref.go:50-67`; REFERENCE.md:946-962 (the pinned
+list); `time_async_module.go:26`; `modules/math.go:339,350`;
+`io_module.go:87`.
+**Documentation status:** code comments only; the ADR's closed list
+does not contain the exception.
+
+---
+
+## NUR024 — Ordering words are family-restricted; equality is total {#nur024}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one comparison vocabulary, one totality regime.
+**Divergence:** `cmp`/`lt`/`lte`/`gt`/`gte` raise `[aql/incomparable]`
+across families (`cmp true 1` errors — verified live) while
+`eq`/`neq`/`deq` are total (`1 eq "1"` → false) and `tcmp` is the
+unrestricted total order — two totality regimes inside one family,
+with `cmp` and `tcmp` answering differently for the same pair.
+**Evidence:** REFERENCE.md:1156-1179; `compare.go` (family
+restriction), `compare_types.go` (tcmp's Rank order).
+**Documentation status:** fully documented with rationale ("different
+types are simply not equal; only the ordering words restrict").
+**Proposed verdict:** allow — the restriction catches real type errors
+where a silent cross-family order would hide them, and `tcmp` provides
+the escape.
+
+---
+
+## NUR025 — Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented {#nur025}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** REFERENCE §Comments defines the comment vocabulary: `# text`
+(line) and `## text ##` (block).
+**Divergence:** `##` does not open a block — `1 ## hi ## add 2` → `1`
+(rest of line ignored; the second `##` closes nothing). The actual
+block form is `/* */` (`1 /* hi */ add 2` → `3`) and `//` is a second
+working line form — both inherited jsonic defaults, absent from
+REFERENCE.
+**Evidence:** REFERENCE.md:243-248; `parse_error.go:67`
+(`unterminated_comment: /*`); `parse_test.go:563`.
+**Documentation status:** the documented form is wrong and the working
+forms are undocumented. **Proposed verdict:** resolve by decision —
+either implement `## ##` and hide the jsonic defaults, or document
+what the parser actually accepts.
+
+---
+
+## NUR026 — Escape sets diverge between quoted strings and templates {#nur026}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one escape vocabulary across string literal forms.
+**Divergence:** quoted strings (`"…"`/`'…'`) accept jsonic's full
+escape set (`\x41`, `A`, `\b`, `\f`, …); backtick templates
+process only `\n \t \r \\ \` \$` — `size "z\x41z"` → 3 while the same
+text in a template → 6 (the escape survives literally).
+**Evidence:** `parse.go:1604-1637` (`processTemplateEscapes`);
+`grammar.go:103,355-367`.
+**Documentation status:** REFERENCE documents the restricted template
+set but never states quoted strings accept a superset — the asymmetry
+is undocumented.
+
+---
+
+## NUR027 — Invalid modifier combos fall through silently, two different ways {#nur027}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** a malformed suffix modifier should be reported, one way.
+**Divergence:** two silent behaviors, neither an error: (a) `/q` plus a
+shape modifier — the shape half is silently ignored (`foo/sq` is a
+plain Atom; documented); (b) a mutually-exclusive combo (`foo/qr`,
+`foo/fs`, duplicate letters) — the whole token silently becomes a word
+name containing a slash, surfacing later as an obscure
+`undefined_word: foo/qr` (undocumented).
+**Evidence:** `parse.go:1274-1368` (`scanWordModifier`), `:1414`.
+**Documentation status:** case (a) documented in CLAUDE.md; case (b)
+undocumented. **Proposed verdict:** resolve by fix for (b) — an
+"invalid modifier" parse error.
+
+---
+
+## NUR028 — `aql fmt` re-parses template holes as map literals {#nur028}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** one parser (ADR-007's spirit) — the formatter must agree with
+the parser about what source means.
+**Divergence:** the formatter has no InterpString handling, so
+`` `hi ${name}` `` round-trips to `` `hi $ {name:name} ` `` — the
+`${expr}` hole re-parsed as a map literal, changing program semantics.
+The kg pipeline hand-formats its sources and guards `make fmt` into a
+no-op because of this.
+**Evidence:** `lang/go/formatter/` (no interp path);
+kg/README.md:238-245 (the only place it is tracked);
+design/go-modules/FMT.10.md is silent.
+**Documentation status:** tracked only in a component README.
+**Proposed verdict:** resolve by fix (formatter learns InterpString);
+until then the register entry is the tracker.
+
+---
+
+## NUR029 — Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) {#nur029}
+
+**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+
+**Rule:** the same construct behaves the same across sibling forms
+(parked vs named, parenthesized vs bare, matched vs default arm,
+returned vs bound, `none` vs `None`, single- vs multi-token).
+**Divergence:** `design/AQL-SHARP-EDGES.0.md` documents seven
+sibling-form divergences, none previously registered: G8 (recovered
+`raise` tears down enclosing params), G9 (a `case` DEFAULT arm
+forward-collects the scrutinee stack; matched arms are isolated), G10
+(parenthesized `(dot message)` finds no receiver where bare `dot
+message` works), G11 (a returned bare list evaluates lazily after
+frame teardown; a `def`-bound one snapshots eagerly), G12 (a
+`/r`-parked fn does not satisfy a `Function` param, yet the same value
+dot-invoked from a map dispatches), G13a (single-token bare-map body
+refuses to compile; multi-token compiles), G13b (`{r: None}` refuses
+to bytecode-compile while `{r: none}` compiles).
+**Evidence:** `design/AQL-SHARP-EDGES.0.md` (minimal repros and triage
+table per item; two engine-bug candidates, two compiler limits, three
+sharp edges).
+**Documentation status:** tracked in the design note with per-item
+status; registered here so each resolution or allowance is recorded.
+This umbrella entry splits into per-item records if any single item is
+allowed rather than fixed.
