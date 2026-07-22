@@ -464,36 +464,46 @@ in the skeleton, whereas the AQL app opens the real Access/Passwords tables
 and Maintenance/Settings sub-menus — i.e. the AQL port reaches *past* the
 skeleton to the same destinations the bubbletea TUI has.
 
-## 7. Deferred: vault logic in AQL (spec sketch, not implemented)
+## 7. Deferred: vault logic in AQL (spec authored, not implemented)
 
 The bridge is the *first* step of a migration, not its end state. The
-follow-on phase — moving vault logic itself into AQL — needs:
+follow-on phase — moving vault logic itself into AQL — is now specified in
+three companion design docs; each subsection below is a one-line
+orientation pointing at the authoritative spec. The specs are pinned to
+the **real Go vault internals** (`cmd/go/internal/vault`) so an in-AQL
+vault can open a vault the Go path wrote — parity, not reinvention.
 
-### 7.1 `aql:crypto`
+### 7.1 `aql:crypto` — cryptographic primitives
 
-`Crypto.aead-seal <key> <nonce> <aad> <plain> → Bytes` /
-`Crypto.aead-open …` (AES-256-GCM; XChaCha20-Poly1305 as an `{alg}`
-option) · `Crypto.scrypt {n r p len} <salt> <pass> → Bytes` ·
-`Crypto.argon2id {…}` · `Crypto.hkdf {info len} <salt> <ikm> → Bytes` ·
-`Crypto.sha256/sha512 <bytes> → Bytes` · `Crypto.hmac <key> <bytes> →
-Bytes` · `Crypto.eq <a> <b> → Boolean` (constant-time) ·
-`Crypto.box-seal`/`box-open` (nacl). Policy scope `crypto`.
+AES-256-GCM AEAD, scrypt (the vault's `N=2¹⁵, r=8, p=1, len=32`),
+HKDF-SHA256, SHA-256/512, HMAC-SHA256, constant-time `eq`, and X25519
+anonymous sealed boxes — a pure-compute module (policy scope `crypto`,
+no global hard-cap). Every byte value is the first-class `Bytes` type
+([BYTES.10](go-modules/BYTES.10.md)). **→ see
+[AQL-CRYPTO.0](AQL-CRYPTO.0.md)** (authoritative spec; defers
+`argon2id`/XChaCha20 as unused by the vault).
 
 ### 7.2 Secure randomness
 
-`Crypto.rand-bytes <n> → Bytes` on `crypto/rand`. Deliberately **not** in
-`aql:rand`, which stays `math/rand` and must never be reached for key
-material.
+`Crypto.rand-bytes <n>` on `crypto/rand`, deliberately **not** in
+`aql:rand` (which stays `math/rand` and must never be reached for key
+material). Specified alongside the primitives **→ see
+[AQL-CRYPTO.0](AQL-CRYPTO.0.md) §9**.
 
 ### 7.3 OS keyring seam
 
-`RegisterHostKeyring` mirroring the tui/vault seams — `get/set/delete`
-over the platform backends — so keychain access stays host-injected.
+`RegisterHostKeyring` mirroring the tui/vault seams — typed
+`get`/`set`/`delete` over the platform backends (Keychain / Secret
+Service / wincred / file / 1Password) — so keychain access stays
+host-injected. **→ see [OS-KEYRING.0](OS-KEYRING.0.md)**.
 
-### 7.4 `aql:os`
+### 7.4 `aql:os` — env read + clipboard
 
-`Os.env <name> → String|None` (gated by the existing `env` policy scope),
-`Os.clipboard-copy <text>`; the general-purpose homes for N1 and G2.
+The env read (N1) is the existing `Os.getenv` (value-or-None, `env`
+scope); the clipboard copy (G2) is a new seam-backed `Os.clipboard-copy`
+gated on `process`. Both are specified in the canonical OS module doc
+**→ see [go-modules/OS.10](go-modules/OS.10.md) §12** (the vault-migration
+additions).
 
 With those landed, `store.jsonic` read/write, keyslot envelopes, and
 capability bookkeeping become expressible in AQL (`aql:io` already covers
