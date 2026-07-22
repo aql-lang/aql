@@ -1,5 +1,13 @@
 # FLEX-ATTRS.0 — named behavioural attributes on flex nodes
 
+> **Superseded (2026-07-21):** the maintainer reviewed this note and
+> took decisions — universal insertion order for all Nodes, the
+> attribute mechanism scrapped, weakness recast as a nominal
+> `WeakFlexMap` subtype, sorted variants as module-exported types.
+> The revised design and its analysis:
+> [FLEX-ATTRS.1.md](FLEX-ATTRS.1.md). The §2 findings and §5/§6
+> analyses below remain the evidence base the revision builds on.
+
 Status: **proposal under examination — not implemented** (2026-07-21).
 This note examines the `attr` proposal from four perspectives —
 implementation, type system, gotchas, language design — and ends in
