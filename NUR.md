@@ -11,9 +11,12 @@ where every deviation from that value is made visible, argued, and
 either eliminated or explicitly accepted.
 
 Records are short, numbered (`NUR000`, `NUR001`, …), and dated, in the
-style of [ADR.md](ADR.md). Numbers are never reused; resolved records
-are kept (with a pointer to the resolving change) rather than deleted,
-so the history of *why* stays legible.
+style of [ADR.md](ADR.md). Numbers are **never reused**. A **Resolved**
+record is **deleted** from this file — the fix and its rationale live
+in the resolving commit, which names the `NURnnn` it closes — and its
+number is retired, never reassigned. A gap in the sequence is itself
+the record that something was found and fixed, and any external
+reference to a deleted `NURnnn` stays unambiguous forever.
 
 > **A newly-encountered non-uniformity is a PR blocker.** When a
 > non-uniformity surfaces — in code review, in a design note, or during
@@ -34,8 +37,10 @@ so the history of *why* stays legible.
 - **Allowed** — a deliberate divergence, kept. The record states the
   uniform rule, the divergence, the rationale, and the evidence that
   pins it (docs and tests), so the acceptance cannot silently rot.
-- **Resolved** — the divergence was removed. The record is kept and
-  points at the resolving change.
+- **Resolved** — the divergence was removed. The record is **deleted**
+  and its number retired (see above), so a record only ever appears in
+  this file as Pending or Allowed; `git log -S NURnnn` recovers a
+  retired number's history.
 
 ---
 
@@ -50,9 +55,7 @@ commit.
 | # | Title | Surfaced by |
 |---|-------|-------------|
 | [NUR005](#nur005) | String `add` crosses scalar types; Atom/Bytes do not mirror it | 2026-07-22 uniformity review |
-| [NUR006](#nur006) | Integer `div` MinInt64 ÷ −1 silently wraps — the one unguarded overflow | 2026-07-22 uniformity review |
 | [NUR007](#nur007) | Two units of "character" in the String words: bytes vs runes | 2026-07-22 uniformity review |
-| [NUR008](#nur008) | Rounding words are Float-only behind a `[Number]` facade | 2026-07-22 uniformity review |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR010](#nur010) | Integer `pow` negative-exponent error carries no `[aql/…]` code | 2026-07-22 uniformity review |
 | [NUR011](#nur011) | `eq` is identity for compounds, value for scalars | 2026-07-22 uniformity review |
@@ -60,12 +63,9 @@ commit.
 | [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
 | [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
 | [NUR015](#nur015) | Collection words dedup/group/member on rendered form — a third equality | 2026-07-22 uniformity review |
-| [NUR016](#nur016) | Sort stability differs across the sorting words | 2026-07-22 uniformity review |
-| [NUR017](#nur017) | `TIdeal`'s Behavior is assigned by two competing `init()`s | 2026-07-22 uniformity review |
 | [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
 | [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
 | [NUR020](#nur020) | The `print` core exception is asserted, never argued | 2026-07-22 uniformity review |
-| [NUR021](#nur021) | Accessor-family container coverage is asymmetric | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR024](#nur024) | Ordering words are family-restricted; equality is total | 2026-07-22 uniformity review |
@@ -300,29 +300,6 @@ Atom/Bytes asymmetry is noted only in a code comment.
 
 ---
 
-## NUR006 — Integer `div` MinInt64 ÷ −1 silently wraps — the one unguarded overflow {#nur006}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** integer arithmetic that crosses the int64 range raises
-`[aql/integer_overflow]` "rather than silently wrapping two's-
-complement… The policy is uniform across every integer arithmetic
-word" — `lang/go/native/native_math.go:33-36`.
-**Divergence:** `divTowerOps.intFn` guards only the zero divisor;
-`-9223372036854775808 div -1` returns `-9223372036854775808` silently
-(verified live) — the sole overflow case in integer division, wrapped
-where add/sub/mul/pow raise. The check-mode mirror (`returnsDivMod`)
-mirrors division-by-zero only, so the wrap is invisible statically too.
-**Evidence:** `native_math.go:213-219` (unguarded) vs `:71-73`
-(`checkedMulInt` guards the same pair for mul); `:351`;
-`design/INTEGER-OVERFLOW-STRATEGY.5.md:114-118` (root-cause table
-omits div).
-**Documentation status:** undocumented; contradicts the stated uniform
-policy. **Proposed verdict:** resolve by fix (guard + mirror + spec
-row), not allow.
-
----
-
 ## NUR007 — Two units of "character" in the String words: bytes vs runes {#nur007}
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
@@ -344,27 +321,6 @@ bytes") vs REFERENCE.md:1058 ("once per character").
 **Documentation status:** REFERENCE documents the byte rule for `size`
 only; the split itself and the invalid-UTF-8 slice edge are
 undocumented.
-
----
-
-## NUR008 — Rounding words are Float-only behind a `[Number]` facade {#nur008}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** the aql:math-util unary words were made "TOTAL over the whole
-Number family" (`lang/go/modules/math.go:354-358`), declared with a
-`[Number] -> [Number]` facade (`math.go:32-39`).
-**Divergence:** `ceil`/`floor`/`round`/`round-even`/`trunc` register a
-single `[Float]` runtime signature; `MathUtil.ceil 5` (Integer) is an
-`uncalled_function` while `MathUtil.ceil 5.4` → 6 (verified live), and
-the Big leaves have no overload either. Every sibling unary
-(`abs`/`negate`/`sign`, `sqrt`/`exp`/`log`, trig) covers
-Integer+Float+Big.
-**Evidence:** `math.go:459-475` vs `:72-168,368-413`;
-`native_helpers.go:329-357`.
-**Documentation status:** undocumented; contradicts the module's own
-totality comment. **Proposed verdict:** resolve by fix (add the
-Integer/Big overloads), not allow.
 
 ---
 
@@ -500,45 +456,6 @@ basis.
 
 ---
 
-## NUR016 — Sort stability differs across the sorting words {#nur016}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** one sorting contract across the sorting vocabulary.
-**Divergence:** `sort` (list & map) and `sortby` (reach form) are
-stable (`sort.SliceStable`); `sortby` (two-list form) and `grade` are
-unstable (`sort.Slice`) — one word stable in one overload and unstable
-in the other. Observable whenever elements compare equal (cross-leaf
-magnitudes, structurally-equal compounds).
-**Evidence:** `native_sort.go:58,84`; `native_array.go:1432` vs
-`:1105,961`.
-**Documentation status:** undocumented. **Proposed verdict:** resolve
-by fix (SliceStable everywhere), not allow.
-
----
-
-## NUR017 — `TIdeal`'s Behavior is assigned by two competing `init()`s {#nur017}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** one Behavior struct per type node, composing capabilities,
-assigned once (every other kernel type: e.g. `listFormatBehavior`
-carries Format+Size in one struct).
-**Divergence:** `TIdeal.Behavior` is assigned by `convert_ideal.go`'s
-init (`idealConvertBehavior` — IdealConverter, no Sizer) and again by
-`size.go`'s init (`idealSizeBehavior` — Sizer, no IdealConverter);
-lexical filename order decides, `size.go` wins, and the convert
-fallback the first file documents is never installed (conversion
-survives only because both terminal defaults coincide). Renaming a
-file silently breaks `size` on Class/Store/Table/Resource/Error.
-**Evidence:** `eng/go/convert_ideal.go:66-78,260-269`;
-`eng/go/size.go:99-124`; no test pins the resolved Behavior.
-**Documentation status:** undocumented; the two files' comments
-contradict each other. **Proposed verdict:** resolve by fix (one Ideal
-behavior struct implementing both capabilities + a pinning test).
-
----
-
 ## NUR018 — Store and Error are excluded from `make` {#nur018}
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
@@ -590,26 +507,6 @@ rest namespaced, with the boundary un-argued.
 **Documentation status:** deliberate but asserted, not argued.
 **Proposed verdict:** allow with the argument written down (or resolve
 by moving print — a breaking change).
-
----
-
-## NUR021 — Accessor-family container coverage is asymmetric {#nur021}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** `get`/`getr`/`has` (and the dot/dotr sugar) are one
-strict/lenient/presence family sharing signature sets.
-**Divergence:** the members cover different containers: `getr`/`dotr`
-lack the Store rows `get`/`has` carry; only `get`/`dot` know the Xml
-well-known fields — live, `m.tag` reads the tag, `m!.tag` errors, and
-`m has tag/q` answers **false** for a field `dot` successfully reads
-(the presence predicate contradicts the reader); `has` also lacks the
-ModuleExport/Module rows both getters carry.
-**Evidence:** `native_accessor.go:61-129` vs
-`native_storage.go:243-282`.
-**Documentation status:** the strict/lenient/total *behavior* split is
-documented; the container-coverage gaps are not. **Proposed verdict:**
-resolve by fix (fill the missing rows), not allow.
 
 ---
 

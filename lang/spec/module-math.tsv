@@ -17,6 +17,14 @@ import "aql:math-util"  MathUtil.ceil 2.3	3	round up
 import "aql:math-util"  MathUtil.floor 2.7	2	round down
 import "aql:math-util"  MathUtil.round 4.6	5	round to nearest
 import "aql:math-util"  MathUtil.trunc 4.9	4	truncate toward zero
+# the rounding family is total over the whole Number family (NUR008 fix):
+# an Integer is already integral — identity, keeping its type.
+import "aql:math-util"  MathUtil.ceil 5	5	Integer ceil is identity
+import "aql:math-util"  MathUtil.floor -3	-3	Integer floor is identity (negative too)
+import "aql:math-util"  MathUtil.round 7	7	Integer round is identity
+import "aql:math-util"  MathUtil.round-even 8	8	Integer round-even is identity
+import "aql:math-util"  MathUtil.trunc 9	9	Integer trunc is identity
+import "aql:math-util"  MathUtil.ceil "x"	ERROR:uncalled_function	a non-Number still refuses (negative twin)
 #
 # §3  roots / logs (Float results)
 import "aql:math-util"  MathUtil.sqrt 16.0	4.0	square root

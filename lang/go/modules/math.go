@@ -216,14 +216,17 @@ var MathNatives = func() []native.NativeFunc {
 				return b, nil
 			}),
 		),
-		// ceil/floor/round/round-even/trunc: decimal -> integer.
-		// `round` rounds halves away from zero; `round-even` rounds halves
-		// to even (IEEE-754 roundTiesToEven, the default rounding mode).
-		ceilFloorNative("ceil", math.Ceil),
-		ceilFloorNative("floor", math.Floor),
-		ceilFloorNative("round", math.Round),
-		ceilFloorNative("round-even", math.RoundToEven),
-		ceilFloorNative("trunc", math.Trunc),
+		// ceil/floor/round/round-even/trunc over the whole Number family:
+		// Float -> Integer (the historical form), Integer/BigInteger are
+		// identity, BigDecimal rounds to an integral BigDecimal under the
+		// word's apd mode. `round` rounds halves away from zero;
+		// `round-even` rounds halves to even (IEEE-754 roundTiesToEven,
+		// the default rounding mode).
+		native.RoundToIntegralNative("ceil", math.Ceil, apd.RoundCeiling),
+		native.RoundToIntegralNative("floor", math.Floor, apd.RoundFloor),
+		native.RoundToIntegralNative("round", math.Round, apd.RoundHalfUp),
+		native.RoundToIntegralNative("round-even", math.RoundToEven, apd.RoundHalfEven),
+		native.RoundToIntegralNative("trunc", math.Trunc, apd.RoundDown),
 	}
 
 	// Unary numeric words. Integer/Float arguments stay on the Float
@@ -451,26 +454,6 @@ func mergeBinaryNumNatives(name string, intNative, numNative native.NativeFunc) 
 		Name: name,
 
 		Signatures: sigs,
-	}
-}
-
-// ceilFloorNative builds a NativeFunc for ceil/floor/round/trunc-style
-// words: decimal -> integer via int64(fn(d)).
-func ceilFloorNative(name string, fn func(float64) float64) native.NativeFunc {
-	return native.NativeFunc{
-		Name: name,
-
-		Signatures: []native.Signature{{
-			Args: []*native.Type{native.TFloat},
-			Impl: native.Go(func(args []native.Value, _ map[string]native.Value, _ []native.Value, _ *native.Registry) ([]native.Value, error) {
-				d, err := args[0].AsConcreteFloat()
-				if err != nil {
-					return nil, err
-				}
-				return []native.Value{native.NewInteger(int64(fn(d)))}, nil
-			}),
-			Returns: []*native.Type{native.TInteger}, BarrierPos: -1,
-		}},
 	}
 }
 

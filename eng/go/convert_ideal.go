@@ -14,7 +14,7 @@ var ErrNoConverter = errors.New("eng: no converter in this Behavior")
 // IdealConverter is the optional capability that lets an Ideal type
 // convert its values to a Map or a List. Implement it on a TypeBehavior.
 //
-// The base Ideal type (idealConvertBehavior, installed below) provides the
+// The base Ideal type (idealRootBehavior, installed below) provides the
 // fallback: any Ideal that does not override converts to an empty Map ({})
 // or empty List ([]). Concrete Ideals — built-in or user-defined, in Go or
 // AQL — may attach a Behavior implementing this to give a meaningful
@@ -60,22 +60,32 @@ func ConvertIdealToList(v Value) (Value, error) {
 	return NewList(nil), nil
 }
 
-// idealConvertBehavior is the base Ideal Behavior. It delegates the core
-// TypeBehavior methods to DefaultBehavior and supplies the empty-{}/[]
-// IdealConverter fallback for every Ideal that does not override.
-type idealConvertBehavior struct{}
+// idealRootBehavior is THE Ideal-root Behavior: one struct composing
+// every root capability, assigned exactly once (below). It supplies the
+// empty-{}/[] IdealConverter fallback for every Ideal that does not
+// override, and the payload-switch Sizer (its Size method lives in
+// size.go with the other kernel Sizers); Match/Format/Equal stay at the
+// kernel default via the embedded defaultBehavior + formatDelegate.
+//
+// One struct is load-bearing (the NUR017 fix): the root previously had
+// TWO mutually-exclusive behaviors — a converter-only struct assigned
+// here and a sizer-only struct assigned in size.go's init — so lexical
+// filename order decided which survived, the loser's assignment was
+// dead, and renaming a file would silently drop `size` (or `convert`)
+// on every Ideal kind without its own override.
+// ideal_root_behavior_test.go pins the resolved composition.
+type idealRootBehavior struct{ defaultBehavior }
 
-func (idealConvertBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (idealConvertBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (idealConvertBehavior) Format(v Value) string       { return DefaultBehavior.Format(v) }
-func (idealConvertBehavior) ToMap(Value) (Value, error)  { return NewMap(NewOrderedMap()), nil }
-func (idealConvertBehavior) ToList(Value) (Value, error) { return NewList(nil), nil }
+func (idealRootBehavior) formatDelegate() {}
+
+func (idealRootBehavior) ToMap(Value) (Value, error)  { return NewMap(NewOrderedMap()), nil }
+func (idealRootBehavior) ToList(Value) (Value, error) { return NewList(nil), nil }
 
 func init() {
-	// Install the fallback converter on the Ideal root. Package vars
-	// (incl. TIdeal) are initialised before init() runs — see the
+	// The SINGLE Ideal-root Behavior install. Package vars (incl.
+	// TIdeal) are initialised before init() runs — see the
 	// compare_scalar_behaviors.go init for the same ordering rationale.
-	TIdeal.ensureTMeta().Behavior = idealConvertBehavior{}
+	TIdeal.ensureTMeta().Behavior = idealRootBehavior{}
 }
 
 // ---- concrete converters for the built-in Ideal kinds ----

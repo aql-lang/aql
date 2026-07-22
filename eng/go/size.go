@@ -25,8 +25,8 @@ func SizeOf(v Value) int {
 
 // The Size methods below attach the Sizer capability to the kernel
 // Behaviors declared in compare_scalar_behaviors.go (the scalar
-// branch) and coretype_list_map_behaviors.go (List / Map), plus
-// idealSizeBehavior (declared here) for the Ideal family.
+// branch), coretype_list_map_behaviors.go (List / Map), and
+// convert_ideal.go (idealRootBehavior, the Ideal family).
 // Gathering them keeps the one size rule auditable in one place.
 
 // Size of a Number is its floored magnitude: an Integer floors to
@@ -90,17 +90,13 @@ func (mapFormatBehavior) Size(v Value) int {
 	return m.Len()
 }
 
-// idealSizeBehavior carries the Sizer capability for the Ideal
-// family. Installed on the Ideal root, the SizeOf walk reaches it
-// for any Ideal-family instance whose own type has no Sizer. Each
-// kind sizes to its member count: an Object's fields, a Store's
-// entries, a Table's rows. Record instances are field-maps and size
-// via the Map Sizer instead.
-type idealSizeBehavior struct{ defaultBehavior }
-
-func (idealSizeBehavior) formatDelegate() {}
-
-func (idealSizeBehavior) Size(v Value) int {
+// The Ideal family's Sizer rides idealRootBehavior (convert_ideal.go —
+// the ONE Ideal-root Behavior; NUR017). The SizeOf walk reaches it for
+// any Ideal-family instance whose own type has no Sizer. Each kind
+// sizes to its member count: an Object's fields, a Store's entries, a
+// Table's rows. Record instances are field-maps and size via the Map
+// Sizer instead.
+func (idealRootBehavior) Size(v Value) int {
 	switch d := v.Data.(type) {
 	case ClassInstanceInfo:
 		if d.Fields != nil {
@@ -118,8 +114,4 @@ func (idealSizeBehavior) Size(v Value) int {
 		return len(d.Rows)
 	}
 	return 0
-}
-
-func init() {
-	TIdeal.ensureTMeta().Behavior = idealSizeBehavior{}
 }

@@ -76,6 +76,19 @@ var accessorNatives = []NativeFunc{
 			// optional Urlon fields (an absent port answers false).
 			{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(hasMicronHandler), Returns: []*Type{TBoolean}},
+			// [Key | Node/Xml] — the three well-known fields (tag / attr
+			// / cren) are BOUND on every Xml element, so `has` agrees
+			// with what dot/get can read (NUR021: it used to answer
+			// false for a field `dot` successfully returned); any other
+			// key answers false. Wins over [Key | Node] by specificity.
+			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
+			// [Key | ModuleExport] / [Key | Module] — presence over the
+			// same lookup get/getr read, synthetics included (NUR021).
+			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasModuleExportHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(hasModuleExportHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
+			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
 			// [Key | None] — total: an absent parent answers false.
 			// The Atom/q overload captures a bare-word key (`none has
 			// a`, `(m get sub) has k`), going one better than get/getr,
@@ -121,6 +134,16 @@ func accessorGetrSignatures() []Signature {
 		// of reading none).
 		{Args: []*Type{TAtom, TMicron}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
 		{Args: []*Type{TString, TMicron}, BarrierPos: 1, Impl: Go(getrMicronHandler), ReturnsFn: getrMicronReturns},
+		// [Key | Store] — strict store read (NUR021: mirrors get's TStore
+		// sigs; the miss raises the family's not_found).
+		{Args: []*Type{TAtom, TStore}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrStoreHandler), ReturnsFn: getStoreReturnsFn},
+		{Args: []*Type{TString, TStore}, BarrierPos: 1, Impl: Go(getrStoreHandler), ReturnsFn: getStoreReturnsFn},
+		// [Key | Node/Xml] — strict well-known-field read (NUR021: mirrors
+		// get's TXml sigs; wins over the [Key | Node] rows by specificity
+		// exactly as get's do, so `x!.tag` reads and an unknown field
+		// raises not_found). Covers FlexXml via conformance.
+		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrXmlHandler), Returns: []*Type{TAny}},
+		{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(getrXmlHandler), Returns: []*Type{TAny}},
 		// [Key | None]
 		// Always raises not_found — never produces a value; a receiver the
 		// checker KNOWS is None (a literal, a strict None carrier from a
@@ -186,6 +209,41 @@ func hasStoreHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 
 func hasNoneHandler(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	return []Value{NewBoolean(false)}, nil
+}
+
+// hasXmlHandler answers presence for the Xml well-known fields: tag /
+// attr / cren are bound on every Xml element (they are exactly what
+// dot/get/getr can read), anything else is false. Total — a type
+// literal or non-Xml payload answers false.
+func hasXmlHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if _, _, _, ok := XmlParts(args[1]); !ok {
+		return []Value{NewBoolean(false)}, nil
+	}
+	switch getKey(args[0]) {
+	case "tag", "attr", "cren":
+		return []Value{NewBoolean(true)}, nil
+	}
+	return []Value{NewBoolean(false)}, nil
+}
+
+// hasModuleExportHandler / hasModuleInstHandler answer presence over
+// the SAME lookups the get/getr handlers read (moduleExportGet /
+// moduleGet), so the three siblings agree on what is bound. Total — a
+// type literal answers false where the getters raise.
+func hasModuleExportHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if !IsConcrete(args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	_, ok := moduleExportGet(args[1], getKey(args[0]))
+	return []Value{NewBoolean(ok)}, nil
+}
+
+func hasModuleInstHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	if !IsConcrete(args[1]) {
+		return []Value{NewBoolean(false)}, nil
+	}
+	_, ok := moduleGet(args[1], getKey(args[0]))
+	return []Value{NewBoolean(ok)}, nil
 }
 
 // returnsGetrIndexChecked is the check-mode ReturnsFn for the

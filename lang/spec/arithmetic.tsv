@@ -60,6 +60,9 @@ add 1 'x' 'y'	'x1' 'y'	add is binary: the third value is left on the stack
 4000000000 mul 4000000000	ERROR:integer_overflow	product exceeds int64 (was a silent two's-complement wrap)
 2 pow 63	ERROR:integer_overflow	2^63 overflows (was a silent wrap to minint)
 2 pow 62	4611686018427387904	2^62 is the largest in-range power of two — no error
+-9223372036854775808 div -1	ERROR:integer_overflow	minint div -1 is the one division overflow — checked, not wrapped (NUR006)
+-9223372036854775808 div 1	-9223372036854775808	minint div 1 is in range — no error
+-9223372036854775808 mod -1	0	minint mod -1 is defined (0) — mod has no overflow case
 1000000 mul 1000000	1000000000000	a large but in-range product is unaffected
 9223372036854775807 add 1.0	9223372036854776000.0	a Float operand opts out of the integer check (IEEE-754 result)
 # `convert Float` yields a VALUE of type Float (not the Float type literal), so

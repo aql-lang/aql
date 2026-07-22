@@ -127,7 +127,7 @@ func TestS6b5ConvertIdealDecliningBehaviorWalks(t *testing.T) {
 }
 
 func TestS6b5IdealConvertBehaviorFallbacks(t *testing.T) {
-	b := idealConvertBehavior{}
+	b := idealRootBehavior{}
 	m, err := b.ToMap(NewInteger(1))
 	if err != nil {
 		t.Fatalf("ToMap: %v", err)

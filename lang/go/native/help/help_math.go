@@ -129,21 +129,21 @@ func init() {
 
 	register(&Entry{
 		Word:        "ceil",
-		Summary:     "Round a float up to the nearest integer.",
-		Description: "Returns the smallest integer value greater than or equal to the input.",
+		Summary:     "Round a number up to the nearest integral value.",
+		Description: "Returns the smallest integral value greater than or equal to the input. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
 		Notes:       []string{"Requires: import \"aql:math\""},
 	})
 
 	register(&Entry{
 		Word:        "floor",
-		Summary:     "Round a float down to the nearest integer.",
-		Description: "Returns the largest integer value less than or equal to the input.",
+		Summary:     "Round a number down to the nearest integral value.",
+		Description: "Returns the largest integral value less than or equal to the input. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
 		Notes:       []string{"Requires: import \"aql:math\""},
 	})
 
 	register(&Entry{
 		Word:        "round",
-		Summary:     "Round a float to the nearest integer.",
+		Summary:     "Round a number to the nearest integral value.",
 		Description: "Rounds to the nearest integer; ties round away from zero.",
 		Notes: []string{
 			"Uses Go's math.Round: 0.5 rounds away from zero.",
@@ -153,14 +153,14 @@ func init() {
 
 	register(&Entry{
 		Word:        "trunc",
-		Summary:     "Truncate a float toward zero.",
-		Description: "Removes the fractional part, rounding toward zero.",
+		Summary:     "Truncate a number toward zero.",
+		Description: "Removes the fractional part, rounding toward zero. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
 		Notes:       []string{"Requires: import \"aql:math\""},
 	})
 
 	register(&Entry{
 		Word:        "round-even",
-		Summary:     "Round a float to the nearest integer, ties to even.",
+		Summary:     "Round a number to the nearest integral value, ties to even.",
 		Description: "Rounds to nearest; halves go to the even neighbour (IEEE-754 roundTiesToEven). `2.5 round-even` is 2, `3.5 round-even` is 4. Contrast `round`, which rounds halves away from zero.",
 		Notes:       []string{"Requires: import \"aql:math-util\""},
 	})

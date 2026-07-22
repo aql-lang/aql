@@ -58,6 +58,30 @@ def Pt class {x:1} end def Pt3 refine Pt {z:3} end (make Pt3 {}) dotr x	1	dotr r
 context set 'foo' 42 end context dot foo	42	dot quotes the bare key over a Store
 context set 'foo' 42 end def k 'foo' end context get k	42	get evaluates k to 'foo'
 context set 'foo' 42 end context get 'missing'	ERROR:unknown key	Store get is strict on a miss
+# the strict twins cover Store too (NUR021 fix — getr/dotr previously
+# had no Store rows while get/has did):
+context set 'foo' 42 end context getr 'foo'	42	getr reads a bound store key
+context set 'foo' 42 end context dotr foo	42	dotr quotes the bare key over a Store
+context getr 'missing'	ERROR:not_found	getr on a missing store key raises the family's not_found
+
+# ---- Xml: the well-known fields (tag / attr / cren) ----
+# get/dot read them; the strict twins and `has` agree (NUR021 fix —
+# dotr raised expected-a-map and has answered false for a field dot
+# successfully read):
+def m <a>text</a> end m.tag	'a'	dot reads the well-known tag field
+def m <a>text</a> end m!.tag	'a'	…and the strict !. reads it too
+def m <a x="1">t</a> end (m!.attr) get 'x'	'1'	!. reads attr; the map composes with get
+def m <a><b/>text</a> end m!.cren	[<b/> 'text']	!. reads cren — all children, elements and text
+def m <a>text</a> end m!.nope	ERROR:not_found	an unknown Xml field raises for the strict reader
+def m <a>text</a> end m has tag/q	true	has agrees with what dot reads
+def m <a>text</a> end m has cren/q	true	…cren is bound on every element
+def m <a>text</a> end m has nope/q	false	an unknown field is not bound
+
+# ---- Module / ModuleExport: presence joins the family (NUR021 fix) ----
+import module [export "M" {x: 1}] end M has x/q	true	has sees a bound export
+import module [export "M" {x: 1}] end M has y/q	false	…and answers false where getr raises
+import module [export "M" {x: 1}] end (M get $module/q) has kind/q	true	has reads the Module descriptor fields too
+import module [export "M" {x: 1}] end (M get $module/q) has zzz/q	false	…and stays total on an unknown one
 
 # ---- Error value: code / message / payload fields ----
 do [raise bad_input 'boom'] error [dot code]	bad_input/q	dot reads the error code (literal field)

@@ -958,7 +958,9 @@ func gradeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	for i := 0; i < n; i++ {
 		indices[i] = i
 	}
-	sort.Slice(indices, func(a, b int) bool {
+	// Stable, like every sorting word (NUR016): equal-comparing elements
+	// grade in input order, so `grade` agrees with `sort`'s tie handling.
+	sort.SliceStable(indices, func(a, b int) bool {
 		va := list.Get(indices[a])
 		vb := list.Get(indices[b])
 		return arrCompareValues(va, vb) < 0
@@ -1102,7 +1104,9 @@ func sortbyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	for i := 0; i < n; i++ {
 		indices[i] = i
 	}
-	sort.Slice(indices, func(a, b int) bool {
+	// Stable, like the reach-form sortby and sort itself (NUR016):
+	// equal keys keep their data elements in input order.
+	sort.SliceStable(indices, func(a, b int) bool {
 		return arrCompareValues(keys.Get(indices[a]), keys.Get(indices[b])) < 0
 	})
 	result := make([]Value, n)
