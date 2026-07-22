@@ -1,2 +1,3 @@
-def fib fn [[n:Integer] [Integer] [if (n lte 1) [n] [(fib (n sub 1)) add (fib (n sub 2))]]] end
+def fib fn n:Integer Integer
+[if (n lte 1) [n] [(fib (n sub 1)) add (fib (n sub 2))]] end
 print (fib 24)

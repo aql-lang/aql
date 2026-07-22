@@ -13,15 +13,20 @@ import "aql:time-util"
 # Socket at runtime). Either way the handler runs compiled via the
 # callback-compilation seam (~95x over the interpreter). `Socket` is exported by
 # aql:net and resolves as a bare type name.
-def ln (Net.serve-raw {tcp: 19099} (fn [[sock:Socket] [Any] [
-  def nl (convert Bytes "\n")
-  for 20001 [
-    def line (Net.recv-until sock nl)
-    Net.send-bytes (convert Bytes (join "" [(convert String line) "\n"])) sock
-  ]
-]]))
+def ln
+(Net.serve-raw {tcp:19099}
+      (fn sock:Socket Any
+          [def nl (convert Bytes "\n")
+            for 20001
+              [def line (Net.recv-until sock nl) Net.send-bytes
+                  (convert Bytes (join "" [(convert String line) "\n"]))
+                  sock
+              ]
+          ]
+      )
+  )
 
-def sock (Net.connect-raw {tcp: "127.0.0.1:19099"})
+def sock (Net.connect-raw {tcp:"127.0.0.1:19099"})
 def nl (convert Bytes "\n")
 def msg (convert Bytes "hello world\n")
 
@@ -30,11 +35,13 @@ Net.send-bytes msg sock
 Net.recv-until sock nl drop
 
 def start (TimeUtil.now)
-for 20000 [
-  Net.send-bytes msg sock
-  Net.recv-until sock nl drop
-]
+for 20000 [Net.send-bytes msg sock Net.recv-until sock nl drop]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
 
-print (join "" ["AQL  20000 round-trips  " (convert String dur) " ms  " (convert String (div dur 20000000.0)) " req/s"])
+print
+(join ""
+      ["AQL  20000 round-trips  " (convert String dur) " ms  "
+          (convert String (div dur 20000000.0)) " req/s"
+      ]
+  )
 Net.close sock

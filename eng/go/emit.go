@@ -965,6 +965,66 @@ func residualForceOrder(ops []emitOperand, vals []Value) map[int]bool {
 	return forceOrder
 }
 
+// residualForceOrderFor picks the out-of-order promotion set for a fn-unit's
+// finished residual. It is nil for the fn-value / trailing-apply shapes
+// (dynTrail != 0) and for a TRIMMED residual (len(ops) != len(vals) after
+// trimToTopResult, in-order by construction). Otherwise, an ARMED whole-frame
+// replay (dynFrameW > 0) uses replayForceOrder (re-push the token region in
+// exact order — the stylesheet-apply `[nd (rules get …)]` shape); every other
+// residual uses residualForceOrder (the `do [x 1 add 2]` → [const-x, event]
+// event-above-inert case). Extracted from the finish closure to keep
+// StartFnCompile under the cyclomatic-complexity gate.
+func (es *EmitState) residualForceOrderFor(dynTrail int, rec *fnUnitRec, ops []emitOperand, vals []Value) map[int]bool {
+	if dynTrail != 0 || len(ops) != len(vals) {
+		return nil
+	}
+	if rec.dynFrameW > 0 {
+		return es.replayForceOrder(ops)
+	}
+	return residualForceOrder(ops, vals)
+}
+
+// replayForceOrder returns the promotion set that re-pushes an ARMED
+// whole-frame replay residual (dynFrameW > 0) in exact source order. The
+// token-region layout IS the replay's contract — the values must sit on the
+// stack in the order the interpreter's pointer stepped them (args below, the
+// fn value at its own step position) — so an out-of-order residual (a
+// dyn-event result lowered before the inert operand that must sit under it,
+// the `[nd (rules get …)]` stylesheet-apply shape) promotes every residual
+// event to a frame local exactly as residualForceOrder does for plain
+// residuals. The fn/dynamic bail there protects an UNARMED residual from
+// compiling an apply away as data; here OpCallDynFrame owns the apply, so
+// ordering the operands is precisely what makes the replay faithful.
+// Declines (nil — an out-of-order residual then keeps the seating refusal,
+// the sound interpreter fallback) when an event result is VARIADIC (a
+// runtime-variable count cannot store to one slot) or a multi-result event
+// participates (promotion re-pushes single results only).
+func (es *EmitState) replayForceOrder(ops []emitOperand) map[int]bool {
+	seenNonEvent, outOfOrder := false, false
+	for _, op := range ops {
+		if op.kind == opEvent {
+			if op.resIdx != 0 || es.eventInfo[op.idx].variadicResult {
+				return nil
+			}
+			if seenNonEvent {
+				outOfOrder = true
+			}
+		} else {
+			seenNonEvent = true
+		}
+	}
+	if !outOfOrder {
+		return nil
+	}
+	forceOrder := map[int]bool{}
+	for _, op := range ops {
+		if op.kind == opEvent {
+			forceOrder[op.idx] = true
+		}
+	}
+	return forceOrder
+}
+
 // forkForProbe returns a throwaway recording state for compiling a closure body
 // speculatively (recordClosureDispatch's probe), seeded so a RECURSIVE call
 // inside the body resolves to the enclosing in-progress unit. The closure body's
@@ -3301,17 +3361,22 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				return
 			}
 			// A USER fn whose residual COUNT mismatches AND whose residual carries a
-			// Function/FnDef VALUE is an UNAPPLIED fn-value-call the compiler missed —
-			// `(fnv 100)` pushes [fnv, 100] without applying, where the interpreter
-			// applies fnv → ONE value. The count-mismatch-compiles path above assumes
-			// the interpreter ALSO mismatches (and the VM RET raises the matching
-			// type_error), but here it APPLIES and succeeds. resolveDynamicApply runs
-			// only for the MAIN program residual, not fn bodies (cluster E of the broad
-			// hunt), so a fn-body fn-value apply is never lowered. Refuse → fall back. (A
-			// GENUINE count mismatch that happens to carry a fn value still errors in
-			// both engines, so the fallback is sound either way.)
+			// Function/FnDef VALUE — or a DYNAMIC value that may turn out to be one
+			// (a map get over Any: the stylesheet fn-value-dispatch idiom) — is a
+			// possible UNAPPLIED fn-value-call: `(fnv 100)` pushes [fnv, 100] without
+			// applying, where the interpreter applies fnv → ONE value. The
+			// count-mismatch-compiles path below assumes the interpreter ALSO
+			// mismatches (and the VM RET raises the matching type_error), but here it
+			// may APPLY and succeed. noteDynFrameReplay classifies the residual as
+			// the whole-frame replay (OpCallDynFrame — the region re-steps under
+			// execFnDefLiteral's own runtime rule, faithful whether the value applies
+			// or stays data) and arms the RET's RetReplay discipline; a shape it
+			// cannot prove (a mid-body apply failing the body-tail gate, an
+			// undecomposable window) refuses → fall back. (A GENUINE count mismatch
+			// that happens to carry a fn value still errors in both engines, so the
+			// fallback is sound either way.)
 			if dynTrail == 0 && !rec.closure && len(rec.returns) > 0 && len(ops) != len(rec.returns) &&
-				!noteDynFrameReplay(u, rec, vals, len(ops)-len(rec.returns)) {
+				!es.noteDynFrameReplay(u, rec, vals, len(ops)-len(rec.returns)) {
 				es.MarkUncompilable("fn " + name + ": unapplied fn-value in body residual (dynamic apply not compiled in a fn body)")
 				return
 			}
@@ -3371,19 +3436,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				!(len(rec.returns) > 0 && es.eventInfo[ops[n-1].idx].dynBodyResult) {
 				rec.variadic = true
 			}
-			// Out-of-order residual (an event result above an inert bottom —
-			// `do [x 1 add 2]` → [const-x, event]): the in-order RET
-			// reconciliation would refuse "result above a literal". Mirror
-			// Finalize's program-residual promotion: force EVERY residual
-			// event to a frame local, so the reconciliation pushes the whole
-			// residual (locals + consts + types) in exact order. Guarded off
-			// the fn-value / dynamic-apply shapes, whose stack layout IS the
-			// apply's contract and must not reorder — and off a trimmed
-			// residual (len(ops) != len(vals) after trimToTopResult, which is
-			// in-order by construction).
-			if dynTrail == 0 && rec.dynFrameW == 0 && len(ops) == len(vals) {
-				forceOrder = residualForceOrder(ops, vals)
-			}
+			forceOrder = es.residualForceOrderFor(dynTrail, rec, ops, vals)
 		}
 		// Value-def locals for THIS unit (the top-level program's promotion,
 		// scoped to a fn body): a computed result referenced more than once, read
@@ -7709,17 +7762,24 @@ func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []emitOperand) []em
 // args.N fold, a paren apply), where the interpreter's execFnDefLiteral rule
 // fires by RUNTIME Name/arity — statically unknowable in the recorder, so the
 // WHOLE frame residual is replayed at run time (OpCallDynFrame /
-// dynFrameWindow), where that same rule decides. Returns true when no such
-// value exists or the replay window was seated; false keeps the refusal.
-func noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bool {
+// dynFrameWindow), where that same rule decides. A DYNAMIC value (a bounded
+// gradual carrier — a map get over Any, the fn-value-dispatch stylesheet
+// idiom `[nd (rules get (Fmt.kind nd))]`) takes the same replay: whether it
+// turns out to be a fn (the interpreter applies it) or plain data (both
+// engines raise the count error at RET) is decided by the SAME runtime rule
+// the replay re-steps under, so arming is faithful for both outcomes — where
+// the previous compile-with-symmetric-RET-error assumption diverged the
+// moment the runtime value was callable. Returns true when no such value
+// exists or the replay window was seated; false keeps the refusal.
+func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bool {
 	for i, v := range vals {
 		if i < extra && i < rec.nUnnamed {
 			if slot, isLocal := u.localByID[v.ID]; isLocal && slot < rec.nParams {
 				continue
 			}
 		}
-		if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
-			if w, ok := dynFrameWindow(u, rec, vals); ok && replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
+		if v.Dynamic || (v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))) {
+			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
 				rec.dynFrameW = w
 				rec.retReplay = true
 				return true
@@ -7731,16 +7791,39 @@ func noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bo
 }
 
 // replayIsBodyTail reports whether the replay window is the body's LAST
-// statement in source order. The whole-frame replay fires at the RET, so any
-// recorded event positioned AFTER the window would have its effects reordered
+// statement — the whole-frame replay fires at the RET, so any recorded event
+// that ran AFTER the window's production would have its effects reordered
 // ahead of the apply's (the interpreter runs the apply at its own source
 // position: `[(args.0 args.1) print "after"]` prints the callee's output
-// first) — such a body declines and falls back. Events BEFORE the window ran
-// before the apply on both engines, and an event-free body is trivially a
-// tail. When events exist but no window value carries a source position, the
-// order cannot be proven and the replay declines.
-func replayIsBodyTail(frag *EmitFragment, window []Value) bool {
+// first) — such a body declines and falls back. An event-free body is
+// trivially a tail. Two proofs, by window shape:
+//
+//   - A window holding an EVENT RESULT orders by the recorded trace: the
+//     trace is the check run's execution order, so the window is the tail
+//     exactly when no event was recorded after the window's last producer.
+//     (Source columns cannot prove this — a nested-paren argument
+//     `(rules get (Fmt.kind nd))` sits textually after its consumer but ran
+//     before it, and a check-run carrier often carries no Pos at all.)
+//   - An all-inert window (param re-reads) has no producer to anchor on;
+//     order by source position — the apply fires where the fn value is
+//     read. With events but no positioned window value, the order cannot
+//     be proven and the replay declines.
+func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 	if frag == nil || len(frag.events) == 0 {
+		return true
+	}
+	anchorSeq := -1
+	for _, v := range window {
+		if pr, ok := es.producedBy[v.ID]; ok && pr.seq > anchorSeq {
+			anchorSeq = pr.seq
+		}
+	}
+	if anchorSeq >= 0 {
+		for i := range frag.events {
+			if frag.events[i].seq > anchorSeq {
+				return false
+			}
+		}
 		return true
 	}
 	anchor := SrcPos{}

@@ -5,12 +5,21 @@ import "./design/examples/apps/mini-s3.aql"
 import "./design/examples/apps/mini-s3-client.aql"
 import "aql:net"
 import "aql:time-util"
-def ln (MiniS3.serve {port: 0})
+def ln (MiniS3.serve {port:0})
 def port (Net.addr ln).port
-def sock (MiniS3Client.dial (join "" ["127.0.0.1:" (convert String port)]))
+def sock
+(MiniS3Client.dial (join "" ["127.0.0.1:" (convert String port)]))
 def body (convert Bytes "hello world payload")
 MiniS3Client.req sock "PUT" "/b/k" [] body drop
 def start (TimeUtil.now)
-for 3000 [ MiniS3Client.req sock "PUT" "/b/k" [] body drop  MiniS3Client.req sock "GET" "/b/k" [] (convert Bytes "") drop ]
+for 3000 [
+  MiniS3Client.req sock "PUT" "/b/k" [] body drop MiniS3Client.req sock
+    "GET" "/b/k" [] (convert Bytes "") drop
+]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
-print (join "" ["mini-s3 6000 ops  " (convert String dur) " ms  " (convert String (div dur 6000000.0)) " req/s"])
+print
+(join ""
+      ["mini-s3 6000 ops  " (convert String dur) " ms  "
+          (convert String (div dur 6000000.0)) " req/s"
+      ]
+  )

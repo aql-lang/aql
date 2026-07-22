@@ -29,7 +29,7 @@ func init() {
 			"`+bb/…/` minilang kinds (import \"aql:minilang\").",
 		Examples: []string{
 			`def Msg (refine BinarySpec [{name:'op' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}])  unpack-prefix Msg (convert Bytes [1 0 2 104 105])   # {ok:Class/Msg{op:1 len:2 body:Bytes<68 69>} rest:Bytes<>}`,
-			`def Hdr (refine BinarySpec [{name:'op' type:'u8'} {name:'len' type:'u16'}])  unpack-prefix Hdr (convert Bytes [0])   # {need: 2}`,
+			`def Hdr (refine BinarySpec [{name:'op' type:'u8'} {name:'len' type:'u16'}]) unpack-prefix Hdr (convert Bytes [0]) # {need: 2}`,
 		},
 	})
 }

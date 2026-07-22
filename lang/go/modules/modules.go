@@ -47,6 +47,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"log":         BuildLogModule,
 	"repl":        BuildReplModule,
 	"debug":       BuildDebugModule,
+	"fmt":         BuildFmtModule,
 	"vault":       BuildVaultModule,
 	"vault-tui":   BuildVaultTuiModule,
 }

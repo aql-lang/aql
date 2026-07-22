@@ -13,6 +13,40 @@ cluster onto a small number of foundational changes.
 
 ---
 
+## Update (2026-07-21) — Stage-3 fn-value dispatch: body-tail dynamic apply landed
+
+The fn-unit fn-value-application frontier moved by widening the EXISTING
+whole-frame replay recorder (`noteDynFrameReplay`, per REFUSAL-CLOSURE §2's
+route-dynamics-to-runtime doctrine) rather than the two coordinated
+`resolveDynamicApply`/`trailingApply` changes sketched below — the
+`OpCallDynFrame` mechanism subsumes them for the body-tail shape:
+
+- **Trigger widened**: a count-mismatched fn-body residual carrying a
+  **`Dynamic`** value (a bounded gradual carrier — a map get over `Any`,
+  the aql:fmt stylesheet driver `def apply fn [nd:Any Any [nd (rules get
+  (Fmt.kind nd))]]`) now arms `OpCallDynFrame` + `RetReplay` exactly like a
+  statically Function-typed one. Faithful for BOTH runtime outcomes: a
+  callable value re-steps under `execFnDefLiteral`'s own rule (forward
+  collection included); a non-callable value stays data and the RET raises
+  the interpreter's own count error. This also CLOSED the latent
+  divergence where such a body compiled under the symmetric-RET-error
+  assumption but the interpreter applied the runtime-callable value.
+- **Tail proof re-anchored on the trace**: `replayIsBodyTail` orders by
+  recorded event seq when the window holds an event result (source columns
+  cannot order a nested-paren argument against its consumer); the all-inert
+  window keeps the source-position proof.
+- **Out-of-order residual seated**: `replayForceOrder` promotes the
+  residual events so `[inert-local, dyn-event]` re-pushes in exact token
+  order — the layout the replay re-steps.
+- Pins: `TestEdgeFindingDynamicFnValueApplyBodyTail` (graduation + the
+  still-refusing mid-body shape), `fmt_compiled_parity_test.go` (both
+  aql:fmt declarative-formatter demos compiled, `wasCompiled` asserted —
+  including the dispatch-by-`Fmt.kind` end-to-end demo whose dynamic ATOM
+  key trips a pre-existing `get (Map, dynamic(Atom))` checker
+  false-positive, so it is pinned here rather than in the check-accuracy-
+  gated corpus), module-fmt.tsv corpus rows (a check-clean concrete-key
+  driver + its not-callable count-error twin).
+
 ## Update (2026-06-25) — islands back to 0; quoted-operand cluster cleared
 
 A status-completion pass (branch `claude/frame-cleanup-over-pop-dzhf04`)

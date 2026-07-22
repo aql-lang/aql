@@ -7,6 +7,35 @@ import (
 	"testing"
 )
 
+// TestFmtByExtension covers formatByExt: Markdown and HTML files have
+// only their embedded AQL reformatted, while other extensions are treated
+// as whole AQL source files.
+func TestFmtByExtension(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct{ name, content, want string }{
+		{"doc.md", "```aql\ndef  x  1\n```\n", "```aql\ndef x 1\n```\n"},
+		{"page.html", "<!-- aqlfmt -->\ndef  y  2\n<!-- /aqlfmt -->\n", "<!-- aqlfmt -->\ndef y 2\n<!-- /aqlfmt -->\n"},
+		{"code.aql", "def   z   3\n", "def z 3\n"},
+	}
+	for _, c := range cases {
+		p := filepath.Join(dir, c.name)
+		if err := os.WriteFile(p, []byte(c.content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		var out, errOut bytes.Buffer
+		if code := Run([]string{p}, &out, &errOut); code != 0 {
+			t.Fatalf("%s: code=%d stderr=%q", c.name, code, errOut.String())
+		}
+		got, rerr := os.ReadFile(p)
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		if string(got) != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, string(got), c.want)
+		}
+	}
+}
+
 // TestFmtPositionalTildeExpanded guards that a leading ~ in a positional
 // file path that the shell left verbatim (e.g. a quoted "~/x.aql")
 // resolves under the home folder rather than being read as a literal

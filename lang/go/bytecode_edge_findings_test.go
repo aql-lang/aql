@@ -579,3 +579,67 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 		}
 	}
 }
+
+// §6 (Stage-3 fn-value dispatch, landed 2026-07-21) — a fn body whose tail
+// applies a DYNAMIC value (a Function fetched from a map at runtime) to the
+// waiting frame values: the aql:fmt stylesheet driver
+// `def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]`. Before the
+// noteDynFrameReplay widening the count-mismatched residual [inert-local,
+// dyn-event] refused ("fn apply: result above a literal"); now the recorder
+// arms the whole-frame replay (OpCallDynFrame + RetReplay): the residual
+// re-pushes in exact token order (replayForceOrder) and re-steps at the RET
+// under execFnDefLiteral's own runtime rule — the fn applies exactly as the
+// interpreter's pointer would, and a NON-callable value stays data so the
+// RET raises the interpreter's own count error. The gate is the recorded
+// trace: a body with any event AFTER the window's last producer (its
+// effects would reorder behind the replay) keeps refusing.
+func TestEdgeFindingDynamicFnValueApplyBodyTail(t *testing.T) {
+	// The stylesheet idiom, stack-arranged apply: fn value fetched by a
+	// dynamic key, applied to the waiting nd below it.
+	mustCompileWithParity(t,
+		`def rules {inc: ([x:Integer] => [x add 1])}
+		 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]]
+		 app 5 rules`,
+		"[6]")
+	// Forward-collection variant: the fetched fn steps FIRST and collects
+	// the following token region, exactly as the interpreter's pointer does.
+	mustCompileWithParity(t,
+		`def rules {inc: ([x:Integer] => [x add 1])}
+		 def app fn [[nd:Any m:Map] [Any] [(m get "inc") nd]]
+		 app 5 rules`,
+		"[6]")
+	// NOT-callable runtime value: the replay leaves it as data and the RET
+	// raises the interpreter's own return-count type_error (positions may
+	// differ — the VM raises in the callee frame — but code and message
+	// match; the differential skips ERROR rows for exactly this reason).
+	{
+		src := `def rules {inc: 42}
+		 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc")]]
+		 app 5 rules`
+		a, _ := New()
+		_, iErr := a.RunInterp(src)
+		b, _ := New()
+		_, compiled, cErr := b.RunCompiled(src)
+		if !compiled {
+			t.Errorf("%q: the not-callable sibling must still compile", src)
+		}
+		if iErr == nil || cErr == nil || codeOf(iErr) != codeOf(cErr) {
+			t.Errorf("%q: raise parity — compiled=[%s]%v interp=[%s]%v",
+				src, codeOf(cErr), cErr, codeOf(iErr), iErr)
+		}
+		if iErr != nil && cErr != nil &&
+			(!strings.Contains(cErr.Error(), "expected 1 return value(s), got 2") ||
+				!strings.Contains(iErr.Error(), "expected 1 return value(s), got 2")) {
+			t.Errorf("%q: count-error text — compiled=%v interp=%v", src, cErr, iErr)
+		}
+	}
+	// A MID-BODY dynamic apply (an event recorded after the window's
+	// producer — its print must run AFTER the apply) cannot replay at the
+	// RET without reordering effects: refuses, the sound interpreter
+	// fallback.
+	mustRefuseWithParity(t,
+		`def rules {inc: ([x:Integer] => [x add 1])}
+		 def app fn [[nd:Any m:Map] [Any] [nd (m get "inc") print "after"]]
+		 app 5 rules`,
+		"unapplied fn-value in body residual")
+}

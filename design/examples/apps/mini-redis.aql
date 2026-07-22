@@ -26,46 +26,47 @@ import "aql:time-util"
 
 # Decode one inline command line: "SET greeting hello world" →
 # {cmd: "SET", args: ["greeting" "hello" "world"]}.
-def redis-decode fn [[buf:Any] [Any] [
+def redis-decode fn buf:Any Any [
   def txt (convert String buf)
   def idx (StringUtil.indexof "\n" txt)
-  if (idx gte 0) [
-    def line (StringUtil.trim (convert String (slice 0 idx buf)))
-    def rest (slice (add 1 idx) (size buf) buf)
-    def parts (StringUtil.split " " line)
-    def cmd (StringUtil.upper (parts get 0))
-    def cmd-args (slice 1 (size parts) parts)
-    {msg: {cmd: cmd args: cmd-args} rest: rest}
-  ] [ {need: 1} ]
-]]
+  if (idx gte 0)
+    [def line (StringUtil.trim (convert String (slice 0 idx buf)))
+      def rest (slice (add 1 idx) (size buf) buf)
+      def parts (StringUtil.split " " line)
+      def cmd (StringUtil.upper (parts get 0))
+      def cmd-args (slice 1 (size parts) parts)
+        {msg:{cmd:cmd args:cmd-args} rest:rest}
+    ]
+    [{need:1}]
+]
 
 # Encode a reply value as one RESP-flavoured line.
-def redis-encode fn [[reply:Any] [Any] [
-  def txt (
-    if ((typeof reply) eq Integer) [ join "" [":" (convert String reply)] ] [
-      if (reply eq None) [ "$-1" ] [
-        if ((typeof reply) eq List) [ join " " reply ] [
-          if ((typeof reply) eq Map) [
-            join "" ["-ERR " (convert String (reply get "message"))]
-          ] [ reply ]
+def redis-encode fn reply:Any Any [
+  def txt
+    (if ((typeof reply) eq Integer)
+        [join "" [":" (convert String reply)]]
+        [if (reply eq None) ["$-1"]
+            [if ((typeof reply) eq List) [join " " reply]
+                [if ((typeof reply) eq Map)
+                    [join ""
+                        ["-ERR " (convert String (reply get "message"))]
+                    ]
+                    [reply]
+                ]
+            ]
         ]
-      ]
-    ]
-  )
-  convert Bytes (join "" [txt "\n"])
-]]
+    )
+    convert Bytes (join "" [txt "\n"])
+]
 
-def redis-codec {
-  decode: redis-decode/r
-  encode: redis-encode/r
-}
+def redis-codec {decode:redis-decode/r encode:redis-encode/r}
 
 # ---- helpers over the service state ----
 # state: {kv: {} expires: {} lists: {} hashes: {}}
 
 # The clock, as epoch milliseconds (expiries are stored as plain
 # Integers — scalar values round-trip a flex map across dispatches).
-def now-ms fn [[] [Integer] [ TimeUtil.to-unix-ms (TimeUtil.now) ]]
+def now-ms fn [[] [Integer] [TimeUtil.to-unix-ms (TimeUtil.now)]]
 
 # Drop k if its expiry has passed; then read it (None on miss).
 # (Flex `set` returns its receiver, so every set is followed by a drop
@@ -73,195 +74,184 @@ def now-ms fn [[] [Integer] [ TimeUtil.to-unix-ms (TimeUtil.now) ]]
 def kv-read fn [[st:Any k:String] [Any] [
   def expires st.expires
   def exp (expires get k)
-  def expired (if (exp eq None) [ false ] [ exp lte (now-ms) ])
-  if expired [
-    def kv st.kv
-    (kv set (k) None) drop
-    (expires set (k) None) drop
-    0
-  ] [ 0 ]
-  drop
-  def kv2 st.kv
-  kv2 get k
+  def expired (if (exp eq None) [false] [exp lte (now-ms)])
+  if expired
+    [def kv st.kv (kv set (k) None) drop (expires set (k) None) drop 0]
+    [0] drop
+  def kv2 st.kv kv2 get k
 ]]
 
 def arg-at fn [[xs:List i:Integer] [Any] [
-  if ((size xs) gt i) [ xs get i ] [ None ]
+  if ((size xs) gt i) [xs get i] [None]
 ]]
 
 # ---- the server ----
 
-def redis-serve fn [[opts:Map] [Any] [
-  def svc (service {kv: {} expires: {} lists: {} hashes: {}})
-
-  add {cmd:"PING"} ([req:Map state:Any] => [ "+PONG" ]) svc
-
-  add {cmd:"SET"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def v (join " " (slice 1 (size req.args) req.args))
-    def kv state.kv
-    (kv set (k) v) drop
-    def expires state.expires
-    (expires set (k) None) drop
-    "+OK"
-  ]) svc
-
-  add {cmd:"GET"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    kv-read state k
-  ]) svc
-
-  add {cmd:"DEL"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def kv state.kv
-    def had (if ((kv get k) eq None) [ 0 ] [ 1 ])
-    (kv set (k) None) drop
-    had
-  ]) svc
-
-  add {cmd:"EXISTS"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    if ((kv-read state k) eq None) [ 0 ] [ 1 ]
-  ]) svc
-
-  add {cmd:"INCR"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def cur (kv-read state k)
-    def n (if (cur eq None) [ 0 ] [ convert Integer cur ])
-    def n2 (add 1 n)
-    def kv state.kv
-    (kv set (k) (convert String n2)) drop
-    n2
-  ]) svc
-
-  add {cmd:"KEYS"} ([req:Map state:Any] => [
-    def kv state.kv
-    def live (filter ([e:Any] => [ def kk e.value ((kv get kk) eq None) not ]) (keys kv))
-    if ((size live) eq 0) [ "(empty)" ] [ live ]
-  ]) svc
-
-  add {cmd:"EXPIRE"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def secs (convert Integer (arg-at req.args 1))
-    if ((kv-read state k) eq None) [ 0 ] [
-      def expires state.expires
-      def when (add (mul 1000 secs) (now-ms))
-      (expires set (k) when) drop
-      1
-    ]
-  ]) svc
-
-  add {cmd:"TTL"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    if ((kv-read state k) eq None) [ -2 ] [
-      def expires state.expires
-      def exp (expires get k)
-      if (exp eq None) [ -1 ] [ convert Integer ((exp sub (now-ms)) div 1000) ]
-    ]
-  ]) svc
-
-  add {cmd:"LPUSH"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def v (arg-at req.args 1)
-    def lists state.lists
-    def cur (lists get k)
-    def xs (if (cur eq None) [ [] ] [ cur ])
-    def xs2 (unshift v xs)
-    (lists set (k) xs2) drop
-    size xs2
-  ]) svc
-
-  add {cmd:"RPUSH"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def v (arg-at req.args 1)
-    def lists state.lists
-    def cur (lists get k)
-    def xs (if (cur eq None) [ [] ] [ cur ])
-    def xs2 (push v xs)
-    (lists set (k) xs2) drop
-    size xs2
-  ]) svc
-
-  add {cmd:"LLEN"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def lists state.lists
-    def cur (lists get k)
-    if (cur eq None) [ 0 ] [ size cur ]
-  ]) svc
-
-  add {cmd:"LRANGE"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def start (convert Integer (arg-at req.args 1))
-    def stop (convert Integer (arg-at req.args 2))
-    def lists state.lists
-    def cur (lists get k)
-    if (cur eq None) [ "(empty)" ] [
-      def n (size cur)
-      def stop2 (if (stop lt 0) [ add n stop ] [ stop ])
-      def stop3 (add 1 stop2)
-      def upper2 (if (stop3 lt n) [ stop3 ] [ n ])
-      if (start gte upper2) [ "(empty)" ] [ slice start upper2 cur ]
-    ]
-  ]) svc
-
-  add {cmd:"HSET"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def f (arg-at req.args 1)
-    def v (arg-at req.args 2)
-    def hashes state.hashes
-    def cur (hashes get k)
-    def h (if (cur eq None) [ {} ] [ cur ])
-    def h2 (h set (f) v)
-    (hashes set (k) h2) drop
-    1
-  ]) svc
-
-  add {cmd:"HGET"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def f (arg-at req.args 1)
-    def hashes state.hashes
-    def cur (hashes get k)
-    if (cur eq None) [ None ] [
-      def v (cur get f)
-      v
-    ]
-  ]) svc
-
-  add {cmd:"HDEL"} ([req:Map state:Any] => [
-    def k (arg-at req.args 0)
-    def f (arg-at req.args 1)
-    def hashes state.hashes
-    def cur (hashes get k)
-    if (cur eq None) [ 0 ] [
-      def had (if ((cur get f) eq None) [ 0 ] [ 1 ])
-      def h2 (cur set (f) None)
-      (hashes set (k) h2) drop
-      had
-    ]
-  ]) svc
-
-  # Unknown command → an -ERR reply, not a dead connection.
-  add {} ([req:Map state:Any] => [
-    {message: (join "" ["unknown command '" req.cmd "'"])}
-  ]) svc
-
-  Net.listen {tcp: opts.port codec: redis-codec} svc
-]]
+def redis-serve fn opts:Map Any [
+  def svc (service {kv:{} expires:{} lists:{} hashes:{}}) add
+    {cmd:"PING"} ([req:Map state:Any] => ["+PONG"]) svc add {cmd:"SET"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def v (join " " (slice 1 (size req.args) req.args))
+          def kv state.kv (kv set (k) v) drop
+          def expires state.expires (expires set (k) None) drop "+OK"
+        ]
+    )
+    svc add {cmd:"GET"}
+    ([req:Map state:Any] => [def k (arg-at req.args 0) kv-read state k])
+    svc add {cmd:"DEL"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def kv state.kv
+          def had (if ((kv get k) eq None) [0] [1]) (kv set (k) None)
+            drop had
+        ]
+    )
+    svc add {cmd:"EXISTS"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          if ((kv-read state k) eq None) [0] [1]
+        ]
+    )
+    svc add {cmd:"INCR"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def cur (kv-read state k)
+          def n (if (cur eq None) [0] [convert Integer cur])
+          def n2 (add 1 n)
+          def kv state.kv (kv set (k) (convert String n2)) drop n2
+        ]
+    )
+    svc add {cmd:"KEYS"}
+    ([req:Map state:Any] =>
+        [def kv state.kv
+          def live
+            (filter
+                ([e:Any] => [def kk e.value ((kv get kk) eq None) not])
+                (keys kv)
+            )
+          if ((size live) eq 0) ["(empty)"] [live]
+        ]
+    )
+    svc add {cmd:"EXPIRE"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def secs (convert Integer (arg-at req.args 1))
+          if ((kv-read state k) eq None) [0]
+            [def expires state.expires
+              def when (add (mul 1000 secs) (now-ms))
+                (expires set (k) when) drop 1
+            ]
+        ]
+    )
+    svc add {cmd:"TTL"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          if ((kv-read state k) eq None) [-2]
+            [def expires state.expires
+              def exp (expires get k)
+              if (exp eq None) [-1]
+                [convert Integer ((exp sub (now-ms)) div 1000)]
+            ]
+        ]
+    )
+    svc add {cmd:"LPUSH"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def v (arg-at req.args 1)
+          def lists state.lists
+          def cur (lists get k)
+          def xs (if (cur eq None) [[]] [cur])
+          def xs2 (unshift v xs) (lists set (k) xs2) drop size xs2
+        ]
+    )
+    svc add {cmd:"RPUSH"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def v (arg-at req.args 1)
+          def lists state.lists
+          def cur (lists get k)
+          def xs (if (cur eq None) [[]] [cur])
+          def xs2 (push v xs) (lists set (k) xs2) drop size xs2
+        ]
+    )
+    svc add {cmd:"LLEN"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def lists state.lists
+          def cur (lists get k)
+          if (cur eq None) [0] [size cur]
+        ]
+    )
+    svc add {cmd:"LRANGE"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def start (convert Integer (arg-at req.args 1))
+          def stop (convert Integer (arg-at req.args 2))
+          def lists state.lists
+          def cur (lists get k)
+          if (cur eq None) ["(empty)"]
+            [def n (size cur)
+              def stop2 (if (stop lt 0) [add n stop] [stop])
+              def stop3 (add 1 stop2)
+              def upper2 (if (stop3 lt n) [stop3] [n])
+              if (start gte upper2) ["(empty)"] [slice start upper2 cur]
+            ]
+        ]
+    )
+    svc add {cmd:"HSET"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def f (arg-at req.args 1)
+          def v (arg-at req.args 2)
+          def hashes state.hashes
+          def cur (hashes get k)
+          def h (if (cur eq None) [{}] [cur])
+          def h2 (h set (f) v) (hashes set (k) h2) drop 1
+        ]
+    )
+    svc add {cmd:"HGET"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def f (arg-at req.args 1)
+          def hashes state.hashes
+          def cur (hashes get k)
+          if (cur eq None) [None] [def v (cur get f) v]
+        ]
+    )
+    svc add {cmd:"HDEL"}
+    ([req:Map state:Any] =>
+        [def k (arg-at req.args 0)
+          def f (arg-at req.args 1)
+          def hashes state.hashes
+          def cur (hashes get k)
+          if (cur eq None) [0]
+            [def had (if ((cur get f) eq None) [0] [1])
+              def h2 (cur set (f) None) (hashes set (k) h2) drop had
+            ]
+        ]
+    )
+    svc # Unknown command → an -ERR reply, not a dead connection.
+  add {}
+    ([req:Map state:Any] =>
+        [{message:(join "" ["unknown command '" req.cmd "'"])}]
+    )
+    svc Net.listen {tcp:opts.port codec:redis-codec} svc
+]
 
 # ---- a convenience client ----
 
-def redis-connect fn [[addr:String] [Any] [
-  Net.connect {tcp: addr codec: Net.lines}
-]]
+def redis-connect fn addr:String Any [
+  Net.connect {tcp:addr codec:Net.lines}
+]
 
 # Send one inline command; returns the reply line.
 def redis-cmd fn [[ep:Service line:String] [String] [
-  def reply (call {line: line} ep {timeout: 10000})
-  reply.line
+  def reply (call {line:line} ep {timeout:10000}) reply.line
 ]]
 
 export "MiniRedis" {
-  serve:   redis-serve/r
-  connect: redis-connect/r
-  cmd:     redis-cmd/r
+  serve:redis-serve/r
+  connect:redis-connect/r
+  cmd:redis-cmd/r
 }

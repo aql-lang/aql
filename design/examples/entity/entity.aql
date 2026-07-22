@@ -17,19 +17,28 @@
 # literal keys are bare, variable keys parenthesised (set (k) v m); all strings
 # double-quoted. (Collection-word spellings are illustrative pending `aql describe`.)
 
-import "aql:serve"          # service / add / call / wrap
-import "aql:string-util"          # StringUtil.split (canon parsing)
+import "aql:serve" # service / add / call / wrap
+import "aql:string-util" # StringUtil.split (canon parsing)
 
 export "Entity" {
-  bus:    bus-new/r         # build a routing bus service
-  mount:  mount/r           # register a store at a canon specificity
-  make:   make-ent/r        # construct a handle (the make$ analog)
-  field:  field/r           # set a field -> new handle (immutable)
-  data:   data-of/r         # the plain Map of fields
-  save:   save/r            # persist  -> handle with id
-  load:   load/r            # load by id -> handle | None
-  list:   list-ents/r       # query    -> List of rows
-  remove: remove-ent/r      # delete by id
+  bus:bus-new/r
+  # build a routing bus service
+  mount:mount/r
+  # register a store at a canon specificity
+  make:make-ent/r
+  # construct a handle (the make$ analog)
+  field:field/r
+  # set a field -> new handle (immutable)
+  data:data-of/r
+  # the plain Map of fields
+  save:save/r
+  # persist  -> handle with id
+  load:load/r
+  # load by id -> handle | None
+  list:list-ents/r
+  # query    -> List of rows
+  remove:remove-ent/r
+  # delete by id
 }
 
 # ---------------------------------------------------------------------------
@@ -37,19 +46,22 @@ export "Entity" {
 # ---------------------------------------------------------------------------
 
 # An empty bus; stores are mounted onto it. (The bus owns no rows itself.)
-def bus-new fn [[] [Service] [ service {} ]]
+def bus-new fn [[] [Service] [service {}]]
 
 # `mount {canon-spec} <store> <bus>` registers forwarding handlers for all five
 # entity commands at the given canon specificity. Omitting a tag from `canonspec`
 # = Seneca's wildcard on that dimension (e.g. {base:"app"} catches any name under
 # base "app"). patrun then routes each request to the most-specific store.
 def mount fn [[canonspec:Map store:Service bus:Service] [Service] [
-  each ([c:String] => [
-      add (set cmd (c) (set role "entity" canonspec))   # {role:"entity" cmd:<c> …spec}
-          [ [req state] => [ call req store ] ]          # forward the whole message
+  each
+    ([c:String] =>
+        [add (set cmd (c) (set role "entity" canonspec))
+            # {role:"entity" cmd:<c> …spec}
+          [[req state] => [call req store]] # forward the whole message
           bus
-  ]) ["save" "load" "list" "remove" "native"]
-  bus
+        ]
+    )
+    ["save" "load" "list" "remove" "native"] bus
 ]]
 
 # ---------------------------------------------------------------------------
@@ -58,7 +70,7 @@ def mount fn [[canonspec:Map store:Service bus:Service] [Service] [
 
 # `make "zone/base/name" <bus>` -> handle. (Real design: returns an `Entity`.)
 def make-ent fn [[canon:String bus:Service] [Map] [
-  { canon: (parse-canon canon)  data: {}  bus: bus }
+  {canon:(parse-canon canon) data:{} bus:bus}
 ]]
 
 # Set a field, returning a NEW handle (entities are immutable data).
@@ -66,43 +78,67 @@ def field fn [[k:String v:Any e:Map] [Map] [
   set data (set (k) v e.data) e
 ]]
 
-def data-of fn [[e:Map] [Map] [ e.data ]]
+def data-of fn e:Map Map [e.data]
 
 # save: insert/update. Reply is the stored row (carrying its id); rewrap it.
-def save fn [[e:Map] [Map] [
-  def reply ( call { role: "entity"  cmd: "save"
-                     base: e.canon.base  name: e.canon.name
-                     ent:  e.data } e.bus )
-  set data reply e
-]]
+def save fn e:Map Map [
+  def reply
+    (call
+        {role:"entity"
+          cmd:"save"
+          base:e.canon.base
+          name:e.canon.name
+          ent:e.data
+        }
+        e.bus
+    )
+    set data reply e
+]
 
 # load by id -> handle | None.
 def load fn [[e:Map id:String] [Map] [
-  def reply ( call { role: "entity"  cmd: "load"
-                     base: e.canon.base  name: e.canon.name
-                     q: {id: id} } e.bus )
-  if (none? reply) [ None ] [ set data reply e ]
+  def reply
+    (call
+        {role:"entity"
+          cmd:"load"
+          base:e.canon.base
+          name:e.canon.name
+          q:{id:id}
+        }
+        e.bus
+    )
+  if (none? reply) [None] [set data reply e]
 ]]
 
 # list: AND-filter `q`, with sort/limit/skip/fields in `opts` (no Seneca `$`).
 def list-ents fn [[e:Map q:Map opts:Map] [List] [
-  call { role: "entity"  cmd: "list"
-         base: e.canon.base  name: e.canon.name
-         q: q  opts: opts } e.bus
+  call
+    {role:"entity"
+      cmd:"list"
+      base:e.canon.base
+      name:e.canon.name
+      q:q
+      opts:opts
+    }
+    e.bus
 ]]
 
 def remove-ent fn [[e:Map id:String] [Any] [
-  call { role: "entity"  cmd: "remove"
-         base: e.canon.base  name: e.canon.name
-         q: {id: id} } e.bus
+  call
+    {role:"entity"
+      cmd:"remove"
+      base:e.canon.base
+      name:e.canon.name
+      q:{id:id}
+    }
+    e.bus
 ]]
 
 # ---------------------------------------------------------------------------
 # Canon parsing — "base/name" or "name" (zone optional). Illustrative.
 # ---------------------------------------------------------------------------
-def parse-canon fn [[s:String] [Map] [
-  def parts ( StringUtil.split "/" s )
-  if (eq (size parts) 1)
-    [ {zone: None  base: None         name: (parts get 0)} ]
-    [ {zone: None  base: (parts get 0) name: (parts get 1)} ]
-]]
+def parse-canon fn s:String Map [
+  def parts (StringUtil.split "/" s)
+  if (eq (size parts) 1) [{zone:None base:None name:(parts get 0)}]
+    [{zone:None base:(parts get 0) name:(parts get 1)}]
+]

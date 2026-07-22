@@ -10,70 +10,79 @@
 # illustrative pending `aql describe`. The point is the SHAPE of a store handler.
 
 import "aql:serve"
-import "aql:rand"          # Rand.uuid for id generation
+import "aql:rand" # Rand.uuid for id generation
 
-export "MemStore" { New: New/r }
+export "MemStore" {New:New/r}
 
 # `New {}` -> Service  (mount it on an entity bus; see usage.aql)
-def New fn [[opts:Map] [Service] [
-  def svc ( service {data: {}} )            # data: collection-key -> {id -> row}
-
+def New fn opts:Map Service [
+  def svc (service {data:{}}) # data: collection-key -> {id -> row}
   # --- save: id present => update, absent => insert (store-assigned id) ----
-  add {role: "entity"  cmd: "save"} [ [req state] => [
-      def key  ( coll-key req )
-      def coll ( (state dot data) get (key) ? {} )
-      def id   ( req.ent dot id ? (Rand.uuid) )      # the seneca-store-test rule
-      def row  ( set id (id) req.ent )               # ensure the id rides on the row
-      state set data (set (key) (set (id) row coll) (state dot data))
-      row                                            # reply: the stored row
-  ] ] svc
-
-  # --- load: by id; first match otherwise -------------------------------
-  add {role: "entity"  cmd: "load"} [ [req state] => [
-      def coll ( (state dot data) get (coll-key req) ? {} )
-      coll get (req.q.id)                            # None if absent
-  ] ] svc
-
-  # --- list: AND-filter q, then sort/limit/skip/fields from opts ----------
-  add {role: "entity"  cmd: "list"} [ [req state] => [
-      def coll ( (state dot data) get (coll-key req) ? {} )
-      def hits ( filter ([r:Map] => [ matches r req.q ]) (vals coll) )
-      apply-opts hits req.opts
-  ] ] svc
-
-  # --- remove: by id; reply the removed row -----------------------------
-  add {role: "entity"  cmd: "remove"} [ [req state] => [
-      def key  ( coll-key req )
-      def coll ( (state dot data) get (key) ? {} )
-      def row  ( coll get (req.q.id) )
-      state set data (set (key) (del (req.q.id) coll) (state dot data))
-      row
-  ] ] svc
-
-  # --- native: raw escape hatch (no backend here) -----------------------
-  add {role: "entity"  cmd: "native"} [ [req state] => [ state dot data ] ] svc
-
-  svc
-]]
+  add {role:"entity" cmd:"save"}
+    [[req state] =>
+        [def key (coll-key req)
+          def coll ((state dot data) get (key)? {})
+          def id (req.ent dot id? (Rand.uuid))
+            # the seneca-store-test rule
+          def row (set id (id) req.ent) # ensure the id rides on the row
+          state set data
+            (set (key) (set (id) row coll) (state dot data)) row
+            # reply: the stored row
+        ]
+    ]
+    svc
+    # --- load: by id; first match otherwise -------------------------------
+  add {role:"entity" cmd:"load"}
+    [[req state] =>
+        [def coll ((state dot data) get (coll-key req)? {}) coll get
+            (req.q.id) # None if absent
+        ]
+    ]
+    svc
+    # --- list: AND-filter q, then sort/limit/skip/fields from opts ----------
+  add {role:"entity" cmd:"list"}
+    [[req state] =>
+        [def coll ((state dot data) get (coll-key req)? {})
+          def hits (filter ([r:Map] => [matches r req.q]) (vals coll))
+            apply-opts hits req.opts
+        ]
+    ]
+    svc
+    # --- remove: by id; reply the removed row -----------------------------
+  add {role:"entity" cmd:"remove"}
+    [[req state] =>
+        [def key (coll-key req)
+          def coll ((state dot data) get (key)? {})
+          def row (coll get (req.q.id)) state set data
+            (set (key) (del (req.q.id) coll) (state dot data)) row
+        ]
+    ]
+    svc
+    # --- native: raw escape hatch (no backend here) -----------------------
+  add {role:"entity" cmd:"native"} [[req state] => [state dot data]]
+    svc svc
+]
 
 # ---------------------------------------------------------------------------
 # Helpers (illustrative collection logic).
 # ---------------------------------------------------------------------------
 
 # Collection key from the canon tags on the request.
-def coll-key fn [[req:Map] [String] [ `${req.base}/${req.name}` ]]
+def coll-key fn req:Map String [`${req.base}/${req.name}`]
 
 # AND-match: every key in the query equals the row's value for that key.
 def matches fn [[r:Map q:Map] [Boolean] [
-  fold ([k:String acc:Boolean] => [ and acc (eq (r get (k)) (q get (k))) ])
-       (keys q) true
+  fold
+    ([k:String acc:Boolean] => [and acc (eq (r get (k)) (q get (k)))])
+    (keys q) true
 ]]
 
 # Apply the query-meta opts {sort limit skip fields}. Sketched: skip then limit.
 def apply-opts fn [[rows:List opts:Map] [List] [
-  def skipped ( drop (opts dot skip ? 0) rows )
-  def limited ( if (none? (opts dot limit ? None))
-                  [ skipped ]
-                  [ take (opts dot limit) skipped ] )
-  limited                                  # sort/fields projection omitted (sketch)
+  def skipped (drop (opts dot skip? 0) rows)
+  def limited
+    (if (none? (opts dot limit? None)) [skipped]
+        [take (opts dot limit) skipped]
+    )
+    limited # sort/fields projection omitted (sketch)
 ]]
