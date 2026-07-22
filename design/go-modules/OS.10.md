@@ -296,3 +296,86 @@ Follow `io.go` (the **capability-backed** reference), not `math.go`
    `Mem`-backed deterministic clock/env so `getenv`/`hostname` specs
    are reproducible). `describe` surfaces the module live via
    `stampExportProvenance` — no static help wiring.
+
+## 12. Vault-migration additions (VAULT-TUI-PORT §7.4)
+
+> The "vault logic in AQL" phase ([VAULT-TUI-PORT.0](../VAULT-TUI-PORT.0.md)
+> §7.4) names two `Os.*` needs — a single-variable env read (**N1**) and a
+> clipboard copy (**G2**). This section is the spec for those two, added
+> here rather than in a fourth module so the OS surface stays in one place.
+
+### 12.1 `Os.env` is the existing `getenv`
+
+VAULT-TUI-PORT §7.4 writes `Os.env <name> → String|None`. That is
+**exactly** `Os.getenv` (§4) — value-or-None env read, `env` scope, `env`
+global. There is no second word: **`getenv` is the canonical spelling**
+(it merges `Getenv`+`LookupEnv` and matches the `setenv`/`unsetenv`
+family). The vault's env read (N1) calls `Os.getenv`; treat "`Os.env`" in
+the port RFC as an informal alias for it. If a shorter reader alias is
+ever wanted, it should be a documented alias of `getenv`, not a divergent
+word.
+
+### 12.2 `clipboard-copy` — a seam-backed effect
+
+| Go mechanism | aql word | signature (top-first) | one-line doc |
+|---|---|---|---|
+| platform clipboard CLI (see below) | `clipboard-copy` | `String → ` (nothing) | Place text on the host clipboard. |
+
+Clipboard is **not** an environment/process-identity attribute, and its
+implementation is a **process spawn** (the Go vault shells out to
+`pbcopy` / `wl-copy` / `xclip` / `xsel` / PowerShell `Set-Clipboard`,
+piping the text on **stdin, never argv** —
+`cmd/go/internal/vault/clipboard.go`). OS.10 deliberately pushes
+`os/exec` spawning out to [`aql:exec`](EXEC.10.md), so `clipboard-copy`
+does **not** call `os/exec` from its handler either. Instead it routes
+through a **host clipboard seam**, exactly like every other effect here:
+
+- **`lang/go` defines ONLY the interface** — a `capabilities.HostClipboard`
+  (`Copy(text string) error`, plus a `Paste`/`Clear` pair reserved for a
+  future read word) and an **in-memory fake** for specs (records the last
+  copied string; no spawn). `lang/go` **must not** import
+  `cmd/go/internal/vault/clipboard.go` — Go's internal-visibility rule
+  forbids it, and an `os/exec`-backed default in `lang/go` would
+  reintroduce the very process-spawning dependency this seam exists to
+  keep out of the language layer (the same reason `FileOps` keeps its OS
+  backing in the host). So the exec default lives **host-side**;
+- the **exec-backed implementation is provided by `cmd/go`** at
+  registration time — `cmd/go` adapts the vault's platform detection
+  (`clipboard.go`) to `HostClipboard` and calls `SetHostClipboard` (the
+  `FileOps` / `OSFileOps` split: interface in `lang/go`, OS impl injected
+  by the command). With nothing registered the slot is empty and the word
+  raises `capability_not_installed`;
+- retrieved via `HostClipboard(r)`, removed to a `notInstalled` stub under
+  `install:false`, and **auto-wrapped** by the `permissioned*` gate when a
+  policy is present.
+
+**Policy.** Because the effect spawns a helper process, `clipboard-copy`
+binds the **`process`** global — the same choice the Go vault makes for
+its clipboard op (`policy.GlobalsFor` maps the vault `clipboard` op →
+`process`; VAULT-TUI-PORT §5). Add a `GlobalsFor` row `(os,
+clipboard-copy) → process`; scope stays `process` in `KnownScopes` (no
+new scope needed). A determinism/no-spawn sandbox denies it via the fake
+backend.
+
+| word | scope | global cap | default posture |
+|---|---|---|---|
+| `clipboard-copy` | `process` | `process` | off by default in a no-spawn sandbox |
+
+**Errors.** `os-clipboard-failed` when the host backend errors (no
+clipboard tool on `PATH`, or the tool exits non-zero) — a single error,
+matching the vault's `copy not supported` / non-zero-exit handling. `Copy`
+of empty text is a valid clear, not an error.
+
+**Robustness note (child-registry leak).** A dispatch-time `os-denied`
+gate would become allow-all inside an imported module body (see
+[PERMISSIONS.10 → Known gap](../PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy)),
+which is where the vault-in-AQL clipboard call runs. The
+`permissioned*`-wrapper form recommended in §7 (policy baked into the
+capability object, inherited by value) is leak-resistant and is the
+required mechanism for `clipboard-copy`.
+
+**Overlap.** `aql:vault`'s own `clipboard` op (the recipe/secret copy)
+delegates to `Os.clipboard-copy` after the migration rather than
+re-implementing the platform exec; [`aql:exec`](EXEC.10.md) owns
+general process spawning, of which this is a single, curated, host-sealed
+instance.
