@@ -259,16 +259,24 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	// boundary must be inert and evaluation-fixed. Anything else — a word, a
 	// paren, a marker, a carrier — declines the whole model (the interpreter
 	// could dispatch or collect through it in ways the window cannot bake).
+	// An ALL-0-ARG member skips the scan entirely: it NEVER forward-collects
+	// (it auto-fires with no operands the moment it lands), so the following
+	// tokens belong to the NEXT dispatch and are irrelevant to the arity-0
+	// model — `r get "bool" eq false` was declining on the `eq` word the
+	// member cannot consume (probe-verified; the dot form of the same
+	// landing already compiled through the identical arity-0 claim).
 	winEnd := valIdx
-	for i := valIdx + 1; i < e.tape.Len(); i++ {
-		tv := e.tape.At(i)
-		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
-			break
+	if !allZeroArgSigs(fn) {
+		for i := valIdx + 1; i < e.tape.Len(); i++ {
+			tv := e.tape.At(i)
+			if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
+				break
+			}
+			if !evalFixedWindowToken(tv) {
+				return nil, nil, false
+			}
+			winEnd = i
 		}
-		if !evalFixedWindowToken(tv) {
-			return nil, nil, false
-		}
-		winEnd = i
 	}
 	if winEnd == valIdx || allZeroArgSigs(fn) {
 		// No forward window (or every overload is 0-arg, so the landing

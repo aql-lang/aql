@@ -287,20 +287,23 @@ func TestXmlInterpExprErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestXmlInterpDynamicRefusesCompile(t *testing.T) {
-	// Under the emit recorder, a runtime-computed hole (a native result is
-	// a carrier in check mode) marks the program uncompilable.
+func TestXmlInterpDynamicCompilesToOp(t *testing.T) {
+	// GRADUATED (REFUSAL-CLOSURE §9.2c, 2026-07-17): a runtime-computed hole
+	// lowers to OpInterpXml — the hole's own dispatch records its event and
+	// the op rebuilds the element from the popped value at run time
+	// (rebuildXmlFromTmpl). End-to-end parity is pinned in
+	// lang/go bytecode_s9_landing_test.go TestS9XmlInterpComputed.
 	r := covRegistry(t, nil)
 	tmpl := XmlTmpl{
 		Tag:  "p",
 		Cren: []XmlCren{{Kind: XmlCrenExpr, Expr: []Value{NewWord("cadd"), NewInteger(1), NewInteger(2)}}},
 	}
 	prog, reason := compileTokens(t, r, []Value{NewXmlInterp(tmpl)})
-	if prog != nil {
-		t.Fatal("dynamic XML interp compiled")
+	if prog == nil {
+		t.Fatalf("dynamic XML interp must compile to OpInterpXml, refused: %s", reason)
 	}
-	if !strings.Contains(reason, "XML") && !strings.Contains(reason, "finalize") {
-		t.Logf("refusal reason: %s", reason)
+	if !strings.Contains(prog.Disassemble(), "INTERP_XML") {
+		t.Fatalf("expected an INTERP_XML op:\n%s", prog.Disassemble())
 	}
 }
 

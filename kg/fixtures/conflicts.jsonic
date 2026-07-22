@@ -1,0 +1,80 @@
+# conflicts.jsonic — two sources make incompatible claims on a
+# single-valued predicate (works_for). The pipeline must PRESERVE both
+# assertions, mark them disputed, and route them to human review —
+# never pick a winner silently.
+{
+  sources: [
+    {
+      id: "src:register-2024"
+      kind: "jsonic"
+      locator: "fixtures/conflicts.jsonic#register-2024"
+      title: "Staff Register 2024"
+      retrieved_at: "2024-12-01T00:00:00Z"
+      content_hash: "fixture-register-2024"
+      authority: "official"
+      metadata: {}
+    }
+    {
+      id: "src:news-2026"
+      kind: "text"
+      locator: "fixtures/conflicts.jsonic#news-2026"
+      title: "Trade press profile, 2026"
+      retrieved_at: "2026-02-01T00:00:00Z"
+      content_hash: "fixture-news-2026"
+      authority: "secondary"
+      metadata: {}
+    }
+  ]
+  entities: [
+    { key: "vega", type: "Person", label: "Miro Vega" }
+    { key: "orbital", type: "Organization", label: "Orbital Dynamics Ltd" }
+    { key: "helio", type: "Organization", label: "Helio Forge" }
+  ]
+  assertions: [
+    {
+      subject: "vega"
+      predicate: "works_for"
+      object: { kind: "entity", entity: "orbital" }
+      evidence: [
+        {
+          source: "src:register-2024"
+          locator: "row 12"
+          quote: "Vega, Miro — Orbital Dynamics Ltd"
+          extraction_method: "direct_record"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.9
+    }
+    {
+      subject: "vega"
+      predicate: "works_for"
+      object: { kind: "entity", entity: "helio" }
+      evidence: [
+        {
+          source: "src:news-2026"
+          locator: "paragraph 3"
+          quote: "Miro Vega, now at Helio Forge, told us"
+          extraction_method: "manual"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.75
+    }
+    {
+      subject: "vega"
+      predicate: "mentions"
+      object: { kind: "entity", entity: "helio" }
+      evidence: [
+        {
+          source: "src:news-2026"
+          locator: "paragraph 3"
+          quote: "Miro Vega, now at Helio Forge, told us"
+          extraction_method: "manual"
+          extractor: "fixture"
+        }
+      ]
+      confidence: 0.9
+    }
+  ]
+}

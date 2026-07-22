@@ -64,3 +64,49 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 		requireEngineParity(t, src, false)
 	}
 }
+
+// TestDoScalarFallibleAccessorCompiles pins the #stats fix: a SINGLE-value
+// fallible `do` body whose declared happy-path residual is a SCALAR actually
+// yields an Error when it raises (do catches the raise into an Error value), so
+// a downstream Error accessor (`.code` / `.message`) used to no_signature on the
+// bare scalar and force the code-body fallback (`code-body word test-test`, the
+// stats_unit_test `((do [Stats.mean [] end]).code)` shape). doListReturnsFn now
+// widens the scalar residual to the (scalar tor Error) union, so the accessor
+// dispatches its Error overload and the body compiles natively. compile ==
+// interpret MUST hold (the caught error is byte-identical).
+func TestDoScalarFallibleAccessorCompiles(t *testing.T) {
+	native := []string{
+		// The stats shape: a scalar-declared always-raising fn, `.code` of the do.
+		`def boom fn [[] [Integer] [ (raise bad_input/q "always") ]]
+[ ((do [boom]).code) ]`,
+		// `.message` over a Float-declared fallible do.
+		`def boom fn [[] [Float] [ (raise bad_input/q "x") ]]
+[ ((do [boom]).message) ]`,
+		// The accessor read INSIDE a fn body (the real Test.test / Assert shape).
+		`def ec fn [[] [Atom] [ (do [ (raise bad_input/q "e") ]).code ]]
+[ (ec) ]`,
+	}
+	for _, src := range native {
+		requireEngineParity(t, src, true)
+	}
+}
+
+// TestDoFallibleTypeLiteralResidualBareNode pins the !IsBareTypeNode guard on
+// the scalar→Error widening: when a FALLIBLE single-value `do` body's happy-path
+// residual is a ROOT type literal (Any/None/Never — `.Parent == nil`), the
+// widening must NOT fire. `add 1 2 drop X` leaves exactly the bare `X` node after
+// the now-overflow-fallible add, so `doBodyMayRaise` is true and the branch is
+// reached. A bare type node is not a scalar value (Any tor Error = Any, and
+// None/Never aren't scalars), so widening it to (node tor Error) is meaningless.
+// The guard also keeps the call-site nil-safety explicit rather than leaning on
+// ConformsTo's receiver-nil handling. These shapes compile natively and stay
+// byte-parity with the interpreter (both engines produce the bare node value).
+func TestDoFallibleTypeLiteralResidualBareNode(t *testing.T) {
+	for _, src := range []string{
+		`do [add 1 2 drop Any]`,
+		`do [add 1 2 drop None]`,
+		`do [add 1 2 drop Never]`,
+	} {
+		requireEngineParity(t, src, true)
+	}
+}

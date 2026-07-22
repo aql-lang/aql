@@ -62,7 +62,7 @@ func cforReturns(args []Value, r *Registry) []Value {
 		startV, endV, stepV = NewInteger(0), cv, NewInteger(1)
 		es.ArmLoopCapture()
 	}
-	stk := AnalyseLoopBody(r, body, []string{"i"}, []Value{iter})
+	stk := AnalyseLoopBody(r, body, []string{"i"}, []Value{iter}, false)
 	out := NewCarrier(TList)
 	if len(stk) > 0 {
 		top := stk[len(stk)-1]

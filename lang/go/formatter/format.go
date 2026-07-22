@@ -492,6 +492,28 @@ func scanBacktick(s string) (string, int) {
 	return s, len(s)
 }
 
+// backtickClosed reports whether a `...` literal (s[0] == '`') has a real
+// closing backtick — the same scan scanBacktick runs, returning only whether
+// it reached the close branch (vs consuming to the end unterminated). Used by
+// the tabnas gap recovery to tell a whole literal from one the flat lexer's
+// quote-swallow split across a re-scan boundary.
+func backtickClosed(s string) bool {
+	i := 1
+	for i < len(s) {
+		switch {
+		case s[i] == '\\' && i+1 < len(s):
+			i += 2
+		case s[i] == '`':
+			return true
+		case s[i] == '$' && i+1 < len(s) && s[i+1] == '{':
+			i = scanInterpHole(s, i+2)
+		default:
+			i++
+		}
+	}
+	return false
+}
+
 // scanInterpHole scans from just past a "${" to just past its matching
 // "}", tracking brace depth and skipping nested string / template
 // literals (whose braces must not affect the count). Returns the index

@@ -39,6 +39,32 @@ func TestScanBacktick(t *testing.T) {
 	}
 }
 
+// TestBacktickClosed exercises every branch of backtickClosed — the tabnas
+// gap-recovery predicate that distinguishes a whole `...` literal from one the
+// flat lexer's quote-swallow split across a re-scan boundary: plain close,
+// escape-then-close, an interpolation hole then close, and the unterminated
+// tails (lone backtick, trailing backslash, unterminated hole).
+func TestBacktickClosed(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"`x`", true},     // plain close
+		{"`\"`", true},    // a bare quote as content, then close
+		{"`a\\`b`", true}, // an escaped backtick, then a real close
+		{"`${x}`", true},  // an interp hole, then close
+		{"`x", false},     // unterminated
+		{"`", false},      // a lone backtick
+		{"`a\\", false},   // a trailing backslash swallows the (absent) close
+		{"`${abc", false}, // an unterminated interp hole
+	}
+	for _, tt := range tests {
+		if got := backtickClosed(tt.in); got != tt.want {
+			t.Errorf("backtickClosed(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 // TestFormatBacktickVerbatim pins the "backtick content is left verbatim"
 // rule: a template literal is one atomic token, its interior spacing is
 // untouched, and it is never rewrapped even when the line exceeds the

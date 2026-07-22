@@ -377,6 +377,17 @@ type FnSig struct {
 	// arriving from a DIFFERENT module raises [aql/extend_conflict],
 	// while identical provenance (diamond re-import) is idempotent.
 	Origin string
+	// CoreDefault marks a core-provided UNLOCKED default overload that the
+	// kernel appends to a builtin word (RegisterCoreDefault) — the Micron
+	// field-wise arithmetic default is the sole user. Unlike a locked
+	// native sig it dispatches AFTER (is beaten by) any more-specific
+	// user/module overload, so a user's own `def add fn [[a:Kindon
+	// b:Kindon] …]` wins by specificity. Unlike an ordinary unlocked def it
+	// lives on the native FnDefInfo (so `undef` of the builtin still
+	// refuses) and is SKIPPED by the export transplant (so it never rides
+	// a module's word extension into an importer, where its builtin-only
+	// tuple would trip the module-scope user-type rule).
+	CoreDefault bool
 }
 
 // CompileEffect is a set of compile-relevant capability flags a word declares
@@ -526,6 +537,17 @@ const (
 	// rides as its plain list and that branch interprets — per-element and
 	// sound.
 	CompileStoresBodyList
+	// CompileFnHandlerStrict marks a store-fn word (a CompileStoresFn slot)
+	// whose native VALIDATES and DISPATCHES its handler as an FnDefInfo value
+	// — the `service`/`add` family (requireHandlerFn + the call seam's
+	// MatchFnSig, which both need a real FnDefInfo). A CAPTURING handler at
+	// such a slot cannot stamp (captures) and would otherwise fall through to
+	// a bare OpPushClosure ClosurePayload the native rejects ("got Function")
+	// — a divergence. The recorder refuses it so the interpreter owns the
+	// shape; a non-strict store-fn word (a Patrun `add`, which invokes a
+	// stored closure fine) is unaffected. Non-capturing handlers stamp
+	// either way.
+	CompileFnHandlerStrict
 )
 
 // CompileDefault is an ordinary word: no compile-relevant capability. A
@@ -1226,6 +1248,18 @@ type Value struct {
 	// slot) at a typed use so a later provably-disjoint use of the same
 	// name is caught. Read via DynFrom() (nil-safe), set via SetDynFrom.
 	dynFrom *string
+	// elem is the retained ELEMENT constraint of a concrete typed container
+	// ({:T} map / [:T] list), behind a pointer so its Value doesn't ride on
+	// every runtime copy (nil for the overwhelming majority — everything that
+	// is not a concrete typed container). Construction (unifyTyped*WithConcrete)
+	// is the sole origin; it lets a concrete {:T} value stay CONCRETE (Data is
+	// still the MapPayload/ListPayload, AsMap/AsList/IsConcrete unchanged) while
+	// carrying the element type that write-enforcement (set/setpath/merge) and
+	// strict reads consult. The constraint is the child Value verbatim — a bare
+	// type literal, a disjunct ({:(A tor B)}), or a nested typed-container
+	// literal ({:[:Integer]}). Read via ElemConstraint() (nil-safe), set via
+	// SetElemConstraint. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+	elem *Value
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1362,6 +1396,29 @@ func (v *Value) SetDynFrom(name string) {
 		return
 	}
 	v.dynFrom = &name
+}
+
+// ElemConstraint returns the retained element constraint of a concrete
+// typed container ({:T} map / [:T] list) and true, or a zero Value and
+// false when v carries no tag (the common case). Nil-safe read of the
+// pointer. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+func (v Value) ElemConstraint() (Value, bool) {
+	if v.elem == nil {
+		return Value{}, false
+	}
+	return *v.elem, true
+}
+
+// SetElemConstraint attaches (c present) or clears (c a zero/bare-Any
+// literal) the element constraint carried by a concrete typed container.
+// Construction (unifyTyped*WithConcrete) is the sole caller; an Any child
+// clears the tag (an untyped container is not element-constrained).
+func (v *Value) SetElemConstraint(c Value) {
+	if c.Parent == nil || c.Parent.Equal(TAny) {
+		v.elem = nil
+		return
+	}
+	v.elem = &c
 }
 
 // Name is the nil-safe read of the type-node leaf name — "" for an
@@ -3326,6 +3383,12 @@ func kernelFormatDefault(v Value) string {
 	case isFnDefValue(v):
 		fd, _ := v.Data.(FnDefInfo)
 		return formatFnDef(fd)
+	case func() bool { cl, ok := v.Data.(ClosurePayload); return ok && cl.Render != "" }():
+		// A compiled closure carrying its source fn's interpreter rendering
+		// (CompiledFn.Render via OpPushClosure) — byte-identical to the
+		// interpreter's fn value in interpolation holes and print output.
+		cl, _ := v.Data.(ClosurePayload)
+		return cl.Render
 	// TMap rendering moved to mapFormatBehavior in
 	// coretype_list_map_behaviors.go (Step 10). The top-of-function
 	// Behavior dispatch routes Map values (and TMap-rooted subtypes

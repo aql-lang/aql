@@ -60,3 +60,20 @@ func TestFitsFlat(t *testing.T) {
 		t.Error("nested group under indent should fit in 9")
 	}
 }
+
+// TestRenderDocHostileIndent pins the pad-clamp guard (PR #298 review P1): a
+// caller-supplied document node with a NEGATIVE or ABSURD `by` (reachable from
+// AQL via `Fmt.render {fmt:'indent' by:-1 …}`) must not panic strings.Repeat
+// or force an unbounded allocation — the indent clamps to [0, maxPad].
+func TestRenderDocHostileIndent(t *testing.T) {
+	// Negative indent over a hard line: clamps to 0, so the break carries no
+	// leading spaces (column 0) — no panic.
+	if got := RenderDoc(80, ind(-5, cat(txt("a"), hard(), txt("b")))); got != "a\nb" {
+		t.Errorf("negative indent = %q, want %q", got, "a\nb")
+	}
+	// An absurd indent is clamped to maxPad, not an unbounded allocation.
+	out := RenderDoc(80, ind(maxPad*4, cat(txt("a"), hard(), txt("b"))))
+	if want := len("a\n") + maxPad + len("b"); len(out) != want {
+		t.Errorf("absurd indent produced %d bytes, want %d (clamped to maxPad)", len(out), want)
+	}
+}

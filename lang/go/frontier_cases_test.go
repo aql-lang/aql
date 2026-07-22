@@ -209,18 +209,21 @@ var frontierCases = []frontierCase{
 		// the service handler closes over n.
 		return fcStampedRun(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5) drop def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"N"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"N"} s)`, "anonymous fn")
 	}},
-	// GRADUATED 2026-07-15: the gen/property bodies landed 2026-07-14
-	// (stored-param-body units run nested on the VM), and the residual
-	// module-load entries are now attributed under the "module-load" C4
-	// seam (the preamble bracket in BuildTestModule / RunModuleBody /
-	// BuildReplModule). The case stays as a permanent pin.
+	// UN-GRADUATED 2026-07-18: the gen/property bodies were graduated
+	// 2026-07-14 (stored-param-body units on the VM), but a direct rand-call
+	// GEN body (`[r.int 1 9]` — a member fn read from the opaque Map param
+	// `r` applied to forward args) is the fn-value-call boundary: it CANNOT
+	// compile to a correct unit and must DECLINE. The "graduated" unit
+	// silently returned the trailing arg (a constant generator — the
+	// r.int→9 miscompile that turned the trie/sort PBT suites vacuous). The
+	// decline fix (emit.go closure-residual dynMaybeFn refusal) makes the gen
+	// body interpret per-iteration, so this case is now legitimately red —
+	// ledgered below. The property body (no member-fn boundary) still
+	// compiles; only the direct rand-call gen interprets.
 	{"p6/check-prop-body-on-vm", func() error {
-		// Module-scope check-prop (the compiling half of
-		// bytecode_checkprop_interp_test.go). Target: the per-iteration
-		// gen/property bodies run as JIT'd units — zero unattributed
-		// interpreter entries. The fn-scope-refuses miscompile guard
-		// (TestCheckPropInterpStringFnScopeRefuses) stays green forever and
-		// is never ledgered.
+		// Module-scope check-prop with a DIRECT rand-call gen body: the gen
+		// body's member-fn-arrival dispatch declines (sound), so the
+		// per-iteration gen run adds unattributed interpreter entries.
 		src := "import \"aql:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ var [[k] (`v${k}`) eq `v${k}` ] ] 5 1 0)\nres get \"ok\""
 		return fcNoUnattributedInterp(func(a *AQL) error {
 			_, err := a.RunCompiledStrict(src)
@@ -346,4 +349,18 @@ var frontierLedger = map[string]frontierEntry{
 	// parallels compile per element (CompileStoresBodyList → compileStoredBody
 	// carriers) and runParallelBranch runs each via RunUnit on its fork.
 	// The case above stays as a permanent pin.
+
+	// UN-GRADUATED 2026-07-18: a direct rand-call check-prop GEN body
+	// (`[r.int 1 9]`) reads a member fn from the opaque Map param `r` and
+	// applies it to forward args — the fn-value-call boundary. A stored-param
+	// unit cannot model the auto-dispatch (`r` is Any-typed; no member schema
+	// is known), so it must DECLINE and the gen body interprets per iteration.
+	// The earlier "graduated" unit silently returned the trailing arg — a
+	// constant generator that made the trie/sort PBT suites vacuous or fail
+	// (bisected to 853dcaa4). The decline is the sound state; the compilable
+	// half (property bodies, non-member gen bodies) still runs on the VM.
+	"p6/check-prop-body-on-vm": {
+		why:       "member-fn-arrival gen body (r.int LO HI from an opaque Map param) is the fn-value-call boundary; the stored-param unit must decline and the interpreter owns the auto-dispatch",
+		failsWith: "unattributed interpreter entries",
+	},
 }

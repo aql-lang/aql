@@ -62,8 +62,15 @@ func RenderDoc(width int, doc Doc) string {
 				col++
 			} else {
 				b.WriteByte('\n')
-				b.WriteString(strings.Repeat(" ", it.indent))
-				col = it.indent
+				// A document node may carry a hostile indent (`{fmt:'indent'
+				// by:-1}` drives it.indent negative; a huge `by` drives it
+				// absurdly large). pad clamps a negative run to zero and an
+				// oversized one to maxPad, so a caller-supplied document tree
+				// can never panic strings.Repeat or force an unbounded
+				// allocation (ADR-005). col tracks what was actually emitted.
+				ind := pad(it.indent)
+				b.WriteString(ind)
+				col = len(ind)
 			}
 		case DocConcat:
 			for i := len(d.Parts) - 1; i >= 0; i-- {

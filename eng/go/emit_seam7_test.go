@@ -1550,3 +1550,21 @@ func TestReadFnMemberValueArms(t *testing.T) {
 		t.Errorf("a rich tag must report the member")
 	}
 }
+
+// fnValueInputs: a param carrying only a value PATTERN has no bare type
+// (FnParam.Type nil) and binds a gradual Any input carrier; a typed param
+// binds its own type. Pinned directly — the shape is otherwise reachable
+// only through a capturing pattern-param returned fn, whose probe declines
+// before the carrier is consumed (PR #295 merge coverage).
+func TestFnValueInputsPatternParamDefaultsAny(t *testing.T) {
+	inputs, names := fnValueInputs([]FnParam{{Name: "p"}, {Name: "q", Type: TInteger}})
+	if len(inputs) != 2 || len(names) != 2 || names[0] != "p" || names[1] != "q" {
+		t.Fatalf("inputs/names = %v %v", inputs, names)
+	}
+	if inputs[0].Parent == nil || !inputs[0].Parent.Equal(TAny) {
+		t.Errorf("a pattern-only param must bind an Any carrier, got %v", inputs[0].Parent)
+	}
+	if !inputs[1].Parent.Equal(TInteger) {
+		t.Errorf("a typed param must keep its type, got %v", inputs[1].Parent)
+	}
+}

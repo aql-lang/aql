@@ -1,1 +1,2 @@
-def af fn [[x:Any] [Any] [x]] end def g fn [[s:String] [Integer] [1]] end def f fn [[s:String] [Integer] [(((af s) slice 0 1) g)]] end
+def af fn x:Any Any [x] end def g fn s:String Integer [1] end def f fn
+s:String Integer [(((af s) slice 0 1) g)] end

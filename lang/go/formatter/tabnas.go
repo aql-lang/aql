@@ -102,7 +102,25 @@ func tabnasTokenize(src string, lts []parser.LexToken) []Token {
 		if btEnd > 0 {
 			if gap := src[btEnd:lt.SI]; gap != "" {
 				flush()
-				out = append(out, tokenize(gap)...)
+				toks := tokenize(gap)
+				// A quote INSIDE an earlier backtick literal makes the flat
+				// lexer's string matcher run to a quote inside a LATER literal,
+				// swallowing that literal's opening backtick — so lt.SI (the
+				// stray closing backtick that survived) falls in the MIDDLE of
+				// the later literal, and the re-scanned gap ends with an
+				// unterminated backtick. Emit the clean prefix, then the WHOLE
+				// literal re-scanned from source, and resync btEnd past it so
+				// the stray closing-backtick flat token is dropped.
+				if k := len(toks) - 1; k >= 0 && toks[k].Kind == TokString &&
+					strings.HasPrefix(toks[k].Text, "`") && !backtickClosed(toks[k].Text) {
+					out = append(out, toks[:k]...)
+					p := len(gap) - len(toks[k].Text)
+					lit, n := scanBacktick(src[btEnd+p:])
+					out = append(out, Token{TokString, lit})
+					btEnd = btEnd + p + n
+					continue
+				}
+				out = append(out, toks...)
 			}
 			btEnd = 0
 		}

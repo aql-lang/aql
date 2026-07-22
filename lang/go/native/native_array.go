@@ -828,7 +828,9 @@ func reverseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	for i := 0; i < n; i++ {
 		elems[i] = list.Get(n - 1 - i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): reverse is a pure reorder — retain the source [:T] tag so
+	// downstream reads narrow and downstream writes stay enforced.
+	return []Value{d2RetainElem(NewList(elems), args[0])}, nil
 }
 
 // ---- take ----
@@ -860,7 +862,9 @@ func takeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	for i := start; i < end; i++ {
 		elems[i-start] = list.Get(i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): take selects a contiguous subset — element types are
+	// preserved, so retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(elems), args[1])}, nil
 }
 
 // ---- shed ----
@@ -892,7 +896,9 @@ func shedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	for i := start; i < end; i++ {
 		elems[i-start] = list.Get(i)
 	}
-	return []Value{NewList(elems)}, nil
+	// #4 (round 3): shed drops a prefix/suffix — the remaining elements keep
+	// their type, so retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(elems), args[1])}, nil
 }
 
 // ---- where ----
@@ -935,7 +941,9 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if result == nil {
 		result = []Value{}
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): unique is a dedup subset — elements are unchanged, so
+	// retain the source list's [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[0])}, nil
 }
 
 // ---- grade ----
@@ -1001,7 +1009,8 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4: `at` gathers a subset of the data list's elements — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- insert-at / remove-at ----
@@ -1025,15 +1034,22 @@ func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if idx < 0 || idx > n {
 		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("insert-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n), "insert-at")
 	}
+	// insert-at adds args[1] as a NEW element — enforce it against the data's
+	// [:T] element type (like push/set), storing the recursively-retagged value,
+	// and retain the tag on the result copy (#4, Codex round 4).
+	tagged, terr := d2AdoptTyped(r, args[2], args[1], "insert-at")
+	if terr != nil {
+		return nil, terr
+	}
 	result := make([]Value, 0, n+1)
 	for i := 0; i < idx; i++ {
 		result = append(result, data.Get(i))
 	}
-	result = append(result, args[1])
+	result = append(result, tagged)
 	for i := idx; i < n; i++ {
 		result = append(result, data.Get(i))
 	}
-	return []Value{NewList(result)}, nil
+	return []Value{d2RetainElem(NewList(result), args[2])}, nil
 }
 
 // removeAtHandler returns a new list with the element at index args[0]
@@ -1063,7 +1079,8 @@ func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		}
 		result = append(result, data.Get(i))
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (Codex round 4): remove-at is a subset — retain the source [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- sortby ----
@@ -1092,7 +1109,8 @@ func sortbyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	for i, idx := range indices {
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): sortby reorders the data list — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- member ----
@@ -1232,7 +1250,9 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if result == nil {
 		result = []Value{}
 	}
-	return []Value{NewList(result)}, nil
+	// #4: replicate repeats each source element — all elements come from the
+	// data list unchanged, so retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- expand ----
@@ -1416,7 +1436,8 @@ func sortbyReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	for i, idx := range indices {
 		result[i] = data.Get(idx)
 	}
-	return []Value{NewList(result)}, nil
+	// #4 (round 3): sortby (reach form) reorders the data list — retain its [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // forEachHandler runs the body once per data element for its side effects,
@@ -1907,7 +1928,8 @@ func compressHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			result = append(result, data.Get(i))
 		}
 	}
-	return []Value{NewList(result)}, nil
+	// #4: compress is a mask-filtered subset — retain the data list's [:T] tag.
+	return []Value{d2RetainElem(NewList(result), args[1])}, nil
 }
 
 // ---- eachrank ----

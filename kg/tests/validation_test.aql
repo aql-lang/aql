@@ -1,0 +1,85 @@
+# validation_test.aql — every planted defect in fixtures/invalid.jsonic
+# surfaces as an issue; the clean fixture stays clean.
+# Run from kg/:  ../cmd/go/bin/aql tests/validation_test.aql
+
+import "aql:io"
+import "aql:test"
+import "./report.aql"
+import "./queries.aql"
+import "./util.aql"
+
+def stamp "2026-01-01T00:00:00Z"
+
+# -- the clean fixture produces zero issues -------------------------------
+
+def clean (KgReport.build-graph
+  [(IO.read (make Pathon "fixtures/valid.jsonic"))]
+  {recorded_at: stamp})
+def clean-summary (clean get "summary")
+[ (clean-summary get "error_count") 0 Assert.equal ]
+  "valid.jsonic: no validation errors" Test.test end
+[ (clean-summary get "warning_count") 0 Assert.equal ]
+  "valid.jsonic: no validation warnings" Test.test end
+[ (clean-summary get "entity_count") 3 Assert.equal ]
+  "valid.jsonic: all three entities ingested" Test.test end
+[ (clean-summary get "assertion_count") 3 Assert.equal ]
+  "valid.jsonic: all three assertions ingested" Test.test end
+
+# -- the broken fixture reports every planted defect ----------------------
+
+def broken (KgReport.build-graph
+  [(IO.read (make Pathon "fixtures/invalid.jsonic"))]
+  {recorded_at: stamp})
+def rules (each [dot rule] (broken get "validation_issues"))
+
+def has-rule fn [[rule:String] [Boolean] [
+  ((filter [eq rule] rules) size) gt 0
+]]
+
+[ (has-rule "kg_entity_label_missing") true Assert.equal ]
+  "missing entity label is reported" Test.test end
+[ (has-rule "kg_entity_nlabel_missing") true Assert.equal ]
+  "missing normalized label is reported" Test.test end
+[ (has-rule "kg_entity_type") true Assert.equal ]
+  "unknown entity type is reported" Test.test end
+[ (has-rule "kg_unknown_predicate") true Assert.equal ]
+  "unknown predicate is reported" Test.test end
+[ (has-rule "kg_dangling_object") true Assert.equal ]
+  "dangling object entity is reported" Test.test end
+[ (has-rule "kg_confidence_range") true Assert.equal ]
+  "out-of-range confidence is reported" Test.test end
+[ (has-rule "kg_interval_order") true Assert.equal ]
+  "inverted validity interval is reported" Test.test end
+[ (has-rule "kg_unknown_datatype") true Assert.equal ]
+  "unknown literal datatype is reported" Test.test end
+[ (has-rule "kg_dangling_source") true Assert.equal ]
+  "evidence pointing at an unlisted source is reported" Test.test end
+[ (has-rule "kg_inferred_rule_missing") true Assert.equal ]
+  "inferred assertion without a rule is reported" Test.test end
+[ (has-rule "kg_no_provenance") true Assert.equal ]
+  "evidence-free assertion is rejected with an issue" Test.test end
+[ (has-rule "kg_unknown_subject") true Assert.equal ]
+  "assertion with an unknown subject key is rejected with an issue" Test.test end
+[ (has-rule "kg_model_quote_missing") true Assert.equal ]
+  "model-extracted evidence without a quote is flagged" Test.test end
+
+# The two ingest-rejected assertions must NOT appear in the graph.
+[ ((filter [dot predicate eq "owns"] (broken get "assertions")) size) 0 Assert.equal ]
+  "the evidence-free assertion was not emitted" Test.test end
+
+# Every accepted assertion still carries evidence (the invariant holds
+# even in a broken bundle).
+def all-supported (fold [var [[a acc]
+  acc and (((KgUtil.list-at a "evidence") size) gt 0)
+]] (broken get "assertions") true)
+[ all-supported true Assert.equal ]
+  "every emitted assertion carries at least one evidence record" Test.test end
+
+# Errors surface in the review queue, never silently.
+[ (((broken get "human_review_queue") size) gt 0) true Assert.equal ]
+  "the broken bundle produces a human-review queue" Test.test end
+[ (((KgQuery.validation-errors broken) size) gt 0) true Assert.equal ]
+  "validation-errors exposes the error-severity issues" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [raise test_failed "validation_test failures"]

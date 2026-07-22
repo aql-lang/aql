@@ -124,6 +124,31 @@ var macroNatives = []NativeFunc{
 				Impl:      Go(miniHandler, RunInCheck()),
 				Returns:   []*Type{TAny}, BarrierPos: -1,
 			},
+			// The mini-language VALUE form — `mini <fn> <src> <opts?>`:
+			// the first operand IS the transducer, a fn (or a word bound to
+			// one, handled in miniHandler) whose every signature opens with
+			// the standard [src opts] prefix. An anonymous fn literal is
+			// TFunction; a def'd fn or module export is TFnDef.
+			{
+				Args:    []*Type{TFunction, TString, TMap},
+				Impl:    Go(miniHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TString},
+				Impl:    Go(miniHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TString, TMap},
+				Impl:    Go(miniHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TString},
+				Impl:    Go(miniHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
 		},
 	},
 	{
@@ -169,6 +194,32 @@ var macroNatives = []NativeFunc{
 				Impl:      Go(emitHandler, RunInCheck()),
 				Returns:   []*Type{TString}, BarrierPos: -1,
 			},
+			// The emitter VALUE form — `emit <fn> <opts?> <data>`: the first
+			// operand IS the emitter, a fn whose every signature is
+			// [value:Any opts:Map …] → [String …]. These sit BEFORE the auto
+			// family: a Function conforms to TAny, so without them a fn
+			// operand would silently route to emit_auto and JSON-emit the fn
+			// value itself.
+			{
+				Args:    []*Type{TFunction, TAny, TAny},
+				Impl:    Go(emitHandler, RunInCheck()),
+				Returns: []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TAny},
+				Impl:    Go(emitHandler, RunInCheck()),
+				Returns: []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TAny, TAny},
+				Impl:    Go(emitHandler, RunInCheck()),
+				Returns: []*Type{TString}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TAny},
+				Impl:    Go(emitHandler, RunInCheck()),
+				Returns: []*Type{TString}, BarrierPos: -1,
+			},
 			{
 				Args:    []*Type{TAny, TAny},
 				Impl:    Go(emitHandler, RunInCheck()),
@@ -197,6 +248,13 @@ var macroNatives = []NativeFunc{
 		// against the imported `ParseLang` namespace at expansion time —
 		// unknown kinds fail loudly here. A parser returns Any (an AST, a
 		// transduction, …, per the language).
+		//
+		// The first operand may instead BE the parser — a ParseLang value,
+		// i.e. a Function carrying the standard [source opts] signature
+		// prefix (sigs 3-4, and the bare-name fallback in parseHandler for a
+		// word bound to one): `parse <fn> <opts?> <source>` expands to the
+		// direct call `<fn> <source> <opts> end` with no kind lookup, so a
+		// parser can be used without registering it under a kind name.
 		Signatures: []Signature{
 			{
 				Args:      []*Type{TAtom, TMap, TAny},
@@ -209,6 +267,29 @@ var macroNatives = []NativeFunc{
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(parseHandler, RunInCheck()),
 				Returns:   []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TMap, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFunction, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			// A def'd fn or a module export (e.g. `(ParseLang.parse_json)`)
+			// is a TFnDef value, a separate family from an anonymous fn's
+			// TFunction — both spell the same ParseLang-value form.
+			{
+				Args:    []*Type{TFnDef, TMap, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TFnDef, TAny},
+				Impl:    Go(parseHandler, RunInCheck()),
+				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
 		},
 	},
@@ -338,6 +419,9 @@ func macroexpandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 // (2-arg form normalizes to {}). src/opts are spliced as collected — they may
 // be carriers in check mode; only the kind must be concrete.
 func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+		return miniFnExpand(args[0], args, r)
+	}
 	kind, err := args[0].AsConcreteAtom()
 	if err != nil {
 		return nil, r.AqlErrorHint("mini_error",
@@ -349,6 +433,34 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// Resolve the kind against the imported MiniLang namespace NOW —
 	// unknown kinds are expansion-time errors at the call site.
 	if !miniKindRegistered(r, target) {
+		// A bare word BOUND to a Function is the mini-language VALUE form
+		// spelled by name (`def dbl (fn …)  mini dbl 'ab'`) — mirror parse's
+		// bound-variable fallback. A registered kind wins a collision
+		// (checked above); an unbound name or a non-Function binding keeps
+		// the unknown-kind handling below. A name def-bound to a COMPUTED
+		// fn (`def m (mk)`) has no Defs binding under analysis — installDef
+		// declines so the compiled closure machinery owns the name — and
+		// resolves through the per-pass fn-carrier side table
+		// (checkFnCarrierBind) instead, like parse.
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
+			}
+		}
+		if bound {
+			// The /q-captured word bypassed stepWord's use tracking.
+			r.Check.RecordUse(kind)
+			if _, isFn := top.Data.(FnDefInfo); isFn {
+				return miniFnExpand(top, args, r)
+			}
+			if r.Check.IsActive() && !IsConcrete(top) {
+				macroDegradedAdvisory(r, "mini", "the mini fn bound to "+kind+" is not a concrete value under analysis", args[0].Pos())
+				return []Value{NewDynamicCarrier(TAny)}, nil
+			}
+		}
 		if r.Check.IsActive() && !miniNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
 			// dynamic value rather than a false-positive diagnostic. A bound
@@ -364,14 +476,14 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// the trap and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-				`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`,
+				`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`,
 				args[0].Pos())
 			macroDegradedAdvisory(r, "mini", "the aql:minilang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("mini_unknown_lang",
 			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-			`import "aql:minilang" first; register custom kinds with MiniLang.register; MiniLang.kinds lists what is loaded`)
+			`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`)
 	}
 
 	opts := NewMap(NewOrderedMap())
@@ -380,51 +492,48 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 
 	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
-	// a compile hook AND src is concrete, compile at the call site and splice
-	// the hook's tokens instead of the standard call. A PLAIN check pass
-	// stays on the standard `lang_<kind>` call (the semantic reference for
-	// checking; a check-mode src is usually a carrier anyway) — but a
-	// COMPILE pass must take the SAME path the interpreter takes, or the
-	// recorded program bakes the transducer where the runtime runs the hook
-	// (`mini up 'hi'` compiled [hi] vs interpreted [HI] — a live miscompile
-	// the 2026-07-15 flip attempt caught). So the hook runs when NOT
-	// checking, or when COMPILING with a concrete src: the GO hook is pure
-	// expansion machinery over the source text (the §13 contract — hooks
-	// memoize, deterministic over src+opts), so its spliced tokens record
-	// exactly as the interpreter splices them. A compile pass that cannot
-	// mirror the hook faithfully (non-concrete src/opts, or an AQL hook —
-	// a macro whose check-mode expansion is not the runtime expansion)
-	// REFUSES instead of baking the transducer — slow, not wrong.
+	// a Go compile hook AND src is concrete, compile at the call site and
+	// splice the hook's tokens instead of the standard call. (Hooks are
+	// BUILT-IN machinery now — the AQL `register-compiled` surface died with
+	// the frozen kind namespace; `re` is the shipping example.) A PLAIN
+	// check pass stays on the standard `lang_<kind>` call (the semantic
+	// reference for checking; a check-mode src is usually a carrier anyway)
+	// — but a COMPILE pass must take the SAME path the interpreter takes,
+	// or the recorded program bakes the transducer where the runtime runs
+	// the hook (`mini up 'hi'` compiled [hi] vs interpreted [HI] — a live
+	// miscompile the 2026-07-15 flip attempt caught). So the hook runs when
+	// NOT checking, or when COMPILING with a concrete src: the GO hook is
+	// pure expansion machinery over the source text (the §13 contract —
+	// hooks memoize, deterministic over src+opts), so its spliced tokens
+	// record exactly as the interpreter splices them. A compile pass that
+	// cannot mirror the hook faithfully (non-concrete src/opts) REFUSES
+	// instead of baking the transducer — slow, not wrong.
 	// `mini` has no expansion cache, so the hook re-runs whenever the call
 	// is stepped — hooks memoize their compile (as `re` does). A
 	// non-concrete runtime src falls back to the standard transducer call.
 	if !r.Check.IsActive() || r.Check.Compiling {
 		goHook, hasGo := miniGoHook(r, kind)
-		aqlHook, hasAQL := miniCompileExport(r, kind)
-		if (hasGo || hasAQL) && r.Check.IsActive() {
+		if hasGo && r.Check.IsActive() {
 			refuse := func(why string) {
 				if es := r.Check.Recorder(); es.Active() {
 					es.MarkUncompilable("mini " + kind + ": " + why)
 				}
 			}
 			switch {
-			case hasAQL && !hasGo:
-				refuse("AQL compile hook is interpreter-only (check-mode expansion is not the runtime expansion)")
 			case func() bool { _, serr := args[1].AsConcreteString(); return serr != nil }():
 				refuse("compile hook needs a concrete src at compile time")
 			case !IsConcrete(opts):
 				refuse("compile hook needs concrete opts at compile time")
 			}
 		}
-		if hasGo || hasAQL {
+		if hasGo {
 			if src, serr := args[1].AsConcreteString(); serr == nil {
 				var hookToks []Value
 				var herr error
-				switch {
-				case hasGo && r.Check.IsActive() && !IsConcrete(opts):
+				if r.Check.IsActive() && !IsConcrete(opts) {
 					// Refused above; keep the standard call for analysis.
 					hookToks = nil
-				case hasGo:
+				} else {
 					hookToks, herr = goHook(src, opts, r)
 					// A COMPILE pass can only take the hook path when the
 					// expansion RECORDS — every token statically
@@ -435,12 +544,6 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 					if herr == nil && r.Check.IsActive() && !miniHookToksMaterialisable(hookToks) {
 						hookToks = nil
 					}
-				case r.Check.IsActive():
-					// AQL hook under a compile pass: refused above; the
-					// standard call below keeps the check-mode analysis.
-					hookToks = nil
-				default:
-					hookToks, herr = miniInvokeAQLCompile(r, kind, aqlHook, src, opts)
 				}
 				if herr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 					return nil, herr
@@ -484,6 +587,49 @@ standardCall:
 	return []Value{NewSplice(NewList(callTail))}, nil
 }
 
+// miniFnExpand expands the mini-language VALUE form `mini <fn> <src>
+// <opts?>` into the direct call `<fn> <src> <opts> end`, spliced at the call
+// site — the fn supplied by the caller instead of the MiniLang namespace. fn
+// must be a concrete Function whose every signature opens with the standard
+// [src opts] prefix — the shared MiniLangFnSigWhy contract — so a
+// wrong-shaped fn fails loudly rather than
+// silently mis-collecting its operands. A FILTER-shaped fn (every sig
+// exactly [src opts subject]) expands to the same partially-applied
+// Function a registered filter kind produces — subject pending — but with
+// no MiniKind tag (member types are name-keyed to registered kinds). A
+// Function-typed carrier under analysis degrades to a dynamic value like
+// the other not-statically-expandable macro paths.
+func miniFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		if r.Check.IsActive() && !IsConcrete(fn) {
+			macroDegradedAdvisory(r, "mini", "the mini fn is not a concrete value under analysis", args[0].Pos())
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		// A fn-family value whose payload is not an FnDefInfo — defensive:
+		// the sig matcher never delivers one from surface syntax.
+		return nil, r.AqlErrorHint("mini_error",
+			"mini: the mini-language is not a usable function value", "mini",
+			"pass a transducer fn: mini (fn [[src:String opts:Map] [Any] [...]]) 'text'")
+	}
+	if why := MiniLangFnSigWhy(fnDef); why != "" {
+		return nil, r.AqlErrorHint("mini_bad_signature",
+			"mini: "+why, "mini",
+			"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
+	}
+	opts := NewMap(NewOrderedMap())
+	if len(args) == 3 {
+		opts = args[2]
+	}
+	tail := []Value{fn, args[1], opts, NewEnd()}
+	if MiniLangFnFilterShaped(fnDef) {
+		// No trailing End on the partial splice — see miniPartialFn.
+		partial := miniPartialFromSigs("fn", "", fnDef.Signatures, tail)
+		return []Value{NewSplice(NewList([]Value{partial}))}, nil
+	}
+	return []Value{NewSplice(NewList(tail))}, nil
+}
+
 // miniSubjParam is the synthetic parameter name a mini partial binds
 // its subject to — the body pushes it under the embedded standard call
 // so the call's stack slot is filled exactly as an inline subject
@@ -517,14 +663,19 @@ func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool)
 		return Value{}, false
 	}
 	info, ok := wrapper.Data.(FnDefInfo)
-	if !ok || len(info.Signatures) == 0 {
+	if !ok || !MiniLangFnFilterShaped(info) {
 		return Value{}, false
 	}
-	for _, ws := range info.Signatures {
-		if len(ws.Params) != 3 {
-			return Value{}, false
-		}
-	}
+	return miniPartialFromSigs(kind, kind, info.Signatures, tail), true
+}
+
+// miniPartialFromSigs builds the partially-applied filter Function from the
+// given FILTER-shaped sigs (every sig exactly [src opts subject]) — the
+// shared core of the registered-kind path (miniPartialFn, kindTag = kind so
+// the per-kind member types match) and the fn-VALUE form (miniFnExpand,
+// kindTag = "" — an anonymous transducer has no name-keyed member type).
+// label names the partial for downstream identity.
+func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Value {
 	// The tail's trailing End is the bare-splice statement terminator;
 	// inside a SIG BODY it instead ends the CALLER's statement when the
 	// partial dispatches within an enclosing fn body (dropping pending
@@ -534,9 +685,9 @@ func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool)
 		tail = tail[:len(tail)-1]
 	}
 	body := append([]Value{NewWord(miniSubjParam)}, tail...)
-	sigs := make([]FnSig, 0, len(info.Signatures))
-	for _, ws := range info.Signatures {
-		sigs = append(sigs, FnSig{
+	outSigs := make([]FnSig, 0, len(sigs))
+	for _, ws := range sigs {
+		outSigs = append(outSigs, FnSig{
 			Params:  []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
 			Returns: ws.Returns,
 			Impl:    AQL(body),
@@ -554,46 +705,22 @@ func miniPartialFn(r *Registry, kind, target string, tail []Value) (Value, bool)
 	// different bound sources, and downstream identity keys on the name.
 	miniPartialSeq++
 	return NewFunction(FnDefInfo{
-		Name:       fmt.Sprintf("mini-%s#%d", kind, miniPartialSeq),
-		Signatures: sigs,
+		Name:       fmt.Sprintf("mini-%s#%d", label, miniPartialSeq),
+		Signatures: outSigs,
 		Anonymous:  true,
 		// The kind tag the per-kind member types (MiniLang.Re, …)
-		// match on — the partial's NAMED type for fn params.
-		MiniKind: kind,
-	}), true
+		// match on — the partial's NAMED type for fn params. Empty for
+		// the fn-value form.
+		MiniKind: kindTag,
+	})
 }
 
 // miniPartialSeq disambiguates partial names process-wide.
 var miniPartialSeq int
 
-// miniCompileExport returns kind's AQL compile-hook fn (the `compile_<kind>`
-// export of the bound MiniLang namespace), if present.
-func miniCompileExport(r *Registry, kind string) (Value, bool) {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return Value{}, false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return Value{}, false
-	}
-	return info.Fields.Get("compile_" + kind)
-}
-
-// miniInvokeAQLCompile runs an AQL compile hook at expansion time. An AQL hook
-// is a MACRO (template with quote/unquote): the language's list literals don't
-// capture locals, so a plain fn can't build a value-injected token list — the
-// macro template is the vehicle. It is expanded against [src, opts] and the
-// resulting tokens are what `mini` splices.
-func miniInvokeAQLCompile(r *Registry, kind string, fn Value, src string, opts Value) ([]Value, error) {
-	fnDef, ok := fn.Data.(FnDefInfo)
-	if !ok || !fnDef.Macro || len(fnDef.Signatures) == 0 {
-		return nil, r.AqlErrorHint("mini_bad_compiler",
-			fmt.Sprintf("compile_%s must be a macro", kind), "mini",
-			"register it as MiniLang.register-compiled "+kind+" (macro [[src opts] [ quote [ … ] ]])")
-	}
-	return eng.ExpandMacroWith(r, &fnDef, []Value{NewString(src), opts})
-}
+// (miniCompileExport / miniInvokeAQLCompile — the AQL compile-hook plumbing —
+// died with the frozen kind namespace: hooks are Go-only builtin machinery
+// now, discovered via miniGoHook.)
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
 // ModuleExport in the current scope.
@@ -628,7 +755,14 @@ func miniKindRegistered(r *Registry, target string) bool {
 // `source` is the required LAST surface arg, `opts` the optional middle one
 // (2-arg form normalizes to {}). source/opts are spliced as collected — they
 // may be carriers in check mode; only the kind must be concrete.
+//
+// A Function first operand is the ParseLang-VALUE form instead: the operand
+// IS the parser (no kind lookup), and the call expands to the direct fn call
+// — see parseFnExpand.
 func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+		return parseFnExpand(args[0], args, r)
+	}
 	kind, err := args[0].AsConcreteAtom()
 	if err != nil {
 		return nil, r.AqlErrorHint("parse_error",
@@ -640,30 +774,45 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// Resolve the kind against the imported ParseLang namespace NOW —
 	// unknown kinds are expansion-time errors at the call site.
 	if !parseKindRegistered(r, target) {
-		if r.Check.IsActive() && parseKindDeferred(r, kind) {
-			// A Parse.register kind (aql:parse): its grammar is built by Parse
-			// builder words whose result is NOT a concrete value during analysis,
-			// so the parser can't be installed for the checker — but it IS
-			// registered at run time by the Parse.register call. Degrade to a
-			// dynamic value WITHOUT a trap (unlike the unbound-namespace case
-			// below): the runtime resolves the kind, so the compiled program must
-			// NOT raise parse_unknown_lang. The check-mode hook that records the
-			// deferral is aql:parse's parse-register ReturnsFn.
-			macroDegradedAdvisory(r, "parse", "the "+kind+" grammar is built at run time (Parse.register)", args[0].Pos())
-			// COMPILE pass (Phase 6 M3): record the runtime deferred dispatch —
-			// a CALL_NATIVE of parselang-deferred-dispatch — so the parse
-			// result has provenance and the program compiles. At run time the
-			// op resolves parse_<kind> against the LIVE export map (populated
-			// by the compiled Parse.register call) and dispatches it, or
-			// raises the byte-identical parse_unknown_lang when a
-			// runtime-conditional registration did not execute. The check pass
-			// itself installs NOTHING into the export map (the reverted
-			// register-ReturnsFn leak stays closed); pure check keeps the
-			// dynamic degrade below unchanged.
-			if out, ok := recordDeferredParseDispatch(r, args); ok {
-				return []Value{out}, nil
+		// A bare word BOUND to a Function is the ParseLang-value form spelled
+		// by name (`def myp (fn …)  parse myp '…'`) — mirror emit's
+		// bound-variable reconstruction. A registered kind wins a collision
+		// (checked above); an unbound name or a non-Function binding keeps
+		// the unknown-kind handling below, so `parse nope 'x'` still raises
+		// parse_unknown_lang unchanged. A name def-bound to a COMPUTED fn
+		// (`def op (Parse.parser g)`) has no Defs binding under analysis —
+		// installDef declines so the compiled closure machinery owns the
+		// name — and resolves through the per-pass fn-carrier side table
+		// (checkFnCarrierBind) instead.
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
 			}
-			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		if bound {
+			// The /q-captured word bypassed stepWord's use tracking, so an
+			// only-used-as-a-parser fn would be falsely flagged unused_def.
+			r.Check.RecordUse(kind)
+			if _, isFn := top.Data.(FnDefInfo); isFn {
+				return parseFnExpand(top, args, r)
+			}
+			if r.Check.IsActive() && !IsConcrete(top) {
+				// A Function-typed carrier binding (a fn param, a computed
+				// parser) under analysis: the parser is real at run time but
+				// not expandable here — degrade like the other macro paths.
+				// The COMPILE pass records the runtime fn dispatch against
+				// the live binding so the result has provenance.
+				macroDegradedAdvisory(r, "parse", "the parser fn bound to "+kind+" is not a concrete value under analysis", args[0].Pos())
+				if out, ok := recordParseLangFnDispatch(r, top, args); ok {
+					return []Value{out}, nil
+				}
+				return []Value{NewDynamicCarrier(TAny)}, nil
+			}
+			// A non-concrete non-carrier Function binding (the bare Function
+			// type literal): not a parser — fall through to unknown-kind.
 		}
 		if r.Check.IsActive() && !parseNamespaceBound(r) {
 			// The import may be outside the checked fragment; degrade to a
@@ -674,32 +823,160 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// declines and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-				`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`,
+				`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`,
 				args[0].Pos())
 			macroDegradedAdvisory(r, "parse", "the aql:parselang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
 		return nil, r.AqlErrorHint("parse_unknown_lang",
 			fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-			`import "aql:parselang" first; register parsers with ParseLang.register; ParseLang.kinds lists what is loaded`)
+			`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`)
 	}
 
-	// Surface: parse <kind> <opts?> <source>. source is the required last
-	// arg; opts is optional. Map surface→emission to the standard parser
-	// call shape [source opts].
-	var opts, source Value
-	if len(args) == 3 {
-		opts = args[1]
-		source = args[2]
-	} else {
-		opts = NewMap(NewOrderedMap())
-		source = args[1]
-	}
+	source, opts := parseSurfaceOperands(args)
 	toks := []Value{
 		NewWord("ParseLang"), NewWord("dot"), NewWord(target),
 		source, opts, NewEnd(),
 	}
 	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// parseSurfaceOperands maps the parse surface [kind|fn, opts?, source] to the
+// standard parser call shape: source is the required LAST operand, opts the
+// optional MIDDLE one (2-arg form normalizes to {}).
+func parseSurfaceOperands(args []Value) (source, opts Value) {
+	if len(args) == 3 {
+		return args[2], args[1]
+	}
+	return args[1], NewMap(NewOrderedMap())
+}
+
+// parseFnExpand expands the ParseLang-VALUE form `parse <fn> <opts?>
+// <source>` into the direct call `<fn> <source> <opts> end`, spliced at the
+// call site — the token sequence the deferred dispatch replays for a
+// resolved kind, with the fn value supplied by the caller instead of the
+// ParseLang namespace. fn is the parser operand (args[0], or the value a
+// bare word resolved to); it must be a concrete Function whose every
+// signature opens with the standard [source opts] prefix — the shared
+// ParseLangFnSigWhy contract — so a wrong-shaped fn fails loudly here
+// rather than silently mis-collecting its operands. A Function-typed carrier
+// under analysis (a computed parser) degrades to a dynamic value, exactly
+// like the other not-statically-expandable macro paths.
+func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		if r.Check.IsActive() && !IsConcrete(fn) {
+			macroDegradedAdvisory(r, "parse", "the parser fn is not a concrete value under analysis", args[0].Pos())
+			// COMPILE pass: record the runtime fn dispatch so the result has
+			// provenance and the program compiles — the fn operand's own
+			// producing event is the proof. Pure check keeps the dynamic
+			// degrade below.
+			if out, ok := recordParseLangFnDispatch(r, fn, args); ok {
+				return []Value{out}, nil
+			}
+			return []Value{NewDynamicCarrier(TAny)}, nil
+		}
+		// A fn-family value whose payload is not an FnDefInfo — defensive: the
+		// sig matcher never delivers one from surface syntax (a bare `Function`
+		// type literal is parented at Type and refuses every parse sig), so
+		// only a crafted or corrupted function value lands here.
+		return nil, r.AqlErrorHint("parse_error",
+			"parse: the parser is not a usable function value", "parse",
+			"pass a parser fn: parse (fn [[source:String opts:Map] [Any] [...]]) 'x'")
+	}
+	if why := ParseLangFnSigWhy(fnDef); why != "" {
+		return nil, r.AqlErrorHint("parse_bad_signature",
+			"parse: "+why, "parse",
+			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
+	}
+	source, opts := parseSurfaceOperands(args)
+	toks := []Value{fn, source, opts, NewEnd()}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// ParseLangFnSigWhy reports why fnDef cannot serve as a parser (a ParseLang)
+// — every signature must open with the STANDARD parser prefix
+// [source:(String|Any) opts:Map …] and declare exactly ONE return (a parser
+// yields one result — the contract parselang-fn-dispatch enforces at run
+// time, so the statically-expanded and computed forms agree) — or "" when
+// it conforms. It is the ONE contract every parser surface enforces: the
+// `parse` macro's fn-operand form (parseFnExpand), the compiled
+// parselang-fn-dispatch, and the NewParseLangFn value constructor's callers.
+func ParseLangFnSigWhy(fnDef FnDefInfo) string {
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 {
+			return "every signature must start [source:String opts:Map …]"
+		}
+		p0 := sig.Params[0].Type
+		if p0 == nil || !(p0.ConformsTo(TString) || p0.Equal(TAny)) ||
+			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(TMap) {
+			return "every signature must start [source:String opts:Map …]"
+		}
+		if len(sig.Returns) != 1 {
+			return "every signature must declare exactly one return (a parser yields one result)"
+		}
+	}
+	return ""
+}
+
+// MiniLangFnSigWhy reports why fnDef cannot serve as a mini-language
+// transducer — every signature must open with the standard prefix
+// [src:String opts:Map …] — or "" when it conforms. It is the single
+// contract shared by the `mini` macro's fn-operand form (miniFnExpand) and
+// aql:minilang's MiniLang.register validation (modules/minilang.go), so
+// both surfaces enforce byte-identical requirements.
+func MiniLangFnSigWhy(fnDef FnDefInfo) string {
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 ||
+			sig.Params[0].Type == nil || !sig.Params[0].Type.ConformsTo(TString) ||
+			sig.Params[1].Type == nil || !sig.Params[1].Type.ConformsTo(TMap) {
+			return "every signature must start with the standard prefix [src:String opts:Map …]"
+		}
+	}
+	return ""
+}
+
+// MiniLangFnFilterShaped reports whether every signature is exactly the
+// FILTER shape [src opts subject] — the shape whose `mini` expansion is a
+// partially-applied Function (subject pending) rather than an immediate
+// call. Shared by MiniLang.register's member-type mint decision and the
+// fn-operand form's partial construction.
+func MiniLangFnFilterShaped(fnDef FnDefInfo) bool {
+	if len(fnDef.Signatures) == 0 {
+		return false
+	}
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) != 3 {
+			return false
+		}
+	}
+	return true
+}
+
+// EmitLangFnSigWhy reports why fnDef cannot serve as an emitter — every
+// signature must be [value:Any opts:Map …] → [String …] (the first
+// parameter exactly Any so the emitter accepts every value) — or "" when it
+// conforms. It is the single contract shared by the `emit` macro's
+// fn-operand form (emitFnExpand) and the NewEmitLangFn value constructor
+// (modules/langvalue.go builds conforming values by construction).
+func EmitLangFnSigWhy(fnDef FnDefInfo) string {
+	for _, sig := range fnDef.Signatures {
+		if len(sig.Params) < 2 {
+			return "every signature must start [value:Any opts:Map …] and return a value"
+		}
+		p0 := sig.Params[0].Type
+		if p0 == nil || !p0.Equal(TAny) {
+			return "the first parameter must be value:Any so the emitter accepts every value"
+		}
+		p1 := sig.Params[1].Type
+		if p1 == nil || !p1.ConformsTo(TMap) {
+			return "every signature must start [value:Any opts:Map …] and return a String"
+		}
+		if len(sig.Returns) == 0 || sig.Returns[0] == nil || !sig.Returns[0].ConformsTo(TString) {
+			return "every signature must return a String (emit is value→string)"
+		}
+	}
+	return ""
 }
 
 // parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
@@ -713,105 +990,57 @@ func parseNamespaceBound(r *Registry) bool {
 	return ok
 }
 
-// parseKindRegistered reports whether `parse_<kind>` is an export of the
-// bound ParseLang namespace.
-// capParseDeferredKinds holds the set of parse-kind names a Parse.register call
-// will install at RUNTIME — recorded in check mode so `parse <kind>` resolves
-// leniently during analysis even though the built grammar isn't concrete yet.
-const capParseDeferredKinds = "engine.parse.deferred-kinds"
+// capParseLangFnDispatch holds the parselang-fn-dispatch *Signature — the
+// runtime resolver a compiled `parse <fn>` VALUE-form call dispatches
+// through when the parser operand is not concrete under analysis (a
+// computed parser, a Function-typed binding, a Parse.parser grammar
+// parser). Installed once per registry when aql:parselang is built.
+const capParseLangFnDispatch = "engine.parse.fn-dispatch"
 
-// MarkParseKindDeferred records (during check) that `kind` is registered at run
-// time by an aql:parse `Parse.register <kind> <built-grammar>` call. The grammar
-// is constructed by Parse builder words whose result is not a concrete value
-// under static analysis, so the parser can't be installed for the checker; the
-// `parse` macro therefore degrades `parse <kind>` to a dynamic value (no
-// parse_unknown_lang, no trap) for a deferred kind. Called from aql:parse's
-// parse-register check-mode ReturnsFn.
-func MarkParseKindDeferred(r *Registry, kind string) {
-	if r == nil || kind == "" {
-		return
-	}
-	if m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds); ok && m != nil {
-		m[kind] = true
-		return
-	}
-	_ = r.Capabilities.Set(capParseDeferredKinds, map[string]bool{kind: true})
-}
-
-// ResetParseDeferredKinds clears the deferred parse-kind set so it is scoped to
-// a single check pass. The set lives in the persistent Capabilities store, so a
-// reused AQL instance would otherwise carry a prior pass's `Parse.register`
-// kinds into a later Check: `parse <kind>` for that kind would silently degrade
-// to a dynamic value (no parse_unknown_lang) even though the kind is no longer
-// registered. Called at the start of every check pass (see lang.(*AQL).Check /
-// CompileCheck) so deferral is per-check-run, not per-instance lifetime.
-func ResetParseDeferredKinds(r *Registry) {
-	if r == nil || r.Capabilities == nil {
-		return
-	}
-	_, _ = r.Capabilities.Delete(capParseDeferredKinds)
-}
-
-// parseKindDeferred reports whether `kind` was marked as a runtime-registered
-// Parse.register kind (see MarkParseKindDeferred).
-func parseKindDeferred(r *Registry, kind string) bool {
-	m, ok, _ := eng.Cap[map[string]bool](r, capParseDeferredKinds)
-	return ok && m != nil && m[kind]
-}
-
-// capParseDeferredDispatch holds the parselang-deferred-dispatch *Signature —
-// the runtime resolver a compiled `parse <deferred-kind>` call dispatches
-// through. Installed once per registry when aql:parselang is built; static
-// module wiring, so it is NOT reset per check pass (unlike the deferred-kind
-// SET above, which is per-pass state).
-const capParseDeferredDispatch = "engine.parse.deferred-dispatch"
-
-// InstallParseDeferredDispatch records the parselang-side deferred-dispatch
+// InstallParseLangFnDispatch records the parselang-side fn-dispatch
 // signature so the `parse` macro's compile branch can record calls against
 // it. Called from BuildParseLangModule with the importing registry.
-func InstallParseDeferredDispatch(r *Registry, sig *Signature) {
+func InstallParseLangFnDispatch(r *Registry, sig *Signature) {
 	if r == nil || sig == nil {
 		return
 	}
-	_ = r.Capabilities.Set(capParseDeferredDispatch, sig)
+	_ = r.Capabilities.Set(capParseLangFnDispatch, sig)
 }
 
-// recordDeferredParseDispatch records the ONE runtime call a compiled
-// `parse <kind>` deferred dispatch lowers to (Phase 6 M3): CALL_NATIVE
-// parselang-deferred-dispatch(kind, source, opts) with a dynamic(Any) result
-// registered as the event's output, so the parse result reaches downstream
-// consumers (the residual, a def) with provenance instead of refusing
-// "residual value of unknown provenance". Returns (out, true) only when the
-// recording pass is live and the dispatcher is installed; every other case —
-// pure check, suspended analysis, no aql:parselang import — declines and the
-// caller keeps today's unrecorded dynamic degrade. forceDynOut is proven
-// here: the declared return IS Any (the parser's output is genuinely runtime
-// data), and the VM pushes the real dispatched value.
-func recordDeferredParseDispatch(r *Registry, args []Value) (Value, bool) {
+// recordParseLangFnDispatch records the ONE runtime call a compiled
+// `parse <fn>` value-form dispatch lowers to when the parser operand is not
+// concrete under analysis: CALL_NATIVE parselang-fn-dispatch(fn, source,
+// opts) with a dynamic(Any) result registered as the event's output. The fn
+// OPERAND's provenance is its own producing event — the recorded call that
+// computed it — so the parse result reaches downstream consumers with
+// provenance instead of refusing "residual value of unknown provenance".
+// Declines (pure check, suspended analysis, no aql:parselang import) leave
+// the caller on the unrecorded dynamic degrade.
+func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool) {
 	rec := r.Check.Recorder()
 	if !r.Check.Compiling || !rec.Active() {
 		return Value{}, false
 	}
-	sig, ok, _ := eng.Cap[*Signature](r, capParseDeferredDispatch)
+	sig, ok, _ := eng.Cap[*Signature](r, capParseLangFnDispatch)
 	if !ok || sig == nil {
 		return Value{}, false
 	}
-	// Same surface→call mapping as the registered-kind expansion below:
-	// source is the required LAST arg, opts the optional middle one.
-	var opts, source Value
-	if len(args) == 3 {
-		opts = args[1]
-		source = args[2]
-	} else {
-		opts = NewMap(NewOrderedMap())
-		source = args[1]
+	source, opts := parseSurfaceOperands(args)
+	pos := fn.Pos()
+	if pos.Row == 0 {
+		// A COMPUTED fn value carries no source position — anchor the
+		// recorded event at the source operand, which is written at the
+		// `parse` call site, so a runtime raise stamps a real location.
+		pos = source.Pos()
 	}
 	outs := []Value{NewDynamicCarrier(TAny)}
-	rec.RecordCall("parselang-deferred-dispatch", sig,
-		[]Value{args[0], source, opts}, outs, args[0].Pos(), true, false)
+	rec.RecordCall("parselang-fn-dispatch", sig,
+		[]Value{fn, source, opts}, outs, pos, true, false)
 	return outs[0], true
 }
 
+// parseKindRegistered reports whether `parse_<kind>` is an export of the
+// bound ParseLang namespace.
 func parseKindRegistered(r *Registry, target string) bool {
 	top, ok := r.Defs.Top("ParseLang")
 	if !ok {
@@ -841,6 +1070,12 @@ func parseKindRegistered(r *Registry, target string) bool {
 // data is always the LAST operand; opts the optional middle one. data/opts are
 // spliced as collected — they may be carriers in check mode.
 func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	// The emitter VALUE form — `emit <fn> <opts?> <data>` (sigs 4-7): the
+	// first operand IS the emitter, so no kind classification happens.
+	if len(args) >= 2 &&
+		(args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef)) {
+		return emitFnExpand(args[0], args, r)
+	}
 	// Try to read the leading operand as a kind name (a /q'd bare word).
 	kind, isWord := "", false
 	if a, err := args[0].AsConcreteAtom(); err == nil {
@@ -852,6 +1087,35 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	leadingKind := isWord && len(args) >= 2
 	explicit := leadingKind && emitKindRegistered(r, "emit_"+kind)
 
+	// A bare word BOUND to a Function (with data after it) is the emitter
+	// VALUE form spelled by name (`def up (fn …)  emit up {a:1}`) — without
+	// this it would fall to the auto form below and JSON-emit the fn value
+	// itself. A registered kind wins a collision; a lone `emit f` stays a
+	// bare-variable auto emit, unchanged. A name def-bound to a COMPUTED fn
+	// has no Defs binding under analysis and resolves through the per-pass
+	// fn-carrier side table (checkFnCarrierBind), like parse.
+	if leadingKind && !explicit {
+		top, bound := r.Defs.Top(kind)
+		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+			if v, hit := checkFnCarrierBind(r, kind); hit {
+				top, bound = v, true
+			} else {
+				bound = false
+			}
+		}
+		if bound {
+			// The /q-captured word bypassed stepWord's use tracking.
+			r.Check.RecordUse(kind)
+			if _, isFn := top.Data.(FnDefInfo); isFn {
+				return emitFnExpand(top, args, r)
+			}
+			if r.Check.IsActive() && !IsConcrete(top) {
+				macroDegradedAdvisory(r, "emit", "the emitter fn bound to "+kind+" is not a concrete value under analysis", args[0].Pos())
+				return []Value{NewDynamicCarrier(TString)}, nil
+			}
+		}
+	}
+
 	// A leading bare word that is neither a registered kind nor a bound value is
 	// an unknown-kind typo → loud expansion-time error (mirror parse), with the
 	// check-mode dynamic-carrier fallback. A leading word that resolves to a
@@ -861,13 +1125,13 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
 			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-				`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`,
+				`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`,
 				args[0].Pos())
 			return []Value{NewDynamicCarrier(TString)}, nil
 		}
 		return nil, r.AqlErrorHint("emit_unknown_lang",
 			fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-			`import "aql:emitlang" first; register emitters with EmitLang.register; EmitLang.kinds lists what is loaded`)
+			`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`)
 	}
 
 	// Reconstruct a /q'd leading bare word as a Word so the variable it names
@@ -905,6 +1169,43 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		NewWord("EmitLang"), NewWord("dot"), NewWord(target),
 		data, opts, NewEnd(),
 	}
+	return []Value{NewSplice(NewList(toks))}, nil
+}
+
+// emitFnExpand expands the emitter VALUE form `emit <fn> <opts?> <data>`
+// into the direct call `<fn> <data> <opts> end`, spliced at the call site —
+// the fn supplied by the caller instead of the EmitLang namespace. fn must
+// be a concrete Function whose every signature is [value:Any opts:Map …] →
+// [String …] — the shared EmitLangFnSigWhy contract. A
+// Function-typed carrier under analysis degrades to a
+// dynamic String like the other not-statically-expandable macro paths.
+func emitFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
+	fnDef, ok := fn.Data.(FnDefInfo)
+	if !ok {
+		if r.Check.IsActive() && !IsConcrete(fn) {
+			macroDegradedAdvisory(r, "emit", "the emitter fn is not a concrete value under analysis", args[0].Pos())
+			return []Value{NewDynamicCarrier(TString)}, nil
+		}
+		// A fn-family value whose payload is not an FnDefInfo — defensive:
+		// the sig matcher never delivers one from surface syntax.
+		return nil, r.AqlErrorHint("emit_error",
+			"emit: the emitter is not a usable function value", "emit",
+			"pass an emitter fn: emit (fn [[value:Any opts:Map] [String] [...]]) {a:1}")
+	}
+	if why := EmitLangFnSigWhy(fnDef); why != "" {
+		return nil, r.AqlErrorHint("emit_bad_signature",
+			"emit: "+why, "emit",
+			"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
+	}
+	var data, opts Value
+	if len(args) == 3 {
+		opts = args[1]
+		data = args[2]
+	} else {
+		opts = NewMap(NewOrderedMap())
+		data = args[1]
+	}
+	toks := []Value{fn, data, opts, NewEnd()}
 	return []Value{NewSplice(NewList(toks))}, nil
 }
 

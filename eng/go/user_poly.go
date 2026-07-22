@@ -234,7 +234,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 	pats := make([]*Value, len(sigParams))
 	for i, p := range sigParams {
 		paramNames[i] = p.Name
-		genArgs[i] = ParamInputCarrier(p.Type)
+		genArgs[i] = paramBodyCarrier(p)
 		pts[i] = p.Type
 		pats[i] = p.Pattern
 	}

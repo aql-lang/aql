@@ -42,7 +42,7 @@ func TestS7BuildXmlEmptyLiteralChild(t *testing.T) {
 	r := xmlReg(t)
 	e := NewTop(r)
 	tmpl := XmlTmpl{Tag: "p", Cren: []XmlCren{{Kind: XmlCrenLit, Lit: ""}}}
-	_, _, err := e.buildXmlFromTmpl(tmpl)
+	_, _, _, _, err := e.buildXmlFromTmpl(tmpl)
 	if err != nil {
 		t.Fatalf("empty literal child: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestS7BuildXmlNestedChildError(t *testing.T) {
 		Kind: XmlCrenExpr, Expr: []Value{NewWord("cfailx"), NewInteger(1)},
 	}}}
 	tmpl := XmlTmpl{Tag: "p", Cren: []XmlCren{{Kind: XmlCrenChild, Child: child}}}
-	if _, _, err := e.buildXmlFromTmpl(tmpl); err == nil {
+	if _, _, _, _, err := e.buildXmlFromTmpl(tmpl); err == nil {
 		t.Fatal("a nested child template that errors must propagate")
 	}
 }
@@ -64,7 +64,7 @@ func TestS7BuildXmlNilChildSkipped(t *testing.T) {
 	r := xmlReg(t)
 	e := NewTop(r)
 	tmpl := XmlTmpl{Tag: "p", Cren: []XmlCren{{Kind: XmlCrenChild, Child: nil}}}
-	if _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
+	if _, _, _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
 		t.Fatalf("nil child should be skipped, got %v", err)
 	}
 }
@@ -75,7 +75,7 @@ func TestS7BuildXmlAttrFlowCtrl(t *testing.T) {
 	tmpl := XmlTmpl{Tag: "p", Attr: []XmlAttrTmpl{{
 		Name: "x", Parts: []InterpPart{{Expr: []Value{NewWord("cbreak")}}},
 	}}}
-	if _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
+	if _, _, _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
 		t.Fatalf("attr flow-ctrl: %v", err)
 	}
 	if r.FlowCtrl != FlowBreak {
@@ -89,7 +89,7 @@ func TestS7BuildXmlChildExprFlowCtrl(t *testing.T) {
 	tmpl := XmlTmpl{Tag: "p", Cren: []XmlCren{{
 		Kind: XmlCrenExpr, Expr: []Value{NewWord("cbreak")},
 	}}}
-	if _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
+	if _, _, _, _, err := e.buildXmlFromTmpl(tmpl); err != nil {
 		t.Fatalf("child expr flow-ctrl: %v", err)
 	}
 	if r.FlowCtrl != FlowBreak {
@@ -103,7 +103,7 @@ func TestS7BuildXmlAttrDynamic(t *testing.T) {
 	tmpl := XmlTmpl{Tag: "p", Attr: []XmlAttrTmpl{{
 		Name: "x", Parts: []InterpPart{{Expr: []Value{NewWord("dynv")}}},
 	}}}
-	_, dynamic, err := e.buildXmlFromTmpl(tmpl)
+	_, dynamic, _, _, err := e.buildXmlFromTmpl(tmpl)
 	if err != nil {
 		t.Fatalf("attr dynamic: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestS7BuildXmlNestedChildDynamic(t *testing.T) {
 		Name: "x", Parts: []InterpPart{{Expr: []Value{NewWord("dynv")}}},
 	}}}
 	tmpl := XmlTmpl{Tag: "p", Cren: []XmlCren{{Kind: XmlCrenChild, Child: child}}}
-	_, dynamic, err := e.buildXmlFromTmpl(tmpl)
+	_, dynamic, _, _, err := e.buildXmlFromTmpl(tmpl)
 	if err != nil {
 		t.Fatalf("nested child dynamic: %v", err)
 	}

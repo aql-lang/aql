@@ -87,8 +87,11 @@ func TestComputedRangeLoopCompilesAndMatches(t *testing.T) {
 		{`def f fn [[n:Integer] [Any] [ for [0 n 65536] [ 5 drop ] 0 ]] f 3`, true},
 		{`def f fn [[n:Integer] [Any] [ for [n] [ 5 drop ] 0 ]] f 4`, true},
 		{`def f fn [[n:Integer] [Any] [ for [2 n] [ 5 drop ] 0 ]] f 5`, true},
-		{`def f fn [[a:Integer b:Integer] [Any] [ for [a b] [ 5 drop ] 0 ]] f 1 4`, false},
-		{`def f fn [[n:Integer s:Integer] [Any] [ for [0 n s] [ 5 drop ] 0 ]] f 6 2`, false},
+		// GRADUATED 2026-07-17: a computed range START/STEP that resolves to
+		// a frame LOCAL now lowers (computedRangeBounds passes the bounds
+		// as-is; RecordLoop admits const + local operands, refusing events).
+		{`def f fn [[a:Integer b:Integer] [Any] [ for [a b] [ 5 drop ] 0 ]] f 1 4`, true},
+		{`def f fn [[n:Integer s:Integer] [Any] [ for [0 n s] [ 5 drop ] 0 ]] f 6 2`, true},
 	}
 	for _, c := range cases {
 		ac, err := New()

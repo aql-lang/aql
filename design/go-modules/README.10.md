@@ -84,6 +84,7 @@ bare namespace would collide with a builtin type (`Path`, `String`,
 | `path` | [PATH](PATH.10.md) | `aql:path-util` | `PathUtil` | none |
 | `path/filepath` | [PATH-FILEPATH](PATH-FILEPATH.10.md) | `aql:filepath` | `FilePath` | none (pure string ops) |
 | `os` | [OS](OS.10.md) | `aql:os` | `Os` | `env`, `process`, `system-info` |
+| `os/exec` | [EXEC](EXEC.10.md) | `aql:exec` | `Exec` | `process` |
 | `runtime` | [RUNTIME](RUNTIME.10.md) | `aql:runtime` | `Runtime` | `system-info` |
 | `encoding/csv` | [ENCODING-CSV](ENCODING-CSV.10.md) | `aql:csv` | `Csv` | none |
 | `text/template` | [TEXT-TEMPLATE](TEXT-TEMPLATE.10.md) | `aql:template` | `Template` | none |

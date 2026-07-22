@@ -66,6 +66,15 @@ func TestTabnasParseMatchesHandLexer(t *testing.T) {
 		"xs filter +gex|*.go|",
 		// clean backtick (empty swallowed gap)
 		"`hello ${name}` done",
+		// a backtick literal whose ENTIRE content is a quote char (`"` / `'`):
+		// the flat lexer starts a string at the inner quote that runs to a quote
+		// inside a LATER literal, swallowing that literal's opening backtick. The
+		// gap recovery must re-scan the split literal whole, not leave it
+		// unterminated (sift.aql's char-quote check; regression for PR #298).
+		"a eq `\"`",
+		"(a eq `\"`) or (b eq `\"`)",
+		"if (((a eq `\"`) and (b eq `\"`)) or ((a eq `'`) and (b eq `'`))) [x] [y]",
+		"x `'` y `'` z",
 		// backtick containing `//` → mis-lexer swallows the line tail; the
 		// closing paren after it must be recovered
 		"def u ( `http://h/${p}/x` )\n",

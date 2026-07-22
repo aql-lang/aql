@@ -24,6 +24,7 @@ import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x
 import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest
 import "aql:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width
 import "aql:fmt" end Fmt.render 1 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a\nb'	Fmt.render breaks a doc that does not fit the width
+import "aql:fmt" end Fmt.render 20 {fmt:'indent' by:-1 body:{fmt:'concat' parts:[{fmt:'hardline'} 'x']}}	'\nx'	a NEGATIVE document indent clamps to column 0 (no strings.Repeat panic — PR #298 review P1)
 #
 # The XSLT-style rule vocabulary: Fmt.kind supplies a node's dispatch key
 # (an XSLT match pattern) and Fmt.children its child sequence

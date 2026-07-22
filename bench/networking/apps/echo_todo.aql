@@ -4,11 +4,27 @@
 import "./design/examples/apps/todo-api.aql"
 import "aql:net"
 import "aql:time-util"
-def ln (TodoApi.serve {port: 0})
+def ln (TodoApi.serve {port:0})
 def port (Net.addr ln).port
-def ep (Net.connect {tcp: (join "" ["127.0.0.1:" (convert String port)]) codec: Net.http})
-call {method:"POST" path:"/todos" headers:{content-type:"application/json"} body:"{\"text\": \"x\"}"} ep {timeout: 5000} drop
+def ep
+(Net.connect
+      {tcp:(join "" ["127.0.0.1:" (convert String port)])
+        codec:Net.http
+      }
+  )
+call
+{method:"POST"
+    path:"/todos"
+    headers:{content-type:"application/json"}
+    body:"{\"text\": \"x\"}"
+  }
+ep {timeout:5000} drop
 def start (TimeUtil.now)
-for 5000 [ call {method:"GET" path:"/todos"} ep {timeout: 5000} drop ]
+for 5000 [call {method:"GET" path:"/todos"} ep {timeout:5000} drop]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
-print (join "" ["todo-api 5000 GET  " (convert String dur) " ms  " (convert String (div dur 5000000.0)) " req/s"])
+print
+(join ""
+      ["todo-api 5000 GET  " (convert String dur) " ms  "
+          (convert String (div dur 5000000.0)) " req/s"
+      ]
+  )

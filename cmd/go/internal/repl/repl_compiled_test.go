@@ -82,7 +82,7 @@ func TestStartRefusedLineFallsBackWithResult(t *testing.T) {
 // apply; `for 3 [1 2]` above compiles natively since the refusal census
 // hit zero, so it pins the compiled path, not this fallback).
 func TestStartRefusedLineFallbackIsSilent(t *testing.T) {
-	in := strings.NewReader(`def m {f: ([y:Integer] => [y add 1])} add 1 ((m get "f") 5)` + "\n")
+	in := strings.NewReader(`def mk (fn [[n:Integer] [Any] [ def svc (service {}) add {cmd:"X"} ([req:Map state:Any] => [ n ]) svc svc ]]) def s (mk 7) (call {cmd:"X"} s)` + "\n")
 	out := &bytes.Buffer{}
 	Start(in, out, "")
 	if !strings.Contains(out.String(), "7") {

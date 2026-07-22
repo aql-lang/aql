@@ -148,11 +148,13 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 // It compiles ONLY shapes it can statically prove the single-result branch
 // lowering will take — a re-pushable case value (`OperandRepushable`: tested
 // against every clause guard, a computed event could not be re-pushed inside
-// the else fragments) and a trailing default (so the innermost else is a
-// definite value, not a 2-arg-if variadic). Every other shape returns the
-// prior conservative dynamic-Any WITHOUT marking the program uncompilable, so
-// the island / whole-program fallback keeps owning it and refusals never
-// rise. Faithfulness rides the differential gate (runtime stays
+// the else fragments). A trailing default makes the innermost else a definite
+// value; without one the chain lowers as a 0-or-1 variadic (see the comment
+// on the desugar below) — only the code-body-scrutinee sub-path additionally
+// demands the 3-element default shape. Every other shape returns the prior
+// conservative dynamic-Any WITHOUT marking the program uncompilable, so the
+// island / whole-program fallback keeps owning it and refusals never rise.
+// Faithfulness rides the differential gate (runtime stays
 // caseHandler/caseClauses; __casematch reuses its UnifyR).
 func caseReturnsFn(args []Value, r *Registry) []Value {
 	dynAny := []Value{NewDynamicCarrier(TAny)}
@@ -161,6 +163,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		v, clauses = clauses, v
 	}
 	if isCodeBody(v) {
+		// A code-body scrutinee is DYNAMIC — its result type is not
+		// statically modelled — so the clause list must carry its own
+		// catch-all (a trailing default or an Any clause). Emitted on
+		// both the plain-check and compile paths (case_exhaustive.go).
+		checkCaseCodeBodyScrutinee(r, v, clauses)
 		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
 		// dispatches on its last result. In compile mode:
 		//   - 0-net body → the run-time case_error (caseHandler): record a TERMINAL
@@ -219,6 +226,12 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		return dynAny
 	}
 	elems := lst.Slice()
+	// Static coverage pass (case_exhaustive.go) — BEFORE the compile-desugar /
+	// plain-check paths diverge, so both report identical findings: a
+	// default-less case whose clauses don't cover the scrutinee's static type
+	// is a check error, plus the redundant-default / unreachable-clause
+	// advisories.
+	checkCaseExhaustiveness(r, v, clauses, elems)
 	// At least one clause pair. A trailing default (odd length) makes the
 	// innermost else a definite value; WITHOUT one (even length) the innermost
 	// `if guard [block]` has no else and the chain is variadic (0-or-1), which

@@ -1,10 +1,15 @@
 import "aql:net"
 import "aql:time-util"
-def ln (Net.serve-raw {tcp: 19091} (fn [[sock:Any] [Any] [
-  def nl (convert Bytes "\n")
-  for 40000 [
-    def line (Net.recv-until sock nl)
-    Net.send-bytes (convert Bytes (join "" [(convert String line) "\n"])) sock
-  ]
-]]))
-TimeUtil.sleep 60000    # keep the acceptor alive while a client runs
+def ln
+(Net.serve-raw {tcp:19091}
+      (fn sock:Any Any
+          [def nl (convert Bytes "\n")
+            for 40000
+              [def line (Net.recv-until sock nl) Net.send-bytes
+                  (convert Bytes (join "" [(convert String line) "\n"]))
+                  sock
+              ]
+          ]
+      )
+  )
+TimeUtil.sleep 60000 # keep the acceptor alive while a client runs

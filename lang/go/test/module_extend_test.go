@@ -141,10 +141,15 @@ export "Mid" {mk: omk/r}`,
 		`add (Mid.mk true) (Mid.mk true)`,
 	})
 	if err == nil {
-		t.Fatal("expected signature_error (extension must not cross two levels), got no error")
+		t.Fatal("expected an error (extension must not cross two levels), got no error")
 	}
-	if !strings.Contains(err.Error(), "signature_error") {
-		t.Fatalf("expected signature_error, got %v", err)
+	// The [Flag Flag] extension did NOT cross, so `add flag flag` does not
+	// dispatch it. Flag is a `refine Boolean`, so the call falls to the
+	// core within-type default for Boolean — arithmetic is a defined error —
+	// which still proves the extension is absent (it would otherwise return
+	// a Flag, not raise).
+	if !strings.Contains(err.Error(), "arithmetic is not defined on Boolean") {
+		t.Fatalf("expected the Boolean within-type default error, got %v", err)
 	}
 }
 

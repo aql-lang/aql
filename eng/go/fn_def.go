@@ -194,6 +194,19 @@ func IsSigTypeValue(r *Registry, v Value) bool {
 		name, _ := AsString(v)
 		return isSigTypeName(r, name)
 	}
+	// A DOTTED type reference (`MatrixUtil.Matrix` — a Reach) reaching a type
+	// literal through bound module exports: recognise it as a TYPE, exactly
+	// as dottedParamType resolves it for a param slot. Without this an output
+	// sig `[Pkg.Type]` was mis-read as a concrete return-by-value — the
+	// resolved type literal got spliced onto the body and surfaced as a
+	// spurious "expected N return value(s), got N+1" (a MatrixUtil tensor
+	// return type, the stats cov-matrix false positive). The Word-name case
+	// above already covers a plain `def`'d type name; this is its dotted twin.
+	if IsReach(v) {
+		if _, ok := dottedParamType(r, v); ok {
+			return true
+		}
+	}
 	return false
 }
 

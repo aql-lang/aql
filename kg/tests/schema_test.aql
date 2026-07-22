@@ -1,0 +1,77 @@
+# schema_test.aql — constructors and vocabulary checks.
+# Run from kg/:  ../cmd/go/bin/aql tests/schema_test.aql
+
+import "aql:test"
+import "./schema.aql"
+
+# -- vocabulary membership: positive and negative -------------------------
+
+[ (KgSchema.term-approved "Person" KgSchema.entity-types) true Assert.equal ]
+  "Person is an approved entity type" Test.test end
+[ (KgSchema.term-approved "Wizard" KgSchema.entity-types) false Assert.equal ]
+  "Wizard is not an approved entity type" Test.test end
+[ (KgSchema.term-approved "works_for" KgSchema.predicates) true Assert.equal ]
+  "works_for is an approved predicate" Test.test end
+[ (KgSchema.term-approved "blessed_by" KgSchema.predicates) false Assert.equal ]
+  "blessed_by is not an approved predicate" Test.test end
+
+# -- valid entity creation ------------------------------------------------
+
+def good (KgSchema.mk-entity {
+  id: "ent:Person:1" type: "Person" label: "Ada" normalized_label: "ada"
+  aliases: [] external_ids: {} attributes: {} status: "accepted"
+})
+[ good.label "Ada" Assert.equal ] "valid entity constructs" Test.test end
+[ good.status "accepted" Assert.equal ] "entity keeps its status" Test.test end
+
+# -- missing / mistyped fields are refused at construction ----------------
+
+def label-missing (do [
+  KgSchema.mk-entity {id: "ent:Person:2" type: "Person" normalized_label: "x"
+    aliases: [] external_ids: {} attributes: {} status: "accepted"}
+] error [var [[e] "refused"]])
+[ label-missing "refused" Assert.equal ]
+  "entity without a label is refused" Test.test end
+
+def alias-mistyped (do [
+  KgSchema.mk-entity {id: "ent:Person:3" type: "Person" label: "X" normalized_label: "x"
+    aliases: [7] external_ids: {} attributes: {} status: "accepted"}
+] error [var [[e] "refused"]])
+[ alias-mistyped "refused" Assert.equal ]
+  "non-string alias is refused" Test.test end
+
+def unknown-field (do [
+  KgSchema.mk-source {id: "src:1" kind: "json" locator: "l" title: "t"
+    retrieved_at: none content_hash: "h" authority: "primary" metadata: {}
+    surprise: 1}
+] error [var [[e] "refused"]])
+[ unknown-field "refused" Assert.equal ]
+  "unknown source field is refused" Test.test end
+
+# -- object forms ---------------------------------------------------------
+
+def eref (KgSchema.mk-entity-ref "ent:Person:1")
+[ (KgSchema.is-entity-ref eref) true Assert.equal ]
+  "entity ref satisfies is-entity-ref" Test.test end
+[ (KgSchema.is-literal eref) false Assert.equal ]
+  "entity ref is not a literal" Test.test end
+
+def lit (KgSchema.mk-literal {value: 42 datatype: "Integer"})
+[ (KgSchema.is-literal lit) true Assert.equal ]
+  "literal satisfies is-literal" Test.test end
+[ lit.unit none Assert.equal ] "literal unit defaults to none" Test.test end
+[ (KgSchema.is-entity-ref lit) false Assert.equal ]
+  "literal is not an entity ref" Test.test end
+
+# -- proposals can never smuggle an accepted status -----------------------
+
+def prop (KgSchema.mk-proposal {
+  id: "schema-proposal:1" term_kind: "predicate" term: "advises"
+  definition: "d" domain: ["Person"] range: ["Person"] examples: []
+  reason: "r" possible_equivalents: ["related_to"] status: "accepted"
+})
+[ prop.status "requires_approval" Assert.equal ]
+  "proposal status is forced to requires_approval" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [raise test_failed "schema_test failures"]

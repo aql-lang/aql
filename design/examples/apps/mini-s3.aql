@@ -28,143 +28,155 @@ def s3-chunk-size 65536
 # ---- the object store: a service over {objects: {"bucket/key": Bytes}} ----
 
 def s3-make-store fn [[] [Any] [
-  def store (service {objects: {}})
-
-  add {op:"size"} ([req:Map state:Any] => [
-    def objects state.objects
-    def k req.key
-    def cur (objects get k)
-    if (cur eq None) [ -1 ] [ size cur ]
-  ]) store
-
-  add {op:"reset"} ([req:Map state:Any] => [
-    def objects state.objects
-    def k req.key
-    objects set (k) (convert Bytes "")
-    drop
-    0
-  ]) store
-
-  add {op:"append"} ([req:Map state:Any] => [
-    def objects state.objects
-    def k req.key
-    def cur (objects get k)
-    def old (if (cur eq None) [ convert Bytes "" ] [ cur ])
-    def nb (old add req.chunk)
-    objects set (k) nb
-    drop
-    size nb
-  ]) store
-
-  add {op:"read"} ([req:Map state:Any] => [
-    def objects state.objects
-    def k req.key
-    objects get k
-  ]) store
-
-  add {op:"delete"} ([req:Map state:Any] => [
-    def objects state.objects
-    def k req.key
-    def had (if ((objects get k) eq None) [ 0 ] [ 1 ])
-    objects set (k) None
-    drop
-    had
-  ]) store
-
-  add {op:"list"} ([req:Map state:Any] => [
-    def objects state.objects
-    def bkt req.bucket
-    def prefix (join "" [bkt "/"])
-    def plen (size prefix)
-    def matching (filter ([e:Any] => [
-      def kk e.value
-      if ((objects get kk) eq None) [ false ] [
-        if ((size kk) lt plen) [ false ] [
-          (convert String (slice 0 plen (convert Bytes kk))) eq prefix
+  def store (service {objects:{}}) add {op:"size"}
+    ([req:Map state:Any] =>
+        [def objects state.objects
+          def k req.key
+          def cur (objects get k)
+          if (cur eq None) [-1] [size cur]
         ]
-      ]
-    ]) (keys objects))
-    matching
-  ]) store
-
-  store
+    )
+    store add {op:"reset"}
+    ([req:Map state:Any] =>
+        [def objects state.objects
+          def k req.key objects set (k) (convert Bytes "") drop 0
+        ]
+    )
+    store add {op:"append"}
+    ([req:Map state:Any] =>
+        [def objects state.objects
+          def k req.key
+          def cur (objects get k)
+          def old (if (cur eq None) [convert Bytes ""] [cur])
+          def nb (old add req.chunk) objects set (k) nb drop size nb
+        ]
+    )
+    store add {op:"read"}
+    ([req:Map state:Any] =>
+        [def objects state.objects def k req.key objects get k]
+    )
+    store add {op:"delete"}
+    ([req:Map state:Any] =>
+        [def objects state.objects
+          def k req.key
+          def had (if ((objects get k) eq None) [0] [1]) objects set
+            (k) None drop had
+        ]
+    )
+    store add {op:"list"}
+    ([req:Map state:Any] =>
+        [def objects state.objects
+          def bkt req.bucket
+          def prefix (join "" [bkt "/"])
+          def plen (size prefix)
+          def matching
+            (filter
+                ([e:Any] =>
+                    [def kk e.value
+                      if ((objects get kk) eq None) [false]
+                        [if ((size kk) lt plen) [false]
+                            [(convert String
+                                    (slice 0 plen (convert Bytes kk))
+                                )
+                                eq prefix
+                            ]
+                        ]
+                    ]
+                )
+                (keys objects)
+            )
+            matching
+        ]
+    )
+    store store
 ]]
 
 # ---- HTTP plumbing, hand-rolled over the raw socket ----
 
 # One response: status line + headers + content-length, then the body
 # streamed out in bounded chunks.
-def s3-send-resp fn [[conn:Any status:Integer extra:List body:Bytes] [Any] [
-  def hdrs (push (join "" ["content-length: " (convert String (size body))]) extra)
-  def head (join "\r\n" (unshift (join "" ["HTTP/1.1 " (convert String status) " S"]) hdrs))
-  Net.send-bytes (convert Bytes (join "" [head "\r\n\r\n"])) conn
+def s3-send-resp fn [[conn:Any status:Integer extra:List body:Bytes]
+  [Any] [
+  def hdrs
+    (push (join "" ["content-length: " (convert String (size body))])
+        extra
+    )
+  def head
+    (join "\r\n"
+        (unshift (join "" ["HTTP/1.1 " (convert String status) " S"])
+            hdrs
+        )
+    )
+    Net.send-bytes (convert Bytes (join "" [head "\r\n\r\n"])) conn
   def total (size body)
-  for [0 total 65536] [
-    def hi (if ((add i 65536) lt total) [ add i 65536 ] [ total ])
-    Net.send-bytes (slice i hi body) conn
-  ]
-  0
+  for [0 total 65536]
+    [def hi (if ((add i 65536) lt total) [add i 65536] [total])
+        Net.send-bytes (slice i hi body) conn
+    ]
+    0
 ]]
 
 # Read the header block into a flex map of lowercased names.
 # (Recursive per line: `break` cannot cross an fn-body `for` today, so
 # open-ended loops in fns recurse instead.)
 def s3-read-header-lines fn [[conn:Any hs:Any] [Any] [
-  def line-b (Net.recv-until conn s3-crlf {within: 20000})
-  if ((size line-b) eq 0) [ 0 ] [
-    def line (convert String line-b)
-    def ci (StringUtil.indexof ":" line)
-    if (ci gte 0) [
-      def hk (StringUtil.lower (StringUtil.trim (convert String (slice 0 ci line-b))))
-      def hv (StringUtil.trim (convert String (slice (add 1 ci) (size line-b) line-b)))
-      hs set (hk) hv
-      drop
-    ] [ ]
-    s3-read-header-lines conn hs
-  ]
+  def line-b (Net.recv-until conn s3-crlf {within:20000})
+  if ((size line-b) eq 0) [0]
+    [def line (convert String line-b)
+      def ci (StringUtil.indexof ":" line)
+      if (ci gte 0)
+        [def hk
+            (StringUtil.lower
+                (StringUtil.trim (convert String (slice 0 ci line-b)))
+            )
+          def hv
+            (StringUtil.trim
+                (convert String (slice (add 1 ci) (size line-b) line-b))
+            )
+            hs set (hk) hv drop
+        ]
+        [] s3-read-header-lines conn hs
+    ]
 ]]
 
-def s3-read-headers fn [[conn:Any] [Any] [
-  def hs (flex {})
-  s3-read-header-lines conn hs
-  drop
-  hs
-]]
+def s3-read-headers fn conn:Any Any [
+  def hs (flex {}) s3-read-header-lines conn hs drop hs
+]
 
 def s3-header fn [[hs:Any k:String fallback:String] [String] [
   def v (hs get k)
-  if (v eq None) [ fallback ] [ v ]
+  if (v eq None) [fallback] [v]
 ]]
 
 # Stream clen body bytes into the store at okey in bounded 64 KiB
 # chunks. The chunk count is computed up front, and each iteration
 # derives its remaining count from the store's size — no loop-carried
 # state, no break.
-def s3-read-body-into fn [[conn:Any store:Any okey:String clen:Integer start:Integer] [Any] [
+def s3-read-body-into fn
+  [[conn:Any store:Any okey:String clen:Integer start:Integer] [Any] [
   def nloops ((clen add 65535) div 65536)
-  for nloops [
-    def cur (call {op:"size" key: okey} store)
-    def rem (clen sub (cur sub start))
-    def nread (if (rem lt 65536) [ rem ] [ 65536 ])
-    def chunk (Net.recv-bytes conn nread {within: 20000})
-    call {op:"append" key: okey chunk: chunk} store drop
-  ]
-  0
+  for nloops
+    [def cur (call {op:"size" key:okey} store)
+      def rem (clen sub (cur sub start))
+      def nread (if (rem lt 65536) [rem] [65536])
+      def chunk (Net.recv-bytes conn nread {within:20000}) call
+        {op:"append" key:okey chunk:chunk} store drop
+    ]
+    0
 ]]
 
 # Discard clen body bytes (a rejected upload must still drain the
 # request so the connection can carry the next one).
 def s3-drain-body fn [[conn:Any clen:Integer] [Any] [
-  def sink (flex {got: 0})
+  def sink (flex {got:0})
   def nloops ((clen add 65535) div 65536)
-  for nloops [
-    def rem (clen sub sink.got)
-    def nread (if (rem lt 65536) [ rem ] [ 65536 ])
-    Net.recv-bytes conn nread {within: 20000} drop
-    sink set got (add nread sink.got)
-    drop
-  ]
-  0
+  for nloops
+    [def rem (clen sub sink.got)
+      def nread (if (rem lt 65536) [rem] [65536]) Net.recv-bytes conn
+        nread {within:20000} drop sink set got (add nread sink.got)
+        drop
+    ]
+    0
 ]]
 
 # Parse a "bytes=A-B" / "bytes=A-" range header against a total size.
@@ -177,8 +189,8 @@ def s3-parse-range fn [[rv:String total:Integer] [Any] [
   def a-str (convert String (slice 0 dash sb))
   def b-str (convert String (slice (add 1 dash) (size sb) sb))
   def from (convert Integer a-str)
-  def upto (if (b-str eq "") [ total sub 1 ] [ convert Integer b-str ])
-  {from: from upto: upto}
+  def upto (if (b-str eq "") [total sub 1] [convert Integer b-str])
+    {from:from upto:upto}
 ]]
 
 # ---- request dispatch ----
@@ -186,108 +198,128 @@ def s3-parse-range fn [[rv:String total:Integer] [Any] [
 def s3-handle-put fn [[conn:Any store:Any okey:String hs:Any] [Any] [
   def clen (convert Integer (s3-header hs "content-length" "0"))
   def offv (hs get "x-offset")
-  if (offv eq None) [
-    # plain PUT: full overwrite
-    call {op:"reset" key: okey} store drop
-    s3-read-body-into conn store okey clen 0 drop
-    def sz (call {op:"size" key: okey} store)
-    s3-send-resp conn 200 [(join "" ["x-size: " (convert String sz)])] (convert Bytes "")
-  ] [
-    # resumable PUT: the offset must equal the current staged size
-    def offset (convert Integer offv)
-    def cur (call {op:"size" key: okey} store)
-    def cur2 (if (cur lt 0) [ 0 ] [ cur ])
-    if (offset eq cur2) [
-      if (cur lt 0) [ call {op:"reset" key: okey} store drop ] [ ]
-      s3-read-body-into conn store okey clen offset drop
-      def sz (call {op:"size" key: okey} store)
-      s3-send-resp conn 200 [(join "" ["x-size: " (convert String sz)])] (convert Bytes "")
-    ] [
-      # wrong resume point: drain, then tell the client where to resume
-      s3-drain-body conn clen drop
-      s3-send-resp conn 409 [(join "" ["x-size: " (convert String cur2)])] (convert Bytes "")
+  if (offv eq None)
+    [# plain PUT: full overwrite
+      call {op:"reset" key:okey} store drop s3-read-body-into conn
+        store okey clen 0 drop
+      def sz (call {op:"size" key:okey} store) s3-send-resp conn 200
+        [(join "" ["x-size: " (convert String sz)])] (convert Bytes "")
     ]
-  ]
+    [# resumable PUT: the offset must equal the current staged size
+      def offset (convert Integer offv)
+      def cur (call {op:"size" key:okey} store)
+      def cur2 (if (cur lt 0) [0] [cur])
+      if (offset eq cur2)
+        [if (cur lt 0) [call {op:"reset" key:okey} store drop] []
+            s3-read-body-into conn store okey clen offset drop
+          def sz (call {op:"size" key:okey} store) s3-send-resp conn
+            200 [(join "" ["x-size: " (convert String sz)])]
+            (convert Bytes "")
+        ]
+        [# wrong resume point: drain, then tell the client where to resume
+          s3-drain-body conn clen drop s3-send-resp conn 409
+            [(join "" ["x-size: " (convert String cur2)])]
+            (convert Bytes "")
+        ]
+    ]
 ]]
 
 def s3-handle-get fn [[conn:Any store:Any okey:String hs:Any] [Any] [
-  def data (call {op:"read" key: okey} store)
-  if (data eq None) [
-    s3-send-resp conn 404 [] (convert Bytes "not found")
-  ] [
-    def total (size data)
-    def rv (hs get "range")
-    if (rv eq None) [
-      s3-send-resp conn 200 [(join "" ["x-size: " (convert String total)])] data
-    ] [
-      def r (s3-parse-range rv total)
-      def from r.from
-      def upto (if (r.upto lt total) [ r.upto ] [ total sub 1 ])
-      if ((from gte total) or (from gt upto)) [
-        s3-send-resp conn 416 [(join "" ["content-range: bytes */" (convert String total)])] (convert Bytes "")
-      ] [
-        def part (slice from (add 1 upto) data)
-        def cr (join "" ["content-range: bytes " (convert String from) "-" (convert String upto) "/" (convert String total)])
-        s3-send-resp conn 206 [cr] part
-      ]
+  def data (call {op:"read" key:okey} store)
+  if (data eq None)
+    [s3-send-resp conn 404 [] (convert Bytes "not found")]
+    [def total (size data)
+      def rv (hs get "range")
+      if (rv eq None)
+        [s3-send-resp conn 200
+            [(join "" ["x-size: " (convert String total)])] data
+        ]
+        [def r (s3-parse-range rv total)
+          def from r.from
+          def upto (if (r.upto lt total) [r.upto] [total sub 1])
+          if ((from gte total) or (from gt upto))
+            [s3-send-resp conn 416
+                [(join ""
+                        ["content-range: bytes */"
+                            (convert String total)
+                        ]
+                    )
+                ]
+                (convert Bytes "")
+            ]
+            [def part (slice from (add 1 upto) data)
+              def cr
+                (join ""
+                    ["content-range: bytes " (convert String from) "-"
+                        (convert String upto) "/"
+                        (convert String total)
+                    ]
+                )
+                s3-send-resp conn 206 [cr] part
+            ]
+        ]
     ]
-  ]
 ]]
 
 def s3-handle-one fn [[conn:Any store:Any] [Any] [
-  def req-line (convert String (Net.recv-until conn s3-crlf {within: 30000}))
+  def req-line
+    (convert String (Net.recv-until conn s3-crlf {within:30000}))
   def parts (StringUtil.split " " req-line)
   def method (parts get 0)
   def path (parts get 1)
   def hs (s3-read-headers conn)
-  # path → bucket / key ("/b/k/with/slashes" keeps the slashes in the key)
+    # path → bucket / key ("/b/k/with/slashes" keeps the slashes in the key)
   def pb (convert Bytes path)
   def trimmed (convert String (slice 1 (size pb) pb))
   def segs (StringUtil.split "/" trimmed)
   def bucket (segs get 0)
   def okey trimmed
   def has-key ((size segs) gt 1)
-  if (method eq "PUT") [
-    if has-key [ s3-handle-put conn store okey hs ] [
-      s3-send-resp conn 400 [] (convert Bytes "missing key") ]
-  ] [
-    if (method eq "GET") [
-      if has-key [ s3-handle-get conn store okey hs ] [
-        def listing (call {op:"list" bucket: bucket} store)
-        s3-send-resp conn 200 [] (convert Bytes (join "\n" listing)) ]
-    ] [
-      if (method eq "HEAD") [
-        def sz (call {op:"size" key: okey} store)
-        if (sz lt 0) [
-          s3-send-resp conn 404 [(join "" ["x-size: 0"])] (convert Bytes "")
-        ] [
-          s3-send-resp conn 200 [(join "" ["x-size: " (convert String sz)])] (convert Bytes "")
-        ]
-      ] [
-        if (method eq "DELETE") [
-          call {op:"delete" key: okey} store drop
-          s3-send-resp conn 204 [] (convert Bytes "")
-        ] [
-          s3-send-resp conn 400 [] (convert Bytes "unsupported method")
-        ]
-      ]
+  if (method eq "PUT")
+    [if has-key [s3-handle-put conn store okey hs]
+        [s3-send-resp conn 400 [] (convert Bytes "missing key")]
     ]
-  ]
+    [if (method eq "GET")
+        [if has-key [s3-handle-get conn store okey hs]
+            [def listing (call {op:"list" bucket:bucket} store)
+                s3-send-resp conn 200 []
+                (convert Bytes (join "\n" listing))
+            ]
+        ]
+        [if (method eq "HEAD")
+            [def sz (call {op:"size" key:okey} store)
+              if (sz lt 0)
+                [s3-send-resp conn 404 [(join "" ["x-size: 0"])]
+                    (convert Bytes "")
+                ]
+                [s3-send-resp conn 200
+                    [(join "" ["x-size: " (convert String sz)])]
+                    (convert Bytes "")
+                ]
+            ]
+            [if (method eq "DELETE")
+                [call {op:"delete" key:okey} store drop s3-send-resp
+                    conn 204 [] (convert Bytes "")
+                ]
+                [s3-send-resp conn 400 []
+                    (convert Bytes "unsupported method")
+                ]
+            ]
+        ]
+    ]
 ]]
 
 # The per-connection actor: a keep-alive request loop (recursive — one
 # level per request); `closed` (or any transport error) ends this
 # connection only.
 def s3-conn fn [[conn:Any store:Any] [Any] [
-  def ok (do [ s3-handle-one conn store drop true ] error [ drop false ])
-  if ok [ s3-conn conn store ] [ 0 ]
+  def ok (do [s3-handle-one conn store drop true] error [drop false])
+  if ok [s3-conn conn store] [0]
 ]]
 
-def s3-serve fn [[opts:Map] [Any] [
-  def store (s3-make-store)
-  Net.serve-raw {tcp: opts.port} ([conn:Any] => [ s3-conn conn store ])
-]]
+def s3-serve fn opts:Map Any [
+  def store (s3-make-store) Net.serve-raw {tcp:opts.port}
+    ([conn:Any] => [s3-conn conn store])
+]
 
-export "MiniS3" {
-  serve: s3-serve/r
-}
+export "MiniS3" {serve:s3-serve/r}

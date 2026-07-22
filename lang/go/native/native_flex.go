@@ -55,15 +55,17 @@ var flexNatives = []NativeFunc{
 			// than the Any sig, so it wins whenever the argument is a
 			// list (including another FlexList, which conforms to List).
 			{
-				Args:    []*Type{TList, TFlexList},
-				Impl:    Go(appendListHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TList, TFlexList},
+				Impl:      Go(appendListHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: appendListReturns, BarrierPos: -1,
 			},
 			// Any other value: append as a single element.
 			{
-				Args:    []*Type{TAny, TFlexList},
-				Impl:    Go(appendElemHandler),
-				Returns: []*Type{TFlexList}, BarrierPos: -1,
+				Args:      []*Type{TAny, TFlexList},
+				Impl:      Go(appendElemHandler),
+				Returns:   []*Type{TFlexList},
+				ReturnsFn: flexGrowReturns("append"), BarrierPos: -1,
 			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
@@ -103,21 +105,25 @@ func flexReturns(args []Value, r *Registry) []Value {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
 	shapes := r != nil && r.Check.IsActive()
+	// flex only toggles mutability — a {:T}/[:T] source stays typed, so carry the
+	// element tag onto the residual (FlexDeepCopy preserves it at runtime). The
+	// tag drives the check-mode write mirror (d2CheckWrite reads ElemConstraint),
+	// so `append "bad" (flex xs)` for xs:[:Integer] is diagnosed (#6, Codex round 6).
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
 		if shapes {
 			if ss, ok := eng.StoreShapeOf(args[0]); ok {
 				v := NewCarrier(TFlexMap)
 				v.Data = ss.CloneShape()
-				return []Value{v}
+				return []Value{d2RetainElem(v, args[0])}
 			}
 			if v, ok := eng.MintFlexShapeCarrier(args[0], 0); ok {
-				return []Value{v}
+				return []Value{d2RetainElem(v, args[0])}
 			}
 		}
-		return []Value{NewCarrier(TFlexMap)}
+		return []Value{d2RetainElem(NewCarrier(TFlexMap), args[0])}
 	case p.ConformsTo(TList):
-		return []Value{NewCarrier(TFlexList)}
+		return []Value{d2RetainElem(NewCarrier(TFlexList), args[0])}
 	case p.ConformsTo(TXml):
 		return []Value{NewCarrier(TFlexXml)}
 	}
@@ -131,11 +137,13 @@ func nodeReturns(args []Value, _ *Registry) []Value {
 	if len(args) != 1 || args[0].Parent == nil {
 		return []Value{NewDynamicCarrier(TNode)}
 	}
+	// node just toggles mutability back — a {:T}/[:T] flex stays typed as a plain
+	// container, so retain the element tag (NodeDeepCopy preserves it at runtime).
 	switch p := args[0].Parent; {
 	case p.ConformsTo(TMap):
-		return []Value{NewCarrier(TMap)}
+		return []Value{d2RetainElem(NewCarrier(TMap), args[0])}
 	case p.ConformsTo(TList):
-		return []Value{NewCarrier(TList)}
+		return []Value{d2RetainElem(NewCarrier(TList), args[0])}
 	case p.ConformsTo(TXml):
 		return []Value{NewCarrier(TXml)}
 	}
@@ -169,9 +177,14 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	if err != nil {
 		return nil, r.AqlError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
 	}
+	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "append")
+	if werr != nil {
+		return nil, werr
+	}
 	// A flex tree stays ENTIRELY mutable: a plain Node element is deep-
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
-	elem, aerr := eng.AdoptIntoFlex(args[0])
+	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
 		return nil, r.AqlError("append_error", aerr.Error(), "append")
 	}
@@ -224,12 +237,17 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("append_error", err.Error(), "append")
 	}
 	// Slice() snapshots before the grow, so `append f f` (self-concat)
-	// is well-defined. Each appended element is adopted so the tree
-	// stays entirely mutable.
+	// is well-defined. Each appended element is enforced + re-tagged against
+	// the [:T] element type (the concat spread must not bypass what the
+	// single-value append enforces) then adopted so the tree stays mutable.
 	elems := src.Slice()
 	adopted := make([]Value, len(elems))
 	for i, el := range elems {
-		a, aerr := eng.AdoptIntoFlex(el)
+		tagged, terr := d2AdoptTyped(r, args[1], el, "append")
+		if terr != nil {
+			return nil, terr
+		}
+		a, aerr := eng.AdoptIntoFlex(tagged)
 		if aerr != nil {
 			return nil, r.AqlError("append_error", aerr.Error(), "append")
 		}
@@ -237,4 +255,24 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	}
 	fd.Elems = append(fd.Elems, adopted...)
 	return []Value{args[1]}, nil
+}
+
+// appendListReturns is the check-mode mirror for the list-concat append
+// (`[TList, TFlexList]`): dispatch picks this more-specific overload for a list
+// source, which otherwise has no ReturnsFn, so check mode never preflighted the
+// per-element enforcement appendListHandler runs at runtime. Each provably-known
+// source element is validated against the destination's [:T] tag (mirroring the
+// runtime raise), and the flex list's tag is retained on the residual (#5, Codex
+// round 5). args are [sourceList, FlexList].
+func appendListReturns(args []Value, r *Registry) []Value {
+	res := NewCarrier(TFlexList)
+	if len(args) == 2 {
+		if src, err := RequireConcreteList(args[0], "append"); err == nil {
+			for i := 0; i < src.Len(); i++ {
+				d2CheckWrite(r, args[1], src.Get(i), "append", args[0].Pos())
+			}
+		}
+		res = d2RetainElem(res, args[1])
+	}
+	return []Value{res}
 }

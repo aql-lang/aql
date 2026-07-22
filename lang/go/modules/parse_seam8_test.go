@@ -80,17 +80,13 @@ func TestW8ParseBuilderBadArgs(t *testing.T) {
 	}
 }
 
-// TestW8ParseRegisterHandlerArgs drives the parse-register handler's name and
-// grammar refusal arms (770 / 774) directly.
-func TestW8ParseRegisterHandlerArgs(t *testing.T) {
+// TestW8ParseParserHandlerArgs drives the parse-parser handler's grammar
+// refusal arm directly.
+func TestW8ParseParserHandlerArgs(t *testing.T) {
 	r := mcovReg(t)
-	h := parseRegisterHandlerFor(r)
-	gv, _ := w8ParseGrammar()
-	if _, err := h([]native.Value{native.NewTypeLiteral(native.TAtom), gv}, nil, nil, r); err == nil {
-		t.Error("Parse.register: non-concrete name should error")
-	}
-	if _, err := h([]native.Value{native.NewAtom("x"), native.NewInteger(5)}, nil, nil, r); err == nil {
-		t.Error("Parse.register: non-grammar should error")
+	h := parseParserHandlerFor(r)
+	if _, err := h([]native.Value{native.NewInteger(5)}, nil, nil, r); err == nil {
+		t.Error("Parse.parser: non-grammar should error")
 	}
 }
 
