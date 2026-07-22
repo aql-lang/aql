@@ -62,6 +62,7 @@
     { key: "explanation", type: "Document", label: "EXPLANATION.md" }
     { key: "cli-md", type: "Document", label: "CLI.md" }
     { key: "adr", type: "Document", label: "ADR.md" }
+    { key: "nur", type: "Document", label: "NUR.md" }
     { key: "eng-guide", type: "Document", label: "eng/go/CLAUDE.md" }
     { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
     { key: "vault", type: "Concept", label: "secrets vault"
@@ -184,6 +185,11 @@
       object: { kind: "entity", entity: "aql" }
       evidence: [{ source: "src:readme", locator: "Documentation",
         quote: "Architecture Design Record | You want the key architectural decisions and the reasoning behind them." }]
+      confidence: 0.9 }
+    { subject: "nur", predicate: "mentions"
+      object: { kind: "entity", entity: "aql" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Non-Uniformity Register | You want the recorded deviations from the language's uniform rules, each pending, resolved, or explicitly allowed." }]
       confidence: 0.9 }
     { subject: "eng-guide", predicate: "supports"
       object: { kind: "entity", entity: "eng-go" }

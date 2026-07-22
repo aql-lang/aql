@@ -139,6 +139,7 @@ learning need, plus a CLI reference and the architecture record:
 | **[Explanation](EXPLANATION.md)** | You want to understand *why* AQL is the way it is. |
 | **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
+| **[Non-Uniformity Register](NUR.md)** | You want the recorded deviations from the language's uniform rules, each pending, resolved, or explicitly allowed. |
 | **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `aql describe`/`aql help`. |
 | **[Project knowledge graph](kg/README.md)** | You want the repository as data: modules, docs, tools, and concepts with evidence-backed relations, in [`kg/out/graph.json`](kg/out/graph.json) — built (and dog-fooded) in AQL. Keep it updated with each PR. |
 
