@@ -488,7 +488,7 @@ func TestW8ExecFnDefSigRuntimeCompaction(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
 	e.pointer = 3
-	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, nil); err != nil {
+	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig: %v", err)
 	}
 }
@@ -501,7 +501,7 @@ func TestW8ExecFnDefSigRuntimeElseBranch(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, nil); err != nil {
+	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig: %v", err)
 	}
 	if e.pointer != 0 {
@@ -517,7 +517,7 @@ func TestW8ExecFnDefSigCapturedRegCompaction(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
 	e.pointer = 3
-	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, r); err != nil {
+	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured: %v", err)
 	}
 }
@@ -530,7 +530,7 @@ func TestW8ExecFnDefSigCapturedRegZeroArg(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{fnv}, stackHeadroom)
 	e.pointer = 0
-	if err := e.execFnDefSig(0, sig, nil, r); err != nil {
+	if err := e.execFnDefSig(0, sig, nil, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured 0-arg: %v", err)
 	}
 }
@@ -543,7 +543,7 @@ func TestW8ExecFnDefSigCapturedRegElseBranch(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, r); err != nil {
+	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured else: %v", err)
 	}
 }
@@ -558,7 +558,7 @@ func TestW8ExecFnDefSigListAutoEval(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil); err != nil {
+	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig list autoeval: %v", err)
 	}
 }
@@ -573,7 +573,7 @@ func TestW8ExecFnDefSigListAutoEvalError(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil); err == nil {
+	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil, false); err == nil {
 		t.Fatal("expected an error from an undefined word in a list arg")
 	}
 }
@@ -591,7 +591,7 @@ func TestW8ExecFnDefSigMapAutoEval(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil); err != nil {
+	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig map autoeval: %v", err)
 	}
 }
@@ -608,7 +608,7 @@ func TestW8ExecFnDefSigMapAutoEvalError(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil); err == nil {
+	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil, false); err == nil {
 		t.Fatal("expected an error from an undefined word in a map arg value")
 	}
 }
@@ -622,7 +622,7 @@ func TestW8ExecFnDefSigArgsPushError(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
 	e.pointer = 1
-	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2)}, nil); err == nil {
+	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2)}, nil, false); err == nil {
 		t.Fatal("expected an Args.Push error with a nil Args stack")
 	}
 }

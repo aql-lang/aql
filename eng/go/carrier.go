@@ -4163,7 +4163,7 @@ func refineRecursiveSummary(r *Registry, key string, diagBase int, result []Valu
 // baseline so any inner fn/afn construction inside the body sees this scope
 // as its enclosing-fn baseline — without it, ComputeCaptures would treat
 // outer params as if they lived at module/global scope and miss the capture.
-func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding) []Value {
+func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding, anonymous bool) []Value {
 	snapshot := r.Defs.Snapshot()
 	r.PushFnBaseline(snapshot)
 	defer r.PopFnBaseline()
@@ -4244,7 +4244,12 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// predicate the frame-tail builders use — so a single
 	// paren-expression body (which the interpreter also evaluates
 	// in-frame) records too.
-	if r.Check.Recorder().active() && (isCallbackBodyName(name) || BodyEvalsResidual(body)) {
+	// A NAMED fn (!anonymous) always evaluates its body in-frame, so its
+	// residual container is assembled against the live params and records
+	// like any in-frame computation. Only an anonymous lambda keeps the
+	// single-bare-literal transparency (BodyEvalsResidual), where in-frame
+	// assembly would bake the param and diverge — that shape keeps refusing.
+	if r.Check.Recorder().active() && (isCallbackBodyName(name) || !anonymous || BodyEvalsResidual(body)) {
 		sub.elemEvalRecordable = true
 	}
 	result, err := sub.Run(input)
@@ -4306,7 +4311,7 @@ func isCallbackBodyName(name string) bool {
 // Returns the residual carrier stack. An empty or nil return means
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type, anonymous bool) []Value {
 	// Fn-body analysis runs nested sub-engines — not part of the
 	// caller's straight line; pause bytecode recording, UNLESS a fn
 	// compilation armed capture (StartFnCompile): the body's events then
@@ -4454,7 +4459,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// body sees this scope as its enclosing-fn baseline — without it,
 	// ComputeCaptures would treat outer params as if they lived at
 	// module/global scope and miss the capture.
-	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures) }
+	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
 
 	bailsBefore := r.Check.InflightBails
 	diagBase := len(r.Check.Diagnostics)

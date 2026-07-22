@@ -811,7 +811,7 @@ func TestS6aRefineRecursiveSummaryJoinsRounds(t *testing.T) {
 func TestS6aRunFnBodyOnceErrorMarksUncompilable(t *testing.T) {
 	r := newTestRegistry(t)
 	es := armEmit(r)
-	got := runFnBodyOnce(r, "s6afn", nil, []Value{NewWord("s6a_undef_body_word")}, nil, nil)
+	got := runFnBodyOnce(r, "s6afn", nil, []Value{NewWord("s6a_undef_body_word")}, nil, nil, false)
 	if got != nil {
 		t.Errorf("an erroring body returns nil, got %v", got)
 	}
@@ -827,7 +827,7 @@ func TestS6aAnalyseFnBodyInflightBailArmedRecorder(t *testing.T) {
 	body := []Value{NewWord("s6a_rec_body")}
 	key := FnAnalysisKey(r.AnalysisScopeID(), "s6arec", nil, nil, body)
 	r.Check.FnInflight = map[string]bool{key: true}
-	out := AnalyseFnBody(r, "s6arec", nil, body, nil, nil, nil)
+	out := AnalyseFnBody(r, "s6arec", nil, body, nil, nil, nil, false)
 	if len(out) != 1 || !out[0].Carrier || !out[0].Parent.Equal(TAny) || out[0].Dynamic {
 		t.Errorf("armed in-flight bail must be a strict Any carrier, got %+v", out)
 	}

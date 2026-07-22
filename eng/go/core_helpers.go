@@ -293,7 +293,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:         s.Decl,
 			UnnamedCount: u,
 			FuncName:     name,
-			EvalResidual: BodyEvalsResidual(s.body()),
+			EvalResidual: !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
 		})
 		skeleton = append(skeleton, NewCloseParen())
 		// When the body provably never reads `args` (sound under the
@@ -466,7 +466,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:         s.Decl,
 			UnnamedCount: unnamedCount,
 			FuncName:     name,
-			EvalResidual: BodyEvalsResidual(s.body()),
+			EvalResidual: !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
 		})
 		result = append(result, NewCloseParen())
 		return result, nil
@@ -1309,11 +1309,19 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// downstream consumer (each resolves `c1` against the binding live at that
 		// point). The folded const is what the program bakes; no VM change. Still
 		// analyse the body first so its diagnostics propagate.
-		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok {
-			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns)
-			for i := len(genNames) - 1; i >= 0; i-- {
-				r.Defs.Pop(genNames[i])
-			}
+		// Only an ANONYMOUS fn (afn / =>) keeps this no-closures transparency.
+		// A NAMED fn always creates a function context — its params are in scope
+		// for the whole body, including a returned bare list — so it falls
+		// through to the normal analysis + unit compile, where the list is
+		// assembled in-frame against the param (fixed at call time, which the
+		// unit models exactly).
+		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok && fnDef.Anonymous {
+			// An afn is never generic (afnHandler declares no type params, so
+			// fnDef.Gen is nil whenever fnDef.Anonymous), hence genNames is empty
+			// here — no gen-binding cleanup is needed before the early return. A
+			// generic NAMED fn with a deferred-list body is not anonymous, so it
+			// falls through to the normal path, which pops genNames below.
+			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns, fnDef.Anonymous)
 			return []Value{raw}
 		}
 		// Always analyse the body so diagnostics emitted by stepWord
@@ -1490,11 +1498,11 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// recursive closure probe (aql:test run-case) compiled to an EMPTY
 				// stub unit in the real pass (silent 0-cases miscompile).
 				delete(r.Check.FnSummaries, FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy))
-				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns)
+				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns, fnDef.Anonymous)
 				finishFn(stkGen)
 			}
 		}
-		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns)
+		stk := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, narrowArgsToParams(args, sigParams), capturesCopy, declaredReturns, fnDef.Anonymous)
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}
@@ -1828,7 +1836,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
 		// diagnostics-only contract this pass needs.
 		restore := r.Check.IsolateEmit()
-		AnalyseFnBody(r, name, paramNames, s.body(), genArgs, fnDef.Captured, declared)
+		AnalyseFnBody(r, name, paramNames, s.body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
 		restore()
 	}
 }

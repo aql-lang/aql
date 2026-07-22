@@ -71,7 +71,7 @@ func TestResidualParenBodyBindsParam(t *testing.T) {
 	// Transparency negative: the single-literal body still resolves in
 	// the consumer's scope.
 	wantResidual(t,
-		`def c1 1 def mk fn [[c1:Integer] [Map] [{a: c1}]] def r (mk 9) (r get "a")`,
+		`def c1 1 def mk ([c1:Integer] => [{a: c1}]) def r (mk 9) (r get "a")`,
 		"1")
 }
 

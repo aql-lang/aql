@@ -5198,7 +5198,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			for i, pos := range positions {       //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				args[i] = e.tape.At(pos)
 			}
-			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry, fnDef.Anonymous) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		}
 	}
 
@@ -5353,7 +5353,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			if checkFnValue && len(sig.body()) > 0 {
 				return e.spliceFnValueCheckResult(valIdx, 0, fnDef, sig, nil)
 			}
-			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
+			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry, fnDef.Anonymous)
 		}
 		if len(resolved) < nArgs {
 			continue
@@ -5404,7 +5404,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		} else {
 			candidate := resolved[len(resolved)-nArgs:]
@@ -5442,7 +5442,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		}
 	}
@@ -5509,7 +5509,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns, true)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -5691,7 +5691,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
-func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
+func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
@@ -5898,7 +5898,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
-		EvalResidual: BodyEvalsResidual(sig.body()),
+		EvalResidual: !anonymous || BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 

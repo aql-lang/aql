@@ -270,7 +270,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 		// re-runs and records the body into THIS unit (the same memo-key
 		// discipline as the single-overload path).
 		delete(r.Check.FnSummaries, key)
-		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared)
+		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared, owner.Anonymous)
 		finishFn(stk)
 	}
 	if !es.active() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)

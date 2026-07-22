@@ -106,14 +106,15 @@ func TestModelActionCaptureDeclinesAndInterprets(t *testing.T) {
 func TestModelActionDataContextLambdaDeclineIsRenamed(t *testing.T) {
 	r, _ := mw4Reg(t)
 	r.EnableRuntimeStamping()
-	// A lambda built in DATA context (a map value) runs no capture analysis —
+	// A lambda built in DATA context (a map value) inside an afn's transparent
+	// single-literal body runs no capture analysis —
 	// pre-existing interpreter behavior: the body's read of the enclosing
 	// param fails at ACTION time with undefined_word, surfacing in errs. The
 	// stamp probe declines on the unresolvable read; the decline is recorded
 	// under the ACTION name (the rename applies whether or not the stamp
 	// lands), and stamping must not change the outcome.
 	out := mcovRun(t, r, mw4Imp+
-		`def mk fn [[flag:Boolean] [Map] [{src:'a: 1', actions:{gen:([mod:Any] => [flag])}}]]
+		`def mk ([flag:Boolean] => [{src:'a: 1', actions:{gen:([mod:Any] => [flag])}}])
 		 def m (Model.new (mk false)) def res (Model.run m) (res get 'ok') ((res get 'errs') get 0)`)
 	if s, err := out[len(out)-1].AsConcreteString(); err != nil || !strings.Contains(s, "undefined word: flag") {
 		t.Fatalf("errs[0] = %v (%v), want the pre-existing undefined_word action error", out[len(out)-1], err)
