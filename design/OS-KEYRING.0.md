@@ -41,9 +41,21 @@ Semantics copied verbatim from `RegisterHostVault`
   "engine.keyring.host"`), created on first registration;
 - a **second registration on the same registry errors** ("already
   registered") — one backend per registry;
-- registration may happen **before or after** the program imports the
-  module: words resolve the backend at dispatch time, not at module
-  build;
+- **register before the import for module-body callers (CRITICAL).** On
+  the *same* registry the words resolve the backend live at dispatch, so a
+  top-level program may register before or after `import "aql:keyring"`.
+  But the vault-in-AQL use case runs inside an **imported module body**,
+  and `RunModuleBody` snapshots the `ModuleInheritedCaps` slots from the
+  parent **at import time**: if nothing has created the slot on the parent
+  before the child imports, the child inherits no slot, and a later
+  `RegisterHostKeyring` on the parent creates a backend the already-imported
+  child never sees. So the host **must register the backend before the
+  program imports the module** (which is what the launcher does, ordering
+  `RegisterHost*` ahead of the run — matching `registerAqlTuiBackends`).
+  This is the same child-registry snapshot semantics as
+  [PERMISSIONS.10's Known gap](PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy);
+  the seam's word docs must state the before-import requirement rather than
+  the vault seam's looser "before or after" wording.
 - with **no backend registered**, the words raise `[aql/no_backend]` —
   the natural state of the spec harness, wasm, and CI, where a **fake
   in-memory backend** is registered for tests.

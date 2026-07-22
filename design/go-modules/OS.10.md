@@ -330,14 +330,24 @@ piping the text on **stdin, never argv** —
 does **not** call `os/exec` from its handler either. Instead it routes
 through a **host clipboard seam**, exactly like every other effect here:
 
-- a `capabilities.HostClipboard` interface (`Copy(text string) error`,
-  plus a `Paste`/`Clear` pair reserved for a future read word) with an
-  **exec-backed default** that reuses the vault's platform detection and
-  stdin-piped copy, and an **in-memory fake** for specs (records the last
-  copied string; no spawn);
-- installed via `SetHostClipboard` / retrieved via `HostClipboard(r)`,
-  removed to a `notInstalled` stub under `install:false`;
-- **auto-wrapped** by the `permissioned*` gate when a policy is present.
+- **`lang/go` defines ONLY the interface** — a `capabilities.HostClipboard`
+  (`Copy(text string) error`, plus a `Paste`/`Clear` pair reserved for a
+  future read word) and an **in-memory fake** for specs (records the last
+  copied string; no spawn). `lang/go` **must not** import
+  `cmd/go/internal/vault/clipboard.go` — Go's internal-visibility rule
+  forbids it, and an `os/exec`-backed default in `lang/go` would
+  reintroduce the very process-spawning dependency this seam exists to
+  keep out of the language layer (the same reason `FileOps` keeps its OS
+  backing in the host). So the exec default lives **host-side**;
+- the **exec-backed implementation is provided by `cmd/go`** at
+  registration time — `cmd/go` adapts the vault's platform detection
+  (`clipboard.go`) to `HostClipboard` and calls `SetHostClipboard` (the
+  `FileOps` / `OSFileOps` split: interface in `lang/go`, OS impl injected
+  by the command). With nothing registered the slot is empty and the word
+  raises `capability_not_installed`;
+- retrieved via `HostClipboard(r)`, removed to a `notInstalled` stub under
+  `install:false`, and **auto-wrapped** by the `permissioned*` gate when a
+  policy is present.
 
 **Policy.** Because the effect spawns a helper process, `clipboard-copy`
 binds the **`process`** global — the same choice the Go vault makes for

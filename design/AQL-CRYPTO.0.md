@@ -144,6 +144,32 @@ Crypto.rand-bytes <n:Integer> → Bytes     # n cryptographically-random bytes
 
 See §9.
 
+### Resource bounds (CRITICAL)
+
+`scrypt` exposes `n`/`r`/`p` and every KDF/`rand-bytes` word takes an
+output length. Left unbounded these are a **memory/CPU denial-of-service**:
+scrypt allocates `128 · N · r · p` bytes and does the matching work
+*before* it can return, so a valid-but-huge `{n, r, p}` exhausts the host
+— and because §8 permits `crypto` in a **compute** sandbox, an untrusted
+guest reaches it. Every bound below is validated as `crypto_usage`
+(§7) **before any allocation**:
+
+| Word / param | Hard cap (proposed) | Rationale |
+| --- | --- | --- |
+| `scrypt` `n` | power of two, `≤ 2²⁰` | `n` must be a power of two (scrypt requirement); the cap bounds the cost base |
+| `scrypt` `r`, `p` | `r ≤ 32`, `p ≤ 16` | small constants; the vault uses `r=8, p=1` |
+| `scrypt` memory | `128·N·r·p ≤ 1 GiB` | the real ceiling — reject the *combination* before `scrypt.Key`, not each factor alone |
+| `scrypt` / `hkdf` `len` | `≤ 1024` (hkdf `≤ 255·32`, its HMAC-SHA256 max) | derived-key sizes are small; HKDF has a hard protocol max |
+| `rand-bytes` `n` | `≥ 1`, `≤ 1 MiB` | key material is small; a huge draw is almost always a bug or an attack |
+| `aead` / `hmac` inputs | streamed, but a per-call size ceiling ties to `Limits` | bound total work per op |
+
+The caps are a **starting proposal** — the load-bearing requirement is
+that the combination is bounded pre-allocation. The cleaner long-term
+answer is to route these through an enforced runtime budget
+(`policy.Limits` / the `MaxStepBudget`-style governors) so the ceiling is
+policy-configurable rather than a hard constant; until that exists, the
+module ships with the constants above and rejects anything larger.
+
 ## 5. Parameter fidelity to the Go vault (CRITICAL)
 
 `aql:crypto` cannot import `cmd/go/internal/vault` (an internal package),
@@ -163,15 +189,28 @@ parity test (§12) must assert equality against the Go source.
 | Public-key seal | `box-*` | X25519 NaCl **anonymous** sealed box (`box.SealAnonymous`/`OpenAnonymous`) | `keyslot.go` `sealNDK`/`openNDK` |
 | CSPRNG | `rand-bytes` | `crypto/rand` | `keyslot.go` `newRandom`, `p7_seam7.go` (`rand.Reader`) |
 
-**The envelope byte layouts stay in AQL, not in these words.** The vault's
-on-disk envelopes (`"AQLE" | format | ndkID | nonce | ct` for a sealed
-value; `"AQLK" | format | salt | nonce | ct` for the file keyring blob;
-the export bundle) are *framings around* `aead-seal`, with
-scheme-specific AAD. Those framings are the vault-in-AQL layer's job to
-reproduce; `aql:crypto` provides only the primitives. The spec must
-therefore also pin the vault's **AAD construction** convention
-(`label ‖ 0x00 ‖ fields joined by 0x00`) as data the AQL layer builds and
-passes as the `aad` argument — it is not baked into the words.
+**The envelope byte layouts stay in AQL, not in these words** — and each
+envelope's AAD is **distinct**, so the AQL layer must build the exact
+bytes below and pass them as the `aead-seal`/`aead-open` `aad` argument
+(`aql:crypto` seals nothing implicitly). There is **no** single universal
+AAD rule; getting any one wrong produces envelopes the Go vault cannot
+open (and vice versa). The four the vault uses today
+(`cmd/go/internal/vault`):
+
+| Envelope | Wire layout | **AAD bytes** | Go source |
+| --- | --- | --- | --- |
+| Sealed value | `"AQLE" ‖ format(1) ‖ ndkID(8) ‖ nonce(12) ‖ ct‖tag` | `valueAAD` = `"AQLE" ‖ format ‖ ndkID ‖ namespace ‖ 0x00 ‖ alias` | `keyslot.go` `valueAAD`/`sealValue` |
+| Slot private key | base64(`nonce(12) ‖ ct‖tag`) | `privAAD` = `macInput("AQLP", name, scope[, expiresAt])` | `keyslot.go` `privAAD`/`sealPrivKey` |
+| File keyring blob (headered) | `"AQLK" ‖ format(1) ‖ salt(16) ‖ nonce(12) ‖ ct‖tag` | `keyringAAD` = `header(magic‖format) ‖ salt` | `keyring.go` `keyringAAD`/`encryptBlob` |
+| Export bundle | `exportMagic ‖ format(1) ‖ salt(16) ‖ nonce(12) ‖ ct‖tag` | `header(magic‖format) ‖ salt` | `export.go` `sealExport` |
+
+The `macInput` helper — `label ‖ 0x00 ‖ fields joined by 0x00`
+(`keyslot.go`) — is the **MAC / verifier** domain-separation convention
+(used by `privAAD`, `deriveVerifier`, `derivePubMAC`); it is *not* the
+value/keyring/export AEAD AAD, which are the concatenations above. A
+legacy headerless file-keyring blob authenticates `salt` alone. The AQL
+layer reproduces these byte-for-byte; the parity test (§12) must pin at
+least the value and keyring AADs against a Go-sealed fixture.
 
 ## 6. Types — `Bytes` is the carrier
 
@@ -295,6 +334,20 @@ deterministic reader and assert exact bytes, while production reads
   [BYTES.10](go-modules/BYTES.10.md) §8), plus the **non-cryptographic**
   `fnv32`/`fnv64` hashes (which must never be used where
   `Crypto.sha256`/`hmac` is required).
+  **Supersession (both proposals are unimplemented).** The
+  [BIN-UTIL.10](go-modules/BIN-UTIL.10.md) proposal §4.3/§4.5/§4.6 also
+  homes cryptographic hashes (`sha256`/`sha512`/…), `hmac`/`hmac-verify`,
+  and secure random (`random-bytes`/`random-int`/`random-hex`) in
+  `BinUtil`. Those overlap this module and are **superseded here**:
+  cryptographic primitives belong in the curated, policy-scoped
+  `aql:crypto`, not in a bit-twiddling utility that lacks the AEAD/KDF/
+  sealed-box surface the vault actually needs. `aql:bin-util` should
+  retain only its **non-cryptographic** binary surface — bitwise ops,
+  rotates, `popcount`, CRC checksums, the `base*`/`hex`/`ascii85`
+  encodings, and UUIDs — and drop the `sha*`/`hmac`/`random-*` words in
+  favour of `Crypto.*`. (A pointer note is added at the head of those
+  BIN-UTIL.10 sections; the final call is the maintainer's — flagged on
+  the PR.)
 - **`Bytes` ([BYTES.10](go-modules/BYTES.10.md))** — the carrier type
   (§6): immutable binary leaf with `convert`/`slice`/`add`/`size` and the
   bit-syntax the AQL layer uses to frame envelopes.
