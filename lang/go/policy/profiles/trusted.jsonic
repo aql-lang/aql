@@ -13,5 +13,6 @@
     process: { words: { default: "allow" } }
     clock:   { words: { default: "allow" } }
     terminal: { words: { default: "allow" } }
+    vault:   { words: { default: "allow" } }
   }
 }
