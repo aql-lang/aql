@@ -697,9 +697,17 @@ var builtinDecls = []builtinDecl{
 	{Path: "Node/List", FixedID: 12, Rank: 30_100_000_000},
 	{Path: "Node/List/Args", FixedID: 13, Rank: 30_110_000_000},
 	{Path: "Node/List/FlexList", FixedID: 79, Rank: 30_120_000_000},
+	// Node/List/FlexList/WeakFlexList — the weak-valued FlexList child:
+	// mutable-handle elements are held weakly w.r.t. GC and splice-
+	// compact at observation points. See design/FLEX-ATTRS.1.md §4.
+	{Path: "Node/List/FlexList/WeakFlexList", FixedID: 124, Rank: 30_121_000_000},
 	{Path: "Node/Map", FixedID: 14, Rank: 30_200_000_000},
 	{Path: "Node/Map/Inspect", FixedID: 31, Rank: 30_210_000_000},
 	{Path: "Node/Map/FlexMap", FixedID: 78, Rank: 30_220_000_000},
+	// Node/Map/FlexMap/WeakFlexMap — the weak-valued FlexMap child.
+	// Scalars store strongly, mutable handles weakly, immutable Nodes
+	// are refused (Python's weakref rule). design/FLEX-ATTRS.1.md §4.
+	{Path: "Node/Map/FlexMap/WeakFlexMap", FixedID: 123, Rank: 30_221_000_000},
 	// Node/Xml — the immutable element value embedded XML literals
 	// (`<tag>…</tag>`) and `parse xml` produce. A dedicated Node-branch
 	// type (not a Map subtype) with a custom Behavior that serialises
@@ -710,6 +718,10 @@ var builtinDecls = []builtinDecl{
 	// reached via `flex <xml>`, mirroring FlexMap/FlexList. Inherits the
 	// Xml Behavior through the parent chain. See design/XML-LITERAL.0.md §5.
 	{Path: "Node/Xml/FlexXml", FixedID: 110, Rank: 30_310_000_000},
+	// Node/Xml/FlexXml/WeakFlexXml — the weak-valued FlexXml child:
+	// mutable-handle children held weakly, spliced on sweep; text and
+	// attributes stay strong. See design/FLEX-ATTRS.1.md §4.
+	{Path: "Node/Xml/FlexXml/WeakFlexXml", FixedID: 125, Rank: 30_311_000_000},
 
 	// Ideal branch — the structural type-kinds (Class, Record, Options,
 	// Error, Store, Table) are direct children of Ideal: peer kinds. The

@@ -67,6 +67,31 @@ var flexNatives = []NativeFunc{
 				Returns:   []*Type{TFlexList},
 				ReturnsFn: flexGrowReturns("append"), BarrierPos: -1,
 			},
+			// WeakFlexList: append ONE element, classified per the weak
+			// value domain (scalar → strong, handle → weak, immutable
+			// Node → refused with weak_value_error). No list-splice
+			// form: an immutable List argument is exactly the refused
+			// kind, and the refusal is the teachable path. The TList
+			// twin exists so a list-valued argument (immutable → the
+			// refusal; a flex handle → one weak element) reaches THIS
+			// classify path instead of the FlexList concatenate sig,
+			// which sorts first on position 0 otherwise.
+			{
+				Args:    []*Type{TList, TWeakFlexList},
+				Impl:    Go(appendWeakElemHandler),
+				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TAny, TWeakFlexList},
+				Impl:    Go(appendWeakElemHandler),
+				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+			},
+			// WeakFlexXml: append one child, same classification.
+			{
+				Args:    []*Type{TAny, TWeakFlexXml},
+				Impl:    Go(appendWeakXmlChildHandler),
+				Returns: []*Type{TWeakFlexXml}, BarrierPos: -1,
+			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
 			{
@@ -189,6 +214,32 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("append_error", aerr.Error(), "append")
 	}
 	fd.Elems = append(fd.Elems, elem)
+	return []Value{args[1]}, nil
+}
+
+// appendWeakElemHandler appends one classified element to a
+// WeakFlexList (design/FLEX-ATTRS.1.md §4.4).
+func appendWeakElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	wd, err := AsWeakFlexList(args[1])
+	if err != nil {
+		return nil, r.AqlError("append_error", "append: expected a WeakFlexList, got "+args[1].Parent.String(), "append")
+	}
+	if refusal := wd.Append(args[0]); refusal != nil {
+		return nil, WeakRefusalError(r, "append", "WeakFlexList", refusal)
+	}
+	return []Value{args[1]}, nil
+}
+
+// appendWeakXmlChildHandler appends one classified child to a
+// WeakFlexXml element.
+func appendWeakXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	wd, err := AsWeakFlexXml(args[1])
+	if err != nil {
+		return nil, r.AqlError("append_error", "append: expected a WeakFlexXml, got "+args[1].Parent.String(), "append")
+	}
+	if refusal := wd.AppendChild(args[0]); refusal != nil {
+		return nil, WeakRefusalError(r, "append", "WeakFlexXml", refusal)
+	}
 	return []Value{args[1]}, nil
 }
 

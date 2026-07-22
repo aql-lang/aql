@@ -15,6 +15,11 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 	// with a concrete FlexList (or another FlexList literal). A plain
 	// list is NOT a FlexList; the supertype literal `List` accepts
 	// flex values below via the ordinary family rule.
+	// WeakFlexList literal first (deeper node — more specific than the
+	// FlexList arm below, which also accepts weak values by subtree).
+	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TWeakFlexList, IsWeakFlexList, "WeakFlexList"); handled {
+		return res, err
+	}
 	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TFlexList, IsFlexList, "FlexList"); handled {
 		return res, err
 	}

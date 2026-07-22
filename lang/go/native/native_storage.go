@@ -128,6 +128,46 @@ var storageNatives = []NativeFunc{
 				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
 			},
 
+			// WeakFlexMap (in-place key set; scalars store STRONGLY,
+			// mutable handles store WEAKLY, immutable Nodes and other
+			// value-like data are refused with a weak_value_error —
+			// design/FLEX-ATTRS.1.md §4.4. The dedicated sig is forced:
+			// the inherited FlexMap handler's AsMutableMap refuses the
+			// weak payload, by design.)
+			{
+				Args:    []*Type{TString, TAny, TWeakFlexMap},
+				Impl:    Go(setWeakFlexMapHandler),
+				Returns: []*Type{TWeakFlexMap}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TWeakFlexMap},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(setWeakFlexMapHandler),
+				Returns:   []*Type{TWeakFlexMap}, BarrierPos: -1,
+			},
+
+			// WeakFlexList (in-place index set over the post-sweep
+			// view; same value domain as WeakFlexMap).
+			{
+				Args:    []*Type{TInteger, TAny, TWeakFlexList},
+				Impl:    Go(setWeakFlexListHandler),
+				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+			},
+
+			// WeakFlexXml (in-place attribute set; attributes are part
+			// of the element and always store strongly).
+			{
+				Args:    []*Type{TString, TAny, TWeakFlexXml},
+				Impl:    Go(setWeakFlexXmlHandler),
+				Returns: []*Type{TWeakFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TAny, TWeakFlexXml},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(setWeakFlexXmlHandler),
+				Returns:   []*Type{TWeakFlexXml}, BarrierPos: -1,
+			},
+
 			// Micron (IMMUTABLE — always errors): the explicit erroring
 			// sig pins "set: <Kind> values are immutable" where
 			// sig-absence would raise an opaque dispatch failure.
@@ -591,6 +631,60 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.AqlError("set_error", aerr.Error(), "set")
 	}
 	m.Set(StoreKey(args[0]), val)
+	return []Value{container}, nil
+}
+
+// setWeakFlexMapHandler stores one entry in a WeakFlexMap. The value
+// domain is the decided Python-style rule (design/FLEX-ATTRS.1.md
+// §4.4): scalars strong, mutable handles weak, everything else refused
+// with the rich weak_value_error diagnostic.
+func setWeakFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	wd, err := AsWeakFlexMap(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a WeakFlexMap, got "+container.Parent.String(), "set")
+	}
+	if refusal := wd.SetValue(StoreKey(args[0]), args[1]); refusal != nil {
+		return nil, WeakRefusalError(r, "set", "WeakFlexMap", refusal)
+	}
+	return []Value{container}, nil
+}
+
+// setWeakFlexListHandler replaces one element of a WeakFlexList. The
+// index addresses the post-sweep view; out-of-range is the same error
+// as FlexList (sparse weak lists are equally illegal).
+func setWeakFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	wd, err := AsWeakFlexList(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a WeakFlexList, got "+container.Parent.String(), "set")
+	}
+	asInt, ierr := args[0].AsConcreteInteger()
+	if ierr != nil {
+		return nil, r.AqlError("set_error", "set: WeakFlexList index must be a concrete integer", "set")
+	}
+	idx := int(asInt)
+	if n := wd.Len(); idx < 0 || idx >= n {
+		return nil, r.AqlErrorHint("set_error",
+			fmt.Sprintf("set: index %d out of bounds for WeakFlexList (length %d)", idx, n),
+			"set", "use append to grow; note entries may have been collected — length reflects surviving elements")
+	}
+	if refusal := wd.SetIndex(idx, args[1]); refusal != nil {
+		return nil, WeakRefusalError(r, "set", "WeakFlexList", refusal)
+	}
+	return []Value{container}, nil
+}
+
+// setWeakFlexXmlHandler writes one attribute of a WeakFlexXml element.
+// Attributes are part of the element (not weak entries) and always
+// store strongly, mirroring FlexXml.
+func setWeakFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[2]
+	wd, err := AsWeakFlexXml(container)
+	if err != nil {
+		return nil, r.AqlError("set_error", "set: expected a WeakFlexXml, got "+container.Parent.String(), "set")
+	}
+	wd.SetAttr(StoreKey(args[0]), args[1])
 	return []Value{container}, nil
 }
 

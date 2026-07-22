@@ -50,6 +50,9 @@ func xmlParts(v Value) (tag string, attr *OrderedMap, cren []Value, ok bool) {
 		return x.Tag, x.Attr, x.Cren, true
 	case *FlexXmlData:
 		return x.Tag, x.Attr, x.Cren, true
+	case *WeakFlexXmlData:
+		// Swept strong snapshot of the children (see AsMap's weak arm).
+		return x.Tag, x.Attr, x.snapshotCren(), true
 	}
 	return "", nil, nil, false
 }

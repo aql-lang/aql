@@ -1,0 +1,109 @@
+# tokens	expected	note
+# =====================================================================
+# Weak flex nodes — WeakFlexMap / WeakFlexList / WeakFlexXml
+# (design/FLEX-ATTRS.1.md §4). Value domain (Python's weakref rule):
+# scalars store STRONGLY (no GC identity); mutable handles — flex
+# nodes, Store, Resource, class instances — store WEAKLY; immutable
+# Nodes and other value-like data are REFUSED (weak_value_error).
+#
+# SPEC DISCIPLINE: every row keeps a live binding to every stored
+# handle — a live binding pins deterministically in every execution
+# mode. There are NO vanish rows: collection timing is inherently
+# nondeterministic (interpreter internals differ between interpreted
+# and compiled runs) and is covered by Go unit tests instead
+# (eng/go/weak_flex_test.go). Entries may be ABSENT at any observation
+# after their last handle drops; neither removal nor retention is
+# guaranteed. Within ONE operation the container is a consistent
+# strong snapshot.
+# =====================================================================
+
+# ====================================================================
+# 1. Construction and typing
+# ====================================================================
+
+typeof (make WeakFlexMap { })	WeakFlexMap
+typeof (make WeakFlexList [ ])	WeakFlexList
+typeof (make WeakFlexMap {n:42})	WeakFlexMap	scalar entries construct strongly
+(make WeakFlexMap { }) is WeakFlexMap	true
+(make WeakFlexMap { }) is FlexMap	true	nominal subtype of FlexMap
+(make WeakFlexMap { }) is Map	true
+(make WeakFlexMap { }) is Node	true
+{ } is WeakFlexMap	false	a plain map is not weak (nominal)
+(flex { }) is WeakFlexMap	false	a flex map is not weak (nominal)
+(make WeakFlexList [ ]) is FlexList	true
+(make WeakFlexList [ ]) is List	true
+[ ] is WeakFlexList	false
+make WeakFlexMap [ ]	ERROR:WeakFlexMap source must be a concrete map	wrong source family
+make WeakFlexList { }	ERROR:WeakFlexList source must be a concrete list
+
+# ====================================================================
+# 2. Map operations (scalar entries — strong, fully deterministic)
+# ====================================================================
+
+def w (make WeakFlexMap {n:42}) w.n	42	scalar entry reads back
+def w (make WeakFlexMap {n:42}) size w	1
+def w (make WeakFlexMap {n:42}) keys w	['n']
+def w (make WeakFlexMap { }) (set n/q 42 w) drop w.n	42	set stores a scalar strongly
+def w (make WeakFlexMap { }) (set n/q 1 w) drop (set n/q 2 w) drop w.n	2	re-set replaces in place
+def w (make WeakFlexMap {n:42}) w.missing	None	absent key reads None (get is None-partial)
+def w (make WeakFlexMap {n:42}) typeof (set m/q 7 w)	WeakFlexMap	set returns the node (chaining) — type preserved
+
+# ====================================================================
+# 3. Map operations (handle entries — live bindings pin them)
+# ====================================================================
+
+def u (flex {a:1}) def w (make WeakFlexMap { }) (set k/q u w) drop w.k	(flex {a:1})	weak entry reads back while u is live (canon keeps flexness)
+def u (flex {a:1}) def w (make WeakFlexMap {k:u}) size w	1	make classifies handle entries
+def u (flex {a:1}) def w (make WeakFlexMap { }) (set k/q u w) drop (set x/q 9 (w.k)) drop u	(flex {a:1 x:9})	the entry IS the live handle — mutating it mutates u
+def C (class {a:Integer}) def o (make C {a:1}) def w (make WeakFlexMap {k:o}) size w	1	class instances are weak-eligible handles
+
+# ====================================================================
+# 4. Equality / rendering / canon
+# ====================================================================
+
+def w (make WeakFlexMap {n:42}) w deq {n:42}	true	deq is content, family-normalised (mode not identity)
+def w (make WeakFlexMap {n:42}) w deq (flex {n:42})	true
+def w (make WeakFlexMap {n:42}) def w2 w w eq w2	true	eq is container identity — a binding copy shares
+def w (make WeakFlexMap {n:42}) w eq (make WeakFlexMap {n:42})	false	fresh containers are eq-distinct
+def w (make WeakFlexMap {n:42}) canon w	'(make WeakFlexMap {n:42})'	SNAPSHOT canon — descriptive, not a semantic round-trip
+def u (flex {a:1}) def w (make WeakFlexMap {k:u}) canon w	'(make WeakFlexMap {k:(flex {a:1})})'
+
+# ====================================================================
+# 5. Refusals — the weak value domain, statically teachable
+# ====================================================================
+
+def w (make WeakFlexMap { }) set k/q {a:1} w	ERROR:cannot store an immutable Map in a WeakFlexMap	the Python rule
+def w (make WeakFlexMap { }) set k/q [1 2] w	ERROR:cannot store an immutable List in a WeakFlexMap
+def w (make WeakFlexMap { }) set k/q Integer w	ERROR:cannot store a type literal in a WeakFlexMap
+def w (make WeakFlexMap { }) set k/q none w	ERROR:cannot store none in a WeakFlexMap	none ≡ absent — store nothing instead
+make WeakFlexMap {cfg:{mode:'fast'}}	ERROR:cannot store an immutable Map in a WeakFlexMap	construction applies the same domain
+def w (make WeakFlexList [ ]) append [1 2] w	ERROR:cannot store an immutable List in a WeakFlexList
+def w (make WeakFlexList [ ]) append {a:1} w	ERROR:cannot store an immutable Map in a WeakFlexList
+
+# ====================================================================
+# 6. Materialization — node / flex / clone
+# ====================================================================
+
+def w (make WeakFlexMap {n:42}) typeof (node w)	Map	strong immutable materialization
+def w (make WeakFlexMap {n:42}) (node w) deq {n:42}	true
+def w (make WeakFlexMap {n:42}) typeof (flex w)	FlexMap	strong mutable snapshot (weak→flex demotion)
+
+# ====================================================================
+# 7. WeakFlexList
+# ====================================================================
+
+def w (make WeakFlexList [ ]) (append 1 w) drop w get 0	1	scalar element, strong
+def w (make WeakFlexList [ ]) (append 1 w) drop size w	1
+def u (flex {a:1}) def w (make WeakFlexList [ ]) (append u w) drop w get 0	(flex {a:1})	handle element, weak — pinned by u
+def w (make WeakFlexList [ ]) (append 1 w) drop (set 0 9 w) drop w get 0	9	in-place index set over the post-sweep view
+def w (make WeakFlexList [ ]) set 0 9 w	ERROR:out of bounds for WeakFlexList	sparse weak lists are equally illegal
+def w (make WeakFlexList [1 2]) size w	2	make classifies each element
+
+# ====================================================================
+# 8. WeakFlexXml
+# ====================================================================
+
+def x (flex <a b='1'>hi</a>) typeof (make WeakFlexXml x)	WeakFlexXml
+def x (flex <a b='1'>hi</a>) def w (make WeakFlexXml x) (set c/q '2' w) drop w	(make WeakFlexXml <a b="1" c="2">hi</a>)	attributes are strong, set in place
+def x (flex <a>hi</a>) def w (make WeakFlexXml x) w is FlexXml	true	nominal subtype of FlexXml
+def x (flex <a/>) def w (make WeakFlexXml x) append {k:1} w	ERROR:cannot store an immutable Map in a WeakFlexXml	child domain matches

@@ -317,7 +317,7 @@ func MakeClassInstance(objType ClassTypeInfo, provided *OrderedMap, r *Registry)
 // place). Drives FreshenDefault's identity fast path: scalars and
 // purely-immutable nodes share safely and are returned unchanged.
 func containsSharedMutable(v Value) bool {
-	if IsFlexNode(v) || IsStore(v) || IsClassInstance(v) {
+	if IsFlexNode(v) || IsWeakFlexNode(v) || IsStore(v) || IsClassInstance(v) {
 		return true
 	}
 	if !IsConcrete(v) {
@@ -367,6 +367,19 @@ func FreshenDefault(v Value) Value {
 	}
 	out := v
 	switch {
+	case IsWeakFlexNode(v):
+		// Freshen re-establishes the weak representation: strong slots
+		// freshen recursively; weak slots carry over as-is — the
+		// referent is a handle the caller shares, and a freshened
+		// referent nobody holds would be dead on arrival.
+		switch wd := v.Data.(type) {
+		case *WeakFlexMapData:
+			out.Data = CloneWeakFlexMapData(wd, FreshenDefault)
+		case *WeakFlexListData:
+			out.Data = CloneWeakFlexListData(wd, FreshenDefault)
+		case *WeakFlexXmlData:
+			out.Data = CloneWeakFlexXmlData(wd, FreshenDefault, freshenAttrMap)
+		}
 	case IsClassInstance(v):
 		info, err := AsClassInstance(v)
 		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
@@ -420,6 +433,19 @@ func FreshenDefault(v Value) Value {
 		}
 	}
 	return out
+}
+
+// freshenAttrMap freshens an XML attribute map for FreshenDefault's
+// weak-xml arm.
+func freshenAttrMap(m *OrderedMap) *OrderedMap {
+	om := NewOrderedMap()
+	if m != nil {
+		for _, k := range m.Keys() {
+			v, _ := m.Get(k)
+			om.Set(k, FreshenDefault(v))
+		}
+	}
+	return om
 }
 
 // MakeClassFieldValue validates one value against a class-schema

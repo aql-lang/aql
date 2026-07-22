@@ -3027,6 +3027,10 @@ func AsList(v Value) (ReadList, error) {
 	if fd, ok := v.Data.(*FlexListData); ok {
 		return ReadList{elems: fd.Elems}, nil
 	}
+	// Weak flex list: swept strong snapshot (see AsMap's weak arm).
+	if wd, ok := v.Data.(*WeakFlexListData); ok {
+		return ReadList{elems: wd.snapshotElems()}, nil
+	}
 	if td, ok := v.Data.(TableData); ok {
 		return ReadList{elems: td.Rows}, nil
 	}
@@ -3123,6 +3127,12 @@ func AsMap(v Value) (ReadMap, error) {
 	}
 	if mp, ok := v.Data.(MapPayload); ok {
 		return mp.M, nil
+	}
+	// Weak flex map: sweep dead slots and materialize a STRONG
+	// snapshot, so the whole read vocabulary observes one consistent
+	// world per operation (design/FLEX-ATTRS.1.md §4.3).
+	if wd, ok := v.Data.(*WeakFlexMapData); ok {
+		return wd.snapshot(), nil
 	}
 	// Typed map carrying both a child constraint and concrete entries
 	// (`{k:v :T}`). Surface the entries as an OrderedMap so map-aware

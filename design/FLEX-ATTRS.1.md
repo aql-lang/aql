@@ -1,7 +1,21 @@
 # FLEX-ATTRS.1 — insertion order universal; WeakFlexMap; sorted types
 
-Status: **design under examination — decisions taken, nothing
-implemented** (2026-07-22). Revision of
+> **Implementation note (2026-07-22):** D3 is IMPLEMENTED on this
+> branch, extended per maintainer instruction to all three flex kinds
+> — `WeakFlexMap` (FixedID 123), `WeakFlexList` (124), `WeakFlexXml`
+> (125). Collected list/xml elements SPLICE-COMPACT at observation
+> points (survivor order preserved — a hole would violate the
+> no-sparse-lists invariant). The §4.4 refusal domain, snapshot-at-
+> funnel representation, `weak_value_error` diagnostics, and the §4.7
+> propagation matrix (adopt=share, `node`=strong Map, `flex`=strong
+> FlexMap, `clone`=weak) are as designed; spec rows live in
+> `lang/spec/weak-flex.tsv` (live-binding discipline, zero vanish
+> rows), collection is covered by GC unit tests in
+> `eng/go/weak_flex_test.go`. D1 (universal insertion order) and D4
+> (sorted types) remain unimplemented.
+
+Status: **design under examination — decisions taken; D3 implemented
+on this branch** (2026-07-22). Revision of
 [FLEX-ATTRS.0.md](FLEX-ATTRS.0.md): after reviewing that note's
 analysis, the maintainer took four decisions (§1) that replace the
 instance-attribute mechanism. This note records the decisions, designs

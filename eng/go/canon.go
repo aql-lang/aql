@@ -142,6 +142,25 @@ func CanonValue(v Value) string {
 			return n.Leaf() + "/t"
 		}
 		return v.String()
+	case IsWeakFlexMap(v):
+		// STABLE SNAPSHOT RENDER, not a semantic round-trip: re-parsing
+		// stores literal entries whose referents are dead on arrival.
+		// The Node column's first descriptive canon, declared as such
+		// (design/FLEX-ATTRS.1.md §4.7).
+		m, err := AsMap(v)
+		if err != nil || m == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
+			return v.String()
+		}
+		return "(make WeakFlexMap {" + joinEntries(m, canonChild) + "})"
+	case IsWeakFlexList(v):
+		lst, _ := AsList(v)
+		parts := make([]string, lst.Len())
+		for i := 0; i < lst.Len(); i++ {
+			parts[i] = canonChild(lst.Get(i))
+		}
+		return "(make WeakFlexList [" + strings.Join(parts, " ") + "])"
+	case IsWeakFlexXml(v):
+		return "(make WeakFlexXml " + v.String() + ")"
 	case IsFlexList(v):
 		// Round-trippable source form — a plain `[...]` would parse
 		// back as an immutable List and lose the flexness.

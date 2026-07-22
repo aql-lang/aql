@@ -90,9 +90,13 @@ var unflaggedPins = map[string]int{
 	"module-emitlang.tsv":   8,
 	"module-io.tsv":         29,
 	"module-log.tsv":        6,
-	"module-minilang.tsv":   28,
+	"module-minilang.tsv":   19,
 	"module-net.tsv":        7,
 	"module-parse.tsv":      4,
+	// weak-flex refusals raise inside the weak set/append/make handlers —
+	// runtime-only today; the check-mode guaranteed-error mirror for the
+	// refusal path is documented follow-up (design/FLEX-ATTRS.1.md §4.4).
+	"weak-flex.tsv":         11,
 	"module-parselang.tsv":  13,
 	"module-query.tsv":      1,
 	"module-sift.tsv":       24,
