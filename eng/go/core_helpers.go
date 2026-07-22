@@ -1220,7 +1220,12 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 // single-overload predicate fn is NOT barred: its CALL_USER param guard
 // re-validates at entry and raises exactly the interpreter's no-match error.
 func planUserPolyDispatch(r *Registry, es EmitRecorder, word string, args []Value, declaredReturns []*Type) (*userPolyPlan, bool) {
-	clusterC := es.active() && anyDynamicCarrier(args) &&
+	// A gradual-Any arg OR a strict Any carrier (an Any param's generalised
+	// arg — a wrapper forwarding a value through an `Any` param) both make the
+	// dispatch runtime-dynamic: the committed Any-slot arm is not a proof, the
+	// interpreter re-matches on the true value, and dynamicReachableOverloadCount
+	// counts the strict-Any arg as reaching every arm.
+	clusterC := es.active() && (anyDynamicCarrier(args) || anyAnyCarrier(args)) &&
 		dynamicReachableOverloadCount(r, word, args) >= 2
 	predHazard := !clusterC && es.active() && fnPredicateOverloadHazard(r, word, args)
 	if !clusterC && !predHazard {

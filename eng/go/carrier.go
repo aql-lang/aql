@@ -2464,6 +2464,17 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 		}
 		reach := true
 		for j := range args {
+			// A strict OR gradual Any carrier could hold a value of any type at
+			// run time, so it reaches EVERY same-arity arm — the dispatch is
+			// genuinely runtime-dynamic and must poly re-match, not commit
+			// statically to the Any-slot arm. Without this a strict Any (an Any
+			// param's generalised arg — core_helpers.go) reached only the Any
+			// overload, so a wrapper forwarding a Map through an Any param baked
+			// the Any arm and diverged from the interpreter's Map dispatch (the
+			// each/fold-body multi-sig degradation).
+			if isAnyCarrier(args[j]) {
+				continue
+			}
 			// A GENERIC placeholder slot ((T extends Comparable)) admits by
 			// per-call instantiation over the runtime value, which a gradual
 			// arg's bound-disjointness probe cannot see (tand(Integer, T-node)
@@ -2756,11 +2767,20 @@ func anyNonConcreteOperand(vs []Value) bool {
 // type error.
 func anyAnyCarrier(vs []Value) bool {
 	for _, v := range vs {
-		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+		if isAnyCarrier(v) {
 			return true
 		}
 	}
 	return false
+}
+
+// isAnyCarrier reports whether v is an Any-typed carrier (strict or gradual):
+// a value whose static type is exactly Any, so at run time it may hold a value
+// of any type. Such an arg to a multi-overload user fn makes the dispatch
+// genuinely runtime-dynamic — the committed Any-slot arm is not a proof, since
+// the runtime value may match a more-specific sibling overload.
+func isAnyCarrier(v Value) bool {
+	return v.Carrier && v.Parent != nil && v.Parent.Equal(TAny)
 }
 
 // anyDisjunctCarrier reports whether any value is a UNION (Disjunct) carrier — a
