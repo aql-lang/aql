@@ -1058,10 +1058,20 @@ func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
 		fill = " "
 	}
 
+	// The cap is a BYTE bound (the builder-allocation/OOM safeguard),
+	// and a multi-byte fill multiplies the per-character width — so
+	// re-check the PROJECTED byte size before allocating anything
+	// (flagged in PR #306 review: a 4-byte emoji fill could pass the
+	// character-count check yet allocate ~4x the cap).
+	fillRunes := utf8.RuneCountInString(fill)
+	reps := (needed / fillRunes) + 1
+	if projected := len(input) + reps*len(fill); projected > maxStringResultBytes {
+		return nil, fmt.Errorf("pad: projected result size %d exceeds %d bytes", projected, maxStringResultBytes)
+	}
+
 	// Generate enough fill characters (runes, so a multi-rune or
 	// multi-byte fill never gets cut mid-character).
-	fillRunes := utf8.RuneCountInString(fill)
-	padding := []rune(strings.Repeat(fill, (needed/fillRunes)+1))
+	padding := []rune(strings.Repeat(fill, reps))
 
 	switch o.side {
 	case "left":
@@ -1149,6 +1159,22 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 		return matches
 	}
 
+	// An empty pattern matches at every CHARACTER boundary, end
+	// included — one match per boundary. The generic loop's one-BYTE
+	// advance produced duplicate character indices inside multi-byte
+	// runes once indices became rune-based (flagged in PR #306 review).
+	if pattern == "" {
+		if !all {
+			return []matchEntry{{m: "", i: 0, e: 0}}
+		}
+		n := utf8.RuneCountInString(input)
+		matches := make([]matchEntry, 0, n+1)
+		for k := 0; k <= n; k++ {
+			matches = append(matches, matchEntry{m: "", i: k, e: k})
+		}
+		return matches
+	}
+
 	var matches []matchEntry
 	start := 0
 	for {
@@ -1166,6 +1192,10 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 		if !all {
 			break
 		}
+		// A valid non-empty UTF-8 pattern can only match at rune
+		// boundaries (lead bytes never equal continuation bytes), so
+		// the byte-wise advance keeps the overlapping-match contract
+		// without ever landing mid-rune.
 		start = absIdx + 1
 		if start >= len(input) {
 			break

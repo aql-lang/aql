@@ -61,6 +61,11 @@ import "aql:string-util"  StringUtil.replace '語' 'ご' '日本語'	'日本ご'
 import "aql:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is rune-faithful on multi-byte input
 size (import "aql:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a CHARACTER width: ñ + 3 spaces
 import "aql:string-util"  (StringUtil.match 'l' 'héllo') dot fst dot i	2	match indices are character indices too
+import "aql:string-util"  (StringUtil.match '' 'éé' {scope: "all"}) dot ms	[{m:'' i:0 e:0} {m:'' i:1 e:1} {m:'' i:2 e:2}]	an empty pattern matches at every character BOUNDARY, end included (PR #306 review)
+import "aql:string-util"  (StringUtil.match '' 'éé') dot fst	{m:'' i:0 e:0}	…and the default first-scope reports the leading boundary
+import "aql:string-util"  StringUtil.indexof 'a' 'İİa' {mode: "shell", cs: "insensitive", occ: "last"}	2	insensitive shell offsets stay in the ORIGINAL string (İ narrows when folded — PR #306 review)
+import "aql:string-util"  StringUtil.pad 4 {fill: '😀'} 'hé'	'hé😀😀'	a multi-byte fill pads whole characters
+import "aql:string-util"  StringUtil.pad 200000000 {fill: '😀'} 'x'	ERROR:exceeds	the byte cap holds under a multi-byte fill — checked as a PROJECTION, before allocating (PR #306 review)
 import "aql:string-util"  StringUtil.upper 'straße'	'STRAßE'	ß has no simple-case uppercase — it survives (no SS expansion)
 import "aql:string-util"  StringUtil.lower 'ΣΙΓΜΑ'	'σιγμα'	simple case mapping: no final-sigma ς at the word end
 import "aql:string-util"  StringUtil.upper 'ñé'	'ÑÉ'	accented Latin uppercases per rune
