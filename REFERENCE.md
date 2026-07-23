@@ -276,6 +276,16 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/u` | Usurp — `f/u` ≡ `usurp f` |
 | `/t` | A type bound — `Map/t` ≡ `Type<Map>` ≡ `(Type of [Map])`; combines with no other modifier |
 
+Letters stack in any order (`foo/sq` ≡ `foo/qs`), each at most once;
+`f`/`s` are mutually exclusive, `q` excludes `r` and `u`, `t` combines
+with nothing, and digits form one contiguous run. When `q` is present
+the result is an atom and any companion shape letters are ignored. An
+**invalid combination spelled from the modifier letters** (`add/fs`,
+`foo/qr`, `add/1f2`) is a loud `[aql/syntax_error]` — never a silent
+fall-through. A suffix containing any other character is not a modifier
+at all: the whole token is one plain word, which is how the full type
+paths (`Scalar/Number/Integer`) parse.
+
 <!-- aql-test: skip -->
 ```
 lower/f "ABC"                 # returns 'abc' — (lower is in aql:string-util — StringUtil.lower)
@@ -1105,6 +1115,14 @@ all-forward form `WORD input arg…` is the clearest reading per the
 [argument-order rule](TUTORIAL.md#the-argument-order-rule). Infix
 forms work too but require placing the search/needle on the *left*
 of the word, with the haystack as the forward arg.
+
+**One character unit.** Every string count and index is in
+**characters** (Unicode runes): `size`, `slice` positions,
+`StringUtil.indexof` results and its `{from}` option,
+`StringUtil.pad` widths, `StringUtil.match` indices, and the
+occurrence ops `mul`/`pow` all agree — `"héllo" size` is 5 and
+`"héllo" slice 1 2` is `'é'`, never half of one. For byte-level
+work, convert to `Bytes` (`(convert Bytes "héllo") size` is 6).
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -2024,7 +2042,7 @@ type:
 |-------|------|---------|
 | List | element count | `[10,20,30] size` returns `3` |
 | Map | key count | `{a:1, b:2} size` returns `2` |
-| String | length in bytes | `"hello" size` returns `5` |
+| String | length in characters (Unicode runes) — byte length via `convert Bytes` | `"hello" size` returns `5`; `"héllo" size` returns `5` |
 | Atom | length of the name | `foo/q size` returns `3` |
 | Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |

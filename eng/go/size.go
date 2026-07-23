@@ -1,6 +1,9 @@
 package eng
 
-import "math"
+import (
+	"math"
+	"unicode/utf8"
+)
 
 // SizeOf reports the natural size of a value. It is a total function
 // — every value has a size — so unlike CompareValues it never errors.
@@ -41,10 +44,13 @@ func (numberCompareBehavior) Size(v Value) int {
 	return int(math.Floor(n))
 }
 
-// Size of a String is its length in bytes.
+// Size of a String is its length in characters (Unicode runes) — the
+// ONE character unit every string word counts in (NUR007: size/slice/
+// indexof previously counted bytes while the occurrence ops mul/pow
+// counted runes). Byte-level work belongs to the Bytes type.
 func (stringCompareBehavior) Size(v Value) int {
 	s, _ := AsString(v)
-	return len(s)
+	return utf8.RuneCountInString(s)
 }
 
 // Size of a Boolean is 1 for true, 0 for false.
@@ -55,10 +61,11 @@ func (booleanCompareBehavior) Size(v Value) int {
 	return 0
 }
 
-// Size of an Atom is the length of its name.
+// Size of an Atom is the length of its name in characters (runes),
+// mirroring the String rule.
 func (atomCompareBehavior) Size(v Value) int {
 	a, _ := AsAtom(v)
-	return len(a)
+	return utf8.RuneCountInString(a)
 }
 
 // Size on the Scalar root is reached only by Pathon — its branch has

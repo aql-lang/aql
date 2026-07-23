@@ -24,9 +24,17 @@
 # r and u yield reference / usurp words (f/s/digit accepted but ignored,
 # since they bypass ordinary dispatch).
 #
-# An INVALID suffix is NOT a parse error: the whole token (slash and all)
-# is treated as a single plain word, which then raises [aql/undefined_word]
-# at run time because no such word is registered.
+# An INVALID suffix splits by its spelling (NUR027 — previously every
+# invalid suffix silently became a plain word, surfacing later as an
+# obscure undefined_word):
+#   - spelled ENTIRELY from the modifier alphabet (digits + f s q r u t):
+#     a botched modifier, never a legitimate name — a LOUD parse error
+#     ([aql/syntax_error]: invalid word modifier).
+#   - containing any NON-modifier character (uppercase included): the
+#     whole token (slash and all) stays a single plain word — that is
+#     what keeps slash-bearing names (`add/x`) and the builtin type
+#     paths (`Scalar/Number/Integer`) parsing; unbound ones raise
+#     [aql/undefined_word] at run time.
 #
 # Full coverage of /r and /u lives in ref.tsv and usurp.tsv; this file is
 # the modifier matrix — every variation and combination, including errors.
@@ -77,19 +85,22 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/rs) 10 3	7	/rs = re
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/us) 10 3	-7	/us = usurp (+ s ignored): reversed
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  (sub2/u2) 10 3	-7	/u2 = usurp (+ digit ignored)
 #
-# §9  INVALID combinations — whole token becomes an unknown word
-add/fs	ERROR:undefined_word	f and s are mutually exclusive
-add/sf	ERROR:undefined_word	same pairing, other order
-add/qr	ERROR:undefined_word	q cannot combine with r
-add/qu	ERROR:undefined_word	q cannot combine with u
-add/ff	ERROR:undefined_word	a letter may appear at most once
-add/ss	ERROR:undefined_word	repeated s
-add/qq	ERROR:undefined_word	repeated q
-add/rr	ERROR:undefined_word	repeated r
-add/uu	ERROR:undefined_word	repeated u
-add/1f2	ERROR:undefined_word	digits must be a single contiguous run
-add/x	ERROR:undefined_word	unknown modifier letter
-add/z	ERROR:undefined_word	unknown modifier letter
+# §9  INVALID combinations — all-modifier-alphabet spellings are a loud
+#     parse error (NUR027); non-alphabet letters keep the plain-word
+#     reading and surface as undefined_word only if unbound
+add/fs	ERROR:invalid word modifier	f and s are mutually exclusive
+add/sf	ERROR:invalid word modifier	same pairing, other order
+add/qr	ERROR:invalid word modifier	q cannot combine with r
+add/qu	ERROR:invalid word modifier	q cannot combine with u
+add/ff	ERROR:invalid word modifier	a letter may appear at most once
+add/ss	ERROR:invalid word modifier	repeated s
+add/qq	ERROR:invalid word modifier	repeated q
+add/rr	ERROR:invalid word modifier	repeated r
+add/uu	ERROR:invalid word modifier	repeated u
+add/1f2	ERROR:invalid word modifier	digits must be a single contiguous run
+add/x	ERROR:undefined_word	a NON-alphabet letter is a plain slash-name, unbound here
+add/z	ERROR:undefined_word	…same for z
+({} set add/x/q 1) get 'add/x'	1	a non-alphabet slash token still works as a quoted atom key (`def` names reject `/` separately: invalid_word_name)
 #
 # §10  On functions — combined with ref / usurp / apply
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  10 3 sub2/r apply	-7	/r + apply

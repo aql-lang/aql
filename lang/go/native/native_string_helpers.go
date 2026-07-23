@@ -231,53 +231,79 @@ func shellMatch(pattern, s string, caseInsensitive bool) bool {
 	return matched
 }
 
+// runeBounds returns every rune-boundary byte offset of s, including
+// the trailing len(s). Shell candidates are cut at these boundaries so
+// every reported offset is a valid position in the ORIGINAL string.
+func runeBounds(s string) []int {
+	b := make([]int, 0, len(s)+1)
+	for i := range s {
+		b = append(b, i)
+	}
+	return append(b, len(s))
+}
+
+// foldShell lowercases per-rune (simple fold) for shell matching. It is
+// applied to the PATTERN and to each candidate SUBSTRING COPY — never
+// to the searched string itself — so reported offsets always index the
+// original string. Lowering a whole copy and searching it returned
+// offsets into the COPY, which drift whenever folding changes a rune's
+// byte width (İ U+0130 is 2 bytes, its lowercase i is 1 — flagged in
+// PR #306 review).
+func foldShell(s string) string {
+	return strings.Map(unicode.ToLower, s)
+}
+
 // shellFind finds the first occurrence of a shell pattern in a string
-// by trying the pattern against every possible substring.
-// Returns (index, length) or (-1, 0) if not found.
+// by trying the pattern against every rune-boundary substring.
+// Returns (byte index, byte length) into the ORIGINAL string, or
+// (-1, 0) if not found.
 func shellFind(s, pattern string, caseInsensitive bool) (int, int) {
-	target := s
 	pat := pattern
 	if caseInsensitive {
-		target = strings.ToLower(target)
-		pat = strings.ToLower(pat)
+		pat = foldShell(pat)
 	}
-	n := len(target)
-	for i := 0; i < n; i++ {
-		for j := i + 1; j <= n; j++ {
-			sub := target[i:j]
+	bounds := runeBounds(s)
+	for bi := 0; bi < len(bounds)-1; bi++ {
+		for bj := bi + 1; bj < len(bounds); bj++ {
+			sub := s[bounds[bi]:bounds[bj]]
+			if caseInsensitive {
+				sub = foldShell(sub)
+			}
 			if matched, _ := filepath.Match(pat, sub); matched {
-				return i, j - i
+				return bounds[bi], bounds[bj] - bounds[bi]
 			}
 		}
 	}
 	return -1, 0
 }
 
-// shellFindAll finds all non-overlapping occurrences of a shell pattern.
+// shellFindAll finds all non-overlapping occurrences of a shell
+// pattern, as (start, end) byte-offset pairs into the ORIGINAL string.
 func shellFindAll(s, pattern string, caseInsensitive bool) [][2]int {
-	var results [][2]int
-	target := s
 	pat := pattern
 	if caseInsensitive {
-		target = strings.ToLower(target)
-		pat = strings.ToLower(pat)
+		pat = foldShell(pat)
 	}
-	n := len(target)
-	offset := 0
-	for offset < n {
+	bounds := runeBounds(s)
+	var results [][2]int
+	pos := 0
+	for pos < len(bounds)-1 {
 		found := false
-		for i := offset; i < n && !found; i++ {
-			for j := i + 1; j <= n; j++ {
-				sub := target[i:j]
+		for i := pos; i < len(bounds)-1 && !found; i++ {
+			for j := i + 1; j < len(bounds); j++ {
+				sub := s[bounds[i]:bounds[j]]
+				if caseInsensitive {
+					sub = foldShell(sub)
+				}
 				if matched, _ := filepath.Match(pat, sub); matched {
-					results = append(results, [2]int{i, j})
-					offset = j
+					results = append(results, [2]int{bounds[i], bounds[j]})
+					pos = j
 					found = true
 					break
 				}
 			}
 			if !found {
-				offset = i + 1
+				pos = i + 1
 			}
 		}
 		if !found {

@@ -444,14 +444,11 @@ func TestParseRefSuffixInExpression(t *testing.T) {
 
 func TestParseRefAndQuoteMutuallyExclusive(t *testing.T) {
 	// /q and /r express different intents (data vs. resolved value),
-	// so combining them is a parse-level rejection — the whole token
-	// reverts to a plain word.
-	assertParse(t, "foo/qr", []eng.Value{
-		eng.NewWord("foo/qr"),
-	})
-	assertParse(t, "foo/rq", []eng.Value{
-		eng.NewWord("foo/rq"),
-	})
+	// so combining them is a LOUD parse error (NUR027 — previously the
+	// whole token silently became the word "foo/qr", surfacing later
+	// as an obscure undefined_word).
+	assertParseError(t, "foo/qr")
+	assertParseError(t, "foo/rq")
 }
 
 func TestParseRefIgnoresShapeModifiers(t *testing.T) {
@@ -469,34 +466,40 @@ func TestParseRefIgnoresShapeModifiers(t *testing.T) {
 }
 
 func TestParseRefDuplicateRejected(t *testing.T) {
-	assertParse(t, "foo/rr", []eng.Value{
-		eng.NewWord("foo/rr"),
-	})
+	assertParseError(t, "foo/rr")
 }
 
 func TestParseModifiersForwardAndStackMutuallyExclusive(t *testing.T) {
-	// f and s in the same suffix are invalid — the whole token falls
-	// back to a plain word with the slash in its name.
-	assertParse(t, "foo/fs", []eng.Value{
-		eng.NewWord("foo/fs"),
-	})
+	// f and s in the same suffix are invalid — a loud parse error
+	// (NUR027; the all-modifier-alphabet suffix proves a botched
+	// modifier, never a name).
+	assertParseError(t, "foo/fs")
 }
 
 func TestParseModifiersDuplicateRejected(t *testing.T) {
-	// Duplicate modifiers reset the whole token to a plain word.
-	assertParse(t, "foo/qq", []eng.Value{
-		eng.NewWord("foo/qq"),
-	})
-	assertParse(t, "foo/ff", []eng.Value{
-		eng.NewWord("foo/ff"),
-	})
-	assertParse(t, "foo/ss", []eng.Value{
-		eng.NewWord("foo/ss"),
-	})
+	// Duplicate modifiers are a parse error (NUR027).
+	assertParseError(t, "foo/qq")
+	assertParseError(t, "foo/ff")
+	assertParseError(t, "foo/ss")
 	// Digits may not appear in two runs separated by a letter — the
 	// argCount is a single contiguous number.
-	assertParse(t, "foo/1q1", []eng.Value{
-		eng.NewWord("foo/1q1"),
+	assertParseError(t, "foo/1q1")
+}
+
+func TestParseNonAlphabetSuffixStaysWord(t *testing.T) {
+	// The negative boundary of the NUR027 error: a suffix containing
+	// any NON-modifier character is a plain slash-bearing name, exactly
+	// as before — that is what keeps `add/x`-style names and the
+	// builtin type paths (Scalar/Number/Integer, capitalized segments)
+	// parsing. Only the all-alphabet botched combos error.
+	assertParse(t, "foo/bar", []eng.Value{
+		eng.NewWord("foo/bar"),
+	})
+	assertParse(t, "foo/x", []eng.Value{
+		eng.NewWord("foo/x"),
+	})
+	assertParse(t, "foo/qx", []eng.Value{
+		eng.NewWord("foo/qx"),
 	})
 }
 
