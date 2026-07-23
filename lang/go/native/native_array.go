@@ -928,13 +928,23 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]bool)
+	// Dedup by deq — the language's VALUE equality (scalars by value,
+	// where eq and deq coincide; Nodes/Ideals by deep value, where eq is
+	// reference identity). Keying on the rendered form was a THIRD
+	// equality notion agreeing with neither: `unique [1 1.0]` kept both
+	// (deq-equal, renders differ) while `unique [["a"] ["a"]]` merged
+	// values eq distinguishes (NUR015).
 	var result []Value
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
-		key := elem.String()
-		if !seen[key] {
-			seen[key] = true
+		dup := false
+		for _, kept := range result {
+			if DeepEqual(kept, elem) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
 			result = append(result, elem)
 		}
 	}
@@ -1128,13 +1138,16 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, err
 	}
-	haystackSet := make(map[string]bool, haystack.Len())
-	for i := 0; i < haystack.Len(); i++ {
-		haystackSet[haystack.Get(i).String()] = true
-	}
+	// Membership is deq — the value equality (NUR015; it was keyed on
+	// the rendered form).
 	result := make([]Value, needles.Len())
 	for i := 0; i < needles.Len(); i++ {
-		result[i] = NewBoolean(haystackSet[needles.Get(i).String()])
+		needle := needles.Get(i)
+		found := false
+		for j := 0; j < haystack.Len() && !found; j++ {
+			found = DeepEqual(haystack.Get(j), needle)
+		}
+		result[i] = NewBoolean(found)
 	}
 	return []Value{NewList(result)}, nil
 }
@@ -1154,27 +1167,65 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	if err != nil {
 		return nil, err
 	}
-	haystackLen := haystack.Len()
-	indexMap := make(map[string]int, haystackLen)
-	for i := 0; i < haystackLen; i++ {
-		key := haystack.Get(i).String()
-		if _, exists := indexMap[key]; !exists {
-			indexMap[key] = i
-		}
-	}
+	// Lookup is deq — the value equality (NUR015); first match wins.
 	result := make([]Value, needles.Len())
 	for i := 0; i < needles.Len(); i++ {
-		key := needles.Get(i).String()
-		if idx, exists := indexMap[key]; exists {
-			result[i] = NewInteger(int64(idx))
-		} else {
-			result[i] = NewInteger(-1)
+		needle := needles.Get(i)
+		idx := int64(-1)
+		for j := 0; j < haystack.Len(); j++ {
+			if DeepEqual(haystack.Get(j), needle) {
+				idx = int64(j)
+				break
+			}
 		}
+		result[i] = NewInteger(idx)
 	}
 	return []Value{NewList(result)}, nil
 }
 
 // ---- group ----
+
+// deqGrouper accumulates deq-equivalence classes for the group word
+// (NUR015 — grouping was previously keyed on the rendered form, a third
+// equality notion). Membership in a class is deq: scalars by value
+// (eq and deq coincide there), Nodes/Ideals by deep value. The output
+// map's keys stay RENDERED strings (a map key is a string), taken from
+// each class's FIRST occurrence; two deq-distinct classes whose renders
+// collide (an atom and a string of the same name) fold into one group,
+// exactly as before — the render is the map-key contract, deq is the
+// grouping contract within it.
+type deqGrouper struct {
+	reps    []Value
+	repKeys []string
+	groups  [][]Value
+}
+
+func (g *deqGrouper) add(key, v Value) {
+	for ri, rep := range g.reps {
+		if DeepEqual(rep, key) {
+			g.groups[ri] = append(g.groups[ri], v)
+			return
+		}
+	}
+	rk := key.String()
+	for ri, existing := range g.repKeys {
+		if existing == rk {
+			g.groups[ri] = append(g.groups[ri], v)
+			return
+		}
+	}
+	g.reps = append(g.reps, key)
+	g.repKeys = append(g.repKeys, rk)
+	g.groups = append(g.groups, []Value{v})
+}
+
+func (g *deqGrouper) toMap() Value {
+	om := NewOrderedMap()
+	for ri := range g.reps {
+		om.Set(g.repKeys[ri], NewList(g.groups[ri]))
+	}
+	return NewMap(om)
+}
 
 func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	keys, err := requireListArg(r, args[0], "group", "concrete keys list")
@@ -1188,20 +1239,11 @@ func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if keys.Len() != values.Len() {
 		return nil, fmt.Errorf("group: keys length %d does not match values length %d", keys.Len(), values.Len())
 	}
-	om := NewOrderedMap()
-	groups := make(map[string][]Value)
-	order := make([]string, 0)
+	var g deqGrouper
 	for i := 0; i < keys.Len(); i++ {
-		k := keys.Get(i).String()
-		if _, exists := groups[k]; !exists {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], values.Get(i))
+		g.add(keys.Get(i), values.Get(i))
 	}
-	for _, k := range order {
-		om.Set(k, NewList(groups[k]))
-	}
-	return []Value{NewMap(om)}, nil
+	return []Value{g.toMap()}, nil
 }
 
 func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -1209,20 +1251,11 @@ func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, err
 	}
-	om := NewOrderedMap()
-	groups := make(map[string][]Value)
-	order := make([]string, 0)
+	var g deqGrouper
 	for i := 0; i < list.Len(); i++ {
-		k := list.Get(i).String()
-		if _, exists := groups[k]; !exists {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], NewInteger(int64(i)))
+		g.add(list.Get(i), NewInteger(int64(i)))
 	}
-	for _, k := range order {
-		om.Set(k, NewList(groups[k]))
-	}
-	return []Value{NewMap(om)}, nil
+	return []Value{g.toMap()}, nil
 }
 
 // ---- replicate ----

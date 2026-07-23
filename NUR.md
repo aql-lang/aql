@@ -57,11 +57,9 @@ commit.
 | [NUR005](#nur005) | String `add` crosses scalar types; Atom/Bytes do not mirror it | 2026-07-22 uniformity review |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR010](#nur010) | Integer `pow` negative-exponent error carries no `[aql/…]` code | 2026-07-22 uniformity review |
-| [NUR011](#nur011) | `eq` is identity for compounds, value for scalars | 2026-07-22 uniformity review |
 | [NUR012](#nur012) | Pathon orders segments in reverse lexical order | 2026-07-22 uniformity review |
 | [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
 | [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
-| [NUR015](#nur015) | Collection words dedup/group/member on rendered form — a third equality | 2026-07-22 uniformity review |
 | [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
 | [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
 | [NUR020](#nur020) | The `print` core exception is asserted, never argued | 2026-07-22 uniformity review |
@@ -339,19 +337,43 @@ code); the partiality itself needs its own verdict.
 
 ## NUR011 — `eq` is identity for compounds, value for scalars {#nur011}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-07-23
 
-**Rule:** one word, one equality principle.
-**Divergence:** `eq` compares scalars by value but lists/maps/XML by
-container identity (`["a"] eq ["a"]` → false); `deq` is structural
-throughout. Consequence: `eq` disagrees with `cmp`-equality on
-compounds (structurally-equal lists are `cmp`-equal but not `eq`).
-**Evidence:** `eng/go/compare.go:326-384`; REFERENCE.md:1174-1181.
-**Documentation status:** argued in `design/LISP-ANALYSIS.5.md` (the
-Scheme eq?/equal? trichotomy) and accepted in the DX reports; stated in
-REFERENCE; absent from EXPLANATION's equality discussion.
-**Proposed verdict:** allow (argued design), plus a doc task to surface
-the argument in EXPLANATION.
+### The uniform rule
+
+One word, one equality principle.
+
+### The divergence
+
+`eq` compares scalars by value but lists/maps/XML/instances by
+container identity (`["a"] eq ["a"]` → false); `deq` is deep value
+equality throughout. Consequence: `eq` disagrees with `cmp`-equality
+on compounds (structurally-equal lists are `cmp`-equal but not `eq`).
+
+### Why allowed
+
+The maintainer's rule (2026-07-23, resolving NUR015 in the same
+stroke): **for Scalars, `eq` and `deq` are the same and based on
+values; for Nodes and Ideals, `eq` is by reference, `deq` is by
+value.** Two equality levels are deliberate — reference identity
+answers "is this the same container?" (cheap, aliasing-aware), deep
+equality answers "do these hold the same values?" — the Scheme
+`eq?`/`equal?` trichotomy collapsed to two levels because scalar
+value-identity makes the levels coincide there. Every value-oriented
+word keys on `deq` (the collection words since the NUR015 fix); `eq`
+remains the aliasing probe.
+
+### Evidence
+
+- `eng/go/compare.go` — `ExactEqual` (scalar arm shared with
+  `DeepEqual` via `scalarFamilyEqual`, so eq and deq can never drift
+  on a scalar; `sameContainer` identity arms for compounds).
+- REFERENCE.md §Comparison ("**`eq` is identity for compounds; `deq`
+  is structural — by design**"); EXPLANATION.md §"Two equalities, one
+  rule" (added with this verdict); `design/LISP-ANALYSIS.5.md` (the
+  original argument).
+- `lang/spec/module-array.tsv` — the collection words' `deq`-basis
+  battery pins the value side of the rule.
 
 ---
 
@@ -407,26 +429,6 @@ property, not a family invariant.
 `Decimal('0.1') == 0.1 → False`); user-facing at REFERENCE.md:197,501.
 **Proposed verdict:** allow — mathematically honest; the alternative
 (rounding Big to float64) silently collapses distinct values.
-
----
-
-## NUR015 — Collection words dedup/group/member on rendered form — a third equality {#nur015}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** the language defines two equality notions (`eq` identity/
-value, `deq` structural) and one order (`cmp`/`tcmp`); collection
-words should use one of them.
-**Divergence:** `ArrayUtil.unique`/`member`/`indices`/`group` key on
-the rendered `Value.String()` — a third notion agreeing with none:
-`unique [1 1.0]` keeps both (though `1 eq 1.0`, `deq [1] [1.0]`, and
-`cmp 1 1.0 = 0` all say equal — verified live) while
-`unique [["a"] ["a"]]` dedups lists that `eq` calls distinct
-(verified).
-**Evidence:** `native_array.go:935,1129,1156,1163,1191,1212`.
-**Documentation status:** undocumented — REFERENCE and
-design/ARRAYIFICATION.6.md give examples but never state the equality
-basis.
 
 ---
 

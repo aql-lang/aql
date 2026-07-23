@@ -477,6 +477,16 @@ would only order by the stage-2 Rank fallback (`1 lt "a"`,
 freely — values of different types are simply not equal (`1 eq "1"`
 returns `false`), which is safe and needs no escape hatch.
 
+**Two equalities, one rule.** For **Scalars**, `eq` and `deq` are the
+same thing: equality by *value* (`1 eq 1.0` and `1 deq 1.0` are both
+true — cross-leaf magnitude). For **Nodes and Ideals** (lists, maps,
+XML, class instances, stores), `eq` is *reference* equality — are these
+the same container? — while `deq` is *value* equality, comparing
+contents deeply: `["a"] eq ["a"]` is false, `["a"] deq ["a"]` is true.
+Words that operate on values use `deq`: the collection words
+(`ArrayUtil.unique`/`member`/`indices`/`group`) dedup, test, and group
+by the `deq` class.
+
 A bare type literal sorts strictly below every concrete inhabitant
 of its family (same-family, so the restricted words allow it — but
 write the literal on the *right*: a type literal on the **left** of
