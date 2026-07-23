@@ -55,7 +55,6 @@ commit.
 | # | Title | Surfaced by |
 |---|-------|-------------|
 | [NUR005](#nur005) | String `add` crosses scalar types; Atom/Bytes do not mirror it | 2026-07-22 uniformity review |
-| [NUR007](#nur007) | Two units of "character" in the String words: bytes vs runes | 2026-07-22 uniformity review |
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR010](#nur010) | Integer `pow` negative-exponent error carries no `[aql/…]` code | 2026-07-22 uniformity review |
 | [NUR011](#nur011) | `eq` is identity for compounds, value for scalars | 2026-07-22 uniformity review |
@@ -71,7 +70,6 @@ commit.
 | [NUR024](#nur024) | Ordering words are family-restricted; equality is total | 2026-07-22 uniformity review |
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
-| [NUR027](#nur027) | Invalid modifier combos fall through silently, two different ways | 2026-07-22 uniformity review |
 | [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
 
@@ -297,30 +295,6 @@ mirrored String/Atom/Bytes trio crosses types; two do not.
 (REFERENCE.md:981-984, with the `add true 1` negative), but it sits 60
 lines from the "never across it" rule it contradicts, and the
 Atom/Bytes asymmetry is noted only in a code comment.
-
----
-
-## NUR007 — Two units of "character" in the String words: bytes vs runes {#nur007}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** one string model per family — a word set should agree on what
-a "character" is.
-**Divergence:** `size`/`slice`/`StringUtil.indexof` are byte-oriented
-(`size "héllo"` → 6; `"héllo" slice 1 2` yields a broken half-rune,
-producing invalid UTF-8; `indexof "l" "héllo"` → 3, a byte index — all
-verified live) while the occurrence-package `mul`/`pow` are
-rune-oriented (`"ab" mul "é"` → `'aébé'`; `"ab" pow "é"` → `'ab'`,
-one repetition for one character — verified). The kernel size docstring
-says "character length", the check-mode comment says "rune count", the
-implementation counts bytes.
-**Evidence:** `eng/go/size.go:14-16,44-48,58-62`;
-`lang/go/native/size.go:17-18`; `native_scalar_ops.go:155,176`
-(`[]rune`, `utf8.RuneCountInString`); REFERENCE.md:2027 ("length in
-bytes") vs REFERENCE.md:1058 ("once per character").
-**Documentation status:** REFERENCE documents the byte rule for `size`
-only; the split itself and the invalid-UTF-8 slice edge are
-undocumented.
 
 ---
 
@@ -601,24 +575,6 @@ text in a template → 6 (the escape survives literally).
 **Documentation status:** REFERENCE documents the restricted template
 set but never states quoted strings accept a superset — the asymmetry
 is undocumented.
-
----
-
-## NUR027 — Invalid modifier combos fall through silently, two different ways {#nur027}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** a malformed suffix modifier should be reported, one way.
-**Divergence:** two silent behaviors, neither an error: (a) `/q` plus a
-shape modifier — the shape half is silently ignored (`foo/sq` is a
-plain Atom; documented); (b) a mutually-exclusive combo (`foo/qr`,
-`foo/fs`, duplicate letters) — the whole token silently becomes a word
-name containing a slash, surfacing later as an obscure
-`undefined_word: foo/qr` (undocumented).
-**Evidence:** `parse.go:1274-1368` (`scanWordModifier`), `:1414`.
-**Documentation status:** case (a) documented in CLAUDE.md; case (b)
-undocumented. **Proposed verdict:** resolve by fix for (b) — an
-"invalid modifier" parse error.
 
 ---
 

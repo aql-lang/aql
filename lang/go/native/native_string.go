@@ -23,6 +23,35 @@ func foldEqualRune(a, b rune) bool {
 	return a == b || unicode.ToLower(a) == unicode.ToLower(b)
 }
 
+// The string words expose ONE character unit — runes (NUR007). The
+// search machinery below works in byte offsets internally (that is
+// what strings.Index and the fold helpers return); these two helpers
+// convert at the word boundary: user-supplied indices ({from}) arrive
+// as rune indices and convert IN, result indices convert OUT.
+
+// byteToRuneIdx converts a byte offset in s to its character (rune)
+// index; the -1 not-found sentinel passes through unchanged.
+func byteToRuneIdx(s string, byteIdx int) int {
+	if byteIdx < 0 {
+		return byteIdx
+	}
+	return utf8.RuneCountInString(s[:byteIdx])
+}
+
+// runeToByteIdx returns the byte offset of the runeIdx-th rune in s,
+// or len(s) when runeIdx is at (or beyond) the rune count. Callers
+// bound runeIdx to [0, rune count] first.
+func runeToByteIdx(s string, runeIdx int) int {
+	seen := 0
+	for i := range s {
+		if seen == runeIdx {
+			return i
+		}
+		seen++
+	}
+	return len(s)
+}
+
 // foldMatchAt reports whether s begins with a case-insensitive match of
 // substr, returning the number of bytes of s the match spans (which can
 // differ from len(substr) when casing changes byte length).
@@ -574,26 +603,30 @@ func doIndexOf(input, search string, o strOpts) ([]Value, error) {
 	}
 
 	ci := o.cs == "insensitive"
+	// {from} is a CHARACTER (rune) index — converted to the byte offset
+	// the search machinery works in; results convert back on the way
+	// out (NUR007: one character unit across the string words).
 	from := 0
 	if o.hasFrom {
-		from = int(o.from)
-		if from < 0 {
-			from = 0
+		fromRunes := int(o.from)
+		if fromRunes < 0 {
+			fromRunes = 0
 		}
-		if from > len(input) {
+		if fromRunes > utf8.RuneCountInString(input) {
 			return []Value{NewInteger(-1)}, nil
 		}
+		from = runeToByteIdx(input, fromRunes)
 	}
 
 	if o.mode == "shell" {
 		if o.occ == "last" {
-			return []Value{NewInteger(int64(shellFindLast(input, search, ci)))}, nil
+			return []Value{NewInteger(int64(byteToRuneIdx(input, shellFindLast(input, search, ci))))}, nil
 		}
 		idx, _ := shellFind(input[from:], search, ci)
 		if idx >= 0 {
 			idx += from
 		}
-		return []Value{NewInteger(int64(idx))}, nil
+		return []Value{NewInteger(int64(byteToRuneIdx(input, idx)))}, nil
 	}
 
 	// Literal matching. Case-insensitive search goes through foldIndex so
@@ -601,22 +634,22 @@ func doIndexOf(input, search string, o strOpts) ([]Value, error) {
 	// lowercased copy whose byte offsets can drift).
 	if ci {
 		if o.occ == "last" {
-			return []Value{NewInteger(int64(foldLastIndex(input, search)))}, nil
+			return []Value{NewInteger(int64(byteToRuneIdx(input, foldLastIndex(input, search))))}, nil
 		}
 		idx, _ := foldIndex(input, search, from)
-		return []Value{NewInteger(int64(idx))}, nil
+		return []Value{NewInteger(int64(byteToRuneIdx(input, idx)))}, nil
 	}
 
 	if o.occ == "last" {
 		idx := strings.LastIndex(input, search)
-		return []Value{NewInteger(int64(idx))}, nil
+		return []Value{NewInteger(int64(byteToRuneIdx(input, idx)))}, nil
 	}
 
 	idx := strings.Index(input[from:], search)
 	if idx >= 0 {
 		idx += from
 	}
-	return []Value{NewInteger(int64(idx))}, nil
+	return []Value{NewInteger(int64(byteToRuneIdx(input, idx)))}, nil
 }
 
 // shellFindLast finds the last occurrence of a shell pattern.
@@ -654,12 +687,18 @@ func doReplace(input, search, repl string, o strOpts) ([]Value, error) {
 	}
 
 	ci := o.cs == "insensitive"
+	// {from} is a rune index (NUR007) — convert to the byte offset the
+	// replacement machinery slices with, clamped to the string's end.
 	from := 0
 	if o.hasFrom {
-		from = int(o.from)
-		if from < 0 {
-			from = 0
+		fromRunes := int(o.from)
+		if fromRunes < 0 {
+			fromRunes = 0
 		}
+		if rc := utf8.RuneCountInString(input); fromRunes > rc {
+			fromRunes = rc
+		}
+		from = runeToByteIdx(input, fromRunes)
 	}
 
 	maxCount := -1
@@ -1000,12 +1039,15 @@ func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
 	if targetLen > int64(maxStringResultBytes) {
 		return nil, fmt.Errorf("pad: target length %d exceeds %d bytes", targetLen, maxStringResultBytes)
 	}
-	current := len(input)
+	// Width and truncation count CHARACTERS (runes), the string words'
+	// one unit (NUR007) — byte-based padding both mis-sized multi-byte
+	// input and could split a multi-byte fill rune.
+	current := utf8.RuneCountInString(input)
 	target := int(targetLen)
 
 	if current >= target {
 		if o.trunc {
-			return []Value{NewString(input[:target])}, nil
+			return []Value{NewString(string([]rune(input)[:target]))}, nil
 		}
 		return []Value{NewString(input)}, nil
 	}
@@ -1016,20 +1058,22 @@ func doPad(input string, targetLen int64, o strOpts) ([]Value, error) {
 		fill = " "
 	}
 
-	// Generate enough fill characters
-	padding := strings.Repeat(fill, (needed/len(fill))+1)
+	// Generate enough fill characters (runes, so a multi-rune or
+	// multi-byte fill never gets cut mid-character).
+	fillRunes := utf8.RuneCountInString(fill)
+	padding := []rune(strings.Repeat(fill, (needed/fillRunes)+1))
 
 	switch o.side {
 	case "left":
-		result := padding[:needed] + input
+		result := string(padding[:needed]) + input
 		return []Value{NewString(result)}, nil
 	case "both":
 		left := needed / 2
 		right := needed - left
-		result := padding[:left] + input + padding[:right]
+		result := string(padding[:left]) + input + string(padding[:right])
 		return []Value{NewString(result)}, nil
 	default: // "right"
-		result := input + padding[:needed]
+		result := input + string(padding[:needed])
 		return []Value{NewString(result)}, nil
 	}
 }
@@ -1090,8 +1134,8 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 			}
 			matches = append(matches, matchEntry{
 				m: input[idx : idx+span],
-				i: idx,
-				e: idx + span,
+				i: byteToRuneIdx(input, idx),
+				e: byteToRuneIdx(input, idx+span),
 			})
 			if !all {
 				break
@@ -1116,8 +1160,8 @@ func findLiteralMatches(input, pattern string, ci bool, all bool) []matchEntry {
 		end := absIdx + len(pattern)
 		matches = append(matches, matchEntry{
 			m: input[absIdx:end],
-			i: absIdx,
-			e: end,
+			i: byteToRuneIdx(input, absIdx),
+			e: byteToRuneIdx(input, end),
 		})
 		if !all {
 			break
@@ -1136,8 +1180,8 @@ func findShellMatches(input, pattern string, ci bool, all bool) []matchEntry {
 	for _, r := range results {
 		matches = append(matches, matchEntry{
 			m: input[r[0]:r[1]],
-			i: r[0],
-			e: r[1],
+			i: byteToRuneIdx(input, r[0]),
+			e: byteToRuneIdx(input, r[1]),
 		})
 		if !all {
 			break

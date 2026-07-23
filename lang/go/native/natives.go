@@ -384,14 +384,56 @@ func stringSliceNative() NativeFunc {
 	}
 }
 
+// sliceStringByRunes slices a string by CHARACTER (rune) indices —
+// the one character unit every string word counts in (NUR007; slice
+// previously sliced bytes and could split a multi-byte rune into
+// invalid UTF-8). The index normalization replicates voxgigstruct.
+// Slice's arithmetic exactly, with the unit changed: a negative start
+// drops |start| characters from the END (start 0, end vlen+start); a
+// negative end counts back from the end; everything clamps to the
+// rune length; an inverted range is the empty string.
+func sliceStringByRunes(s string, start int, endP *int) string {
+	r := []rune(s)
+	vlen := len(r)
+	end := vlen
+	if start < 0 {
+		end = vlen + start
+		if end < 0 {
+			end = 0
+		}
+		start = 0
+	} else if endP != nil {
+		end = *endP
+		if end < 0 {
+			end = vlen + end
+			if end < 0 {
+				end = 0
+			}
+		} else if vlen < end {
+			end = vlen
+		}
+	}
+	if vlen < start {
+		start = vlen
+	}
+	if start <= end && end <= vlen {
+		return string(r[start:end])
+	}
+	return ""
+}
+
 // sliceStartEndHandler implements `slice start end data` (forward-first:
 // args[0]=start, args[1]=end, args[2]=data). Used by both string and
-// list overloads.
+// list overloads; the string overload slices by runes (NUR007), lists
+// keep the voxgigstruct path.
 func sliceStartEndHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	_as0, _ := args[0].AsConcreteInteger()
 	start := int(_as0)
 	_as1, _ := args[1].AsConcreteInteger()
 	end := int(_as1)
+	if s, serr := args[2].AsConcreteString(); serr == nil {
+		return []Value{NewString(sliceStringByRunes(s, start, &end))}, nil
+	}
 	data := valueToSliceArg(args[2])
 	result := voxgigstruct.Slice(data, start, end)
 	res, err := sliceResult(result)
@@ -400,10 +442,13 @@ func sliceStartEndHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 
 // sliceStartHandler implements `slice start data` (forward-first:
 // args[0]=start, args[1]=data). Slices from start to the end of the
-// input.
+// input; the string overload slices by runes (NUR007).
 func sliceStartHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	_as0, _ := args[0].AsConcreteInteger()
 	s := int(_as0)
+	if str, serr := args[1].AsConcreteString(); serr == nil {
+		return []Value{NewString(sliceStringByRunes(str, s, nil))}, nil
+	}
 	data := valueToSliceArg(args[1])
 	result := voxgigstruct.Slice(data, s)
 	res, err := sliceResult(result)

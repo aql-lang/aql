@@ -73,10 +73,10 @@ func init() {
 	register(&Entry{
 		Word:    "indexof",
 		Summary: "Find the index of a search term in a string.",
-		Description: "Returns the byte index of the first (or last) occurrence of the search " +
+		Description: "Returns the character (rune) index of the first (or last) occurrence of the search " +
 			"term in the input string. Returns -1 if not found.",
 		Notes: []string{
-			"Returns byte offsets, not rune offsets.",
+			"Indices count characters (runes), the one unit every string word uses; {from} is a character index too.",
 			"Options: cs, mode, from, occ (\"first\"/\"last\"), u, norm.",
 		},
 	})

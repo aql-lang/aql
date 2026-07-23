@@ -1363,9 +1363,33 @@ func scanWordModifier(text string) (base string, argCount int, forceStack, force
 	}
 	if !valid {
 		// Unrecognized / malformed modifier — treat entire token as plain word.
+		// parseWord upgrades the all-modifier-alphabet subset of this case
+		// (a botched modifier like foo/fs, never a legitimate name) to a
+		// loud parse error — see isModifierAlphabet (NUR027).
 		return text, -1, false, false, false, false, false, false, false
 	}
 	return baseName, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, true
+}
+
+// isModifierAlphabet reports whether every character of a candidate
+// modifier suffix is drawn from the modifier alphabet (digits plus
+// f s q r u t). It is the line between a BOTCHED MODIFIER (`foo/fs`,
+// `foo/qr`, `foo/1f2` — all-alphabet but an invalid combination),
+// which errors loudly, and a slash-bearing plain name (`foo/bar`,
+// `add/x`, the builtin type paths `Scalar/Number/Integer` — the
+// suffix contains a non-modifier character, uppercase included),
+// which stays a single plain word exactly as before. Valid modifier
+// combinations never reach this: scanWordModifier claims them first.
+func isModifierAlphabet(s string) bool {
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c >= '0' && c <= '9':
+		case c == 'f', c == 's', c == 'q', c == 'r', c == 'u', c == 't':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // wordBaseName returns the base name of an unquoted word token, stripping
@@ -1381,10 +1405,27 @@ func wordBaseName(text string) string {
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
 func parseWord(text string) (eng.Value, error) {
-	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, _ := scanWordModifier(text)
+	name, argCount, forceStack, forceForward, quoteFlag, refFlag, usurpFlag, typeFlag, valid := scanWordModifier(text)
 
 	if name == "" {
 		return eng.Value{}, fmt.Errorf("empty word")
+	}
+
+	// An invalid modifier combination spelled entirely from the modifier
+	// alphabet is a PARSE ERROR (NUR027) — previously the whole token
+	// silently became a slash-bearing word that surfaced later as an
+	// obscure undefined_word. A suffix containing any non-modifier
+	// character keeps the historical plain-word reading (slash-bearing
+	// names, builtin type paths).
+	if !valid {
+		if idx := strings.LastIndex(text, "/"); idx >= 0 && idx < len(text)-1 && isModifierAlphabet(text[idx+1:]) {
+			return eng.Value{}, &eng.AqlError{
+				Code:   "syntax_error",
+				Detail: fmt.Sprintf("invalid word modifier /%s on %q", text[idx+1:], text[:idx]),
+				Src:    text,
+				Hint:   "modifier letters stack in any order, each at most once; f|s are exclusive; q excludes r and u; t combines with nothing; digits form one contiguous run within int range",
+			}
+		}
 	}
 
 	// `X/t` — the type-bound sugar: desugars to the paren group

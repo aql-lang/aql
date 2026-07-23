@@ -155,8 +155,10 @@ func TestParseWave3UsurpAndRefWords(t *testing.T) {
 }
 
 // TestParseWave3InvalidModifierCombos pins the scanWordModifier rejection
-// rules: an invalid modifier suffix demotes the whole token to a plain
-// word (full text kept), never a partial parse and never a panic.
+// rules post-NUR027: an invalid combination spelled entirely from the
+// modifier alphabet is a loud parse error (never a partial parse, never
+// a panic); a suffix containing a non-modifier character keeps the whole
+// token as a plain word (the slash-name / type-path reading).
 func TestParseWave3InvalidModifierCombos(t *testing.T) {
 	for _, src := range []string{
 		"a/1f2", // second digit run
@@ -170,18 +172,23 @@ func TestParseWave3InvalidModifierCombos(t *testing.T) {
 		"a/qt",  // t after q
 		"a/tf",  // t + f
 		"a/2t",  // t + argCount
-		"a/zz",  // unknown letters
 	} {
+		if _, err := Parse(src); err == nil {
+			t.Errorf("%q: an all-alphabet invalid modifier combo must be a parse error", src)
+		}
+	}
+	// Non-alphabet letters keep the historical plain-word demotion.
+	for _, src := range []string{"a/zz", "a/qz"} {
 		vals := mustParseWave3(t, src)
 		if len(vals) != 1 {
 			t.Fatalf("%q: got %d values, want 1", src, len(vals))
 		}
 		w := wordNameWave3(t, vals[0], src)
 		if w.Name != src {
-			t.Errorf("%q: invalid modifier must keep the whole token as the word name, got %q", src, w.Name)
+			t.Errorf("%q: a non-alphabet suffix must keep the whole token as the word name, got %q", src, w.Name)
 		}
 		if w.ForceUsurp || w.ForceRef || w.ForceStack || w.ForceForward {
-			t.Errorf("%q: invalid modifier must not set any flag: %+v", src, w)
+			t.Errorf("%q: a non-alphabet suffix must not set any flag: %+v", src, w)
 		}
 	}
 }
@@ -197,15 +204,12 @@ func TestParseWave3WordContextTypePath(t *testing.T) {
 }
 
 // TestParseWave3HugeArityModifier pins that an argCount too large for int
-// demotes the token to a plain word instead of mis-parsing.
+// is a loud parse error (NUR027 — an all-digit suffix is a modifier
+// attempt, and overflowing arity previously demoted silently to the
+// word "a/99999…" and an obscure undefined_word).
 func TestParseWave3HugeArityModifier(t *testing.T) {
-	src := "a/99999999999999999999"
-	vals := mustParseWave3(t, src)
-	if len(vals) != 1 {
-		t.Fatalf("%q: got %d values, want 1", src, len(vals))
-	}
-	if w := wordNameWave3(t, vals[0], src); w.Name != src || w.ArgCount != -1 {
-		t.Errorf("%q: got name=%q argCount=%d, want the full token and -1", src, w.Name, w.ArgCount)
+	if _, err := Parse("a/99999999999999999999"); err == nil {
+		t.Error("an int-overflowing argCount modifier must be a parse error")
 	}
 }
 

@@ -30,16 +30,37 @@ import "aql:string-util"  StringUtil.pad 3 ''	'   '	padding the empty string is 
 import "aql:string-util"  StringUtil.changecase '' {style: 'upper'}	''	changecase of empty is empty
 import "aql:string-util"  StringUtil.normalize ''	''	normalize of empty is empty
 #
-# §2  byte vs rune — size counts BYTES, split '' walks RUNES
-size 'héllo'	6	size is the BYTE length: é is two bytes in UTF-8
-size '日本語'	9	three CJK runes are nine bytes
-size (import "aql:string-util"  StringUtil.split '' 'héllo')	5	split '' walks runes — five of them
+# §2  ONE character unit — every string count and index is CHARACTERS
+#     (Unicode runes), matching the occurrence ops mul/pow (NUR007 fix —
+#     this section previously pinned size/indexof/pad as BYTE-based
+#     while split/mul/pow walked runes, and slice could cut a rune in
+#     half into invalid UTF-8). Byte-level work is the Bytes type.
+size 'héllo'	5	size is the CHARACTER length: é is one character
+size '日本語'	3	three CJK characters
+size (convert Bytes 'héllo')	6	…the byte length lives on Bytes: é is two bytes in UTF-8
+size (import "aql:string-util"  StringUtil.split '' 'héllo')	5	split '' walks the same five characters size counts
 import "aql:string-util"  StringUtil.split '' '日本語'	['日' '本' '語']	multi-byte runes split cleanly, never mid-byte
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo'	3	indexof reports a BYTE offset (h=1 + é=2)
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo'	2	indexof reports a CHARACTER index (h=0 é=1 l=2)
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 3}	3	…and {from} is a character index too (the second l)
+'héllo' slice 1 3	'él'	slice cuts at character boundaries
+'héllo' slice 1 2	'é'	…never through a multi-byte rune (was invalid UTF-8)
+'héllo' slice -2	'hél'	a negative start drops characters from the end
+'héllo' slice 1 -1	'éll'	a negative end counts back from the end, in characters
+'héllo' slice 1 99	'éllo'	an over-length end clamps to the character length
+'héllo' slice 9	''	a start past the end is the empty string
+'héllo' slice 3 1	''	an inverted range is the empty string
+'hé' slice -9	''	a negative start past the front empties
+'hé' slice 0 -9	''	…and so does a negative end past the front
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {occ: "last"}	3	{occ: last} reports the last l's character index
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 9}	-1	a {from} past the character length finds nothing
+import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 5}	-1	…and a {from} AT the character length searches the empty tail
+import "aql:string-util"  StringUtil.replace 'l' 'X' 'héllo' {from: 99}	'héllo'	replace clamps an over-length {from} — nothing to the right, unchanged
+import "aql:string-util"  StringUtil.indexof 'L' 'héllo' {cs: "insensitive"}	2	case-insensitive indices are character indices too
 import "aql:string-util"  StringUtil.split '本' '日本語'	['日' '語']	a multi-byte SEPARATOR works
 import "aql:string-util"  StringUtil.replace '語' 'ご' '日本語'	'日本ご'	replace is rune-safe
-import "aql:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is byte-faithful on multi-byte input
-size (import "aql:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a BYTE width: ñ (2 bytes) + 2 spaces
+import "aql:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is rune-faithful on multi-byte input
+size (import "aql:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a CHARACTER width: ñ + 3 spaces
+import "aql:string-util"  (StringUtil.match 'l' 'héllo') dot fst dot i	2	match indices are character indices too
 import "aql:string-util"  StringUtil.upper 'straße'	'STRAßE'	ß has no simple-case uppercase — it survives (no SS expansion)
 import "aql:string-util"  StringUtil.lower 'ΣΙΓΜΑ'	'σιγμα'	simple case mapping: no final-sigma ς at the word end
 import "aql:string-util"  StringUtil.upper 'ñé'	'ÑÉ'	accented Latin uppercases per rune
