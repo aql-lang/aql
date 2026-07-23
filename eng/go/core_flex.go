@@ -398,7 +398,16 @@ func MakeNodeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 		if refusal != nil {
 			return nil, weakRefusalError(reg, "make", "WeakFlexMap", refusal)
 		}
-		return []Value{WithPos(out, srcVal)}, nil
+		out = WithPos(out, srcVal)
+		// Weak keeps {:T}, like flex: the constraint rides the header
+		// elem on flex/adopted sources, and the ChildTypeInfo payload
+		// on a concrete typed-map literal.
+		if elem, ok := srcVal.ElemConstraint(); ok {
+			out.SetElemConstraint(elem)
+		} else if ci, cerr := AsChildType(srcVal); cerr == nil {
+			out.SetElemConstraint(ci.Child)
+		}
+		return []Value{out}, nil
 	case target.Equal(TWeakFlexList):
 		if !srcVal.Parent.ConformsTo(TList) || !IsConcrete(srcVal) {
 			return nil, fmt.Errorf("make: WeakFlexList source must be a concrete list, got %s", srcVal.String())
@@ -411,7 +420,14 @@ func MakeNodeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 		if refusal != nil {
 			return nil, weakRefusalError(reg, "make", "WeakFlexList", refusal)
 		}
-		return []Value{WithPos(out, srcVal)}, nil
+		out = WithPos(out, srcVal)
+		// Weak keeps [:T], like flex (header elem or typed-literal payload).
+		if elem, ok := srcVal.ElemConstraint(); ok {
+			out.SetElemConstraint(elem)
+		} else if ci, cerr := AsChildType(srcVal); cerr == nil {
+			out.SetElemConstraint(ci.Child)
+		}
+		return []Value{out}, nil
 	case target.Equal(TWeakFlexXml):
 		if !srcVal.Parent.ConformsTo(TXml) || !IsConcrete(srcVal) {
 			return nil, fmt.Errorf("make: WeakFlexXml source must be a concrete Xml element, got %s", srcVal.String())

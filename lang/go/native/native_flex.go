@@ -77,20 +77,23 @@ var flexNatives = []NativeFunc{
 			// classify path instead of the FlexList concatenate sig,
 			// which sorts first on position 0 otherwise.
 			{
-				Args:    []*Type{TList, TWeakFlexList},
-				Impl:    Go(appendWeakElemHandler),
-				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+				Args:      []*Type{TList, TWeakFlexList},
+				Impl:      Go(appendWeakElemHandler),
+				Returns:   []*Type{TWeakFlexList},
+				ReturnsFn: weakAppendListReturns, BarrierPos: -1,
 			},
 			{
-				Args:    []*Type{TAny, TWeakFlexList},
-				Impl:    Go(appendWeakElemHandler),
-				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+				Args:      []*Type{TAny, TWeakFlexList},
+				Impl:      Go(appendWeakElemHandler),
+				Returns:   []*Type{TWeakFlexList},
+				ReturnsFn: weakAppendListReturns, BarrierPos: -1,
 			},
 			// WeakFlexXml: append one child, same classification.
 			{
-				Args:    []*Type{TAny, TWeakFlexXml},
-				Impl:    Go(appendWeakXmlChildHandler),
-				Returns: []*Type{TWeakFlexXml}, BarrierPos: -1,
+				Args:      []*Type{TAny, TWeakFlexXml},
+				Impl:      Go(appendWeakXmlChildHandler),
+				Returns:   []*Type{TWeakFlexXml},
+				ReturnsFn: weakAppendXmlReturns, BarrierPos: -1,
 			},
 			// FlexXml: append child nodes (elements or text) in place.
 			// A List splices its elements; any other value is one child.
@@ -224,7 +227,13 @@ func appendWeakElemHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	if err != nil {
 		return nil, r.AqlError("append_error", "append: expected a WeakFlexList, got "+args[1].Parent.String(), "append")
 	}
-	if refusal := wd.Append(args[0]); refusal != nil {
+	// Typed weak list ([:T]) enforcement on grow, mirroring the flex
+	// column — weakness never drops the element contract.
+	tagged, werr := d2AdoptTyped(r, args[1], args[0], "append")
+	if werr != nil {
+		return nil, werr
+	}
+	if refusal := wd.Append(tagged); refusal != nil {
 		return nil, WeakRefusalError(r, "append", "WeakFlexList", refusal)
 	}
 	return []Value{args[1]}, nil

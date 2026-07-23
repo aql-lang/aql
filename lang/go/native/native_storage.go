@@ -135,23 +135,26 @@ var storageNatives = []NativeFunc{
 			// the inherited FlexMap handler's AsMutableMap refuses the
 			// weak payload, by design.)
 			{
-				Args:    []*Type{TString, TAny, TWeakFlexMap},
-				Impl:    Go(setWeakFlexMapHandler),
-				Returns: []*Type{TWeakFlexMap}, BarrierPos: -1,
+				Args:      []*Type{TString, TAny, TWeakFlexMap},
+				Impl:      Go(setWeakFlexMapHandler),
+				Returns:   []*Type{TWeakFlexMap},
+				ReturnsFn: weakSetMapReturns, BarrierPos: -1,
 			},
 			{
 				Args:      []*Type{TAtom, TAny, TWeakFlexMap},
 				QuoteArgs: map[int]bool{0: true},
 				Impl:      Go(setWeakFlexMapHandler),
-				Returns:   []*Type{TWeakFlexMap}, BarrierPos: -1,
+				Returns:   []*Type{TWeakFlexMap},
+				ReturnsFn: weakSetMapReturns, BarrierPos: -1,
 			},
 
 			// WeakFlexList (in-place index set over the post-sweep
 			// view; same value domain as WeakFlexMap).
 			{
-				Args:    []*Type{TInteger, TAny, TWeakFlexList},
-				Impl:    Go(setWeakFlexListHandler),
-				Returns: []*Type{TWeakFlexList}, BarrierPos: -1,
+				Args:      []*Type{TInteger, TAny, TWeakFlexList},
+				Impl:      Go(setWeakFlexListHandler),
+				Returns:   []*Type{TWeakFlexList},
+				ReturnsFn: weakSetListReturns, BarrierPos: -1,
 			},
 
 			// WeakFlexXml (in-place attribute set; attributes are part
@@ -757,10 +760,83 @@ func setWeakFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	if err != nil {
 		return nil, r.AqlError("set_error", "set: expected a WeakFlexMap, got "+container.Parent.String(), "set")
 	}
-	if refusal := wd.SetValue(StoreKey(args[0]), args[1]); refusal != nil {
+	// A typed weak map ({:T}) enforces its element tag on a write,
+	// exactly like the flex column — weakness never drops the element
+	// contract.
+	tagged, werr := d2AdoptTyped(r, container, args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
+	if refusal := wd.SetValue(StoreKey(args[0]), tagged); refusal != nil {
 		return nil, WeakRefusalError(r, "set", "WeakFlexMap", refusal)
 	}
 	return []Value{container}, nil
+}
+
+// weakValueMirror is the check-time twin of the runtime weak-domain
+// refusal (the guaranteed-error mirror discipline, eng/go/CLAUDE.md):
+// a statically-known stored value outside the weak domain — a concrete
+// value or a bare type literal — deterministically raises
+// weak_value_error at runtime, so the checker reports the same
+// diagnostic. Dynamic values stay runtime-only.
+func weakValueMirror(r *Registry, v Value, word, container string) {
+	if !atUncaughtTopLevel(r) {
+		return
+	}
+	// Statically-known stored values: a concrete value, a bare type
+	// literal, or ANY None-shaped check value — None has a single
+	// inhabitant, so even a None carrier is provably the none the
+	// runtime refuses.
+	if !IsConcrete(v) && !eng.IsBareTypeNode(v) && !eng.IsNoneShape(v) {
+		return
+	}
+	if refusal := eng.ClassifyWeakRefusal(v); refusal != nil {
+		eng.CheckAddUniqueDiagnostic(r, "weak_value_error",
+			fmt.Sprintf("%s: cannot store %s in a %s", word, refusal.Kind, container),
+			word, v.Pos())
+	}
+}
+
+// weakSetMapReturns / weakSetListReturns / weakAppendListReturns /
+// weakAppendXmlReturns run the weak-domain mirror plus the typed-write
+// mirror (d2CheckWrite — a weak {:T}/[:T] enforces on writes exactly
+// like the flex column) and pass the receiver through (the runtime
+// returns the node for chaining, tag intact).
+func weakSetMapReturns(args []Value, r *Registry) []Value {
+	if len(args) != 3 {
+		return []Value{NewCarrier(TWeakFlexMap)}
+	}
+	weakValueMirror(r, args[1], "set", "WeakFlexMap")
+	d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+	return []Value{args[2]}
+}
+
+func weakSetListReturns(args []Value, r *Registry) []Value {
+	if len(args) != 3 {
+		return []Value{NewCarrier(TWeakFlexList)}
+	}
+	weakValueMirror(r, args[1], "set", "WeakFlexList")
+	d2CheckWrite(r, args[2], args[1], "set", args[0].Pos())
+	return []Value{args[2]}
+}
+
+func weakAppendListReturns(args []Value, r *Registry) []Value {
+	if len(args) != 2 {
+		return []Value{NewCarrier(TWeakFlexList)}
+	}
+	weakValueMirror(r, args[0], "append", "WeakFlexList")
+	d2CheckWrite(r, args[1], args[0], "append", args[0].Pos())
+	return []Value{args[1]}
+}
+
+// weakAppendXmlReturns has no typed-write mirror: Xml carries no
+// element constraint (there is no typed-Xml literal).
+func weakAppendXmlReturns(args []Value, r *Registry) []Value {
+	if len(args) != 2 {
+		return []Value{NewCarrier(TWeakFlexXml)}
+	}
+	weakValueMirror(r, args[0], "append", "WeakFlexXml")
+	return []Value{args[1]}
 }
 
 // setWeakFlexListHandler replaces one element of a WeakFlexList. The
@@ -782,7 +858,12 @@ func setWeakFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Regi
 			fmt.Sprintf("set: index %d out of bounds for WeakFlexList (length %d)", idx, n),
 			"set", "use append to grow; note entries may have been collected — length reflects surviving elements")
 	}
-	if refusal := wd.SetIndex(idx, args[1]); refusal != nil {
+	// Typed weak list ([:T]) enforcement, mirroring the flex column.
+	tagged, werr := d2AdoptTyped(r, container, args[1], "set")
+	if werr != nil {
+		return nil, werr
+	}
+	if refusal := wd.SetIndex(idx, tagged); refusal != nil {
 		return nil, WeakRefusalError(r, "set", "WeakFlexList", refusal)
 	}
 	return []Value{container}, nil

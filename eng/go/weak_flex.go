@@ -545,6 +545,15 @@ func PopulateWeakFlexXml(tag string, attr *OrderedMap, cren []Value) (Value, *We
 	return out, nil
 }
 
+// ClassifyWeakRefusal reports the WeakRefusal a value would raise when
+// stored in a weak container, or nil for domain members. The word
+// layer's check-time mirrors consult it so a statically-known refusal
+// is flagged before runtime (design/FLEX-ATTRS.1.md §4.4).
+func ClassifyWeakRefusal(v Value) *WeakRefusal {
+	_, refusal := classifyWeak(v)
+	return refusal
+}
+
 // WeakRefusalError renders a WeakRefusal as the rich diagnostic the
 // design pins (design/FLEX-ATTRS.1.md §4.4): code weak_value_error,
 // the refused kind in the message, the identity explanation as a

@@ -11,8 +11,15 @@
 > FlexMap, `clone`=weak) are as designed; spec rows live in
 > `lang/spec/weak-flex.tsv` (live-binding discipline, zero vanish
 > rows), collection is covered by GC unit tests in
-> `eng/go/weak_flex_test.go`. D1 (universal insertion order) and D4
-> (sorted types) remain unimplemented.
+> `eng/go/weak_flex_test.go`. The 2026-07-23 review round added:
+> `cmp` sees the swept CONTENT view (mode-blind ordering, not the
+> `(make WeakFlex…)` canon), the check-time mirrors are live
+> (`weak_value_error` via `weakValueMirror`; typed writes via
+> `d2CheckWrite` — `make`'s check residual now carries the element
+> tag for flex AND weak targets), and typed weak containers enforce
+> `{:T}`/`[:T]` on set/append exactly like the flex column. D1
+> (universal insertion order) and D4 (sorted types) remain
+> unimplemented.
 
 Status: **design under examination — decisions taken; D3 implemented
 on this branch** (2026-07-22). Revision of

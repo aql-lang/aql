@@ -646,3 +646,113 @@ func TestWeakMapSetValueZeroStruct(t *testing.T) {
 		t.Fatal("zero-struct set lost the entry")
 	}
 }
+
+// ── Codex-round seams: exported classifier, compare views, make tag carry ──
+
+// TestClassifyWeakRefusalExport pins the exported wrapper the word
+// layer's check-time mirror consults (weakValueMirror).
+func TestClassifyWeakRefusalExport(t *testing.T) {
+	if r := ClassifyWeakRefusal(NewInteger(1)); r != nil {
+		t.Fatalf("scalar refused: %+v", r)
+	}
+	om := NewOrderedMap()
+	if r := ClassifyWeakRefusal(NewMap(om)); r == nil || r.Kind != "an immutable Map" {
+		t.Fatalf("immutable map verdict = %+v", r)
+	}
+}
+
+// TestCompareWeakContainers pins cmp as CONTENT ordering, mode-blind
+// (Codex round: the canon fallback ordered every weak container before
+// its plain sibling because of the `(make WeakFlex…)` prefix).
+func TestCompareWeakContainers(t *testing.T) {
+	om := NewOrderedMap()
+	om.Set("n", NewInteger(42))
+	weakMap, refusal := PopulateWeakFlexMap(om)
+	if refusal != nil {
+		t.Fatalf("populate map: %+v", refusal)
+	}
+	weakList, refusal := PopulateWeakFlexList(ReadList{elems: []Value{NewInteger(1), NewInteger(2)}})
+	if refusal != nil {
+		t.Fatalf("populate list: %+v", refusal)
+	}
+	plainMap := NewMap(om)
+	plainList := NewList([]Value{NewInteger(1), NewInteger(2)})
+	for _, tc := range []struct {
+		name string
+		a, b Value
+		want int
+	}{
+		{"weak map vs same plain map", weakMap, plainMap, 0},
+		{"weak list vs same plain list", weakList, plainList, 0},
+		{"plain map vs weak map (flipped)", plainMap, weakMap, 0},
+	} {
+		got, err := CompareValues(tc.a, tc.b)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: cmp = %d, %v (want %d)", tc.name, got, err, tc.want)
+		}
+	}
+	// …and stays contentful: a differing entry still orders.
+	om2 := NewOrderedMap()
+	om2.Set("n", NewInteger(43))
+	if got, err := CompareValues(weakMap, NewMap(om2)); err != nil || got != -1 {
+		t.Fatalf("differing content cmp = %d, %v", got, err)
+	}
+	// Non-container inputs decline both views (the false arms).
+	if _, ok := compareListView(NewInteger(1)); ok {
+		t.Fatal("integer produced a list view")
+	}
+	if _, ok := compareMapView(NewInteger(1)); ok {
+		t.Fatal("integer produced a map view")
+	}
+}
+
+// TestMakeWeakCarriesElemConstraint pins the {:T}/[:T] carry through
+// make for BOTH tag homes: the header elem (a typed-def-unified
+// source) and a typed literal's ChildTypeInfo payload.
+func TestMakeWeakCarriesElemConstraint(t *testing.T) {
+	intLit := NewTypeLiteral(TInteger)
+
+	om := NewOrderedMap()
+	om.Set("a", NewInteger(1))
+	headerMap := NewMap(om)
+	headerMap.SetElemConstraint(intLit)
+	literalMap := NewValueRaw(TMap, ChildTypeInfo{
+		Child:   intLit,
+		Entries: []ChildEntry{{Key: "a", Value: NewInteger(1)}},
+	})
+	headerList := NewList([]Value{NewInteger(1)})
+	headerList.SetElemConstraint(intLit)
+	literalList := NewValueRaw(TList, ChildTypeInfo{
+		Child:    intLit,
+		Elements: []Value{NewInteger(1)},
+	})
+
+	for _, tc := range []struct {
+		name   string
+		target *Type
+		src    Value
+	}{
+		{"map header elem", TWeakFlexMap, headerMap},
+		{"map typed literal", TWeakFlexMap, literalMap},
+		{"list header elem", TWeakFlexList, headerList},
+		{"list typed literal", TWeakFlexList, literalList},
+	} {
+		out, err := MakeNodeHandler([]Value{NewTypeLiteral(tc.target), tc.src}, nil, nil, nil)
+		if err != nil || len(out) != 1 {
+			t.Fatalf("%s: make failed: %v", tc.name, err)
+		}
+		elem, ok := out[0].ElemConstraint()
+		if !ok || !elem.Equal(TInteger) {
+			t.Fatalf("%s: constraint not carried (ok=%v)", tc.name, ok)
+		}
+	}
+	// An untagged source stays untagged.
+	plain := NewOrderedMap()
+	out, err := MakeNodeHandler([]Value{NewTypeLiteral(TWeakFlexMap), NewMap(plain)}, nil, nil, nil)
+	if err != nil || len(out) != 1 {
+		t.Fatalf("plain make failed: %v", err)
+	}
+	if _, ok := out[0].ElemConstraint(); ok {
+		t.Fatal("untagged source grew a constraint")
+	}
+}

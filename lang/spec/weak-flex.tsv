@@ -67,6 +67,11 @@ def w (make WeakFlexMap {n:42}) def w2 w w eq w2	true	eq is container identity �
 def w (make WeakFlexMap {n:42}) w eq (make WeakFlexMap {n:42})	false	fresh containers are eq-distinct
 def w (make WeakFlexMap {n:42}) canon w	'(make WeakFlexMap {n:42})'	SNAPSHOT canon — descriptive, not a semantic round-trip
 def u (flex {a:1}) def w (make WeakFlexMap {k:u}) canon w	'(make WeakFlexMap {k:(flex {a:1})})'
+def w (make WeakFlexMap {n:42}) w cmp {n:42}	0	cmp is CONTENT ordering, mode-blind — weak orders like plain
+def w (make WeakFlexMap {n:42}) w cmp (flex {n:42})	0
+def w (make WeakFlexList [1 2]) w cmp [1 2]	0
+def w (make WeakFlexList [1 2]) w cmp (flex [1 2])	0
+def w (make WeakFlexMap {n:42}) w cmp {n:43}	-1	…and stays contentful, not degenerate-equal
 
 # ====================================================================
 # 5. Refusals — the weak value domain, statically teachable
@@ -107,3 +112,15 @@ def x (flex <a b='1'>hi</a>) typeof (make WeakFlexXml x)	WeakFlexXml
 def x (flex <a b='1'>hi</a>) def w (make WeakFlexXml x) (set c/q '2' w) drop w	(make WeakFlexXml <a b="1" c="2">hi</a>)	attributes are strong, set in place
 def x (flex <a>hi</a>) def w (make WeakFlexXml x) w is FlexXml	true	nominal subtype of FlexXml
 def x (flex <a/>) def w (make WeakFlexXml x) append {k:1} w	ERROR:cannot store an immutable Map in a WeakFlexXml	child domain matches
+
+# ====================================================================
+# 9. Typed weak containers — {:T}/[:T] rides through make, writes enforce
+# ====================================================================
+
+def w (make WeakFlexMap {:Integer a:1}) (set b/q 5 w) drop w.b	5	the element tag survives make (typed-literal source)
+def w (make WeakFlexMap {:Integer a:1}) set b/q 'x' w	ERROR:does not conform to element type Integer	weakness never drops the element contract
+def m:{:Integer} {a:1} def w (make WeakFlexMap m) set b/q 'x' w	ERROR:does not conform to element type Integer	a header-tagged source carries too
+def w (make WeakFlexList [:Integer 1]) (append 5 w) drop w get 1	5
+def w (make WeakFlexList [:Integer 1]) append 'x' w	ERROR:does not conform to element type Integer
+def w (make WeakFlexList [:Integer 1 2]) set 0 'x' w	ERROR:does not conform to element type Integer	the in-place index set enforces too
+def l:[:Integer] [1] def w (make WeakFlexList l) append 'x' w	ERROR:does not conform to element type Integer	header-tagged list source

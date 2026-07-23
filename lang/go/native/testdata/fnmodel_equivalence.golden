@@ -31,11 +31,11 @@ WORD any
   [Node/List] barrier=1 returns=[Scalar/Boolean]
 WORD append
   [Node/List Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
-  [Node/List Node/List/FlexList/WeakFlexList] barrier=2 returns=[Node/List/FlexList/WeakFlexList]
+  [Node/List Node/List/FlexList/WeakFlexList] barrier=2 returns=[Node/List/FlexList/WeakFlexList] +returnsfn
   [Node/List Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
-  [Any Node/Xml/FlexXml/WeakFlexXml] barrier=2 returns=[Node/Xml/FlexXml/WeakFlexXml]
+  [Any Node/Xml/FlexXml/WeakFlexXml] barrier=2 returns=[Node/Xml/FlexXml/WeakFlexXml] +returnsfn
   [Any Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
-  [Any Node/List/FlexList/WeakFlexList] barrier=2 returns=[Node/List/FlexList/WeakFlexList]
+  [Any Node/List/FlexList/WeakFlexList] barrier=2 returns=[Node/List/FlexList/WeakFlexList] +returnsfn
   [Any Node/List/FlexList] barrier=2 returns=[Node/List/FlexList] +returnsfn
 WORD apply
   [Ideal/Reach Any] barrier=2 returns=[Any]
@@ -680,18 +680,18 @@ WORD set
   [Scalar/String Any Ideal/Store] barrier=3 +returnsfn
   [Scalar/String Any Node/Xml/FlexXml/WeakFlexXml] barrier=3 returns=[Node/Xml/FlexXml/WeakFlexXml]
   [Scalar/String Any Node/Xml/FlexXml] barrier=3 returns=[Node/Xml/FlexXml]
-  [Scalar/String Any Node/Map/FlexMap/WeakFlexMap] barrier=3 returns=[Node/Map/FlexMap/WeakFlexMap]
+  [Scalar/String Any Node/Map/FlexMap/WeakFlexMap] barrier=3 returns=[Node/Map/FlexMap/WeakFlexMap] +returnsfn
   [Scalar/String Any Node/Map/FlexMap] barrier=3 returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/String Any Node/Map] barrier=3 returns=[Node/Map] +returnsfn
   [Scalar/String Any Scalar/Micron] barrier=3 +returnsfn
-  [Scalar/Number/Integer Any Node/List/FlexList/WeakFlexList] barrier=3 returns=[Node/List/FlexList/WeakFlexList]
+  [Scalar/Number/Integer Any Node/List/FlexList/WeakFlexList] barrier=3 returns=[Node/List/FlexList/WeakFlexList] +returnsfn
   [Scalar/Number/Integer Any Node/List/FlexList] barrier=3 returns=[Node/List/FlexList] +returnsfn
   [Scalar/Number/Integer Any Node/List] barrier=3 returns=[Node/List] +returnsfn
   [Scalar/Atom Any Ideal/Class] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Ideal/Store] barrier=3 quote={0} +returnsfn
   [Scalar/Atom Any Node/Xml/FlexXml/WeakFlexXml] barrier=3 quote={0} returns=[Node/Xml/FlexXml/WeakFlexXml]
   [Scalar/Atom Any Node/Xml/FlexXml] barrier=3 quote={0} returns=[Node/Xml/FlexXml]
-  [Scalar/Atom Any Node/Map/FlexMap/WeakFlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap/WeakFlexMap]
+  [Scalar/Atom Any Node/Map/FlexMap/WeakFlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap/WeakFlexMap] +returnsfn
   [Scalar/Atom Any Node/Map/FlexMap] barrier=3 quote={0} returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/Atom Any Node/Map] barrier=3 quote={0} returns=[Node/Map] +returnsfn
   [Scalar/Atom Any Scalar/Micron] barrier=3 quote={0} +returnsfn
