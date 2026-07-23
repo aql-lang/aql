@@ -483,3 +483,37 @@ reversible; that is most of why the stages are ordered this way.
   strictly larger blast radius than frame replacement for the same
   tail-recursion payoff; the gap-buffer tape already removed the
   quadratic cost for non-tail shapes. Out of scope.
+
+## 6. Known limitation — TCO under forward-paren eager eval
+
+A tail call dispatched while the interpreter is eagerly evaluating a
+**forward paren group** (`evalParenGroupAt` — the path that reduces
+`(f n)` in-place so forward collection can type-match its result, as in
+`def x (f n)` / `g (f n)`) is **declined** (`tcoEligible` returns false
+when `Engine.parenEvalDepth > 0`). That loop finds the group's matching
+`)` with a local paren-depth counter, and a frame-region rewrite (full
+replacement / shell elision) splices the tape out from under it, so the
+counter desyncs, the group never collapses, and its bound result silently
+vanishes (historically surfaced as `undefined_word` on the *next*
+statement — pinned by `lang/go/tco_forward_paren_test.go`).
+
+Declining costs **space, never value**: the call nests, which is the
+un-optimised reference semantics the counter already tracks correctly. The
+consequence is interpreter-only — under `--no-compile`, deep tail recursion
+consumed through a forward paren nests to full depth and can raise
+`tape_exhausted` (~70-80k frames) where the SAME program completes
+compiled. This sits inside the interpreter/compiler differential contract
+(the interpreter may hit a ceiling the compiler clears, never the reverse),
+and the default / `--force-compile` paths lower the recursion to O(1).
+
+Note the asymmetry with `stepCloseParen`, which evaluates a **word-context**
+paren `(f n)` and *keeps* TCO: it re-derives the close index after each
+dispatch (`findCloseParenAfter`) rather than tracking it across the splice.
+A robust `evalParenGroupAt` could adopt the same recompute (re-derive the
+group close from an invariant tail length each iteration) to restore
+interpreter TCO here, but that trades the decline's purely *local*
+correctness ("a declined call nests") for a *global* invariant over the
+whole handler surface ("no handler ever splices at/after the group close").
+Given the compiler already delivers O(1) on every path but the diagnostic
+interpreter, the local decline is the deliberate call; revisit only if
+pure-interpreter TCO through a forward paren becomes a hard requirement.

@@ -1474,7 +1474,7 @@ func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 					carrierArgs[j] = NewCarrier(t)
 				}
 			}
-			eng.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns)
+			eng.AnalyseFnBody(r, "", paramNames, s.Body(), carrierArgs, fnDef.Captured, s.Returns, fnDef.Anonymous)
 		}
 		PopGenBindings(r, genSpec)
 	}

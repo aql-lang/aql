@@ -136,6 +136,22 @@ type Engine struct {
 	// design/ERRORS.8.md §3 (VOXGIG B3). Cleared at every statement
 	// boundary (stepEnd).
 	voidGroups []string
+	// parenEvalDepth counts the forward-paren-group evaluations
+	// (evalParenGroupAt) currently open on THIS engine's call stack. It
+	// gates tail-call elimination: evalParenGroupAt drives its own loop
+	// with a local paren-`depth` counter to find the group's matching
+	// `)`, and a TCO frame-region rewrite (full replacement / shell
+	// elision splices the tape underneath that loop) desynchronises the
+	// counter from the tape — the group's close paren is deleted or
+	// shifted before the loop decrements on it, so the group never
+	// collapses and its result is never bound (`def x (f n)` for a
+	// tail-recursive `f` errored `undefined_word: x`). While this is
+	// >0 the tail call simply NESTS (tcoEligible declines) — correctness
+	// never depends on TCO firing (design/TCO-STAGED.10.md), and the
+	// nested frame is exactly what evalParenGroupAt's depth counter is
+	// built to track. Incremented/decremented in lockstep by
+	// evalParenGroupAt; sub-engine runs get their own zeroed counter.
+	parenEvalDepth int
 }
 
 // RecorderSkipper is an optional extension to Recorder. When a
@@ -2192,6 +2208,13 @@ func (e *Engine) staticForwardType(tok Value) (match Value, kind fwdKind) {
 // raised inside the paren is left on the registry for the outer Run frame.
 func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	savedPointer := e.pointer
+
+	// This loop tracks the group's extent with a local paren-`depth`
+	// counter. TCO's frame-region rewrite would splice the tape out from
+	// under that counter, so tail calls dispatched inside here must nest,
+	// not elide — tcoEligible reads this flag. Balanced restore below.
+	e.parenEvalDepth++
+	defer func() { e.parenEvalDepth-- }()
 
 	// Check mode: snapshot the group's inner tokens before evaluation
 	// reduces them. If the group collapses to a single Boolean
@@ -5232,7 +5255,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			for i, pos := range positions {       //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				args[i] = e.tape.At(pos)
 			}
-			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry, fnDef.Anonymous) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		}
 	}
 
@@ -5387,7 +5410,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			if checkFnValue && len(sig.body()) > 0 {
 				return e.spliceFnValueCheckResult(valIdx, 0, fnDef, sig, nil)
 			}
-			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
+			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry, fnDef.Anonymous)
 		}
 		if len(resolved) < nArgs {
 			continue
@@ -5438,7 +5461,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		} else {
 			candidate := resolved[len(resolved)-nArgs:]
@@ -5476,7 +5499,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		}
 	}
@@ -5543,7 +5566,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns, true)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -5725,7 +5748,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
-func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
+func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
@@ -5932,7 +5955,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
-		EvalResidual: BodyEvalsResidual(sig.body()),
+		EvalResidual: !anonymous || BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 

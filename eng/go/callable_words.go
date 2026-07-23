@@ -75,7 +75,10 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	// Drop any summary a suspended (non-recording) analysis cached so the
 	// body re-runs under the armed unit and records.
 	delete(r.Check.FnSummaries, key)
-	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared)
+	// true preserves this callback-body path's original recording gate
+	// (!anonymous is neutralised): the fn-context change flows through the
+	// def/dispatch paths, not this closure-body compile.
+	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared, true)
 	if len(bodyToks) == 0 && len(stk) == 0 {
 		// An EMPTY body's residual is its pushed inputs, verbatim: the runtime
 		// InvokeBody pushes the per-call inputs and runs no tokens, so the frame

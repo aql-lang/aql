@@ -29,8 +29,8 @@ func TestComputedMapInFnBodyCompiles(t *testing.T) {
 	negatives := []struct {
 		name, src string
 	}{
-		{"paren value", `def f fn [[a:Integer] [Map] [ {x:(a 1 add)} ]] (f 5)`},
-		{"list value", `def f fn [[a:Integer] [Map] [ {x:[a add 1]} ]] (f 5)`},
+		{"paren value", `def f ([a:Integer] => [{x:(a 1 add)}]) (f 5)`},
+		{"list value", `def f ([a:Integer] => [{x:[a add 1]}]) (f 5)`},
 	}
 	for _, c := range negatives {
 		t.Run("deferred-residual refuses/"+c.name, func(t *testing.T) {

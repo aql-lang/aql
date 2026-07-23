@@ -54,6 +54,32 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	if e.registry.TCO.Disable {
 		return false
 	}
+	// A tail call dispatched while a forward paren group is being
+	// evaluated (evalParenGroupAt, e.parenEvalDepth > 0) must nest: that
+	// loop finds the group's `)` with a local paren-depth counter, and a
+	// frame-region rewrite (full replacement / shell elision) splices the
+	// tape underneath it, desyncing the counter so the group never
+	// collapses and its bound result vanishes (`def x (f n)` for
+	// tail-recursive `f`). Declining nests the call — which the depth
+	// counter tracks correctly — at no VALUE cost (TCO is an optimisation;
+	// a declined call computes the identical result).
+	//
+	// The cost is SPACE, and only in the tree-walking interpreter: a deep
+	// tail recursion whose result is consumed by a forward paren nests to
+	// full depth here instead of running in O(1), so under `--no-compile`
+	// it can raise tape_exhausted at ~70-80k frames where the SAME program
+	// completes compiled. That is within the interpreter/compiler
+	// differential contract (the interpreter may hit a resource ceiling the
+	// compiler clears, never the reverse — lang/go/aql.go), the default and
+	// `--force-compile` paths lower this recursion to O(1), and it is
+	// strictly better than the prior silent undefined_word miscompile. Note
+	// the asymmetry: a WORD-CONTEXT paren `(f n)` keeps TCO, because
+	// stepCloseParen re-derives the close index after each dispatch
+	// (findCloseParenAfter) instead of tracking it across the splice; only
+	// this forward-collection eager-eval path declines.
+	if e.parenEvalDepth > 0 {
+		return false
+	}
 	if scan.Meta == nil {
 		return false
 	}
