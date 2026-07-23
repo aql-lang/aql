@@ -114,7 +114,13 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			// than deferring on its FnDefInfo binding — matching the interpreter,
 			// which passes the /q-captured name as data to parseFnDispatchHandler.
 			FnDataArgs: map[int]bool{0: true},
-			Impl:       native.Go(parseFnDispatchHandler),
+			// arg0 is also INERT to the VM: parseFnDispatchHandler runs the
+			// parser in its OWN sub-engine (never re-stepped on the VM tape), so
+			// a CONCRETE parser fn value (a detached stamp binds the runtime-
+			// constructed parser concretely) bakes as a plain const operand
+			// rather than tripping the fn-value Stage-3 refusal.
+			FnInertArgs: map[int]bool{0: true},
+			Impl:        native.Go(parseFnDispatchHandler),
 		}},
 	})
 	if fn := subReg.Lookup("parselang-fn-dispatch"); fn != nil && len(fn.Signatures) == 1 {

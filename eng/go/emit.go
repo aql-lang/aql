@@ -792,6 +792,17 @@ type emitUnit struct {
 	// have no producing event, so they still const-fold; only computed /
 	// mutable enclosing bindings take this path.)
 	enclosingBindIDs map[string]bool
+	// enclosingBindNames snapshots, at unit open, the NAMES of every def binding
+	// visible in the DefTable — the by-name twin of enclosingBindIDs. It exists
+	// for the one case IDs cannot cover: a DETACHED stamp (StampDetachedFn) forks
+	// the RUNTIME def table, where a value's ID was ELIDED (no compile-time mint),
+	// so a module-scope `flex`/`store` read arrives with an empty ID that is
+	// absent from enclosingBindIDs. dynScopeRescue recovers the read's NAME (from
+	// DynFrom, tagged at the read site) and consults this set to confirm it is a
+	// live enclosing binding — the VM's OpLookupDynScope reads the same live cell
+	// the interpreter does (and DEFERS on a miss, a sound fallback), so a name
+	// match is a safe commit signal for an otherwise un-ID-able mutable read.
+	enclosingBindNames map[string]bool
 	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
 	// unit's body dispatched through the `apply` word (a param/captured
 	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
@@ -1879,6 +1890,21 @@ func (es *EmitState) snapshotAllBindingIDs() map[string]bool {
 		}
 	}
 	return ids
+}
+
+// snapshotAllBindingNames snapshots the NAMES of every def binding visible in
+// the DefTable at unit open — the by-name twin of snapshotAllBindingIDs, used
+// only to recover an ENCLOSING mutable-reference read whose value ID was elided
+// at pure runtime (a detached stamp). See emitUnit.enclosingBindNames.
+func (es *EmitState) snapshotAllBindingNames() map[string]bool {
+	names := map[string]bool{}
+	if es.reg == nil || es.reg.Defs == nil {
+		return names
+	}
+	for _, name := range es.reg.Defs.Names() {
+		names[name] = true
+	}
+	return names
 }
 
 // tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
@@ -3244,7 +3270,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos, reg: fnReg}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), enclosingBindIDs: es.snapshotAllBindingIDs(), reg: fnReg}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), enclosingBindIDs: es.snapshotAllBindingIDs(), enclosingBindNames: es.snapshotAllBindingNames(), reg: fnReg}
 	es.units = append(es.units, u)
 	es.unitNames = append(es.unitNames, name)
 	es.openUnitRecs = append(es.openUnitRecs, unit)
@@ -5275,6 +5301,19 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	if len(es.units) > 1 {
 		if cur := es.units[len(es.units)-1]; cur != nil {
 			enclosing = cur.enclosingBindIDs[v.ID]
+			// An ID-ELIDED enclosing read (a detached stamp forked the runtime
+			// def table, where the mutable ref's ID was never minted) cannot be
+			// matched by ID. Fall back to the by-name snapshot: the recovered
+			// binding name being a live enclosing binding is a sound commit
+			// signal — the VM's OpLookupDynScope reads the same live cell and
+			// defers on a miss. Scoped to (a) the empty-ID case, so an ID-bearing
+			// read stays strictly ID-matched (no by-name widening at depth 0), and
+			// (b) a DynFrom-tagged read, so the name came from the module-scope
+			// mutable-ref tag (engine.stepWord) — NOT the unreliable defReads[""]
+			// that every elided-ID read collides on.
+			if !enclosing && v.ID == "" && v.DynFrom() != "" {
+				enclosing = cur.enclosingBindNames[name]
+			}
 		}
 	}
 	if !enclosing && !c.dynamicScopeReachable(name, reader) {
