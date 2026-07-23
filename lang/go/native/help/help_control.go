@@ -168,24 +168,6 @@ func init() {
 	})
 
 	register(&Entry{
-		Word:    "super",
-		Summary: "Get a built-in word's pristine dispatch as a Function.",
-		Description: "Returns a Function wrapping the named built-in word's original " +
-			"(pre-merge) signature table, so an extension override's body can delegate " +
-			"to the base overloads without re-entering itself. Delegation is " +
-			"call-by-value: quote-capture slots are cleared, so `bset k v m` passes " +
-			"the binding k, never the literal word. Only built-in words have a base; " +
-			"plain user fns refuse with super_error.",
-		Notes: []string{
-			"The canonical use is an ownership-anchored override (design/OPEN-WORDS.1.md): " +
-				"`def bset (super set)` inside a module that merges its own `set` overload.",
-		},
-		Examples: []string{
-			`def bset (super set) def m (flex {}) (bset 'a' 1 m) drop keys m ; # ['a']`,
-		},
-	})
-
-	register(&Entry{
 		Word:    "undef",
 		Summary: "Remove the most recent definition of a word.",
 		Description: "Pops the most recent definition of the named word, restoring any previous " +

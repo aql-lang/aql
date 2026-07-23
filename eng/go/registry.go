@@ -1442,27 +1442,6 @@ func (r *Registry) Lookup(name string) *FnDefInfo {
 	return fn
 }
 
-// BuiltinBase returns the PRISTINE native registration for a builtin
-// word — the deepest FnDefInfo in the name's binding stack, before any
-// def-merge clone or user shadow — or nil when the name is not a
-// builtin word. This is the dispatch table `super` exposes so an
-// override body can delegate to the base overloads without
-// re-entering its own merged signature (design/OPEN-WORDS.1.md
-// follow-up: the delegation escape for pure-AQL overrides).
-func (r *Registry) BuiltinBase(name string) *FnDefInfo {
-	if !r.IsBuiltinWord(name) {
-		return nil
-	}
-	stack := r.Defs.Stack(name)
-	for i := 0; i < len(stack); i++ {
-		if fnDef, ok := stack[i].Data.(FnDefInfo); ok {
-			base := fnDef
-			return &base
-		}
-	}
-	return nil
-}
-
 // lookupUncached aggregates the dispatch table for name from its binding
 // stack, with no memoization. Lookup wraps it with the generation-keyed
 // dispatchCache; call this directly only when a fresh (uncached) aggregate

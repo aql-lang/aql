@@ -60,7 +60,7 @@ var categories = []Category{
 	}},
 	{"control", "Control flow, definitions, and functions.", []string{
 		"unpack", "unpack-prefix", "codequote", "do", "raise", "if", "case", "for", "break",
-		"continue", "def", "super", "undef", "var", "fn", "args",
+		"continue", "def", "undef", "var", "fn", "args",
 		"afn", "guard", "error", "force-arity", "usurp", "forward-args",
 		"stack-args",
 	}},

@@ -218,32 +218,130 @@ kernel table and modules alike.
 | `micron.tsv` §extensions | row 504 (builtin Micron leaf refused) unchanged in outcome, error code updated; 505 (minted Baron anchors) unchanged |
 | ratchets | check-accuracy pins for touched files; COMPILED_STATUS refresh; fnmodel golden if sig lists shift |
 
-## 7b. The pure-AQL enablers (follow-up, landed with rev 2)
+## 7b. The pure-AQL enablers (follow-up; two landed, one OPEN)
 
 Three seams initially kept the FLEX-ATTRS.1 D4 sorted nodes a
-Go-module capability; all three are now fixed, making the whole shape
-expressible in user AQL (pinned by `lang/spec/super.tsv` and
-`lang/go/test/sorted_user_test.go`):
+Go-module capability. Two are fixed (pinned by
+`lang/spec/refine-flex.tsv`):
 
 - **Flex retag.** `def w:S (flex m)` for `S (refine FlexMap)` — the
   flex-literal unify arm now accepts a check-mode carrier tagged at or
   under the flex type (`unifyFlexLiteral`), matching the runtime,
   which already unified. Bare-refine newtypes of mutable containers
   render by payload family (`bareRefineUnifier.formatDelegate`).
-- **`super name/q`** — the delegation escape: returns a Function
-  wrapping the word's PRISTINE builtin dispatch (`Registry.
-  BuiltinBase`), quote-capture cleared on deep-copied signatures
-  (call-by-value delegation), so an anchored override body calls the
-  base overloads without re-entering itself.
 - **Container content-predicates** already worked as fn-bodied
   capitalised defs (`def Sorted ([m:Map] => [pred])`); pinned.
 
-Residual (deliberate): a DYNAMIC value (a `get` result) flowing into
-a delegated fn-value call refuses compilation ("dynamic input at …" —
-the fn-value boundary's widening guard), so the full maintained-sort
-program runs interpreted today; its compiled twin lands with that
-boundary. Word-level admission, dispatch, retag, and delegation all
-compile.
+The third — **base-dispatch delegation for override bodies** — is
+OPEN. A `super`-style word (returning the pristine dispatch as a
+Function to bind under a fresh name) was built and REJECTED by the
+maintainer: requiring renamed shadows of core words (`def bset (super
+set)` and then calling `bset` in the body) is bad DX. The problem it
+was solving stands and needs a better mechanism.
+
+### 7b.1 The delegation problem, precisely
+
+An anchored override's body needs to PERFORM the operation it
+specializes. For `SortedFlexMap`, the `set` override must (a) write
+the entry, then (b) restore key order — and both (a) and the
+per-key moves in (b) ARE the operation `set` (plus `del`). But
+inside the override's scope, the word `set` resolves — like every
+AQL word, dynamically, at call time, through the def stack — to the
+MERGED clone, whose most specific matching signature for a
+SortedFlexMap receiver is the override itself. The body's `set`
+re-enters the body: unbounded recursion. The name being extended is
+the only name the body has for the thing it needs underneath.
+
+This is the classic override-shadow problem every OO language meets
+(`super` in Smalltalk/Java/Python, `call-next-method` in CLOS,
+`invoke` in Julia). AQL's value-binding `def` avoids it for VALUES
+by evaluating the body before binding (`def x (x add 1)` reads the
+old x) — but fn bodies are DEFERRED code, resolved at dispatch time,
+so the same trick does not apply.
+
+### 7b.2 Why Go-side extensions never hit this
+
+The kernel's own subtype specializations (WeakFlexMap's `set` sigs
+over FlexMap's) delegate freely because Go operates in a SECOND
+namespace below the word layer. The word `set` is only a dispatch
+surface; each signature's implementation is a distinct Go symbol
+(`setFlexMapHandler`, `setWeakFlexMapHandler`), and those handlers
+never "call `set`" — they call payload-level operations
+(`OrderedMap.Set`, `WeakFlexMapData.SetValue`). Two structural
+facts do the work:
+
+1. **Two layers of naming.** One shared surface name for dispatch;
+   unlimited distinct implementation names beneath it. Overriding at
+   the surface while delegating at the implementation layer is
+   trivial because the layers cannot collide.
+2. **Static resolution.** A Go handler's callees are fixed at link
+   time. An AQL body's words are resolved at call time through a
+   stack the merge itself just rewrote — the override shadows the
+   very name it needs.
+
+AQL source currently has ONLY the surface layer: the word `set` is
+both the dispatch surface and the sole vocabulary for the
+operation. That is the whole gap.
+
+### 7b.3 Design space for the drawing board
+
+- **(a) Pre-merge lexical resolution.** Inside a merge's body,
+  references to the extended word resolve to the PRE-MERGE dispatch
+  — the def-body precedent (`def x (x add 1)`) applied to extension
+  bodies, implementable as an implicit capture of the base clone at
+  def-merge time. DX: the body just says `set k v m` and it means
+  "the set that existed when this code was written" — exactly the
+  static-resolution intuition Go gets for free. Cost: the body
+  cannot re-enter the FULL dispatch (no virtual self-recursion over
+  substructures of the same subtype); that call would need the
+  surface spelling from outside, or is simply not expressible.
+- **(b) A dispatch-continuation word** (CLOS `call-next-method`):
+  one uniform word meaning "continue dispatch below the currently
+  executing signature." No renamed shadows, full-fidelity semantics,
+  and self-recursion stays available through the plain word. Cost: a
+  special word with dispatch-stack context, and a compile story for
+  it.
+- **(c) A primitive layer.** Give AQL the implementation vocabulary
+  Go enjoys — a small set of payload-level words (`map-put!`,
+  `map-del!`, an ordered-insert) that the surface words are defined
+  over. Overrides then build on primitives, never delegating to the
+  surface at all — the same two-layer structure as the kernel. Cost:
+  new vocabulary to design and maintain; the primitives must be
+  powerful enough for real invariants without becoming a second API.
+- **(d) Call-site signature selection via dispatch ascription**
+  (maintainer proposal). Force a call to a SPECIFIC signature by
+  widening an argument's type AT MATCH TIME ONLY: `set k v (m as
+  FlexMap)` dispatches as if `m` were a plain FlexMap — so the
+  anchored override cannot match (its anchor is a nominal subtype
+  the widened tag no longer conforms to; the reachability theorem
+  run in reverse) and natural specificity lands on the base sig —
+  while the VALUE passed to the body keeps its real tag (Julia
+  `invoke` semantics: select on declared types, execute on actual
+  args). Rule R2 (no redefinition) already guarantees a type
+  vector uniquely names a sig, so exact ascription pins
+  deterministically. The crucial fork is what kind of cast: a
+  RETAGGING cast (reparent the value) would evaporate the subtype
+  tag on results and hand outsiders an invariant-bypass; a
+  match-time-only, UPCAST-only ascription changes nothing about
+  the value and refuses downcasts, so it is sound with no new
+  dispatch machinery — it is per-call static-resolution, i.e. a
+  devirtualization hint the compiled path can pin statically
+  (the strongest compile story of the four options). Costs: a
+  pure-AQL base body's own internal calls remain virtual (they
+  dispatch on the real tag — same property as Julia's `invoke`;
+  the kernel natives are the recursion floor today), and the
+  operator is publicly available, so outside code can route around
+  an override explicitly (visible and greppable, but a policy
+  question: allow anywhere vs restrict to extension bodies).
+  Surface syntax open: an `as` word vs reusing `:` ascription in
+  call position.
+
+(a) matches the maintainer's resolution-should-be-natural instinct
+most closely; (c) is the most honest mirror of why Go works; (b) is
+the classical multiple-dispatch answer; (d) is the C++ qualified-
+call / Julia `invoke` answer — explicit like (b) but needing no
+dispatch-stack context, and it keeps full-dispatch re-entry
+available by simply not ascribing. Decision pending.
 
 ## 8. Relation to bounded generics
 

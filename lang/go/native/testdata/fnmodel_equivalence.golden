@@ -769,8 +769,6 @@ WORD sub
   [Scalar/String Scalar/String] barrier=2 +returnsfn
   [Scalar/Boolean Scalar/Boolean] barrier=2 +returnsfn
   [Scalar/Atom Scalar/Atom] barrier=2 +returnsfn
-WORD super
-  [Scalar/Atom] barrier=1 runcheck quote={0} returns=[Type/Function]
 WORD surface
   [Node/Map] barrier=1 runcheck returns=[Type]
 WORD swap
