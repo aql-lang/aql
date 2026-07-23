@@ -70,6 +70,10 @@ commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
+| [NUR030](#nur030) | `group` folds deq-distinct classes whose renders collide | 2026-07-23 PR #309 review |
+| [NUR031](#nur031) | Opaque Ideals: `eq` and `deq` are both always false, even self-compare | 2026-07-23 PR #309 review |
+| [NUR032](#nur032) | Numeric type literals compare `eq`/`deq`-equal to zero | 2026-07-23 PR #309 review |
+| [NUR033](#nur033) | `deq` falls back to a render comparison for typed lists/maps | 2026-07-23 PR #309 review |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -625,3 +629,116 @@ sharp edges).
 status; registered here so each resolution or allowance is recorded.
 This umbrella entry splits into per-item records if any single item is
 allowed rather than fixed.
+
+---
+
+## NUR030 — `group` folds deq-distinct classes whose renders collide {#nur030}
+
+**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:** PR #309 review (Codex P1)
+
+**Rule:** the collection words operate on `deq` classes (the NUR011
+rule, applied by the NUR015 fix): one class per value, membership by
+deep value equality.
+**Divergence:** `group` returns a Map, and a map key is a rendered
+string — so two deq-distinct classes whose renders collide fold into
+one group at the output boundary: `group [Integer Integer/q]` (a type
+literal and an atom, deq-unequal) yields the single group
+`{Integer:[0 1]}`. Grouping is `deq` everywhere except the last step,
+where the render notion NUR015 evicted re-enters through the map-key
+contract.
+**Evidence:** `lang/go/native/native_array.go` (`deqGrouper`'s
+render-key fallback, commented); `lang/spec/module-array.tsv` §3 row
+`group [Integer Integer/q]` → `{Integer:[0 1]}` pins the fold.
+**Documentation status:** stated in REFERENCE.md's ArrayUtil note and
+the spec row; the fold itself had no register entry until this PR's
+review flagged it.
+**Proposed verdict:** allow with a note, or resolve by shape change —
+the fold is forced only by `group`'s Map return type; a lossless
+alternative returns `[[rep group] …]` pairs (reps stay values), at the
+cost of breaking `group`'s established map shape. If the Map shape is
+the contract, the fold is the honest completion of it.
+
+---
+
+## NUR031 — Opaque Ideals: `eq` and `deq` are both always false, even self-compare {#nur031}
+
+**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:** PR #309 review (Codex P2)
+
+**Rule:** NUR011 (Allowed): for Nodes and Ideals, `eq` is reference
+identity and `deq` is deep value equality.
+**Divergence:** the rule holds only for the structural families
+(lists, maps, XML, class/resource instances). Every other Ideal —
+Store, Error, Timer, Interval, Function, Module — falls through BOTH
+`ExactEqual` and `DeepEqual` to `false`: a store is not `eq` to
+itself through the same binding, and not `deq` to itself either.
+Neither half of the two-equality rule applies to the opaque handles.
+**Evidence:** `eng/go/compare.go` — `ExactEqual`'s fall-through
+(`:383`), `sameContainer`'s default arm (`:445`), `DeepEqual`'s
+unsupported return (`:577`); `eng/go/compare_deqkey.go` classifies
+these `DeqNeverEqual` to mirror it.
+**Documentation status:** EXPLANATION.md briefly overclaimed that
+stores follow the rule (corrected in this PR — the claim is now scoped
+to the structural families); REFERENCE.md's "`eq` is identity for
+compounds" note carries the same overclaim.
+**Proposed verdict:** resolve — give the opaque Ideals payload-pointer
+reference identity under `eq` (a store IS its pointer), then pick the
+`deq` story per the rule: either `deq ≡ eq` for handles (no deeper
+value to compare) or a per-type structural projection (Store by
+entries). Needs the maintainer's call on which.
+
+---
+
+## NUR032 — Numeric type literals compare `eq`/`deq`-equal to zero {#nur032}
+
+**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:** PR #309 review (DeqKey mirroring work)
+
+**Rule:** a bare type literal is not a concrete value: the ordering
+words give it the literal-first slot (`Integer cmp 0` → -1), and the
+String/Boolean/Atom families never report a literal equal to any
+concrete value (`"" eq String` → false).
+**Divergence:** the Number family does: `0 eq Integer`, `0 deq
+Integer`, `0.0 eq Float`, and `0.0 deq Integer` are all true (and
+`1 deq Integer` is false — the literal behaves as the VALUE zero).
+Cause: a literal Value IS its lattice node, so its `Parent` is the
+node's lattice parent (`Integer` literal → `Number`), which passes
+`ConformsTo(TNumber)` and reaches the error-ignoring `AsNumber`
+projection — zero. The other scalar families escape only accidentally
+(their literals' parent is `Scalar`, outside their own family branch).
+**Evidence:** `eng/go/compare.go::scalarFamilyEqual` (`:263` — the
+`af, _ := AsNumber(a)` error drops); live probes 2026-07-23:
+`0 deq Integer → true`, `1 deq Integer → false`, `"" eq String →
+false`, `false eq Boolean → false`.
+**Documentation status:** undocumented anywhere; no spec row pins it
+(in either direction).
+**Proposed verdict:** resolve — the scalar equality branches should
+require concrete operands (mixed literal/concrete pairs are never
+equal, matching the String/Boolean/Atom behaviour and the ordering
+words' literal-first rule), with spec rows pinning `0 eq Integer →
+false` and friends.
+
+---
+
+## NUR033 — `deq` falls back to a render comparison for typed lists/maps {#nur033}
+
+**Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:** PR #309 review (DeqKey mirroring work)
+
+**Rule:** `deq` is deep VALUE equality (NUR011); NUR015 removed render
+keying from the collection words precisely because the rendered form
+is a third equality notion agreeing with neither `eq` nor `deq`.
+**Divergence:** `DeepEqual` itself harbors that third notion: when
+structural access fails on a list- or map-family value (typed lists
+`[:T]`, tables, records, typed maps), the arm compares
+`a.String() == b.String()` — render equality. The relation is not
+even transitive there: plain `[1]` deq plain `[1.0]` (structural,
+cross-leaf), plain `[1]` deq typed `[1]` (render), but plain `[1.0]`
+is NOT deq typed `[1]` (renders differ).
+**Evidence:** `eng/go/compare.go` (`:486-488` lists, `:505-507`
+maps); `eng/go/compare_deqkey.go` must class exactly these shapes
+`DeqUnkeyed` — unbucketable — because render-reachability crosses the
+plain/typed boundary.
+**Documentation status:** in-code comments only.
+**Proposed verdict:** resolve — compare typed containers by their
+ELEMENT values (structural recursion over the materialized elements,
+with the tag compared as a separate fact), which removes the render
+notion from `deq` and restores transitivity; the `DeqUnkeyed` class
+then disappears from the bucketing machinery.
