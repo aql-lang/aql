@@ -83,8 +83,8 @@ func TestWordSplice(t *testing.T) {
 // baseline (regression guard for the interpreter frame-state optimization).
 func TestWordSpliceMacroFnCapture(t *testing.T) {
 	src := `def mk word [fn [[x:Integer] [Integer] [x add y]]]
-def outer fn [[y:Integer] [Function] [mk]]
-def f (outer 100)
+def wrapper fn [[y:Integer] [Function] [mk]]
+def f (wrapper 100)
 f 5`
 	if got := runSplice(t, src); got != "105" {
 		t.Errorf("macro-fn capture = %q, want 105", got)

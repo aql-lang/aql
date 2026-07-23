@@ -124,16 +124,16 @@ func TestS6b1AdoptSeqFrom(t *testing.T) {
 	}
 }
 
-// --- typetable.go: RegisterExternalBuiltin leaf ambiguity ------------------
+// --- typetable.go: RegisterType leaf ambiguity ------------------
 
-func TestS6b1RegisterExternalBuiltinLeafDup(t *testing.T) {
+func TestS6b1RegisterTypeLeafDup(t *testing.T) {
 	dt := NewDynamicTypeTable()
-	if _, err := dt.RegisterExternalBuiltin("S6b1Ldup", 91001, nil); err != nil {
+	if _, err := dt.RegisterType("S6b1Ldup", 91001, "plugin:test", nil); err != nil {
 		t.Fatalf("root registration: %v", err)
 	}
 	// Same leaf name under the root: the leaf index entry must be
 	// blanked so short-name expansion refuses to guess.
-	if _, err := dt.RegisterExternalBuiltin("S6b1Ldup/S6b1Ldup", 91002, nil); err != nil {
+	if _, err := dt.RegisterType("S6b1Ldup/S6b1Ldup", 91002, "plugin:test", nil); err != nil {
 		t.Fatalf("child registration: %v", err)
 	}
 	if _, ok := dt.ExpandShortName("S6b1Ldup"); ok {

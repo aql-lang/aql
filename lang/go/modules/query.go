@@ -28,7 +28,7 @@ func BuildQueryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the query words. They are
 	// deliberately absent from the global registry — query is only
 	// reachable through `import "aql:query"`.
-	subReg, err := newModuleRegistry(native.QueryNatives)
+	subReg, err := newModuleRegistry("aql:query", native.QueryNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

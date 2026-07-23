@@ -37,7 +37,7 @@ func compareTypes(a, b *Type) int {
 }
 
 // rankOf returns t's unified lattice Rank. Builtins, MintType, and
-// RegisterExternalBuiltin all set Rank at creation, so this normally
+// RegisterType all set Rank at creation, so this normally
 // returns t.Rank directly; the parent-chain walk is a fallback for a
 // *Type assembled without one (chiefly in tests).
 func rankOf(t *Type) int {
@@ -52,7 +52,7 @@ func rankOf(t *Type) int {
 // typeDepth is the length of t's parent chain — its distance from the
 // lattice root. A subtype is one deeper than the type it refines. The
 // value is cached in Type.Depth at construction (builtins, MintType,
-// RegisterExternalBuiltin), so this is an O(1) field read; the walk is a
+// RegisterType), so this is an O(1) field read; the walk is a
 // fallback for an ad-hoc *Type assembled without a Depth (chiefly tests).
 func typeDepth(t *Type) int {
 	if t != nil && t.Depth() > 0 {

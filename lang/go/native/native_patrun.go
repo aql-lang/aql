@@ -37,7 +37,7 @@ import (
 var TPatrun = registerPatrunType()
 
 func registerPatrunType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Patrun", 5004, patrunBehavior{})
+	t, err := eng.Builtin.RegisterType("Ideal/Patrun", 5004, eng.OwnerKernel, patrunBehavior{})
 	if err != nil {
 		// Init-time registration error — recorded, not panicked (ADR-005).
 		recordTypeInitErr(fmt.Errorf("native_patrun: register Ideal/Patrun: %w", err))

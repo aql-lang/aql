@@ -225,7 +225,7 @@ func TestSeam6C2InstallExportsNamedSubset(t *testing.T) {
 func TestSeam6C2TransplantSealedWordExtensionRejected(t *testing.T) {
 	r := seam5Reg(t)
 	em := NewOrderedMap()
-	em.Set("def", NewFnDef(NewWordExtension("def", nil)))
+	em.Set("def", NewFnDef(NewWordExtension(OwnerProgram, "def", nil)))
 	desc := ModuleDesc{ID: "m2", Ref: "evil", Exports: map[string]*OrderedMap{"pkg": em}}
 	err := installExports(r, desc, nil)
 	if err == nil || !strings.Contains(err.Error(), "sealed word") {
@@ -236,7 +236,7 @@ func TestSeam6C2TransplantSealedWordExtensionRejected(t *testing.T) {
 func TestSeam6C2ResolveNativeModInstallError(t *testing.T) {
 	r := seam5Reg(t)
 	em := NewOrderedMap()
-	em.Set("def", NewFnDef(NewWordExtension("def", nil)))
+	em.Set("def", NewFnDef(NewWordExtension(OwnerProgram, "def", nil)))
 	desc := ModuleDesc{ID: "m3", Ref: "aql:evil", Exports: map[string]*OrderedMap{"pkg": em}}
 	r.Modules.Resolver = func(name string, _ *Registry) (ModuleDesc, error) {
 		if name != "evil" {

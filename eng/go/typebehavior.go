@@ -27,6 +27,16 @@ package eng
 // every implementor. Optional capability sub-interfaces (Comparer,
 // Hasher, Walker, Sizer — see below) let a type opt into extra
 // operations without expanding the required surface.
+// ContentMembership marks a TypeBehavior whose Match admits values by
+// CONTENT — a predicate, member function, union, negation, schema, or
+// type-shape test — rather than by construction tag. A content-based
+// type cannot ANCHOR a word-extension signature
+// (design/OPEN-WORDS.1.md §3.1): its members can exist before the type
+// does, so an anchored signature could capture pre-existing calls and
+// break the reachability theorem. Every new content-deciding Behavior
+// MUST add the marker; TestContentMembershipInventory pins the set.
+type ContentMembership interface{ ContentMembership() }
+
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
 	// canonical default is a lattice walk (v.Parent is t or a
@@ -114,7 +124,7 @@ type ConstBakeable interface {
 // refine-with-clause types so the predicate body runs at every Unify
 // callsite (closing the soundness gap where narrowing into a refined
 // type bypassed the constraint check). External plugin types can
-// install a Unifier directly via RegisterExternalBuiltin; user code
+// install a Unifier directly via RegisterType; user code
 // can install one via `behave unify/q (fn …)`.
 //
 // Symmetry is required: Unify(a, b) must equal Unify(b, a) up to

@@ -17,7 +17,7 @@ var (
 )
 
 func mustRegisterIdeal(path string, id int, b eng.TypeBehavior) *Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, id, b)
+	t, err := eng.Builtin.RegisterType(path, id, "plugin:test", b)
 	if err != nil {
 		panic(err)
 	}

@@ -41,7 +41,7 @@ import (
 var TTerminal = registerTuiType("Ideal/Terminal", 5011, terminalBehavior{})
 
 func registerTuiType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, id, b)
+	t, err := eng.Builtin.RegisterType(path, id, "aql:tui", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("tui: register %s: %w", path, err))
 	}

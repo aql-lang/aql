@@ -11,7 +11,7 @@
 # (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
 # (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
 def x 1 def f ([y:Integer] => [x add y]) def x 2 f 0	2	module-level name is DYNAMIC — not captured, sees the rebind
-def outer fn [[] [Integer] [def b0 10 def inner fn [[n:Integer] [Integer] [b0 add n]] inner 5]] outer	15	body-local def captured by inner
+def outer fn [[] [Integer] [def b0 10 def helper fn [[n:Integer] [Integer] [b0 add n]] helper 5]] outer	15	body-local def captured by the body-local helper (`helper`, not `inner` — a core word since rev 2 needs an anchored merge)
 def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]] fact 5	120	forward-ref recursion resolves at call time
 # (omitted) fn-value-call-via-named-binding / args-in-compiled-fn boundary — falls back sound (args.1 also diverges under compile: FINDING, design/EDGE-SPEC-FINDINGS.0.md); kept out of corpus for gate purity
 

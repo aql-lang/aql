@@ -26,6 +26,8 @@ type disjunctUnifier struct {
 // The disjunct accepts v iff some alternative unifies with it. Type
 // literals (Data==nil, !Carrier) pass through to the prev/DefaultBehavior
 // walk — a bare Maybe-literal is "the type itself", not an inhabitant.
+func (*disjunctUnifier) ContentMembership() {}
+
 func (d *disjunctUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)

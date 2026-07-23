@@ -236,7 +236,7 @@ func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 // survives the callee's teardown) — keeps a sound refusal via the FnBinders
 // gate.
 func TestBodyLocalMultiOverloadPolyStored(t *testing.T) {
-	src := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:3}`
+	src := `def wrapfn fn [[m:Map] [Integer] [def helper fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] helper (m get k/q)]] wrapfn {k:3}`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +259,7 @@ func TestBodyLocalMultiOverloadPolyStored(t *testing.T) {
 
 	// BOTH arms dispatch by runtime value through one compiled program: the
 	// Integer arm doubles, the String arm returns 7.
-	both := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] [(outer {k:3}) (outer {k:'s'})]`
+	both := `def wrapfn fn [[m:Map] [Integer] [def helper fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] helper (m get k/q)]] [(wrapfn {k:3}) (wrapfn {k:'s'})]`
 	gotC, compiled, errC, gotI, errI = runBothEngines(t, both)
 	if !compiled || errC != nil {
 		t.Errorf("both-arms run: compiled=%v err=%v", compiled, errC)
@@ -272,7 +272,7 @@ func TestBodyLocalMultiOverloadPolyStored(t *testing.T) {
 	// A runtime value NO arm matches defers to the interpreter, which raises
 	// the canonical signature_error — code parity, never a stored-mode raise
 	// of its own.
-	nomatch := `def outer fn [[m:Map] [Integer] [def inner fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] inner (m get k/q)]] outer {k:[1 2]}`
+	nomatch := `def wrapfn fn [[m:Map] [Integer] [def helper fn [[a:Integer] [Integer] [a mul 2] [b:String] [Integer] [7]] helper (m get k/q)]] wrapfn {k:[1 2]}`
 	_, compiled, errC, _, errI = runBothEngines(t, nomatch)
 	if compiled {
 		t.Error("the no-match run must defer to the interpreter")

@@ -390,16 +390,17 @@ constants) **iff** one of these holds:
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,
 `Fetch{Function,Request,Response}`, all user types, all plugin
-types — **flows through `RegisterExternalBuiltin`**:
+types — **flows through `RegisterType`**:
 
 ```go
 // In the type's owning package:
 var TFoo = registerFooType()
 
 func registerFooType() *eng.Type {
-    t, err := eng.Builtin.RegisterExternalBuiltin(
+    t, err := eng.Builtin.RegisterType(
         "Ideal/Foo",   // path
         N,             // stable FixedID from the documented per-module range
+        "my:module",   // owner id (eng.OwnerKernel for kernel-shipped types) — design/OPEN-WORDS.1.md §4
         fooBehavior{}, // optional; nil → DefaultBehavior
     )
     if err != nil {
@@ -421,7 +422,7 @@ duplicated in lang.
 
 ### Two categories — pick by lifetime, not by "is it a user type"
 
-`RegisterExternalBuiltin` is for types that are **global and
+`RegisterType` is for types that are **global and
 wire-stable**: one identity for the whole process, a FixedID baked
 into serialised `Value.ID`s (matrix, time, fetch, the timers,
 third-party plugins). It is NOT the path for a type that is
@@ -457,7 +458,7 @@ embedded in `Value.ID`). Changing an existing type's FixedID is
 a wire-compatibility break.
 
 Documented per-module ranges (see
-`TypeTable.RegisterExternalBuiltin` doc):
+`TypeTable.RegisterType` doc):
 
 ```
    1-99       eng kernel builtins
@@ -500,7 +501,7 @@ externally-registered type means:
   (positional: parent + depth-scaled offset, so a child always
   ranks above its parent and siblings run least-to-most complex
   — laid out on `typetable.go::builtinDecls`). User types
-  (`MintType`) and external builtins (`RegisterExternalBuiltin`)
+  (`MintType`) and external builtins (`RegisterType`)
   share a single Rank per branch via `externalBandFor`, so they
   sort AFTER every kernel positional type in the same branch.
   Same-Rank ties break in `compareTypes` by depth → name → id;

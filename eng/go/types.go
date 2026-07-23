@@ -90,7 +90,7 @@ var (
 	TResourceEntity = mustType("Ideal/Resource/Entity")
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go (Step 8 migration); registered via
-	// RegisterExternalBuiltin at lang/go/native package init.
+	// RegisterType at lang/go/native package init.
 	TError = mustType("Ideal/Error")
 	TType  = mustType("Type")
 	// Scalar/Time and descendants moved to
@@ -107,7 +107,7 @@ var (
 // typeNames is the user-facing name → Type map for bare-word type
 // resolution. Built at init from the Builtin TypeTable; refreshed
 // whenever a new externally-registered builtin is added via
-// RegisterExternalBuiltin. The parser and engine consult this map
+// RegisterType. The parser and engine consult this map
 // to resolve bare type-name words (e.g. `Integer`, `Date`, plugin-
 // supplied names) to their *Type.
 var typeNames = buildTypeNames()
@@ -124,7 +124,7 @@ func buildTypeNames() map[string]*Type {
 }
 
 // refreshTypeNames rebuilds the typeNames snapshot. Called by
-// RegisterExternalBuiltin so freshly-installed types are immediately
+// RegisterType so freshly-installed types are immediately
 // resolvable by bare-name lookup in the parser.
 func refreshTypeNames() {
 	typeNames = buildTypeNames()

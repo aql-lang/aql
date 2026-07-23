@@ -48,7 +48,7 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Construct a sub-registry for the module's words. Module exports
 	// are dispatched through this sub-registry; the parent's policy
 	// is consulted for module.call gating elsewhere.
-	subReg, err := newModuleRegistry(vmNatives(parent))
+	subReg, err := newModuleRegistry("aql:vm", vmNatives(parent))
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

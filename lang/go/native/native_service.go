@@ -44,7 +44,7 @@ import (
 var TService = registerServiceType()
 
 func registerServiceType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Service", 5008, serviceBehavior{})
+	t, err := eng.Builtin.RegisterType("Ideal/Service", 5008, eng.OwnerKernel, serviceBehavior{})
 	if err != nil {
 		recordTypeInitErr(fmt.Errorf("native_service: register Ideal/Service: %w", err))
 	}

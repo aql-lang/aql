@@ -18,7 +18,7 @@ import (
 //	some-table  Report.table  print
 //	some-value  Report.value  print
 func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry(reportNatives())
+	subReg, err := newModuleRegistry("aql:report", reportNatives())
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

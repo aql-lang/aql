@@ -550,19 +550,28 @@ func sigSlotValue(sig *Signature, i int) Value {
 // Fallback sigs need no special-case: a fallback is always 0-arg, so
 // the arity-first rule already sinks it to the end.
 //
-// Locked signatures (native registrations) sort strictly FIRST — before
-// every unlocked (def-merged) signature, across arity. This is the
-// locked-first ordering theorem (design/OPEN-WORDS.0.md §2.3/§3.3): an
-// unlocked merged addition can never pre-empt a locked match, so no
-// previously-valid call changes its dispatch under a merge. All-locked
-// lists (pure natives) and all-unlocked lists (user fns) are unaffected;
-// only word-extension clones and cross-stack aggregates mix the two.
+// There is NO tier key: locked and merged signatures sort together by
+// the natural specificity order. Dispatch stability under merges is
+// guaranteed by ADMISSION instead of ordering — every merged signature
+// must be anchored by a nominal type its author owns (the ownership
+// rules, design/OPEN-WORDS.1.md §2-3), so an added signature can only
+// ever match calls carrying values of the author's own types, which
+// cannot predate the merge. `Locked` survives only as the
+// replacement-refusal flag (mergeExtensionSigs) — never as an ordering
+// input; the rev-1 locked-first key this replaces is documented in
+// design/OPEN-WORDS.0.md §2.3/§3.3.
 func CompareSignatures(a, b *Signature) int {
-	if a.Locked != b.Locked {
-		if a.Locked {
-			return -1
+	// CoreDefault overloads (the within-type scalar/Micron field-wise
+	// arithmetic, RegisterCoreDefault) sort strictly LAST: they are the
+	// kernel's declared catch-afters, dispatched only when no specific
+	// overload — kernel, module, or user — claims the call. Under rev 1
+	// this fell out of their being unlocked behind the locked tier; rev
+	// 2 encodes the role explicitly.
+	if a.CoreDefault != b.CoreDefault {
+		if a.CoreDefault {
+			return 1
 		}
-		return 1
+		return -1
 	}
 	if c := cmpInt(b.TotalArgs(), a.TotalArgs()); c != 0 {
 		return c

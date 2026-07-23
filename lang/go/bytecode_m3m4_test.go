@@ -134,7 +134,7 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 		// A def-bound value never touches the export map (module-minilang.tsv
 		// pins the same read as a spec row): MiniLang.Gen is None on every run.
 		{"missing key with a value-form binding",
-			`import "aql:minilang"  def gen (fn [[src:String opts:Map] [Integer] [1]])  MiniLang.Gen`},
+			`import "aql:minilang"  def genv (fn [[src:String opts:Map] [Integer] [1]])  MiniLang.Gen`},
 		// No binding at all: the ledger is empty, absence is stable.
 		{"missing key with no binding",
 			`import "aql:minilang"  MiniLang.Nope`},

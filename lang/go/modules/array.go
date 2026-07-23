@@ -27,7 +27,7 @@ func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the specialised array words.
 	// They are deliberately absent from the global registry (see
 	// native_array.go).
-	subReg, err := newModuleRegistry(native.ArrayModuleNatives)
+	subReg, err := newModuleRegistry("aql:array-util", native.ArrayModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

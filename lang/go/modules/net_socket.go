@@ -48,7 +48,7 @@ var (
 )
 
 func registerNetType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, id, b)
+	t, err := eng.Builtin.RegisterType(path, id, "aql:net", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("net: register %s: %w", path, err))
 	}

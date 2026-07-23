@@ -1431,9 +1431,9 @@ both parameter and return slots of that type (and of any supertype):
 
 ```
 def Box (class {v:0})
-def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
-typeof (wrap 5)               # returns Box
-(wrap 5) get 'v'              # returns 5
+def boxed fn [[n:Integer] [Box] [make Box {v:n}]]
+typeof (boxed 5)              # returns Box
+(boxed 5) get 'v'             # returns 5
 ```
 
 **Bare refinement — a *newtype*.** `def Pos (refine Integer)` adds no

@@ -17,5 +17,5 @@ import (
 // `indexof` keeps its List overload here too, so StringUtil.indexof covers
 // both the string and list-membership forms.
 func BuildStringModule(parent *native.Registry) (native.ModuleDesc, error) {
-	return buildDelegatingModule(parent, "StringUtil", native.StringModuleNatives)
+	return buildDelegatingModule(parent, "aql:string-util", "StringUtil", native.StringModuleNatives)
 }

@@ -56,9 +56,10 @@ func TestW9PositionalMatchDeclines(t *testing.T) {
 }
 
 func TestW9CompareSignaturesTieBreaks(t *testing.T) {
-	// Locked sorts first.
-	if got := CompareSignatures(&Signature{Locked: true}, &Signature{Locked: false}); got != -1 {
-		t.Errorf("locked-first = %d, want -1", got)
+	// Locked is NOT an ordering key (design/OPEN-WORDS.1.md §2 R3):
+	// two otherwise-identical sigs differing only in Locked tie.
+	if got := CompareSignatures(&Signature{Locked: true}, &Signature{Locked: false}); got != 0 {
+		t.Errorf("locked as ordering key = %d, want 0 (no tier)", got)
 	}
 	// Equal locked + equal arity + equal slots: the one WITHOUT an
 	// intermediate barrier sorts after the one WITH one.

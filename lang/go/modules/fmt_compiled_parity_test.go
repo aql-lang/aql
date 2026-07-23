@@ -9,7 +9,7 @@ import (
 
 // fmt_compiled_parity_test.go pins the Stage-3 fn-value dispatch graduation
 // for the aql:fmt declarative-formatter demos: the `apply` driver
-// (`def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]` — a Function
+// (`def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]` — a Function
 // value fetched from a map at runtime, applied to a waiting value) COMPILES
 // via the whole-frame dynamic-apply replay (OpCallDynFrame + RetReplay) and
 // produces byte-identical results to the interpreter. Before the
@@ -50,13 +50,13 @@ func runBothEngines(t *testing.T, prog string) (compiled, interpreted string) {
 // TestFmtDeclarativeFormatter (fmtrule_test.go): the data-tree demo.
 func TestFmtDeclarativeFormatterCompiledParity(t *testing.T) {
 	const prog = `import "aql:fmt"
-def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def rules {
   scalar: (nd:Any => (canon nd))
-  entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (apply nd.value)]}))
-  map:    (nd:Any => ({fmt:'group' body:{fmt:'concat' parts:((Fmt.children nd) each [apply])}}))
+  entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (fmtapply nd.value)]}))
+  map:    (nd:Any => ({fmt:'group' body:{fmt:'concat' parts:((Fmt.children nd) each [fmtapply])}}))
 }
-Fmt.render 72 (apply {a:1 b:{c:2}})`
+Fmt.render 72 (fmtapply {a:1 b:{c:2}})`
 	gotC, gotI := runBothEngines(t, prog)
 	if gotC != gotI {
 		t.Errorf("compiled %q != interpreted %q", gotC, gotI)
@@ -71,20 +71,20 @@ Fmt.render 72 (apply {a:1 b:{c:2}})`
 // exercised over a nested-paren statement (dispatch + recursion + fold).
 func TestFmtTreeDeclarativeFormatterCompiledParity(t *testing.T) {
 	const prog = `import "aql:fmt"
-def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def inline fn [nd:Any Any [
   def r ({s:"" p:none} fold [foldstep] (nd.children))
   r.s
 ]]
 def foldstep fn [[elem:Any accm:Any] Any [
-  def news (join "" [accm.s (if (eq accm.p none) [""] [" "]) (apply elem)])
+  def news (join "" [accm.s (if (eq accm.p none) [""] [" "]) (fmtapply elem)])
   {s:news p:elem}
 ]]
 def rules {
   root:(nd:Any => (inline nd)) word:(nd:Any => (nd.text)) number:(nd:Any => (nd.text))
   paren:(nd:Any => (join "" ["(" (inline nd) ")"]))
 }
-apply (Fmt.tree "(f (g 1) 2)")`
+fmtapply (Fmt.tree "(f (g 1) 2)")`
 	gotC, gotI := runBothEngines(t, prog)
 	if gotC != gotI {
 		t.Errorf("compiled %q != interpreted %q", gotC, gotI)

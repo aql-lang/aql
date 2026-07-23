@@ -30,7 +30,7 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 	if err := formatter.DefaultRulesInitError(); err != nil {
 		return native.ModuleDesc{}, err
 	}
-	return buildDelegatingModule(parent, "Fmt", FmtNatives)
+	return buildDelegatingModule(parent, "aql:fmt", "Fmt", FmtNatives)
 }
 
 // FmtNatives is the NativeFunc slice for the aql:fmt module's

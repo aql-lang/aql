@@ -1,0 +1,229 @@
+# Open Words rev 2 — ownership-anchored signatures, natural dispatch order
+
+Status: **decided (2026-07-23) — implemented on this branch.**
+Revision of [OPEN-WORDS.0.md](OPEN-WORDS.0.md): rev 1's locked-first
+ordering theorem (§2.3/§3.3 there) is **replaced** by an
+ownership-anchored admission rule, and dispatch ordering becomes
+purely type-natural. Everything else in rev 1 — the `def`-merge
+model, word clones on the DefTable, scoping, export transplant, the
+firewall idiom, sealed words — is unchanged. Discussion artifact per
+the ADR rule (no ADR entry without explicit maintainer instruction).
+
+One sentence: **a signature may be added to a word only when it is
+anchored by a nominal type its author owns and replaces nothing its
+author does not own; dispatch then simply picks the most specific
+match.**
+
+## 1. Why rev 1's ordering had to go
+
+Rev 1 made merges safe with a tier: locked (native) signatures sort
+strictly before every unlocked (merged) signature, before arity,
+before specificity (`CompareSignatures`, signature.go). That bought
+the stability theorem — *no previously-valid call changes its
+dispatch under a merge* — by ordering alone. But the tier
+over-approximates the theorem, and the over-approximation is exactly
+the useful part of subtype polymorphism:
+
+- `def M (refine Map)` + a merged `set [Atom Any M]` sig is
+  **silently unreachable** — the locked `[Atom Any Map]` sig is
+  tried first and matches the M value (a subtype conforms to its
+  parent). Verified on the live tree: the user body never runs, the
+  kernel handler wins, and the M tag evaporates on its result. No
+  error anywhere; `typeof` keeps claiming M.
+- The same override is legal and correct when both sigs are locked —
+  the kernel's own WeakFlexMap `set` sigs dispatch ahead of the
+  FlexMap sigs by per-position specificity. Specialization is a
+  privilege of the host tier, not a property of the type lattice.
+- FLEX-ATTRS.1 §5.1 therefore had to declare the module `set`
+  override for a maintained `SortedFlexMap` "dead on arrival."
+
+The tier also made safety a *global ordering invariant* — invisible
+at the def site, dependent on what else is loaded — instead of a
+local, checkable property of the signature being added.
+
+## 2. The model — three rules, uniform across every author
+
+Every type records its **owner** at registration (§4). Every
+signature's author is the scope adding it: the kernel, a first-party
+or user module, or the top-level program. The rules:
+
+- **R1 — anchor.** A signature merged onto a word that carries
+  signatures the author does not own MUST include at least one
+  position typed by a **nominal** type the author owns. (A word the
+  author owns outright — a plain user fn — is unrestricted, as
+  today.)
+- **R2 — no cross-owner redefinition.** A signature whose
+  argument-type tuple equals an existing signature the author does
+  not own is refused (`locked_signature`, generalized to all
+  owners). Re-merging a tuple the author owns replaces it in scope,
+  as today (the REPL iteration pattern).
+- **R3 — natural order.** Candidates sort by arity, then
+  per-position specificity on the unified type/value lattice, then
+  barrier — with **no tier key**. `Locked` survives only as the
+  replacement-refusal flag behind R2 and for the sealed words
+  (`def`/`make`/`word`), never as an ordering input.
+
+The kernel trivially satisfies R1 (it owns `Integer`, `Map`,
+`Number`, …), so its registrations are unchanged. First-party
+modules anchor on the types they register (`Date`, `Matrix`,
+`Pathon`). User modules anchor on their minted types. The top-level
+program anchors on types it mints with `refine`/`class`.
+
+**Re-export carveout (transplant only).** R1 is enforced strictly
+where a signature is WRITTEN (the def-merge inside the authoring
+scope). At TRANSPLANT time, a source clone may carry re-exported
+signatures whose anchors belong to a module deeper in the import
+chain (rev 1 §2.4: re-export takes ownership of the *export*). The
+transplant admission therefore accepts any **module-minted** nominal
+anchor for source clones — reachability still holds, because a
+module-minted type cannot predate the import chain that delivered
+it — while kernel- and program-owned anchors stay author-only
+(`sigHasModuleAnchor`, word_extend.go). Host clones always verify
+against their declared `ExtOwner`.
+
+## 3. The safety theorem, restated and proved
+
+**Theorem (reachability).** Under R1–R3, no call whose argument
+types all predate a merge changes its dispatch because of that
+merge.
+
+*Proof sketch.* Let S be a merged signature anchored at position i
+by nominal type T owned by author A. Nominal membership is
+tag-carried: `v.Is(T)` requires `v.Parent.ConformsTo(T)` — the value
+must have been constructed *as* a T (or a subtype). No value tagged
+T exists before T exists, and T is minted by A's scope at merge time
+or later (for registered module types: before the module's sigs
+transplant, and values of those types are only produced by the
+module's own words). Hence any call matching S carries at least one
+post-merge value; a call built entirely from pre-existing types
+cannot match S at any position ordering. Since R2 forbids replacing
+existing tuples, every pre-existing signature is still present and
+still matches exactly the calls it matched before; by R3 those calls
+see the same most-specific pre-existing signature. ∎
+
+The theorem is the same guarantee rev 1's tier provided —
+"previously-valid calls are byte-identical" — but proved by
+*provenance* instead of *ordering*, which is precisely what makes
+overlap-with-specialization admissible: a `set [Atom Any
+SortedFlexMap]` sig overlaps the kernel `[Atom Any Map]` sig only on
+values that could not exist before the module loaded.
+
+### 3.1 Nominality is load-bearing (the counterexample)
+
+R1 says *nominal*, not merely *user-defined*, and this is not
+pedantry. AQL user types split by membership mode (the refine
+doctrine):
+
+- **bare refine / class** — tag-carried; a value is a member only if
+  constructed as one. These anchor.
+- **predicate / member / disjunct bodies** — content-carried;
+  membership is decided by looking at the value. These MUST NOT
+  anchor. Counterexample: with `SortedMap` as a content predicate
+  (`MintMemberType(TMap, keysAscending)`), the pre-existing literal
+  `{a:1 b:2}` *is* a SortedMap — its keys happen to ascend — so a
+  sig anchored on it would capture pre-existing `set` calls and the
+  theorem is dead.
+- **aliases** (`def MyMap Map`) never mint, so they cannot launder a
+  foreign type through the check — unchanged from rev 1.
+
+Consequence for FLEX-ATTRS.1 §5.2: the classification type
+(predicate `SortedMap`) and the override anchor (nominal
+`SortedFlexMap`) are necessarily *different types*. The predicate
+type classifies; the nominal type specializes.
+
+## 4. Ownership — a stamped fact, not a category
+
+`Type` gains an **Owner** stamp, set once at registration:
+
+- kernel builtins (`builtinDecls`) — the kernel sentinel;
+- module-registered global types — the registering module's id
+  (`aql:time-util` owns `Date`/`Instant`/the durations; matrix owns
+  `Tensor`; `aql:io` owns `Pathon`'s module-scoped kinds; …);
+- runtime mints (`refine`/`class`/member types) — the minting
+  scope's module id, or the program sentinel at top level.
+
+This dissolves rev 1's builtin/user dichotomy (`isUserType`,
+`Origin == OriginUserDef`) as the safety discriminator, and with it
+the first-party waiver: `NewWordExtensionAnchored` /
+`AllowBuiltinAnchor` existed solely because `Date` was "builtin" and
+therefore could not anchor time-util's own arithmetic. Under
+ownership, `add [Date CalendarDuration]` is a rule application, not
+an escape hatch.
+
+**`RegisterExternalBuiltin` is retired.** There is one registration
+path for globally-registered types, carrying (path, FixedID, owner,
+behavior). FixedIDs and the wire-stability contract are **retained
+unchanged** — wire identity is orthogonal to ownership, and
+`fixedid_stability_test` continues to pin every ID at its current
+value. What disappears is the *category* ("external builtin") and
+the API name; what remains is one owner-stamped registration used by
+kernel table and modules alike.
+
+## 5. Behavior changes
+
+1. **Top-level non-anchored merges are refused.** `def add fn
+   [[a:Boolean b:Boolean] …]` at top level — admissible under rev 1
+   because the tier made it harmless — now fails the R1 admission
+   check (`extend_owned_type`). Maintainer's call: the pattern is
+   non-essential and dangerous (it was also the main §4.1/§4.2
+   hazard surface). The fn-scope/closure/undef *machinery* is
+   untouched and continues to work for anchored merges.
+2. **Module extensions gain reachability.** An anchored `set [Atom
+   Any SortedFlexMap]` sig now sorts ahead of the kernel Map/FlexMap
+   sigs by specificity (user mints rank above every kernel type in
+   their branch — `externalBandFor`) and actually dispatches. This
+   un-blocks FLEX-ATTRS.1 D4's maintained sorted type at the word
+   level.
+3. **First-party extensions are unchanged in effect.** Temporal /
+   io / matrix tuples all anchor under ownership; the waiver
+   plumbing is deleted.
+4. **Dispatch among pre-existing sigs is unchanged.** All-kernel
+   candidate lists were already specificity-sorted within the locked
+   tier; removing the tier key reorders nothing among them, and
+   formerly-unlocked benign merges either become refusals (1) or
+   anchored (2).
+
+## 6. Hazards carried forward (unchanged verdicts, new shapes)
+
+- **Collection shift (rev 1 §4.2).** A merged sig still widens
+  forward collection — but with R1, only around values of the
+  anchor's nominal family, which shrinks the advisory surface to the
+  owner's own domain.
+- **Cross-module subtype shadowing.** Module B may refine module A's
+  nominal type and anchor overrides on the subtype, changing
+  behavior for B-tagged values flowing through A-generic code. That
+  is ordinary virtual-dispatch fragility (B can break A's invariant
+  for B's values), not a stability violation. Allowed; documented.
+- **Bypass funnels.** Words that write through the mutable payload
+  in Go (the setpath/struct family, adoption, compiled fast paths)
+  never dispatch `set` and are untouched by any sig-level mechanism.
+  FLEX-ATTRS.1 §5.2's write-mediation capability remains the answer
+  underneath an invariant-bearing type.
+- **Compiled-path conservatism.** Fold sites must not assume a
+  parent-typed receiver dispatches the parent sig when a subtype
+  could flow — a discipline the locked tier already required
+  (WeakFlexMap vs FlexMap are both locked), now policed for merged
+  sigs too by the differential and whole-corpus gates.
+
+## 7. Migration
+
+| Piece | Change |
+| --- | --- |
+| `CompareSignatures` | delete the Locked ordering key; keep arity → per-position → barrier |
+| `word_extend.go` | `requireUserTypedSigs` → owner-verified nominal-anchor rule, applied at every scope (def-merge and transplant); `AllowBuiltinAnchor` / `NewWordExtensionAnchored` deleted |
+| `native_definition.go` merge path | top-level/fn-scope merges onto other-owner words run the same admission check |
+| `TypeTable` | `RegisterExternalBuiltin` removed; unified owner-carrying registration; `Owner` stamped on every mint path; FixedIDs unchanged |
+| first-party callers | temporal / timers / fetch / keyval / module-types / matrix re-registered through the unified path with their owner ids |
+| `lang/spec/open-words.tsv` | non-anchored merge rows become admission refusals; anchored twins pin the new dispatch (a minted subtype's sig actually fires); locked-first rows repinned as ownership rows |
+| `micron.tsv` §extensions | row 504 (builtin Micron leaf refused) unchanged in outcome, error code updated; 505 (minted Baron anchors) unchanged |
+| ratchets | check-accuracy pins for touched files; COMPILED_STATUS refresh; fnmodel golden if sig lists shift |
+
+## 8. Relation to bounded generics
+
+None needed — confirming the earlier conclusion: `gen [(T extends
+Map)]` already covers the parametric half (one implementation, many
+types, checker-preserved `T → T`), and this note's rules cover the
+ad-hoc half (different implementation per owned subtype). The two
+compose: a module's generic utilities accept any Map subtype and
+keep it; its anchored sigs specialize behavior for the subtypes it
+owns.

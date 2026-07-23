@@ -114,7 +114,7 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	// compiled twin is TestFmtTreeDeclarativeFormatterCompiledParity
 	// (fmt_compiled_parity_test.go).
 	const rules = `import "aql:fmt"
-def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def ends-dot fn [nd:Any Any [
   def t (nd.text)
   all [(eq (Fmt.kind nd) word/q) (gt 0 (size t)) (eq (slice ((size t) sub 1) (size t) t) ".")]
@@ -129,7 +129,7 @@ def sepfor fn [[elem:Any prev:Any] Any [
   if (eq prev none) [""] [if (attaches elem prev) [""] [" "]]
 ]]
 def foldstep fn [[elem:Any accm:Any] Any [
-  def news (join "" [accm.s (sepfor elem accm.p) (apply elem)])
+  def news (join "" [accm.s (sepfor elem accm.p) (fmtapply elem)])
   {s:news p:elem}
 ]]
 def inline fn [nd:Any Any [
@@ -165,7 +165,7 @@ def rules {
 		"x:Integer y:String",
 	}
 	for _, src := range cases {
-		prog := rules + "apply (Fmt.tree " + strconv.Quote(src) + ")"
+		prog := rules + "fmtapply (Fmt.tree " + strconv.Quote(src) + ")"
 		values, perr := parser.Parse(prog)
 		if perr != nil {
 			t.Fatalf("parse %q: %v", src, perr)

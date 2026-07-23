@@ -24,5 +24,5 @@ import (
 func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// The struct words are deliberately absent from the global registry, so
 	// the module's fresh sub-registry gains them here explicitly.
-	return buildDelegatingModule(parent, "StructUtil", native.StructModuleNatives)
+	return buildDelegatingModule(parent, "aql:struct-util", "StructUtil", native.StructModuleNatives)
 }

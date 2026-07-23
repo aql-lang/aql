@@ -30,7 +30,7 @@ import (
 //
 // See design/TYPE-OPERATIONS.8.md.
 func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry(typeModuleNatives)
+	subReg, err := newModuleRegistry("aql:type-util", typeModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

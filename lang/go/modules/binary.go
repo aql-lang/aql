@@ -27,7 +27,7 @@ const sign63Mask = 0x7FFFFFFFFFFFFFFF
 //
 // See design/BINARY-OPERATIONS.10.md.
 func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry(binaryModuleNatives)
+	subReg, err := newModuleRegistry("aql:bin-util", binaryModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

@@ -62,6 +62,19 @@ func (t *Type) IsNative() bool {
 	return t != nil && t.Origin == OriginBuiltin
 }
 
+// Owner sentinels for typeMeta.Owner (design/OPEN-WORDS.1.md §4).
+// Every real registration/mint path stamps one of these or a module
+// id; empty string means UNOWNED (ad-hoc / test fixtures) and anchors
+// nothing.
+const (
+	// OwnerKernel marks kernel builtins (builtinDecls) and
+	// kernel-shipped globally-registered types.
+	OwnerKernel = "aql:kernel"
+	// OwnerProgram marks types minted by the top-level program
+	// (refine / class outside any module body).
+	OwnerProgram = "program"
+)
+
 // anyFixedID is Any's stable FixedID. Hardcoded here so Path() can
 // short-circuit the "skip Any as parent" check without referencing
 // the TAny var — that would create an initializer cycle (Builtin →
@@ -188,6 +201,11 @@ type TypeTable struct {
 	rootSet   map[string]bool   // roots, for fast IsRoot checks
 	leafIndex map[string]string // builtin leaf-name → full path; "" if ambiguous
 	seq       *atomic.Int64     // minted-ID counter, one per registry TREE (shared by forks/modules, copied by rollback clones) — see mintID
+	// MintOwner is the provenance stamped onto every type this table
+	// mints (design/OPEN-WORDS.1.md §4): OwnerProgram for a program
+	// registry, the module's owner token for a module sub-registry.
+	// Set once at registry construction; copied by Clone/CloneDynamic.
+	MintOwner string
 }
 
 // dynamicIDBase is the starting point for minted IDs, chosen well above
@@ -244,10 +262,11 @@ func (tt *TypeTable) KnownPart(part string) bool {
 // package-level Builtin table at call sites that need them.
 func NewDynamicTypeTable() *TypeTable {
 	return &TypeTable{
-		byID:   make(map[string]*Type),
-		byName: make(map[string]*Type),
-		parts:  make(map[string]bool),
-		seq:    new(atomic.Int64),
+		byID:      make(map[string]*Type),
+		byName:    make(map[string]*Type),
+		parts:     make(map[string]bool),
+		seq:       new(atomic.Int64),
+		MintOwner: OwnerProgram,
 	}
 }
 
@@ -346,7 +365,7 @@ func (tt *TypeTable) AdoptSeqFrom(src *TypeTable) {
 func (tt *TypeTable) MintType(name string, parent *Type) *Type {
 	def := &Type{
 		Parent: parent,
-		tmeta:  &typeMeta{Name: name, Depth: depthOf(parent), Behavior: DefaultBehavior},
+		tmeta:  &typeMeta{Name: name, Depth: depthOf(parent), Behavior: DefaultBehavior, Owner: tt.MintOwner},
 		Origin: OriginUserDef,
 	}
 	// User and external types share a single Rank band per kernel
@@ -417,12 +436,16 @@ func externalBandFor(parent *Type) int {
 	return parent.Rank()
 }
 
-// RegisterExternalBuiltin installs a non-kernel-declared "builtin-
-// class" type from outside the eng package — host modules
-// (lang/go/modules/time, lang/go/native/fetch, plugin packages,
-// etc.) that own a type the kernel doesn't need to know about by
-// name. Conceptually equivalent to a builtinDecls row, but supplied
-// at runtime by the owning module.
+// RegisterType installs a globally-registered, wire-stable type from
+// outside the kernel decl table — host modules (temporal, matrix,
+// fetch, plugin packages, …) that own a type the kernel doesn't need
+// to know about by name. Conceptually equivalent to a builtinDecls
+// row, but supplied at runtime by the owning module, which stamps its
+// OWNER id (design/OPEN-WORDS.1.md §4) — the provenance the
+// ownership-anchored signature rules check. This is the unified
+// successor of the retired RegisterExternalBuiltin: the "external
+// builtin" category is gone; what remains is one owner-carrying
+// registration used for every global type.
 //
 // FixedID allocation policy: each module reserves a stable per-module
 // range so cross-version ID stability survives reorderings and
@@ -444,19 +467,22 @@ func externalBandFor(parent *Type) int {
 // Validates the path is well-formed (every part starts with [A-Z]),
 // the parent path is registered, and the FixedID is unused. Returns
 // the minted *Type on success.
-func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior TypeBehavior) (*Type, error) {
+func (tt *TypeTable) RegisterType(path string, fixedID int, owner string, behavior TypeBehavior) (*Type, error) {
+	if owner == "" {
+		return nil, fmt.Errorf("RegisterType: %q needs a non-empty owner id (OwnerKernel, a module id, …)", path)
+	}
 	parts := strings.Split(path, "/")
 	if len(parts) == 0 || path == "" {
-		return nil, fmt.Errorf("RegisterExternalBuiltin: empty path")
+		return nil, fmt.Errorf("RegisterType: empty path")
 	}
 	for _, p := range parts {
 		if p == "" {
-			return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (empty part)", path)
+			return nil, fmt.Errorf("RegisterType: invalid path %q (empty part)", path)
 		}
 		c := p[0]
 		if c < 'A' || c > 'Z' {
 			if !strings.HasPrefix(p, "__") {
-				return nil, fmt.Errorf("RegisterExternalBuiltin: invalid path %q (part %q must start with [A-Z])", path, p)
+				return nil, fmt.Errorf("RegisterType: invalid path %q (part %q must start with [A-Z])", path, p)
 			}
 		}
 	}
@@ -466,17 +492,17 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 		parentPath := strings.Join(parts[:len(parts)-1], "/")
 		parent = tt.bypath[parentPath]
 		if parent == nil {
-			return nil, fmt.Errorf("RegisterExternalBuiltin: parent %q not registered for %q", parentPath, path)
+			return nil, fmt.Errorf("RegisterType: parent %q not registered for %q", parentPath, path)
 		}
 	}
 
 	if existing := tt.bypath[path]; existing != nil {
-		return nil, fmt.Errorf("RegisterExternalBuiltin: path %q already registered", path)
+		return nil, fmt.Errorf("RegisterType: path %q already registered", path)
 	}
 
 	id := formatFixedID(path, fixedID)
 	if existing, dup := tt.byID[id]; dup {
-		return nil, fmt.Errorf("RegisterExternalBuiltin: FixedID %d for %q collides with %q", fixedID, path, existing.Path())
+		return nil, fmt.Errorf("RegisterType: FixedID %d for %q collides with %q", fixedID, path, existing.Path())
 	}
 
 	if behavior == nil {
@@ -499,7 +525,7 @@ func (tt *TypeTable) RegisterExternalBuiltin(path string, fixedID int, behavior 
 	def := &Type{
 		ID:     id,
 		Parent: parent,
-		tmeta:  &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: fixedID, Behavior: behavior},
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: fixedID, Behavior: behavior, Owner: owner},
 		Origin: OriginBuiltin,
 	}
 	// External builtins share the user-/external-type band for
@@ -565,9 +591,10 @@ func (tt *TypeTable) Clone() *TypeTable {
 		return nil
 	}
 	nt := &TypeTable{
-		byID:   make(map[string]*Type, len(tt.byID)),
-		byName: make(map[string]*Type, len(tt.byName)),
-		parts:  make(map[string]bool, len(tt.parts)),
+		byID:      make(map[string]*Type, len(tt.byID)),
+		byName:    make(map[string]*Type, len(tt.byName)),
+		parts:     make(map[string]bool, len(tt.parts)),
+		MintOwner: tt.MintOwner,
 		// COPY the mint counter, don't share it: Clone is the rollback
 		// snapshot (predicate / compile sandboxes), whose mints are
 		// discarded on restore. The parent's later mints must reproduce
@@ -620,7 +647,7 @@ type builtinDecl struct {
 //	depth 1  branch kinds   +1e8 per sibling
 //	depth 2  refinements    +1e7 per sibling   (Word markers: +1e3)
 //
-// User types (MintType) and external builtins (RegisterExternalBuiltin)
+// User types (MintType) and external builtins (RegisterType)
 // do not get a positional slot — they inherit the parent's Rank, and
 // compareTypes breaks the resulting ties by name/id. Max rank ≈ 6e10,
 // far under the int64 ceiling.
@@ -731,7 +758,7 @@ var builtinDecls = []builtinDecl{
 	// peer kind under Ideal (they no longer descend from Object). FixedIDs
 	// 36/37 are kept across the re-root so serialised Resource/Entity IDs
 	// stay wire-stable. External modules graft Tensor / Timeout / Fetch /
-	// … on as further Ideal/* kinds via RegisterExternalBuiltin.
+	// … on as further Ideal/* kinds via RegisterType.
 	{Path: "Ideal/Resource", FixedID: 36, Rank: 40_120_000_000},
 	{Path: "Ideal/Resource/Entity", FixedID: 37, Rank: 40_121_000_000},
 	// FixedID 44 retired with Ideal/Array (the mutable indexed container)
@@ -890,7 +917,7 @@ func (tt *TypeTable) registerBuiltin(d builtinDecl) {
 	def := &Type{
 		ID:         id,
 		Parent:     parent,
-		tmeta:      &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank, Behavior: DefaultBehavior},
+		tmeta:      &typeMeta{Name: parts[len(parts)-1], Depth: depthOf(parent), FixedID: d.FixedID, Rank: d.Rank, Behavior: DefaultBehavior, Owner: OwnerKernel},
 		IsInternal: d.IsInternal,
 		Origin:     OriginBuiltin,
 	}
@@ -1014,7 +1041,7 @@ func MintTestType(path string) *Type {
 	}
 	def := &Type{
 		ID:     fmt.Sprintf("%st%011x", prefix, testTypeSeq),
-		tmeta:  &typeMeta{Name: parts[len(parts)-1], Behavior: DefaultBehavior},
+		tmeta:  &typeMeta{Name: parts[len(parts)-1], Behavior: DefaultBehavior, Owner: OwnerProgram},
 		Parent: parent,
 		Origin: OriginUserDef,
 	}
@@ -1049,7 +1076,7 @@ func mustBuiltinType(path string) *Type {
 		// The recorded error is surfaced at NewRegistry, which returns it
 		// before the registry is ever used, so the placeholder is never
 		// actually dispatched against.
-		return &Type{tmeta: &typeMeta{Name: path}, Origin: OriginBuiltin}
+		return &Type{tmeta: &typeMeta{Name: path, Owner: OwnerKernel}, Origin: OriginBuiltin}
 	}
 	return def
 }
@@ -1067,9 +1094,10 @@ func (tt *TypeTable) CloneDynamic() *TypeTable {
 		return NewDynamicTypeTable()
 	}
 	cp := &TypeTable{
-		byID:   make(map[string]*Type, len(tt.byID)),
-		byName: make(map[string]*Type, len(tt.byName)),
-		parts:  make(map[string]bool, len(tt.parts)),
+		byID:      make(map[string]*Type, len(tt.byID)),
+		byName:    make(map[string]*Type, len(tt.byName)),
+		parts:     make(map[string]bool, len(tt.parts)),
+		MintOwner: tt.MintOwner,
 		// SHARE the mint counter: a concurrent fork's values (await
 		// branch results) escape back to the parent, so a mint in the
 		// fork must never collide with a mint anywhere else in the

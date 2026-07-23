@@ -155,11 +155,15 @@ func makeTypedFnDef(wordName string, subReg *native.Registry, ret *native.Type, 
 // that must adopt the parent's type-ID sequence or mint module-owned
 // types BEFORE registering their words keep constructing the registry
 // by hand and register with a plain loop.
-func newModuleRegistry(natives []native.NativeFunc) (*native.Registry, error) {
+func newModuleRegistry(owner string, natives []native.NativeFunc) (*native.Registry, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
+	// Types minted in this module's registry carry its owner id — the
+	// provenance the ownership-anchored signature rules check
+	// (design/OPEN-WORDS.1.md §4).
+	subReg.Types.MintOwner = owner
 	for _, n := range natives {
 		subReg.RegisterNativeFunc(n)
 	}
@@ -194,8 +198,8 @@ func moduleDesc(parent *native.Registry, namespace string, subReg *native.Regist
 // native module: an isolated sub-registry holding the given natives,
 // and one derived FnDef wrapper per native exported under the
 // module's namespace, keyed by the native's own name.
-func buildDelegatingModule(parent *native.Registry, namespace string, natives []native.NativeFunc) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry(natives)
+func buildDelegatingModule(parent *native.Registry, owner, namespace string, natives []native.NativeFunc) (native.ModuleDesc, error) {
+	subReg, err := newModuleRegistry(owner, natives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

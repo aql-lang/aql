@@ -234,12 +234,24 @@ func TestInstallWordExtensionMergeAndDispatch(t *testing.T) {
 		t.Fatal("native registration should carry locked sigs")
 	}
 
+	// R1: extending a core word requires a nominal anchor this scope
+	// owns — mint a program-owned String subtype and anchor on it.
+	prefab := r.Types.MintRefinePrefab(TString)
+	if err := InstallType(r, "CovStr", NewTypeLiteral(prefab)); err != nil {
+		t.Fatalf("InstallType CovStr: %v", err)
+	}
+	entry0, _ := r.Defs.TopEntry("CovStr")
+	covStrT := entry0.TypeDef
+	if covStrT == nil {
+		t.Fatal("CovStr minted no type")
+	}
+
 	// The def-merge path (compileFnSigs) reads Params, so the extension
-	// authors named params like an AQL `fn [[a:String b:String] …]` def.
+	// authors named params like an AQL `fn [[a:CovStr b:String] …]` def.
 	ext := FnDefInfo{
 		Name: "cadd",
 		Signatures: []Signature{{
-			Params: []FnParam{{Name: "a", Type: TString}, {Name: "b", Type: TString}},
+			Params: []FnParam{{Name: "a", Type: covStrT}, {Name: "b", Type: TString}},
 			Impl: AQL([]Value{
 				NewOpenParen(), NewWord("ccat"), NewWord("a"), NewWord("b"), NewCloseParen(),
 			}),
@@ -263,8 +275,8 @@ func TestInstallWordExtensionMergeAndDispatch(t *testing.T) {
 		t.Errorf("clone.Extends = %q", clone.Extends)
 	}
 
-	// Dispatch: the new String overload works, the locked Integer one remains.
-	out, err := NewTop(r).Run([]Value{NewWord("cadd"), NewString("a"), NewString("b")})
+	// Dispatch: the anchored overload works, the locked Integer one remains.
+	out, err := NewTop(r).Run([]Value{NewWord("cadd"), ReparentValue(NewString("a"), covStrT), NewString("b")})
 	if err != nil {
 		t.Fatalf("extended string call: %v", err)
 	}
@@ -300,7 +312,11 @@ func TestInstallWordExtensionRefusals(t *testing.T) {
 	if err := InstallWordExtension(r, "no_such_base", ext); err == nil {
 		t.Error("extension of unknown word accepted")
 	}
-	// A tuple colliding with a LOCKED signature is refused.
+	// An attempt to claim a locked kernel tuple dies at ADMISSION now
+	// (R1): the all-kernel tuple has no owned anchor, so the refusal is
+	// extend_owner — the replacement can no longer even be attempted.
+	// (The locked_signature arm remains reachable for non-builtin
+	// locked-bearing words — see TestMergeExtensionSigsLockedCollision.)
 	collide := FnDefInfo{Name: "cadd", Signatures: []Signature{{
 		Args: []*Type{TInteger, TInteger},
 		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
@@ -308,7 +324,21 @@ func TestInstallWordExtensionRefusals(t *testing.T) {
 		}),
 		Returns: []*Type{TInteger}, BarrierPos: -1,
 	}}}
-	if err := InstallWordExtension(r, "cadd", collide); err == nil || !strings.Contains(err.Error(), "locked") {
+	if err := InstallWordExtension(r, "cadd", collide); err == nil || !strings.Contains(err.Error(), "extend_owner") {
+		t.Errorf("kernel-tuple claim: err = %v", err)
+	}
+}
+
+// TestMergeExtensionSigsLockedCollision pins the R2 replacement-refusal
+// arm directly: a tuple equal to a LOCKED signature can never replace
+// it, whatever the anchor situation.
+func TestMergeExtensionSigsLockedCollision(t *testing.T) {
+	r := covRegistry(t, nil)
+	base := &FnDefInfo{Name: "wlock", Signatures: []Signature{{
+		Args: []*Type{TInteger}, Locked: true, BarrierPos: 0,
+	}}}
+	incoming := []Signature{{Args: []*Type{TInteger}, BarrierPos: 0}}
+	if _, _, err := mergeExtensionSigs(r, "wlock", base, incoming, ""); err == nil || !strings.Contains(err.Error(), "locked") {
 		t.Errorf("locked-tuple collision: err = %v", err)
 	}
 }
@@ -328,8 +358,10 @@ func TestNewWordExtensionAndTransplant(t *testing.T) {
 	}
 
 	// A host-authored clone (NewWordExtension) transplants its unlocked
-	// sigs onto the importer's base word.
-	ext := NewWordExtension("cadd", []Signature{{
+	// sigs onto the importer's base word. The author owner must match
+	// the anchor type's owner — CovFlag is minted by this (program)
+	// registry, so the clone is program-authored.
+	ext := NewWordExtension(OwnerProgram, "cadd", []Signature{{
 		Args: []*Type{flagT, TBoolean},
 		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			a, _ := AsBoolean(args[0])
@@ -342,7 +374,7 @@ func TestNewWordExtensionAndTransplant(t *testing.T) {
 		t.Fatalf("NewWordExtension.Extends = %q", ext.Extends)
 	}
 
-	if err := TransplantExtension(r, ext, "cov:module"); err != nil {
+	if err := TransplantExtension(r, ext, "cov:module", ""); err != nil {
 		t.Fatalf("TransplantExtension: %v", err)
 	}
 	flagVal := ReparentValue(NewBoolean(true), flagT)
@@ -354,21 +386,23 @@ func TestNewWordExtensionAndTransplant(t *testing.T) {
 		t.Errorf("transplanted overload result = %v", out[0])
 	}
 
-	// The user-type rule holds: an all-builtin tuple refuses to transplant.
-	allBuiltin := NewWordExtension("cadd", []Signature{{
+	// The ownership rule holds: a tuple with no author-owned nominal
+	// anchor refuses to transplant (TBoolean is kernel-owned, the
+	// author is the program).
+	allBuiltin := NewWordExtension(OwnerProgram, "cadd", []Signature{{
 		Args: []*Type{TBoolean, TBoolean},
 		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			return []Value{NewBoolean(false)}, nil
 		}),
 		Returns: []*Type{TBoolean}, BarrierPos: -1,
 	}})
-	if err := TransplantExtension(r, allBuiltin, "cov:module"); err == nil {
+	if err := TransplantExtension(r, allBuiltin, "cov:module", ""); err == nil {
 		t.Error("all-builtin tuple transplanted onto a core word")
 	}
 
 	// Idempotent: re-transplanting the same origin installs nothing new.
 	before, _ := r.Defs.TopEntry("cadd")
-	if err := TransplantExtension(r, ext, "cov:module"); err != nil {
+	if err := TransplantExtension(r, ext, "cov:module", ""); err != nil {
 		t.Fatalf("second transplant: %v", err)
 	}
 	after, _ := r.Defs.TopEntry("cadd")
@@ -379,25 +413,26 @@ func TestNewWordExtensionAndTransplant(t *testing.T) {
 	}
 
 	// Sealed word refuses transplant too.
-	sealedExt := NewWordExtension("make", nil)
-	if err := TransplantExtension(r, sealedExt, "cov:module"); err == nil {
+	sealedExt := NewWordExtension(OwnerProgram, "make", nil)
+	if err := TransplantExtension(r, sealedExt, "cov:module", ""); err == nil {
 		t.Error("transplant onto sealed word accepted")
 	}
 
 	// Missing base name: degrade silently (no error, no install).
-	orphan := NewWordExtension("never_registered_word", nil)
-	if err := TransplantExtension(r, orphan, "cov:module"); err != nil {
+	orphan := NewWordExtension(OwnerProgram, "never_registered_word", nil)
+	if err := TransplantExtension(r, orphan, "cov:module", ""); err != nil {
 		t.Errorf("missing-base transplant should be a no-op, got %v", err)
 	}
 }
 
-func TestNewWordExtensionAnchoredWaivesUserTypeRule(t *testing.T) {
-	// The first-party anchor waiver: NewWordExtensionAnchored lets a
-	// builtin-only tuple transplant onto a core word, which the plain
-	// NewWordExtension path refuses (TestNewWordExtensionAndTransplant).
+func TestNewWordExtensionKernelAuthor(t *testing.T) {
+	// The kernel-author path: a kernel-shipped host module may author
+	// sigs anchored on KERNEL-owned types (aql:io's Pathon list/remove)
+	// by declaring OwnerKernel as the extension's author — which the
+	// program-authored path refuses (TestNewWordExtensionAndTransplant).
 	r := covRegistry(t, nil)
 
-	anchored := NewWordExtensionAnchored("cadd", []Signature{{
+	anchored := NewWordExtension(OwnerKernel, "cadd", []Signature{{
 		Args: []*Type{TBoolean, TBoolean},
 		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 			a, _ := AsBoolean(args[0])
@@ -406,15 +441,16 @@ func TestNewWordExtensionAnchoredWaivesUserTypeRule(t *testing.T) {
 		}),
 		Returns: []*Type{TBoolean}, BarrierPos: -1,
 	}})
-	if !anchored.AllowBuiltinAnchor {
-		t.Fatal("NewWordExtensionAnchored did not set AllowBuiltinAnchor")
+	if anchored.ExtOwner != OwnerKernel {
+		t.Fatalf("ExtOwner = %q, want OwnerKernel", anchored.ExtOwner)
 	}
 	if anchored.Extends != "cadd" {
 		t.Fatalf("anchored.Extends = %q", anchored.Extends)
 	}
 
-	// Transplant succeeds despite the all-builtin [Boolean Boolean] tuple.
-	if err := TransplantExtension(r, anchored, "cov:firstparty"); err != nil {
+	// Transplant succeeds: the [Boolean Boolean] tuple anchors on the
+	// kernel-owned Boolean and the author IS the kernel.
+	if err := TransplantExtension(r, anchored, "cov:firstparty", ""); err != nil {
 		t.Fatalf("anchored transplant refused: %v", err)
 	}
 	out, err := NewTop(r).Run([]Value{NewWord("cadd"), NewBoolean(true), NewBoolean(true)})

@@ -969,6 +969,12 @@ func TestDynInputsProven(t *testing.T) {
 	if es.dynInputsProven(sigStr, []Value{NewDynamicCarrier(TInteger)}) {
 		t.Fatal("non-conforming dynamic operand should not be proven")
 	}
+	// a genuinely-WIDENED gradual operand (dynamic Any) is exactly the
+	// unproven case the guard defends — refused even on a conforming sig.
+	sigAny := &Signature{CompileEffect: CompileRunsBodyIsolated, Args: []*Type{TAny}}
+	if es.dynInputsProven(sigAny, []Value{NewDynamicCarrier(TAny)}) {
+		t.Fatal("a widened dynamic(Any) operand must refuse the proof")
+	}
 }
 
 func TestInterpMemberInert(t *testing.T) {

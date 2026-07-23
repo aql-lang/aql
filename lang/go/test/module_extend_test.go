@@ -108,13 +108,13 @@ func TestModuleExtendTransplantConflictDirect(t *testing.T) {
 	}
 	native.UninstallDef(reg, "add")
 
-	if err := native.TransplantExtension(reg, clone, "./mod-a.aql"); err != nil {
+	if err := native.TransplantExtension(reg, clone, "./mod-a.aql", native.OwnerProgram); err != nil {
 		t.Fatalf("first transplant: %v", err)
 	}
-	if err := native.TransplantExtension(reg, clone, "./mod-a.aql"); err != nil {
+	if err := native.TransplantExtension(reg, clone, "./mod-a.aql", native.OwnerProgram); err != nil {
 		t.Fatalf("diamond re-transplant (same ref) must be idempotent, got %v", err)
 	}
-	err = native.TransplantExtension(reg, clone, "./mod-b.aql")
+	err = native.TransplantExtension(reg, clone, "./mod-b.aql", native.OwnerProgram)
 	if err == nil {
 		t.Fatal("expected [aql/extend_conflict] for the same tuple from a different module, got no error")
 	}
@@ -175,10 +175,11 @@ export "Mid" {mk: omk/r add: add/r}`,
 	assertResult(t, result, "true")
 }
 
-// TestModuleExtendFileUserTypeRule pins the module-scope safety rule at
-// the file boundary: a module extending a core word with an all-kernel
-// tuple is refused at import with [aql/extend_user_type] — `add 1 {}`
-// can never start working because of an import.
+// TestModuleExtendFileUserTypeRule pins the ownership-anchor rule at
+// the file boundary (rev 2, design/OPEN-WORDS.1.md): a module extending
+// a core word with an unanchored (all-kernel) tuple is refused with
+// [aql/extend_owner] — `add 1 {}` can never start working because of
+// an import.
 func TestModuleExtendFileUserTypeRule(t *testing.T) {
 	files := map[string]string{
 		"bad.aql": `def add fn [[a:Integer b:Map] [Integer] [1]]
@@ -188,10 +189,10 @@ export "Bad" {add: add/r}`,
 		`import "./bad.aql"`,
 	})
 	if err == nil {
-		t.Fatal("expected [aql/extend_user_type], got no error")
+		t.Fatal("expected [aql/extend_owner], got no error")
 	}
-	if !strings.Contains(err.Error(), "extend_user_type") {
-		t.Fatalf("expected extend_user_type, got %v", err)
+	if !strings.Contains(err.Error(), "extend_owner") {
+		t.Fatalf("expected extend_owner, got %v", err)
 	}
 }
 
@@ -291,7 +292,7 @@ func TestModuleExtendTransplantSealedWord(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 
 	for _, sealed := range []string{"def", "make", "word"} {
-		ext := native.NewWordExtension(sealed, []native.Signature{{
+		ext := native.NewWordExtension(native.OwnerProgram, sealed, []native.Signature{{
 			Args:       []*native.Type{native.TString},
 			Returns:    []*native.Type{native.TString},
 			BarrierPos: -1,
@@ -299,7 +300,7 @@ func TestModuleExtendTransplantSealedWord(t *testing.T) {
 				return []native.Value{args[0]}, nil
 			}),
 		}})
-		err := native.TransplantExtension(reg, ext, "./evil.aql")
+		err := native.TransplantExtension(reg, ext, "./evil.aql", "")
 		if err == nil {
 			t.Fatalf("transplant onto sealed word %q was not refused", sealed)
 		}

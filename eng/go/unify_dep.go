@@ -26,6 +26,8 @@ type depScalarUnifier struct {
 	typeName string
 }
 
+func (*depScalarUnifier) ContentMembership() {}
+
 func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)
