@@ -3511,7 +3511,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 // collide with an arm's live local, JoinCarriers' own §), but for a
 // merely-narrowed enclosing def that fresh ID strands every later
 // reference as an unseated dynamic carrier ("fn call operand of unknown
-// provenance"; the alice viewer's render fn hit exactly this). A GENUINE
+// provenance"; the aless viewer's render fn hit exactly this). A GENUINE
 // reassignment gives the arms DIFFERING IDs and keeps the fresh-ID join.
 func joinBranchDef(a, b Value) Value {
 	out := JoinCarriers(a, b)
