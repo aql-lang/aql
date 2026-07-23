@@ -165,3 +165,47 @@ func TestRequireOwnedAnchorModuleCarveout(t *testing.T) {
 		t.Error("strict path accepted a foreign module anchor")
 	}
 }
+
+// TestBuiltinBase pins the super word's kernel accessor: the pristine
+// native registration, nil for non-builtins, nil when the binding
+// stack has been torn out from under a builtin name.
+func TestBuiltinBase(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Register("bb-word", Signature{
+		Args: []*Type{TInteger}, BarrierPos: 0,
+		Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return []Value{args[0]}, nil
+		}),
+		Returns: []*Type{TInteger},
+	})
+	base := r.BuiltinBase("bb-word")
+	if base == nil || len(base.Signatures) == 0 || !base.Signatures[0].Locked {
+		t.Fatalf("BuiltinBase(bb-word) = %+v", base)
+	}
+	if r.BuiltinBase("no-such-word") != nil {
+		t.Error("non-builtin returned a base")
+	}
+	// Defensive arm: a builtin name whose def stack lost its FnDefInfo.
+	r.Defs.Delete("bb-word")
+	if r.BuiltinBase("bb-word") != nil {
+		t.Error("torn-down builtin returned a base")
+	}
+}
+
+// TestFlexLiteralUnifiesCarrier pins the flex-retag gap fix: a
+// check-mode carrier tagged at (or under) the flex type satisfies the
+// flex literal; foreign carriers still refuse.
+func TestFlexLiteralUnifiesCarrier(t *testing.T) {
+	if _, ok := Unify(NewCarrier(TFlexMap), NewTypeLiteral(TFlexMap)); !ok {
+		t.Error("FlexMap carrier refused by its own literal")
+	}
+	if _, ok := Unify(NewCarrier(TWeakFlexMap), NewTypeLiteral(TFlexMap)); !ok {
+		t.Error("subtype carrier refused by the parent flex literal")
+	}
+	if _, ok := Unify(NewCarrier(TInteger), NewTypeLiteral(TFlexMap)); ok {
+		t.Error("foreign carrier accepted by the flex literal")
+	}
+}

@@ -1,0 +1,44 @@
+# AQL Language Specification: `super` — base-dispatch delegation, and the
+# pure-AQL sorted-node enablers (design/OPEN-WORDS.1.md follow-ups)
+# Format: input<TAB>expected<TAB>description
+#
+# Three seams make user-module container subtypes (FLEX-ATTRS.1 D4)
+# expressible in pure AQL:
+#   1. `super name/q` returns a Function wrapping the word's PRISTINE
+#      builtin dispatch table — call-by-value (quote-capture cleared),
+#      so an anchored override body can delegate to the base overloads
+#      without re-entering itself.
+#   2. A bare refine of a FLEX type retags flex handles through typed
+#      def (`def w:S (flex m)`) — check and runtime agree; the tag
+#      survives in-place writes because flex words return the receiver.
+#   3. A fn-bodied capitalised def (`def Sorted ([m:Map] => [pred])`)
+#      is a CONTENT-predicate type over containers; params dispatch on
+#      the predicate. (Content types cannot ANCHOR extensions — the
+#      OPEN-WORDS.1 §3.1 nominality rule — classification only.)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  super — the base dispatch as a value
+def bset (super set)  typeof (bset/r)	Function	super returns the pristine builtin dispatch as a Function
+def bset (super set)  def m (flex { })  (bset 'a' 1 m) drop keys m	['a']	the delegated write runs the KERNEL set — no merged overloads
+def bset (super set)  def k b/q  def m (flex { })  (bset k 2 m) drop keys m	['b']	delegation is CALL-BY-VALUE: k passes its BINDING, never the literal word (quote-capture is cleared)
+super nosuchword	ERROR:super_error	an unknown word has no base
+def myfn fn [[x:Integer] [Integer] [x]]  super myfn	ERROR:super_error	a plain user fn has no hidden base — call it directly
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  refine-of-flex retag — nominal subtypes of mutable containers
+def S (refine FlexMap)  def w:S (flex {b:2 a:1})  typeof w	S	typed def retags a flex handle to the newtype (the flex-retag gap, fixed)
+def S (refine FlexMap)  def w:S (flex {b:2 a:1})  (set c/q 3 w) drop typeof w	S	the tag survives an in-place write — flex words return the receiver handle
+def S (refine FlexMap)  def w:S (flex {a:1})  w.a	1	reads dispatch the inherited flex vocabulary
+def S (refine FlexMap)  def w:S (flex {b:2 a:1})  w is FlexMap	true	nominal subtyping: an S is a FlexMap
+def S (refine FlexMap)  def w:S (flex {b:2 a:1})  w	{a:1 b:2}	a newtype value renders by its payload family, not as an opaque wrapper
+def L (refine FlexList)  def v:L (flex [1 2])  typeof v	L	the list column retags identically
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  content-predicate types over containers (classification)
+def Sorted ([m:Map] => [(keys m) deq (sort (keys m))])  def f fn [[m:Sorted] [Integer] [size m]]  f {a:1 b:2}	2	a map satisfying the predicate dispatches the Sorted param
+def Sorted ([m:Map] => [(keys m) deq (sort (keys m))])  def f fn [[m:Sorted] [Integer] [size m]]  f (set a/q 1 (set b/q 2 { }))	ERROR:signature_error	an unsorted map is refused at dispatch (content, not provenance)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  the composition — an anchored override delegating to its base
+def S (refine FlexMap)  def bset (super set)  def set fn [[k:Atom/q v:Any m:S] [S] [(bset k v m)]]  def w:S (flex { })  (set a/q 1 w) drop keys w	['a']	the anchored subtype override dispatches and its body delegates to the kernel set through super — no recursion
+def S (refine FlexMap)  def bset (super set)  def set fn [[k:Atom/q v:Any m:S] [S] [(bset k v m)]]  (set b/q 2 (flex {a:1}))	(flex {a:1 b:2})	a PLAIN flex value never sees the override (reachability)

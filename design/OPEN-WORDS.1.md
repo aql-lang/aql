@@ -218,6 +218,33 @@ kernel table and modules alike.
 | `micron.tsv` §extensions | row 504 (builtin Micron leaf refused) unchanged in outcome, error code updated; 505 (minted Baron anchors) unchanged |
 | ratchets | check-accuracy pins for touched files; COMPILED_STATUS refresh; fnmodel golden if sig lists shift |
 
+## 7b. The pure-AQL enablers (follow-up, landed with rev 2)
+
+Three seams initially kept the FLEX-ATTRS.1 D4 sorted nodes a
+Go-module capability; all three are now fixed, making the whole shape
+expressible in user AQL (pinned by `lang/spec/super.tsv` and
+`lang/go/test/sorted_user_test.go`):
+
+- **Flex retag.** `def w:S (flex m)` for `S (refine FlexMap)` — the
+  flex-literal unify arm now accepts a check-mode carrier tagged at or
+  under the flex type (`unifyFlexLiteral`), matching the runtime,
+  which already unified. Bare-refine newtypes of mutable containers
+  render by payload family (`bareRefineUnifier.formatDelegate`).
+- **`super name/q`** — the delegation escape: returns a Function
+  wrapping the word's PRISTINE builtin dispatch (`Registry.
+  BuiltinBase`), quote-capture cleared on deep-copied signatures
+  (call-by-value delegation), so an anchored override body calls the
+  base overloads without re-entering itself.
+- **Container content-predicates** already worked as fn-bodied
+  capitalised defs (`def Sorted ([m:Map] => [pred])`); pinned.
+
+Residual (deliberate): a DYNAMIC value (a `get` result) flowing into
+a delegated fn-value call refuses compilation ("dynamic input at …" —
+the fn-value boundary's widening guard), so the full maintained-sort
+program runs interpreted today; its compiled twin lands with that
+boundary. Word-level admission, dispatch, retag, and delegation all
+compile.
+
 ## 8. Relation to bounded generics
 
 None needed — confirming the earlier conclusion: `gen [(T extends

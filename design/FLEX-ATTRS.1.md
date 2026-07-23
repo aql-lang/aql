@@ -19,7 +19,12 @@
 > tag for flex AND weak targets), and typed weak containers enforce
 > `{:T}`/`[:T]` on set/append exactly like the flex column. D1
 > (universal insertion order) and D4 (sorted types) remain
-> unimplemented.
+> unimplemented — but D4's blocking seams are now GONE: open-words
+> rev 2 (design/OPEN-WORDS.1.md) makes anchored subtype overrides
+> dispatch, and its §7b follow-ups (flex retag, `super` delegation,
+> container predicates) make the whole sorted-node shape expressible
+> in pure AQL (lang/spec/super.tsv; lang/go/test/sorted_user_test.go
+> runs a user-module SortedFlexMap end to end).
 
 Status: **design under examination — decisions taken; D3 implemented
 on this branch** (2026-07-22). Revision of

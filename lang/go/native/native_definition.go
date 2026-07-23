@@ -53,6 +53,25 @@ var definitionNatives = []NativeFunc{
 		},
 	},
 	{
+		Name: "super",
+
+		Signatures: []Signature{
+			// super word — the delegation escape for override bodies
+			// (design/OPEN-WORDS.1.md follow-up): returns a Function
+			// wrapping the word's PRISTINE builtin dispatch table, so a
+			// merged overload's body can call the base overloads
+			// without re-entering itself. `def bset (super set)` then
+			// `bset k v m` dispatches the kernel `set` signatures only.
+			{
+				Args:       []*Type{TAtom},
+				QuoteArgs:  map[int]bool{0: true},
+				Impl:       Go(superHandler, RunInCheck()),
+				Returns:    []*Type{TFunction},
+				BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name: "undef",
 
 		Signatures: []Signature{
@@ -1641,4 +1660,44 @@ func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, err
 	}
 	return nil, nil
+}
+
+// superHandler resolves `super name/q` to the word's pristine builtin
+// dispatch table as a Function value (see the sig comment above). The
+// returned FnDef carries the base's own signatures — native handlers
+// included — so invoking it can never re-enter a def-merged overload.
+func superHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name, err := args[0].AsConcreteAtom()
+	if err != nil {
+		return nil, r.AqlError("super_error", "super: expected a word name", "super")
+	}
+	base := r.BuiltinBase(name)
+	if base == nil {
+		return nil, r.AqlErrorHint("super_error",
+			fmt.Sprintf("super %s: not a built-in word", name),
+			"super",
+			"super exposes the pristine native dispatch of a BUILT-IN word; user fns have no hidden base — call them directly")
+	}
+	fd := *base
+	// Delegation is CALL-BY-VALUE: the caller passes its already-bound
+	// values, so the base's quote-capture slots (`set k/q …`) must not
+	// re-quote the caller's variable references — `bset k v m` passes
+	// the BINDING k, not the literal atom `k`. Quote-capture belongs to
+	// the surface word; the delegated dispatch takes evaluated operands
+	// (the get/getr rule). Both quote channels are cleared — QuoteArgs
+	// AND the per-param Quote flag it re-derives from — on DEEP-COPIED
+	// sigs so the kernel's shared registration stays untouched.
+	fd.Signatures = make([]Signature, len(base.Signatures))
+	for i := range base.Signatures {
+		sg := base.Signatures[i]
+		sg.QuoteArgs = nil
+		params := make([]FnParam, len(sg.Params))
+		copy(params, sg.Params)
+		for j := range params {
+			params[j].Quote = false
+		}
+		sg.Params = params
+		fd.Signatures[i] = sg
+	}
+	return []Value{NewFnDef(fd)}, nil
 }
