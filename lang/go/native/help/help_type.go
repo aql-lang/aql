@@ -20,12 +20,12 @@ func init() {
 			"presence coercion: empty String / 0 / none / empty collection are false, " +
 			"everything else is true.",
 		Examples: []string{
-			`convert Integer "42"                        ;# 42`,
-			`convert Integer {base:'hex'} "ff"           ;# 255`,
-			`convert Boolean {truthy:true} "no"          ;# false (YAML token)`,
-			`convert Boolean {truthy:true} "meh"         ;# true  (not a token, non-empty)`,
-			`convert BigDecimal {accuracy:'shortest'} 3.14      ;# 0d3.14`,
-			`convert BigDecimal {accuracy:'round' places:2} 3.14159  ;# 0d3.14`,
+			`convert Integer "42" ; # 42`,
+			`convert Integer {base:'hex'} "ff" ; # 255`,
+			`convert Boolean {truthy:true} "no" ; # false (YAML token)`,
+			`convert Boolean {truthy:true} "meh" ; # true  (not a token, non-empty)`,
+			`convert BigDecimal {accuracy:'shortest'} 3.14 ; # 0d3.14`,
+			`convert BigDecimal {accuracy:'round' places:2} 3.14159 ; # 0d3.14`,
 		},
 	})
 
@@ -63,11 +63,11 @@ func init() {
 			"read-only properties via dot " +
 			"(`e.host`, `u.port`, `i.addr`, `h.authority`, `s.major`, `s.stable`).",
 		Examples: []string{
-			`make Point {}          ;# fresh instance, all fields at their defaults`,
-			`make Point {x: 3 y: 4} ;# instance with field overrides`,
-			`(make Counter {}).count ;# parenthesise to read a field off a fresh make`,
-			`make Emailon 'alice@example.com'   ;# validated structured scalar (Micron)`,
-			`(make Urlon 'https://x.com/a').host ;# 'x.com' — Microns have properties`,
+			`make Point {} ; # fresh instance, all fields at their defaults`,
+			`make Point {x:3 y:4} ; # instance with field overrides`,
+			`(make Counter {}).count ; # parenthesise to read a field off a fresh make`,
+			`make Emailon 'alice@example.com' ; # validated structured scalar (Micron)`,
+			`(make Urlon 'https://x.com/a').host ; # 'x.com' — Microns have properties`,
 		},
 	})
 
@@ -97,10 +97,10 @@ func init() {
 			"sealed_field. Subclass with refine: `def Bar refine Foo {\u2026}`. For open, " +
 			"unsealed mutable data use a FlexMap (`flex {\u2026}`) instead.",
 		Examples: []string{
-			`def Point class {x:1, y:2}     ;# x,y default to 1,2`,
-			`def p (make Point {x:9})       ;# p.x => 9, p.y => 2`,
-			`def Point3 refine Point {z:3}  ;# subclass, inherits x,y`,
-			`p set w 5                      ;# ERROR sealed_field`,
+			`def Point class {x:1 y:2} ; # x,y default to 1,2`,
+			`def p (make Point {x:9}) ; # p.x => 9, p.y => 2`,
+			`def Point3 refine Point {z:3} ; # subclass, inherits x,y`,
+			`p set w 5 ; # ERROR sealed_field`,
 		},
 	})
 
@@ -115,11 +115,11 @@ func init() {
 			"(no structural duck typing). Members then dispatch through surface-typed " +
 			"fn params, answer `is`, and ride the tor/tand/tnot type algebra.",
 		Examples: []string{
-			`def Shape surface {area: (fnsig [[Self] [Float]])}`,
+			`def Shape surface {area:(fnsig [[Self] [Float]])}`,
 			`def Circle class {r:1.0}`,
-			`def area fn [[c:Circle] [Float] [(c get r) mul 6.28]]`,
-			`Circle exposes Shape           ;# loud completeness check`,
-			`def total fn [[s:Shape] [Float] [area s]]`,
+			`def area fn c:Circle Float [(c get r) mul 6.28]`,
+			`Circle exposes Shape ; # loud completeness check`,
+			`def total fn s:Shape Float [area s]`,
 		},
 	})
 
@@ -135,11 +135,11 @@ func init() {
 			"check runs at declaration time \u2014 a later undef of an operation is " +
 			"not re-checked (the call then fails loudly downstream).",
 		Examples: []string{
-			`def Shape surface {area: (fnsig [[Self] [Float]])}`,
+			`def Shape surface {area:(fnsig [[Self] [Float]])}`,
 			`def Circle class {r:1.0}`,
-			`def area fn [[c:Circle] [Float] [3.14]]`,
+			`def area fn c:Circle Float [3.14]`,
 			`Circle exposes Shape`,
-			`(make Circle {}) is Shape      ;# true`,
+			`(make Circle {}) is Shape ; # true`,
 		},
 	})
 
@@ -159,7 +159,7 @@ func init() {
 			`def Pair gen [K V] refine Record [key:K value:V]`,
 			`def Sorted gen [(T extends Number)] refine Record [items:[:T]]`,
 			`def Result gen [T (E default Error)] refine Record [ok:T err:E]`,
-			`Box of [Integer]              ;# record{value:Integer}`,
+			`Box of [Integer] ; # record{value:Integer}`,
 		},
 	})
 
@@ -175,9 +175,9 @@ func init() {
 			"`Box of [Integer]` is the same type (`teq` true).",
 		Examples: []string{
 			`def Box gen [T] refine Record [value:T]`,
-			`Box of [Integer]              ;# record{value:Integer}`,
-			`(Box of [Integer]) teq (Box of [Integer])   ;# true`,
-			`Box of []                     ;# ERROR arity_mismatch`,
+			`Box of [Integer] ; # record{value:Integer}`,
+			`(Box of [Integer]) teq (Box of [Integer]) ; # true`,
+			`Box of [] ; # ERROR arity_mismatch`,
 		},
 	})
 
@@ -192,8 +192,8 @@ func init() {
 			"conformance). Only meaningful inside a gen parameter entry.",
 		Examples: []string{
 			`def Sorted gen [(T extends Number)] refine Record [items:[:T]]`,
-			`Sorted of [Integer]           ;# ok — Integer is a Number`,
-			`Sorted of [String]            ;# ERROR constraint_violation`,
+			`Sorted of [Integer] ; # ok — Integer is a Number`,
+			`Sorted of [String] ; # ERROR constraint_violation`,
 		},
 	})
 
@@ -206,8 +206,8 @@ func init() {
 			"extends: `(T extends C default D)`.",
 		Examples: []string{
 			`def Result gen [T (E default Error)] refine Record [ok:T err:E]`,
-			`Result of [Integer]           ;# record{ok:Integer err:Error}`,
-			`Result of [Integer String]    ;# the default is overridable`,
+			`Result of [Integer] ; # record{ok:Integer err:Error}`,
+			`Result of [Integer String] ; # the default is overridable`,
 		},
 	})
 
@@ -223,9 +223,9 @@ func init() {
 			"Maps); NaN is rejected. With tor unions this gives discriminated records: " +
 			"def Circle class {kind:(const 'circle'), r:0.0}.",
 		Examples: []string{
-			`def S class {kind:(const 'point'), x:1}`,
-			`make S {}                     ;# kind='point' — forced default`,
-			`make S {kind:'other'}         ;# ERROR — only 'point' inhabits the type`,
+			`def S class {kind:(const 'point') x:1}`,
+			`make S {} ; # kind='point' — forced default`,
+			`make S {kind:'other'} ; # ERROR — only 'point' inhabits the type`,
 		},
 	})
 
@@ -296,7 +296,7 @@ func init() {
 		Word:        "is",
 		Summary:     "Test whether a value is of a given type: `value is Type`.",
 		Description: "True when the value conforms to (is an inhabitant of) the type — 5 is Integer, 'x' is String. Routes through the type's matching behaviour, so refine and predicate types are honoured.",
-		Examples:    []string{`5 is Integer     ;# => true`, `'x' is Integer   ;# => false`},
+		Examples:    []string{`5 is Integer ; # => true`, `'x' is Integer ; # => false`},
 	})
 	register(&Entry{
 		Word:    "tis",
@@ -307,13 +307,13 @@ func init() {
 			"refine, membership, or structural match — so it is tag-only. " +
 			"`100 tis (Integer gt 10)` and `5 tis (Integer gt 10)` are both true " +
 			"(base tag Integer), where `is` honours the predicate (true / false).",
-		Examples: []string{`5 tis Integer    ;# => true`, `5 tis Number     ;# => true`, `Integer tis Number ;# => true`},
+		Examples: []string{`5 tis Integer ; # => true`, `5 tis Number ; # => true`, `Integer tis Number ; # => true`},
 	})
 	register(&Entry{
 		Word:        "istype",
 		Summary:     "Test whether a value is a type literal rather than a concrete value.",
 		Description: "True for a bare type node like Integer or a user-defined type; false for concrete values like 5.",
-		Examples:    []string{`istype Integer   ;# => true`, `istype 5         ;# => false`},
+		Examples:    []string{`istype Integer ; # => true`, `istype 5 ; # => false`},
 	})
 	register(&Entry{
 		Word:        "behave",
@@ -329,12 +329,12 @@ func init() {
 		Word:        "tnot",
 		Summary:     "The negation of a type: the type of every value that is NOT of it.",
 		Description: "`tnot Integer` is a Type/Negation matching anything that is not an Integer. Combine with type unions and intersections for precise constraints.",
-		Examples:    []string{`typeof (tnot Integer)   ;# => Negation`},
+		Examples:    []string{`typeof (tnot Integer) ; # => Negation`},
 	})
 	register(&Entry{
 		Word:        "pathof",
 		Summary:     "The lattice path of a value's type, as a list of names.",
 		Description: "`pathof Integer` is [Scalar Number Integer] — the chain from the branch root down to the type. The structural complement of typeof.",
-		Examples:    []string{`pathof Integer   ;# => [Scalar Number Integer]`},
+		Examples:    []string{`pathof Integer ; # => [Scalar Number Integer]`},
 	})
 }

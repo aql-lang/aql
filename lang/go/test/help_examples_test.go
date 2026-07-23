@@ -27,7 +27,7 @@ func TestHandAuthoredExamplesWin(t *testing.T) {
 	}{
 		{"set", `c 1 "count" set`, `set 'a'`},
 		{"get", `[10 20 30] 0 get`, ``},
-		{"make", `make Point {x: 3 y: 4}`, ``},
+		{"make", `make Point {x:3 y:4}`, ``},
 		{"each", `[1 2 3] each [dup mul]`, ``},
 		{"fold", `0 fold [add] [1 2 3 4]`, ``},
 	}

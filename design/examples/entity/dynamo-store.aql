@@ -7,44 +7,55 @@
 # I/O instead of touching a local Store.
 
 import "aql:serve"
-import "aql:net"          # Net.fetch (HTTP client; the only transport AQL has)
+import "aql:net" # Net.fetch (HTTP client; the only transport AQL has)
 import "aql:rand"
 
-export "DynamoStore" { New: New/r }
+export "DynamoStore" {New:New/r}
 
 # `New {table region}` -> Service
-def New fn [[opts:Map] [Service] [
-  def svc ( service { table:  (opts dot table)
-                      region: (opts dot region ? "us-east-1") } )
-
-  add {role: "entity"  cmd: "save"} [ [req state] => [
-      def id  ( req.ent dot id ? (Rand.uuid) )
-      def row ( set id (id) req.ent )
-      dynamo state "DynamoDB_20120810.PutItem"
-        { TableName: (state dot table)  Item: (to-attr row) }
-      row
-  ] ] svc
-
-  add {role: "entity"  cmd: "load"} [ [req state] => [
-      def out ( dynamo state "DynamoDB_20120810.GetItem"
-                  { TableName: (state dot table)  Key: (to-attr {id: req.q.id}) } )
-      from-attr (out dot Item)
-  ] ] svc
-
-  add {role: "entity"  cmd: "list"} [ [req state] => [
-      # Real impl builds a FilterExpression from q and paginates the Scan.
-      def out ( dynamo state "DynamoDB_20120810.Scan" { TableName: (state dot table) } )
-      map ([it:Map] => [ from-attr it ]) (out dot Items)
-  ] ] svc
-
-  add {role: "entity"  cmd: "remove"} [ [req state] => [
-      dynamo state "DynamoDB_20120810.DeleteItem"
-        { TableName: (state dot table)  Key: (to-attr {id: req.q.id}) }
-      None
-  ] ] svc
-
-  svc
-]]
+def New fn opts:Map Service [
+  def svc
+    (service
+        {table:(opts dot table) region:(opts dot region? "us-east-1")}
+    )
+    add {role:"entity" cmd:"save"}
+    [[req state] =>
+        [def id (req.ent dot id? (Rand.uuid))
+          def row (set id (id) req.ent) dynamo state
+            "DynamoDB_20120810.PutItem"
+            {TableName:(state dot table) Item:(to-attr row)} row
+        ]
+    ]
+    svc add {role:"entity" cmd:"load"}
+    [[req state] =>
+        [def out
+            (dynamo state "DynamoDB_20120810.GetItem"
+                {TableName:(state dot table)
+                  Key:(to-attr {id:req.q.id})
+                }
+            )
+            from-attr (out dot Item)
+        ]
+    ]
+    svc add {role:"entity" cmd:"list"}
+    [[req state] =>
+        [# Real impl builds a FilterExpression from q and paginates the Scan.
+          def out
+            (dynamo state "DynamoDB_20120810.Scan"
+                {TableName:(state dot table)}
+            )
+            Map ([it:Map] => [from-attr it]) (out dot Items)
+        ]
+    ]
+    svc add {role:"entity" cmd:"remove"}
+    [[req state] =>
+        [dynamo state "DynamoDB_20120810.DeleteItem"
+            {TableName:(state dot table) Key:(to-attr {id:req.q.id})}
+            None
+        ]
+    ]
+    svc svc
+]
 
 # Build and POST a DynamoDB request. `Net.fetch` reaches the host network policy.
 #
@@ -56,14 +67,18 @@ def New fn [[opts:Map] [Service] [
 #      sandbox/read-only profiles hard-deny it.
 # GAP: the real seneca-dynamo-store has a documented upsert race on unique fields.
 def dynamo fn [[state:Store target:String body:Map] [Map] [
-  def url ( `https://dynamodb.${state dot region}.amazonaws.com/` )
-  Net.fetch { url: url  method: "POST"
-              headers: { "X-Amz-Target": target
-                         "Content-Type": "application/x-amz-json-1.0" }
-              body: body }
+  def url (`https://dynamodb.${state dot region}.amazonaws.com/`)
+    Net.fetch
+    {url:url
+      method:"POST"
+      headers:{"X-Amz-Target":target
+        "Content-Type":"application/x-amz-json-1.0"
+      }
+      body:body
+    }
 ]]
 
 # DynamoDB attribute-value codec ({id:"x"} <-> {id:{S:"x"}}) — sketched as
 # identity. GAP: real type tagging ({S}/{N}/{BOOL}/{M}/{L}) is omitted.
-def to-attr   fn [[m:Map] [Map] [ m ]]
-def from-attr fn [[m:Map] [Map] [ m ]]
+def to-attr fn m:Map Map [m]
+def from-attr fn m:Map Map [m]

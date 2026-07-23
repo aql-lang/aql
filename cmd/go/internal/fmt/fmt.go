@@ -33,6 +33,21 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
 
+// formatByExt formats a file's contents according to its extension:
+// Markdown (.md/.markdown) and HTML (.html/.htm) files have only their
+// embedded AQL (```aql fences / <!-- aqlfmt --> regions) reformatted;
+// everything else is treated as a whole AQL source file.
+func formatByExt(path, src string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown":
+		return formatter.FormatMarkdown(src)
+	case ".html", ".htm":
+		return formatter.FormatHTML(src)
+	default:
+		return formatter.Format(src)
+	}
+}
+
 // Run handles `aql fmt [file.aql ...]`.
 func Run(args []string, stdout, stderr io.Writer) int {
 	var files []string
@@ -73,7 +88,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			stdfmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		formatted := formatter.Format(string(data))
+		formatted := formatByExt(path, string(data))
 		if string(data) != formatted {
 			if err := osWriteFile(path, []byte(formatted), 0644); err != nil {
 				stdfmt.Fprintf(stderr, "error: %s\n", err)

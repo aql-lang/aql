@@ -4,11 +4,19 @@
 import "./design/examples/apps/mini-redis.aql"
 import "aql:net"
 import "aql:time-util"
-def ln (MiniRedis.serve {port: 0})
+def ln (MiniRedis.serve {port:0})
 def port (Net.addr ln).port
-def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String port)]))
+def ep
+(MiniRedis.connect (join "" ["127.0.0.1:" (convert String port)]))
 MiniRedis.cmd ep "SET k hello" drop
 def start (TimeUtil.now)
-for 5000 [ MiniRedis.cmd ep "SET k hello" drop  MiniRedis.cmd ep "GET k" drop ]
+for 5000 [
+  MiniRedis.cmd ep "SET k hello" drop MiniRedis.cmd ep "GET k" drop
+]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
-print (join "" ["mini-redis 10000 ops  " (convert String dur) " ms  " (convert String (div dur 10000000.0)) " req/s"])
+print
+(join ""
+      ["mini-redis 10000 ops  " (convert String dur) " ms  "
+          (convert String (div dur 10000000.0)) " req/s"
+      ]
+  )

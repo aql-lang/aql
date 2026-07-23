@@ -7,7 +7,7 @@ func init() {
 		Description: "Prevents evaluation. `quote add` is the atom `add`; `quote [1 add 2]` is the unevaluated " +
 			"list `[1 add 2]`. The `/q` word suffix (`add/q`) is the canonical short form.",
 		Examples: []string{
-			`quote add   ;# => add   (an atom, not a call)`,
+			`quote add ; # => add   (an atom, not a call)`,
 		},
 	})
 
@@ -31,7 +31,7 @@ func init() {
 		Summary: "Bind a body that splices its elements inline at every reference (Forth-style).",
 		Description: "`def name word [body]` makes name expand its body in place wherever it is used, rather than " +
 			"binding the list as a value. The splice fires when the reference is stepped, so it sees current bindings.",
-		Examples: []string{`def double word [dup add]  5 double   ;# => 10`},
+		Examples: []string{`def double word [dup add] 5 double ; # => 10`},
 	})
 
 	register(&Entry{
@@ -71,7 +71,7 @@ func init() {
 			"kind's function auto-dispatches when a matching subject is on the stack — and stays a storable " +
 			"VALUE when not, so `def f (+re/[a-z]+/)` binds a reusable matcher (`\"AbcD\" f`), and /r parks it " +
 			"deliberately. Each built-in filter kind's partial has a NAMED member type (MiniLang.Re, " +
-			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp) for `is` checks and typed fn params " +
+			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp, MiniLang.Sp) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
 			"The built-in kinds live in the aql:minilang module (import it first; MiniLang.kinds lists " +
 			"them) and the kind set is FIXED — new kinds cannot be registered. " +
@@ -81,10 +81,10 @@ func init() {
 			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
-			`import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m   ;# => 'bc'`,
-			`import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m          ;# => 'bc' — a stored matcher`,
-			`import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'   ;# => 'A'`,
-			`import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'  ;# => 'abab' — a fn as the transducer`,
+			`import "aql:minilang" def r ("AbcD" mini re '[a-z]+') end r.fst.m ; # => 'bc'`,
+			`import "aql:minilang" def f (+re/[a-z]+/) ("AbcD" f).fst.m ; # => 'bc' — a stored matcher`,
+			`import "aql:minilang" mini bf '++++++++[>++++++++<-]>+.' ; # => 'A'`,
+			`import "aql:minilang" def dbl fn [[src:String opts:Map] [String] [src add src]] mini dbl 'ab' ; # => 'abab' — a fn as the transducer`,
 		},
 	})
 
@@ -102,10 +102,10 @@ func init() {
 			"standard [source:String opts:Map] prefix — called directly with no kind lookup, so a " +
 			"parser works without being registered under a kind name.",
 		Examples: []string{
-			`import "aql:parselang"  parse calc 'x + y'        ;# => the parser's AST`,
-			`import "aql:parselang"  parse calc {src:'x + y'}  ;# a {src:…} source map`,
-			`import "aql:parselang"  parse (ParseLang.parse_json) '{"a":1}'  ;# a ParseLang value as the parser`,
-			`import "aql:parselang"  def myp fn [[source:String opts:Map] [Any] [...]]  parse myp 'x'  ;# a bound parser fn`,
+			`import "aql:parselang" parse calc 'x + y' ; # => the parser's AST`,
+			`import "aql:parselang" parse calc {src:'x + y'} ; # a {src:…} source map`,
+			`import "aql:parselang" parse (ParseLang.parse_json) '{"a":1}' ; # a ParseLang value as the parser`,
+			`import "aql:parselang" def myp fn [[source:String opts:Map] [Any] [...]] parse myp 'x' ; # a bound parser fn`,
 		},
 	})
 
@@ -127,9 +127,9 @@ func init() {
 			"instead BE the emitter — a fn (or a word bound to one) whose every signature is " +
 			"[value:Any opts:Map] → [String] — called directly with no kind lookup.",
 		Examples: []string{
-			`import "aql:emitlang"  emit {a:1 b:[2 3]}            ;# => compact json (natural)`,
-			`import "aql:emitlang"  emit json {pretty:true} {a:1} ;# => indented json`,
-			`import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}  ;# => 'UP' — a fn as the emitter`,
+			`import "aql:emitlang" emit {a:1 b:[2 3]} ; # => compact json (natural)`,
+			`import "aql:emitlang" emit json {pretty:true} {a:1} ; # => indented json`,
+			`import "aql:emitlang" def up fn [[value:Any opts:Map] [String] ['UP']] emit up {a:1} ; # => 'UP' — a fn as the emitter`,
 		},
 	})
 }

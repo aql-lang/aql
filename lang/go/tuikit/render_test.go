@@ -274,6 +274,53 @@ func TestRenderInputForms(t *testing.T) {
 	}
 }
 
+// A masked input paints one narrow bullet per rune — the value itself
+// never reaches the frame — and the cursor advances one cell per rune
+// even for wide-rune values. The placeholder is a hint, not a secret,
+// so it stays unmasked; a wrong-typed mask is refused in paint and in
+// measure.
+func TestRenderInputMask(t *testing.T) {
+	res := mustRender(t, w("input", "value", "hunter2", "mask", true), 10, 1)
+	if got := screenOf(res)[0]; got != "•••••••   " {
+		t.Errorf("masked value = %q", got)
+	}
+	if got := screenOf(res)[0]; strings.Contains(got, "hunter") {
+		t.Errorf("secret leaked into the frame: %q", got)
+	}
+	// wide-rune value: bullets are narrow, the cursor sits at the rune
+	// index (unmasked, the same cursor lands at X=4 — see
+	// TestRenderInputForms)
+	res = mustRender(t, w("input", "value", "漢字ab", "cursor", 2, "focus", true, "mask", true), 10, 1)
+	if got := screenOf(res)[0]; got != "••••      " {
+		t.Errorf("masked wide value = %q", got)
+	}
+	if res.Cursor == nil || res.Cursor.X != 2 {
+		t.Errorf("masked cursor = %+v", res.Cursor)
+	}
+	// an empty masked input still shows its (unmasked) placeholder
+	res = mustRender(t, w("input", "value", "", "mask", true, "placeholder", "passphrase"), 12, 1)
+	if got := screenOf(res)[0]; got != "passphrase  " {
+		t.Errorf("masked placeholder = %q", got)
+	}
+	// wrong-typed mask: refused in paint and in the measure path
+	if got := renderErr(t, w("input", "mask", 5)); !strings.Contains(got, "mask: must be a Boolean") {
+		t.Errorf("paint mask error = %q", got)
+	}
+	if _, _, err := measureFit(w("input", "value", "x", "mask", 5), 80); err == nil ||
+		!strings.Contains(err.Error(), "mask: must be a Boolean") {
+		t.Errorf("measure mask error = %v", err)
+	}
+	// masked measure counts runes, not display width
+	mw, mh, err := measureFit(w("input", "value", "漢字", "mask", true), 80)
+	if err != nil || mw != 3 || mh != 1 {
+		t.Errorf("masked measure = %d,%d,%v", mw, mh, err)
+	}
+	uw, _, err := measureFit(w("input", "value", "漢字"), 80)
+	if err != nil || uw != 5 {
+		t.Errorf("unmasked measure = %d,%v", uw, err)
+	}
+}
+
 func TestRenderViewport(t *testing.T) {
 	child := w("rows", "children", []any{
 		w("text", "text", "row0", "size", 1),

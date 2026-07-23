@@ -80,6 +80,17 @@ returning `Bytes`.
 
 ### 4.3 Cryptographic hashes
 
+> **Superseded — see [AQL-CRYPTO.0](../AQL-CRYPTO.0.md).** The
+> cryptographic surface below (§4.3 hashes, §4.5 HMAC, §4.6 secure random)
+> was later reassigned to a dedicated, policy-scoped `aql:crypto` module,
+> which also carries the AEAD / KDF / sealed-box primitives the vault
+> migration needs and which `aql:bin-util` does not. Treat these three
+> subsections as withdrawn from this proposal: `aql:bin-util` keeps its
+> **non-cryptographic** binary surface (bitwise ops, rotates, `popcount`,
+> CRC, the `base*`/`hex`/`ascii85` encodings, UUIDs); `sha*`/`hmac`/
+> `random-*` live in `Crypto.*`. (Both docs are unimplemented proposals;
+> the final call is the maintainer's.)
+
 data (`String|Bytes`) → `Bytes` digest. Pipe through `hex-encode` /
 `base64-encode` to render.
 

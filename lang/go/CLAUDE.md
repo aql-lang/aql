@@ -98,12 +98,26 @@ and directions accepted in discussion are *discovery* — they are
 captured in `design/*.md` notes, not as ADR entries, however settled
 they sound. The same rule is stated in the `ADR.md` header.
 
+## Known sharp edges (app-authoring)
+
+Language- and compiler-level sharp edges found by writing a large app
+entirely in AQL are collected in **`design/AQL-SHARP-EDGES.0.md`** —
+minimal repros, root-cause hypotheses, workarounds, and a triage table.
+Two are engine-bug candidates (G8 recovered-`raise` binding teardown;
+G12 an `/r`-parked fn not satisfying a `Function` param); one is a latent
+bug in shipped example code (G10 `def why (dot message)` in an `error`
+handler, in `design/examples/apps/todo-tui-client.aql`); the rest are
+`case`-default collection (G9), returned-list-literal laziness (G11), and
+two bytecode-compiler refusals (G13a single-token bare-map body, G13b a
+type-literal map value). Read it before re-deriving a workaround.
+
 ## Build & Test
 
 ```bash
 make test         # from repo root: fans out across every module
 make vet          # vet across every module
 make fmt          # gofmt across every module
+make fmt-docs     # aql fmt over the gated user-facing docs' ```aql blocks
 make lint         # golangci-lint across every module — RUN BEFORE COMMIT
 
 cd cmd/go

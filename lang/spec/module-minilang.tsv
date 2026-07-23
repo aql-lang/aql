@@ -30,7 +30,7 @@ import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standa
 #
 # §3  value forms / kinds — custom mini-languages are def-bound fn VALUES
 #     (the kind namespace is fixed; §fnv pins the value-form contract)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q]	the (fixed) kind atoms, in registration order
+import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]	the (fixed) kind atoms, in registration order
 import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}	106	a def-bound generator value: named params via opts
 import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  "banana" mini count 'an'	2	a def-bound filter value: subject from the stack, src reaching the body dynamically
 # Memoising a custom mini-language: built-in re/xp cache their compiled artifact
@@ -215,6 +215,21 @@ import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPa
 # pinned in lang/go/test as TestMiniXPathNonXmlSubject / TestMiniPartialParked; the
 # parked shapes are Go tests, not spec rows, because the compiled pipeline does not
 # lower an UNCONSUMED spliced partial yet)
+#
+# §sp  XPath over AQL structure (Map/List) — the same antchfx engine as
+#      xp, but over native AQL data. A Map subject needs an explicit {} opts
+#      (a bare Map is otherwise claimed as opts); a List subject does not.
+import "aql:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over an AQL Map; a Map subject needs the explicit {} opts
+import "aql:minilang"  [{n:'x'} {n:'y'}] mini sp '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
+import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
+import "aql:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sp 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
+import "aql:minilang"  {a:1 b:2 c:3} mini sp 'count(/*)' {}	[3]	count() of the top-level entries
+import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source AQL value
+import "aql:minilang"  {a:1} MiniLang.lang_sp '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
+import "aql:minilang"  +sp|//n| is (MiniLang.Sp)	true	a stored sp query has its named type
+#
+# §sp  negatives
+import "aql:minilang"  {a:1} mini sp '//[' {}	ERROR:mini_parse_error	a malformed XPath is a loud parse error
 import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
 #
 # §mi2  MiniLang.micron — TOMBSTONE. The +m literal grammar is FIXED to

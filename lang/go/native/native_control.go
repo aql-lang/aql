@@ -326,6 +326,30 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// fixed seating. Gated to Compiling so check-mode precision is intact.
 	if r.Check.Compiling {
 		r.Check.Recorder().SetCatchVariadic(len(stk) > 1 && doBodyMayRaise(body, r))
+		// A single-value FALLIBLE body's do-residual is scalar-OR-Error at run time:
+		// do CATCHES a body raise into an Error value (doListHandler's NewError), so a
+		// body whose declared happy-path residual is a SCALAR actually yields an Error
+		// when it raises. Widen the scalar to the (scalar tor Error) union so a
+		// downstream Error accessor (`.code`, `.message`, `convert Map e`) dispatches
+		// its Error overload instead of no_signature-ing on a bare scalar — the stats
+		// `((do [Stats.mean [] end]).code)` shape, which raised on empty input but typed
+		// the residual as the declared Float (#stats code-body refusal). Mirrors the
+		// `if [scalar] [raise]` arm-union. Node/Error residuals already match the
+		// accessor sigs (excluded); an infallible body keeps its exact scalar.
+		// Gated to Compiling ONLY: check-mode precision is intact (`do [1 add 2]` stays
+		// Integer even though `add` is now overflow-fallible) — the union is just the
+		// compile pass's dispatch shape, and both engines dispatch the caught Error.
+		// !IsBareTypeNode guards a ROOT type-literal residual (Any/None/Never,
+		// `.Parent == nil`) — `do [add 1 2 drop Any]` leaves the bare `Any` node
+		// after the now-overflow-fallible add. The widening is meant for a SCALAR
+		// residual; a bare type node is not a scalar value (Any tor Error = Any,
+		// and None/Never aren't scalars either), so skipping it is semantically
+		// correct. It also keeps the nil-safety EXPLICIT at the call site instead
+		// of leaning on ConformsTo's receiver-nil guard (types.go: nil t → false).
+		if len(stk) == 1 && doBodyMayRaise(body, r) && !IsBareTypeNode(stk[0]) &&
+			!stk[0].Parent.ConformsTo(TNode) && !stk[0].Parent.ConformsTo(TError) {
+			return []Value{NewDynamicCarrierValue(NewDisjunct([]Value{stk[0], NewTypeLiteral(TError)}))}
+		}
 	}
 	return stk
 }

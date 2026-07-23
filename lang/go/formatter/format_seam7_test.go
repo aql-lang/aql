@@ -67,28 +67,46 @@ func TestFormatMapCommasSeam7(t *testing.T) {
 	}
 }
 
-// TestFormatFnSingleLineTrailingSeam7 covers tryFnFormat's single-line
-// return (format.go:529). The reconstructed `def name fn [[args] [ret]
-// [body]]` fits within the width even though the whole node run (with
-// trailing tokens after the fn wrapper) overflowed it. tryFnFormat only
-// reformats up to the wrapper, so trailing tokens are dropped — this is
-// the observed behaviour for such (malformed) input, asserted verbatim.
-func TestFormatFnSingleLineTrailingSeam7(t *testing.T) {
-	src := "def n fn [[a:Integer] [Integer] [a]] one two three four five six seven eight\n"
-	want := "def n fn [[a:Integer] [Integer] [a]]\n"
-	if got := Format(src); got != want {
-		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
+// TestFormatFnTrailingNotDropped covers tryFnFormat's two decline guards:
+// a fn wrapper followed by more tokens, and a multi-overload wrapper.
+// tryFnFormat reformats only `header [args][ret][body]`, so applying it to
+// either shape would SILENTLY DROP content (the trailing tokens, or every
+// overload past the first). Both must decline to the general path, which
+// preserves every token. A multi-parameter fn is used so the spec-list form
+// is kept and tryFnFormat is a candidate (a single-param fn takes the
+// bracketless form).
+func TestFormatFnTrailingNotDropped(t *testing.T) {
+	// Trailing tokens after the wrapper are preserved, never truncated.
+	src := "def n fn [[a:Integer b:Integer] [Integer] [a]] one two three four five six seven eight\n"
+	got := Format(src)
+	for _, tok := range []string{"one", "two", "three", "four", "five", "six", "seven", "eight"} {
+		if !strings.Contains(got, tok) {
+			t.Errorf("trailing token %q was dropped:\n%s", tok, got)
+		}
 	}
-	// The trimmed form is a fixed point.
-	idempotentSeam7(t, want)
+	if !strings.Contains(got, "def n fn [[a:Integer b:Integer] [Integer] [a]]") {
+		t.Errorf("the fn def itself was mangled:\n%s", got)
+	}
+	// The formatted output is a fixed point.
+	idempotentSeam7(t, got)
+
+	// A multi-overload wrapper (no trailing tokens, but long enough to reach
+	// tryFnFormat) hits the len(inner) != 3 guard and keeps every overload.
+	multi := "def g fn [[a:Integer b:Integer] [String] [\"first\"] [a:String b:String] [String] [\"second\"]]\n"
+	gotMulti := Format(multi)
+	for _, tok := range []string{"[a:Integer b:Integer]", "[a:String b:String]", "\"first\"", "\"second\""} {
+		if !strings.Contains(gotMulti, tok) {
+			t.Errorf("multi-overload fmt dropped %q:\n%s", tok, gotMulti)
+		}
+	}
 }
 
 // TestFormatFnBodyGroupWrapSeam7 covers tryFnFormat's multi-line body
 // path where a single body group itself exceeds the width and falls to
 // wrapStatement (format.go:552-554).
 func TestFormatFnBodyGroupWrapSeam7(t *testing.T) {
-	src := "def f fn [[x:Integer] [Integer] [x add x add x add x add x add x add x add x add x add x add x add x add x]]\n"
-	want := "def f fn [[x:Integer] [Integer] [\n" +
+	src := "def f fn [[x:Integer y:Integer] [Integer] [x add x add x add x add x add x add x add x add x add x add x add x add x]]\n"
+	want := "def f fn [[x:Integer y:Integer] [Integer] [\n" +
 		"  x add x add x add x add x add x add x add x add x add x add x add x\n" +
 		"    add x\n" +
 		"]]\n"
@@ -103,8 +121,8 @@ func TestFormatFnBodyGroupWrapSeam7(t *testing.T) {
 // starting a fresh part.
 func TestFormatWrapAttachSeam7(t *testing.T) {
 	src := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet, kilo, lima, mike\n"
-	want := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india,\n" +
-		"  juliet, kilo, lima, mike\n"
+	want := "alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet,\n" +
+		"  kilo, lima, mike\n"
 	if got := Format(src); got != want {
 		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
 	}
@@ -130,36 +148,34 @@ func TestFormatListNonFirstGroupWrapSeam7(t *testing.T) {
 	}
 }
 
-// TestFormatInlineBlockCommentSeam7 covers emitNode's comment arm
-// (format.go:606-607) reached naturally: a block comment sitting inside a
-// list renders inline through renderInline.
-func TestFormatInlineBlockCommentSeam7(t *testing.T) {
-	src := "[a ## c ## b]\n"
-	want := "[a ## c ## b]\n"
-	if got := Format(src); got != want {
-		t.Errorf("Format(%q)\n  got:  %q\n  want: %q", src, got, want)
+// TestFormatInlineCommentSeam7 covers emitNode's comment arm reached
+// naturally: a trailing comment renders inline through renderInline. A `##`
+// comment runs to end of line exactly like `#` (AQL has no bounded block
+// comment), so the whole tail is one comment and is emitted verbatim.
+func TestFormatInlineCommentSeam7(t *testing.T) {
+	for _, src := range []string{"foo bar # note\n", "foo bar ## note\n"} {
+		if got := Format(src); got != src {
+			t.Errorf("Format(%q) = %q, want unchanged", src, got)
+		}
+		idempotentSeam7(t, src)
 	}
-	idempotentSeam7(t, src)
 }
 
-// TestEmitNodeRootAndCommentsSeam7 covers emitNode's NdRoot arm
-// (format.go:596-597) and the NdComment/NdBlockComment arm
-// (format.go:606-607) via direct calls, mirroring the existing
-// emitNode direct-call test's idiom for the leaf kinds.
+// TestEmitNodeRootAndCommentsSeam7 covers emitNode's NdRoot arm and the
+// NdComment arm via direct calls, mirroring the existing emitNode
+// direct-call test's idiom for the leaf kinds.
 func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 	root := &Node{Kind: NdRoot, Children: []*Node{
 		{Kind: NdWord, Text: "hi"},
 		{Kind: NdNewline},
 		{Kind: NdWord, Text: "bye"},
 	}}
-	if got := emitNode(root, 0); got != "hi\nbye\n" {
+	r := newRenderer(DefaultRules())
+	if got := r.emitNode(root, 0); got != "hi\nbye\n" {
 		t.Errorf("emitNode(NdRoot) = %q, want %q", got, "hi\nbye\n")
 	}
-	if got := emitNode(&Node{Kind: NdComment, Text: "# c"}, 0); got != "# c" {
+	if got := r.emitNode(&Node{Kind: NdComment, Text: "# c"}, 0); got != "# c" {
 		t.Errorf("emitNode(NdComment) = %q, want %q", got, "# c")
-	}
-	if got := emitNode(&Node{Kind: NdBlockComment, Text: "## b ##"}, 0); got != "## b ##" {
-		t.Errorf("emitNode(NdBlockComment) = %q, want %q", got, "## b ##")
 	}
 }
 
@@ -167,10 +183,11 @@ func TestEmitNodeRootAndCommentsSeam7(t *testing.T) {
 // (format.go:456-458). emitRoot never calls it with an empty statement
 // (blank lines are handled earlier), so the guard is exercised directly.
 func TestEmitStatementEmptySeam7(t *testing.T) {
-	if got := emitStatement(nil, 0); got != "" {
+	r := newRenderer(DefaultRules())
+	if got := r.emitStatement(nil, 0); got != "" {
 		t.Errorf("emitStatement(nil) = %q, want empty", got)
 	}
-	if got := emitStatement([]*Node{}, 4); got != "" {
+	if got := r.emitStatement([]*Node{}, 4); got != "" {
 		t.Errorf("emitStatement([]) = %q, want empty", got)
 	}
 }
@@ -179,7 +196,8 @@ func TestEmitStatementEmptySeam7(t *testing.T) {
 // (format.go:795-797): with no children the loop appends nothing, so the
 // function returns a single group equal to the (empty) input slice.
 func TestSplitIntoGroupsEmptySeam7(t *testing.T) {
-	g := splitIntoGroups(nil)
+	r := newRenderer(DefaultRules())
+	g := r.splitIntoGroups(nil)
 	if len(g) != 1 {
 		t.Fatalf("splitIntoGroups(nil) len = %d, want 1", len(g))
 	}
@@ -188,7 +206,7 @@ func TestSplitIntoGroupsEmptySeam7(t *testing.T) {
 	}
 	// Boundary: a run with no statement-start word is one group holding
 	// all children (the other empty-groups return path).
-	one := splitIntoGroups([]*Node{{Kind: NdWord, Text: "x"}, {Kind: NdWord, Text: "y"}})
+	one := r.splitIntoGroups([]*Node{{Kind: NdWord, Text: "x"}, {Kind: NdWord, Text: "y"}})
 	if len(one) != 1 || len(one[0]) != 2 {
 		t.Errorf("splitIntoGroups(x y) = %d groups (want 1 of len 2)", len(one))
 	}

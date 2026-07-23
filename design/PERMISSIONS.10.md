@@ -638,6 +638,14 @@ if pol := HostPolicy(r); pol != nil {
 }
 ```
 
+> **Caveat.** These hooks read the policy off the registry the engine is
+> *currently executing on*. That is the top-level registry for a top-level
+> call, but an imported module runs its body on a **child registry that
+> does not receive `CapPolicy`**, so the checks above silently become
+> allow-all inside module code. See **[Known gap: child module registries
+> do not inherit the policy](#known-gap-child-module-registries-do-not-inherit-the-policy)**
+> below.
+
 ---
 
 ## CLI surface
@@ -924,6 +932,107 @@ identity, and process-wide-only scope.
 
 ---
 
+## Known gap: child module registries do not inherit the policy
+
+**Status: known defect (as of 2026-07).** The enforcement hooks in
+[Engine integration](#engine-integration) are correct for top-level code
+but do **not** reach code that runs *inside an imported module*. The
+supply-chain framing, the per-import-edge fix, and the `Compose`-not-inherit
+rule are worked out in depth in
+[MODULE-SECURITY.0](MODULE-SECURITY.0.md) §3.4 and §5–§6; this section is
+the disclosure on the *implemented* side, so a reader of this doc does not
+assume module code is gated when it is not.
+
+### Why it happens
+
+Every policy check reads `HostPolicy(r)` off the registry the **live
+dispatching engine** is bound to — `stepWord` reads `HostPolicy(e.r)`, and
+a capability handler is invoked with `e.registry` (`eng/go/engine.go`
+`execMatch`), *not* the sub-registry a module's exports were registered in.
+At the top level that registry carries the policy, so a top-level
+`Vault.reveal` or `IO.write` is gated exactly as designed.
+
+But an imported module runs its body on a **fresh child registry that never
+receives `CapPolicy`**:
+
+- `native.ModuleInheritedCaps` — the allow-list of capability slots copied
+  parent→child at import (`lang/go/native/native_module_module.go`
+  `RunModuleBody`) — contains only the two host seams (`engine.tui.host`,
+  `engine.vault.host`). The policy capability (`CapPolicy = "engine.policy"`)
+  is never on it, and no loader calls `SetHostPolicy` on a child.
+- The child is built by `DefaultRegistryWithPolicy(nil, …)`, which installs
+  a policy only when one is passed (`if p != nil { SetHostPolicy(r, p) }`).
+  So `HostPolicy(childReg)` is `nil`.
+- A `nil` policy means **allow-all** everywhere: `checkVaultPolicy`,
+  `checkNetPolicy`, `checkFetchPolicy`, `checkProcessPolicy`,
+  `checkTuiPolicy`, and the log checks all `return nil` when
+  `pol == nil`, and `policyGateWord` no-ops when
+  `LookupWordChecker(e.registry)` is nil.
+
+### What leaks
+
+Inside a module body (`e.registry` is the policy-free child):
+
+- **Dispatch-time capability checks are skipped.** A profile that extends
+  `trusted` with `vault.words.default: deny` still lets an imported module
+  call `Vault.rotate` / `Vault.reveal`, because the vault *host seam* is
+  copied into the child (it is on `ModuleInheritedCaps`) while the policy
+  that would gate it is not. The same holds for `fetch`, sockets, process
+  spawn, tui, and log emit/install.
+- **The kernel-word (`engine`-scope) gate is disabled** — `policyGateWord`
+  finds no checker on the child, so per-word `engine` denials do not fire
+  for words run inside the body.
+- **The import gate is self-bypassing for nested imports.** The module
+  resolver checks `HostPolicy(parent)`; for an `import` issued *from within*
+  a module body the parent **is** the policy-free child, so
+  `modules.install`, per-module `install:false`, and the `modules.import`
+  check are all skipped. A top-level program under a restrictive policy can
+  therefore circumvent it wholesale by moving the denied imports and
+  capability calls into an imported file or inline `module [ … ]` body —
+  reachable through a single `import "./m.aql"` that the policy did not
+  gate.
+
+### What bounds it (and what makes it worse)
+
+- **FileOps stays gated on the file/inline path.** `RunModuleBody` copies
+  the parent's *already-wrapped* `permissionedFileOps` **value** into the
+  child (`SetHostFileOps(modReg, HostFileOps(parent))`). Enforcement is
+  baked into that object, not re-read off the registry at call time, so
+  `IO.read` / `IO.write` inside a file or inline module body stay policed
+  even though `HostPolicy(child)` is `nil`. Only checks that re-read the
+  policy off the registry leak.
+- **`aql:vm` sub-engines are exempt.** `Vm.run` deliberately
+  `policy.Compose`s the parent policy and installs it on the sub-engine
+  (`newSubEngineRegistry` → `newDefaultRegistryWithPolicy(pol)`), so the
+  [Why this works](#why-this-works-capability-hygiene) reasoning holds
+  there — the gap is specific to the `import` path, not sub-engines.
+- **The hybrid AQL-app loaders are strictly worse.** `aql:sift`,
+  `aql:repl`, and `aql:vault-tui` build their child with a bare
+  `newDefaultRegistry()` and run an embedded AQL program on it. With no
+  policy present, that child's `fileops` **and** `sqlite` slots are
+  installed *fresh and unwrapped* (the `SetHostX` hooks wrap only when a
+  policy is present) — so on these loaders even file and database effects
+  run unchecked, on top of the dispatch-time checks above.
+
+None of this bites the default posture: with no policy installed there is
+nothing to escape. It is load-bearing only when a host installs a
+restrictive policy and expects it to cover imported module code — exactly
+the threat model of [MODULE-SECURITY.0](MODULE-SECURITY.0.md).
+
+### Fix direction
+
+Propagate the policy into every child registry at import — minimally by
+adding `CapPolicy` to `native.ModuleInheritedCaps`, or (properly, per the
+attenuation design) by having `RunModuleBody` and the native-module install
+path install `effective`-parameterised capability *wrappers* plus a
+composed child `CapPolicy`, the way `aql:vm` already does. The per-edge
+grant algebra and the `Compose`-not-inherit rule live in
+[MODULE-SECURITY.0](MODULE-SECURITY.0.md) §5.2 and §6. A regression test
+should pin a policy that denies `vault` (and one that denies a nested
+`import`) which today passes *only* because the child sees a `nil` policy.
+
+---
+
 ## What this design does **not** address
 
 - **Resource accounting beyond limits.** CPU/memory caps are
@@ -975,5 +1084,8 @@ identity, and process-wide-only scope.
   `aql:vm` module slots into.
 - [IMPORTS.10](IMPORTS.10.md) — module resolution path the policy
   hooks into.
+- [MODULE-SECURITY.0](MODULE-SECURITY.0.md) — the transitive-dependency
+  attenuation RFC; §3.4 and §5–§6 carry the analysis and fix plan for the
+  [child-module policy gap](#known-gap-child-module-registries-do-not-inherit-the-policy).
 - `lang/go/CLAUDE.md` § "Helper API discipline" — the
   capability-slot convention.

@@ -2,14 +2,23 @@
 # No per-iteration socket I/O — pure word evaluation in the forked registry.
 import "aql:net"
 import "aql:time-util"
-def ln (Net.serve-raw {tcp: 19096} (fn [[sock:Any] [Any] [
-  def msg (convert Bytes "hello world\n")
-  def start (TimeUtil.now)
-  for 20000 [
-    def line (convert Bytes (join "" [(convert String msg) ""]))
-  ]
-  def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
-  print (join "" ["IN-FORK compute 20000 iters  " (convert String dur) " ms"])
-]]))
-def sock (Net.connect-raw {tcp: "127.0.0.1:19096"})
+def ln
+(Net.serve-raw {tcp:19096}
+      (fn sock:Any Any
+          [def msg (convert Bytes "hello world\n")
+            def start (TimeUtil.now)
+            for 20000
+              [def line
+                  (convert Bytes (join "" [(convert String msg) ""]))
+              ]
+            def dur (TimeUtil.total-ms (TimeUtil.elapsed start)) print
+              (join ""
+                  ["IN-FORK compute 20000 iters  "
+                      (convert String dur) " ms"
+                  ]
+              )
+          ]
+      )
+  )
+def sock (Net.connect-raw {tcp:"127.0.0.1:19096"})
 TimeUtil.sleep 3000
