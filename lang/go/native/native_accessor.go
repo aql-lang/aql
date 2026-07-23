@@ -141,9 +141,10 @@ func accessorGetrSignatures() []Signature {
 		// [Key | Node/Xml] — strict well-known-field read (NUR021: mirrors
 		// get's TXml sigs; wins over the [Key | Node] rows by specificity
 		// exactly as get's do, so `x!.tag` reads and an unknown field
-		// raises not_found). Covers FlexXml via conformance.
-		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrXmlHandler), Returns: []*Type{TAny}},
-		{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(getrXmlHandler), Returns: []*Type{TAny}},
+		// raises not_found, mirrored statically by getrXmlReturns).
+		// Covers FlexXml via conformance.
+		{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrXmlHandler), ReturnsFn: getrXmlReturns},
+		{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(getrXmlHandler), ReturnsFn: getrXmlReturns},
 		// [Key | None]
 		// Always raises not_found — never produces a value; a receiver the
 		// checker KNOWS is None (a literal, a strict None carrier from a
@@ -258,6 +259,43 @@ func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
 		return ReturnsListElemAt(1)(args, r)
 	}
 	return []Value{NewCarrier(TAny)}
+}
+
+// getrXmlReturns is the Xml twin of getrNodeReturns' strict-read
+// static-miss contract: the Xml well-known field set is FIXED (tag /
+// attr / cren — getrXmlHandler switches on nothing else), so a concrete
+// literal key outside it is a GUARANTEED runtime not_found, flagged
+// with the handler's byte-identical text. Unlike the map twin, the
+// proof needs no concrete RECEIVER: check mode strips an Xml literal to
+// a carrier, and the carrier's Xml-family static type suffices — the
+// field set is fixed for the whole family, and the sig is a locked
+// native, so no user overload can claim a subtype-tagged runtime value
+// first (locked-first ordering; contrast the CoreDefault refinement
+// escape booleanArithReturns must guard against). Known keys narrow to
+// the handler's fixed result shapes (tag → String, attr → Map, cren →
+// List); a computed key keeps the gradual dynamic(Any) the
+// declared-Any sig produced before this mirror.
+func getrXmlReturns(args []Value, r *Registry) []Value {
+	dyn := []Value{NewDynamicCarrier(TAny)}
+	if len(args) != 2 || !IsConcrete(args[0]) {
+		return dyn
+	}
+	switch k := getKey(args[0]); k {
+	case "tag":
+		return []Value{NewCarrier(TString)}
+	case "attr":
+		return []Value{NewCarrier(TMap)}
+	case "cren":
+		return []Value{NewCarrier(TList)}
+	default:
+		// A bare `Xml` type literal in the value slot would signature-
+		// error at runtime, not not_found — exclude it from the claim.
+		if r != nil && r.Check.IsActive() && !IsBareTypeNode(args[1]) {
+			eng.CheckAddUniqueDiagnostic(r, "not_found",
+				fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr", args[0].Pos())
+		}
+		return dyn
+	}
 }
 
 // getrNodeReturns is getNodeReturns plus the strict-read static-miss

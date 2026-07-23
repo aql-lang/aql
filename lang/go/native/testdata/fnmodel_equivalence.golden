@@ -218,7 +218,7 @@ WORD dotr
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Resource] barrier=1 returns=[Any]
-  [Scalar/String Node/Xml] barrier=1 returns=[Any]
+  [Scalar/String Node/Xml] barrier=1 +returnsfn
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
@@ -227,7 +227,7 @@ WORD dotr
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Resource] barrier=1 quote={0} returns=[Any]
-  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Node/Xml] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Scalar/Micron] barrier=1 quote={0} +returnsfn
   [Any None] barrier=1 +returnsfn
@@ -351,7 +351,7 @@ WORD getr
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Resource] barrier=1 returns=[Any]
-  [Scalar/String Node/Xml] barrier=1 returns=[Any]
+  [Scalar/String Node/Xml] barrier=1 +returnsfn
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
@@ -360,7 +360,7 @@ WORD getr
   [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Resource] barrier=1 returns=[Any]
-  [Scalar/Atom Node/Xml] barrier=1 returns=[Any]
+  [Scalar/Atom Node/Xml] barrier=1 +returnsfn
   [Scalar/Atom Node] barrier=1 +returnsfn
   [Scalar/Atom Scalar/Micron] barrier=1 +returnsfn
   [Any None] barrier=1 +returnsfn
