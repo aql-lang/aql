@@ -1140,7 +1140,7 @@ func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
 // the lint complexity ceiling — one scan, no behavior change (PR #295
 // merge: main's burial triggers plus this branch's promotion triggers
 // crossed gocyclo's 70 in one function).
-func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, buryOK bool, refs map[int]int, fragRef, buried map[int]bool) {
+func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, refs map[int]int, fragRef, buried map[int]bool) {
 	for i := range events {
 		forEachOperand(&events[i], func(op emitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
@@ -1148,7 +1148,7 @@ func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[i
 				if es.eventInfo[op.idx].variadicResult {
 					return
 				}
-				if pi, ok := producerIndex[op.idx]; ok && buryOK && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
+				if pi, ok := producerIndex[op.idx]; ok && !storeSrc[op.idx] && leaverPrefix[i]-leaverPrefix[pi+1] > 0 {
 					buried[op.idx] = true
 				}
 			}
@@ -1157,7 +1157,7 @@ func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[i
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 				fragRef[op.idx] = true
-				if buryOK && !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
+				if !storeSrc[op.idx] && !es.eventInfo[op.idx].variadicResult {
 					buried[op.idx] = true
 				}
 			}
@@ -1210,15 +1210,6 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	// bind-then-return tail) is never buried and its tail call survives
 	// markTailCalls (which needs the call's result to reach the RET directly).
 	producerIndex, leaverPrefix := computeLeaverPrefix(events)
-	// Buried promotion is scoped to the whole-program / module-load compile
-	// (storedGradualDepth == 0), where it is validated and the sift module's own
-	// fns compile. A DETACHED stamp (StampDetachedFn's isolated fork,
-	// storedGradualDepth > 0) recompiles a runtime-constructed fn value under the
-	// gradual-Any nesting modality; it keeps its established lowering rather than
-	// having this promotion newly seat a value there. A body the promotion would
-	// have seated instead declines (compileStoredFnUnit, or Finalize on a nested
-	// sub-unit) — a sound per-body interpreter fallback.
-	buryOK := es.storedGradualDepth == 0
 	buried := map[int]bool{}
 	// A producer whose result is the SOURCE of a loop-carried store (evStore)
 	// must NOT be buried-promoted: lowerStore re-pushes that source natively from
@@ -1226,13 +1217,19 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	// sim top when the store lowers), so promoting it to a frame local only
 	// diverts it to the operand path. Buried promotion exists for a value consumed
 	// as a CALL / BRANCH arg, not a store source (`for … [if … [def acc (fn …)]]`
-	// — the store source is the `fn` call, on top, natively re-pushed). storeSrc
-	// stays nil off the whole-program path (a nil-map read is false).
-	var storeSrc map[int]bool
-	if buryOK {
-		storeSrc = collectStoreSourceSeqs(events)
-	}
-	es.countRefsAndBurials(events, producerIndex, leaverPrefix, storeSrc, buryOK,
+	// — the store source is the `fn` call, on top, natively re-pushed).
+	//
+	// Buried promotion applies to a DETACHED stamp (StampDetachedFn's isolated
+	// fork, storedGradualDepth > 0) exactly as to the whole-program / module-load
+	// compile: a recursive stored fn whose nested `if` arms read enclosing
+	// value-defs computed by its recursive calls (voxgig-aql/template's
+	// compile-hb-seq binds `head` and `tail` from recursive calls and reads both
+	// inside a deeper arm) seats those defs as frame locals and compiles, where it
+	// previously refused "branch reads enclosing computation". Validated by the
+	// langspec census and the voxgig-aql --compile==interpret differential (all 7
+	// libraries compile with zero divergences).
+	storeSrc := collectStoreSourceSeqs(events)
+	es.countRefsAndBurials(events, producerIndex, leaverPrefix, storeSrc,
 		refs, fragRef, buried)
 	// A SIDE-EFFECT loop (zeroOut: body nets 0 per iteration) lowers cleanly as an
 	// UNCONSUMED statement (its result is dropped, RecordLoop marked it zeroOut).
