@@ -58,12 +58,16 @@ do [0d2 sub 1.0] error [dot code]	type_error/q	Big ⊕ Float never degrades: sub
 do [9223372036854775807 add 1] error [dot code]	integer_overflow/q	runtime overflow carries the integer_overflow code
 do [2 pow 63] error [dot code]	integer_overflow/q	pow overflow carries the same code (no silent wrap)
 do [-9223372036854775808 mul -1] error [dot code]	integer_overflow/q	minint mul -1 has no int64 result — checked, not wrapped
+do [-9223372036854775808 div -1] error [dot code]	integer_overflow/q	minint div -1 likewise — the division twin of the mul row
 0d9223372036854775807 add 0d1	0d9223372036854775808	the BigInteger leaf is the overflow escape hatch
 #
 # §5  the int64 poles under div/mod — minint div -1 is the ONE
-#     Go-defined wrap (quotient = minint, Go spec §Integer operators);
-#     mod -1 is 0. Deterministic, pinned as-is.
--9223372036854775808 div -1	-9223372036854775808	minint div -1 wraps to minint (Go-defined two's-complement edge)
+#     division overflow (the true quotient 2^63 has no int64 home). It
+#     now raises like the add/sub/mul/pow overflows (NUR006 fix — this
+#     section previously pinned the Go-defined two's-complement wrap
+#     as-is, the lone silent wrong answer left in integer arithmetic).
+#     mod -1 stays 0: Go defines it, no overflow case exists for mod.
+-9223372036854775808 div -1	ERROR:integer_overflow	minint div -1 raises — checked like every other integer overflow
 -9223372036854775808 mod -1	0	minint mod -1 is 0 (no overflow)
 -9223372036854775807 sub 1	-9223372036854775808	reaching minint exactly is fine
 #
@@ -100,4 +104,4 @@ import "aql:math-util"  MathUtil.ceil -0.5	0	ceil of a small negative is zero
 import "aql:math-util"  MathUtil.trunc -2.9	-2	trunc is toward zero (compare floor: -3)
 import "aql:math-util"  MathUtil.trunc 2.9	2	trunc positive
 import "aql:math-util"  MathUtil.round 2.5 typeof	Integer	the rounding family returns an Integer, not a Float
-import "aql:math-util"  MathUtil.floor 5	ERROR:uncalled_function	the rounding family is Float-only — an Integer matches no signature
+import "aql:math-util"  MathUtil.floor 5	5	the rounding family is total over Number — an Integer is already integral (identity; NUR008 fix — this row previously pinned the Float-only gap as an uncalled_function)

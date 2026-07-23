@@ -139,3 +139,8 @@ sort ["b" "" "a"]	['' 'a' 'b']	EmptyString is just the smallest String
 sort [[2] [1 5] {a:1}]	[[2] [1 5] {a:1}]	Node branch: shorter list first, every list before every map
 import "aql:array-util" ArrayUtil.grade [true "a" 1]	[0 2 1]	grade returns sort indices over the same order
 import "aql:array-util" ArrayUtil.grade ["b" 2 cat/q true]	[2 3 1 0]	Atom, Boolean, Number, String again — as indices
+# every sorting word is STABLE (NUR016): equal-comparing elements keep
+# input order, so grade/sortby agree with sort's tie handling.
+import "aql:array-util" ArrayUtil.grade [1 1.0 0]	[2 0 1]	stable: the equal-comparing 1 and 1.0 grade in input order
+import "aql:array-util" ArrayUtil.sortby [1 1.0] ["a","b"]	['a' 'b']	stable: equal keys keep the data order
+import "aql:array-util" ArrayUtil.sortby [1.0 1] ["a","b"]	['a' 'b']	…and never swap it, whichever key spelling comes first

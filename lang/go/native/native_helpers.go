@@ -337,6 +337,47 @@ func ApdUnaryNative(name string, floatFn func(float64) float64, apdFn func(c *ap
 	}
 }
 
+// RoundToIntegralNative builds one of the rounding-family words (ceil /
+// floor / round / round-even / trunc) over the WHOLE Number family —
+// the family previously registered only the [Float] overload, so an
+// Integer or Big argument was an uncalled_function despite the
+// [Number] module facade (NUR008):
+//
+//   - Integer / BigInteger — already integral, returned unchanged.
+//   - Float — floatFn, returning Integer (the historical form).
+//   - BigDecimal — rounded to an integral BigDecimal under the word's
+//     apd rounding mode, exactly, via the active decimal context.
+func RoundToIntegralNative(name string, floatFn func(float64) float64, mode apd.Rounder) NativeFunc {
+	identityHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		return []Value{args[0]}, nil
+	}
+	floatHandler := func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+		d, err := args[0].AsConcreteFloat()
+		if err != nil {
+			return nil, err
+		}
+		return []Value{NewInteger(int64(floatFn(d)))}, nil
+	}
+	bigDecHandler := func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		ctx := *decimalContext(r) // clone: Rounding is per-word, the context is shared
+		ctx.Rounding = mode
+		out := new(apd.Decimal)
+		if _, err := ctx.RoundToIntegralValue(out, asApdOperand(args[0])); err != nil { //covergate:allow AQL BigDecimals are always finite (non-finite literals reject at parse; producing ops trap first) and round-to-integral of a finite decimal cannot overflow the context — defensive error-propagation only (§native)
+			return nil, r.AqlError("math_error", name+": "+err.Error(), name)
+		}
+		return []Value{NewBigDecimal(out)}, nil
+	}
+	return NativeFunc{
+		Name: name,
+		Signatures: []Signature{
+			{Args: []*Type{TInteger}, Impl: Go(identityHandler), Returns: []*Type{TInteger}, BarrierPos: -1},
+			{Args: []*Type{TFloat}, Impl: Go(floatHandler), Returns: []*Type{TInteger}, BarrierPos: -1},
+			{Args: []*Type{TBigInteger}, Impl: Go(identityHandler), Returns: []*Type{TBigInteger}, BarrierPos: -1},
+			{Args: []*Type{TBigDecimal}, Impl: Go(bigDecHandler), Returns: []*Type{TBigDecimal}, BarrierPos: -1},
+		},
+	}
+}
+
 // FloatUnaryBigNative builds a unary numeric word that ALWAYS returns
 // Float, accepting Big arguments via the deliberately-lossy AsFloatApprox
 // projection. Used for the transcendentals apd cannot compute exactly

@@ -110,7 +110,16 @@ func checkedPowInt(base, exp int64) (int64, bool) {
 // leaves never overflow, Float saturates per IEEE — takes the base path
 // untouched, so compile-pass behaviour is byte-identical.
 func returnsIntArithChecked(op string, faultFn func(a, b int64) error) ReturnsFunc {
-	base := ReturnsNumericBinary()
+	return returnsIntFaultOn(ReturnsNumericBinary(), op, faultFn)
+}
+
+// returnsIntFaultOn layers the concrete-int64 fault mirror onto an
+// arbitrary base ReturnsFunc. add/sub/mul/pow layer onto the plain
+// numeric-binary carrier (via returnsIntArithChecked); div layers
+// divIntFault onto returnsDivMod — which already owns the zero-divisor
+// divergence — so the single division overflow (MinInt64 div -1) is
+// flagged statically exactly like its siblings' overflows.
+func returnsIntFaultOn(base ReturnsFunc, op string, faultFn func(a, b int64) error) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		checkBigFloatMix(r, args)
 		if atUncaughtTopLevel(r) && len(args) == 2 &&
@@ -167,6 +176,16 @@ func powIntFault(a, b int64) error {
 	return nil
 }
 
+// divIntFault mirrors the one integer-division overflow (MinInt64 div
+// -1). The zero-divisor fault keeps its own mirror (returnsDivMod), so
+// this covers exactly the guard divTowerOps.intFn adds beyond it.
+func divIntFault(a, b int64) error {
+	if a == -1 && b == math.MinInt64 {
+		return integerOverflowError("div", a, b)
+	}
+	return nil
+}
+
 // The per-word numeric leaf towers, shared by the [Number Number]
 // signatures below and by the Micron field-wise default
 // (native_scalar_ops.go), which drives the identical per-leaf semantics
@@ -214,6 +233,12 @@ var (
 		intFn: func(a, b int64) (Value, error) {
 			if a == 0 {
 				return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
+			}
+			// MinInt64 / -1 is the single int64 division overflow — Go
+			// wraps it back to MinInt64 (the same pair checkedMulInt
+			// refuses), so guard before dividing.
+			if a == -1 && b == math.MinInt64 {
+				return Value{}, integerOverflowError("div", a, b)
 			}
 			return NewInteger(b / a), nil
 		},
@@ -348,7 +373,7 @@ var mathNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:      []*Type{TNumber, TNumber},
 			Impl:      Go(numericBinaryHandler(divTowerOps)),
-			ReturnsFn: returnsDivMod("division by zero"), BarrierPos: -1,
+			ReturnsFn: returnsIntFaultOn(returnsDivMod("division by zero"), "div", divIntFault), BarrierPos: -1,
 		}},
 	},
 	{

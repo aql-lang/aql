@@ -210,15 +210,15 @@ func TestS7ComparePathonsArms(t *testing.T) {
 // --- size.go --------------------------------------------------------------
 
 func TestS7IdealSizeBehavior(t *testing.T) {
-	idealSizeBehavior{}.formatDelegate() // zero-statement marker
+	idealRootBehavior{}.formatDelegate() // zero-statement marker
 
 	store := &StoreInstanceInfo{Data: map[string]Value{"a": NewInteger(1), "b": NewInteger(2)}}
 	sv := NewValueRaw(TIdeal, store)
-	if got := (idealSizeBehavior{}).Size(sv); got != 2 {
+	if got := (idealRootBehavior{}).Size(sv); got != 2 {
 		t.Errorf("store size = %d, want 2", got)
 	}
 	tv := NewValueRaw(TIdeal, TableData{Rows: []Value{NewInteger(1), NewInteger(2), NewInteger(3)}})
-	if got := (idealSizeBehavior{}).Size(tv); got != 3 {
+	if got := (idealRootBehavior{}).Size(tv); got != 3 {
 		t.Errorf("table size = %d, want 3", got)
 	}
 }

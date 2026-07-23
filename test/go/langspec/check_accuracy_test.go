@@ -61,7 +61,12 @@ const pinnedFalsePositives = 0
 // Keep entries sorted by filename so new files slot in predictably. The
 // aggregate history is archived in design/CHECK-ACCURACY-RATCHET.10.md.
 var unflaggedPins = map[string]int{
-	"accessor.tsv":          1,
+	// accessor.tsv: both unflagged rows are STORE misses (get + the NUR021
+	// getr twin) — deliberately unproven: the context store is open-world
+	// (a prototype layer / another scope may bind the key), so
+	// getStoreReturnsFn stays optimistic on a static miss by design. The
+	// Xml strict-miss row in the same batch IS flagged (getrXmlReturns).
+	"accessor.tsv":          2,
 	"bignum.tsv":            8,
 	"case.tsv":              2,
 	"class.tsv":             1,

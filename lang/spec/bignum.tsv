@@ -71,6 +71,23 @@ import "aql:math-util"  MathUtil.sqrt 16.0	4.0	Float arg stays on the Float path
 import "aql:math-util"  MathUtil.sin 0d2 typeof	Float	trig has no exact apd form → Float (lossy)
 0d2 pow 0d0.5 typeof	BigDecimal	fractional pow → BigDecimal (apd Pow)
 
+# ───────── rounding family over Big leaves (NUR008 fix) ─────────
+# A BigInteger is already integral — identity, keeping its type. A
+# BigDecimal rounds to an integral BigDecimal under the word's own mode
+# (ceil→ceiling, floor→floor, round→half-up, round-even→half-even,
+# trunc→down); the with-decimal context override does NOT change the
+# word's mode — ceil IS ceiling.
+import "aql:math-util"  (convert BigInteger "123456789012345678901234567890") MathUtil.ceil	0d123456789012345678901234567890	BigInteger ceil is identity
+import "aql:math-util"  (convert BigInteger "99") MathUtil.ceil typeof	BigInteger	…and keeps the BigInteger type
+import "aql:math-util"  MathUtil.ceil 0d2.3	0d3	BigDecimal ceil rounds up to an integral BigDecimal
+import "aql:math-util"  MathUtil.ceil 0d2.3 typeof	BigDecimal	…keeping the BigDecimal type
+import "aql:math-util"  MathUtil.floor 0d2.7	0d2	floor rounds down
+import "aql:math-util"  MathUtil.floor -0d2.5	-0d3	floor of a negative goes toward -inf
+import "aql:math-util"  MathUtil.round 0d2.5	0d3	round ties away from zero (matches the Float form)
+import "aql:math-util"  MathUtil.round-even 0d2.5	0d2	round-even ties to even (matches the Float form)
+import "aql:math-util"  MathUtil.trunc -0d4.9	-0d4	trunc goes toward zero
+import "aql:math-util"  with-decimal {rounding: "down"} [MathUtil.ceil 0d2.3]	0d3	the context rounding override does not change ceil's own mode
+
 # ───────── with-decimal: scoped rounding context ─────────
 with-decimal {precision: 5} [0d1.0 div 0d3.0]	0d0.33333	precision override inside the block
 with-decimal {precision: 4 rounding: "down"} [0d2.0 div 0d3.0]	0d0.6666	rounding override (round-down truncates)

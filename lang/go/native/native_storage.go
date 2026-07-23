@@ -956,6 +956,27 @@ func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	}
 }
 
+// getrXmlHandler is the strict twin of getXmlHandler (NUR021 — the
+// accessor family covers one container table): the same three
+// well-known fields, but any other key raises not_found instead of
+// reading None.
+func getrXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	tag, attr, cren, ok := XmlParts(args[1])
+	if !ok {
+		return nil, r.AqlError("getr_error", "getr: cannot access field on a non-Xml value", "getr")
+	}
+	switch k := getKey(args[0]); k {
+	case "tag":
+		return []Value{NewString(tag)}, nil
+	case "attr":
+		return []Value{NewMap(attr)}, nil
+	case "cren":
+		return []Value{NewList(cren)}, nil
+	default:
+		return nil, r.AqlError("not_found", fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr")
+	}
+}
+
 // isClosureBearingWrapper reports whether v is a module-method wrapper FnDef
 // whose inner native declares a CallableSpec (a code-body higher-order word
 // like Rand.list-of). Such a wrapper, surfaced concrete from a field read,
@@ -1412,6 +1433,23 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	val, ok := store.Get(key)
 	if !ok {
 		return nil, r.AqlError("unknown key_error", fmt.Sprintf("unknown key: %s", key), "unknown key")
+	}
+	return []Value{val}, nil
+}
+
+// getrStoreHandler is the strict twin of getStoreHandler (NUR021): the
+// same lookup, with the miss raised as the accessor family's not_found
+// (getStoreHandler predates the family codes and keeps its historical
+// key_error).
+func getrStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	store, err := AsStore(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("getr: expected a Store, got %s", args[1].Parent.String())
+	}
+	key := getKey(args[0])
+	val, ok := store.Get(key)
+	if !ok {
+		return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in store", key), "getr")
 	}
 	return []Value{val}, nil
 }

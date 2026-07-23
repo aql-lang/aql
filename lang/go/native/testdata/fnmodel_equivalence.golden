@@ -219,14 +219,18 @@ WORD dotr
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
+  [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Resource] barrier=1 returns=[Any]
+  [Scalar/String Node/Xml] barrier=1 +returnsfn
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Resource] barrier=1 quote={0} returns=[Any]
+  [Scalar/Atom Node/Xml] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Node] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Scalar/Micron] barrier=1 quote={0} +returnsfn
   [Any None] barrier=1 +returnsfn
@@ -348,14 +352,18 @@ WORD getr
   [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
+  [Scalar/String Ideal/Store] barrier=1 +returnsfn
   [Scalar/String Ideal/Resource] barrier=1 returns=[Any]
+  [Scalar/String Node/Xml] barrier=1 +returnsfn
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
   [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Resource] barrier=1 returns=[Any]
+  [Scalar/Atom Node/Xml] barrier=1 +returnsfn
   [Scalar/Atom Node] barrier=1 +returnsfn
   [Scalar/Atom Scalar/Micron] barrier=1 +returnsfn
   [Any None] barrier=1 +returnsfn
@@ -368,15 +376,21 @@ WORD gte
 WORD guard
   [Any Scalar/Boolean] barrier=1 +returnsfn
 WORD has
+  [Scalar/String Ideal/ModuleExport] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/String Ideal/Module] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Class] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Store] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Resource] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/String Node/Xml] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Node] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Scalar/Micron] barrier=1 returns=[Scalar/Boolean]
   [Scalar/Number/Integer Node] barrier=1 returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Resource] barrier=1 quote={0} returns=[Scalar/Boolean]
+  [Scalar/Atom Node/Xml] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Node] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Scalar/Micron] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom None] barrier=1 quote={0} returns=[Scalar/Boolean]

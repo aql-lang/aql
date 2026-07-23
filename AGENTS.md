@@ -96,6 +96,7 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 | Understand *why* AQL is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
 | Drive the `aql` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
 | The key architectural decisions and their rationale | [ADR.md](ADR.md) |
+| The recorded non-uniformities of the language and their verdicts | [NUR.md](NUR.md) |
 | The formal semantics | [FORMAL-SPEC.md](FORMAL-SPEC.md) |
 | The executable language spec (the rows tests run against) | [`lang/spec/*.tsv`](lang/spec/) |
 | See the repository itself as a graph (modules, docs, concepts, evidence) | [`kg/out/graph.json`](kg/out/graph.json) — guide: [kg/README.md](kg/README.md) |
@@ -133,6 +134,10 @@ A few rules from those guides that bite hardest when missed:
 
 - **Never** add an entry to `ADR.md` unless a maintainer explicitly says so;
   design discussion is captured in `design/*.md`, not the ADR.
+- **Record every non-uniformity in [NUR.md](NUR.md)** the moment one
+  surfaces — in code review, in a design, or while coding and debugging.
+  It is a PR blocker until the record is resolved or marked allowed
+  (the *allowed* verdict needs a maintainer, the record itself does not).
 - **Pair every positive test with a negative one** — assert what must be
   *rejected*, not just what passes.
 - **Panics are forbidden** outside annotated init-time type registration;

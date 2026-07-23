@@ -24,7 +24,7 @@ import "./identifiers.aql"
 import "./report.aql"
 import "./storage.aql"
 
-def run-stamp "2026-07-21T00:00:00Z"
+def run-stamp "2026-07-22T00:00:00Z"
 
 # The one schema-term gap found while modelling the repository —
 # proposed, not silently added (see kg/README.md §schema proposals).

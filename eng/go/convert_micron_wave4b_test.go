@@ -48,7 +48,7 @@ func TestConvertIdealFallbacks(t *testing.T) {
 		t.Errorf("plain ideal → list = %v, want []", l)
 	}
 	// The base behavior's core methods delegate to the defaults.
-	base := idealConvertBehavior{}
+	base := idealRootBehavior{}
 	if !base.Match(NewValueRaw(node, ExtensionPayload{}), node) {
 		t.Error("ideal behavior Match broken")
 	}
