@@ -42,6 +42,18 @@ import "aql:array-util"  ArrayUtil.member [1 5 3] [1 2 3]	[true false true]	memb
 import "aql:array-util"  ArrayUtil.unique [1 2 2 3 3 3]	[1 2 3]	unique: distinct elements, first-seen order
 import "aql:array-util"  ArrayUtil.indices [20 99 10] [10 20 30]	[1 -1 0]	indices: position of each needle in the haystack, -1 if absent
 import "aql:array-util"  ArrayUtil.group [1 2 3]	{1:[0] 2:[1] 3:[2]}	group (1-arg): map each value to the indices where it occurs
+# the membership/grouping words compare by deq — the VALUE equality
+# (NUR015 fix: they previously keyed on the rendered form, a third
+# equality notion): scalars by value (eq and deq coincide there),
+# Nodes/Ideals by deep value (eq is reference identity there).
+import "aql:array-util"  ArrayUtil.unique [1 1.0]	[1]	cross-leaf magnitude dedups: 1 deq 1.0
+import "aql:array-util"  ArrayUtil.unique [["a"] ["a"]]	[['a']]	structurally-equal lists dedup, though eq (reference) distinguishes them
+import "aql:array-util"  ArrayUtil.unique [nan nan]	[nan nan]	NaN is deq-unequal to itself — both kept, honestly
+import "aql:array-util"  ArrayUtil.member [1.0] [1 2]	[true]	membership by value: 1.0 is in [1 2]
+import "aql:array-util"  ArrayUtil.member [["a"]] [["a"]]	[true]	…and by deep value for Nodes
+import "aql:array-util"  ArrayUtil.indices [2.0] [1 2]	[1]	index lookup by value
+import "aql:array-util"  ArrayUtil.group [1 1.0 2]	{1:[0 1] 2:[2]}	one value class per group; the key is the FIRST occurrence's render
+import "aql:array-util"  ArrayUtil.group [Integer Integer/q]	{Integer:[0 1]}	deq-distinct classes whose renders collide fold into one rendered key (a map key is a string)
 import "aql:array-util"  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{'a':[1 3] 'b':[2]}	group (2-arg): bucket values by their parallel key
 #
 # §4  neighborhoods

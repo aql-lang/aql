@@ -928,13 +928,19 @@ func uniqueHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]bool)
+	// Dedup by deq — the language's VALUE equality (scalars by value,
+	// where eq and deq coincide; Nodes/Ideals by deep value, where eq is
+	// reference identity). Keying on the rendered form was a THIRD
+	// equality notion agreeing with neither: `unique [1 1.0]` kept both
+	// (deq-equal, renders differ) while `unique [["a"] ["a"]]` merged
+	// values eq distinguishes (NUR015). The DeqIndex holds the kept
+	// elements so the dup probe stays near-linear.
 	var result []Value
+	var kept DeqIndex
 	for i := 0; i < list.Len(); i++ {
 		elem := list.Get(i)
-		key := elem.String()
-		if !seen[key] {
-			seen[key] = true
+		if kept.FirstMatch(elem) < 0 {
+			kept.Add(elem)
 			result = append(result, elem)
 		}
 	}
@@ -1128,13 +1134,16 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	if err != nil {
 		return nil, err
 	}
-	haystackSet := make(map[string]bool, haystack.Len())
-	for i := 0; i < haystack.Len(); i++ {
-		haystackSet[haystack.Get(i).String()] = true
+	// Membership is deq — the value equality (NUR015; it was keyed on
+	// the rendered form). The haystack is indexed once so each needle
+	// probes only its own deq bucket.
+	var idx DeqIndex
+	for j := 0; j < haystack.Len(); j++ {
+		idx.Add(haystack.Get(j))
 	}
 	result := make([]Value, needles.Len())
 	for i := 0; i < needles.Len(); i++ {
-		result[i] = NewBoolean(haystackSet[needles.Get(i).String()])
+		result[i] = NewBoolean(idx.FirstMatch(needles.Get(i)) >= 0)
 	}
 	return []Value{NewList(result)}, nil
 }
@@ -1154,27 +1163,66 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	if err != nil {
 		return nil, err
 	}
-	haystackLen := haystack.Len()
-	indexMap := make(map[string]int, haystackLen)
-	for i := 0; i < haystackLen; i++ {
-		key := haystack.Get(i).String()
-		if _, exists := indexMap[key]; !exists {
-			indexMap[key] = i
-		}
+	// Lookup is deq — the value equality (NUR015); first match wins.
+	// DeqIndex.FirstMatch returns the earliest insertion position, so
+	// indexing the haystack once preserves the first-match rule.
+	var idx DeqIndex
+	for j := 0; j < haystack.Len(); j++ {
+		idx.Add(haystack.Get(j))
 	}
 	result := make([]Value, needles.Len())
 	for i := 0; i < needles.Len(); i++ {
-		key := needles.Get(i).String()
-		if idx, exists := indexMap[key]; exists {
-			result[i] = NewInteger(int64(idx))
-		} else {
-			result[i] = NewInteger(-1)
-		}
+		result[i] = NewInteger(int64(idx.FirstMatch(needles.Get(i))))
 	}
 	return []Value{NewList(result)}, nil
 }
 
 // ---- group ----
+
+// deqGrouper accumulates deq-equivalence classes for the group word
+// (NUR015 — grouping was previously keyed on the rendered form, a third
+// equality notion). Membership in a class is deq: scalars by value
+// (eq and deq coincide there), Nodes/Ideals by deep value. The output
+// map's keys stay RENDERED strings (a map key is a string), taken from
+// each class's FIRST occurrence; two deq-distinct classes whose renders
+// collide (an atom and a string of the same name) fold into one group,
+// exactly as before — the render is the map-key contract, deq is the
+// grouping contract within it.
+type deqGrouper struct {
+	reps    DeqIndex       // class representatives, in creation order
+	rkIndex map[string]int // rendered key → class position
+	repKeys []string
+	groups  [][]Value
+}
+
+func (g *deqGrouper) add(key, v Value) {
+	// A class's live render is unique (a colliding class would have
+	// been folded at creation), so the deq probe and the render probe
+	// are each a single lookup.
+	if ri := g.reps.FirstMatch(key); ri >= 0 {
+		g.groups[ri] = append(g.groups[ri], v)
+		return
+	}
+	rk := key.String()
+	if ri, ok := g.rkIndex[rk]; ok {
+		g.groups[ri] = append(g.groups[ri], v)
+		return
+	}
+	if g.rkIndex == nil {
+		g.rkIndex = map[string]int{}
+	}
+	g.rkIndex[rk] = g.reps.Add(key)
+	g.repKeys = append(g.repKeys, rk)
+	g.groups = append(g.groups, []Value{v})
+}
+
+func (g *deqGrouper) toMap() Value {
+	om := NewOrderedMap()
+	for ri := range g.repKeys {
+		om.Set(g.repKeys[ri], NewList(g.groups[ri]))
+	}
+	return NewMap(om)
+}
 
 func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	keys, err := requireListArg(r, args[0], "group", "concrete keys list")
@@ -1188,20 +1236,11 @@ func groupTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if keys.Len() != values.Len() {
 		return nil, fmt.Errorf("group: keys length %d does not match values length %d", keys.Len(), values.Len())
 	}
-	om := NewOrderedMap()
-	groups := make(map[string][]Value)
-	order := make([]string, 0)
+	var g deqGrouper
 	for i := 0; i < keys.Len(); i++ {
-		k := keys.Get(i).String()
-		if _, exists := groups[k]; !exists {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], values.Get(i))
+		g.add(keys.Get(i), values.Get(i))
 	}
-	for _, k := range order {
-		om.Set(k, NewList(groups[k]))
-	}
-	return []Value{NewMap(om)}, nil
+	return []Value{g.toMap()}, nil
 }
 
 func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -1209,20 +1248,11 @@ func groupOneHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		return nil, err
 	}
-	om := NewOrderedMap()
-	groups := make(map[string][]Value)
-	order := make([]string, 0)
+	var g deqGrouper
 	for i := 0; i < list.Len(); i++ {
-		k := list.Get(i).String()
-		if _, exists := groups[k]; !exists {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], NewInteger(int64(i)))
+		g.add(list.Get(i), NewInteger(int64(i)))
 	}
-	for _, k := range order {
-		om.Set(k, NewList(groups[k]))
-	}
-	return []Value{NewMap(om)}, nil
+	return []Value{g.toMap()}, nil
 }
 
 // ---- replicate ----
