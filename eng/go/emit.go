@@ -61,13 +61,14 @@ const (
 type operandKind uint8
 
 const (
-	opNone     operandKind = iota // zero value: unset / invalid (ok=false only)
-	opConst                       // idx → Program.Consts index
-	opEvent                       // idx → producing event sequence number
-	opLocal                       // idx → frame-local slot (loop iterator / param)
-	opType                        // idx → Program.Types index (canonical type)
-	opClosure                     // closureUnit + closureCaps (a compiled body)
-	opDynScope                    // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
+	opNone      operandKind = iota // zero value: unset / invalid (ok=false only)
+	opConst                        // idx → Program.Consts index
+	opEvent                        // idx → producing event sequence number
+	opLocal                        // idx → frame-local slot (loop iterator / param)
+	opType                         // idx → Program.Types index (canonical type)
+	opClosure                      // closureUnit + closureCaps (a compiled body)
+	opDynScope                     // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
+	opDataScope                    // like opDynScope but a READ-AS-DATA lookup (OpLookupDynScopeData): a fn/parser binding pushes as data, no FnDefInfo defer
 )
 
 // emitOperand names where one dispatch argument comes from. For every kind but
@@ -99,6 +100,9 @@ type emitOperand struct {
 func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
 func dynScopeOperand(idx int) emitOperand {
 	return emitOperand{kind: opDynScope, idx: idx}
+}
+func dataScopeOperand(idx int) emitOperand {
+	return emitOperand{kind: opDataScope, idx: idx}
 }
 func eventOperand(seq, resIdx int) emitOperand {
 	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
@@ -632,6 +636,16 @@ type EmitState struct {
 	// binder/call-graph reachability model (dynamicScopeReachable). See
 	// NoteDefRead.
 	defReads map[string]string
+	// rootComputedBindIDs holds the value IDs of TOP-LEVEL computed fn-value
+	// defs (`def op (Parse.parser g)` and the sibling mini/emit value forms)
+	// that installDef DECLINED to install in Defs (the compiled-closure
+	// machinery owns the name). snapshotAllBindingIDs iterates Defs, so it
+	// misses these — yet they ARE real enclosing bindings at run time. Merging
+	// them into a fn unit's enclosingBindIDs lets a deeper body's read of the
+	// name (`parse op src`) rescue to a runtime read (OpLookupDynScopeData)
+	// instead of taking the unreachable enclosing-producer operand and refusing
+	// "reads enclosing computation". Populated by RecordDynBind.
+	rootComputedBindIDs map[string]bool
 	// dynScopeNames collects every name resolveOperand lowered as an
 	// OpLookupDynScope read. The Finalize pass installs an OpBindDynScope
 	// twin in every unit (params and body-local defs) and at every
@@ -1848,6 +1862,12 @@ func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
 // scope lookup rather than an unreachable in-frame event operand.
 func (es *EmitState) snapshotAllBindingIDs() map[string]bool {
 	ids := map[string]bool{}
+	// Top-level computed fn value-defs installDef declined to install in Defs
+	// (`def op (Parse.parser g)`) are still real enclosing bindings; the Defs
+	// scan below misses them, so merge their recorded IDs in.
+	for id := range es.rootComputedBindIDs {
+		ids[id] = true
+	}
 	if es.reg == nil || es.reg.Defs == nil {
 		return ids
 	}
@@ -4751,6 +4771,14 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return nil, false
 		}
+		// A FnDataArgs slot (parselang-fn-dispatch arg0, the computed parser fn)
+		// resolved to a dyn-scope read: re-key it to the READ-AS-DATA lookup so
+		// the VM pushes the FnDefInfo parser binding instead of deferring on it.
+		// Only a dyn-scope resolution is rewritten — a concrete parser (an event
+		// / const operand) is delivered normally.
+		if sig.FnDataArgs[i] && op.kind == opDynScope {
+			op = dataScopeOperand(op.idx)
+		}
 		ops[i] = op
 	}
 	return ops, true
@@ -5139,6 +5167,21 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	root, depth := false, 0
 	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
 		root, depth = true, es.reg.Defs.Depth(name)
+	}
+	if root && !IsConcrete(v) && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+		// A top-level computed fn value-def (`def op (Parse.parser g)`) that
+		// installDef declined to install in Defs (the compiled-closure machinery
+		// owns the name): record its ID + name so a deeper fn body reading the
+		// name (`parse op src`) rescues to a runtime dyn-scope read. The
+		// OpBindDynScope twin this same def records makes the runtime lookup
+		// resolve, byte-identical to the interpreter reading the name against the
+		// live def stack. (ConformsTo is receiver-nil-safe; IsConcrete already
+		// excludes concrete values.)
+		if es.rootComputedBindIDs == nil {
+			es.rootComputedBindIDs = map[string]bool{}
+		}
+		es.rootComputedBindIDs[v.ID] = true
+		es.NoteDefRead(v.ID, name)
 	}
 	spliceDepth := -1
 	if plb := es.pendingLoopBind; plb != nil {

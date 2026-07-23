@@ -108,6 +108,12 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Args:       []*native.Type{native.TAny, native.TAny, native.TMap},
 			Returns:    []*native.Type{native.TAny},
 			BarrierPos: -1,
+			// arg0 (the computed parser fn) is READ AS DATA: when it is bound to
+			// an enclosing `def op (Parse.parser g)`, the compiled dyn-scope
+			// operand uses OpLookupDynScopeData so the parser value PUSHES rather
+			// than deferring on its FnDefInfo binding — matching the interpreter,
+			// which passes the /q-captured name as data to parseFnDispatchHandler.
+			FnDataArgs: map[int]bool{0: true},
 			Impl:       native.Go(parseFnDispatchHandler),
 		}},
 	})

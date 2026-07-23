@@ -456,6 +456,8 @@ func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
 		lw.emit(OpPushType, op.idx, pos)
 	case opDynScope:
 		lw.emit(OpLookupDynScope, op.idx, pos)
+	case opDataScope:
+		lw.emit(OpLookupDynScopeData, op.idx, pos)
 	default: // opConst
 		lw.emit(OpPushConst, op.idx, pos)
 	}
