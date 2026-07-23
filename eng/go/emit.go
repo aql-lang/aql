@@ -5723,6 +5723,20 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // top-frame guard does NOT apply (OpMakeList re-assembles from its operands per
 // run, exactly like OpMakeMap, so it is sound in a fn body / branch / loop).
 func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+	// A SUSPENDED recorder (a higher-order body run for type inference —
+	// analyseHigherOrderBodyVals suspends recording) records no events. The
+	// autoEvalList / autoEvalMap CONSUMED-list callers gate on Armed() (a
+	// recording state exists) not active() (armed AND not suspended), so during a
+	// fold/each/scan accumulator fixed point they would otherwise record a
+	// consumed list — e.g. `{… q:[q]}` inside split-args' fold — into the OUTER
+	// unit's frame, producing an OpLookupDynScope with no coherent bind that
+	// misses at runtime (the voxgig-template liquid `q` fold divergence). Guard at
+	// the recording boundary so every caller (RecordMakeList already pre-checks;
+	// the two autoEval paths do not) is covered. RecordMakeList's own active()
+	// check stays reachable — its isTop caller still reaches it under suspend.
+	if !es.active() {
+		return false
+	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and
