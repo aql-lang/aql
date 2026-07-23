@@ -9,6 +9,7 @@ func init() {
 		"stdout":   "Standard-output handle.",
 		"stderr":   "Standard-error handle.",
 		"trace":    "Run a list as a traced sub-program, returning its result.",
+		"args":     "The script's command-line arguments (after the script path), as a List of Strings; empty when the host passed none.",
 		"folder":   "Create a directory, returning its Path.",
 		"stat":     "Describe a path (name/size/type/mode/mtime/owner/group; {xattr:true} attaches attributes), or none if absent.",
 		"list":     "List a directory's entries; {detail} for records, {recursive} to walk, {match} to glob-filter.",

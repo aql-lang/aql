@@ -64,6 +64,9 @@
     { key: "adr", type: "Document", label: "ADR.md" }
     { key: "eng-guide", type: "Document", label: "eng/go/CLAUDE.md" }
     { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
+    { key: "vault", type: "Concept", label: "secrets vault"
+      attributes: { role: "encrypted API-key / token store, driven by the aql vault subcommand" } }
+    { key: "design-notes", type: "Document", label: "design/ notes" }
     { key: "org", type: "Organization", label: "aql-lang" }
   ]
   assertions: [
@@ -196,6 +199,16 @@
       object: { kind: "entity", entity: "aql" }
       evidence: [{ source: "src:readme", locator: "Install",
         quote: "A wasm-powered browser playground is bundled in docs/index.html" }]
+      confidence: 0.9 }
+    { subject: "vault", predicate: "part_of"
+      object: { kind: "entity", entity: "binary" }
+      evidence: [{ source: "src:readme", locator: "Overview",
+        quote: "a secrets vault" }]
+      confidence: 0.95 }
+    { subject: "design-notes", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "Internal design notes and proposals." }]
       confidence: 0.9 }
   ]
 }

@@ -75,7 +75,7 @@ func TestW4ExecuteScriptFileMissing(t *testing.T) {
 
 func TestW4ExecutePermsConflict(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute([]string{"-e", "1 add 2", "--perms", "none", "--perms-inline", "{}"}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute([]string{"--perms", "none", "--perms-inline", "{}", "-e", "1 add 2"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("Execute(perms conflict) = %d, want 1", code)
 	}
@@ -86,7 +86,7 @@ func TestW4ExecutePermsConflict(t *testing.T) {
 
 func TestW4ExecuteOptionsParseError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute([]string{"-e", "1", "--options", "{{"}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute([]string{"--options", "{{", "-e", "1"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("Execute(bad --options) = %d, want 1", code)
 	}
@@ -97,7 +97,7 @@ func TestW4ExecuteOptionsParseError(t *testing.T) {
 
 func TestW4ExecuteOptionsApplyError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute([]string{"-e", "1", "--options", "zz-unknown:1"}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute([]string{"--options", "zz-unknown:1", "-e", "1"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("Execute(unknown option) = %d, want 1", code)
 	}
@@ -108,7 +108,7 @@ func TestW4ExecuteOptionsApplyError(t *testing.T) {
 
 func TestW4ExecuteOptionsValid(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute([]string{"-e", "1 add 2", "--options", "tape:initial:1024"}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute([]string{"--options", "tape:initial:1024", "-e", "1 add 2"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("Execute(valid --options) = %d, want 0; stderr: %s", code, stderr.String())
 	}

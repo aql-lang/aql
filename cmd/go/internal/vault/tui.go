@@ -23,12 +23,19 @@ var cliVersion string
 // The main package calls it during startup (mirroring run.SetVersion).
 func SetVersion(v string) { cliVersion = v }
 
-// runInteractive launches the interactive vault TUI.
+// runInteractive launches the interactive vault TUI. --aql runs the
+// AQL implementation (the aql:vault-tui module over the aql:vault
+// bridge — design/VAULT-TUI-PORT.0.md §1.3); the bubbletea TUI stays
+// the default.
 func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault -i", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	useAQL := fs.Bool("aql", false, "run the AQL implementation of the interactive TUI (experimental)")
 	if err := fs.Parse(args); err != nil {
 		return 1
+	}
+	if *useAQL {
+		return runInteractiveAQL(homeDir, stdin, stdout, stderr)
 	}
 
 	if !interactiveTTY(stdin, stdout) {

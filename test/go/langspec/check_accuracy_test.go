@@ -88,21 +88,20 @@ var unflaggedPins = map[string]int{
 	"micron.tsv":            3,
 	"module-debug.tsv":      3,
 	"module-emitlang.tsv":   8,
+	"module-fmt.tsv":        3,
 	"module-io.tsv":         29,
 	"module-log.tsv":        6,
-	"module-minilang.tsv":   19,
+	"module-minilang.tsv":   20,
 	"module-net.tsv":        7,
 	"module-parse.tsv":      4,
-	// weak-flex refusals raise inside the weak set/append/make handlers —
-	// runtime-only today; the check-mode guaranteed-error mirror for the
-	// refusal path is documented follow-up (design/FLEX-ATTRS.1.md §4.4).
-	"weak-flex.tsv":         11,
 	"module-parselang.tsv":  13,
 	"module-query.tsv":      1,
 	"module-sift.tsv":       24,
 	"module-struct.tsv":     2,
 	"module-time.tsv":       2,
 	"module-tui.tsv":        20,
+	"module-vault-tui.tsv":  1,
+	"module-vault.tsv":      54,
 	"open-words.tsv":        3,
 	"patrun.tsv":            1,
 	"reach.tsv":             3,
@@ -112,6 +111,10 @@ var unflaggedPins = map[string]int{
 	"storage.tsv":           1,
 	"usurp.tsv":             1,
 	"user-types.tsv":        1,
+	// weak-flex refusals raise inside the weak set/append/make handlers —
+	// runtime-only today; the check-mode guaranteed-error mirror for the
+	// refusal path is documented follow-up (design/FLEX-ATTRS.1.md §4.4).
+	"weak-flex.tsv": 11,
 }
 
 func TestCheckAccuracyRatchet(t *testing.T) {

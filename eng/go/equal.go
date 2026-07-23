@@ -170,8 +170,20 @@ func valuesEqualDefault(a, b Value) bool {
 		if aOk != bOk {
 			return false
 		}
-		aLst, _ := AsList(a)
-		bLst, _ := AsList(b)
+		aLSS, aLShaped := a.Data.(*StoreShapeInfo)
+		bLSS, bLShaped := b.Data.(*StoreShapeInfo)
+		if aLShaped || bLShaped {
+			// Same aliasing model as the map branch below: one minted
+			// shape per container, pointer identity is value identity.
+			return aLShaped && bLShaped && aLSS == bLSS
+		}
+		aLst, aLstErr := AsList(a)
+		bLst, bLstErr := AsList(b)
+		if aLstErr != nil || bLstErr != nil {
+			// Not list-readable (abstract or foreign payload on a
+			// list-family value): rendering compare, never a nil walk.
+			return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)
+		}
 		return listsEqual(aLst.Slice(), bLst.Slice())
 	case nodeFamily(a.Parent).Equal(TMap):
 		aRT, aRec := a.Data.(RecordTypeInfo)
@@ -198,8 +210,22 @@ func valuesEqualDefault(a, b Value) bool {
 		if aOk != bOk {
 			return false
 		}
-		aMap, _ := AsMap(a)
-		bMap, _ := AsMap(b)
+		aSS, aShaped := a.Data.(*StoreShapeInfo)
+		bSS, bShaped := b.Data.(*StoreShapeInfo)
+		if aShaped || bShaped {
+			// Check-mode store-shaped carriers: ONE shape is minted per
+			// container and every carrier copy aliases it (store_shape.go),
+			// so the pointer IS the identity — equal iff the same shape.
+			return aShaped && bShaped && aSS == bSS
+		}
+		aMap, aMapErr := AsMap(a)
+		bMap, bMapErr := AsMap(b)
+		if aMapErr != nil || bMapErr != nil {
+			// A map-family value whose payload is not map-readable (an
+			// abstract check-mode payload, a foreign marker): fall through
+			// to the rendering compare rather than walking a nil ReadMap.
+			return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)
+		}
 		return mapsEqual(aMap, bMap)
 	default:
 		return fmt.Sprintf("%v", a.Data) == fmt.Sprintf("%v", b.Data)

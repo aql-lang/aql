@@ -26,7 +26,7 @@ func init() {
 			"and `receive` their replies. Parenthesise it in argument position: `send {reply: (self)} pid` " +
 			"or inside a map literal `{reply: self}` (map values evaluate).",
 		Examples: []string{
-			`(typeof self) eq Pid   ;# => true`,
+			`(typeof self) eq Pid ; # => true`,
 		},
 	})
 
@@ -40,7 +40,7 @@ func init() {
 			"Sends to dead or unknown targets are silently dropped (fire-and-forget). A full \"fail\"-policy " +
 			"mailbox raises `overload`.",
 		Examples: []string{
-			`send {cmd: "inc"} "counter"`,
+			`send {cmd:"inc"} "counter"`,
 		},
 	})
 
@@ -54,7 +54,7 @@ func init() {
 			"raises `no_match` (it is not saved). The optional `after <ms> [body]` clause fires when the " +
 			"mailbox stays empty past the deadline; `after 0` polls.",
 		Examples: []string{
-			`receive [ {tag: "count" count: Integer} [ count ] after 1000 [ -1 ] ]`,
+			`receive [{tag:"count" count:Integer} [count] after 1000 [-1]]`,
 		},
 	})
 
@@ -75,7 +75,7 @@ func init() {
 		Description: "`whereis <name>` returns the Pid registered under name, or None when the name is " +
 			"unknown (or its process has exited).",
 		Examples: []string{
-			`(whereis "ghost") eq None   ;# => true`,
+			`(whereis "ghost") eq None ; # => true`,
 		},
 	})
 
@@ -98,7 +98,7 @@ func init() {
 			"`wrap`. Dispatch is serialized — one request at a time — so handlers mutate state without " +
 			"locks, and one service is safe to share across processes.",
 		Examples: []string{
-			`def svc (service {count: 0})`,
+			`def svc (service {count:0})`,
 		},
 	})
 
@@ -111,7 +111,7 @@ func init() {
 			"exists). On a `connect`ed Endpoint the same word dispatches to the remote peer; " +
 			"`call {req} ep {timeout: ms}` bounds the wait.",
 		Examples: []string{
-			`call {op: "inc"} svc`,
+			`call {op:"inc"} svc`,
 		},
 	})
 
@@ -137,7 +137,7 @@ func init() {
 			"newest outermost. Per-pattern layering (the `prior` stack) is `add` on an existing pattern; " +
 			"`wrap` is the every-request axis.",
 		Examples: []string{
-			`wrap ([req:Map state:Any prior:Any] => [ prior req ]) svc`,
+			`wrap ([req:Map state:Any prior:Any] => [prior req]) svc`,
 		},
 	})
 }

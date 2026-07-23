@@ -189,6 +189,50 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
+		// del removes a key from a map, completing the storage column
+		// rule `set` established: FlexMap deletes IN PLACE and returns
+		// the node for chaining; an immutable Map returns a NEW map
+		// without the key and leaves the receiver untouched. A missing
+		// key is a no-op in both forms (deletion is idempotent, the
+		// same totality posture as `has`). Keys are strings or atoms,
+		// computed keys via parens: `m del (k)`. This is the in-place
+		// FlexMap deletion design/FLEX-NODES.10.md names as future
+		// work; list element removal stays with the list words
+		// (pop/shift, ArrayUtil.remove-at).
+		Name: "del",
+		Signatures: []Signature{
+			// Map (immutable — copy-returning, mirroring set's Map form).
+			{
+				Args:      []*Type{TString, TMap},
+				Impl:      Go(delMapHandler),
+				Returns:   []*Type{TMap},
+				ReturnsFn: delMapTypedReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TMap},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delMapHandler),
+				Returns:   []*Type{TMap},
+				ReturnsFn: delMapTypedReturns, BarrierPos: -1,
+			},
+
+			// FlexMap (in-place key delete; returns the node for chaining).
+			{
+				Args:      []*Type{TString, TFlexMap},
+				Impl:      Go(delFlexMapHandler),
+				Returns:   []*Type{TFlexMap},
+				ReturnsFn: delFlexMapReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TFlexMap},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delFlexMapHandler),
+				Returns:   []*Type{TFlexMap},
+				ReturnsFn: delFlexMapReturns, BarrierPos: -1,
+			},
+		},
+	},
+	{
 		Name:          "get",
 		CompileEffect: CompileModuleFold | CompileIslandPure,
 		// get EVALUATES its key: the bare-word-quoting atom sigs live on
@@ -511,6 +555,75 @@ func setMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		res.SetElemConstraint(elem)
 	}
 	return []Value{res}, nil
+}
+
+// delMapHandler is the Map form of del. A Map stays immutable: the
+// handler returns a NEW map without the key, leaving the receiver
+// untouched — the same copy-returning contract as set's Map form. A
+// missing key returns an unchanged copy (no-op, never an error).
+func delMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	m, err := RequireConcreteMap(args[1], "del")
+	if err != nil {
+		return nil, err
+	}
+	key := StoreKey(args[0])
+	out := NewOrderedMap()
+	for _, k := range m.Keys() {
+		if k == key {
+			continue
+		}
+		v, _ := m.Get(k)
+		out.Set(k, v)
+	}
+	res := NewMap(out)
+	if elem, ok := args[1].ElemConstraint(); ok {
+		res.SetElemConstraint(elem)
+	}
+	return []Value{res}, nil
+}
+
+// delFlexMapHandler is the FlexMap form of del: removes the key in
+// place and returns the node for chaining, mirroring set's FlexMap
+// contract. A missing key is a no-op.
+func delFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[1]
+	m, err := AsMutableMap(container)
+	if err != nil {
+		return nil, r.AqlError("del_error", "del: expected a FlexMap, got "+container.Parent.String(), "del")
+	}
+	m.Delete(StoreKey(args[0]))
+	return []Value{container}, nil
+}
+
+// delMapTypedReturns is the check-mode mirror of delMapHandler's
+// constraint preservation: the updated-copy residual keeps the
+// receiver's {:T} tag so chained writes stay enforced and reads keep
+// narrowing (the same residual set's Map form uses). del writes no
+// value, so there is no d2CheckWrite write-enforcement mirror.
+func delMapTypedReturns(args []Value, _ *Registry) []Value {
+	res := NewCarrier(TMap)
+	if len(args) == 2 {
+		res = d2TypedMapResidual(args[1])
+	}
+	return []Value{res}
+}
+
+// delFlexMapReturns is the FlexMap `del` check-mode twin of
+// setFlexMapReturns: after a delete the key must STOP narrowing, and
+// the shape model is join-only monotone ("widen, never replace"), so
+// forgetting is expressed as widening the key's entry to dynamic Any.
+// The receiver carrier itself is returned, mirroring the in-place
+// runtime contract (`del … f` leaves f, so the shape flows on for
+// chaining). An unshaped receiver — and every COMPILE pass — keeps the
+// legacy fresh FlexMap carrier, exactly as set's twin does.
+func delFlexMapReturns(args []Value, r *Registry) []Value {
+	if r != nil && !r.Check.Compiling && len(args) >= 2 {
+		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+			ss.RecordKey(StoreKey(args[0]), NewCarrier(TAny))
+			return []Value{args[1]}
+		}
+	}
+	return []Value{NewCarrier(TFlexMap)}
 }
 
 // setClassInstanceHandler is the sealed in-place write for class

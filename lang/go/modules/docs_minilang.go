@@ -27,6 +27,12 @@ func init() {
 			"nodes for a node-set (an element as its Node/Xml value, an attribute/text node as a " +
 			"String), or a one-element list for a scalar count/string/boolean result. " +
 			"github.com/antchfx/xpath.",
+		"lang_sp": "Structure-path (XPath-style) over AQL structure: `<map-or-list> mini sp '<path>' {}` — run an XPath " +
+			"(e.g. /name, //title, //item[p>20]/p, count(//item), sum(//v)) over the stack Map/List " +
+			"subject and return a List. Same engine as xp but over native AQL data: a Map is an " +
+			"element per key, a List repeated `item` elements, a scalar the element's text. A matched " +
+			"element comes back as its source value, a text/scalar result as a String/Number/Boolean. " +
+			"A Map subject needs an explicit {} opts (a bare Map is claimed as opts). github.com/antchfx/xpath.",
 		"lang_hb": "Hex Bytes literal: `+hb/deadbeef/` (≡ mini hb 'deadbeef') — decode an " +
 			"even-length hex string to a Bytes value. Whitespace and `_` in the source are " +
 			"ignored, so `+hb/de_ad_be_ef/` groups for readability. A bad/odd-length source " +
@@ -55,7 +61,7 @@ func init() {
 			"`def f (+re/…/)`) produces. `typeof` still reports Function (a member type is a " +
 			"constraint, like a DepScalar); use `is` (`f/r is (MiniLang.Re)`) or a typed fn param " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`) to require specifically a regexp matcher. " +
-			"Every built-in filter kind has one: Re, Gex, Jp, Jq, Xp.",
+			"Every built-in filter kind has one: Re, Gex, Jp, Jq, Xp, Sp.",
 		"Gex": "The named type of a `gex` partial (a stored glob-expression matcher) — " +
 			"see MiniLang.Re for the convention.",
 		"Jp": "The named type of a `jp` partial (a stored JSONPath query) — " +
@@ -63,6 +69,8 @@ func init() {
 		"Jq": "The named type of a `jq` partial (a stored jq filter) — " +
 			"see MiniLang.Re for the convention.",
 		"Xp": "The named type of an `xp` partial (a stored XPath query) — " +
+			"see MiniLang.Re for the convention.",
+		"Sp": "The named type of an `sp` partial (a stored structure-path query) — " +
 			"see MiniLang.Re for the convention.",
 		"kinds": "List the (fixed) mini-language kind atoms.",
 		"register-compiled": "TOMBSTONE — raises mini_registry_frozen. The AQL compile-hook " +

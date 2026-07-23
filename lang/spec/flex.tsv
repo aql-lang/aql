@@ -238,3 +238,28 @@ def iv (flex {b:1}) typeof ({} set a iv).a	Map	a flex value stored into a PLAIN 
 def iv (flex {b:1}) def m ({} set a iv) set b 9 iv end m.a.b	(flex {b:9}) 1	…so mutating the handle afterwards does NOT change the "immutable" map
 def iv (flex [1]) typeof (push iv []).0	List	plain-list push snapshots a flex element
 def iv (flex [1]) typeof (unshift iv []).0	List	plain-list unshift snapshots too
+
+# ====================================================================
+# 12. del — in-place key deletion on FlexMap (copy-returning on Map)
+# ====================================================================
+# `del key node` completes the storage column rule `set` established:
+# a FlexMap deletes IN PLACE and returns the node (aliases observe the
+# removal); an immutable Map returns a NEW map without the key. A
+# missing key is a no-op in both forms. Keys are strings or atoms;
+# computed keys via parens. No List form: element removal stays with
+# the list words (pop / shift / ArrayUtil.remove-at).
+
+def f (flex {a:1 b:2}) (f del "a")	(flex {b:2})	FlexMap del removes the key in place
+def f (flex {a:1 b:2}) ((f del "a") eq f)	true	…and returns the receiver node itself
+def f (flex {a:1 b:2 c:3}) f del a del b	(flex {c:3})	chained deletes keep operating on one node (atom keys quote)
+def f (flex {a:1}) def g f (f del "a") drop g	(flex {})	every alias observes the in-place removal
+def f (flex {a:1}) ((f del "zz") eq f)	true	missing key: no-op, same node back
+def f (flex {a:none}) (f del "a") size	0	a present-but-none entry deletes like any other
+def k "b" (flex {a:1 b:2}) del (k)	(flex {a:1})	computed key via parens
+{a:1 b:2} del a	{b:2}	Map del is copy-returning
+def m {a:1 b:2} (m del "a") drop m	{a:1 b:2}	…and leaves the receiver untouched
+{a:1} del zz	{a:1}	Map del of a missing key: unchanged copy
+del "a" 5	ERROR:signature	scalars have no del
+del "a" [1 2]	ERROR:signature	no List form — use pop/shift/ArrayUtil.remove-at
+del "a" (flex [1 2])	ERROR:signature	no FlexList form either
+del 0 {a:1}	ERROR:signature	an integer key is not a map key

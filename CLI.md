@@ -185,6 +185,23 @@ aql -e '...' -r ./registry  # with a custom registry
 Output: the final stack contents, space-separated, on stdout.
 Errors go to stderr; exit code 1 on failure.
 
+**Program arguments (`IO.args`).** Anything after the script path — or,
+in `-e` mode, after the expression — is the program's own argument
+vector, readable with `IO.args` (`import "aql:io"`). `-e` **ends option
+processing** (the `node -e` / `python -c` convention), so a dash-prefixed
+first argument reaches the program instead of being read as an `aql`
+flag:
+
+```bash
+aql script.aql --fast a       # IO.args → ['--fast' 'a']
+aql -e '…' --fast a           # IO.args → ['--fast' 'a']  (no separator needed)
+aql -e '…' -- --fast          # a leading `--` is accepted and stripped
+```
+
+`aql` flags for the run itself go **before** the script/`-e` expression
+(`aql -s 5 -e '…' --fast` seeds the run and passes `--fast` to the
+program).
+
 ### `aql do`
 
 Evaluate the remaining args as an AQL expression. Slightly more
@@ -745,6 +762,11 @@ records in a small index (`~/.aql/vaults.jsonic`, locations only, never
 secrets). `aql vault folder` prints the same list from the command line, and
 `aql vault [--suffix=NAME] folder add <dir>` registers a pre-existing vault
 (the suffix is auto-detected when the folder holds exactly one).
+
+`aql vault -i --aql` (experimental) runs the TUI's **AQL implementation** —
+the same vault driven by an AQL program (the `aql:vault-tui` module) over
+the `aql:vault` bridge words, per `design/VAULT-TUI-PORT.0.md`. The
+bubbletea TUI stays the default until the AQL port reaches full parity.
 
 The secret value is never taken as a command-line argument — that
 would leak it into your shell history and the process listing.

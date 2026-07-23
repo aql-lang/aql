@@ -16,51 +16,55 @@ import "aql:string-util"
 def s3c-crlf (convert Bytes "\r\n")
 
 def s3c-read-header-lines fn [[sock:Any hs:Any] [Any] [
-  def lb (Net.recv-until sock s3c-crlf {within: 20000})
-  if ((size lb) eq 0) [ 0 ] [
-    def line (convert String lb)
-    def ci (StringUtil.indexof ":" line)
-    def hk (StringUtil.lower (StringUtil.trim (convert String (slice 0 ci lb))))
-    def hv (StringUtil.trim (convert String (slice (add 1 ci) (size lb) lb)))
-    hs set (hk) hv
-    drop
-    s3c-read-header-lines sock hs
-  ]
+  def lb (Net.recv-until sock s3c-crlf {within:20000})
+  if ((size lb) eq 0) [0]
+    [def line (convert String lb)
+      def ci (StringUtil.indexof ":" line)
+      def hk
+        (StringUtil.lower
+            (StringUtil.trim (convert String (slice 0 ci lb)))
+        )
+      def hv
+        (StringUtil.trim
+            (convert String (slice (add 1 ci) (size lb) lb))
+        )
+        hs set (hk) hv drop s3c-read-header-lines sock hs
+    ]
 ]]
 
 # Read one HTTP response: {status headers body}.
-def s3c-read-resp fn [[sock:Any] [Any] [
-  def sl (convert String (Net.recv-until sock s3c-crlf {within: 20000}))
+def s3c-read-resp fn sock:Any Any [
+  def sl (convert String (Net.recv-until sock s3c-crlf {within:20000}))
   def sp (StringUtil.split " " sl)
   def status (convert Integer (sp get 1))
-  def hs (flex {})
-  s3c-read-header-lines sock hs
-  drop
+  def hs (flex {}) s3c-read-header-lines sock hs drop
   def clv (hs get "content-length")
-  def clen (if (clv eq None) [ 0 ] [ convert Integer clv ])
-  def rbody (if (clen gt 0) [ Net.recv-bytes sock clen {within: 20000} ] [ convert Bytes "" ])
-  def out {status: status headers: hs body: rbody}
-  out
-]]
+  def clen (if (clv eq None) [0] [convert Integer clv])
+  def rbody
+    (if (clen gt 0) [Net.recv-bytes sock clen {within:20000}]
+        [convert Bytes ""]
+    )
+  def out {status:status headers:hs body:rbody} out
+]
 
 # Send one request (body streamed in 64 KiB chunks) and read the reply.
-def s3c-req fn [[sock:Any method:String path:String extra:List body:Bytes] [Any] [
-  def hdrs (push (join "" ["content-length: " (convert String (size body))]) extra)
-  def head (join "\r\n" (unshift (join " " [method path "HTTP/1.1"]) hdrs))
-  Net.send-bytes (convert Bytes (join "" [head "\r\n\r\n"])) sock
+def s3c-req fn
+  [[sock:Any method:String path:String extra:List body:Bytes] [Any] [
+  def hdrs
+    (push (join "" ["content-length: " (convert String (size body))])
+        extra
+    )
+  def head
+    (join "\r\n" (unshift (join " " [method path "HTTP/1.1"]) hdrs))
+    Net.send-bytes (convert Bytes (join "" [head "\r\n\r\n"])) sock
   def total (size body)
-  for [0 total 65536] [
-    def hi (if ((add i 65536) lt total) [ add i 65536 ] [ total ])
-    Net.send-bytes (slice i hi body) sock
-  ]
-  s3c-read-resp sock
+  for [0 total 65536]
+    [def hi (if ((add i 65536) lt total) [add i 65536] [total])
+        Net.send-bytes (slice i hi body) sock
+    ]
+    s3c-read-resp sock
 ]]
 
-def s3c-dial fn [[addr:String] [Any] [
-  Net.connect-raw {tcp: addr}
-]]
+def s3c-dial fn addr:String Any [Net.connect-raw {tcp:addr}]
 
-export "MiniS3Client" {
-  dial: s3c-dial/r
-  req:  s3c-req/r
-}
+export "MiniS3Client" {dial:s3c-dial/r req:s3c-req/r}

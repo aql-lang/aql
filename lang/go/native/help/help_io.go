@@ -12,8 +12,8 @@ func init() {
 			"sequential prints use the stack-only modifier print/s, or terminate each " +
 			"statement with `end` / `;` — `\"a\" print; \"b\" print;`.",
 		Examples: []string{
-			`"a" print/s  "b" print/s   ;# a then b — stack-only, in order`,
-			`"a" print; "b" print;      ;# same, via statement terminators`,
+			`"a" print/s "b" print/s ; # a then b — stack-only, in order`,
+			`"a" print ; "b" print ; ; # same, via statement terminators`,
 		},
 	})
 

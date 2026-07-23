@@ -114,6 +114,36 @@ func TestFormatTypeCapitalization(t *testing.T) {
 	}
 }
 
+// TestFormatValueWordsNotCapitalized pins the fix that fmt must not
+// capitalise the type names that are also valid lowercase VALUE / function
+// words — none (the None value, distinct from the None type), and the native
+// words list / any / node. Capitalising them changes program semantics
+// (`size none` → `size None`, `list 1 2 3` → `List 1 2 3`), so they are left
+// verbatim, while genuine lowercase type names still capitalise and existing
+// capitalised forms are untouched.
+func TestFormatValueWordsNotCapitalized(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"none value stays", "size none\n", "size none\n"},
+		{"none in prose-ish stays", "none has a\n", "none has a\n"},
+		{"list constructor stays", "list 1 2 3\n", "list 1 2 3\n"},
+		{"any predicate stays", "any [1 2]\n", "any [1 2]\n"},
+		{"node constructor stays", "node {a:1}\n", "node {a:1}\n"},
+		// Genuine type names still capitalise.
+		{"integer type capitalises", "x is integer\n", "x is Integer\n"},
+		{"map type capitalises", "convert map v\n", "convert Map v\n"},
+		// Already-capital forms are never altered.
+		{"None literal untouched", "size None\n", "size None\n"},
+		{"List literal untouched", "x is List\n", "x is List\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Format(tt.in); got != tt.want {
+				t.Errorf("Format(%q)\n  got:  %q\n  want: %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestFormatBlankLineHandling pins emitRoot's blank-line policy: runs of
 // blank lines collapse to one, and leading blank lines are dropped.
 func TestFormatBlankLineHandling(t *testing.T) {
@@ -135,8 +165,11 @@ func TestFormatBlankLineHandling(t *testing.T) {
 // whose signature triple does not fit on one line puts the body on its
 // own indented lines between `[` and `]]`.
 func TestFormatFnMultiLine(t *testing.T) {
-	src := "def process-all fn [[input:String] [String] [input upper input lower input trim input rev]]\n"
-	want := "def process-all fn [[input:String] [String] [\n" +
+	// A multi-parameter fn keeps the bracketed spec-list form, so this
+	// exercises tryFnFormat's multi-line body path (single-param fns take
+	// the bracketless triple form and bypass tryFnFormat).
+	src := "def process-all fn [[input:String extra:String] [String] [input upper input lower input trim input rev]]\n"
+	want := "def process-all fn [[input:String extra:String] [String] [\n" +
 		"  input upper input lower input trim input rev\n" +
 		"]]\n"
 	got := Format(src)
@@ -201,7 +234,7 @@ func TestFormatFnNotApplicable(t *testing.T) {
 // statement ending in a map keeps `{` on the header line and indents one
 // entry per line.
 func TestFormatTrailingMap(t *testing.T) {
-	src := "export Something {alpha:1 beta:2 gamma:3 delta:4 epsilon:5 zeta:6 eta:7}\n"
+	src := "export Something {alpha:1 beta:2 gamma:3 delta:4 epsilon:5 zeta:6 eta:7 theta:8}\n"
 	want := "export Something {\n" +
 		"  alpha:1\n" +
 		"  beta:2\n" +
@@ -210,6 +243,7 @@ func TestFormatTrailingMap(t *testing.T) {
 		"  epsilon:5\n" +
 		"  zeta:6\n" +
 		"  eta:7\n" +
+		"  theta:8\n" +
 		"}\n"
 	got := Format(src)
 	if got != want {
@@ -248,7 +282,7 @@ func TestFormatTrailingListWrappedGroup(t *testing.T) {
 // TestFormatWrapStatement covers the generic wrap: a long run of plain
 // words breaks with a two-space continuation indent.
 func TestFormatWrapStatement(t *testing.T) {
-	src := "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima\n"
+	src := "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike\n"
 	got := Format(src)
 	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
 	if len(lines) < 2 {
@@ -339,10 +373,9 @@ func TestFormatMapEntryForms(t *testing.T) {
 	}{
 		{"explicit optional pair", "{foo?: bar}\n", "{foo?:bar}\n"},
 		{"string key", `{"a":1}` + "\n", `{"a":1}` + "\n"},
-		// (No idempotence for this row: a line comment inside a
-		// single-line map swallows the rest of the rendered line on a
-		// second pass — a pre-existing formatter limitation.)
-		{"comment inside map", "{a:1\n# note\nb:2}\n", "{a:1 # note b:2}\n"},
+		// A line comment inside a map forces the map multi-line: on one line
+		// the comment would swallow the following entry and the closing `}`.
+		{"comment inside map", "{a:1\n# note\nb:2}\n", "{a:1\n  # note\n  b:2\n}\n"},
 		{"digit modifier shorthand", "{foo/2}\n", "{foo:foo/2}\n"},
 		{"digit+force shorthand", "{foo/2s}\n", "{foo:foo/2s}\n"},
 		{"qs shorthand", "{foo/qs}\n", "{foo:foo/qs}\n"},
@@ -359,9 +392,7 @@ func TestFormatMapEntryForms(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("Format(%q)\n  got:  %q\n  want: %q", tt.in, got, tt.want)
 			}
-			if tt.name != "comment inside map" {
-				checkIdempotent(t, tt.in)
-			}
+			checkIdempotent(t, tt.in)
 		})
 	}
 }
@@ -410,8 +441,9 @@ func TestEmitNodeDirect(t *testing.T) {
 		{NdNewline, "", ""},
 		{NodeKind(99), "zz", ""},
 	}
+	r := newRenderer(DefaultRules())
 	for _, tt := range tests {
-		if got := emitNode(&Node{Kind: tt.kind, Text: tt.text}, 0); got != tt.want {
+		if got := r.emitNode(&Node{Kind: tt.kind, Text: tt.text}, 0); got != tt.want {
 			t.Errorf("emitNode(kind=%d) = %q, want %q", tt.kind, got, tt.want)
 		}
 	}

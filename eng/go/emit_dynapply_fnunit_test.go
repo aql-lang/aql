@@ -42,26 +42,40 @@ func TestDynFrameWindowArms(t *testing.T) {
 }
 
 func TestNoteDynFrameReplayArms(t *testing.T) {
+	es := NewEmitState()
 	u, rec := daUnit("p0", "p1")
 	// A fn value beyond the exempt window whose residual is ALL prefix:
 	// dynFrameWindow declines, so the scan keeps the refusal (false).
-	if noteDynFrameReplay(u, rec, []Value{daFnCarrier("p0"), daFnCarrier("p1")}, 1) {
+	if es.noteDynFrameReplay(u, rec, []Value{daFnCarrier("p0"), daFnCarrier("p1")}, 1) {
 		t.Error("an undecomposable fn residual must keep the refusal")
 	}
 	if rec.retReplay {
 		t.Error("a declined replay must not mark the rec")
 	}
 	// No fn value at all: nothing to replay, no refusal.
-	if !noteDynFrameReplay(u, rec, []Value{NewInteger(1), NewInteger(2)}, 1) {
+	if !es.noteDynFrameReplay(u, rec, []Value{NewInteger(1), NewInteger(2)}, 1) {
 		t.Error("a fn-free residual never refuses here")
 	}
 	// A fn value with a token region seats the replay.
 	u2, rec2 := daUnit("p0", "p1")
-	if !noteDynFrameReplay(u2, rec2, []Value{daFnCarrier("p0"), daFnCarrier("p1"), daFnCarrier("p0")}, 2) {
+	if !es.noteDynFrameReplay(u2, rec2, []Value{daFnCarrier("p0"), daFnCarrier("p1"), daFnCarrier("p0")}, 2) {
 		t.Error("a decomposable fn residual must seat the replay")
 	}
 	if rec2.dynFrameW != 1 || !rec2.retReplay {
 		t.Errorf("replay window = %d retReplay=%v, want 1/true", rec2.dynFrameW, rec2.retReplay)
+	}
+	// A DYNAMIC value (a bounded gradual carrier — the map-get-over-Any
+	// stylesheet idiom) arms the same replay: callable or not is decided by
+	// the runtime rule the replay re-steps under.
+	u3, rec3 := daUnit("p0", "p1")
+	dyn := NewCarrier(TAny)
+	dyn.Dynamic = true
+	dyn.ID = "d0"
+	if !es.noteDynFrameReplay(u3, rec3, []Value{daFnCarrier("p0"), daFnCarrier("p1"), dyn}, 2) {
+		t.Error("a dynamic residual value must seat the replay")
+	}
+	if rec3.dynFrameW != 1 || !rec3.retReplay {
+		t.Errorf("dynamic replay window = %d retReplay=%v, want 1/true", rec3.dynFrameW, rec3.retReplay)
 	}
 }
 
@@ -159,7 +173,34 @@ func TestSetLoopBodyApplySourceOrderGate(t *testing.T) {
 	}
 }
 
+func TestReplayForceOrderArms(t *testing.T) {
+	es := NewEmitState()
+	es.eventInfo[5] = eventFlags{variadicResult: true}
+
+	// In-order [event bottom, inert top]: no event above a non-event — nil.
+	if got := es.replayForceOrder([]emitOperand{eventOperand(0, 0), localOperand(1)}); got != nil {
+		t.Errorf("in-order residual must not force-order, got %v", got)
+	}
+	// Out-of-order [inert bottom, event top] — the stylesheet-apply shape:
+	// promote the event so the RET re-pushes in token order.
+	got := es.replayForceOrder([]emitOperand{localOperand(1), eventOperand(3, 0)})
+	if got == nil || !got[3] || len(got) != 1 {
+		t.Errorf("out-of-order residual must force-order {3}, got %v", got)
+	}
+	// A MULTI-RESULT event operand (resIdx != 0) cannot be re-pushed as one
+	// slot — decline (nil), keep the seating refusal.
+	if got := es.replayForceOrder([]emitOperand{localOperand(1), eventOperand(3, 1)}); got != nil {
+		t.Errorf("a multi-result operand must decline force-order, got %v", got)
+	}
+	// A VARIADIC event operand (runtime-variable count) cannot store to one
+	// slot — decline (nil).
+	if got := es.replayForceOrder([]emitOperand{localOperand(1), eventOperand(5, 0)}); got != nil {
+		t.Errorf("a variadic operand must decline force-order, got %v", got)
+	}
+}
+
 func TestReplayIsBodyTailArms(t *testing.T) {
+	es := NewEmitState()
 	at := func(row, col int) SrcPos { return SrcPos{Row: row, Col: col} }
 	win := func(pos SrcPos) []Value {
 		v := NewInteger(1)
@@ -169,22 +210,56 @@ func TestReplayIsBodyTailArms(t *testing.T) {
 	evAt := func(p SrcPos) emitEvent { return emitEvent{kind: evCall, call: emitCall{pos: p}} }
 
 	// An event-free body is trivially a tail.
-	if !replayIsBodyTail(&EmitFragment{}, win(at(1, 30))) {
+	if !es.replayIsBodyTail(&EmitFragment{}, win(at(1, 30))) {
 		t.Error("an event-free body is a tail")
 	}
 	// Events all BEFORE the window anchor: still a tail.
 	frag := &EmitFragment{events: []emitEvent{evAt(at(1, 5))}}
-	if !replayIsBodyTail(frag, win(at(1, 30))) {
+	if !es.replayIsBodyTail(frag, win(at(1, 30))) {
 		t.Error("events before the apply keep the replay")
 	}
 	// An event AFTER the anchor: its effects would reorder — decline.
 	frag = &EmitFragment{events: []emitEvent{evAt(at(1, 60))}}
-	if replayIsBodyTail(frag, win(at(1, 30))) {
+	if es.replayIsBodyTail(frag, win(at(1, 30))) {
 		t.Error("an event after the apply must decline the replay")
 	}
 	// Events but NO positioned window value: order unprovable — decline.
 	frag = &EmitFragment{events: []emitEvent{evAt(at(1, 5))}}
-	if replayIsBodyTail(frag, win(SrcPos{})) {
+	if es.replayIsBodyTail(frag, win(SrcPos{})) {
 		t.Error("an unanchored window with events must decline")
+	}
+}
+
+func TestReplayIsBodyTailSeqAnchor(t *testing.T) {
+	// A window holding an EVENT RESULT orders by the recorded trace (seq),
+	// not source columns: the nested-paren argument of the stylesheet apply
+	// `(rules get (Fmt.kind nd))` sits textually after its consumer but ran
+	// before it, and the get result carrier carries no Pos of its own.
+	evSeq := func(seq int) emitEvent {
+		return emitEvent{seq: seq, kind: evCall, call: emitCall{pos: SrcPos{Row: 1, Col: 99}}}
+	}
+	dynAt := func(id string) Value {
+		v := NewCarrier(TAny)
+		v.Dynamic = true
+		v.ID = id
+		return v
+	}
+
+	// The window's producer is the trace's LAST event: a tail — arm.
+	es := NewEmitState()
+	res := dynAt("r1")
+	es.producedBy[res.ID] = producer{seq: 7}
+	frag := &EmitFragment{events: []emitEvent{evSeq(3), evSeq(7)}}
+	if !es.replayIsBodyTail(frag, []Value{NewInteger(1), res}) {
+		t.Error("a window produced by the trace's last event is the body tail")
+	}
+	// An event recorded AFTER the window's producer (`[(m get "k") print
+	// "x"]`): the replay would reorder its effects behind the apply — decline.
+	es2 := NewEmitState()
+	res2 := dynAt("r2")
+	es2.producedBy[res2.ID] = producer{seq: 3}
+	frag2 := &EmitFragment{events: []emitEvent{evSeq(3), evSeq(7)}}
+	if es2.replayIsBodyTail(frag2, []Value{NewInteger(1), res2}) {
+		t.Error("an event recorded after the window's producer must decline")
 	}
 }
