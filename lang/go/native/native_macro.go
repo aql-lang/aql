@@ -899,6 +899,25 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
 	}
 	source, opts := parseSurfaceOperands(args)
+	// COMPILE pass, NON-CONCRETE source (a fn-body parse over a `src:String`
+	// param carrier — every voxgig-aql/template lexer): the direct expansion
+	// `<fn> <source> <opts> end` dispatches the parser WORD, whose result is a
+	// dynamic Any, so the compiler refuses "unannotated or opaque word <fn>".
+	// Route it through the SAME parselang-fn-dispatch CALL_NATIVE the
+	// non-concrete-PARSER form uses: parseFnDispatchHandler replays the
+	// identical tail in a sub-engine, so the compiled program is byte-identical
+	// to the expansion. This is what makes a module-exported lexer compile — a
+	// detached stamp binds the runtime-constructed parser as a concrete value,
+	// so the non-concrete-parser branch above never fires for it. A CONCRETE
+	// source (a top-level `parse op 'inc'`) keeps the expansion: the dispatch
+	// yields a concrete result the compile pass folds, observation-free
+	// (TestParseFnDispatchCheckObservationFree). Declines (pure check, no
+	// aql:parselang import) also fall through to the expansion.
+	if !IsConcrete(source) {
+		if out, ok := recordParseLangFnDispatch(r, fn, args); ok {
+			return []Value{out}, nil
+		}
+	}
 	toks := []Value{fn, source, opts, NewEnd()}
 	return []Value{NewSplice(NewList(toks))}, nil
 }

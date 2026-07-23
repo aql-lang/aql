@@ -2721,10 +2721,8 @@ func (e *Engine) stepWord(val Value) error {
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
-			if top.Dynamic && e.registry.Check.IsActive() {
-				// Tag the gradual value with its binding so a typed use
-				// downstream narrows the binding (narrowing-through-use).
-				top.SetDynFrom(w.Name)
+			if e.registry.Check.IsActive() {
+				e.tagCheckModeDefRead(&top, w.Name)
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
@@ -2976,6 +2974,36 @@ func (e *Engine) stepWord(val Value) error {
 		e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	}
 	return e.execMatch(match)
+}
+
+// tagCheckModeDefRead records provenance on a def-word substitution so a later
+// compile pass can lower an un-ID-able read to a runtime dyn-scope lookup. Two
+// cases tag DynFrom (consumed ONLY by resolveOperand's dynScopeRescue; narrowing
+// is Dynamic-gated, so a non-dynamic tag is inert there):
+//
+//   - a DYNAMIC (gradual) value: the tag lets a typed downstream use narrow the
+//     binding (narrowing-through-use);
+//   - a CONCRETE MODULE-SCOPE mutable reference (a `flex` map/list/xml, a Store
+//     bound outside the current fn frame): its reads lower to a live dyn-scope
+//     lookup so every reference re-resolves the ONE shared instance. A DETACHED
+//     stamp forks the RUNTIME def table where the value's ID was ELIDED, so
+//     defReads[ID] cannot name it — the tag makes the read nameable regardless of
+//     ID. Scoped to MODULE scope (ModuleScopeBinding): such a binding lives in the
+//     registry Defs for the whole run, so OpLookupDynScope resolves it byte-
+//     identically to the interpreter. A BODY-LOCAL flex is a frame local, not a
+//     registry binding, so dyn-scoping it would miss — it keeps its local-slot
+//     lowering (or a sound refusal), left untagged.
+//
+// Extracted from stepWord so the hot dispatch path stays under the cyclomatic-
+// complexity gate.
+func (e *Engine) tagCheckModeDefRead(top *Value, name string) {
+	switch {
+	case top.Dynamic:
+		top.SetDynFrom(name)
+	case (IsFlexMap(*top) || IsFlexList(*top) || IsFlexXml(*top) || IsStore(*top)) &&
+		ModuleScopeBinding(e.registry, name):
+		top.SetDynFrom(name)
+	}
 }
 
 // checkMixedFormAdvisories emits the two check-mode forward-greediness

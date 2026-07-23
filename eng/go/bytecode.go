@@ -440,6 +440,15 @@ const (
 	// slot popped by a later check-time undef skips the write (the interpreter
 	// would have discarded the binding too).
 	OpBindGlobal
+	// OpLookupDynScopeData is the DATA-position twin of OpLookupDynScope: it
+	// reads the name's live dynamic-scope binding and PUSHES it, WITHOUT the
+	// FnDefInfo dispatch-defer. The emitter uses it only where a
+	// Signature.FnDataArgs slot proved the fn value is consumed as DATA (the
+	// parselang-fn-dispatch parser operand), so pushing the FnDefInfo binding is
+	// byte-identical to the interpreter reading the /q-captured name as data. It
+	// still defers on a genuine miss, an active token, and a class binding (a
+	// class read as data is not a parser).
+	OpLookupDynScopeData
 )
 
 // opcodeNames is the single source of each opcode's disassembler mnemonic,
@@ -493,6 +502,7 @@ var opcodeNames = [...]string{
 	OpBindDynScope:         "BIND_DYN_SCOPE",
 	OpCallDynMixedFromMark: "CALL_DYN_MIXED_FROM_MARK",
 	OpBindGlobal:           "BIND_GLOBAL",
+	OpLookupDynScopeData:   "LOOKUP_DYN_SCOPE_DATA",
 }
 
 func (o Opcode) String() string {
@@ -1185,7 +1195,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 	for i, in := range code {
 		fmt.Fprintf(sb, "%04d %-11s", i, in.Op.String())
 		switch in.Op {
-		case OpPushConst, OpLookupDynScope, OpBindDynScope:
+		case OpPushConst, OpLookupDynScope, OpLookupDynScopeData, OpBindDynScope:
 			c := p.Consts[in.Arg]
 			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:

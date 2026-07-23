@@ -61,13 +61,14 @@ const (
 type operandKind uint8
 
 const (
-	opNone     operandKind = iota // zero value: unset / invalid (ok=false only)
-	opConst                       // idx → Program.Consts index
-	opEvent                       // idx → producing event sequence number
-	opLocal                       // idx → frame-local slot (loop iterator / param)
-	opType                        // idx → Program.Types index (canonical type)
-	opClosure                     // closureUnit + closureCaps (a compiled body)
-	opDynScope                    // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
+	opNone      operandKind = iota // zero value: unset / invalid (ok=false only)
+	opConst                        // idx → Program.Consts index
+	opEvent                        // idx → producing event sequence number
+	opLocal                        // idx → frame-local slot (loop iterator / param)
+	opType                         // idx → Program.Types index (canonical type)
+	opClosure                      // closureUnit + closureCaps (a compiled body)
+	opDynScope                     // idx → Program.Consts index of the NAME a runtime dynamic-scope lookup reads
+	opDataScope                    // like opDynScope but a READ-AS-DATA lookup (OpLookupDynScopeData): a fn/parser binding pushes as data, no FnDefInfo defer
 )
 
 // emitOperand names where one dispatch argument comes from. For every kind but
@@ -99,6 +100,9 @@ type emitOperand struct {
 func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
 func dynScopeOperand(idx int) emitOperand {
 	return emitOperand{kind: opDynScope, idx: idx}
+}
+func dataScopeOperand(idx int) emitOperand {
+	return emitOperand{kind: opDataScope, idx: idx}
 }
 func eventOperand(seq, resIdx int) emitOperand {
 	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
@@ -632,6 +636,16 @@ type EmitState struct {
 	// binder/call-graph reachability model (dynamicScopeReachable). See
 	// NoteDefRead.
 	defReads map[string]string
+	// rootComputedBindIDs holds the value IDs of TOP-LEVEL computed fn-value
+	// defs (`def op (Parse.parser g)` and the sibling mini/emit value forms)
+	// that installDef DECLINED to install in Defs (the compiled-closure
+	// machinery owns the name). snapshotAllBindingIDs iterates Defs, so it
+	// misses these — yet they ARE real enclosing bindings at run time. Merging
+	// them into a fn unit's enclosingBindIDs lets a deeper body's read of the
+	// name (`parse op src`) rescue to a runtime read (OpLookupDynScopeData)
+	// instead of taking the unreachable enclosing-producer operand and refusing
+	// "reads enclosing computation". Populated by RecordDynBind.
+	rootComputedBindIDs map[string]bool
 	// dynScopeNames collects every name resolveOperand lowered as an
 	// OpLookupDynScope read. The Finalize pass installs an OpBindDynScope
 	// twin in every unit (params and body-local defs) and at every
@@ -778,6 +792,17 @@ type emitUnit struct {
 	// have no producing event, so they still const-fold; only computed /
 	// mutable enclosing bindings take this path.)
 	enclosingBindIDs map[string]bool
+	// enclosingBindNames snapshots, at unit open, the NAMES of every def binding
+	// visible in the DefTable — the by-name twin of enclosingBindIDs. It exists
+	// for the one case IDs cannot cover: a DETACHED stamp (StampDetachedFn) forks
+	// the RUNTIME def table, where a value's ID was ELIDED (no compile-time mint),
+	// so a module-scope `flex`/`store` read arrives with an empty ID that is
+	// absent from enclosingBindIDs. dynScopeRescue recovers the read's NAME (from
+	// DynFrom, tagged at the read site) and consults this set to confirm it is a
+	// live enclosing binding — the VM's OpLookupDynScope reads the same live cell
+	// the interpreter does (and DEFERS on a miss, a sound fallback), so a name
+	// match is a safe commit signal for an otherwise un-ID-able mutable read.
+	enclosingBindNames map[string]bool
 	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
 	// unit's body dispatched through the `apply` word (a param/captured
 	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
@@ -1848,6 +1873,12 @@ func (es *EmitState) snapshotCompoundBindingIDs() map[string]bool {
 // scope lookup rather than an unreachable in-frame event operand.
 func (es *EmitState) snapshotAllBindingIDs() map[string]bool {
 	ids := map[string]bool{}
+	// Top-level computed fn value-defs installDef declined to install in Defs
+	// (`def op (Parse.parser g)`) are still real enclosing bindings; the Defs
+	// scan below misses them, so merge their recorded IDs in.
+	for id := range es.rootComputedBindIDs {
+		ids[id] = true
+	}
 	if es.reg == nil || es.reg.Defs == nil {
 		return ids
 	}
@@ -1859,6 +1890,21 @@ func (es *EmitState) snapshotAllBindingIDs() map[string]bool {
 		}
 	}
 	return ids
+}
+
+// snapshotAllBindingNames snapshots the NAMES of every def binding visible in
+// the DefTable at unit open — the by-name twin of snapshotAllBindingIDs, used
+// only to recover an ENCLOSING mutable-reference read whose value ID was elided
+// at pure runtime (a detached stamp). See emitUnit.enclosingBindNames.
+func (es *EmitState) snapshotAllBindingNames() map[string]bool {
+	names := map[string]bool{}
+	if es.reg == nil || es.reg.Defs == nil {
+		return names
+	}
+	for _, name := range es.reg.Defs.Names() {
+		names[name] = true
+	}
+	return names
 }
 
 // tryReturnedClosure compiles a fn VALUE that a body RETURNS — the factory
@@ -3224,7 +3270,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 	rec := &fnUnitRec{name: name, nParams: len(args), nUnnamed: nUnnamed, caps: captures, generic: generic, returns: declared, locals: locals, pos: pos, reg: fnReg}
 	es.fnRecs = append(es.fnRecs, rec)
 	es.fnUnits[key] = unit
-	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), enclosingBindIDs: es.snapshotAllBindingIDs(), reg: fnReg}
+	u := &emitUnit{localByID: map[string]int{}, capID: map[string]bool{}, enclosingIDs: es.snapshotCompoundBindingIDs(), enclosingBindIDs: es.snapshotAllBindingIDs(), enclosingBindNames: es.snapshotAllBindingNames(), reg: fnReg}
 	es.units = append(es.units, u)
 	es.unitNames = append(es.unitNames, name)
 	es.openUnitRecs = append(es.openUnitRecs, unit)
@@ -4751,6 +4797,14 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 			es.MarkUncompilable("operand of unknown provenance or not statically materialisable at " + word)
 			return nil, false
 		}
+		// A FnDataArgs slot (parselang-fn-dispatch arg0, the computed parser fn)
+		// resolved to a dyn-scope read: re-key it to the READ-AS-DATA lookup so
+		// the VM pushes the FnDefInfo parser binding instead of deferring on it.
+		// Only a dyn-scope resolution is rewritten — a concrete parser (an event
+		// / const operand) is delivered normally.
+		if sig.FnDataArgs[i] && op.kind == opDynScope {
+			op = dataScopeOperand(op.idx)
+		}
 		ops[i] = op
 	}
 	return ops, true
@@ -5140,6 +5194,21 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
 		root, depth = true, es.reg.Defs.Depth(name)
 	}
+	if root && !IsConcrete(v) && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+		// A top-level computed fn value-def (`def op (Parse.parser g)`) that
+		// installDef declined to install in Defs (the compiled-closure machinery
+		// owns the name): record its ID + name so a deeper fn body reading the
+		// name (`parse op src`) rescues to a runtime dyn-scope read. The
+		// OpBindDynScope twin this same def records makes the runtime lookup
+		// resolve, byte-identical to the interpreter reading the name against the
+		// live def stack. (ConformsTo is receiver-nil-safe; IsConcrete already
+		// excludes concrete values.)
+		if es.rootComputedBindIDs == nil {
+			es.rootComputedBindIDs = map[string]bool{}
+		}
+		es.rootComputedBindIDs[v.ID] = true
+		es.NoteDefRead(v.ID, name)
+	}
 	spliceDepth := -1
 	if plb := es.pendingLoopBind; plb != nil {
 		// The S5 first-value bind (SplitLoopRegionBind latched it in the same
@@ -5232,6 +5301,19 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	if len(es.units) > 1 {
 		if cur := es.units[len(es.units)-1]; cur != nil {
 			enclosing = cur.enclosingBindIDs[v.ID]
+			// An ID-ELIDED enclosing read (a detached stamp forked the runtime
+			// def table, where the mutable ref's ID was never minted) cannot be
+			// matched by ID. Fall back to the by-name snapshot: the recovered
+			// binding name being a live enclosing binding is a sound commit
+			// signal — the VM's OpLookupDynScope reads the same live cell and
+			// defers on a miss. Scoped to (a) the empty-ID case, so an ID-bearing
+			// read stays strictly ID-matched (no by-name widening at depth 0), and
+			// (b) a DynFrom-tagged read, so the name came from the module-scope
+			// mutable-ref tag (engine.stepWord) — NOT the unreliable defReads[""]
+			// that every elided-ID read collides on.
+			if !enclosing && v.ID == "" && v.DynFrom() != "" {
+				enclosing = cur.enclosingBindNames[name]
+			}
 		}
 	}
 	if !enclosing && !c.dynamicScopeReachable(name, reader) {
@@ -5641,6 +5723,20 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 // top-frame guard does NOT apply (OpMakeList re-assembles from its operands per
 // run, exactly like OpMakeMap, so it is sound in a fn body / branch / loop).
 func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+	// A SUSPENDED recorder (a higher-order body run for type inference —
+	// analyseHigherOrderBodyVals suspends recording) records no events. The
+	// autoEvalList / autoEvalMap CONSUMED-list callers gate on Armed() (a
+	// recording state exists) not active() (armed AND not suspended), so during a
+	// fold/each/scan accumulator fixed point they would otherwise record a
+	// consumed list — e.g. `{… q:[q]}` inside split-args' fold — into the OUTER
+	// unit's frame, producing an OpLookupDynScope with no coherent bind that
+	// misses at runtime (the voxgig-template liquid `q` fold divergence). Guard at
+	// the recording boundary so every caller (RecordMakeList already pre-checks;
+	// the two autoEval paths do not) is covered. RecordMakeList's own active()
+	// check stays reachable — its isTop caller still reaches it under suspend.
+	if !es.active() {
+		return false
+	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
 	// element 0 DEEPEST, so reverse: ops[0] is the LAST element (laid out on
 	// top), ops[N-1] the first (deepest). OpMakeList then pops [first..last] and

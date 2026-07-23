@@ -1802,6 +1802,29 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-active-token", "dynamic-scope read of an active token `"+name+"`; deferring to the interpreter")
 			}
 			stack = append(stack, v)
+		case OpLookupDynScopeData:
+			// The DATA-position twin of OpLookupDynScope (see bytecode.go): read
+			// the name's live binding and PUSH it, pushing an FnDefInfo (the
+			// parser/fn value the emitter proved is consumed as data by
+			// parselang-fn-dispatch) rather than deferring — byte-identical to
+			// the interpreter passing the /q-captured name as data. Still defers
+			// on a genuine miss, a class binding (not a parser), and an active
+			// token (splice/reach/word/mark/move).
+			name, nerr := p.Consts[in.Arg].AsConcreteString()
+			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+				return nil, vmErrAt(curDebug, pc, "LOOKUP_DYN_SCOPE_DATA bad name const")
+			}
+			v, ok := curReg.Defs.Top(name)
+			if !ok {
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-data-miss", "dynamic-scope data read miss for `"+name+"`; deferring to the interpreter")
+			}
+			if _, isClass := v.Data.(*ClassTypeInfo); isClass {
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-data-class", "dynamic-scope data read of a class binding `"+name+"`; deferring to the interpreter")
+			}
+			if IsSplice(v) || IsReach(v) || IsWord(v) || IsMark(v) || IsMove(v) {
+				return nil, vmDefer(vc.r, curDebug, pc, "vm:dyn-scope-data-active-token", "dynamic-scope data read of an active token `"+name+"`; deferring to the interpreter")
+			}
+			stack = append(stack, v)
 		case OpRet:
 			// Return-type check — the compiled mirror of the interpreter's
 			// ReturnCheck (__RC, engine.go): the body's result must satisfy
