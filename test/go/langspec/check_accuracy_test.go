@@ -66,7 +66,18 @@ var unflaggedPins = map[string]int{
 	// (a prototype layer / another scope may bind the key), so
 	// getStoreReturnsFn stays optimistic on a static miss by design. The
 	// Xml strict-miss row in the same batch IS flagged (getrXmlReturns).
-	"accessor.tsv":          2,
+	"accessor.tsv": 2,
+	// as.tsv: the weak-payload guard row is a RUNTIME-only refusal by
+	// design — the ascribed dispatch statically commits the base FlexMap
+	// overload (sound: the interpreter takes the same widened match), and
+	// the base handler's own payload-kind check (`set: expected a FlexMap,
+	// got WeakFlexMap`) fires over the real runtime value; the check-mode
+	// carrier has no payload to inspect. The second unflagged row is the
+	// gradual §7 one: a dynamic(Any) value ascribed to Map passes the
+	// check optimistically (the tree lattice cannot refute it) and the
+	// as handler's runtime validation raises as_error over the concrete
+	// Integer.
+	"as.tsv":                2,
 	"bignum.tsv":            8,
 	"case.tsv":              2,
 	"class.tsv":             1,

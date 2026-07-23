@@ -11,7 +11,8 @@
 #      the predicate. (Content types cannot ANCHOR extensions — the
 #      OPEN-WORDS.1 §3.1 nominality rule — classification only.)
 # (The third enabler — base-dispatch delegation for override bodies —
-# is back at the drawing board; see OPEN-WORDS.1 §7b.)
+# is the `as` dispatch-ascription word; see OPEN-WORDS.1 §9 and
+# lang/spec/as.tsv.)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  refine-of-flex retag — nominal subtypes of mutable containers

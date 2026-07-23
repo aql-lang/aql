@@ -299,6 +299,19 @@ func init() {
 		Examples:    []string{`5 is Integer ; # => true`, `'x' is Integer ; # => false`},
 	})
 	register(&Entry{
+		Word:    "as",
+		Summary: "Dispatch a value as an ancestor type for ONE call: `value as Type`.",
+		Description: "Returns the value UNCHANGED, carrying a match-time ascription: the next " +
+			"signature match treats it as the ascribed type, then argument delivery strips it — " +
+			"the handler or fn body receives the real value, so typeof/is/rendering/equality " +
+			"never change. Upcast-only: the type must be an ancestor of the value's own type. " +
+			"This is the delegation escape for subtype overrides of core words: inside an " +
+			"anchored `set` override, `set k v (m as FlexMap)` dispatches the base FlexMap " +
+			"overload — the override's own signature cannot match the widened view — with no " +
+			"renamed shadow words and no retagging.",
+		Examples: []string{`typeof (5 as Number) ; # => Integer`, `(5 as Number) add 1 ; # => 6`},
+	})
+	register(&Entry{
 		Word:    "tis",
 		Summary: "Nominal subtype test — `is` but walking only the lattice (Value.Parent).",
 		Description: "Like `is`, but consults ONLY the type lattice: it reduces each " +

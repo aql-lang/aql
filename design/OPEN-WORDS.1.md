@@ -233,11 +233,12 @@ Go-module capability. Two are fixed (pinned by
   capitalised defs (`def Sorted ([m:Map] => [pred])`); pinned.
 
 The third — **base-dispatch delegation for override bodies** — is
-OPEN. A `super`-style word (returning the pristine dispatch as a
-Function to bind under a fresh name) was built and REJECTED by the
-maintainer: requiring renamed shadows of core words (`def bset (super
-set)` and then calling `bset` in the body) is bad DX. The problem it
-was solving stands and needs a better mechanism.
+now CLOSED by `as` (§9). A `super`-style word (returning the
+pristine dispatch as a Function to bind under a fresh name) was
+built first and REJECTED by the maintainer: requiring renamed
+shadows of core words (`def bset (super set)` and then calling
+`bset` in the body) is bad DX. §7b.1–7b.3 keep the problem
+statement and the design space that led to the decision.
 
 ### 7b.1 The delegation problem, precisely
 
@@ -341,7 +342,9 @@ most closely; (c) is the most honest mirror of why Go works; (b) is
 the classical multiple-dispatch answer; (d) is the C++ qualified-
 call / Julia `invoke` answer — explicit like (b) but needing no
 dispatch-stack context, and it keeps full-dispatch re-entry
-available by simply not ascribing. Decision pending.
+available by simply not ascribing.
+
+**DECIDED: (d), implemented as the `as` word — see §9.**
 
 ## 8. Relation to bounded generics
 
@@ -352,3 +355,71 @@ ad-hoc half (different implementation per owned subtype). The two
 compose: a module's generic utilities accept any Map subtype and
 keep it; its anchored sigs specialize behavior for the subtypes it
 owns.
+
+## 9. `as` — call-site signature selection (option (d), IMPLEMENTED)
+
+`v as T` is match-time dispatch ascription: the value comes back
+UNCHANGED — payload, real Parent tag, rendering, equality — carrying
+an ascription (`Value.asc`, a pointer field) that the NEXT signature
+match reads as the value's tag. Three rules make it sound:
+
+- **Upcast-only.** `T` must be an ancestor of (or equal to) the
+  value's own tag (`asValidate`, error `as_error`) — `as` widens
+  dispatch, it never claims a subtype the value does not carry, so
+  no runtime representation changes and no invariant can be forged.
+  Bare type literals refuse on both slots' misuse: the target must
+  be a nominal type literal, the subject must be a value.
+- **Match-time only.** The single matcher choke point
+  (`sigTypeMatches`, which every dispatch path funnels through —
+  the interpreter's matchSignature arms, positionalMatch, the VM's
+  guarded-native contract and poly re-match) substitutes a
+  reparented VIEW for the test and nothing else. The view is
+  strictly non-dynamic: post-validation, dispatch resolves at
+  exactly the ascribed type.
+- **Consumed at delivery.** Every arg-delivery and storage boundary
+  strips the ascription (`StripAscribed`): the interpreter's
+  execMatch args loop and execFnDefSig param binding, list/map
+  literal assembly (autoEvalList / autoEvalMap), and the VM's
+  OpCallNative / poly / OpCallUser(Poly) arg pops, OpStoreLocal /
+  OpBindGlobal / OpBindDynScope / OpBindTyped stores, and
+  OpMakeList / OpMakeMap assembly. So an ascription selects exactly
+  ONE dispatch and can never ride into a handler, a binding, a
+  container, or a returned receiver.
+
+**Why it solves §7b.1.** Inside an anchored override, `set k v (m
+as FlexMap)` widens the receiver's dispatch tag to FlexMap; the
+override's own nominal anchor (a strict subtype) cannot match the
+widened view — the reachability theorem run in reverse — so natural
+specificity lands on the base overload, while the base handler still
+receives the real subtype-tagged value (the tag survives, in-place
+mutation hits the same payload). The body reads in core vocabulary;
+no renamed shadows, no retagging, no dispatch-stack context. R2 (no
+redefinition) guarantees a type vector uniquely names a signature,
+so exact ascription pins deterministically.
+
+**Check/compile story.** `as` is an ordinary native (no RunInCheck):
+`asReturns` is its exact static mirror — a provable violation (bad
+target, non-ancestor over a known tag) emits the same `as_error` as
+a RuntimeMirror diagnostic (`as_error` is registered SeverityError);
+a valid ascription returns the input carrier ascribed, so check-mode
+dispatch of the consuming word resolves the SAME signature the
+runtime match will; a dynamic input the tree lattice cannot refute
+passes gradually as a carrier at the target (the runtime handler
+re-validates). Acceptance: lang/spec/as.tsv (transparency, subtype
+tags, overload selection, one-call consumption, delegation,
+refusals) and lang/go/test/sorted_user_test.go (the full pure-AQL
+SortedFlexMap: anchored override + as-delegation + recursive
+resort keeps keys sorted with the tag intact).
+
+**Compiled-path residual.** A DYNAMIC operand dispatching a word
+that carries BOTH native and merged user signatures has two live
+candidates, and the emitter's dispatch commit is single-candidate
+(static CALL_NATIVE, single-sig guard, or native-only/user-only
+poly) — so e.g. the resort loop's dynamic list-element key feeding
+the merged `set` refuses compilation ("dynamic input at set") and
+the acceptance runs interpreted. This is the pre-existing
+dynamic-input boundary meeting merged tables, not an `as` limit —
+ascribed receivers with strict keys compile (as.tsv §5), and the
+VM's poly re-match already honors ascription when it does run.
+Widening the commit to guarded multi-candidate dispatch is future
+compiler work.

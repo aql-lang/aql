@@ -1255,6 +1255,17 @@ type Value struct {
 	// literal ({:[:Integer]}). Read via ElemConstraint() (nil-safe), set via
 	// SetElemConstraint. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
 	elem *Value
+	// asc is the value's dispatch ASCRIPTION (`v as T` — design/
+	// OPEN-WORDS.1.md §9): an ancestor type that signature MATCHING treats
+	// as the value's tag while the value itself — payload, real Parent,
+	// rendering, equality — is untouched. Upcast-only (the `as` word
+	// refuses a non-ancestor), match-time-only: every arg-delivery boundary
+	// (execMatch, fn-param binding, the VM call/bind/make ops) strips it,
+	// so the ascription selects exactly one dispatch and never leaks into
+	// handlers, bindings, containers, or results. Behind a pointer so the
+	// overwhelming majority of values (no ascription) don't carry it. Read
+	// via AscribedType() (nil-safe), set/clear via SetAscribed.
+	asc *Type
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1423,6 +1434,31 @@ func (v *Value) SetElemConstraint(c Value) {
 		return
 	}
 	v.elem = &c
+}
+
+// AscribedType returns the value's dispatch ascription (`v as T`), or nil
+// for the overwhelming majority of values that carry none. Nil-safe read
+// of the pointer; see the asc field doc for the semantics.
+func (v Value) AscribedType() *Type {
+	return v.asc
+}
+
+// SetAscribed attaches (t non-nil) or clears (t nil) the dispatch
+// ascription. The `as` word's handler is the sole attach site; the
+// arg-delivery boundaries (execMatch, fn-param binding, the VM call/bind/
+// make ops) clear it via StripAscribed.
+func (v *Value) SetAscribed(t *Type) {
+	v.asc = t
+}
+
+// StripAscribed returns v without its dispatch ascription — the
+// arg-delivery form of the value. The no-ascription fast path returns v
+// unchanged (no copy cost on the hot path).
+func StripAscribed(v Value) Value {
+	if v.asc != nil {
+		v.asc = nil
+	}
+	return v
 }
 
 // Name is the nil-safe read of the type-node leaf name — "" for an

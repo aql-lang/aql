@@ -393,6 +393,8 @@ func TestTypeLiteralNoPanicNative(t *testing.T) {
 		{"size-list", `size List`},
 		{"flatten-list", `flatten List`},
 		{"join-list", `join List`},
+		{"as-typelit-subject", `Map as Map`},
+		{"as-typelit-both", `(Integer as Integer)`},
 	}
 
 	for _, tc := range cases {

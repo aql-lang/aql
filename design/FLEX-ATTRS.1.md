@@ -19,13 +19,15 @@
 > tag for flex AND weak targets), and typed weak containers enforce
 > `{:T}`/`[:T]` on set/append exactly like the flex column. D1
 > (universal insertion order) and D4 (sorted types) remain
-> unimplemented — but two of D4's three blocking seams are now GONE:
+> unimplemented — but ALL THREE of D4's blocking seams are now GONE:
 > open-words rev 2 (design/OPEN-WORDS.1.md) makes anchored subtype
-> overrides dispatch, and its §7b follow-ups fixed the flex retag and
-> pinned container predicates (lang/spec/refine-flex.tsv). The third
-> seam — base-dispatch delegation for override bodies — is OPEN at
-> the drawing board (OPEN-WORDS.1 §7b.1-3: a super-style word was
-> built and rejected on DX grounds).
+> overrides dispatch, its §7b follow-ups fixed the flex retag and
+> pinned container predicates (lang/spec/refine-flex.tsv), and the
+> third seam — base-dispatch delegation for override bodies — is
+> closed by the `as` dispatch-ascription word (OPEN-WORDS.1 §9;
+> lang/spec/as.tsv; the full pure-AQL SortedFlexMap acceptance runs
+> in lang/go/test/sorted_user_test.go). A super-style word was built
+> first and rejected on DX grounds (§7b.1-3 keep that history).
 
 Status: **design under examination — decisions taken; D3 implemented
 on this branch** (2026-07-22). Revision of

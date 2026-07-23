@@ -510,6 +510,11 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 			"CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error",
 			bestEffortNoMatch(r, fn, pr.Word, window, curDebug, pc))
 	}
+	// StripAscribed at delivery: the re-match above consumed the ascribed
+	// view; the handler receives the REAL values (execMatch parity).
+	for i := range mr.Args {
+		mr.Args[i] = StripAscribed(mr.Args[i])
+	}
 	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
@@ -1207,7 +1212,8 @@ func (vc *vmContext) bindDynScope(curReg *Registry, p *Program, arg int, stack [
 	if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, vmErrAt(curDebug, pc, "BIND_DYN_SCOPE bad name const")
 	}
-	v := stack[len(stack)-1]
+	// Ascription hygiene: a stored binding holds the REAL value.
+	v := StripAscribed(stack[len(stack)-1])
 	vc.dynBinds = append(vc.dynBinds, dynBindEntry{reg: curReg, name: name, depth: curReg.Defs.Depth(name)})
 	InstallDef(curReg, name, v)
 	return stack[:len(stack)-1], nil
@@ -1230,13 +1236,15 @@ func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []
 		if idx < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL splice underflow")
 		}
-		curReg.Defs.SetAt(gb.Name, gb.Depth, stack[idx])
+		curReg.Defs.SetAt(gb.Name, gb.Depth, StripAscribed(stack[idx]))
 		return append(stack[:idx], stack[idx+1:]...), nil
 	}
 	if len(stack) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, vmErrAt(curDebug, pc, "BIND_GLOBAL underflow")
 	}
-	curReg.Defs.SetAt(gb.Name, gb.Depth, stack[len(stack)-1])
+	// Ascription hygiene on both bind arms: a stored binding holds the REAL
+	// value (interpreter def parity).
+	curReg.Defs.SetAt(gb.Name, gb.Depth, StripAscribed(stack[len(stack)-1]))
 	if gb.Pop {
 		return stack[:len(stack)-1], nil
 	}
@@ -1411,7 +1419,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if len(stack) == 0 {
 				return nil, vmErrAt(curDebug, pc, "STORE_LOCAL stack underflow")
 			}
-			locals[in.Arg] = stack[len(stack)-1]
+			// Ascription hygiene: a stored binding holds the REAL value
+			// (`def y (m as T)` — the interpreter's def strips at arg
+			// delivery; the compiled local store is that same boundary).
+			locals[in.Arg] = StripAscribed(stack[len(stack)-1])
 			stack = stack[:len(stack)-1]
 		case OpDrop:
 			// Discard the top value — the computed else value on the taken
@@ -1434,6 +1445,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			elems := make([]Value, n)
 			copy(elems, stack[len(stack)-n:])
+			// Ascription hygiene: list elements are STORED data (mirrors
+			// autoEvalList's element strip).
+			for i := range elems {
+				elems[i] = StripAscribed(elems[i])
+			}
 			stack = stack[:len(stack)-n]
 			stack = append(stack, NewList(elems))
 		case OpMakeMap:
@@ -1589,7 +1605,12 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				args = argScratch[:n]
 			}
 			for i := 0; i < n; i++ {
-				args[i] = stack[len(stack)-1-i]
+				// StripAscribed at delivery: the handler receives the REAL
+				// value (execMatch parity); the guard below still matches the
+				// ascribed view via sigTypeMatches, but a stripped subtype
+				// passes every slot its widened view passed, so the strip is
+				// order-independent — see design/OPEN-WORDS.1.md §9.
+				args[i] = StripAscribed(stack[len(stack)-1-i])
 			}
 			stack = stack[:len(stack)-n]
 			// A GUARDED native call (recovered single-overload dispatch the checker
@@ -1627,7 +1648,9 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if len(stack) == 0 {
 				return nil, vmErrAt(curDebug, pc, "BIND_TYPED stack underflow")
 			}
-			bound, err := RunTypedBind(r, &p.TypedBinds[in.Arg], stack[len(stack)-1])
+			// Ascription hygiene: the typed-def bind stores the REAL value
+			// (interpreter parity — defTypedHandler's arg arrived stripped).
+			bound, err := RunTypedBind(r, &p.TypedBinds[in.Arg], StripAscribed(stack[len(stack)-1]))
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1715,6 +1738,11 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			stack = stack[:len(stack)-fn.NParams]
 			nl := make([]Value, fn.NLocals)
 			copy(nl, sigArgs)
+			// StripAscribed at delivery (the poly re-match above already
+			// consumed the ascribed view).
+			for i := 0; i < fn.NParams && i < len(nl); i++ {
+				nl[i] = StripAscribed(nl[i])
+			}
 			if err := checkParamContract(r, fn, nl); err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
@@ -1731,7 +1759,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			nl := make([]Value, fn.NLocals)
 			for i := 0; i < fn.NParams; i++ {
-				nl[i] = stack[len(stack)-1-i]
+				// StripAscribed at delivery: params bind the REAL value
+				// (execFnDefSig parity); a stripped subtype still passes the
+				// param contract its widened view passed.
+				nl[i] = StripAscribed(stack[len(stack)-1-i])
 			}
 			stack = stack[:len(stack)-fn.NParams]
 			// Param-type guard — the compiled mirror of the interpreter's
@@ -2247,7 +2278,9 @@ func vmMakeMap(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]
 	om := NewOrderedMap()
 	om.Implicit = spec.Implicit
 	for i, k := range spec.Keys {
-		om.Set(k, vals[i])
+		// Ascription hygiene: map values are STORED data (mirrors
+		// autoEvalMap's value strip).
+		om.Set(k, StripAscribed(vals[i]))
 	}
 	return append(stack[:len(stack)-n], NewMap(om)), nil
 }

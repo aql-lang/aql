@@ -42,6 +42,8 @@ WORD apply
   [Type/Function] barrier=0 returns=[Any] +returnsfn
 WORD args
   [] barrier=0 returns=[Node/List]
+WORD as
+  [Any Any] barrier=1 returns=[Any] +returnsfn
 WORD await
   [Ideal/Options Node/List] barrier=2 noeval={1} returns=[Any]
   [Node/List] barrier=1 noeval={0} returns=[Any]

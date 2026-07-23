@@ -937,6 +937,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"fn_body_error":         SeverityError,
 	"branch_error":          SeverityError,
 	"type_error":            SeverityError,
+	"as_error":              SeverityError,
 	"uncalled_function":     SeverityError,
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,

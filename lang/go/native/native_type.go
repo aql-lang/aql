@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -159,6 +160,32 @@ var typeNatives = []NativeFunc{
 			// the positional map keeps that slot on the refusal path (pinned by
 			// TestFnValueIntrospectionLowers' invoke negative).
 			FnInertArgs: map[int]bool{1: true},
+		}},
+	},
+	{
+		// as is call-site signature selection via match-time dispatch
+		// ascription (design/OPEN-WORDS.1.md §9): `v as T` returns v
+		// UNCHANGED — payload, tag, rendering, equality — carrying an
+		// ascription that makes the NEXT signature match treat v as a T.
+		// Upcast-only (T must be an ancestor of v's tag), consumed at arg
+		// delivery, so it selects exactly one dispatch. The delegation
+		// escape for anchored override bodies: `set k v (m as FlexMap)`
+		// dispatches the base FlexMap overload — the override's nominal
+		// anchor cannot match the widened view — while the handler still
+		// receives the real subtype-tagged m.
+		Name:          "as",
+		CompileEffect: CompileIslandPure,
+
+		Signatures: []Signature{{
+			Args:       []*Type{TAny, TAny},
+			BarrierPos: 1,
+			Impl:       Go(asHandler),
+			Returns:    []*Type{TAny},
+			ReturnsFn:  asReturns,
+			// Both slots are DATA: the type operand is a literal the
+			// handler validates (never a predicate to invoke, unlike
+			// `is`), and the value slot mirrors `is`'s inert value rule.
+			FnInertArgs: map[int]bool{0: true, 1: true},
 		}},
 	},
 	{
@@ -617,6 +644,118 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	// its metatype (Type); implicit-map record shape → its metatype;
 	// the value `none` (unique inhabitant of None) → None.
 	return []Value{TypeOf(args[0])}, nil
+}
+
+// ---- as ----
+
+// asTargetType resolves `as`'s TYPE operand (sig position 0) to its
+// canonical lattice node. Only a bare nominal type literal qualifies —
+// ascription redirects DISPATCH along the nominal lattice, so structural
+// bodies (records, predicates, disjuncts) and plain values refuse with
+// as_error rather than silently ascribing something dispatch cannot walk.
+func asTargetType(r *Registry, t Value) (*Type, error) {
+	if !eng.IsTypeLiteral(t) {
+		return nil, r.AqlErrorHint("as_error",
+			"as needs a type to dispatch as, got "+t.String(),
+			"as", "spell the target type by name: value as FlexMap")
+	}
+	tc := t
+	return CanonicalType(r, &tc), nil
+}
+
+// asValidate enforces the upcast-only rule: the value's own tag must
+// conform to the ascribed type. `as` WIDENS dispatch — it never claims a
+// subtype the value does not carry, which is what keeps the ascription
+// sound with no runtime representation change. A check-mode DYNAMIC
+// carrier is admitted gradually (its bound overlaps the target on the
+// tree lattice) — the runtime step re-runs this validation over the
+// concrete value.
+func asValidate(r *Registry, target *Type, v Value) error {
+	refuse := func() error {
+		name := target.Leaf()
+		own := "nothing"
+		if v.Parent != nil {
+			own = v.Parent.Leaf()
+		}
+		return r.AqlErrorHint("as_error",
+			"as: "+name+" is not a supertype of the value's type "+own+
+				" — as widens dispatch only",
+			"as", "ascribe an ancestor of the value's own type; to construct a subtype use def x:"+name+" instead")
+	}
+	if eng.IsTypeLiteral(v) || v.Parent == nil {
+		return refuse()
+	}
+	if v.Dynamic {
+		// Tree lattice: two nodes overlap iff one is an ancestor of the
+		// other, so gradual admission is the two-way conformance test.
+		if v.Parent.ConformsTo(target) || target.ConformsTo(v.Parent) {
+			return nil
+		}
+		return refuse()
+	}
+	if !v.Parent.ConformsTo(target) {
+		return refuse()
+	}
+	return nil
+}
+
+// asHandler implements `v as T` at run time: validate the upcast, then
+// return v itself carrying the match-time ascription. No payload copy, no
+// reparent — typeof, is, rendering, and equality all still see the real
+// value; only the NEXT signature match reads the ascription (and arg
+// delivery strips it — the match-time-only rule, design/OPEN-WORDS.1.md §9).
+func asHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	target, err := asTargetType(r, args[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := asValidate(r, target, args[1]); err != nil {
+		return nil, err
+	}
+	out := args[1]
+	out.SetAscribed(target)
+	return []Value{out}, nil
+}
+
+// asReturns is the check-mode model of `as` — the exact static mirror of
+// asHandler over carriers: a provable violation (bad type operand, a
+// non-ancestor target over a known tag) is a GUARANTEED runtime error and
+// emits the same as_error as a mirror diagnostic; a valid ascription
+// returns the input carrier ascribed, so check-mode dispatch of the
+// consuming word resolves the SAME signature the runtime match will. A
+// dynamic input the tree lattice cannot refute passes gradually, modeled
+// as a carrier at the target (the runtime validation proves conformance
+// before any consumer dispatches on it).
+func asReturns(args []Value, r *Registry) []Value {
+	degrade := func(err error) []Value {
+		if eng.CheckAtUncaughtTopLevel(r) {
+			code, detail := "as_error", err.Error()
+			var ae *eng.AqlError
+			if errors.As(err, &ae) {
+				code, detail = ae.Code, ae.Detail
+			}
+			eng.CheckAddUniqueDiagnostic(r, code, detail, "as", args[1].Pos())
+		}
+		return []Value{eng.NewDynamicCarrier(TAny)}
+	}
+	target, terr := asTargetType(r, args[0])
+	if terr != nil {
+		return degrade(terr)
+	}
+	v := args[1]
+	if verr := asValidate(r, target, v); verr != nil {
+		return degrade(verr)
+	}
+	if v.Dynamic && !v.Parent.ConformsTo(target) {
+		// Gradually admitted: statically all that is known post-as is
+		// "conforms to target" (the runtime validation guarantees it).
+		c := eng.NewCarrier(target)
+		c.SetAscribed(target)
+		return []Value{eng.WithPos(c, v)}
+	}
+	out := v
+	out.SetAscribed(target)
+	return []Value{out}
 }
 
 // ---- is ----

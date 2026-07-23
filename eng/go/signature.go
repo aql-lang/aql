@@ -267,6 +267,24 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // satisfy ordinary value slots (Carrier{Integer} matches TInteger)
 // and are rejected at TypeArgs slots by sigTypeMatchesAsType.
 func sigTypeMatches(v Value, t *Type) bool {
+	// Dispatch ascription (`v as T` — design/OPEN-WORDS.1.md §9): match as
+	// if the value were tagged with the ascribed ancestor type. The VIEW is
+	// a reparented copy used for this test only — the delivered arg is the
+	// real value (execMatch / the VM strip the ascription at delivery).
+	// Strictly non-dynamic: `as` validated (or will validate, for a dynamic
+	// input, at its own runtime step) that the value conforms to the
+	// ascribed type, so dispatch resolves at exactly that type — which is
+	// what makes an anchored subtype override unable to capture the call
+	// (the widened tag no longer conforms to the override's nominal
+	// anchor). Every matcher funnels through here — the interpreter's
+	// matchSignature arms, positionalMatch, the VM's guarded-native
+	// contract and poly re-match — so this one arm is the whole rule.
+	if a := v.AscribedType(); a != nil {
+		view := ReparentValue(v, a)
+		view.SetAscribed(nil)
+		view.Dynamic = false
+		return sigTypeMatches(view, t)
+	}
 	// Gradual (dynamic) carrier: matches the slot unless its bound is
 	// PROVABLY disjoint from t — the not-disjoint rule, the optimistic
 	// dual of strict ConformsTo (design/dynamic-modality-report.10.md).
