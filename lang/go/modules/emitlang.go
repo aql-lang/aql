@@ -100,8 +100,14 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- built-in emit kinds --------------------------------------------
 	// The canonical walk-based emitter family (json, jsonic, yaml, csv, tsv,
 	// toml, ini, xml) ships in the box — and IS the whole kind set.
-	for _, spec := range builtinEmitSpecs() {
-		if err := installBuiltinEmitter(exports, subReg, spec); err != nil { //covergate:allow the built-in kind set is static and name-disjoint (native.EmitKinds, order pinned by module-emitlang.tsv), so the duplicate-key arm cannot fire; the installer's arm itself is driven directly by TestW8InstallBuiltinEmitterDuplicate (§modules)
+	//
+	// The kinds live in predefinedEmitters — a Map keyed by kind name — so no
+	// per-kind key is hard-coded at the install site. Installation walks the
+	// companion order slice, keeping EmitLang.kinds pinned to native.EmitKinds
+	// order (module-emitlang.tsv).
+	byName, order := predefinedEmitters()
+	for _, name := range order {
+		if err := installBuiltinEmitter(exports, subReg, byName[name]); err != nil { //covergate:allow the built-in kind set is static and name-disjoint (native.EmitKinds), so the duplicate-key arm cannot fire; the installer's arm itself is driven directly by TestW8InstallBuiltinEmitterDuplicate (§modules)
 			return native.ModuleDesc{}, err
 		}
 	}
@@ -167,6 +173,25 @@ func installBuiltinEmitter(exports *native.OrderedMap, subReg *native.Registry, 
 	params := []native.FnParam{{Type: native.TAny}, {Type: native.TMap}}
 	exports.Set(key, wrapMiniFnDef(inner, [][]native.FnParam{params}, returns, nil, subReg))
 	return nil
+}
+
+// predefinedEmitters returns the FIXED set of built-in emit kinds — the
+// canonical walk-based emitter family — as a Map keyed by kind name, together
+// with the pinned installation order (native.EmitKinds order). It is the
+// single source of the predefined-kind set: BuildEmitLangModule installs every
+// entry by walking the order slice, so no per-kind key is hard-coded at the
+// call site while EmitLang.kinds stays byte-stable (module-emitlang.tsv). The
+// names are disjoint (EmitKinds is disjoint), so each name keys exactly one
+// spec.
+func predefinedEmitters() (map[string]EmitLangSpec, []string) {
+	specs := builtinEmitSpecs()
+	byName := make(map[string]EmitLangSpec, len(specs))
+	order := make([]string, len(specs))
+	for i, spec := range specs {
+		byName[spec.Name] = spec
+		order[i] = spec.Name
+	}
+	return byName, order
 }
 
 // builtinEmitSpecs returns the emitter kinds backed by the canonical

@@ -83,6 +83,16 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// eng/go/module_export_growth.go.
 	eng.RegisterModuleExportGrowth(parent, exports)
 
+	// langs collects the FIXED built-in kinds by NAME (a Map) — re, bf, gex,
+	// math, hb, bb, micron, m, jp, jq, xp, sp — so no per-kind lang_<name>
+	// key is hard-coded at the registration sites. Once every kind is
+	// registered its FnDef is published into exports under the partitioned
+	// lang_<name> key in ONE place (below), keeping MiniLang.kinds pinned to
+	// the insertion order (module-minilang.tsv). The exotic wiring a couple of
+	// kinds also need — re's compile hook + run-re consumer, micron's
+	// tombstone — stays out-of-band on exports, unchanged.
+	langs := native.NewOrderedMap()
+
 	// mintMiniFnType mints the NAMED member type for a filter kind's
 	// partially-applied Function and exports it under the capitalized
 	// kind name (`MiniLang.Re`, `MiniLang.Gex`, …). The member
@@ -136,7 +146,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniReHandler),
 		}},
 	})
-	exports.Set("lang_re", wrapMiniFnDef("minilang-re", [][]native.FnParam{
+	langs.Set("re", wrapMiniFnDef("minilang-re", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TString}),
 	}, []*native.Type{native.TMap}, nil, subReg))
 
@@ -190,7 +200,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			},
 		},
 	})
-	exports.Set("lang_bf", wrapMiniFnDef("minilang-bf", [][]native.FnParam{
+	langs.Set("bf", wrapMiniFnDef("minilang-bf", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TString}),
 		stdPrefix,
 	}, []*native.Type{native.TString}, nil, subReg))
@@ -211,7 +221,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniGexHandler),
 		}},
 	})
-	exports.Set("lang_gex", wrapMiniFnDef("minilang-gex", [][]native.FnParam{
+	langs.Set("gex", wrapMiniFnDef("minilang-gex", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TAny}, nil, subReg))
 	mintMiniFnType("gex")
@@ -230,7 +240,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniMathHandler),
 		}},
 	})
-	exports.Set("lang_math", wrapMiniFnDef("minilang-math", [][]native.FnParam{stdPrefix},
+	langs.Set("math", wrapMiniFnDef("minilang-math", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TNumber}, nil, subReg))
 
 	// ---- kind: hb — hex Bytes literal ----------------------------------
@@ -246,7 +256,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniHexBytesHandler),
 		}},
 	})
-	exports.Set("lang_hb", wrapMiniFnDef("minilang-hb", [][]native.FnParam{stdPrefix},
+	langs.Set("hb", wrapMiniFnDef("minilang-hb", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TBytes}, nil, subReg))
 
 	// ---- kind: bb — binary Bytes literal -------------------------------
@@ -262,7 +272,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniBinBytesHandler),
 		}},
 	})
-	exports.Set("lang_bb", wrapMiniFnDef("minilang-bb", [][]native.FnParam{stdPrefix},
+	langs.Set("bb", wrapMiniFnDef("minilang-bb", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TBytes}, nil, subReg))
 
 	// ---- kind: micron (short form: m) — Micron literal ------------------
@@ -291,8 +301,8 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	})
 	micronFnDef := wrapMiniFnDef("minilang-micron", [][]native.FnParam{stdPrefix},
 		[]*native.Type{native.TMicron}, nil, subReg)
-	exports.Set("lang_micron", micronFnDef)
-	exports.Set("lang_m", micronFnDef)
+	langs.Set("micron", micronFnDef)
+	langs.Set("m", micronFnDef)
 
 	// ---- out-of-band: micron (TOMBSTONE) --------------------------------
 	// The `+m` literal grammar is FIXED to the builtin Micron leaves
@@ -327,7 +337,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniJsonPathHandler),
 		}},
 	})
-	exports.Set("lang_jp", wrapMiniFnDef("minilang-jp", [][]native.FnParam{
+	langs.Set("jp", wrapMiniFnDef("minilang-jp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("jp")
@@ -344,7 +354,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniJqHandler),
 		}},
 	})
-	exports.Set("lang_jq", wrapMiniFnDef("minilang-jq", [][]native.FnParam{
+	langs.Set("jq", wrapMiniFnDef("minilang-jq", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TAny}),
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("jq")
@@ -364,7 +374,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			Impl:       native.Go(miniXPathHandler),
 		}},
 	})
-	exports.Set("lang_xp", wrapMiniFnDef("minilang-xp", [][]native.FnParam{
+	langs.Set("xp", wrapMiniFnDef("minilang-xp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TXml}),
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("xp")
@@ -399,11 +409,21 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 			},
 		},
 	})
-	exports.Set("lang_sp", wrapMiniFnDef("minilang-sp", [][]native.FnParam{
+	langs.Set("sp", wrapMiniFnDef("minilang-sp", [][]native.FnParam{
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TMap}),
 		append(append([]native.FnParam{}, stdPrefix...), native.FnParam{Type: native.TList}),
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("sp")
+
+	// Publish the built-in kinds under their partitioned lang_<name> keys.
+	// They were collected by name in `langs` (a Map), so the lang_ key is
+	// formed in exactly ONE place here rather than hard-coded per kind;
+	// iterating in insertion order keeps MiniLang.kinds pinned
+	// (module-minilang.tsv).
+	for _, name := range langs.Keys() {
+		def, _ := langs.Get(name)
+		exports.Set("lang_"+name, def)
+	}
 
 	// ---- out-of-band: register (TOMBSTONE) ------------------------------
 	// The mini kind namespace is fixed; registration was removed. The word

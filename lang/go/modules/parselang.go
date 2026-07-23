@@ -142,8 +142,15 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// parser in native (see native/aontu.go) and installs the same way.
 	// This set is the WHOLE kind namespace — nothing else ever installs
 	// into it.
-	for _, spec := range append(tabnasParserSpecs(), aontuParserSpec()) {
-		if err := installBuiltinParser(exports, subReg, spec); err != nil { //covergate:allow the built-in kind set is static and name-disjoint (TabnasKinds + aontu, order pinned by tabnas_format_test.go), so the duplicate-key arm cannot fire; the installer's arm itself is driven directly by TestW8InstallBuiltinParserDuplicate (§modules)
+	//
+	// The kinds live in predefinedParsers — a Map keyed by kind name (aontu
+	// included, no longer a special-cased append) — so no per-kind key is
+	// hard-coded at the install site. Installation walks the companion order
+	// slice, keeping ParseLang.kinds pinned to the tabnas order followed by
+	// aontu (module-parselang.tsv §3).
+	byName, order := predefinedParsers()
+	for _, name := range order {
+		if err := installBuiltinParser(exports, subReg, byName[name]); err != nil { //covergate:allow the built-in kind set is static and name-disjoint (TabnasKinds + aontu), so the duplicate-key arm cannot fire; the installer's arm itself is driven directly by TestW8InstallBuiltinParserDuplicate (§modules)
 			return native.ModuleDesc{}, err
 		}
 	}
@@ -431,6 +438,26 @@ func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []
 			fmt.Sprintf("parse fn: expected one result, got %d", len(res)), "parse")
 	}
 	return res, nil
+}
+
+// predefinedParsers returns the FIXED set of built-in parser kinds — the
+// tabnas parser family plus aontu — as a Map keyed by kind name, together
+// with the pinned installation order (the tabnas order from
+// native.TabnasKinds followed by aontu). It is the single source of the
+// predefined-lang set: BuildParseLangModule installs every entry by walking
+// the order slice, so no per-kind key is hard-coded at the call site while
+// ParseLang.kinds stays byte-stable (module-parselang.tsv §3). The names are
+// disjoint (TabnasKinds is disjoint, aontu is not a tabnas kind), so each
+// name keys exactly one spec.
+func predefinedParsers() (map[string]ParseLangSpec, []string) {
+	specs := append(tabnasParserSpecs(), aontuParserSpec())
+	byName := make(map[string]ParseLangSpec, len(specs))
+	order := make([]string, len(specs))
+	for i, spec := range specs {
+		byName[spec.Name] = spec
+		order[i] = spec.Name
+	}
+	return byName, order
 }
 
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser
