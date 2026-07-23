@@ -1642,7 +1642,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// one-unit fork, storedGradualDepth > 0) recompiles a runtime-constructed fn
 	// VALUE, which never reads the module flexes; it keeps its established
 	// lowering (a decline there is a sound per-body interpreter fallback).
-	if es.storedGradualDepth == 0 && (IsFlexMap(v) || IsFlexList(v) || IsStore(v)) {
+	if es.storedGradualDepth == 0 && (IsFlexMap(v) || IsFlexList(v) || IsWeakFlexNode(v) || IsStore(v)) {
 		if op, ok := es.dynScopeRescue(v); ok {
 			return op, true
 		}

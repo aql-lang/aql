@@ -31,6 +31,13 @@ func unifyFlexLiteral(a Value, sa ValueShape, b Value, sb ValueShape, flexType *
 	if isFlex(other) {
 		return other, true, nil
 	}
+	// Subtree-nominal: a concrete value TAGGED with a descendant of the
+	// flex type (a WeakFlex* value, a user `refine FlexMap` newtype)
+	// satisfies the parent literal — ordinary nominal subtyping. Plain
+	// nodes still do not qualify (they sit ABOVE the flex type).
+	if IsConcrete(other) && other.Parent != nil && other.Parent.ConformsTo(flexType) {
+		return other, true, nil
+	}
 	return Value{}, true, unifyFail(name+" type literal needs a concrete "+name, lit, other)
 }
 

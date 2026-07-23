@@ -984,6 +984,10 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// `set` of a field outside a class instance's CLOSED schema
 	// (native_storage.go setClassInstanceReturns — the runtime's own code).
 	"sealed_field": SeverityError,
+	// A statically-known value outside the weak container domain
+	// (native_storage.go weakValueMirror — the runtime's own code,
+	// design/FLEX-ATTRS.1.md §4.4).
+	"weak_value_error": SeverityError,
 	// Dry-pass mirrors of PURE words over concrete literals
 	// (eng/go/drypass.go DryPassReturns): each code is the runtime's own —
 	// a failing Assert comparison, a malformed codec/parse literal, an

@@ -47,6 +47,34 @@ func makeScalarReturns() ReturnsFunc {
 	}
 }
 
+// makeNodeReturns wraps ReturnsFreshInstance for the node-make sig: the
+// check residual additionally carries the source's element tag for the
+// targets whose RUNTIME carries it — FlexMap/FlexList keep a header
+// {:T}/[:T] through FlexDeepCopy, and the weak targets keep both the
+// header tag and a typed-literal's ChildTypeInfo tag (MakeNodeHandler's
+// weak arms) — so a later non-conforming write into the made container
+// is check-flagged exactly where the runtime raises (d2CheckWrite).
+func makeNodeReturns() ReturnsFunc {
+	fresh := ReturnsFreshInstance(0)
+	return func(args []Value, r *Registry) []Value {
+		out := fresh(args, r)
+		if len(args) != 2 || len(out) != 1 || !eng.IsBareTypeNode(args[0]) {
+			return out
+		}
+		target, src := args[0], args[1]
+		weakTarget := target.Equal(TWeakFlexMap) || target.Equal(TWeakFlexList)
+		if !weakTarget && !target.Equal(TFlexMap) && !target.Equal(TFlexList) {
+			return out
+		}
+		if elem, ok := src.ElemConstraint(); ok {
+			out[0].SetElemConstraint(elem)
+		} else if ci, cerr := eng.AsChildType(src); weakTarget && cerr == nil {
+			out[0].SetElemConstraint(ci.Child)
+		}
+		return out
+	}
+}
+
 var makeNatives = []NativeFunc{
 	{
 		Name:          "make",
@@ -66,7 +94,7 @@ var makeNatives = []NativeFunc{
 			// inverse). Structural type bodies that land in the Node
 			// TypeArgs slot are deferred back to MakeHandler inside
 			// the handler.
-			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeNodeHandler), ReturnsFn: ReturnsFreshInstance(0), BarrierPos: -1},
+			{Args: []*Type{TNode, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeNodeHandler), ReturnsFn: makeNodeReturns(), BarrierPos: -1},
 			{Args: []*Type{TScalar, TAny}, TypeArgs: map[int]bool{0: true}, Impl: Go(eng.MakeScalarHandler), ReturnsFn: makeScalarReturns(), BarrierPos: -1},
 			{Args: []*Type{TAny, TAny, TMap}, Impl: Go(eng.MakeWithOpts), Returns: []*Type{TAny}, BarrierPos: -1},
 			{Args: []*Type{TAny, TAny}, Impl: Go(eng.MakeHandler), Returns: []*Type{TAny}, BarrierPos: -1},

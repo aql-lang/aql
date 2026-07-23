@@ -145,14 +145,17 @@ var (
 	TInternal     = eng.TInternal
 	TInterpString = eng.TInterpString
 	// TInterval moved to lang/go/engine/native_misc.go (Step 8).
-	TList     = eng.TList
-	TListArgs = eng.TListArgs
-	TFlexList = eng.TFlexList
-	TMap      = eng.TMap
-	TFlexMap  = eng.TFlexMap
-	TXml      = eng.TXml
-	TFlexXml  = eng.TFlexXml
-	TMark     = eng.TMark
+	TList         = eng.TList
+	TListArgs     = eng.TListArgs
+	TFlexList     = eng.TFlexList
+	TWeakFlexList = eng.TWeakFlexList
+	TMap          = eng.TMap
+	TFlexMap      = eng.TFlexMap
+	TWeakFlexMap  = eng.TWeakFlexMap
+	TXml          = eng.TXml
+	TFlexXml      = eng.TFlexXml
+	TWeakFlexXml  = eng.TWeakFlexXml
+	TMark         = eng.TMark
 	// TMatrix moved to lang/go/internal/nativemod/matrix.go (Step 8).
 	TMove           = eng.TMove
 	TNever          = eng.TNever
@@ -277,6 +280,11 @@ var (
 	AsMutableMap              = eng.AsMutableMap
 	AsFlexList                = eng.AsFlexList
 	AsFlexXml                 = eng.AsFlexXml
+	AsWeakFlexMap             = eng.AsWeakFlexMap
+	AsWeakFlexList            = eng.AsWeakFlexList
+	AsWeakFlexXml             = eng.AsWeakFlexXml
+	IsWeakFlexNode            = eng.IsWeakFlexNode
+	WeakRefusalError          = eng.WeakRefusalError
 	IsXmlValue                = eng.IsXmlValue
 	XmlParts                  = eng.XmlParts
 	AsClassInstance           = eng.AsClassInstance

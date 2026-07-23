@@ -111,6 +111,12 @@ var unflaggedPins = map[string]int{
 	"storage.tsv":           1,
 	"usurp.tsv":             1,
 	"user-types.tsv":        1,
+	// The weak set/append refusals and typed weak writes are check-
+	// mirrored (weakValueMirror + d2CheckWrite, native_storage.go). The
+	// residue is make's own errors — source-family mismatch and a
+	// refused CONSTRUCTION entry (no make mirror) — plus an
+	// out-of-bounds index the static length tracker cannot see.
+	"weak-flex.tsv": 4,
 }
 
 func TestCheckAccuracyRatchet(t *testing.T) {

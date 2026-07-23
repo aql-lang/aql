@@ -28,6 +28,19 @@ func nodeFamily(t *Type) *Type {
 	if t.Equal(TFlexList) {
 		return TList
 	}
+	// Weak flex nodes fold like their flex parents: weakness is a
+	// lifecycle mode, not value identity (design/FLEX-ATTRS.1.md §4).
+	// WeakFlexXml folds to FlexXml (which does not itself fold — the
+	// Xml family owns its own equality through its Behavior).
+	if t.Equal(TWeakFlexMap) {
+		return TMap
+	}
+	if t.Equal(TWeakFlexList) {
+		return TList
+	}
+	if t.Equal(TWeakFlexXml) {
+		return TFlexXml
+	}
 	return t
 }
 

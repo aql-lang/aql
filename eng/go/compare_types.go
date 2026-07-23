@@ -97,11 +97,43 @@ func compareStructural(a, b Value) (int, error) {
 	return strings.Compare(CanonValue(a), CanonValue(b)), nil
 }
 
+// compareListView surfaces the element view structural comparison
+// orders by: the mutable payload when present, else the swept strong
+// snapshot of a weak flex list. cmp is CONTENT ordering, mode-blind —
+// a weak container orders exactly like its plain counterpart
+// (design/FLEX-ATTRS.1.md §4.6), so the weak payload must not fall to
+// the canon rendering (whose `(make WeakFlex…)` prefix would order it
+// before every plain sibling).
+func compareListView(v Value) ([]Value, bool) {
+	if ae, err := AsMutableList(v); err == nil {
+		return ae, true
+	}
+	if IsWeakFlexList(v) {
+		if lst, err := AsList(v); err == nil {
+			return lst.Slice(), true
+		}
+	}
+	return nil, false
+}
+
+// compareMapView is the map twin of compareListView.
+func compareMapView(v Value) (ReadMap, bool) {
+	if m, err := AsMutableMap(v); err == nil {
+		return m, true
+	}
+	if IsWeakFlexMap(v) {
+		if m, err := AsMap(v); err == nil {
+			return m, true
+		}
+	}
+	return nil, false
+}
+
 // compareListElems orders two list-like values element by element.
 func compareListElems(a, b Value) (int, error) {
-	ae, aerr := AsMutableList(a)
-	be, berr := AsMutableList(b)
-	if aerr != nil || berr != nil {
+	ae, aok := compareListView(a)
+	be, bok := compareListView(b)
+	if !aok || !bok {
 		// Not a plain element list (a typed list, a table, …) — fall
 		// back to the canonical rendering.
 		return strings.Compare(CanonValue(a), CanonValue(b)), nil
@@ -124,9 +156,9 @@ func compareListElems(a, b Value) (int, error) {
 // compareMapEntries orders two map-like values by their sorted key
 // lists, then by the value stored at each shared key.
 func compareMapEntries(a, b Value) (int, error) {
-	am, aerr := AsMutableMap(a)
-	bm, berr := AsMutableMap(b)
-	if aerr != nil || berr != nil {
+	am, aok := compareMapView(a)
+	bm, bok := compareMapView(b)
+	if !aok || !bok {
 		return strings.Compare(CanonValue(a), CanonValue(b)), nil
 	}
 	ak := append([]string(nil), am.Keys()...)

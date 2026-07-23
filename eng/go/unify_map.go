@@ -13,6 +13,11 @@ func unifyMapFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Uni
 	// with a concrete FlexMap (or another FlexMap literal). A plain
 	// map is NOT a FlexMap; the supertype literal `Map` accepts flex
 	// values below via the ordinary family rule.
+	// WeakFlexMap literal first (deeper node — more specific than the
+	// FlexMap arm below, which also accepts weak values by subtree).
+	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TWeakFlexMap, IsWeakFlexMap, "WeakFlexMap"); handled {
+		return res, err
+	}
 	if res, handled, err := unifyFlexLiteral(a, sa, b, sb, TFlexMap, IsFlexMap, "FlexMap"); handled {
 		return res, err
 	}

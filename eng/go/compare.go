@@ -419,6 +419,16 @@ func sameContainer(a, b Payload) bool {
 		// Pointer identity — the FlexXml store pointer IS the container.
 		bv, ok := b.(*FlexXmlData)
 		return ok && av == bv
+	case *WeakFlexMapData:
+		// Weak containers are reference cells — pointer identity.
+		bv, ok := b.(*WeakFlexMapData)
+		return ok && av == bv
+	case *WeakFlexListData:
+		bv, ok := b.(*WeakFlexListData)
+		return ok && av == bv
+	case *WeakFlexXmlData:
+		bv, ok := b.(*WeakFlexXmlData)
+		return ok && av == bv
 	case XmlElementPayload:
 		// An immutable Node/Xml has no pointer-backed store; it aliases
 		// by its shared attribute map and children slice (a value dup'd

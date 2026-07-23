@@ -81,6 +81,30 @@ func (c *cloner) clone(v Value) Value {
 		nd.Elems = c.cloneSlice(p.Elems)
 		return c.withPayload(v, nd)
 
+	case *WeakFlexMapData:
+		if cp, ok := c.seen[p]; ok {
+			return c.withPayload(v, cp.(*WeakFlexMapData))
+		}
+		nd := CloneWeakFlexMapData(p, c.clone)
+		c.seen[p] = nd
+		return c.withPayload(v, nd)
+
+	case *WeakFlexListData:
+		if cp, ok := c.seen[p]; ok {
+			return c.withPayload(v, cp.(*WeakFlexListData))
+		}
+		nd := CloneWeakFlexListData(p, c.clone)
+		c.seen[p] = nd
+		return c.withPayload(v, nd)
+
+	case *WeakFlexXmlData:
+		if cp, ok := c.seen[p]; ok {
+			return c.withPayload(v, cp.(*WeakFlexXmlData))
+		}
+		nd := CloneWeakFlexXmlData(p, c.clone, c.cloneOrderedMap)
+		c.seen[p] = nd
+		return c.withPayload(v, nd)
+
 	case *StoreInstanceInfo:
 		return c.withPayload(v, c.cloneStore(p))
 
