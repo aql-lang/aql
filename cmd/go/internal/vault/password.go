@@ -114,11 +114,12 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 	nsFlag := fs.String("namespaces", "*", "comma-separated namespaces this password may access ('*' = all, ':' = root)")
 	ttl := fs.Duration("ttl", 0, "make this a TEMPORARY password that stops working after this duration (e.g. 30m, 2h); 0 = never expires")
 	generate := fs.Bool("generate", false, "generate a strong random password and print it once instead of prompting (hand it to an agent for time-boxed access)")
+	rotate := fs.Bool("rotate", false, "if a password of this name already exists, REPLACE it (rotate): mint a fresh password and reset the TTL/scope/namespaces, invalidating the old one — so an agent token can be re-issued under the same name instead of a new one")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password add [--scope=...] [--namespaces=...] [--ttl=DUR] [--generate] <name>")
+		fmt.Fprintln(stderr, "error: usage: aql vault password add [--scope=...] [--namespaces=...] [--ttl=DUR] [--generate] [--rotate] <name>")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -179,8 +180,8 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 			fmt.Fprintln(stderr, "error: only an admin password can add passwords")
 			return 1
 		}
-		if existing, _ := s.FindPasswordSlot(name); existing != nil {
-			fmt.Fprintf(stderr, "error: password %q already exists\n", name)
+		if existing, _ := s.FindPasswordSlot(name); existing != nil && !*rotate {
+			fmt.Fprintf(stderr, "error: password %q already exists (pass --rotate to replace it with a fresh one)\n", name)
 			return 1
 		}
 	} else {
@@ -220,6 +221,7 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 	}
 
 	migrated := false
+	rotated := false
 	if err := withVaultLock(homeDir, func() error {
 		st, err := p7loadStore(homeDir)
 		if err != nil {
@@ -231,6 +233,15 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		if !st.HasPasswordSlots() {
 			migrated = true
 			return migrateLegacyAndAdd(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
+		}
+		// --rotate replaces an existing slot: drop the old one (no rekey —
+		// rotation re-issues ACCESS, it does not revoke already-decrypted data;
+		// that is `rm --rekey`) so addSlotToEnvelope seats a fresh slot under the
+		// same name. The removed slot's verifier is gone, so the OLD password
+		// stops authenticating. RemovePasswordSlot reports whether one existed, so
+		// a --rotate over an absent name is just a create.
+		if *rotate {
+			rotated = st.RemovePasswordSlot(name)
 		}
 		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
 	}); err != nil {
@@ -251,8 +262,12 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.migrate", Outcome: "ok"})
 		fmt.Fprintln(stdout, "migrated vault to envelope format; your current passphrase is now the \"admin\" password")
 	}
-	_ = appendAudit(homeDir, AuditEvent{Action: "vault.password.add", Alias: name, Outcome: "ok", Reason: reason})
-	fmt.Fprintf(stdout, "added %s %q (scope=%s, namespaces=%s", kind, name, *scope, namespacesLabel(namespaces))
+	action, verb := "vault.password.add", "added"
+	if rotated {
+		action, verb = "vault.password.rotate", "rotated"
+	}
+	_ = appendAudit(homeDir, AuditEvent{Action: action, Alias: name, Outcome: "ok", Reason: reason})
+	fmt.Fprintf(stdout, "%s %s %q (scope=%s, namespaces=%s", verb, kind, name, *scope, namespacesLabel(namespaces))
 	if expiresAt != "" {
 		fmt.Fprintf(stdout, ", expires %s", expiresAt)
 	}
