@@ -313,8 +313,8 @@ value.
 def x 1
 {x}                           # returns {x:1}
 def a 10  def b 20
-{a b}                         # returns {a:10 b:20} — keys sort
-{a c:3 b}                     # returns {a:10 b:20 c:3} — mixes with explicit pairs
+{a b}                         # returns {a:10 b:20} — source order
+{a c:3 b}                     # returns {a:10 c:3 b:20} — mixes with explicit pairs
 {outer: {a}}                  # returns {outer:{a:10}} — nests
 ```
 

@@ -362,7 +362,10 @@ export class Value {
     }
     if (this.data instanceof OrderedMap) {
       const m = this.data
-      const parts = m.sortedKeys().map((k) => `${k}:${m.get(k)!.toString()}`)
+      // D1: render in INSERTION order (design/FLEX-ATTRS.1.md §3), matching
+      // Go's joinEntries (Keys()). sortedKeys() is retained only for
+      // order-insensitive map equality (coretype.ts valuesEqual).
+      const parts = m.keys().map((k) => `${k}:${m.get(k)!.toString()}`)
       return `{${parts.join(' ')}}`
     }
     return String(this.data)

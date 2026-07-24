@@ -139,7 +139,7 @@ func TestW3BehaveNodify(t *testing.T) {
 	// A custom projection renames and drops fields.
 	w3BehaveWant(t, `def Person class {name:String age:Integer secret:String}
 behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]])
-make Person {name:'Alice' age:30 secret:'hush'} nodify`, `{age:30 n:'Alice'}`)
+make Person {name:'Alice' age:30 secret:'hush'} nodify`, `{n:'Alice' age:30}`)
 	// Scalar collapse.
 	w3BehaveWant(t, `def Money class {cents:Integer}
 behave nodify/q (fn [[Money] [Any] [(a 'cents' get)]])

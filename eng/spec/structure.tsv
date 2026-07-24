@@ -47,7 +47,7 @@
 lengthq [ Integer String Boolean ]	3	
 firstq [ Integer String ]	Integer	first element is the Integer type literal
 { a:Integer }	{a:Integer}	single type-literal value
-{ a:Integer b:String c:Boolean }	{a:Integer b:String c:Boolean}	(source already in sorted-key order)
+{ a:Integer b:String c:Boolean }	{a:Integer b:String c:Boolean}	(fields in source order)
 		
 # def / type references to a type literal resolve when the structure		
 # auto-evaluates.		
@@ -158,8 +158,8 @@ def a ( quote red ) { x:{ y:{ z:[ { w:a } ] } } }	{x:{y:{z:[{w:red/q}]}}}	atom, 
 # Mixed: a config-shaped structure combining a type, a disjunct, an		
 # atom, and a paren-evaluated number, all at depth, plus a def		
 # reference resolving inside it.		
-def n 2 def Color (enum [ red green blue ]) { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{defaults:{count:3 tag:red/q} schema:{id:Integer kind:(red tor green tor blue)}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
+def n 2 def Color (enum [ red green blue ]) { schema:{ id:Integer kind:Color } defaults:{ count:( n addq 1 ) tag:( quote red ) } }	{schema:{id:Integer kind:(red tor green tor blue)} defaults:{count:3 tag:red/q}}	`n` resolves; `Color` resolves to its disjunct; Integer stays a type literal; quote stays an atom
 		
 # Auto-eval still mixes freely with these: a paren-evaluated scalar		
 # value alongside a type-literal value in the same nested map.		
-def n 5 { row:{ value:( n mulq 2 ) type:Integer } }	{row:{type:Integer value:10}}	
+def n 5 { row:{ value:( n mulq 2 ) type:Integer } }	{row:{value:10 type:Integer}}	

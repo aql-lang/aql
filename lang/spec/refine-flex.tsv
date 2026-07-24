@@ -20,7 +20,7 @@ def S (refine FlexMap)  def w:S (flex {b:2 a:1})  typeof w	S	typed def retags a 
 def S (refine FlexMap)  def w:S (flex {b:2 a:1})  (set c/q 3 w) drop typeof w	S	the tag survives an in-place write — flex words return the receiver handle
 def S (refine FlexMap)  def w:S (flex {a:1})  w.a	1	reads dispatch the inherited flex vocabulary
 def S (refine FlexMap)  def w:S (flex {b:2 a:1})  w is FlexMap	true	nominal subtyping: an S is a FlexMap
-def S (refine FlexMap)  def w:S (flex {b:2 a:1})  w	{a:1 b:2}	a newtype value renders by its payload family, not as an opaque wrapper
+def S (refine FlexMap)  def w:S (flex {b:2 a:1})  w	{b:2 a:1}	a newtype value renders by its payload family, not as an opaque wrapper
 def L (refine FlexList)  def v:L (flex [1 2])  typeof v	L	the list column retags identically
 #
 # ─────────────────────────────────────────────────────────────────────

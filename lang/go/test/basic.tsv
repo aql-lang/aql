@@ -268,7 +268,7 @@ do {x:1,y:2}	{x:1 y:2}
 String tor None	None tor String
 (String tor None) unify "a"	'a' true
 (None tor Boolean) unify None	None true
-({x:1} tor {y:2}) unify {x:1,q:9}	{q:9 x:1} true
+({x:1} tor {y:2}) unify {x:1,q:9}	{x:1 q:9} true
 
 # typeof - returns a Type literal of the value's exact type. For
 # concrete values, the leaf type (Integer, String, Boolean, …); for

@@ -36,7 +36,10 @@ func TestTypedListWave3Elements(t *testing.T) {
 }
 
 func TestTypedMapWave3Entries(t *testing.T) {
-	vals := mustParseWave3(t, "{:Integer a:1 b:2}")
+	// Source order is b, a — NOT alphabetical — so this pins D1 insertion
+	// order for the typed-map entries path (the `ko` order channel reaches
+	// convertTypedMap, not just plain maps). design/FLEX-ATTRS.1.md §3.
+	vals := mustParseWave3(t, "{:Integer b:2 a:1}")
 	if len(vals) != 1 || !eng.IsTypedMap(vals[0]) {
 		t.Fatalf("expected one typed map, got %v", vals)
 	}
@@ -50,11 +53,11 @@ func TestTypedMapWave3Entries(t *testing.T) {
 	if len(ci.Entries) != 2 {
 		t.Fatalf("got %d entries, want 2", len(ci.Entries))
 	}
-	// Entries are collected in sorted key order.
+	// Entries are collected in SOURCE order (b before a), not sorted.
 	for i, want := range []struct {
 		key string
 		n   int64
-	}{{"a", 1}, {"b", 2}} {
+	}{{"b", 2}, {"a", 1}} {
 		e := ci.Entries[i]
 		if e.Key != want.key {
 			t.Errorf("entry %d key %q, want %q", i, e.Key, want.key)

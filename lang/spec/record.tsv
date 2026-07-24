@@ -131,3 +131,11 @@ def sch (refine Record [ { x:Integer } { y:Integer } ]) sch	record{x:Integer y:I
 refine Record [ ]	ERROR:	empty record list — must have at least one field
 refine Record { a:Integer }	ERROR:	argument must be a list, not a map
 refine Record [ 'not a map' ]	ERROR:	each element must be a pair (single-key map)
+		
+# === D1 — record order-identity (design/FLEX-ATTRS.1.md §3.5.4) ===		
+# Field order is part of a record's identity: reordered bodies are		
+# DISTINCT, non-unifiable types (forced by positional-make soundness).		
+# Instances stay deq-equal by content — type identity is finer than value.		
+def R1 (refine Record [a:Integer b:Integer]) def R2 (refine Record [b:Integer a:Integer]) R1 unify R2	'~unify-fail' false	reordered field bodies do not unify
+def R2 (refine Record [b:Integer a:Integer]) make R2 [2 1]	{b:2 a:1}	positional make fills declared field order
+def R1 (refine Record [a:Integer b:Integer]) def R2 (refine Record [b:Integer a:Integer]) (make R1 [1 2]) deq (make R2 [2 1])	true	same-content instances stay deq-equal across order-variant types

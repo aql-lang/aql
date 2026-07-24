@@ -18,8 +18,8 @@ def f fn [[a:Integer] [Integer] [ def m {x:(a 1 add)} (m "x" get) ]] (f 5)	6
 def f fn [[a:Integer] [Map] [ def m {x:(1 add 2)} m ]] (f 5)	{x:3}
 def f fn [[a:Integer] [Map] [ def m {n:[a add 1]} m ]] (f 5)	{n:[6]}
 def f fn [[a:Integer] [Map] [ do {n:[a add 1]} ]] (f 5)	{n:6}
-def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:[bf "m" get]} ]] ({n:1 m:2} f)	{m:2 n:1}
-def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:(bf "m" get)} ]] ({n:1 m:2} f)	{m:2 n:1}
+def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:[bf "m" get]} ]] ({n:1 m:2} f)	{n:1 m:2}
+def f fn [[bf:Map] [Map] [ do {n:[bf "n" get], m:(bf "m" get)} ]] ({n:1 m:2} f)	{n:1 m:2}
 def g fn [[x:Integer] [Integer] [x add 1]]  def f fn [[x:Integer] [Map] [ def mv (x g)  do {a:(mv add 0), b:(mv g)} ]] (5 f)	{a:6 b:7}
 def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [do {code:["y"] next:[i]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)	'y'
 def mk fn [[i:Integer] [Map] [ if (i lte 0) [do {code:["x"] next:[i]}] [def more (mk (i sub 1)) do {code:[(more get "code")] next:[(more get "next")]}] ]]  def use fn [[i:Integer] [String] [ ((mk i) get "code") ]] (use 3)	'x'

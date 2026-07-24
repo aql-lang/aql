@@ -279,7 +279,7 @@ Lists use square brackets, maps use braces:
 
 ```
 aql> [1, 2, 3]                       # returns [1 2 3]
-aql> {name: "Alice", age: 30}        # returns {age:30 name:'Alice'} — keys sort
+aql> {name: "Alice", age: 30}        # returns {name:'Alice' age:30} — source order
 ```
 
 Commas are optional inside literals — both `[1 2 3]` and `[1, 2, 3]`

@@ -53,4 +53,4 @@ def m {a:[1]} (apply $.a m) eq m.a	true	a reach lens extracts the same shared me
 size [None]	1	…but it still counts as an element
 each [drop None] [1]	[None]	an each body may legitimately produce None per element
 scan [add] (flex {a:1 b:2})	{a:1 b:3}	scan over a FlexMap yields the plain running map
-vals {b:2 a:1}	[1 2]	vals come out in sorted-key order, like keys
+vals {b:2 a:1}	[2 1]	vals come out in insertion-key order, like keys

@@ -134,8 +134,8 @@ context set 'f' (flex []) end push 1 (context get 'f') drop context get 'f'	(fle
 # §8  ordering words on maps
 # ====================================================================
 
-keys {b:1 a:2}	['a' 'b']	keys come out SORTED, not in insertion order
-keys ({b:1 a:2} set c 3)	['a' 'b' 'c']	…including after a copy-returning set
+keys {b:1 a:2}	['b' 'a']	keys come out in insertion (source) order
+keys ({b:1 a:2} set c 3)	['b' 'a' 'c']	…insertion order preserved across a copy-returning set
 keys (set c/q 3 (flex {a:1}))	['a' 'c']	…and over a mutated FlexMap
 sort {b:2 a:1}	{a:1 b:2}	sort on a map orders by key
 def m {b:1} (sort m) eq m	false	…returning a fresh map, not the receiver
