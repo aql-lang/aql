@@ -243,8 +243,15 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		// still exists, THEN upserts the fresh one, so the auth never dangles. The
 		// old slot's verifier is overwritten, so the OLD password stops working. A
 		// --rotate over an absent name is just a create.
-		if _, idx := st.FindPasswordSlot(name); *rotate && idx >= 0 {
+		if old, idx := st.FindPasswordSlot(name); *rotate && idx >= 0 {
 			rotated = true
+			// Last-admin guard (mirrors `password rm`): rotating the SOLE admin
+			// to a non-admin scope would demote it, leaving no admin and locking
+			// every password-management command out. `--scope` defaults to read,
+			// so `password add --rotate admin` would trip this — refuse it.
+			if old.Scope == ScopeAdmin && *scope != ScopeAdmin && !st.OtherFunctionalAdminExists(name) {
+				return errors.New("refusing to rotate the last admin password to a non-admin scope (it would lock password management); keep --scope=admin, or add another admin first")
+			}
 		}
 		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt, *rotate)
 	}); err != nil {

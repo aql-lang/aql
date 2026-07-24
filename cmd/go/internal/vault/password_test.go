@@ -94,7 +94,17 @@ func TestPasswordRotateAuthenticatingAdmin(t *testing.T) {
 	// Migrate to envelope: "test-pass" becomes the "admin" slot.
 	mustAddPassword(t, "test-pass", "reader-pass", "reader", "--scope=read", "--namespaces=proj")
 
-	// Rotate the admin slot while authenticating AS admin.
+	// Last-admin guard: rotating the sole admin to a NON-admin scope (--scope
+	// defaults to read) would leave no admin and lock password management — it
+	// must be refused, before the slot is touched.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "x")
+	if code, _, e := runVault(t, "", "password", "add", "--rotate", "admin"); code == 0 ||
+		!strings.Contains(e, "last admin") {
+		t.Fatalf("rotate sole admin to read scope: code=%d err=%q, want a last-admin refusal", code, e)
+	}
+
+	// Rotate the admin slot while authenticating AS admin (keeping --scope=admin).
 	setPass(t, "test-pass")
 	t.Setenv(EnvNewPassphrase, "admin-v2")
 	code, out, e := runVault(t, "", "password", "add", "--rotate", "--scope=admin", "admin")
