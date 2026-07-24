@@ -108,6 +108,50 @@ func TestLookupDynScopeReadsTopLevelBinding(t *testing.T) {
 	}
 }
 
+// TestLookupDynScopeDataArms pins OpLookupDynScopeData, the DATA-position twin
+// of OpLookupDynScope: it PUSHES an FnDefInfo (a parser/fn value read as data)
+// where OpLookupDynScope defers, and still defers on a miss, a class binding,
+// and an active token.
+func TestLookupDynScopeDataArms(t *testing.T) {
+	// FnDefInfo binding: OpLookupDynScope DEFERS (name-position dispatch), but
+	// the DATA twin PUSHES it — the parselang-fn-dispatch parser operand.
+	r := seam7Reg(t)
+	fn := NewFnDef(FnDefInfo{Name: "dspfn", Registry: r,
+		Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}})
+	r.Defs.Push("dspfn", fn)
+	p := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspfn"))
+	out, err := RunProgram(p, r)
+	if err != nil {
+		t.Fatalf("data read of a fn binding must PUSH, not defer: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("residual %v, want the pushed fn value", out)
+	}
+	if _, isFn := out[0].Data.(FnDefInfo); !isFn {
+		t.Errorf("pushed %v, want the FnDefInfo parser value as data", out[0])
+	}
+
+	// Miss: no live binding — defer.
+	r2 := seam7Reg(t)
+	p2 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspmiss"))
+	_, err = RunProgram(p2, r2)
+	wantInternal(t, err, "dynamic-scope data read miss for `dspmiss`")
+
+	// A class binding is not a parser — defer.
+	r3 := seam7Reg(t)
+	r3.Defs.Push("dspcls", NewValueRaw(TClass, &ClassTypeInfo{Name: "Class/C", Fields: NewOrderedMap()}))
+	p3 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspcls"))
+	_, err = RunProgram(p3, r3)
+	wantInternal(t, err, "dynamic-scope data read of a class binding `dspcls`")
+
+	// An active token (a splice marker) steps on the tape, never data — defer.
+	r4 := seam7Reg(t)
+	r4.Defs.Push("dspsp", NewSplice(NewList([]Value{NewInteger(1)})))
+	p4 := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspsp"))
+	_, err = RunProgram(p4, r4)
+	wantInternal(t, err, "dynamic-scope data read of an active token `dspsp`")
+}
+
 // A break escaping a callee to an outer loop (flowSignal) tears down the
 // escaped frame's dynamic-scope bindings — the interpreter's
 // unwindLiveFrames replays the frame's cleanup tail; without the unwind the

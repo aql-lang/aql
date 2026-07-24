@@ -328,6 +328,14 @@ type FnSig struct {
 	// (`5 is Positive` — RunPredicate) and must keep refusing. Read by
 	// recordCallOperands alongside CompileReadsFn/CompileStoresFn.
 	FnInertArgs map[int]bool
+	// FnDataArgs marks per-position slots where a fn-value operand resolved via
+	// a dynamic-scope read (an enclosing `def op (Parse.parser g)`) must be READ
+	// AS DATA — the lowering picks OpLookupDynScopeData, which PUSHES the
+	// FnDefInfo binding instead of deferring like the plain OpLookupDynScope
+	// (whose FnDefInfo defer is for a name-POSITION read the interpreter would
+	// dispatch). The one holder is parselang-fn-dispatch's arg0 (the computed
+	// parser fn), which the interpreter passes as data to parseFnDispatchHandler.
+	FnDataArgs map[int]bool
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
 	// ReturnsFn is the check-mode return computer (native-authored or

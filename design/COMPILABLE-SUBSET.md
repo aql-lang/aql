@@ -66,8 +66,8 @@ the shared ID when both arm carriers are the same identity (a narrow-only,
 identity no-op merge), preserving the seat; a GENUINE reassignment gives
 the arms differing IDs and keeps the fresh-ID join (a branch RESULT must
 not collide with an arm's live local). Pinned by
-`lang/go/bytecode_ifbranch_operand_test.go` (reduced from the alice
-viewer's render fn — voxgig-aql/alice, dx-report 2026-07-21).
+`lang/go/bytecode_ifbranch_operand_test.go` (reduced from the aless
+viewer's render fn — voxgig-aql/aless, dx-report 2026-07-21).
 
 ---
 

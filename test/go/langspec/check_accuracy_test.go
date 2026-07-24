@@ -91,6 +91,10 @@ var unflaggedPins = map[string]int{
 	"edge-errors-2.tsv":     1,
 	"edge-forward-1.tsv":    1,
 	"edge-forward-2.tsv":    1,
+	// edge-scalars-3.tsv: the pad byte-cap PROJECTION row (PR #306
+	// review — a multi-byte fill exceeding maxStringResultBytes) is a
+	// value-dependent resource bound, the runtime's job.
+	"edge-scalars-3.tsv":    1,
 	"edge-types-2.tsv":      3,
 	"edge-types-3.tsv":      3,
 	"error.tsv":             1,

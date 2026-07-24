@@ -2472,6 +2472,17 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 		}
 		reach := true
 		for j := range args {
+			// A strict OR gradual Any carrier could hold a value of any type at
+			// run time, so it reaches EVERY same-arity arm — the dispatch is
+			// genuinely runtime-dynamic and must poly re-match, not commit
+			// statically to the Any-slot arm. Without this a strict Any (an Any
+			// param's generalised arg — core_helpers.go) reached only the Any
+			// overload, so a wrapper forwarding a Map through an Any param baked
+			// the Any arm and diverged from the interpreter's Map dispatch (the
+			// each/fold-body multi-sig degradation).
+			if isAnyCarrier(args[j]) {
+				continue
+			}
 			// A GENERIC placeholder slot ((T extends Comparable)) admits by
 			// per-call instantiation over the runtime value, which a gradual
 			// arg's bound-disjointness probe cannot see (tand(Integer, T-node)
@@ -2764,11 +2775,20 @@ func anyNonConcreteOperand(vs []Value) bool {
 // type error.
 func anyAnyCarrier(vs []Value) bool {
 	for _, v := range vs {
-		if v.Carrier && v.Parent != nil && v.Parent.Equal(TAny) {
+		if isAnyCarrier(v) {
 			return true
 		}
 	}
 	return false
+}
+
+// isAnyCarrier reports whether v is an Any-typed carrier (strict or gradual):
+// a value whose static type is exactly Any, so at run time it may hold a value
+// of any type. Such an arg to a multi-overload user fn makes the dispatch
+// genuinely runtime-dynamic — the committed Any-slot arm is not a proof, since
+// the runtime value may match a more-specific sibling overload.
+func isAnyCarrier(v Value) bool {
+	return v.Carrier && v.Parent != nil && v.Parent.Equal(TAny)
 }
 
 // anyDisjunctCarrier reports whether any value is a UNION (Disjunct) carrier — a
@@ -3491,7 +3511,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 // collide with an arm's live local, JoinCarriers' own §), but for a
 // merely-narrowed enclosing def that fresh ID strands every later
 // reference as an unseated dynamic carrier ("fn call operand of unknown
-// provenance"; the alice viewer's render fn hit exactly this). A GENUINE
+// provenance"; the aless viewer's render fn hit exactly this). A GENUINE
 // reassignment gives the arms DIFFERING IDs and keeps the fresh-ID join.
 func joinBranchDef(a, b Value) Value {
 	out := JoinCarriers(a, b)
@@ -4274,7 +4294,7 @@ func refineRecursiveSummary(r *Registry, key string, diagBase int, result []Valu
 // baseline so any inner fn/afn construction inside the body sees this scope
 // as its enclosing-fn baseline — without it, ComputeCaptures would treat
 // outer params as if they lived at module/global scope and miss the capture.
-func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding) []Value {
+func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding, anonymous bool) []Value {
 	snapshot := r.Defs.Snapshot()
 	r.PushFnBaseline(snapshot)
 	defer r.PopFnBaseline()
@@ -4355,7 +4375,12 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// predicate the frame-tail builders use — so a single
 	// paren-expression body (which the interpreter also evaluates
 	// in-frame) records too.
-	if r.Check.Recorder().active() && (isCallbackBodyName(name) || BodyEvalsResidual(body)) {
+	// A NAMED fn (!anonymous) always evaluates its body in-frame, so its
+	// residual container is assembled against the live params and records
+	// like any in-frame computation. Only an anonymous lambda keeps the
+	// single-bare-literal transparency (BodyEvalsResidual), where in-frame
+	// assembly would bake the param and diverge — that shape keeps refusing.
+	if r.Check.Recorder().active() && (isCallbackBodyName(name) || !anonymous || BodyEvalsResidual(body)) {
 		sub.elemEvalRecordable = true
 	}
 	result, err := sub.Run(input)
@@ -4417,7 +4442,7 @@ func isCallbackBodyName(name string) bool {
 // Returns the residual carrier stack. An empty or nil return means
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type) []Value {
+func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type, anonymous bool) []Value {
 	// Fn-body analysis runs nested sub-engines — not part of the
 	// caller's straight line; pause bytecode recording, UNLESS a fn
 	// compilation armed capture (StartFnCompile): the body's events then
@@ -4588,7 +4613,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// body sees this scope as its enclosing-fn baseline — without it,
 	// ComputeCaptures would treat outer params as if they lived at
 	// module/global scope and miss the capture.
-	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures) }
+	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
 
 	bailsBefore := r.Check.InflightBails
 	diagBase := len(r.Check.Diagnostics)

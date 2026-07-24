@@ -1056,8 +1056,9 @@ Type<Map>	Map/t
 Type of [Map]	Map/t
 Map/t eq (Type of [Map])	true
 Map/t eq List/t	false
-# /t combines with no other modifier; a non-type bound errors in `of`
-Map/tq		undefined_word
+# /t combines with no other modifier (a botched combo is a loud parse
+# error per NUR027); a non-type bound errors in `of`
+Map/tq		syntax_error
 foo/t		type_error
 # inline disjuncts now CONSTRAIN (previously a silent Any wildcard)
 def g fn [[x:(Integer tor String)] [Any] [x]] g 5	5

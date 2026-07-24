@@ -19,7 +19,7 @@ func TestFnAnalysisQuota(t *testing.T) {
 	// force a fresh analysis per call without minting types.
 	for i := 0; i <= FnAnalysisQuota+5; i++ {
 		caps := []CapturedBinding{{Name: "c" + strconv.Itoa(i), Value: NewCarrier(TInteger)}}
-		AnalyseFnBody(r, "poly", nil, body, nil, caps, nil)
+		AnalyseFnBody(r, "poly", nil, body, nil, caps, nil, false)
 	}
 
 	// The counter is keyed by definition site (scope + name + body
@@ -48,7 +48,7 @@ func TestFnAnalysisQuota(t *testing.T) {
 	defer done2()
 	for i := 0; i < 3; i++ {
 		caps := []CapturedBinding{{Name: "c" + strconv.Itoa(i), Value: NewCarrier(TInteger)}}
-		AnalyseFnBody(r2, "small", nil, body, nil, caps, nil)
+		AnalyseFnBody(r2, "small", nil, body, nil, caps, nil, false)
 	}
 	for _, d := range r2.Check.Diagnostics {
 		if d.Code == "analysis_truncated" {
@@ -72,7 +72,7 @@ func TestFnAnalysisQuotaKeyedByDefinitionSite(t *testing.T) {
 	for i := 0; i <= FnAnalysisQuota+20; i++ {
 		tok := NewInteger(int64(i))
 		tok.SetPos(SrcPos{Row: i + 1, Col: 1})
-		AnalyseFnBody(r, "each$body", nil, []Value{tok}, nil, nil, nil)
+		AnalyseFnBody(r, "each$body", nil, []Value{tok}, nil, nil, nil, false)
 	}
 	for _, d := range r.Check.Diagnostics {
 		if d.Code == "analysis_truncated" {

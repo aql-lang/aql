@@ -276,6 +276,16 @@ A trailing `/...` suffix overrides a word's default argument shape:
 | `/u` | Usurp — `f/u` ≡ `usurp f` |
 | `/t` | A type bound — `Map/t` ≡ `Type<Map>` ≡ `(Type of [Map])`; combines with no other modifier |
 
+Letters stack in any order (`foo/sq` ≡ `foo/qs`), each at most once;
+`f`/`s` are mutually exclusive, `q` excludes `r` and `u`, `t` combines
+with nothing, and digits form one contiguous run. When `q` is present
+the result is an atom and any companion shape letters are ignored. An
+**invalid combination spelled from the modifier letters** (`add/fs`,
+`foo/qr`, `add/1f2`) is a loud `[aql/syntax_error]` — never a silent
+fall-through. A suffix containing any other character is not a modifier
+at all: the whole token is one plain word, which is how the full type
+paths (`Scalar/Number/Integer`) parse.
+
 <!-- aql-test: skip -->
 ```
 lower/f "ABC"                 # returns 'abc' — (lower is in aql:string-util — StringUtil.lower)
@@ -1106,6 +1116,14 @@ all-forward form `WORD input arg…` is the clearest reading per the
 forms work too but require placing the search/needle on the *left*
 of the word, with the haystack as the forward arg.
 
+**One character unit.** Every string count and index is in
+**characters** (Unicode runes): `size`, `slice` positions,
+`StringUtil.indexof` results and its `{from}` option,
+`StringUtil.pad` widths, `StringUtil.match` indices, and the
+occurrence ops `mul`/`pow` all agree — `"héllo" size` is 5 and
+`"héllo" slice 1 2` is `'é'`, never half of one. For byte-level
+work, convert to `Bytes` (`(convert Bytes "héllo") size` is 6).
+
 | Word | Description | Example |
 |------|-------------|---------|
 import "aql:string-util" | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
@@ -1932,10 +1950,17 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 | `ArrayUtil.compress` | Select elements where a mask is true | `ArrayUtil.compress [true,false,true] [10,20,30]` returns `[10,30]` |
 | `ArrayUtil.eachrank` | Apply a body at a given cell rank (0 = scalars, 1 = innermost lists, …) | `ArrayUtil.eachrank 1 [each [add 10]] [[1,2],[3,4]]` returns `[[11,12],[13,14]]` |
 | `ArrayUtil.foldaxis` | Reduce a rank-2 list along an axis (0 = columns, 1 = rows) | `ArrayUtil.foldaxis 0 [add] [[1,2],[3,4]]` returns `[4,6]` |
-| `ArrayUtil.member` | Per-element membership test | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
-| `ArrayUtil.unique` | Remove duplicates | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
-| `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent); haystack is the final argument | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
-| `ArrayUtil.group` | Group values by parallel keys (or indices by value) | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
+| `ArrayUtil.member` | Per-element membership test, by `deq` | `[1,2,3] ArrayUtil.member [2,3,4]` returns `[true,true,false]` |
+| `ArrayUtil.unique` | Remove duplicates, by `deq` | `ArrayUtil.unique [1,2,2,3]` returns `[1,2,3]` |
+| `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent), by `deq`; haystack is the final argument | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
+| `ArrayUtil.group` | Group values by parallel keys (or indices by value), one group per `deq` class | `ArrayUtil.group ["a","b","a"] [1,2,3]` |
+
+> **The membership/grouping words compare by `deq`** — the value
+> equality: `ArrayUtil.unique [1 1.0]` returns `[1]` (cross-leaf
+> magnitude), and `unique [["a"] ["a"]]` returns `[['a']]` even though
+> `eq` (reference identity for compounds) distinguishes the two lists.
+> `group`'s map keys stay rendered strings — the first occurrence's
+> render names each `deq` class.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
@@ -2024,7 +2049,7 @@ type:
 |-------|------|---------|
 | List | element count | `[10,20,30] size` returns `3` |
 | Map | key count | `{a:1, b:2} size` returns `2` |
-| String | length in bytes | `"hello" size` returns `5` |
+| String | length in characters (Unicode runes) — byte length via `convert Bytes` | `"hello" size` returns `5`; `"héllo" size` returns `5` |
 | Atom | length of the name | `foo/q size` returns `3` |
 | Integer / Float | floored magnitude | `42 size` returns `42`, `7.9 size` returns `7` |
 | Boolean | `1` for `true`, `0` for `false` | `true size` returns `1` |

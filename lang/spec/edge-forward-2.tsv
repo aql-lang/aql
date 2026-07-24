@@ -47,9 +47,9 @@ mul/qs	mul/q	…either spelling
 sub/f2 10 3	-7	digits stack with f: /f2 ≡ /2f
 sub/2f 10 3	-7	…either spelling
 10 3 sub/s2	7	digits stack with s
-sub/fs 1 2	ERROR:undefined_word	f and s are exclusive: the whole token is an unknown word
-pow/ff 2 3	ERROR:undefined_word	repeated letters are invalid
-div/y 2 10	ERROR:undefined_word	unknown modifier letter
+sub/fs 1 2	ERROR:invalid word modifier	f and s are exclusive: a botched modifier is a loud parse error (NUR027)
+pow/ff 2 3	ERROR:invalid word modifier	repeated letters are invalid — same loud error
+div/y 2 10	ERROR:undefined_word	a NON-alphabet letter keeps the plain-word reading (slash-name), unbound here
 pow/u 2 3	8	/u reverses the call: pow 3 2
 div/u 2 10	0	/u div: 2/10
 sub/u 10 3	7	/u sub: sub 3 10

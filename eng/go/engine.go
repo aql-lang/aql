@@ -136,6 +136,22 @@ type Engine struct {
 	// design/ERRORS.8.md §3 (VOXGIG B3). Cleared at every statement
 	// boundary (stepEnd).
 	voidGroups []string
+	// parenEvalDepth counts the forward-paren-group evaluations
+	// (evalParenGroupAt) currently open on THIS engine's call stack. It
+	// gates tail-call elimination: evalParenGroupAt drives its own loop
+	// with a local paren-`depth` counter to find the group's matching
+	// `)`, and a TCO frame-region rewrite (full replacement / shell
+	// elision splices the tape underneath that loop) desynchronises the
+	// counter from the tape — the group's close paren is deleted or
+	// shifted before the loop decrements on it, so the group never
+	// collapses and its result is never bound (`def x (f n)` for a
+	// tail-recursive `f` errored `undefined_word: x`). While this is
+	// >0 the tail call simply NESTS (tcoEligible declines) — correctness
+	// never depends on TCO firing (design/TCO-STAGED.10.md), and the
+	// nested frame is exactly what evalParenGroupAt's depth counter is
+	// built to track. Incremented/decremented in lockstep by
+	// evalParenGroupAt; sub-engine runs get their own zeroed counter.
+	parenEvalDepth int
 }
 
 // RecorderSkipper is an optional extension to Recorder. When a
@@ -2193,6 +2209,13 @@ func (e *Engine) staticForwardType(tok Value) (match Value, kind fwdKind) {
 func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	savedPointer := e.pointer
 
+	// This loop tracks the group's extent with a local paren-`depth`
+	// counter. TCO's frame-region rewrite would splice the tape out from
+	// under that counter, so tail calls dispatched inside here must nest,
+	// not elide — tcoEligible reads this flag. Balanced restore below.
+	e.parenEvalDepth++
+	defer func() { e.parenEvalDepth-- }()
+
 	// Check mode: snapshot the group's inner tokens before evaluation
 	// reduces them. If the group collapses to a single Boolean
 	// carrier, the tokens are attached as a GuardFactInfo payload so
@@ -2698,10 +2721,8 @@ func (e *Engine) stepWord(val Value) error {
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
-			if top.Dynamic && e.registry.Check.IsActive() {
-				// Tag the gradual value with its binding so a typed use
-				// downstream narrows the binding (narrowing-through-use).
-				top.SetDynFrom(w.Name)
+			if e.registry.Check.IsActive() {
+				e.tagCheckModeDefRead(&top, w.Name)
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
@@ -2953,6 +2974,36 @@ func (e *Engine) stepWord(val Value) error {
 		e.traceNote = "stack " + traceSigStr(w.Name, sig)
 	}
 	return e.execMatch(match)
+}
+
+// tagCheckModeDefRead records provenance on a def-word substitution so a later
+// compile pass can lower an un-ID-able read to a runtime dyn-scope lookup. Two
+// cases tag DynFrom (consumed ONLY by resolveOperand's dynScopeRescue; narrowing
+// is Dynamic-gated, so a non-dynamic tag is inert there):
+//
+//   - a DYNAMIC (gradual) value: the tag lets a typed downstream use narrow the
+//     binding (narrowing-through-use);
+//   - a CONCRETE MODULE-SCOPE mutable reference (a `flex` map/list/xml, a Store
+//     bound outside the current fn frame): its reads lower to a live dyn-scope
+//     lookup so every reference re-resolves the ONE shared instance. A DETACHED
+//     stamp forks the RUNTIME def table where the value's ID was ELIDED, so
+//     defReads[ID] cannot name it — the tag makes the read nameable regardless of
+//     ID. Scoped to MODULE scope (ModuleScopeBinding): such a binding lives in the
+//     registry Defs for the whole run, so OpLookupDynScope resolves it byte-
+//     identically to the interpreter. A BODY-LOCAL flex is a frame local, not a
+//     registry binding, so dyn-scoping it would miss — it keeps its local-slot
+//     lowering (or a sound refusal), left untagged.
+//
+// Extracted from stepWord so the hot dispatch path stays under the cyclomatic-
+// complexity gate.
+func (e *Engine) tagCheckModeDefRead(top *Value, name string) {
+	switch {
+	case top.Dynamic:
+		top.SetDynFrom(name)
+	case (IsFlexMap(*top) || IsFlexList(*top) || IsFlexXml(*top) || IsStore(*top)) &&
+		ModuleScopeBinding(e.registry, name):
+		top.SetDynFrom(name)
+	}
 }
 
 // checkMixedFormAdvisories emits the two check-mode forward-greediness
@@ -5252,7 +5303,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 			for i, pos := range positions {       //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 				args[i] = e.tape.At(pos)
 			}
-			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			return e.execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry, fnDef.Anonymous) //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		}
 	}
 
@@ -5407,7 +5458,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			if checkFnValue && len(sig.body()) > 0 {
 				return e.spliceFnValueCheckResult(valIdx, 0, fnDef, sig, nil)
 			}
-			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry)
+			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry, fnDef.Anonymous)
 		}
 		if len(resolved) < nArgs {
 			continue
@@ -5458,7 +5509,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		} else {
 			candidate := resolved[len(resolved)-nArgs:]
@@ -5496,7 +5547,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				if checkFnValue && len(sig.body()) > 0 {
 					return e.spliceFnValueCheckResult(valIdx, nArgs, fnDef, sig, args)
 				}
-				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry)
+				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
 		}
 	}
@@ -5563,7 +5614,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns)
+	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns, true)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -5745,7 +5796,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
 // (module closure), execution uses CallAQL on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
-func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry) error {
+func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
@@ -5955,7 +6006,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		UnnamedCount: unnamedCount,
 		FuncName:     "<fn>",
 		Pos:          callPos,
-		EvalResidual: BodyEvalsResidual(sig.body()),
+		EvalResidual: !anonymous || BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 

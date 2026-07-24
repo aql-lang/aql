@@ -3329,7 +3329,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 // consumption shape must fold to the SAME value both engines produce — no fn unit,
 // no VM change.
 func TestDeferredListBodyCompiles(t *testing.T) {
-	const mk = `def c1 1 def mk fn [[c1:Integer] [List] [[c1]]] `
+	const mk = `def c1 1 def mk ([c1:Integer] => [[c1]]) `
 	positive := []struct{ src, want string }{
 		// Bare top-level: the deferred list folds at end-of-run, module c1 = 1.
 		{mk + `mk 9`, "[[1]]"},
@@ -3345,7 +3345,7 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 		// Two independent calls.
 		{mk + `mk 9 mk 8`, "[[1] [1]]"},
 		// A different module binding flows through.
-		{`def c1 7 def mk fn [[c1:Integer] [List] [[c1]]] mk 9`, "[[7]]"},
+		{`def c1 7 def mk ([c1:Integer] => [[c1]]) mk 9`, "[[7]]"},
 	}
 	for _, c := range positive {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
@@ -3377,7 +3377,7 @@ func TestDeferredListBodyCompiles(t *testing.T) {
 		{`def mk fn [[c1:Integer] [Function] [([] => [c1])]] def f (mk 7) f`, "[7]"},
 		// No module binding for the named param: the deferred list errors at the
 		// late module-scope eval (undefined word), exactly as the interpreter does.
-		{`def mk fn [[x:Integer] [List] [[x add 1]]] mk 5`, ""},
+		{`def mk ([x:Integer] => [[x add 1]]) mk 5`, ""},
 	}
 	for _, c := range contrast {
 		gotC, _, eC := mustNew(t).RunCompiled(c.src)

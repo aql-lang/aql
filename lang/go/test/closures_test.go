@@ -310,7 +310,7 @@ func TestClosureCheckModeAnalyseFnBodyUsesCaptures(t *testing.T) {
 		{Name: "x", Value: eng.NewCarrier(eng.TInteger)},
 	}
 
-	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures, nil)
+	result := eng.AnalyseFnBody(reg, "test", nil, body, nil, captures, nil, false)
 	if len(result) != 1 {
 		t.Fatalf("got %d residual values, want 1: %v", len(result), result)
 	}
@@ -351,7 +351,7 @@ func TestClosureCheckModeAnalyseFnBodyWithoutCaptures(t *testing.T) {
 		eng.NewInteger(1),
 	}
 	// Same body, no captures — x is undefined in body's scope.
-	eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil)
+	eng.AnalyseFnBody(reg, "test", nil, body, nil, nil, nil, false)
 
 	foundUndefinedX := false
 	for _, d := range reg.Check.Diagnostics {

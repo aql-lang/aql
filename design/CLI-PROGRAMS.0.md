@@ -7,7 +7,7 @@ and gets the things every CLI runtime owes its programs: arguments, an
 argument-parsing convention, environment access, exit codes, stream
 discipline, signals, and (policy-gated) subprocesses.
 
-The motivating client is the `alice` file viewer (voxgig-aql/alice
+The motivating client is the `aless` file viewer (voxgig-aql/aless
 `viewer/`), the first substantial end-user program written in AQL. Its
 2026-07-21 DX round found the runtime strong exactly where AQL has
 invested — packaging (`aql build`/`pack`/`install`), per-invocation
@@ -44,7 +44,7 @@ follow.
 > observe but are documented not to swallow it (§4);
 > (4) signals and subprocess output are **delivered to a Pid mailbox**,
 > never via callback bodies — the callback-fork path is exactly what the
-> `IO.watch`-under-`Tui.run` starvation bug (alice dx §6) shows cannot be
+> `IO.watch`-under-`Tui.run` starvation bug (aless dx §6) shows cannot be
 > trusted while a driver owns the runtime (§6, §7);
 > (5) subprocess execution takes an **argv vector only** — there is no
 > shell-string form at any tier, `{shell:true}` is explicitly rejected as
@@ -230,12 +230,12 @@ subscription restores it. KILL is not interceptable; the Windows story
 is INT-only (Ctrl-C) and documented.
 
 Explicitly **not** a callback body: the `IO.watch` starvation finding
-(alice dx §6 — callback forks never run while a driver owns the runtime)
+(aless dx §6 — callback forks never run while a driver owns the runtime)
 makes body-style delivery untrustworthy in exactly the programs that
 need signals most. Mailbox delivery is the path that demonstrably works
 under `Tui.run` (`send {…} "tui"` from the metronome process). Fixing
 `IO.watch`'s own delivery the same way is tracked in the companion
-proposal (alice `proposals/tui-live-io-and-testability.md`) and shares
+proposal (aless `proposals/tui-live-io-and-testability.md`) and shares
 this section's plumbing.
 
 
@@ -302,7 +302,7 @@ grants.
 
 The runtime surface stays the raw vector; conventions live in a
 loadable module, **written in AQL** (dogfooding; pure; testable by the
-alice suite conventions; no Go coverage cost). Its shape follows the
+aless suite conventions; no Go coverage cost). Its shape follows the
 `aql:test` precedent — a declarative spec map driving an imperative
 surface:
 
@@ -351,7 +351,7 @@ Subcommands (`spec.commands: [{name, summary, flags, args, …}]`) are
 part of the spec shape from day one but ship in the module's second
 stage; `Cli.parse` reports the chosen command in `r.command`.
 
-Two implementation cautions from the alice DX round, binding on the
+Two implementation cautions from the aless DX round, binding on the
 module author: no local alias fns and no recursion in the parse
 machinery (dx §5 — fold-based like `AvTabs`), and native `is`-chains
 rather than multi-sig dispatch on values from the args vector (dx §7).
@@ -416,13 +416,13 @@ C0 (≈60 lines + tests, one day including the gauntlet).
   color recipe. *Unblocks: filters and pipelines.*
 - **C3 — `aql:cli`** (M, AQL-side): parse/usage/main, flags tier;
   `module-cli.tsv`; HOWTO chapter. *Unblocks: conventional UX;
-  `alice` migrates its launcher as the reference client.*
+  `aless` migrates its launcher as the reference client.*
 - **C4 — signals** (M): subscription word + mailbox delivery + driver
   integration (suspend/restore default handling); `Tui.run` apps get
   clean SIGTERM. *Unblocks: services and long-running tools.*
 - **C5 — `aql:proc`** (L): ProcOps seam + fake, run/spawn/write/kill,
   `proc.exec` policy inversion, streaming into mailboxes. *Unblocks:
-  orchestration tools; also the `alice` clipboard-yank deviation.*
+  orchestration tools; also the `aless` clipboard-yank deviation.*
 - **C6 — `aql:cli` subcommands** (S, AQL-side): nested specs,
   per-command usage. *Unblocks: multi-verb tools.*
 

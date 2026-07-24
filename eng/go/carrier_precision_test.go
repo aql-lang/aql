@@ -97,7 +97,7 @@ func TestAnalyseFnBodyGradualizesUndefinedArg(t *testing.T) {
 
 	// The call must not panic and must produce a residual (the gradualized
 	// carrier flows through the body).
-	got := AnalyseFnBody(r, "f", []string{"x"}, body, []Value{und}, nil, nil)
+	got := AnalyseFnBody(r, "f", []string{"x"}, body, []Value{und}, nil, nil, false)
 	if len(got) == 0 {
 		t.Fatal("AnalyseFnBody over an undefined arg produced no residual")
 	}
@@ -107,7 +107,7 @@ func TestAnalyseFnBodyGradualizesUndefinedArg(t *testing.T) {
 
 	// A NON-undefined arg leaves the sanitization loop a no-op (the continue
 	// path) — a different fn name so the memo does not short-circuit.
-	got2 := AnalyseFnBody(r, "g", []string{"x"}, body, []Value{NewInteger(3)}, nil, nil)
+	got2 := AnalyseFnBody(r, "g", []string{"x"}, body, []Value{NewInteger(3)}, nil, nil, false)
 	if len(got2) == 0 {
 		t.Fatal("AnalyseFnBody over a concrete arg produced no residual")
 	}
