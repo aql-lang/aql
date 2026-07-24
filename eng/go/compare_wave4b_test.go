@@ -341,6 +341,37 @@ func TestDeepEqualLists(t *testing.T) {
 	}
 }
 
+// TestDeepEqualTypeLevelContainers pins the residual render-comparison
+// path (NUR033): a type-level list/map operand — a Record/Options type
+// (Parent=TMap) or a Table type (Parent=TList) — carries no readable
+// entries, so deqMapEntries/deqListElems decline and DeepEqual falls
+// back to comparing rendered forms. Two identical type constructors are
+// deq; differing ones are not.
+func TestDeepEqualTypeLevelContainers(t *testing.T) {
+	rf := func(v int) Value {
+		f := NewOrderedMap()
+		f.Set("a", NewInteger(int64(v)))
+		return NewRecordType(f)
+	}
+	if !DeepEqual(rf(1), rf(1)) {
+		t.Error("identical record types must be deq (by render)")
+	}
+	if DeepEqual(rf(1), rf(2)) {
+		t.Error("record types with differing fields must not be deq")
+	}
+	tt := func(v int) Value {
+		f := NewOrderedMap()
+		f.Set("a", NewInteger(int64(v)))
+		return NewTableType(RecordTypeInfo{Fields: f})
+	}
+	if !DeepEqual(tt(1), tt(1)) {
+		t.Error("identical table types must be deq (by render)")
+	}
+	if DeepEqual(tt(1), tt(2)) {
+		t.Error("table types with differing record schemas must not be deq")
+	}
+}
+
 func TestDeepEqualMaps(t *testing.T) {
 	m1 := NewOrderedMap()
 	m1.Set("a", NewInteger(1))
@@ -360,14 +391,28 @@ func TestDeepEqualMaps(t *testing.T) {
 	if DeepEqual(NewMap(m1), NewMap(m4)) {
 		t.Error("different sizes equal")
 	}
-	// Typed maps compare via their rendering.
+	// NUR033: a typed map compares by its ENTRY VALUES, not by rendered
+	// form — the element-type tag is ignored, exactly as deq ignores
+	// flexness. Two EMPTY typed maps are the empty map regardless of
+	// element type, and a populated typed map is deq-equal to the plain
+	// map of the same entries.
 	tm1 := NewTypedMap(NewTypeLiteral(TInteger))
 	tm2 := NewTypedMap(NewTypeLiteral(TInteger))
 	if !DeepEqual(tm1, tm2) {
 		t.Error("same typed maps unequal")
 	}
-	if DeepEqual(tm1, NewTypedMap(NewTypeLiteral(TString))) {
-		t.Error("differently-typed maps equal")
+	if !DeepEqual(tm1, NewTypedMap(NewTypeLiteral(TString))) {
+		t.Error("two empty typed maps must be deq-equal (both empty; tag ignored)")
+	}
+	if !DeepEqual(tm1, NewMap(NewOrderedMap())) {
+		t.Error("an empty typed map must be deq-equal to the plain empty map")
+	}
+	pop := NewTypedMapWithEntries(NewTypeLiteral(TInteger), []ChildEntry{{Key: "a", Value: NewInteger(1)}})
+	if !DeepEqual(pop, NewMap(m1)) {
+		t.Error("a populated typed map must be deq-equal to the plain map of the same entries")
+	}
+	if DeepEqual(pop, NewMap(m3)) {
+		t.Error("a populated typed map with different entries must not be equal")
 	}
 }
 

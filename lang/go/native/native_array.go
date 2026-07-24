@@ -1184,10 +1184,11 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // equality notion). Membership in a class is deq: scalars by value
 // (eq and deq coincide there), Nodes/Ideals by deep value. The output
 // map's keys stay RENDERED strings (a map key is a string), taken from
-// each class's FIRST occurrence; two deq-distinct classes whose renders
-// collide (an atom and a string of the same name) fold into one group,
-// exactly as before — the render is the map-key contract, deq is the
-// grouping contract within it.
+// each class's FIRST occurrence. Two keys that render identically share
+// one entry — deq-equal keys by design, and deq-DISTINCT keys because a
+// string can name only one (NUR030, Allowed): this is what makes
+// `group [nan nan]` fold to `{nan:[0 1]}` (NaN is deq-unequal to
+// itself) instead of erroring.
 type deqGrouper struct {
 	reps    DeqIndex       // class representatives, in creation order
 	rkIndex map[string]int // rendered key → class position
@@ -1196,13 +1197,21 @@ type deqGrouper struct {
 }
 
 func (g *deqGrouper) add(key, v Value) {
-	// A class's live render is unique (a colliding class would have
-	// been folded at creation), so the deq probe and the render probe
-	// are each a single lookup.
+	// Membership is deq: a key deq-equal to an existing class rep folds
+	// into that class. The deq probe is a single DeqIndex lookup.
 	if ri := g.reps.FirstMatch(key); ri >= 0 {
 		g.groups[ri] = append(g.groups[ri], v)
 		return
 	}
+	// NUR030 (Allowed): a Map key is a string, so two deq-DISTINCT keys
+	// that render identically must share one group entry. This also
+	// folds the common NON-REFLEXIVE keys — `nan` (deq-unequal to
+	// itself) and the bare container literals (`List deq List` is false)
+	// — so `group [nan nan]` is `{nan:[0 1]}` rather than an error. The
+	// rare genuinely-distinct collision (the type literal `Integer` and
+	// the atom `Integer/q`, both rendering "Integer") co-groups too;
+	// no index is lost, and the alternative — erroring — would break
+	// grouping over NaN-bearing data. See NUR.md NUR030.
 	rk := key.String()
 	if ri, ok := g.rkIndex[rk]; ok {
 		g.groups[ri] = append(g.groups[ri], v)

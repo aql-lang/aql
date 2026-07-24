@@ -58,7 +58,8 @@ do [raise aa "x"] error [dot code] typeof	Atom	the routed code is a first-class 
 do [raise aa "x"] error [dot message] eq "x"	true	the routed message is the raise's short detail
 do [raise {code: lim/q, message: "m", max: 10}] error [dot max] eq 10	true	a handler can route on payload alone
 do [raise {code: lim/q, message: "m", max: 10}] error [case [[dot code eq lim/q] [dot max] 0]] eq 10	true	predicate case arms inspect the Error; the block reads its payload
-(do [raise aa "x"]) eq (do [raise aa "x"])	false	two reifications of the same raise are DISTINCT error values
+(do [raise aa "x"]) eq (do [raise aa "x"])	true	NUR031: an Error is a value-like Ideal — eq compares its fields (equal code + message), like two equal scalars
+(do [raise aa "x"]) eq (do [raise bb "x"])	false	…and differing codes make them unequal
 def e (do [raise aa "x"]) (e dot code eq aa/q) and (e dot message eq "x")	true	a bound Error value reads repeatedly without being consumed
 #
 # §8  assertion equality semantics

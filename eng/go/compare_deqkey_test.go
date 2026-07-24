@@ -44,8 +44,8 @@ func deqKeyBattery() []Value {
 		NewInteger(1 << 53), NewInteger(1<<53 + 1), NewFloat(float64(uint64(1) << 53)),
 		NewBigInteger(big.NewInt(1)), NewBigInteger(bigInt),
 		NewValueRaw(TBigInteger, IntPayload{N: 1}), // accessor error → never equal
-		// numeric type literals — the zero-value projection artifact
-		// (0 deq Integer is true today; the key must agree)
+		// numeric type literals — NUR032: NOT deq-equal to 0 or to each
+		// other; bucket by type identity
 		NewTypeLiteral(TInteger), NewTypeLiteral(TFloat),
 		// other scalar families + their literals
 		NewString(""), NewString("a"), NewString("a,s:b"), NewBoolean(true),
@@ -82,8 +82,13 @@ func deqKeyBattery() []Value {
 		mkInst(TStore, "k", typed()),
 		mkInst(TStore, "s", NewStoreValue(TStore, &StoreInstanceInfo{})),
 		NewClassInstance(TStore, ClassInstanceInfo{}),
-		// the unsupported fall-through — never deq-equal
-		NewStoreValue(TStore, &StoreInstanceInfo{}), NewWord("w"),
+		// NUR031 deq-comparable handles (DeqUnkeyed): two empty stores are
+		// deq-equal, an error, a timer.
+		NewStoreValue(TStore, &StoreInstanceInfo{}),
+		NewStoreValue(TStore, &StoreInstanceInfo{}),
+		errVal("c", "m", nil), NewValueRaw(TIdeal, &TimeoutInfo{ID: "t"}),
+		// the code/opaque values — still deq-equal to nothing
+		NewWord("w"),
 	}
 }
 
@@ -170,15 +175,22 @@ func TestDeqKeyBranches(t *testing.T) {
 	if class(NewValueRaw(TBigInteger, IntPayload{N: 1})) != DeqNeverEqual {
 		t.Fatal("accessor-error big must be DeqNeverEqual")
 	}
-	// the zero-value projection artifact: the literal mirrors 0's key
-	if key(NewTypeLiteral(TInteger)) != "n:0" {
-		t.Fatalf("Integer literal key: %q", key(NewTypeLiteral(TInteger)))
+	// NUR032: a bare numeric type literal buckets by type identity, NOT
+	// as the value 0 — it is no longer deq-equal to 0, and Integer and
+	// Float literals land in distinct buckets.
+	intLit, fltLit := key(NewTypeLiteral(TInteger)), key(NewTypeLiteral(TFloat))
+	if !strings.HasPrefix(intLit, "tlit:") || intLit == fltLit {
+		t.Fatalf("numeric literals must bucket by type identity: %q vs %q", intLit, fltLit)
+	}
+	if intLit == key(NewInteger(0)) {
+		t.Fatalf("Integer literal must not share 0's bucket: %q", intLit)
 	}
 	if key(NewString("a")) != "s:a" || key(NewBoolean(true)) != "b:true" || key(NewAtom("x")) != "a:x" {
 		t.Fatal("scalar family key shapes")
 	}
-	// String literal parent is Scalar — lands in the family-root bucket
-	if k := key(NewTypeLiteral(TString)); !strings.HasPrefix(k, "c:") {
+	// A bare String type literal buckets as a type literal (NUR032),
+	// not as a concrete scalar; distinct from Integer's literal bucket.
+	if k := key(NewTypeLiteral(TString)); !strings.HasPrefix(k, "tlit:") || k == key(NewTypeLiteral(TInteger)) {
 		t.Fatalf("String literal key: %q", k)
 	}
 	p1 := NewPathon([]string{"a"}, false)
@@ -209,30 +221,51 @@ func TestDeqKeyBranches(t *testing.T) {
 		t.Fatalf("two-field instance key must sort fields: %q", k)
 	}
 
+	// NUR033: an EMPTY typed list/map value keys as its (empty) content,
+	// deq-equal to a plain empty container — no longer DeqUnkeyed. So do
+	// containers nesting one.
 	typed := NewTypedList(NewCarrier(TInteger))
+	if k := key(typed); k != "[]" {
+		t.Fatalf("empty typed list must key as empty: %q", k)
+	}
+	if key(NewList([]Value{typed})) != "[[]]" {
+		t.Fatalf("list nesting an empty typed list must key structurally")
+	}
+	// DeqUnkeyed now means a genuine type-level operand (a carrier, which
+	// DeepEqual still compares by render) or a container whose child has
+	// no sound key.
+	mapWithStore := func() Value {
+		om := NewOrderedMap()
+		om.Set("s", NewStoreValue(TStore, &StoreInstanceInfo{}))
+		return NewMap(om)
+	}()
 	for _, v := range []Value{
-		typed, NewCarrier(TList), NewCarrier(TMap),
-		NewList([]Value{typed}),
+		NewCarrier(TList), NewCarrier(TMap),
 		NewList([]Value{NewStoreValue(TStore, &StoreInstanceInfo{})}),
-		func() Value {
-			om := NewOrderedMap()
-			om.Set("k", typed)
-			return NewMap(om)
-		}(),
-		mkInst(TStore, "k", typed),
+		mapWithStore, // a MAP whose value has no sound key propagates unkeyed
 	} {
 		if class(v) != DeqUnkeyed {
 			t.Fatalf("expected DeqUnkeyed for %v", v)
 		}
 	}
+	// DeqNeverEqual is now only the code/opaque values and instances with
+	// no readable fields — a Store is DeqUnkeyed after NUR031 (covered by
+	// TestNUR031DeqKeyClassification).
 	for _, v := range []Value{
-		NewStoreValue(TStore, &StoreInstanceInfo{}), NewWord("w"),
+		NewWord("w"),
 		NewClassInstance(TStore, ClassInstanceInfo{}),
-		mkInst(TStore, "s", NewStoreValue(TStore, &StoreInstanceInfo{})),
+		// an instance whose field is a code/opaque value (never-equal)
+		// propagates DeqNeverEqual up from the field.
+		mkInst(TStore, "fn", NewWord("f")),
 	} {
 		if class(v) != DeqNeverEqual {
 			t.Fatalf("expected DeqNeverEqual for %v", v)
 		}
+	}
+	// An instance whose field is a (now deq-comparable) store is
+	// DeqUnkeyed, propagated up from the field.
+	if class(mkInst(TStore, "s", NewStoreValue(TStore, &StoreInstanceInfo{}))) != DeqUnkeyed {
+		t.Fatal("instance with a store field must be DeqUnkeyed")
 	}
 }
 
@@ -250,12 +283,13 @@ func TestDeqKeyTerminatesOnCycles(t *testing.T) {
 }
 
 // TestDeqIndexNeverEqualSkips pins the DeqNeverEqual fast path on both
-// sides: a store neither matches anything nor is matched.
+// sides: a code/opaque value (a Word) neither matches anything nor is
+// matched (NUR031 kept these as the argued equal-to-nothing remainder).
 func TestDeqIndexNeverEqualSkips(t *testing.T) {
 	var idx DeqIndex
-	s := NewStoreValue(TStore, &StoreInstanceInfo{})
-	idx.Add(s)
-	if got := idx.FirstMatch(s); got != -1 {
-		t.Fatalf("store FirstMatch = %d, want -1", got)
+	w := NewWord("f")
+	idx.Add(w)
+	if got := idx.FirstMatch(w); got != -1 {
+		t.Fatalf("word FirstMatch = %d, want -1", got)
 	}
 }

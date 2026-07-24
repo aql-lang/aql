@@ -45,7 +45,9 @@ import "aql:array-util"  ArrayUtil.group [1 2 3]	{1:[0] 2:[1] 3:[2]}	group (1-ar
 # the membership/grouping words compare by deq — the VALUE equality
 # (NUR015 fix: they previously keyed on the rendered form, a third
 # equality notion): scalars by value (eq and deq coincide there),
-# Nodes/Ideals by deep value (eq is reference identity there).
+# Nodes/Ideals by deep value (eq is reference identity there). group's
+# map keys stay rendered strings, so two deq-distinct keys that render
+# identically share one entry — NUR030 (Allowed).
 import "aql:array-util"  ArrayUtil.unique [1 1.0]	[1]	cross-leaf magnitude dedups: 1 deq 1.0
 import "aql:array-util"  ArrayUtil.unique [["a"] ["a"]]	[['a']]	structurally-equal lists dedup, though eq (reference) distinguishes them
 import "aql:array-util"  ArrayUtil.unique [nan nan]	[nan nan]	NaN is deq-unequal to itself — both kept, honestly
@@ -53,7 +55,8 @@ import "aql:array-util"  ArrayUtil.member [1.0] [1 2]	[true]	membership by value
 import "aql:array-util"  ArrayUtil.member [["a"]] [["a"]]	[true]	…and by deep value for Nodes
 import "aql:array-util"  ArrayUtil.indices [2.0] [1 2]	[1]	index lookup by value
 import "aql:array-util"  ArrayUtil.group [1 1.0 2]	{1:[0 1] 2:[2]}	one value class per group; the key is the FIRST occurrence's render
-import "aql:array-util"  ArrayUtil.group [Integer Integer/q]	{Integer:[0 1]}	deq-distinct classes whose renders collide fold into one rendered key (a map key is a string)
+import "aql:array-util"  ArrayUtil.group [Integer Integer/q]	{Integer:[0 1]}	deq-distinct classes whose renders collide share one key (NUR030, Allowed) — the map key is a string
+import "aql:array-util"  ArrayUtil.group [nan nan] [1 2]	{nan:[1 2]}	NaN is deq-unequal to itself, but both render "nan", so they co-group rather than error
 import "aql:array-util"  ArrayUtil.group ['a' 'b' 'a'] [1 2 3]	{'a':[1 3] 'b':[2]}	group (2-arg): bucket values by their parallel key
 #
 # §4  neighborhoods

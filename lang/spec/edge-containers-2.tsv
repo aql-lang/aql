@@ -105,8 +105,8 @@ context set 'x' 1 end context set 'x' 2 end context set 'x' 3 end context get 'x
 context set k/q 3 end context dot k	3	atom keys work against the store
 context set 'x' 5 end def g fn [[] [Integer] [context get 'x']] (g)	5	a fn body reads the caller's context (dynamic scope)
 def g fn [[] [Integer] [context set 'y' 7 end context get 'y']] (g) context get 'y'	7 7	a fn body runs in the SAME engine — its context write PERSISTS after the call (contrast `do`)
-(context) deq (context)	false	Stores opt out of deq as well as eq — never equal, even to themselves
-def s1 (context) def s2 (context) (s1 deq s2)	false	…including two captures of the same context
+(context) deq (context)	true	NUR031: a Store deq-equals itself — its deep value is its own entries
+def s1 (context) def s2 (context) (s1 deq s2)	true	…two captures of the one context are the same handle, so also deq
 
 # ====================================================================
 # §8  class-instance writes are in place and visible through every view
