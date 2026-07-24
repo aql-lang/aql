@@ -640,6 +640,7 @@ aql vault config                        # show vault config
 aql vault config --set namespace.default=proj   # set a config key (also --unset)
 aql vault password add --scope=read --namespaces=ci ci-bot  # scoped password (keyslot)
 aql vault password add --scope=read --ttl=30m --generate agent  # TEMPORARY password: random, printed once, expires in 30m (hand to an agent)
+aql vault password add --rotate --scope=read --ttl=12h --generate agent  # RE-ISSUE under the same name: fresh password + reset TTL, old one invalidated
 aql vault password rm --temp            # revoke ALL temporary passwords at once
 aql vault password list                 # list keyslots (with scope/namespaces + EXPIRES)
 aql vault history                       # content-revision history (newest first)
@@ -705,6 +706,22 @@ A few modes that need more than one line:
   <name>` mints a **time-boxed** slot with a **randomly generated**
   password printed once. It stops authenticating the moment `--ttl`
   elapses (enforced at every `openSession`), and is never admin-scoped.
+  **Re-issue** an expiring token under the **same name** with `password
+  add --rotate <name>` — it mints a fresh password and resets the TTL,
+  invalidating **that name's** old password, so you don't have to keep
+  inventing new names (a plain `add` over an existing name is refused and
+  points you at `--rotate`; `--rotate` over a name that doesn't exist yet just
+  creates it). The new password must **differ** from the current one —
+  re-issuing a slot with the same secret is refused (it would leave the old
+  password still working); `--generate` always mints a fresh random one.
+  Rotation is scoped to the one named slot: if a **different** slot happens to
+  share the same password (reuse is allowed), it is a separate credential and
+  is untouched — revoke it on its own name. Rotation re-issues
+  *access* — it does not re-encrypt already-reachable namespaces, and a
+  long-running agent that already opened a `proxy`/`mcp` session keeps its
+  in-memory data keys until it restarts; rotation stops the old credential
+  from opening **new** sessions, but to cut a live agent off immediately use
+  `password rm --rekey <name>` (incident response).
   Revoke one early with `password rm <name>`, or pull **every** temporary
   password at once with `password rm --temp`. `list`'s `EXPIRES` column
   shows each slot's expiry (marked `(expired)` once past). The interactive

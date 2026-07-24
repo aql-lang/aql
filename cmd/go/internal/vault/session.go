@@ -214,6 +214,38 @@ func verifyPassphrase(s *Store, homeDir, pass string) error {
 	return nil
 }
 
+// passphraseMatchesSlot reports whether pass authenticates as this ONE slot:
+// it re-derives the slot's KEK from pass and constant-time compares the
+// slot's stored verifier. Unlike openSession it targets a single named slot
+// rather than first-match across all of them, which is what
+// `password add --rotate` needs to reject re-issuing a slot with the SAME
+// secret it already holds — that would leave the old holder still able to
+// authenticate, breaking the documented "invalidates the old one" contract.
+// Any derivation/decoding failure yields false (treated as "not the same
+// secret"), degrading safely to the pre-guard behaviour rather than blocking
+// an otherwise-legitimate rotation.
+func passphraseMatchesSlot(s *Store, slot *PasswordSlot, pass string) bool {
+	vsalt, err := base64.StdEncoding.DecodeString(s.VaultSalt)
+	if err != nil || len(vsalt) == 0 {
+		return false
+	}
+	master, err := s7vaultMasterKEK(pass, vsalt)
+	if err != nil {
+		return false
+	}
+	defer zeroize(master)
+	salt, err := base64.StdEncoding.DecodeString(slot.Salt)
+	if err != nil {
+		return false
+	}
+	kek, err := s7slotKEK(master, salt)
+	if err != nil {
+		return false
+	}
+	defer zeroize(kek)
+	return verifyMatches(slot.Verifier, deriveVerifier(kek, slot.Name, slot.Scope))
+}
+
 // openSession runs the single scrypt over the shared VaultSalt, then
 // tries each slot's HKDF-derived KEK against its verifier. The matching
 // slot's private key and granted NDKs are unsealed. No match -> the

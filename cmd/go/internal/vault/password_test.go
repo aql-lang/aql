@@ -25,6 +25,160 @@ func mustAddPassword(t *testing.T, adminPass, newPass, name string, args ...stri
 	}
 }
 
+// TestPasswordAddRotate covers `password add --rotate`: re-issuing a temporary
+// password under the SAME name mints a fresh password (invalidating the old
+// one) and resets the TTL, so an agent token can be rotated instead of forcing
+// a new name. A same-name add WITHOUT --rotate is refused and the error names
+// the flag; --rotate over an ABSENT name is just a create.
+func TestPasswordAddRotate(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	// First add migrates the legacy vault (admin stays "test-pass") and seeds
+	// the initial agent token with password "agent-v1".
+	mustAddPassword(t, "test-pass", "agent-v1", "agent3", "--scope=read", "--namespaces=*", "--ttl=1h")
+
+	// A same-name add WITHOUT --rotate is refused; the error points at --rotate.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-vX")
+	if code, _, e := runVault(t, "", "password", "add", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3"); code == 0 ||
+		!strings.Contains(e, "already exists") || !strings.Contains(e, "--rotate") {
+		t.Fatalf("duplicate add without --rotate: code=%d err=%q", code, e)
+	}
+
+	// --rotate replaces it: succeeds and the output says "rotated".
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-v2")
+	code, out, e := runVault(t, "", "password", "add", "--rotate", "--generate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3")
+	if code != 0 {
+		t.Fatalf("rotate agent3: %s", e)
+	}
+	if !strings.Contains(out, "rotated") {
+		t.Errorf("rotate output = %q, want it to say 'rotated'", out)
+	}
+
+	// The OLD password no longer authenticates; the freshly-generated slot exists
+	// and kept its TTL.
+	s, err := requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "agent-v1"); err == nil {
+		t.Error("old password still authenticates after --rotate — the slot was not replaced")
+	}
+	if slot, _ := s.FindPasswordSlot("agent3"); slot == nil {
+		t.Error("agent3 slot missing after rotate")
+	} else if slot.ExpiresAt == "" {
+		t.Error("rotated agent3 lost its TTL")
+	}
+
+	// --rotate over an ABSENT name is a create — the output says "added".
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-new")
+	code, out, e = runVault(t, "", "password", "add", "--rotate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent4")
+	if code != 0 {
+		t.Fatalf("rotate absent agent4: %s", e)
+	}
+	if strings.Contains(out, "rotated") || !strings.Contains(out, "added") {
+		t.Errorf("rotate over absent name output = %q, want 'added'", out)
+	}
+}
+
+// TestPasswordRotateRejectsSamePassword pins the reuse guard: an interactive
+// --rotate whose new passphrase equals the slot's current one is refused before
+// the slot is touched (it would leave the old password still valid, breaking the
+// "invalidates the old one" contract), while a genuinely different one rotates
+// cleanly. --generate sidesteps the check by construction (see TestPasswordAddRotate).
+func TestPasswordRotateRejectsSamePassword(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	// Seed an interactive (non-generated) temporary slot with a known password.
+	mustAddPassword(t, "test-pass", "agent-v1", "agent3", "--scope=read", "--namespaces=*", "--ttl=1h")
+
+	// Rotating to the SAME password is refused, and the original still opens.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-v1")
+	if code, _, e := runVault(t, "", "password", "add", "--rotate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3"); code == 0 ||
+		!strings.Contains(e, "identical to the current one") {
+		t.Fatalf("rotate to same password: code=%d err=%q, want a reuse refusal", code, e)
+	}
+	s, err := requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "agent-v1"); err != nil {
+		t.Errorf("original password should still authenticate after a refused rotate: %v", err)
+	}
+
+	// A DIFFERENT password rotates successfully and invalidates the old one.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-v2")
+	if code, out, e := runVault(t, "", "password", "add", "--rotate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3"); code != 0 ||
+		!strings.Contains(out, "rotated") {
+		t.Fatalf("rotate to a new password: code=%d out=%q err=%q", code, out, e)
+	}
+	s, err = requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "agent-v1"); err == nil {
+		t.Error("old password still authenticates after a successful rotate")
+	}
+	if _, err := openSession(s, home, "agent-v2"); err != nil {
+		t.Errorf("new password should authenticate after rotate: %v", err)
+	}
+}
+
+// TestPasswordRotateAuthenticatingAdmin pins the case where --rotate targets the
+// very admin slot that authorized the command: addSlotToEnvelope must reopen its
+// session while the old slot still exists, then upsert the fresh one. A
+// remove-then-add would strand the re-auth (the passphrase no longer matches any
+// slot) and the rotation would fail.
+func TestPasswordRotateAuthenticatingAdmin(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	// Migrate to envelope: "test-pass" becomes the "admin" slot.
+	mustAddPassword(t, "test-pass", "reader-pass", "reader", "--scope=read", "--namespaces=proj")
+
+	// Last-admin guard: rotating the sole admin to a NON-admin scope (--scope
+	// defaults to read) would leave no admin and lock password management — it
+	// must be refused, before the slot is touched.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "x")
+	if code, _, e := runVault(t, "", "password", "add", "--rotate", "admin"); code == 0 ||
+		!strings.Contains(e, "last admin") {
+		t.Fatalf("rotate sole admin to read scope: code=%d err=%q, want a last-admin refusal", code, e)
+	}
+
+	// Rotate the admin slot while authenticating AS admin (keeping --scope=admin).
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "admin-v2")
+	code, out, e := runVault(t, "", "password", "add", "--rotate", "--scope=admin", "admin")
+	if code != 0 {
+		t.Fatalf("rotate authenticating admin: %s", e)
+	}
+	if !strings.Contains(out, "rotated") {
+		t.Errorf("admin rotate output = %q, want 'rotated'", out)
+	}
+
+	// The OLD admin passphrase no longer authenticates; the NEW one opens an
+	// admin session.
+	s, err := requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "test-pass"); err == nil {
+		t.Error("old admin passphrase still authenticates after --rotate")
+	}
+	sess, err := openSession(s, home, "admin-v2")
+	if err != nil {
+		t.Fatalf("new admin passphrase should authenticate: %v", err)
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpAdmin); err != nil {
+		t.Errorf("rotated admin slot lost admin scope: %v", err)
+	}
+}
+
 // TestPasswordAddMigratesAndScopes is the headline end-to-end: a legacy
 // vault migrates on first `password add`, the admin keeps full access,
 // and a read-scoped namespace password can read only its namespace.

@@ -254,21 +254,21 @@ func TestP7_AddSlotToEnvelopeArms(t *testing.T) {
 	t.Run("new namespace NDK", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapRandRead(t, p7failRead)
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", ""); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", "", false); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a new-namespace newNDK failure")
 		}
 	})
 	t.Run("new namespace NDK id", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapRandRead(t, p7countRead(1)) // newNDK ok, newNDKID fails
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", ""); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"brandnew"}, "pw", "", false); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a new-namespace newNDKID failure")
 		}
 	})
 	t.Run("slot build", func(t *testing.T) {
 		home := w4EnvelopeVault(t)
 		p7swapBoxRand(t, p7failReader{})
-		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"proj"}, "pw", ""); err == nil {
+		if err := addSlotToEnvelope(fresh(t, home), home, "test-pass", "x", ScopeRead, []string{"proj"}, "pw", "", false); err == nil {
 			t.Fatal("addSlotToEnvelope should surface a buildSlot failure")
 		}
 	})
