@@ -70,6 +70,17 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return "N", DeqKeyed
 	}
 
+	// A bare type literal is not a concrete value: it is deq-equal only
+	// to another literal of the SAME type (NUR032 for the numeric
+	// families; the scalar families already agree). Bucket by type
+	// identity BEFORE the numeric branch so `Integer` never shares 0's
+	// bucket. Two container literals (`List`, `Map`) whose renders match
+	// still land here and are resolved pairwise by DeepEqual (which
+	// keeps `List deq List` false), so the bucket stays a sound filter.
+	if IsBareTypeNode(v) {
+		return "tlit:" + ValueType(v).ID, DeqKeyed
+	}
+
 	// DepScalar — equal only to a DepScalar of the identical Parent.
 	if v.IsDepScalar() {
 		return "D:" + v.Parent.ID, DeqKeyed
@@ -128,13 +139,13 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return "c:" + scalarFamilyRoot(v.Parent).ID, DeqKeyed
 	}
 
-	// Lists — structural recursion, or the render fallback for shapes
-	// AsMutableList can't open (typed lists, tables): those are
-	// DeqUnkeyed because the render compare crosses the plain/typed
-	// boundary.
+	// Lists — structural recursion over element VALUES (populated typed
+	// lists included, via deqListElems; NUR033). DeqUnkeyed remains only
+	// for a list carrier — a type-level operand DeepEqual still compares
+	// by render, so it must be scanned pairwise within its family.
 	if nodeFamily(v.Parent).Equal(TList) {
-		elems, err := AsMutableList(v)
-		if err != nil {
+		elems, ok := deqListElems(v)
+		if !ok {
 			return "", DeqUnkeyed
 		}
 		var b strings.Builder
@@ -156,12 +167,13 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return b.String(), DeqKeyed
 	}
 
-	// Maps — key-order-insensitive structural recursion (DeepEqual
-	// compares by key lookup), or the render fallback for records and
-	// typed maps.
+	// Maps — key-order-insensitive structural recursion over entry
+	// VALUES (populated typed maps included, via deqMapEntries; NUR033).
+	// DeqUnkeyed remains only for a map carrier or a Record/Options type
+	// constructor, which DeepEqual still compares by render.
 	if nodeFamily(v.Parent).Equal(TMap) {
-		m, err := AsMutableMap(v)
-		if err != nil {
+		m, ok := deqMapEntries(v)
+		if !ok {
 			return "", DeqUnkeyed
 		}
 		keys := append([]string(nil), m.Keys()...)
@@ -225,8 +237,15 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return b.String(), DeqKeyed
 	}
 
-	// DeepEqual's unsupported fall-through — stores, functions,
-	// modules, errors, timers, words: deq-equal to nothing.
+	// NUR031: an opaque Ideal handle that is now deq-comparable pairwise
+	// (Store by entries, Error by fields, a timer by identity). No sound
+	// per-value key, so scan it within its handle family.
+	if isDeqComparableHandle(v) {
+		return "", DeqUnkeyed
+	}
+
+	// DeepEqual's unsupported fall-through — code/opaque values
+	// (functions, modules, words): deq-equal to nothing.
 	return "", DeqNeverEqual
 }
 
@@ -252,6 +271,34 @@ func deqFam(v Value) string {
 	}
 	if _, _, ok := flatInstanceParts(v); ok {
 		return "I:" + v.Parent.ID
+	}
+	// NUR031 handles scan within one family per PAYLOAD KIND, NOT per
+	// type ID: a timer's deq is pointer identity, which ignores Parent,
+	// so a timer reparented to a `refine` subtype (same handle pointer)
+	// is deq to its base and MUST share its scan family. Keying by kind
+	// (rather than ValueType) also stays sound for Store/Error, whose
+	// deq requires the same exact type — DeepEqual settles those pairs
+	// within the one family. A Store never deq-matches an Error, so the
+	// per-kind split keeps the scan tight.
+	if k := handleKind(v); k != "" {
+		return "H:" + k
+	}
+	return ""
+}
+
+// handleKind returns the payload-kind tag of a deq-comparable opaque
+// handle (Store, Error, Timeout, Interval), or "" for anything else.
+// Parent-independent by design — see deqFam.
+func handleKind(v Value) string {
+	switch v.Data.(type) {
+	case *StoreInstanceInfo:
+		return "Store"
+	case ErrorInfo:
+		return "Error"
+	case *TimeoutInfo:
+		return "Timeout"
+	case *IntervalInfo:
+		return "Interval"
 	}
 	return ""
 }

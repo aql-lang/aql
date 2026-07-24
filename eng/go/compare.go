@@ -262,6 +262,20 @@ func lowestCommonAncestor(a, b *Type) *Type {
 // projection until the copies were unified.
 func scalarFamilyEqual(a, b Value) (equal, handled bool) {
 	if a.Parent.ConformsTo(TNumber) && b.Parent.ConformsTo(TNumber) {
+		// NUR032: a bare numeric type literal (`Integer`, `Float`) is not
+		// the value 0. It reaches this branch only because the numeric
+		// lattice has an extra level — `Integer`'s parent is `Number`,
+		// which still conforms to TNumber, where every other family's
+		// literal parent is `Scalar` (so `"" eq String` is already
+		// false). Without this guard the error-ignoring AsNumber below
+		// projects the literal to 0, so `0 eq Integer` and `Integer deq
+		// Float` wrongly report equal. Two numeric literals are equal
+		// iff they name the same type (keeping `Integer eq Integer`,
+		// matching `eq`'s type-body arm); a literal never equals a
+		// concrete number.
+		if aLit, bLit := IsBareTypeNode(a), IsBareTypeNode(b); aLit || bLit {
+			return aLit && bLit && ValueType(a).Equal(ValueType(b)), true
+		}
 		// An arbitrary-precision operand is compared exactly via apd
 		// (cross-leaf magnitude: 1 == 0d1 == 1.0). A NaN/non-finite Float
 		// fails toRatExact, so it is never equal — preserving nan≠nan.
@@ -380,6 +394,19 @@ func ExactEqual(a, b Value) bool {
 		return bok && af != nil && af == bf
 	}
 
+	// Opaque Ideal handles (NUR031). eq is the REFERENCE half of the
+	// two-equalities rule: a pointer-backed handle (Store, Timeout,
+	// Interval) is eq iff it is the SAME handle. Error is a value-like
+	// Ideal with no reference, so eq compares its fields (eq ≡ deq there,
+	// like a scalar leaf). Before this rule every handle fell through to
+	// the terminal `false` — not even eq to itself. The code/opaque
+	// values (Function, Module, Word) stay below: they carry no stable
+	// reference these value-copied payloads could compare (NUR031 keeps
+	// them as an argued remainder).
+	if eq, handled := opaqueIdealExactEqual(a, b); handled {
+		return eq
+	}
+
 	return false
 }
 
@@ -447,6 +474,44 @@ func sameContainer(a, b Payload) bool {
 	}
 }
 
+// deqListElems returns the element slice DeepEqual compares for a
+// list-FAMILY value, and true; (nil, false) for a type-level operand
+// (a list carrier) that has no value content and must fall to the
+// render comparison. A populated typed list (`[1 :Integer]`) surfaces
+// its elements through AsList (which reads the ChildTypeInfo.Elements
+// arm); an EMPTY typed list value (`[:Integer]` — ChildTypeInfo with no
+// elements, not a carrier) is the empty list, so it is deq-equal to
+// `[]`, consistent with `(flex []) deq []`. NUR033.
+func deqListElems(v Value) ([]Value, bool) {
+	if v.Carrier {
+		return nil, false
+	}
+	if rl, err := AsList(v); err == nil {
+		return rl.elems, true
+	}
+	if _, ok := v.Data.(ChildTypeInfo); ok {
+		return []Value{}, true
+	}
+	return nil, false
+}
+
+// deqMapEntries is deqListElems for the map family: a populated typed
+// map surfaces its entries via AsMap, an empty typed map value is the
+// empty map, and a type-level operand (map carrier, Record/Options type
+// constructor) returns false to fall to the render comparison. NUR033.
+func deqMapEntries(v Value) (ReadMap, bool) {
+	if v.Carrier {
+		return nil, false
+	}
+	if rm, err := AsMap(v); err == nil {
+		return rm, true
+	}
+	if _, ok := v.Data.(ChildTypeInfo); ok {
+		return NewOrderedMap(), true
+	}
+	return nil, false
+}
+
 // DeepEqual returns true if two values are deeply equal.
 // Traverses lists and maps depth-first comparing all leaf values.
 func DeepEqual(a, b Value) bool {
@@ -465,6 +530,17 @@ func DeepEqual(a, b Value) bool {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
+	// Type literals (NUR034): two bare type nodes are deq iff they are
+	// the same lattice type — reflexive and agreeing with `eq`'s
+	// type-body arm (`List eq List` → true). This covers the container /
+	// root literals (`List`, `Map`, `Any`) that the scalar path below
+	// leaves out, so `List deq List` → true and `List deq Map` → false.
+	// A mixed literal/concrete pair (`0 deq Integer`) needs both sides
+	// bare, so it falls through to scalarFamilyEqual's NUR032 guard.
+	if IsBareTypeNode(a) && IsBareTypeNode(b) {
+		return ValueType(a).Equal(ValueType(b))
+	}
+
 	// Scalars — the same shared leaf comparison eq uses
 	// (scalarFamilyEqual): deq must never disagree with eq on a scalar
 	// leaf (there is no identity / structural distinction to draw for an
@@ -479,12 +555,16 @@ func DeepEqual(a, b Value) bool {
 
 	// Lists: same length, each element deeply equal. Flex nodes are
 	// normalised to their family — a FlexList deep-equals a plain List
-	// of the same content.
+	// of the same content. NUR033: a TYPED list (`[1 :Integer]`) is
+	// compared by its element VALUES, not by rendered form — so `[1 2
+	// :Integer] deq [1 2]` is true and the relation stays transitive
+	// with cross-leaf pairs (`[1.0] deq [1 :Integer]`). The render-string
+	// fallback survives only for genuine type-level operands (a list
+	// carrier), which carry no value content.
 	if nodeFamily(a.Parent).Equal(TList) && nodeFamily(b.Parent).Equal(TList) {
-		aElems, aErr := AsMutableList(a)
-		bElems, bErr := AsMutableList(b)
-		if aErr != nil || bErr != nil {
-			// Typed lists, table types, etc. — compare structurally via String().
+		aElems, aOk := deqListElems(a)
+		bElems, bOk := deqListElems(b)
+		if !aOk || !bOk {
 			return a.String() == b.String()
 		}
 		if len(aElems) != len(bElems) {
@@ -498,12 +578,15 @@ func DeepEqual(a, b Value) bool {
 		return true
 	}
 
-	// Maps: same keys, each value deeply equal.
+	// Maps: same keys, each value deeply equal. NUR033: a TYPED map
+	// (`{a:1 :Integer}`) is compared by its entry VALUES, like typed
+	// lists. The render-string fallback survives only for type-level
+	// operands with no entries to read (a map carrier, a Record/Options
+	// type constructor).
 	if nodeFamily(a.Parent).Equal(TMap) && nodeFamily(b.Parent).Equal(TMap) {
-		aMap, aErr := AsMutableMap(a)
-		bMap, bErr := AsMutableMap(b)
-		if aErr != nil || bErr != nil {
-			// Record types, typed maps — compare structurally via String().
+		aMap, aOk := deqMapEntries(a)
+		bMap, bOk := deqMapEntries(b)
+		if !aOk || !bOk {
 			return a.String() == b.String()
 		}
 		if aMap.Len() != bMap.Len() {
@@ -573,8 +656,122 @@ func DeepEqual(a, b Value) bool {
 		return true
 	}
 
+	// Opaque Ideal handles (NUR031). deq is the DEEP-VALUE half of the
+	// rule: a Store by its own entries (the same projection as `convert
+	// Map`), Error by its fields; the pure timer handles (Timeout,
+	// Interval) have no deeper structure than their identity, so deq is
+	// their reference identity, matching eq. Code/opaque values
+	// (Function, Module, Word) stay below at the terminal `false`.
+	if eq, handled := opaqueIdealDeepEqual(a, b); handled {
+		return eq
+	}
+
 	// Different types or unsupported — not equal.
 	return false
+}
+
+// opaqueIdealExactEqual is the `eq` (reference) half of NUR031 for the
+// opaque Ideal handles that would otherwise fall through to `false`.
+// Returns (result, true) when a is such a handle; (false, false) to let
+// the caller reach its own fall-through. A pointer-backed handle is eq
+// iff it is the SAME pointer; Error (a value struct) is eq by fields.
+func opaqueIdealExactEqual(a, b Value) (bool, bool) {
+	switch av := a.Data.(type) {
+	case *StoreInstanceInfo:
+		bv, ok := b.Data.(*StoreInstanceInfo)
+		return ok && av == bv, true
+	case *TimeoutInfo:
+		bv, ok := b.Data.(*TimeoutInfo)
+		return ok && av == bv, true
+	case *IntervalInfo:
+		bv, ok := b.Data.(*IntervalInfo)
+		return ok && av == bv, true
+	case ErrorInfo:
+		bv, ok := b.Data.(ErrorInfo)
+		// Error is value-like: eq ≡ deq, so it requires the same exact
+		// type as well as equal fields (a `refine Error` subtype is not
+		// eq to a plain Error).
+		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	}
+	return false, false
+}
+
+// opaqueIdealDeepEqual is the `deq` (deep-value) half of NUR031. It
+// differs from the eq half only for Store, whose deep value is its own
+// entry set (structural), and matches it for the pure handles and Error.
+//
+// The value-comparing arms (Store, Error) additionally require the SAME
+// exact type — a `refine Store` subtype is never deq to a plain Store
+// even with equal entries, matching the flat-instance rule (a Point3 is
+// never deq to a Point). This also keeps DeqKey sound: deqFam buckets a
+// deq-comparable handle by its type ID, so two values DeepEqual can
+// equate must share a type (else the collection words would miss the
+// pair — the store-subtype bug the NUR031 review caught).
+func opaqueIdealDeepEqual(a, b Value) (bool, bool) {
+	switch av := a.Data.(type) {
+	case *StoreInstanceInfo:
+		bv, ok := b.Data.(*StoreInstanceInfo)
+		return ok && a.Parent.Equal(b.Parent) && storeDeepEqual(av, bv), true
+	case *TimeoutInfo:
+		bv, ok := b.Data.(*TimeoutInfo)
+		return ok && av == bv, true
+	case *IntervalInfo:
+		bv, ok := b.Data.(*IntervalInfo)
+		return ok && av == bv, true
+	case ErrorInfo:
+		bv, ok := b.Data.(ErrorInfo)
+		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	}
+	return false, false
+}
+
+// storeDeepEqual compares two Stores by their OWN entries — the same
+// key/value set `convert Map` projects (prototype-inherited keys are not
+// part of a Store's own value, so they are excluded, matching the
+// projection). Pointer-identical stores short-circuit.
+func storeDeepEqual(a, b *StoreInstanceInfo) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(a.Data) != len(b.Data) {
+		return false
+	}
+	for k, av := range a.Data {
+		bv, ok := b.Data[k]
+		if !ok || !DeepEqual(av, bv) {
+			return false
+		}
+	}
+	return true
+}
+
+// errorInfoEqual compares two Errors field-wise: code, message, and the
+// optional spec-map Data (deeply, nil-safe). An Error is a value-like
+// Ideal, so eq and deq coincide on it (like a scalar leaf).
+func errorInfoEqual(a, b ErrorInfo) bool {
+	if a.Code != b.Code || a.Message != b.Message {
+		return false
+	}
+	am, bm := a.Data, b.Data
+	if am == nil {
+		am = NewOrderedMap()
+	}
+	if bm == nil {
+		bm = NewOrderedMap()
+	}
+	return DeepEqual(NewMap(am), NewMap(bm))
+}
+
+// isDeqComparableHandle reports whether v is an opaque Ideal handle that
+// NUR031 made deq-comparable (Store, Error, Timeout, Interval) — as
+// opposed to a code/opaque value (Function, Module, Word) that remains
+// equal to nothing. Used by DeqKey to bucket these into a pairwise-scan
+// family (by handleKind) instead of the DeqNeverEqual fast path.
+func isDeqComparableHandle(v Value) bool {
+	return handleKind(v) != ""
 }
 
 // The comparison-word registrations (lt / gt / lte / gte / eq /

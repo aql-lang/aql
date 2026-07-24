@@ -46,6 +46,39 @@ List lt Map	ERROR:incomparable	two cross-branch type literals
 {a:1} eq {a:1}	false	eq on two distinct equal-looking maps is identity, not structure
 {a:1} deq {a:1}	true	deq compares map structure (deep), so contents match
 1 eq none	false	equality against none is safe
+# ── A bare type literal is not a scalar value (NUR032) ────────────────
+# The numeric families are the trap: `Integer`'s lattice parent is
+# `Number` (still a number), so before this rule the literal projected
+# to 0. `eq`/`deq` require concrete operands; use `teq` to compare types.
+0 eq Integer	false	a numeric literal is not the value 0 — mixed literal/concrete is never equal
+0 deq Integer	false	deq agrees: the literal is not 0
+0 eq Float	false	…and not the Float zero either
+1 deq Integer	false	a non-zero number is not its type literal (this was already false; 0 was the trap)
+Integer deq Float	false	two DISTINCT numeric type literals are not deq-equal (deq wrongly said true before)
+Integer eq Integer	true	the SAME numeric type literal is equal to itself (matches eq's type-body arm)
+Integer deq Integer	true	deq agrees on the same-type literal
+Integer teq Integer	true	the dedicated type-equality word is unaffected
+# deq is reflexive on EVERY type literal, agreeing with eq (NUR034): the
+# container/root literals join the scalar ones, so a type literal is deq
+# to itself and to no other type.
+List deq List	true	a container type literal is deq to itself (was false before NUR034)
+Map deq Map	true	…and so is the map literal
+Any deq Any	true	…and the root literal
+List deq Map	false	two DISTINCT type literals are not deq
+List eq List	true	eq already agreed; deq now matches it
+# ── deq compares typed containers by VALUE, not render (NUR033) ───────
+# A typed list `[:T v0 v1]` carries an element-type annotation. deq is
+# value equality, so it compares the ELEMENTS and ignores the tag, the
+# same way it already ignores flexness. Before this rule deq fell back
+# to the rendered form (`[:Integer]` vs `[1 2]`), which was a third
+# equality notion and broke transitivity with cross-leaf pairs.
+[:Integer 1 2] deq [1 2]	true	a populated typed list is deq-equal to the plain list of the same elements
+[:Integer 1 2] deq [:Integer 1 2]	true	…and to an identically-typed twin
+[:Float 1.0 2.0] deq [:Integer 1 2]	true	the element-type tag is ignored; cross-leaf magnitude still ties
+[1.0] deq [:Integer 1]	true	transitivity: [1.0] deq [1] and [1] deq [:Integer 1], so this holds too
+{:Integer a:1} deq {a:1}	true	typed maps compare by entry values as well
+[:Integer] deq []	true	an empty typed list is the empty list (tag ignored, like flex)
+[:Integer 1 2] eq [1 2]	false	eq is unchanged — still container identity, not structure
 
 # ── tcmp compares anything (the escape hatch) ─────────────────────────
 1 tcmp 'a'	-1	Integer ranks below String
@@ -71,3 +104,15 @@ true tcmp 5	-1	Boolean ranks below Number
 (convert Bytes "hi") eq "hi"	false	cross-type eq is false, never an error
 (convert Bytes "hi") deq "hi"	false	deq likewise
 (convert Bytes "hi") deq (convert Bytes "hi")	true	deq agrees with eq on a scalar leaf (content equality, like Number/String — not the compound identity/structural split)
+
+# ── Opaque Ideal handles: eq/deq no longer equal to nothing (NUR031) ──
+# A Store gets reference identity (eq) and deep entry value (deq); an
+# Error is a value-like Ideal, so eq and deq both compare its fields;
+# the timer handles compare by identity. Before this rule every one of
+# these was equal to nothing, not even itself.
+def s (context) (s eq s)	true	a Store is eq to itself — reference identity, the Ideal half of the rule
+def s (context) (s deq s)	true	…and deq to itself
+(do [raise "boom"]) eq (do [raise "boom"])	true	two Errors with equal fields are eq (a value-like Ideal: eq compares fields)
+(do [raise "boom"]) deq (do [raise "boom"])	true	deq agrees with eq on an Error
+(do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
+(do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal

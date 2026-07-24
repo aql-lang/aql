@@ -1192,11 +1192,19 @@ restricted words refuse. See
 >
 > **`eq` is identity for compounds; `deq` is structural — by design.**
 > `eq` compares scalars (numbers, strings, booleans, atoms) by value, but
-> lists and maps by *identity*: two distinct equal-looking lists are not
-> `eq` (`["a" "b"] eq ["a" "b"]` → `false`). To compare compound *contents*,
-> use `deq`, the deep/structural form (`["a" "b"] deq ["a" "b"]` → `true`).
-> `assert.equal` (the test word) is deep, so a property body written with
-> `eq` over lists can pass vacuously — reach for `deq` there.
+> lists, maps, and `Store` by *identity*: two distinct equal-looking lists
+> are not `eq` (`["a" "b"] eq ["a" "b"]` → `false`). To compare compound
+> *contents*, use `deq`, the deep/structural form (`["a" "b"] deq ["a" "b"]`
+> → `true`). `deq` compares by value throughout — it ignores a container's
+> flexness *and* its element-type tag, so `[:Integer 1 2] deq [1 2]` is
+> `true`. `assert.equal` (the test word) is deep, so a property body written
+> with `eq` over lists can pass vacuously — reach for `deq` there.
+>
+> A **bare type literal is not a value**: `0 eq Integer` and `0 deq Integer`
+> are `false` (a numeric literal is not the number 0); compare *types* with
+> `teq`. `Error` is a value-like Ideal, so `eq`/`deq` compare its fields.
+> The only values with no equality are **code/opaque values** — functions,
+> modules, words.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -1207,7 +1215,7 @@ restricted words refuse. See
 
 | Word | Description | Example |
 |------|-------------|---------|
-| `eq` | Equal — scalars by value, **compounds by identity** | `1 eq 1.0` returns `true`; `[1,2] eq [1,2]` returns `false` |
+| `eq` | Equal — scalars by value, **compounds and `Store` by identity** | `1 eq 1.0` returns `true`; `[1,2] eq [1,2]` returns `false` |
 | `neq` | Not equal (negation of `eq`) | `1 neq 2` returns `true` |
 | `deq` | **Deep / structural** equality (compares contents) | `[1,2] deq [1,2]` returns `true` |
 | `lt` | Less than (same-family) | `1 lt 2` returns `true` |
@@ -1960,7 +1968,11 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > magnitude), and `unique [["a"] ["a"]]` returns `[['a']]` even though
 > `eq` (reference identity for compounds) distinguishes the two lists.
 > `group`'s map keys stay rendered strings — the first occurrence's
-> render names each `deq` class.
+> render names each `deq` class. Two keys that render identically share
+> one entry: this folds `deq`-distinct look-alikes (the type literal
+> `Integer` and the atom `Integer/q`), and — because `nan` is
+> `deq`-unequal to itself — it also groups all `nan` keys together
+> (`group [nan nan]` → `{nan:[0,1]}`).
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
