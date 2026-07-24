@@ -1,13 +1,13 @@
 # VAULT-PROXY-REVIEW
 
 > **Status: point-in-time review (dated).** A code review of the vault
-> credential broker and a competitive comparison with **onecli**, pinned
-> to commit `9e5ecd8` (2026-07-24). Per `design/README.md`'s
-> classification, treat this as a *historical report*: the file/line
-> anchors and the onecli feature summary are correct as of that date and
-> will drift as both projects evolve. The forward-looking design home for
-> the recommendations here is `design/SERVICES.0.md` §6 (the first-class
-> `proxy` abstraction).
+> credential broker and a competitive comparison with **onecli** and
+> **open-connector** (OOMOL), pinned to commit `9e5ecd8` (2026-07-24). Per
+> `design/README.md`'s classification, treat this as a *historical
+> report*: the file/line anchors and the competitor summaries are correct
+> as of that date and will drift as all three projects evolve. The
+> forward-looking design home for the recommendations here is
+> `design/SERVICES.0.md` §6 (the first-class `proxy` abstraction).
 
 ## Scope
 
@@ -187,7 +187,23 @@ gate that does not exist.
   client cannot smuggle a conflicting auth header, but it can pass other
   arbitrary headers to the provider. Low risk given the fixed host.
 
-## 4. Comparison with onecli
+## 4. Comparison with related systems
+
+The three projects occupy different points on one spectrum — from
+*transparent credential injection* to *hardened credential broker* to
+*action-catalog platform* — even though all three share the core principle
+that the real secret stays server-side and the agent never holds it.
+
+```
+ transparent injector            hardened broker              action platform
+  (least abstraction)                                       (most abstraction)
+        onecli  ───────────────  aql vault proxy  ───────────  open-connector
+  MITM + FAKE_KEY swap        alias reverse proxy +        semantic Actions +
+  any host, no governance     capability governance        OAuth lifecycle, 1000+
+                                                            curated providers
+```
+
+### 4.1 onecli — transparent credential injector
 
 **onecli** (`github.com/onecli/onecli`, as of 2026-07-24): a Rust HTTP
 gateway (`:10255`) + Next.js dashboard (`:10254`) + PostgreSQL/Prisma,
@@ -197,65 +213,124 @@ HTTPS** (installed CA cert), matches the request by host/path pattern,
 swaps `FAKE_KEY` → real key (AES-256-GCM at rest under
 `SECRET_ENCRYPTION_KEY`), and forwards. Team mode adds Google OAuth. Its
 public docs mention no quotas, cost tracking, audit log, expiry, or
-revocation.
+revocation. It is the closest analogue to the AQL broker — same job (raw
+static-key injection), opposite proxy mechanics.
 
-| Dimension | **aql vault proxy** | **onecli** |
-| --- | --- | --- |
-| Proxy model | Reverse proxy: `localhost/<alias>/<path>` + bearer token | Forward proxy: `HTTP_PROXY`, real host, `FAKE_KEY` swap |
-| Agent code changes | Yes — rewrite endpoint, present token | ~None — placeholder key + proxy env var; any SDK works unchanged |
-| TLS trust surface | None (no MITM; upstream leg is HTTPS) | MITM of all agent HTTPS via an installed CA cert |
-| Upstreams | 3 hardcoded presets (§3.1) | Arbitrary, via host/path patterns |
-| Stack / ops | Single Go binary, no DB, no dashboard | Rust gateway + Next.js + PostgreSQL + Prisma + Docker |
-| Secret at rest | scrypt → KEK, X25519 envelope, scoped keyslots, OS keychain | AES-256-GCM under one env-var key |
-| Access control | TTL, method/host/IP allowlist, call quota, cost budget, approval, revoke | Per-agent scoped tokens (details unspecified) |
-| Audit / history | Metadata-only JSONL + event-sourced journal + generations/restore | Not documented |
-| AI-agent integration | Native **MCP** server mode | None documented |
-| Team UX | CLI / TUI, single-user | Web dashboard + Google OAuth |
+### 4.2 open-connector — action-catalog platform
 
-### The philosophical split
+**open-connector** (`github.com/oomol-lab/open-connector`, OOMOL, as of
+2026-07-24) is a **different tier of tool**, positioned as an "alternative
+to Composio": a connector *gateway* that exposes a curated catalog of
+**1,000+ providers and 10,000+ prebuilt Actions** to agents. It is Node.js
+22+ / TypeScript, SQLite-backed (or Cloudflare D1), with a Web Console,
+SDK, `oo` CLI, OpenAPI (`/openapi.json`), and native MCP (`/mcp`);
+deployable local/Docker, Fly.io, Cloudflare Workers, or OOMOL SaaS.
+
+Crucially it is **not a raw HTTP proxy**. An agent does not forward an
+upstream path — it invokes a *semantic Action* the gateway executes:
+
+```
+POST http://localhost:3000/v1/actions/github.get_current_user
+```
+
+Providers are a curated set defined in `src/providers/<service>` (with
+contribution guidelines), each Action carrying request/response schemas and
+required scopes. It manages the full **OAuth2 lifecycle** (connect an
+account once, token refresh) alongside API-key / custom / no-auth
+connections, is **multi-tenant** (named connections per user account), and
+governs with connection identity, scopes, action allow/block policy, and
+redacted run logs. Quotas, cost tracking, and expiry are not documented.
+
+This is a **platform**, where the AQL broker is a **library-grade
+component**: open-connector's value is the Action catalog + OAuth
+plumbing + multi-user account management, none of which the AQL vault
+proxy attempts. Conversely open-connector does not expose the AQL broker's
+per-token quantitative governance or its envelope cryptography.
+
+### 4.3 Feature matrix
+
+| Dimension | **aql vault proxy** | **onecli** | **open-connector** |
+| --- | --- | --- | --- |
+| Category | Hardened credential broker | Transparent injector | Action-catalog platform (Composio-class) |
+| Interface to agent | Raw HTTP reverse proxy: `localhost/<alias>/<path>` + bearer token | Forward proxy: `HTTP_PROXY`, real host, `FAKE_KEY` swap | Semantic Actions `POST /v1/actions/<provider>.<action>`; SDK / MCP / OpenAPI |
+| Abstraction | Raw request pass-through | Raw request pass-through | Typed Actions with schemas + scopes |
+| Agent code changes | Yes — rewrite endpoint, present token | ~None — placeholder key + proxy env var | Yes — call Action API / SDK / MCP |
+| TLS trust surface | None (no MITM) | MITM of all agent HTTPS via CA cert | None (gateway executes server-side) |
+| Upstreams | 3 hardcoded presets (§3.1) | Arbitrary via host/path patterns | 1,000+ curated providers, 10,000+ Actions |
+| Auth types brokered | Static secret injection only | Static key swap | API key, **OAuth2 (+ refresh)**, custom, no-auth |
+| Multi-tenant | No (single-user local) | Per-agent tokens | Yes (named connections per user account) |
+| Stack / ops | Single Go binary, no DB | Rust + Next.js + PostgreSQL + Docker | Node 22 + SQLite/D1 + Web Console + Docker |
+| Secret at rest | scrypt → KEK, X25519 envelope, scoped keyslots, OS keychain | AES-256-GCM under one env-var key | Encrypted (mechanism not documented) |
+| Per-token governance | TTL, method/host/IP allowlist, call quota, cost budget, approval, revoke | Scoped tokens (unspecified) | Scopes + action allow/block policy |
+| Audit / history | Metadata-only JSONL + event-sourced journal + generations/restore | Not documented | Redacted run logs |
+| AI-agent integration | Native **MCP** server mode | None documented | Native **MCP** + SDK + OpenAPI |
+| Team UX | CLI / TUI, single-user | Web dashboard + Google OAuth | Web Console + hosted SaaS |
+
+### 4.4 The positioning
 
 - **onecli optimizes for drop-in transparency.** Install a CA cert, point
   `HTTP_PROXY` at the gateway, leave agent code untouched — at the cost of
   MITM-ing all agent TLS (a large trust surface) and running a
   Postgres + dashboard + Docker stack.
-- **AQL optimizes for an explicit, auditable trust boundary.** No MITM, no
-  CA cert, no DB; a hard alias→host binding (§2 SSRF boundary) and a rich
-  capability/audit model — at the cost of making the agent target a
-  rewritten endpoint and speak a bearer token.
+- **open-connector optimizes for breadth and durable account access.** A
+  huge curated Action catalog and full OAuth account management, MCP- and
+  SDK-native — at the cost of being a multi-component Node platform you
+  host and operate, with governance expressed as scopes + allow/block
+  rather than quantitative quotas.
+- **AQL optimizes for an explicit, auditable trust boundary in one
+  binary.** No MITM, no CA cert, no DB; a hard alias→host binding (§2 SSRF
+  boundary), envelope crypto, and a rich per-token capability model — at
+  the cost of a narrow provider set, static-key-only injection, and a
+  rewritten agent endpoint.
 
-For AQL's stated positioning (a single self-documenting binary,
-security-first, agent-oriented), these are the right bets. AQL is
-**meaningfully more secure and more governable**; onecli is **more
-convenient and more universal** out of the box. The two big things onecli
-buys — arbitrary upstreams and zero agent-code change — are exactly the
-gaps §5 recommends closing.
+Read against both competitors, AQL is **the most secure and most
+governable per credential, and by far the lightest to run**, but **the
+narrowest in reach**: onecli beats it on universality (any host, zero
+code change), and open-connector beats it on abstraction and scope (typed
+Actions, OAuth, 1,000+ providers, multi-tenant). The gaps that matter are
+now sharper than in the onecli-only view: arbitrary upstreams and OAuth2
+are the two capabilities whose absence most limits what the AQL broker can
+front — see §5.
 
 ## 5. Recommendations
 
-In priority order.
+In priority order. Items 1–2 are the reach gaps the three-way comparison
+(§4) sharpened; 3–8 are the code-level findings from §3.
 
 1. **User-definable providers (closes §3.1).** Add
    `vault provider add <name> --url=<base> --auth-style=<style>` persisting
    custom presets in the store, so the broker fronts any API rather than
    three. The alias→provider→SSRF-boundary machinery already supports it;
-   only the registry is closed.
-2. **Optional drop-in forward-proxy mode (neutralizes onecli's ergonomic
+   only the registry is closed. This is the cheapest gap to close and the
+   one that most widens reach.
+2. **Decide the OAuth2 question — the strategic fork.** Static-secret
+   injection cannot broker the durable-account use case (Gmail, Slack,
+   Notion, GitHub-App), which is OAuth2 and is exactly where
+   open-connector lives (§4.2). AQL can either (a) **stay a hardened
+   raw-HTTP broker** and explicitly cede the OAuth/connector-platform tier,
+   or (b) **grow an OAuth2 connection type** — store refresh tokens as a
+   new secret kind, refresh on expiry, inject the live access token — which
+   would let the broker front OAuth providers without adopting
+   open-connector's full Action-catalog surface. Pick deliberately; do not
+   drift into it. (This is a positioning decision, not a bug fix — surface
+   it to a maintainer.)
+3. **Optional drop-in forward-proxy mode (neutralizes onecli's ergonomic
    edge).** Offer a non-default `HTTP_PROXY` + placeholder-swap mode
    alongside the explicit reverse proxy, so teams that cannot reconfigure
    agent endpoints still get zero-code-change onboarding — while the safer
    reverse proxy stays the default.
-3. **Flush streaming responses (closes §3.2).** Wrap the copy in a
+4. **Flush streaming responses (closes §3.2).** Wrap the copy in a
    periodic / `http.Flusher` flush so SSE token streams pass through in
    real time.
-4. **Reconcile cost budgets with reality (closes §3.3).** Either ship
+5. **Reconcile cost budgets with reality (closes §3.3).** Either ship
    opt-in provider usage parsers or document `MaxCostCents` as inert for
    the built-in providers today.
-5. **Decide hard vs soft on `MaxCalls` (closes §3.4).** Reserve-under-lock
+6. **Decide hard vs soft on `MaxCalls` (closes §3.4).** Reserve-under-lock
    for a hard cap, or document the TOCTOU as an intentional soft cap.
-6. **Throttle the per-request store rewrite (closes §3.5).** Keep quota
+7. **Throttle the per-request store rewrite (closes §3.5).** Keep quota
    counters in memory and flush periodically (or to a compact append-only
    counter log) before this handles real volume.
-7. **Rename or complete `RequireApproval` (closes §3.6).** Either build the
+8. **Rename or complete `RequireApproval` (closes §3.6).** Either build the
    approve-and-proceed workflow or rename it to reflect the hard-stop it
    is.
 
@@ -266,7 +341,7 @@ a first-class `proxy <target> {before after}` abstraction — `before` =
 capability auth + injection, `target` = a `connect`ed upstream, `after` =
 quota/cost accounting + audit — with **streaming replies as a first-class
 reply shape** and capability-checked interceptors. That RFC is the right
-home for recommendations 3–6 in particular: streaming flush, cost
+home for recommendations 4–7 in particular: streaming flush, cost
 accounting placement, and the accounting/quota model are precisely the
 "careful points the model must honour" it enumerates, not yet reflected in
 the shipping handler. This review is the point-in-time evidence those
