@@ -45,6 +45,8 @@ def add fn [[a:Number b:Number] [Number] [a]]	ERROR:extend_owner	the exact locke
 def add fn [[a:Date b:Date] [Boolean] [true]]	ERROR:extend_owner	a first-party module's type (Date is aql:time-util's) does not anchor a PROGRAM extension — ownership is not transitive
 def Big (Integer gt 10)  def add fn [[a:Big b:Big] [Integer] [1]]	ERROR:extend_owner	a CONTENT-based type (predicate) cannot anchor — its members exist before the type does (the nominality theorem, OPEN-WORDS.1 §3.1)
 def U (Integer tor String)  def add fn [[a:U b:U] [Integer] [1]]	ERROR:extend_owner	a union body is content-based too — no anchor
+def Shape surface {area: (fnsig [[Self] [Float]])} end  def add fn [[a:Shape b:Shape] [Float] [1.0]]	ERROR:extend_owner	a surface is content-based — a type can `exposes` it AFTER the fact, so a value can predate its own membership; no anchor (OPEN-WORDS.1 §3.1)
+def Big (Integer gt 10)  behave compare/q (fn [[Big Big] [Integer] [0]])  def add fn [[a:Big b:Big] [Integer] [1]]	ERROR:extend_owner	a `behave` wrapper does not launder a content type into an anchor — IsNominalAnchor sees through the Match-delegating wrapper to the predicate beneath
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def add fn [[a:(M.Flag) b:(M.Flag)] [Boolean] [a or b]]  add (M.mk true) (M.mk false)	ERROR:extend_owner	a program def cannot re-anchor on ANOTHER module's type to shadow its transplanted tuple — you cannot redefine what you do not own (rev 2; rev 1 allowed this)
 #
 # ─────────────────────────────────────────────────────────────────────

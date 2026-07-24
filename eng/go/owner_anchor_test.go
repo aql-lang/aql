@@ -94,6 +94,7 @@ func TestContentMembershipInventory(t *testing.T) {
 		&genParamUnifier{},
 		&schemaUnifier{},
 		typeMembershipBehavior{},
+		&surfaceUnifier{},
 	}
 	for i, b := range content {
 		if _, ok := b.(ContentMembership); !ok {
@@ -104,6 +105,49 @@ func TestContentMembershipInventory(t *testing.T) {
 		if _, ok := b.(ContentMembership); ok {
 			t.Errorf("nominal behavior %T wrongly marked content-based", b)
 		}
+	}
+}
+
+// delegatingBehavior is a test stand-in for behave's userBehavior: a
+// wrapper that DELEGATES Match to an inner behavior (MatchDelegating).
+type delegatingBehavior struct {
+	defaultBehavior
+	inner TypeBehavior
+}
+
+func (d delegatingBehavior) DelegatesMatchTo() TypeBehavior { return d.inner }
+
+// TestBehaviorIsContentWalksDelegation pins behaviorIsContent: it sees
+// through a Match-delegating wrapper to a content behavior beneath (the
+// behave-hole fix), while a Match-OVERRIDING wrapper (bareRefine, the
+// unifiers) keeps its own nominal verdict.
+func TestBehaviorIsContentWalksDelegation(t *testing.T) {
+	// Direct content marker → content.
+	if !behaviorIsContent(&predicateUnifier{}) {
+		t.Error("a marked content behavior must read as content")
+	}
+	// Plain nominal → not content.
+	if behaviorIsContent(DefaultBehavior) {
+		t.Error("DefaultBehavior is nominal, not content")
+	}
+	// Delegating wrapper over a content behavior → content (the hole fix).
+	if !behaviorIsContent(delegatingBehavior{inner: &depScalarUnifier{}}) {
+		t.Error("a delegating wrapper over a predicate must read as content")
+	}
+	// Delegating wrapper over a nominal behavior → not content (no
+	// over-exclusion: a behave'd refine still anchors).
+	if behaviorIsContent(delegatingBehavior{inner: &bareRefineUnifier{}}) {
+		t.Error("a delegating wrapper over a nominal behavior stays nominal")
+	}
+	// Delegating wrapper whose inner is nil → walk terminates, not content.
+	if behaviorIsContent(delegatingBehavior{inner: nil}) {
+		t.Error("a delegating wrapper over nil terminates as nominal")
+	}
+	// A Match-OVERRIDING wrapper (bareRefine) does NOT implement
+	// MatchDelegating, so its own nominal verdict stands even if it embeds
+	// a content parent — the walk must not reach past it.
+	if _, ok := interface{}(&bareRefineUnifier{}).(MatchDelegating); ok {
+		t.Error("bareRefineUnifier must not be MatchDelegating")
 	}
 }
 

@@ -57,9 +57,9 @@ func TestTailCallResultBindsThroughForwardParen(t *testing.T) {
 		},
 		{
 			"outer fn forwards to a recursive inner, result bound via paren",
-			`def inner fn [[n:Integer] [Integer] [ if ((n) lte 0) [ 100 ] [ inner ((n) sub 1) ] ]]
-			 def outer fn [[n:Integer] [Integer] [ inner (n) ]]
-			 def z (outer 5)
+			`def recur fn [[n:Integer] [Integer] [ if ((n) lte 0) [ 100 ] [ recur ((n) sub 1) ] ]]
+			 def runner fn [[n:Integer] [Integer] [ recur (n) ]]
+			 def z (runner 5)
 			 (z)`,
 			"100",
 		},

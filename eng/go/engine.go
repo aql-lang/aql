@@ -951,6 +951,19 @@ func (e *Engine) stampErrPos(err error) error {
 // returnCountError builds a detailed AqlError for wrong number of return
 // values. The detail text is shared with the VM via returnCountErrorText;
 // the declaration span is interpreter-side enrichment (phase 5).
+// stripTapeAscriptions removes any dispatch ascription (`v as T`) from the
+// tape values in [lo, hi) — the frame-return strip: an ascription is scoped
+// to a dispatch WITHIN a body and must not ride out of the frame into the
+// caller (design/OPEN-WORDS.1.md §9). Extracted from stepCloseParen so that
+// hot path stays under the cyclomatic-complexity gate.
+func (e *Engine) stripTapeAscriptions(lo, hi int) {
+	for j := lo; j < hi; j++ {
+		if e.tape.At(j).AscribedType() != nil {
+			e.tape.Set(j, StripAscribed(e.tape.At(j)))
+		}
+	}
+}
+
 func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *AqlError {
 	return buildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, rc.Pos, rc.Decl)
 }
@@ -7042,6 +7055,13 @@ func (e *Engine) stepCloseParen() error {
 			if err := e.validateReturnTypes(rc, results, extra); err != nil {
 				return err
 			}
+
+			// Strip any dispatch ascription (`v as T`) from the return
+			// values: an ascription is scoped to a single dispatch WITHIN
+			// the body and must not ride out of the frame into the caller's
+			// dispatch (design/OPEN-WORDS.1.md §9 — "can never ride into a
+			// returned receiver"). The top nret values are the returns.
+			e.stripTapeAscriptions(openIdx+1+extra, closeIdx)
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {

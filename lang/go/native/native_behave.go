@@ -317,6 +317,14 @@ func (u *userBehavior) Match(v Value, t *Type) bool {
 	return eng.DefaultBehavior.Match(v, t)
 }
 
+// DelegatesMatchTo exposes the wrapped behavior for the ownership-anchor
+// content check (eng.MatchDelegating): because Match delegates to prev,
+// this wrapper's membership IS prev's, so a behave'd predicate/surface must
+// still be seen as content-based and excluded from anchoring an extension
+// (design/OPEN-WORDS.1.md §3.1). Returns prev (nil-terminating the walk;
+// a nil prev means Match falls to DefaultBehavior, which is nominal).
+func (u *userBehavior) DelegatesMatchTo() eng.TypeBehavior { return u.prev }
+
 // Equal also delegates — equality stays structural by default.
 func (u *userBehavior) Equal(a, b Value) bool {
 	if u.prev != nil {

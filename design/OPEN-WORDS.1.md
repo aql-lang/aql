@@ -116,13 +116,23 @@ doctrine):
 
 - **bare refine / class** — tag-carried; a value is a member only if
   constructed as one. These anchor.
-- **predicate / member / disjunct bodies** — content-carried;
-  membership is decided by looking at the value. These MUST NOT
-  anchor. Counterexample: with `SortedMap` as a content predicate
+- **predicate / member / disjunct / negation / schema / bounded-Type
+  / surface bodies** — content-carried; membership is decided by
+  looking at the value (or, for a surface, by an `exposes`
+  declaration a type can make at ANY time). These MUST NOT anchor.
+  Counterexample: with `SortedMap` as a content predicate
   (`MintMemberType(TMap, keysAscending)`), the pre-existing literal
   `{a:1 b:2}` *is* a SortedMap — its keys happen to ascend — so a
   sig anchored on it would capture pre-existing `set` calls and the
-  theorem is dead.
+  theorem is dead. A **surface** is the same trap by a different
+  door (Codex-review P1): its conformance set is shared and sees
+  *post-hoc* `exposes` updates, so a value that predates the surface
+  can start matching it — anchoring on a surface would let a later
+  `exposes` retroactively capture old calls. Every such behavior
+  carries the `ContentMembership` marker; `IsNominalAnchor` excludes
+  the marked set, and `TestContentMembershipInventory` pins it so a
+  new content behavior missing the marker fails loudly rather than
+  silently becoming anchor-eligible.
 - **aliases** (`def MyMap Map`) never mint, so they cannot launder a
   foreign type through the check — unchanged from rev 1.
 
@@ -385,6 +395,27 @@ match reads as the value's tag. Three rules make it sound:
   OpMakeList / OpMakeMap assembly. So an ascription selects exactly
   ONE dispatch and can never ride into a handler, a binding, a
   container, or a returned receiver.
+- **Never escapes a function return.** A fn/lambda/module call is an
+  abstraction boundary with a declared signature: the value it hands
+  back is its real self, so an ascription written in the body cannot
+  leak into the caller's dispatch. Every fn-return strips it — the
+  interpreter frame-collapse (the ReturnCheck arm, via
+  `stripTapeAscriptions`), `Registry.CallAQL`, and the VM `OpRet` over
+  the frame's produced values. Without this a helper `[(w as
+  FlexMap)]` would hand its caller an ascribed value and the caller's
+  next dispatch would wrongly select the base overload (the
+  Codex-review P1: an escaped ascription). Everything ELSE is inline
+  value-routing and stays TRANSPARENT — a paren group, an `if`-branch,
+  and a code-body word (`do` / `each` / `fold` / …) all route the
+  value to the next dispatch, which consumes the ascription there.
+  That is what makes `set … (m as FlexMap)` work, and it is what keeps
+  the interpreter in step with the COMPILED path: the compiler folds
+  `as` at compile time into the static dispatch selection, so the
+  ascription rides the value flow to the consuming dispatch across
+  every inline form. A fn return is the one boundary the compiler
+  models with a declared type rather than the ascribed carrier, which
+  is exactly why stripping there — and only there — keeps the two
+  engines in agreement. Pinned by lang/spec/as.tsv §8.
 
 **Why it solves §7b.1.** Inside an anchored override, `set k v (m
 as FlexMap)` widens the receiver's dispatch tag to FlexMap; the

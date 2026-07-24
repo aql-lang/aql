@@ -37,6 +37,41 @@ package eng
 // MUST add the marker; TestContentMembershipInventory pins the set.
 type ContentMembership interface{ ContentMembership() }
 
+// MatchDelegating is implemented by a wrapper Behavior whose Match
+// DELEGATES to an inner behavior rather than defining its own membership
+// rule — `behave`'s userBehavior is the one such wrapper (it layers
+// compare/canon/nodify over a type without touching Match). IsNominalAnchor
+// unwraps it (behaviorIsContent) so a CONTENT behavior hidden beneath a
+// Match-delegating wrapper is still found: without this, `behave`-ing a
+// predicate/surface and then anchoring a core-word extension on it would
+// slip past the marker check and break the reachability theorem (the same
+// hole as an unmarked content Behavior, reached through `behave`).
+//
+// Match-OVERRIDING wrappers (bareRefineUnifier and the membership unifiers,
+// which embed behaviorWrapper but define their own nominal/content Match)
+// deliberately do NOT implement this: their own Match decides membership,
+// so a nominal refine-of-a-predicate stays a valid anchor even though its
+// wrapped parent is content-based.
+type MatchDelegating interface{ DelegatesMatchTo() TypeBehavior }
+
+// behaviorIsContent reports whether b decides membership by content —
+// either it carries the ContentMembership marker directly, or it is a
+// Match-delegating wrapper (MatchDelegating) over a behavior that does.
+// The single source of truth for IsNominalAnchor.
+func behaviorIsContent(b TypeBehavior) bool {
+	for b != nil {
+		if _, ok := b.(ContentMembership); ok {
+			return true
+		}
+		d, ok := b.(MatchDelegating)
+		if !ok {
+			return false
+		}
+		b = d.DelegatesMatchTo()
+	}
+	return false
+}
+
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
 	// canonical default is a lattice walk (v.Parent is t or a

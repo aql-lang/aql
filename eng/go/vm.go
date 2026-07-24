@@ -1880,6 +1880,18 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 					return nil, stampAt(err, curDebug, pc, r)
 				}
 				stack = trimmed
+				// Strip any dispatch ascription (`v as T`) from the frame's
+				// return values — the compiled mirror of the interpreter's
+				// frame-collapse / CallAQL strip: an ascription is scoped to
+				// a dispatch WITHIN the body and cannot ride out to the
+				// caller (design/OPEN-WORDS.1.md §9). Unconditional
+				// StripAscribed (its own nil-fast-path handles the common no-
+				// ascription case) — a compiled body only carries a runtime
+				// ascription when `as` took a dynamic operand it could not
+				// fold, so a guarded arm here would be a dead compiled branch.
+				for i := stackBase; i < len(stack); i++ {
+					stack[i] = StripAscribed(stack[i])
+				}
 			}
 			if len(frames) == 0 {
 				// Top RET of a re-entrant unit run (a body closure invoked

@@ -182,8 +182,10 @@ func IsNominalAnchor(t *Type) bool {
 	if t == nil || t.OwnerID() == "" {
 		return false
 	}
-	_, content := t.Behavior().(ContentMembership)
-	return !content
+	// behaviorIsContent walks through a Match-delegating `behave` wrapper
+	// so a behave'd predicate/surface stays excluded (design/OPEN-WORDS.1.md
+	// §3.1) — a bare marker check would miss the content behavior beneath it.
+	return !behaviorIsContent(t.Behavior())
 }
 
 // sigHasOwnedAnchor reports whether at least one of the signature's

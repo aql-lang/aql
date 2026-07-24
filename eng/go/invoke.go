@@ -27,6 +27,14 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	// inputs enter as RESOLVED stack data rather than being re-stepped —
 	// arguments are inert (design/ARG-SEMANTICS-UNIFICATION.0.md, via
 	// RunResolved's start offset).
+	//
+	// A code-body word (each/fold/do/…) does NOT strip a dispatch ascription
+	// from its result: it is inline value-routing (design/OPEN-WORDS.1.md
+	// §9), transparent like a paren group or an if-branch, so the ascription
+	// flows to the consuming dispatch — which matches the compiled path,
+	// where `as` folds at compile time and the ascription rides the static
+	// value flow to that same dispatch. (Only a fn/lambda/module return, an
+	// abstraction boundary with a declared signature, strips.)
 	return RunResolved(r, inputs, bodyTokens(body))
 }
 

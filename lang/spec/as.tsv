@@ -66,3 +66,18 @@ def wk (make WeakFlexMap { })  (set x/q 5 (wk as FlexMap))	ERROR:set_error	ascri
 # §7  gradual — a dynamic value ascribes optimistically, validated at run time
 def m (flex {a:1})  def d (m get (convert String 'a'))  ((d as Number) add 1)	2	a dynamic read the lattice cannot refute passes the check gradually; the runtime validation proves it and dispatch commits at the ascribed type
 def m (flex {a:1})  def d (m get (convert String 'a'))  (d as Map)	ERROR:as_error	the runtime validation catches a dynamic value that does not conform to the ascribed type
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  the fn-return boundary — an ascription never rides out of a call
+# A fn/lambda/module call is an abstraction boundary: the value it hands
+# back is its REAL self, so an ascription written in the body cannot leak
+# into the caller's dispatch (design/OPEN-WORDS.1.md §9). Everything else
+# is INLINE value-routing and stays transparent — a paren group, an
+# if-branch, and a code-body word (do/each/fold) all route the value to
+# the next dispatch, which consumes the ascription there (matching the
+# compiled path, where `as` folds into the static dispatch selection).
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  def helper fn [[] [S] [(w as FlexMap)]]  tag (helper)	'sub'	a helper returning an ascribed value hands back the REAL S — the caller's tag dispatches on the subtype, not the leaked ascription
+def S (refine FlexMap)  def w:S (flex {a:1})  def helper fn [[] [S] [(w as FlexMap)]]  typeof (helper)	S	the returned value is unchanged (the ascription was dispatch-only and is consumed at the fn-return boundary)
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  def h1 fn [[] [S] [(w as FlexMap)]]  def h2 fn [[] [S] [(h1)]]  tag (h2)	'sub'	the strip holds through a chain of returns — no frame lets the ascription escape
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag (if true [(w as FlexMap)] [w])	'base'	an if-branch is INLINE value-routing — the ascription flows to tag and is consumed there (transparent, not a fn boundary)
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag (do [(w as FlexMap)])	'base'	a code-body `do` is inline too — its result routes the ascription onward (transparent, matching the compiled fold), unlike a fn return
