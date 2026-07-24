@@ -234,16 +234,19 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 			migrated = true
 			return migrateLegacyAndAdd(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
 		}
-		// --rotate replaces an existing slot: drop the old one (no rekey —
-		// rotation re-issues ACCESS, it does not revoke already-decrypted data;
-		// that is `rm --rekey`) so addSlotToEnvelope seats a fresh slot under the
-		// same name. The removed slot's verifier is gone, so the OLD password
-		// stops authenticating. RemovePasswordSlot reports whether one existed, so
-		// a --rotate over an absent name is just a create.
-		if *rotate {
-			rotated = st.RemovePasswordSlot(name)
+		// --rotate replaces an existing slot IN PLACE via addSlotToEnvelope's
+		// upsert (no rekey — rotation re-issues ACCESS, it does not revoke
+		// already-decrypted data; that is `rm --rekey`). Replacing (not
+		// remove-then-add) is what lets an admin rotate the very slot it
+		// authenticated with — `password add --rotate --scope=admin admin`:
+		// addSlotToEnvelope opens its session with currentPass while the old slot
+		// still exists, THEN upserts the fresh one, so the auth never dangles. The
+		// old slot's verifier is overwritten, so the OLD password stops working. A
+		// --rotate over an absent name is just a create.
+		if _, idx := st.FindPasswordSlot(name); *rotate && idx >= 0 {
+			rotated = true
 		}
-		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt)
+		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt, *rotate)
 	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -831,7 +834,7 @@ func migrateLegacyAndAdd(s *Store, homeDir, currentPass, newName, newScope strin
 // authenticates, unseals the relevant NDKs, and re-seals them to the new
 // slot's public key. Granting a namespace that has no NDK yet generates
 // one and seals it to every admin slot too.
-func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass, expiresAt string) error {
+func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string, newNS []string, newPass, expiresAt string, replace bool) error {
 	sess, err := openSession(s, homeDir, currentPass)
 	if err != nil {
 		return err
@@ -840,7 +843,10 @@ func addSlotToEnvelope(s *Store, homeDir, currentPass, newName, newScope string,
 	if err := requireScope(sess, OpAdmin); err != nil {
 		return errors.New("only an admin password can add passwords")
 	}
-	if existing, _ := s.FindPasswordSlot(newName); existing != nil {
+	// replace (--rotate) upserts over an existing name; UpsertPasswordSlot below
+	// overwrites it in place. The session was opened above while the old slot
+	// still existed, so rotating the authenticating admin slot re-auths cleanly.
+	if existing, _ := s.FindPasswordSlot(newName); existing != nil && !replace {
 		return fmt.Errorf("password %q already exists", newName)
 	}
 	vsalt, err := base64.StdEncoding.DecodeString(s.VaultSalt)

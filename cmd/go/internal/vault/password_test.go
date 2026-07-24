@@ -83,6 +83,47 @@ func TestPasswordAddRotate(t *testing.T) {
 	}
 }
 
+// TestPasswordRotateAuthenticatingAdmin pins the case where --rotate targets the
+// very admin slot that authorized the command: addSlotToEnvelope must reopen its
+// session while the old slot still exists, then upsert the fresh one. A
+// remove-then-add would strand the re-auth (the passphrase no longer matches any
+// slot) and the rotation would fail.
+func TestPasswordRotateAuthenticatingAdmin(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	// Migrate to envelope: "test-pass" becomes the "admin" slot.
+	mustAddPassword(t, "test-pass", "reader-pass", "reader", "--scope=read", "--namespaces=proj")
+
+	// Rotate the admin slot while authenticating AS admin.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "admin-v2")
+	code, out, e := runVault(t, "", "password", "add", "--rotate", "--scope=admin", "admin")
+	if code != 0 {
+		t.Fatalf("rotate authenticating admin: %s", e)
+	}
+	if !strings.Contains(out, "rotated") {
+		t.Errorf("admin rotate output = %q, want 'rotated'", out)
+	}
+
+	// The OLD admin passphrase no longer authenticates; the NEW one opens an
+	// admin session.
+	s, err := requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "test-pass"); err == nil {
+		t.Error("old admin passphrase still authenticates after --rotate")
+	}
+	sess, err := openSession(s, home, "admin-v2")
+	if err != nil {
+		t.Fatalf("new admin passphrase should authenticate: %v", err)
+	}
+	defer sess.Close()
+	if err := requireScope(sess, OpAdmin); err != nil {
+		t.Errorf("rotated admin slot lost admin scope: %v", err)
+	}
+}
+
 // TestPasswordAddMigratesAndScopes is the headline end-to-end: a legacy
 // vault migrates on first `password add`, the admin keeps full access,
 // and a read-scoped namespace password can read only its namespace.
