@@ -708,12 +708,15 @@ A few modes that need more than one line:
   elapses (enforced at every `openSession`), and is never admin-scoped.
   **Re-issue** an expiring token under the **same name** with `password
   add --rotate <name>` — it mints a fresh password and resets the TTL,
-  invalidating the old one, so you don't have to keep inventing new names
-  (a plain `add` over an existing name is refused and points you at
-  `--rotate`; `--rotate` over a name that doesn't exist yet just creates
-  it). The new password must **differ** from the current one — re-issuing a
-  slot with the same secret is refused (it would leave the old password still
-  working); `--generate` always mints a fresh random one. Rotation re-issues
+  invalidating **that name's** old password, so you don't have to keep
+  inventing new names (a plain `add` over an existing name is refused and
+  points you at `--rotate`; `--rotate` over a name that doesn't exist yet just
+  creates it). The new password must **differ** from the current one —
+  re-issuing a slot with the same secret is refused (it would leave the old
+  password still working); `--generate` always mints a fresh random one.
+  Rotation is scoped to the one named slot: if a **different** slot happens to
+  share the same password (reuse is allowed), it is a separate credential and
+  is untouched — revoke it on its own name. Rotation re-issues
   *access* — it does not re-encrypt already-reachable namespaces, and a
   long-running agent that already opened a `proxy`/`mcp` session keeps its
   in-memory data keys until it restarts; rotation stops the old credential
