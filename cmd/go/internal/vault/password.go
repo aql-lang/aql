@@ -252,6 +252,14 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 			if old.Scope == ScopeAdmin && *scope != ScopeAdmin && !st.OtherFunctionalAdminExists(name) {
 				return errors.New("refusing to rotate the last admin password to a non-admin scope (it would lock password management); keep --scope=admin, or add another admin first")
 			}
+			// Reject rotating a slot to the SAME secret it already holds: the
+			// fresh slot's verifier would still accept the old password, so the
+			// old holder keeps authenticating and "invalidating the old one" is a
+			// lie. --generate always mints a fresh random password, so only the
+			// interactive path can trip this (and only it pays the scrypt).
+			if !*generate && passphraseMatchesSlot(st, old, newPass) {
+				return errors.New("the new password is identical to the current one; rotation must change the secret to invalidate the old credential (use --generate for a fresh random password)")
+			}
 		}
 		return addSlotToEnvelope(st, homeDir, currentPass, name, *scope, namespaces, newPass, expiresAt, *rotate)
 	}); err != nil {

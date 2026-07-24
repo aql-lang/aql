@@ -122,6 +122,43 @@ func TestS7_OpenSessionSlotKEKErrorSkips(t *testing.T) {
 	}
 }
 
+// TestS7_PassphraseMatchesSlotArms drives passphraseMatchesSlot's defensive
+// derivation/decoding arms (the reuse guard for `password add --rotate`). Each
+// must yield false so a failed derivation degrades to "not the same secret"
+// (letting the rotation proceed) rather than blocking it.
+func TestS7_PassphraseMatchesSlotArms(t *testing.T) {
+	slot := &PasswordSlot{Name: "a", Scope: ScopeRead, Salt: s7b64(16)}
+	// Empty / undecodable vault salt.
+	if passphraseMatchesSlot(&Store{VaultSalt: ""}, slot, "p") {
+		t.Error("empty vault salt should not match")
+	}
+	if passphraseMatchesSlot(&Store{VaultSalt: "!!not-base64!!"}, slot, "p") {
+		t.Error("undecodable vault salt should not match")
+	}
+	// master-KEK derivation failure.
+	func() {
+		old := s7vaultMasterKEK
+		s7vaultMasterKEK = func(string, []byte) ([]byte, error) { return nil, errS7Boom }
+		defer func() { s7vaultMasterKEK = old }()
+		if passphraseMatchesSlot(&Store{VaultSalt: s7b64(16)}, slot, "p") {
+			t.Error("master-KEK error should not match")
+		}
+	}()
+	// Undecodable slot salt.
+	if passphraseMatchesSlot(&Store{VaultSalt: s7b64(16)}, &PasswordSlot{Salt: "!!bad!!"}, "p") {
+		t.Error("undecodable slot salt should not match")
+	}
+	// slot-KEK derivation failure.
+	func() {
+		old := s7slotKEK
+		s7slotKEK = func([]byte, []byte) ([]byte, error) { return nil, errS7Boom }
+		defer func() { s7slotKEK = old }()
+		if passphraseMatchesSlot(&Store{VaultSalt: s7b64(16)}, slot, "p") {
+			t.Error("slot-KEK error should not match")
+		}
+	}()
+}
+
 func TestS7_OpenSessionTamperedPrivKey(t *testing.T) {
 	home := w4EnvelopeVault(t)
 	s, err := LoadStore(home)

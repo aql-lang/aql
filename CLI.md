@@ -711,8 +711,14 @@ A few modes that need more than one line:
   invalidating the old one, so you don't have to keep inventing new names
   (a plain `add` over an existing name is refused and points you at
   `--rotate`; `--rotate` over a name that doesn't exist yet just creates
-  it). Rotation re-issues *access* — it does not re-encrypt already-reachable
-  namespaces; for that (incident response) use `password rm --rekey <name>`.
+  it). The new password must **differ** from the current one — re-issuing a
+  slot with the same secret is refused (it would leave the old password still
+  working); `--generate` always mints a fresh random one. Rotation re-issues
+  *access* — it does not re-encrypt already-reachable namespaces, and a
+  long-running agent that already opened a `proxy`/`mcp` session keeps its
+  in-memory data keys until it restarts; rotation stops the old credential
+  from opening **new** sessions, but to cut a live agent off immediately use
+  `password rm --rekey <name>` (incident response).
   Revoke one early with `password rm <name>`, or pull **every** temporary
   password at once with `password rm --temp`. `list`'s `EXPIRES` column
   shows each slot's expiry (marked `(expired)` once past). The interactive

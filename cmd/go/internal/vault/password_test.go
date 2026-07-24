@@ -83,6 +83,51 @@ func TestPasswordAddRotate(t *testing.T) {
 	}
 }
 
+// TestPasswordRotateRejectsSamePassword pins the reuse guard: an interactive
+// --rotate whose new passphrase equals the slot's current one is refused before
+// the slot is touched (it would leave the old password still valid, breaking the
+// "invalidates the old one" contract), while a genuinely different one rotates
+// cleanly. --generate sidesteps the check by construction (see TestPasswordAddRotate).
+func TestPasswordRotateRejectsSamePassword(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+	// Seed an interactive (non-generated) temporary slot with a known password.
+	mustAddPassword(t, "test-pass", "agent-v1", "agent3", "--scope=read", "--namespaces=*", "--ttl=1h")
+
+	// Rotating to the SAME password is refused, and the original still opens.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-v1")
+	if code, _, e := runVault(t, "", "password", "add", "--rotate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3"); code == 0 ||
+		!strings.Contains(e, "identical to the current one") {
+		t.Fatalf("rotate to same password: code=%d err=%q, want a reuse refusal", code, e)
+	}
+	s, err := requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "agent-v1"); err != nil {
+		t.Errorf("original password should still authenticate after a refused rotate: %v", err)
+	}
+
+	// A DIFFERENT password rotates successfully and invalidates the old one.
+	setPass(t, "test-pass")
+	t.Setenv(EnvNewPassphrase, "agent-v2")
+	if code, out, e := runVault(t, "", "password", "add", "--rotate", "--scope=read", "--namespaces=*", "--ttl=1h", "agent3"); code != 0 ||
+		!strings.Contains(out, "rotated") {
+		t.Fatalf("rotate to a new password: code=%d out=%q err=%q", code, out, e)
+	}
+	s, err = requireStore(home)
+	if err != nil {
+		t.Fatalf("reload store: %s", err)
+	}
+	if _, err := openSession(s, home, "agent-v1"); err == nil {
+		t.Error("old password still authenticates after a successful rotate")
+	}
+	if _, err := openSession(s, home, "agent-v2"); err != nil {
+		t.Errorf("new password should authenticate after rotate: %v", err)
+	}
+}
+
 // TestPasswordRotateAuthenticatingAdmin pins the case where --rotate targets the
 // very admin slot that authorized the command: addSlotToEnvelope must reopen its
 // session while the old slot still exists, then upsert the fresh one. A
