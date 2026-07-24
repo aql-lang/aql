@@ -2056,24 +2056,58 @@ func TestFloatToValueFractional(t *testing.T) {
 	}
 }
 
-func TestSortedKeysEmpty(t *testing.T) {
-	keys := sortedKeys(map[string]any{})
+func eqKeys(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestOrderedKeysEmpty(t *testing.T) {
+	keys := orderedKeys(map[string]any{}, nil)
 	if len(keys) != 0 {
 		t.Errorf("expected 0 keys, got %d", len(keys))
 	}
 }
 
-func TestSortedKeysSingle(t *testing.T) {
-	keys := sortedKeys(map[string]any{"a": 1})
-	if len(keys) != 1 || keys[0] != "a" {
-		t.Errorf("expected [a], got %v", keys)
+func TestOrderedKeysSourceOrder(t *testing.T) {
+	// ko covers every key → pure source order, no sorting.
+	union := map[string]any{"c": 3, "a": 1, "b": 2}
+	keys := orderedKeys(union, []string{"c", "a", "b"})
+	if !eqKeys(keys, []string{"c", "a", "b"}) {
+		t.Errorf("expected [c a b], got %v", keys)
 	}
 }
 
-func TestSortedKeysMultiple(t *testing.T) {
-	keys := sortedKeys(map[string]any{"c": 3, "a": 1, "b": 2})
-	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+func TestOrderedKeysFallbackSorted(t *testing.T) {
+	// Absent ko → sorted determinism fallback (pre-D1 behaviour).
+	keys := orderedKeys(map[string]any{"c": 3, "a": 1, "b": 2}, nil)
+	if !eqKeys(keys, []string{"a", "b", "c"}) {
 		t.Errorf("expected [a b c], got %v", keys)
+	}
+}
+
+func TestOrderedKeysPartialCoverage(t *testing.T) {
+	// ko covers some keys (kept in ko order); the rest append sorted.
+	union := map[string]any{"z": 1, "m": 2, "a": 3, "q": 4}
+	keys := orderedKeys(union, []string{"z", "m"})
+	if !eqKeys(keys, []string{"z", "m", "a", "q"}) {
+		t.Errorf("expected [z m a q], got %v", keys)
+	}
+}
+
+func TestOrderedKeysDedupAndStale(t *testing.T) {
+	// A repeated ko entry keeps its first slot; a ko key absent from the
+	// union (a stale order entry) is skipped.
+	union := map[string]any{"a": 1, "b": 2}
+	keys := orderedKeys(union, []string{"a", "gone", "a", "b"})
+	if !eqKeys(keys, []string{"a", "b"}) {
+		t.Errorf("expected [a b], got %v", keys)
 	}
 }
 

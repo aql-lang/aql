@@ -52,7 +52,7 @@ def lex-it fn [ [src:String] [List] [
 
 	// The enclosing parser def read from a SECOND, deeper fn frame still rescues.
 	nested := strings.Replace(src, `(lex-it "hello")`,
-		`def outer fn [[s:String] [List] [ (lex-it s) ]]
-(outer "hi")`, 1)
+		`def deeper fn [[s:String] [List] [ (lex-it s) ]]
+(deeper "hi")`, 1)
 	requireEngineParity(t, nested, true)
 }

@@ -905,9 +905,9 @@ String tor Number tor Boolean	Boolean tor Number tor String
 # Disjunct with concrete maps (open matching)
 ({x:1} tor {y:2}) unify {x:1}	{x:1} true
 ({x:1} tor {y:2}) unify {y:2}	{y:2} true
-({x:1} tor {y:2}) unify {x:1,q:9}	{q:9 x:1} true
-({x:1} tor {y:2} tor {z:3}) unify {y:2,q:9,x:8}	{q:9 x:8 y:2} true
-({x:1} tor {y:2} tor {z:3}) unify {q:9,z:3,x:1}	{q:9 x:1 z:3} true
+({x:1} tor {y:2}) unify {x:1,q:9}	{x:1 q:9} true
+({x:1} tor {y:2} tor {z:3}) unify {y:2,q:9,x:8}	{y:2 q:9 x:8} true
+({x:1} tor {y:2} tor {z:3}) unify {q:9,z:3,x:1}	{q:9 z:3 x:1} true
 
 # Disjunct map: no match
 ({x:1} tor {y:2}) unify {z:3}	'~unify-fail' false

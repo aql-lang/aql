@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -232,7 +231,7 @@ func Parse(src string) ([]eng.Value, error) {
 		return convertTopLevel(val.Val, d)
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			tv, err := convertTypedMap(val.Val, d)
+			tv, err := convertTypedMap(val.Val, d, val.Meta)
 			if err != nil {
 				return nil, err
 			}
@@ -661,7 +660,7 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			return convertTypedMap(val.Val, d)
+			return convertTypedMap(val.Val, d, val.Meta)
 		}
 		mv, err := convertMapData(val.Val, val.Implicit, d, val.Meta)
 		if err != nil {
@@ -807,11 +806,13 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 	var ckSet map[string]bool // computed keys ([key] syntax)
 	var qkSet map[string]bool // quoted keys ({'k': v} syntax)
 	var shList []string       // shorthand keys ({foo} / {foo/r} syntax)
+	var ko []string           // source key order (D1: Meta["ko"] channel)
 	if len(meta) > 0 && meta[0] != nil {
 		qmSet, _ = meta[0]["qm"].(map[string]bool)
 		ckSet, _ = meta[0]["ck"].(map[string]bool)
 		qkSet, _ = meta[0]["qk"].(map[string]bool)
 		shList, _ = meta[0]["sh"].([]string)
+		ko, _ = meta[0]["ko"].([]string)
 	}
 
 	// Word modifiers (`/r`, `/q`, `/f`, `/s`, `/N`) are legal only on
@@ -873,7 +874,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 		}
 	}
 
-	for _, key := range sortedKeys(union) {
+	for _, key := range orderedKeys(union, ko) {
 		var child eng.Value
 		var err error
 		if _, inMap := m[key]; inMap {
@@ -984,7 +985,7 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 
 	case jsonic.MapRef:
 		if hasMapChild(val.Val) {
-			return convertTypedMap(val.Val, d)
+			return convertTypedMap(val.Val, d, val.Meta)
 		}
 		return convertMapData(val.Val, val.Implicit, d, val.Meta)
 
@@ -1083,7 +1084,7 @@ func hasMapChild(m map[string]any) bool {
 // constraint (`{k:v :T}`), each entry is converted in data context
 // and retained on the resulting Value's ChildTypeInfo.Entries; the
 // runtime `is` validates each entry's value against Child on demand.
-func convertTypedMap(m map[string]any, d *parseDepth) (eng.Value, error) {
+func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (eng.Value, error) {
 	if err := d.enter(); err != nil {
 		return eng.Value{}, err
 	}
@@ -1092,20 +1093,26 @@ func convertTypedMap(m map[string]any, d *parseDepth) (eng.Value, error) {
 	if err != nil {
 		return eng.Value{}, err
 	}
-	// Collect non-`child$` entries as concrete values.
-	keys := make([]string, 0, len(m))
-	for k := range m {
+	// Collect non-`child$` entries as concrete values, in SOURCE order
+	// (D1 — design/FLEX-ATTRS.1.md §3). The `child$` constraint is not a
+	// pair, so the order channel never records it; drop it from the union
+	// before ordering.
+	var ko []string
+	if len(meta) > 0 && meta[0] != nil {
+		ko, _ = meta[0]["ko"].([]string)
+	}
+	union := make(map[string]any, len(m))
+	for k, v := range m {
 		if k == "child$" {
 			continue
 		}
-		keys = append(keys, k)
+		union[k] = v
 	}
-	if len(keys) == 0 {
+	if len(union) == 0 {
 		return eng.NewTypedMap(childVal), nil
 	}
-	sort.Strings(keys)
-	entries := make([]eng.ChildEntry, 0, len(keys))
-	for _, k := range keys {
+	entries := make([]eng.ChildEntry, 0, len(union))
+	for _, k := range orderedKeys(union, ko) {
 		ev, err := convertDataValue(m[k], d)
 		if err != nil {
 			return eng.Value{}, err
@@ -1247,18 +1254,45 @@ func resolveTextValue(text string) eng.Value {
 	return eng.NewAtom(text)
 }
 
-// sortedKeys returns the keys of a map in sorted order for deterministic output.
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
+// orderedKeys returns the keys of a map in SOURCE order — the D1
+// insertion-order default (design/FLEX-ATTRS.1.md §3). `ko` is the source
+// key order captured by the grammar's `Meta["ko"]` channel
+// (grammar.go): keys present in `ko` are emitted in that order (first-
+// position/last-value — a repeated literal key keeps its first slot,
+// matching OrderedMap.Set), then any remaining union keys the channel did
+// not cover are appended in sorted order.
+//
+// The sorted tail is the determinism fallback for map values that reach
+// this path WITHOUT an order channel — a map assembled off the pair
+// grammar (e.g. the synthesized `{child$:…}` split, or any future
+// non-pair producer) hands an UNORDERED Go map, where source order is
+// unrecoverable and sorted is the only stable choice. When `ko` covers
+// every key (the common literal case) the tail is empty and output is
+// pure source order.
+func orderedKeys(union map[string]any, ko []string) []string {
+	out := make([]string, 0, len(union))
+	seen := make(map[string]bool, len(union))
+	for _, k := range ko {
+		if seen[k] {
+			continue
+		}
+		if _, ok := union[k]; ok {
+			out = append(out, k)
+			seen[k] = true
 		}
 	}
-	return keys
+	rest := make([]string, 0, len(union))
+	for k := range union {
+		if !seen[k] {
+			rest = append(rest, k)
+		}
+	}
+	for i := 1; i < len(rest); i++ {
+		for j := i; j > 0 && rest[j] < rest[j-1]; j-- {
+			rest[j], rest[j-1] = rest[j-1], rest[j]
+		}
+	}
+	return append(out, rest...)
 }
 
 // scanWordModifier parses the optional `/...` modifier suffix of an

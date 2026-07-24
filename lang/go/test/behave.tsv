@@ -206,7 +206,7 @@ true StructUtil.nodify	true	Boolean passes through
 # Map with renamed / filtered fields. The body returns a Map (Node);
 # `nodify` exposes that Map directly so the spec can assert on its
 # structure without going through the JSON-string encoder.
-def Person class {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} StructUtil.nodify	{age:30 n:'Alice'}	custom projection: rename + drop `secret`
+def Person class {name:String age:Integer secret:String} behave nodify/q (fn [[Person] [Any] [{n: (a 'name' get), age: (a 'age' get)}]]) make Person {name:'Alice' age:30 secret:'hush'} StructUtil.nodify	{n:'Alice' age:30}	custom projection: rename + drop `secret`
 
 # Body can return Scalar, not just Node — projection is free to
 # collapse the whole instance to a primitive.

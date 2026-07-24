@@ -1,5 +1,37 @@
 # FLEX-ATTRS.1 — insertion order universal; WeakFlexMap; sorted types
 
+> **Implementation note (2026-07-24):** D1 is IMPLEMENTED on this
+> branch. Mechanism: the **grammar-BC channel** (§3.2 route 1), not the
+> upstream jsonic bump — tabnas/jsonic v0.2.0 is pinned and reached
+> read-only from the module cache, so `pairval` can't be edited here; the
+> BC route is designed against a swappable `Meta["ko"]` contract so an
+> upstream bump can replace it later. The `aql_ck` leak (§2.6) is fixed
+> first (a `defer delete(r.K, "aql_ck")` in the computed-key BC), then a
+> `ko` order channel records each pair's final union key in source order
+> (first-position/last-value dedup, base-name normalization for
+> shorthand/optional, verbatim quoted/computed keys — the five §3.2
+> special cases). `convertMapData` and `convertTypedMap` iterate the new
+> `orderedKeys(union, ko)` (source order, sorted tail only as the
+> determinism fallback for maps that reach the path off the pair
+> grammar); `sortedKeys` and its three tests are gone (ADR-008). The
+> renderers were already `Keys()`-based, so no Go render change was
+> needed; the **TS engine** flips its three render sites
+> (`canon.ts` map + options, `value.ts` toString) from `sortedKeys()` to
+> `keys()` — `sortedKeys()` stays only for order-insensitive map equality
+> (`coretype.ts`). Migration (§3.3): old-vs-new differential over the full
+> corpus, every differing row machine-verified as a pure key permutation
+> before its expected column flipped — 14 exact-canon rows (map,
+> edge-containers-3/4, refine-flex, bytecode-migrated, basic, behave,
+> syntax, frontier-do-catch, structure ×2), 1 Go assertion
+> (behave_reify_wave3), 3 doc examples (REFERENCE/TUTORIAL/HOWTO), the
+> nodes.tsv representation-vs-canonical doctrine (§3.4), the interp/
+> structure prose, and FORMAL-SPEC.md open question #3 (now closed). The
+> §3.5 normative decisions are pinned: duplicate-key first-position/
+> last-value, source-order value-eval (first-raise-wins), the
+> order-insensitive deq/cmp half of the equality matrix, and record/class
+> order-identity (reordered bodies non-unifiable; same-content instances
+> stay deq-equal). D3 (below) was IMPLEMENTED earlier.
+
 > **Implementation note (2026-07-22):** D3 is IMPLEMENTED on this
 > branch, extended per maintainer instruction to all three flex kinds
 > — `WeakFlexMap` (FixedID 123), `WeakFlexList` (124), `WeakFlexXml`
@@ -18,8 +50,17 @@
 > `d2CheckWrite` — `make`'s check residual now carries the element
 > tag for flex AND weak targets), and typed weak containers enforce
 > `{:T}`/`[:T]` on set/append exactly like the flex column. D1
-> (universal insertion order) and D4 (sorted types) remain
-> unimplemented.
+> (universal insertion order) is now implemented too (see the
+> 2026-07-24 note above); D4 (sorted types) remains
+> unimplemented — but ALL THREE of D4's blocking seams are now GONE:
+> open-words rev 2 (design/OPEN-WORDS.1.md) makes anchored subtype
+> overrides dispatch, its §7b follow-ups fixed the flex retag and
+> pinned container predicates (lang/spec/refine-flex.tsv), and the
+> third seam — base-dispatch delegation for override bodies — is
+> closed by the `as` dispatch-ascription word (OPEN-WORDS.1 §9;
+> lang/spec/as.tsv; the full pure-AQL SortedFlexMap acceptance runs
+> in lang/go/test/sorted_user_test.go). A super-style word was built
+> first and rejected on DX grounds (§7b.1-3 keep that history).
 
 Status: **design under examination — decisions taken; D3 implemented
 on this branch** (2026-07-22). Revision of

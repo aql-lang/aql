@@ -222,6 +222,13 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	// honour.
 	input := make([]Value, len(elems))
 	copy(input, elems)
+	// The module's identity is drawn BEFORE the body runs so every type
+	// the body mints (refine / class) is owner-stamped with this
+	// module's token — the provenance the ownership-anchored signature
+	// rules verify at def-merge and transplant time
+	// (design/OPEN-WORDS.1.md §4).
+	modID := parent.Modules.NextID()
+	modReg.Types.MintOwner = "module#" + modID
 	sub := New(modReg)
 	// C4 attribution (plan Phase 10): the body run IS the module load — a
 	// sanctioned interpreter entry reported under its named seam.
@@ -250,7 +257,6 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 		}
 	}
 
-	modID := parent.Modules.NextID()
 	desc := ModuleDesc{
 		ID:      modID,
 		Exports: exports,
@@ -506,6 +512,13 @@ func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
 		// provenance (each inline `import module […]` is a distinct module).
 		origin = "inline#" + desc.ID
 	}
+	// The exporting module's own mint owner — the AUTHOR the transplant
+	// admission verifies source-clone anchors against (host clones carry
+	// ExtOwner instead). Src is the module's body/sub-registry.
+	owner := ""
+	if desc.Src != nil && desc.Src.Types != nil {
+		owner = desc.Src.Types.MintOwner
+	}
 	for _, exportMap := range desc.Exports {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
@@ -513,7 +526,7 @@ func transplantWordExtensions(r *Registry, desc ModuleDesc) error {
 			if !ok {
 				continue
 			}
-			if err := TransplantExtension(r, ext, origin); err != nil {
+			if err := TransplantExtension(r, ext, origin, owner); err != nil {
 				return err
 			}
 		}

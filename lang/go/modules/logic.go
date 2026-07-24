@@ -13,5 +13,5 @@ import (
 //	true false LogicUtil.nand        # → true
 //	true false LogicUtil.implies     # → false
 func BuildLogicModule(parent *native.Registry) (native.ModuleDesc, error) {
-	return buildDelegatingModule(parent, "LogicUtil", native.LogicModuleNatives)
+	return buildDelegatingModule(parent, "aql:logic-util", "LogicUtil", native.LogicModuleNatives)
 }

@@ -138,6 +138,19 @@ type surfaceUnifier struct {
 	typeName        string
 }
 
+// ContentMembership marks a surface as a CONTENT-based type for the
+// ownership-anchored extension rule (design/OPEN-WORDS.1.md §3.1): a
+// surface's membership is decided by `exposes` declarations that a type
+// can make at ANY time — the conformance set (s.info.Conform) is shared
+// and sees post-hoc updates — so a value that predates the surface can
+// start matching it. Anchoring a core-word extension on a surface would
+// therefore let the merge capture pre-existing calls, breaking the
+// reachability theorem exactly as a predicate/union anchor would. So a
+// surface can never be a nominal anchor (IsNominalAnchor excludes it),
+// even though its membership is nominal-flavoured (explicit `exposes`,
+// not structural duck typing).
+func (*surfaceUnifier) ContentMembership() {}
+
 // Match walks v's declared-type parent chain against the conformance
 // set. Type literals pass through to the default walk — a bare
 // Shape-literal is "the type itself", not an inhabitant.

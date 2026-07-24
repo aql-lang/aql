@@ -179,6 +179,8 @@ func boundedChild(v Value) (Value, bool) {
 // kernel defaults.
 type typeMembershipBehavior struct{}
 
+func (typeMembershipBehavior) ContentMembership() {}
+
 func (typeMembershipBehavior) Match(v Value, t *Type) bool {
 	if t != nil && t.Equal(TType) {
 		return TypeMembership(v)

@@ -25,8 +25,8 @@ func TestGradualAnyForwardArgAccepted(t *testing.T) {
 	// POSITIVE: Any forward arg to a concrete (String) param — no false no_signature.
 	for _, src := range []string{
 		`def lex fn [ [s:String] [List] [ ["x"] ] ]
-def gen fn [ [src:Any] [List] [ (lex src) ] ]
-def _ (gen "hi")`,
+def lexgen fn [ [src:Any] [List] [ (lex src) ] ]
+def _ (lexgen "hi")`,
 		`def known fn [ [name:String] [Boolean] [ true ] ]
 def caller fn [ [opts:Options] [Boolean] [ def engine (opts get "engine") (known engine) ] ]
 def _ (caller {engine:"m"})`,

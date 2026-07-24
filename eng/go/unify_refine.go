@@ -26,6 +26,13 @@ type bareRefineUnifier struct {
 	typeName string
 }
 
+// formatDelegate: a bare-refine newtype adds IDENTITY only, so its
+// values render by their payload family (kernelFormatDefault) — a
+// retagged flex map prints as a map, not as an opaque wrapper. Without
+// the marker the behaviorWrapper hop landed flex payloads outside the
+// family switch and leaked a pointer render (`S({0xc…})`).
+func (b *bareRefineUnifier) formatDelegate() {}
+
 func (b *bareRefineUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(b.prev).Match(v, t)

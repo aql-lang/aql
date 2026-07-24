@@ -130,13 +130,13 @@ func TestFmtDeclarativeFormatter(t *testing.T) {
 	InstallResolver(reg)
 
 	const prog = `import "aql:fmt"
-def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
+def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def rules {
   scalar: (nd:Any => (canon nd))
-  entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (apply nd.value)]}))
-  map:    (nd:Any => ({fmt:'group' body:{fmt:'concat' parts:((Fmt.children nd) each [apply])}}))
+  entry:  (nd:Any => ({fmt:'concat' parts:[nd.key ':' (fmtapply nd.value)]}))
+  map:    (nd:Any => ({fmt:'group' body:{fmt:'concat' parts:((Fmt.children nd) each [fmtapply])}}))
 }
-Fmt.render 72 (apply {a:1 b:{c:2}})`
+Fmt.render 72 (fmtapply {a:1 b:{c:2}})`
 
 	values, perr := parser.Parse(prog)
 	if perr != nil {

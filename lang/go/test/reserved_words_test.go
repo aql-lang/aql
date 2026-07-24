@@ -38,12 +38,16 @@ func TestReservedCoreWordsCannotBeRedefined(t *testing.T) {
 		}
 	}
 
-	// A merge whose tuple exactly matches a LOCKED (native) signature is
-	// refused with its own code — locked signatures can never be replaced.
+	// An attempt to claim a locked kernel tuple dies at ADMISSION under
+	// rev 2 (design/OPEN-WORDS.1.md): the all-kernel tuple has no owned
+	// nominal anchor, so the refusal is extend_owner — the replacement
+	// question is never even reached (the locked_signature arm survives
+	// for non-core locked-bearing words; eng pins it directly in
+	// TestMergeExtensionSigsLockedCollision).
 	if _, err := runNativeSteps(t, nil, []string{`def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add`}); err == nil {
-		t.Errorf("locked-tuple merge: expected [aql/locked_signature], got no error")
-	} else if !strings.Contains(err.Error(), "locked_signature") {
-		t.Errorf("locked-tuple merge: expected locked_signature error, got %v", err)
+		t.Errorf("locked-tuple merge: expected [aql/extend_owner], got no error")
+	} else if !strings.Contains(err.Error(), "extend_owner") {
+		t.Errorf("locked-tuple merge: expected extend_owner error, got %v", err)
 	}
 
 	// `none` is the None value literal, so it is rejected one layer

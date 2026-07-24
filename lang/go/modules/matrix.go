@@ -318,6 +318,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// counter — see eng TypeTable.mintID and the BuildIOModule /
 	// StreamKind precedent.
 	subReg.Types.AdoptSeqFrom(parent.Types)
+	subReg.Types.MintOwner = "aql:matrix-util"
 	tt := MintTensorTypes(subReg)
 
 	for _, n := range matrixNatives(tt) {
@@ -884,13 +885,13 @@ func (tt TensorModuleTypes) matMulHandler(args []native.Value, _ map[string]nati
 // The mat-* words remain as aliases backed by the same handlers.
 func TensorArithmeticExtensions(tt TensorModuleTypes) []native.FnDefInfo {
 	return []native.FnDefInfo{
-		native.NewWordExtension("add", []native.Signature{
+		native.NewWordExtension("aql:matrix-util", "add", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matAddHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
-		native.NewWordExtension("sub", []native.Signature{
+		native.NewWordExtension("aql:matrix-util", "sub", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matSubHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
-		native.NewWordExtension("mul", []native.Signature{
+		native.NewWordExtension("aql:matrix-util", "mul", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matMulHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
 	}

@@ -950,6 +950,12 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 			if _, ok := r.K["aql_ck"]; !ok {
 				return
 			}
+			// Clear the computed-key flag as this pair closes so it cannot
+			// LEAK to the sibling pair. tabnas's K map is shared across the
+			// sibling pairs of a map, so a lingering aql_ck made a later bare
+			// key (`{[k]:1 aa:2}`) wrongly parse as computed — the pre-existing
+			// leak the D1 order channel sits on (design/FLEX-ATTRS.1.md §2.6).
+			defer delete(r.K, "aql_ck")
 			key, _ := r.U["key"].(string)
 			if key == "" {
 				return
@@ -1028,6 +1034,52 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				qkSet[key] = true
 				mr.Meta["qk"] = qkSet
 				r.Node = mr // MapRef is a value type, reassign
+			}
+		})
+	})
+
+	// Record source KEY ORDER in MapRef.Meta["ko"] via pair.BC callback —
+	// the D1 insertion-order channel (design/FLEX-ATTRS.1.md §3). jsonic
+	// hands convertMapData an UNORDERED Go map (MapRef.Val), so without
+	// this the parser sorts keys for determinism and a `{b:2 a:1}` literal
+	// loses its source order. BC fires once per pair in source order; each
+	// records its FINAL union key (the same string convertMapData keys on):
+	// a shorthand base name, an explicit/computed/optional key, else the
+	// bare pair key. First-position/last-value dedup — a repeated key keeps
+	// its first slot (matching OrderedMap.Set), and inner pushed pairs
+	// (the qm/ck double-fire) collapse onto the same slot.
+	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
+		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			var key string
+			switch {
+			case r.U["aql_sh"] != nil:
+				if raw, ok := r.U["aql_sh"].(string); ok {
+					key = wordBaseName(raw)
+				}
+			case r.U["key"] != nil:
+				key, _ = r.U["key"].(string)
+			case r.O0 != nil && !r.O0.IsNoToken():
+				// The explicit/computed/optional/quoted pairs all set
+				// r.U["key"] above; a pair reaching here is a bare `k:v`,
+				// whose key token renders verbatim via Src (its Val is a
+				// non-string primitive — see the D1 coverage note).
+				key = r.O0.Src
+			}
+			if key == "" {
+				return
+			}
+			// Sibling recording BCs (qk/sh/ck) gate on the MapRef the same
+			// way; the pair always closes into a MapRef, so the miss arm is
+			// unreachable and stays out of the guard.
+			if mr, ok := r.Node.(jsonic.MapRef); ok {
+				ko, _ := mr.Meta["ko"].([]string)
+				for _, e := range ko {
+					if e == key {
+						return // already recorded — first-position dedup
+					}
+				}
+				mr.Meta["ko"] = append(ko, key)
+				r.Node = mr
 			}
 		})
 	})

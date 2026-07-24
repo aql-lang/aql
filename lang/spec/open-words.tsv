@@ -1,40 +1,56 @@
-# AQL Language Specification: Open words — scoped `def` extension of existing words
+# AQL Language Specification: Open words — ownership-anchored `def` extension
 # Format: input<TAB>expected<TAB>description
 #
-# design/OPEN-WORDS.0.md: `def <word> fn […]` on a word that carries
+# design/OPEN-WORDS.1.md: `def <word> fn […]` on a word that carries
 # LOCKED signatures (every natively registered word) MERGES the fn's
 # signatures into a word CLONE bound through the ordinary def shadow
 # stack — scoped like every other def (fn body / module body / top
 # level), popped by `undef`, inherited by sub-engines, captured by
-# closures. Locked signatures sort first in match order, so no
-# previously-valid call changes its dispatch; a merge tuple exactly
-# matching a locked tuple is refused ([aql/locked_signature]); sealed
-# words (def / make / word — the kernel's name-keyed identities) refuse
-# entirely ([aql/reserved_word]). A module exports its merged word like
-# any other fn (`export "M" {add: add/r}`) and `import` TRANSPLANTS the
-# extension one level into the importing registry; re-export is the
-# opt-in for transitivity, and the inline-module firewall is the
-# opt-out. Plain user fns (no locked sigs) keep whole-replacement
-# shadowing — the REPL/iterate idiom.
+# closures. Admission is OWNERSHIP-ANCHORED (rev 2): every added
+# signature must carry at least one NOMINAL argument type the
+# extending scope owns ([aql/extend_owner] otherwise — content-based
+# types cannot anchor); a tuple matching a locked signature is refused
+# ([aql/locked_signature]); sealed words (def / make / word) refuse
+# entirely ([aql/reserved_word]). Dispatch sorts ALL signatures by
+# natural per-position specificity — an anchored SUBTYPE overload
+# pre-empts its parent's kernel signature for the subtype's values,
+# while every pre-existing call is untouched (the reachability
+# theorem: no value of the anchor type can predate the merge). A
+# module exports its merged word like any other fn and `import`
+# TRANSPLANTS the extension one level; re-export is the opt-in for
+# transitivity, the inline-module firewall the opt-out. Plain user
+# fns (no locked sigs) keep whole-replacement shadowing.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  the merge — top level
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  add true false	true	a merged signature dispatches on the extended word
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  add 1 2	3	locked native dispatch is unchanged inside the extending scope
-def add fn [[a:Integer b:Integer] [Integer] [99]]  add 1 2	3	locked-first: an unlocked tuple overlapping a locked family can never pre-empt the locked match — previously-valid calls are byte-identical
-add true false	ERROR:arithmetic is not defined on Boolean	an engine without the merge raises the within-type defined error (negative twin of §1 row 1)
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  do [add true false]	true	a top-level merge is visible to sub-engines, like any top-level def
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  [false true] each [add true]	[true true]	higher-order bodies see the merge too
+# §1  the anchored merge — top level
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  def x:Flag true  def y:Flag false  add x y	true	an anchored merged signature dispatches on the extended word
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  add 1 2	3	kernel dispatch is unchanged inside the extending scope
+add true false	ERROR:arithmetic is not defined on Boolean	an engine without a merge raises the within-type defined error (negative twin)
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  def x:Flag true  do [add x x]	true	a top-level merge is visible to sub-engines, like any top-level def
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  def x:Flag true  def y:Flag false  [x y] each [add x]	[true true]	higher-order bodies see the merge too
 #
 # ─────────────────────────────────────────────────────────────────────
-# §2  the merge — fn-body scope (body-local def, torn down at exit)
-def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  f true	true	a fn-body merge extends the word inside the body
-def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add true false	ERROR:arithmetic is not defined on Boolean	the body-local merge is INVISIBLE after fn exit — the call falls to the within-type defined error (negative twin)
-def g fn [[] [Function] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] ([x:Boolean] => [add x false])]]  def h (g)  h true	true	closure capture: a lambda constructed inside a fn-scoped merge keeps the merge after the scope exits (the uniform closure rule, §4.3)
+# §1b  subtype specialization — the natural-order dividend (rev 2)
+# An anchored SUBTYPE overload of a core word sorts ahead of the
+# kernel parent signature by per-position specificity and actually
+# dispatches for the subtype's values; parent-typed calls never see it.
+def M (refine Map)  def set fn [[k:Atom/q v:Any m:M] [String] ['override']]  def x:M {a:1}  set b/q 2 x	'override'	the M-anchored `set` overload pre-empts the kernel Map signature for M values
+def M (refine Map)  def set fn [[k:Atom/q v:Any m:M] [String] ['override']]  (set b/q 2 {a:1})	{a:1 b:2}	…while a plain Map value still dispatches the kernel signature (reachability: pre-existing calls are byte-identical)
 #
 # ─────────────────────────────────────────────────────────────────────
-# §3  locked and sealed refusals
-def add fn [[a:Number b:Number] [Number] [a]]	ERROR:locked_signature	a merge tuple exactly matching a LOCKED signature can never replace it
+# §2  ownership refusals — unanchored and foreign-anchored merges
+def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  add true false	ERROR:extend_owner	an UNANCHORED tuple (kernel types only) cannot merge onto a core word — at any scope, top level included (rev 2)
+def add fn [[a:Integer b:Integer] [Integer] [99]]  add 1 2	ERROR:extend_owner	claiming a kernel tuple dies at admission — the locked family is not even reachable
+def add fn [[a:Number b:Number] [Number] [a]]	ERROR:extend_owner	the exact locked tuple is equally unanchored — refused before any replacement question arises
+def add fn [[a:Date b:Date] [Boolean] [true]]	ERROR:extend_owner	a first-party module's type (Date is aql:time-util's) does not anchor a PROGRAM extension — ownership is not transitive
+def Big (Integer gt 10)  def add fn [[a:Big b:Big] [Integer] [1]]	ERROR:extend_owner	a CONTENT-based type (predicate) cannot anchor — its members exist before the type does (the nominality theorem, OPEN-WORDS.1 §3.1)
+def U (Integer tor String)  def add fn [[a:U b:U] [Integer] [1]]	ERROR:extend_owner	a union body is content-based too — no anchor
+def Shape surface {area: (fnsig [[Self] [Float]])} end  def add fn [[a:Shape b:Shape] [Float] [1.0]]	ERROR:extend_owner	a surface is content-based — a type can `exposes` it AFTER the fact, so a value can predate its own membership; no anchor (OPEN-WORDS.1 §3.1)
+def Big (Integer gt 10)  behave compare/q (fn [[Big Big] [Integer] [0]])  def add fn [[a:Big b:Big] [Integer] [1]]	ERROR:extend_owner	a `behave` wrapper does not launder a content type into an anchor — IsNominalAnchor sees through the Match-delegating wrapper to the predicate beneath
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def add fn [[a:(M.Flag) b:(M.Flag)] [Boolean] [a or b]]  add (M.mk true) (M.mk false)	ERROR:extend_owner	a program def cannot re-anchor on ANOTHER module's type to shadow its transplanted tuple — you cannot redefine what you do not own (rev 2; rev 1 allowed this)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  sealed refusals and non-fn bodies
 def def fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`def` is sealed — the kernel relies on its name identity
 def make fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`make` is sealed (autoEvalMap gating keys on the name)
 def word fn [[x:Integer] [Integer] [x]]	ERROR:reserved_word	`word` is sealed (splice-paren expansion keys on the name)
@@ -42,70 +58,61 @@ def add 42	ERROR:reserved_word	a NON-fn body on a built-in stays a refused redef
 undef add	ERROR:reserved_word	undef of a built-in with no extension present stays refused
 #
 # ─────────────────────────────────────────────────────────────────────
-# §4  unlocked replacement and undef unwinding
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  add true false	false	re-merging the same UNLOCKED tuple replaces it in scope
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  def add fn [[a:Boolean b:Boolean] [Boolean] [a and b]]  undef add  add true false	true	undef pops the replacement, restoring the previous merge
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add 1 2	3	undef pops the merge; the base word is intact
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add  add true false	ERROR:arithmetic is not defined on Boolean	undef pops the merge; the added tuple is gone and the within-type default is restored (negative twin)
+# §4  unlocked replacement and undef unwinding (anchored)
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  def add fn [[a:Flag b:Flag] [Boolean] [a and b]]  def x:Flag true  def y:Flag false  add x y	false	re-merging the same UNLOCKED tuple you own replaces it in scope
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  def add fn [[a:Flag b:Flag] [Boolean] [a and b]]  undef add  def x:Flag true  def y:Flag false  add x y	true	undef pops the replacement, restoring the previous merge
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  undef add  add 1 2	3	undef pops the merge; the base word is intact
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  undef add  def x:Flag true  add x x	ERROR:arithmetic is not defined on Boolean	undef pops the merge; the added tuple is gone and the within-type default is restored (negative twin)
 undef add (fnsig [[Number Number] [Number]])  add 1 2	3	targeted signature-undef never removes a locked (native) signature
-def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]]  undef add (fnsig [[Boolean Boolean] [Boolean]])  add true false	true	targeted signature-undef leaves a word-extension clone intact (it carries locked sigs); plain `undef add` is the retraction
+def Flag (refine Boolean)  def add fn [[a:Flag b:Flag] [Boolean] [a or b]]  undef add (fnsig [[Flag Flag] [Boolean]])  def x:Flag true  add x x	true	targeted signature-undef leaves a word-extension clone intact (it carries locked sigs); plain `undef add` is the retraction
 #
 # ─────────────────────────────────────────────────────────────────────
-# §5  plain user fns keep whole-replacement shadowing (§4.1)
+# §4b  the merge — fn-body scope (body-local def, torn down at exit)
+def Flag (refine Boolean)  def f fn [[x:Flag] [Boolean] [def add fn [[a:Flag b:Flag] [Boolean] [a or b]] add x x]]  def v:Flag true  f v	true	a fn-body merge extends the word inside the body (anchored by a type the program owns)
+def Flag (refine Boolean)  def f fn [[x:Flag] [Boolean] [def add fn [[a:Flag b:Flag] [Boolean] [a or b]] add x x]]  def v:Flag false  (f v) add v v	ERROR:arithmetic is not defined on Boolean	the body-local merge is INVISIBLE after fn exit — the call falls to the within-type defined error (negative twin)
+def Flag (refine Boolean)  def g fn [[] [Function] [def add fn [[a:Flag b:Flag] [Boolean] [a or b]] ([x:Flag] => [add x x])]]  def h (g)  def v:Flag true  h v	true	closure capture: a lambda constructed inside a fn-scoped merge keeps the merge after the scope exits (the uniform closure rule)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  plain user fns keep whole-replacement shadowing
 def f fn [[a:Integer] [Integer] [1]]  def f fn [[a:Integer] [Integer] [2]]  f 5	2	re-def of a plain user fn with the same tuple REPLACES it (the REPL idiom) — no merge semantics without locked sigs
 #
 # ─────────────────────────────────────────────────────────────────────
-# §6  module scope: extending a core word REQUIRES a user type (§4.4b)
-#
-# A module may extend a core word only with at least one USER-MINTED
-# (refine / class) argument type per signature. A tuple built only
-# from built-in types — kernel (Integer, Map, Boolean, …) or
-# aql:-module-registered externals (Date, Matrix, …) — would change
-# what core calls mean for every importer (`add 1 {}` suddenly
-# working) and breaks forward compatibility the day core or a
-# first-party module claims the tuple. Top-level programs are
-# unrestricted (§1).
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]	ERROR:extend_user_type	a module cannot extend a core word with an all-builtin tuple
-import module [def add fn [[a:Integer b:Map] [Integer] [1]] export "M" {add: add/r}]	ERROR:extend_user_type	`add 1 {}` can never start working because of an import
-import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {x:1}]	ERROR:extend_user_type	refused at the module-body def itself — even a module-PRIVATE all-builtin extension breaks when core later claims the tuple
-import module [def add fn [[a:Date b:Date] [Boolean] [true]] export "M" {add: add/r}]	ERROR:extend_user_type	an aql:-module type (Date) is a BUILT-IN, not a user type — it does not anchor a module extension
-import module [def Flag (refine Boolean) def add fn [[a:Integer b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  add 1 (M.mk true)	true	a MIXED tuple qualifies — one user-minted type anchors the signature
-def add fn [[a:Date b:Date] [Boolean] [true]]  import "aql:time-util"  add TimeUtil.today TimeUtil.today	true	the rule is module-scope only: a TOP-LEVEL program may extend core words with builtin tuples freely
+# §6  module scope: the same ownership rule, seen from a module body
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {add: add/r}]	ERROR:extend_owner	a module cannot extend a core word with an unanchored tuple
+import module [def add fn [[a:Integer b:Map] [Integer] [1]] export "M" {add: add/r}]	ERROR:extend_owner	`add 1 {}` can never start working because of an import
+import module [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] export "M" {x:1}]	ERROR:extend_owner	refused at the module-body def itself — even a module-PRIVATE unanchored extension
+import module [def add fn [[a:Date b:Date] [Boolean] [true]] export "M" {add: add/r}]	ERROR:extend_owner	Date is aql:time-util's type, not this module's — foreign first-party types do not anchor
+import module [def Flag (refine Boolean) def add fn [[a:Integer b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  add 1 (M.mk true)	true	a MIXED tuple qualifies — one module-minted nominal type anchors the signature
 #
 # ─────────────────────────────────────────────────────────────────────
-# §7  export transplant — one level, opt-in transitivity (user-typed)
+# §7  export transplant — one level, opt-in transitivity (anchored)
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)	true	exporting the merged word transplants the extension into the importer's bare word
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk false)	false	the transplanted body runs (module-closure execution) — not a stub match
-import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  M.add (M.mk true) (M.mk false)	false	the namespaced binding exists alongside the transplant (§4.9)
-import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add 1 2	3	locked native dispatch is untouched by a transplant
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  M.add (M.mk true) (M.mk false)	false	the namespaced binding exists alongside the transplant
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  add 1 2	3	kernel dispatch is untouched by a transplant
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  typeof (M.mk true)	Flag	the module's minted type crosses the boundary with its values
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def Flag M.Flag  def x:Flag true  def y:Flag true  add x y	true	the importer constructs its OWN values via the exported type (alias annotation) and the transplanted signature dispatches on them
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {mk: mk/r Flag: Flag}]  add (M.mk true) (M.mk true)	ERROR:arithmetic is not defined on Boolean	a module-body merge WITHOUT an export of the word is module-private — nothing crosses the boundary
-import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r}]  add (O.mk true) (O.mk true)	ERROR:arithmetic is not defined on Boolean	one level only: the TYPE crossed two boundaries (O.mk builds Flag-conforming values) but the word extension did not — this is also the firewall idiom
-import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r add: add/r}]  add (O.mk true) (O.mk true)	true	re-export is the opt-in for transitivity: the outer module re-exports the word and its importer gains the extension
-import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [false]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "N" {add: add/r mk: mk/r}]  add (M.mk true) (M.mk true)	true	two modules' same-shaped user-typed extensions COEXIST — each is anchored to its own minted type, so the tuples are distinct by construction (§5.2 per-tree mintID)
-import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [false]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "N" {add: add/r mk: mk/r}]  add (N.mk true) (N.mk true)	false	…and the second module's extension dispatches on ITS values — no shadowing between them ([aql/extend_conflict] guards the identical-tuple case, pinned in module_extend_test.go)
-import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  def add fn [[a:(M.Flag) b:(M.Flag)] [Boolean] [a or b]]  add (M.mk true) (M.mk false)	true	a direct user def still replaces a transplanted tuple freely — the conflict rule is module-vs-module only
+import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r}]  add (O.mk true) (O.mk true)	ERROR:arithmetic is not defined on Boolean	one level only: the TYPE crossed two boundaries but the word extension did not — this is also the firewall idiom
+import module [import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "I" {add: add/r mk: mk/r Flag: Flag}] def Flag I.Flag def omk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "O" {mk: omk/r add: add/r}]  add (O.mk true) (O.mk true)	true	re-export is the opt-in for transitivity — the re-exported sig keeps its ORIGINAL module's anchor, which the transplant admission accepts (module-minted anchors cannot predate the import chain)
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [false]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "N" {add: add/r mk: mk/r}]  add (M.mk true) (M.mk true)	true	two modules' same-shaped anchored extensions COEXIST — each is anchored to its own minted type, so the tuples are distinct by construction
+import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [true]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r}]  import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [false]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "N" {add: add/r mk: mk/r}]  add (N.mk true) (N.mk true)	false	…and the second module's extension dispatches on ITS values — no shadowing between them ([aql/extend_conflict] guards the identical-tuple case)
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  undef add  add 1 2	3	undef pops the transplant; the base word is intact
 import module [def Flag (refine Boolean) def add fn [[a:Flag b:Flag] [Boolean] [a and b]] def mk fn [[b:Boolean] [Flag] [def v:Flag b v]] export "M" {add: add/r mk: mk/r Flag: Flag}]  undef add  add (M.mk true) (M.mk true)	ERROR:arithmetic is not defined on Boolean	undef pops the transplant; the transplanted tuple is gone (negative twin)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §7b  the canonical user-module shape: a CLASS type + a merged overload
-# A module mints Point {x,y}, merges [Point Point] into core add (its
-# own class anchors the signature), and exports both; the importer
-# makes Points through the exported type and `p0 add p1` dispatches
-# the transplant, whose body runs in module scope (`make Point …`).
 import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  def p2 (p0 add p1)  p2.x	5	Point addition via the transplanted class overload — x field
 import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 (make Pointer.Point {x:1 y:2})  def p1 (make Pointer.Point {x:4 y:6})  def p2 (p0 add p1)  p2 is Pointer.Point	true	the sum is a Point of the module's minted class
 import module [def Point class {x:Integer y:Integer} def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]] export "Pointer" {Point: Point add: add/r}]  def p0 make Pointer.Point {x:1 y:2}  add p0 1	ERROR:signature_error	the overload is anchored to Point on BOTH operands — a Point plus a number stays refused (negative twin)
 #
 # ─────────────────────────────────────────────────────────────────────
-# §8  extending module-provided words
-import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt "x"	7	a native-module wrapper rebound to a bare name carries LOCKED sigs, so def merges onto it (§4.1 — module words count); no user-type rule here, the word is not core
-import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt 16.0	4.0	the wrapper's locked signature still dispatches first
+# §8  extending module-provided words (not core — no anchor demanded)
+import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt "x"	7	a native-module wrapper rebound to a bare name carries LOCKED sigs, so def merges onto it; the ownership rule targets CORE words — module words are versioned with their dependency
+import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[s:String] [Integer] [7]]  sqrt 16.0	4.0	the wrapper's locked signature still dispatches (disjoint tuples — order is immaterial)
 import "aql:math-util"  def sqrt MathUtil.sqrt  def sqrt fn [[x:Float] [Float] [1.0]]	ERROR:locked_signature	the wrapper's locked tuple cannot be replaced, same as a core word's
 import "aql:io"  def write IO.write  def write fn [[a:Pathon b:Any] [Pathon] ['x']]	ERROR:locked_signature	a MULTI-overload wrapper rebinds with its inner locked sigs too — an overlapping tuple is refused, not silently replaced
 import "aql:io"  def write IO.write  def write fn [[a:Integer b:Integer] [Integer] [a add b]]  write 1 2	3	…while a DISJOINT tuple still merges onto the multi-overload wrapper
 import module [def w fn [[a:Integer] [Integer] [1]] export "B" {w: w/r}]  def w B.w  def w fn [[a:String] [Integer] [2]]  w "s"	2	a PLAIN module fn (no locked sigs) rebound and re-defd keeps user-word semantics — the new overload dispatches
 import module [def w fn [[a:Integer] [Integer] [1]] export "B" {w: w/r}]  def w B.w  def w fn [[a:String] [Integer] [2]]  w 5	1	…and the module fn's own overload stays reachable (cross-stack overloading, not a merge)
-import module [import "aql:math-util" def sqrt MathUtil.sqrt def sqrt fn [[s:String] [Integer] [7]] export "M" {sqrt: sqrt/r}]  M.sqrt "x"	7	a module may extend ANOTHER module's word and export it; with no bare `sqrt` in the importer the export degrades to the namespaced binding (§4.9)
+import module [import "aql:math-util" def sqrt MathUtil.sqrt def sqrt fn [[s:String] [Integer] [7]] export "M" {sqrt: sqrt/r}]  M.sqrt "x"	7	a module may extend ANOTHER module's word and export it; with no bare `sqrt` in the importer the export degrades to the namespaced binding

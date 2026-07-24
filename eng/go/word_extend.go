@@ -19,8 +19,10 @@ import "fmt"
 //     existing UNLOCKED signature REPLACES it;
 //   - a tuple matching a LOCKED signature is an error
 //     ([aql/locked_signature]) — locked sigs can never be replaced;
-//   - any other signature APPENDS. Locked sigs keep first position in
-//     match order via CompareSignatures' locked-first key.
+//   - any other signature APPENDS. Dispatch order among all sigs is
+//     the natural specificity order (CompareSignatures); admission is
+//     governed by the ownership-anchor rules (requireOwnedAnchor,
+//     design/OPEN-WORDS.1.md).
 
 // sealedWords are the words the engine special-cases BY NAME, where a
 // shadow binding would break the identity the kernel relies on — so
@@ -167,50 +169,89 @@ func mergeExtensionSigs(r *Registry, name string, base *FnDefInfo, incoming []Si
 	return merged, changed, nil
 }
 
-// isUserType reports whether t is a RUNTIME-MINTED type — one user
-// code created with `refine` / `class` (Origin == OriginUserDef).
-// Everything registered as a builtin is excluded: the kernel types the
-// parser can produce (Integer, Map, …) AND the external-builtin domain
-// types the aql: modules and host plugins register globally (Date,
-// Matrix, Fetch, Timeout — RegisterExternalBuiltin). A type alias
-// (`def MyDate Date`) does not mint, so it cannot launder a builtin
-// through this check; a refine of a builtin (`def MyDate (refine
-// Date)`) is a genuine user identity and qualifies.
-func isUserType(t *Type) bool {
-	return t != nil && t.Origin == OriginUserDef
+// IsNominalAnchor reports whether t can ANCHOR a word-extension
+// signature (design/OPEN-WORDS.1.md §3.1): an OWNED type whose
+// membership is TAG-carried — a value is a member only if constructed
+// as one — so no pre-existing value can ever match through it.
+// Content-based types (predicate, member-fn, union, negation, schema,
+// bounded-Type — everything marked ContentMembership) are excluded:
+// their members can predate the type, which would let an anchored
+// signature capture previously-valid calls. Unowned ad-hoc types
+// (empty OwnerID) never anchor.
+func IsNominalAnchor(t *Type) bool {
+	if t == nil || t.OwnerID() == "" {
+		return false
+	}
+	// behaviorIsContent walks through a Match-delegating `behave` wrapper
+	// so a behave'd predicate/surface stays excluded (design/OPEN-WORDS.1.md
+	// §3.1) — a bare marker check would miss the content behavior beneath it.
+	return !behaviorIsContent(t.Behavior())
 }
 
-// sigHasUserType reports whether at least one of the signature's
-// argument types is user-minted. The module-scope safety rule for
-// extending CORE words: a tuple built only from builtin types —
-// kernel or aql:-module-registered — is refused. It would surprise
-// importers (`add 1 {}` suddenly working from an import) and breaks
-// forward compatibility the day core or a first-party module claims
-// the tuple as a locked signature. A minted type anchors the
-// signature to the module's own domain, which is the intended use.
-func sigHasUserType(s *Signature) bool {
+// sigHasOwnedAnchor reports whether at least one of the signature's
+// argument types is a nominal anchor OWNED by the extending author
+// (rule R1, design/OPEN-WORDS.1.md §2): the provenance proof that no
+// call predating the merge can match the added signature.
+func sigHasOwnedAnchor(s *Signature, owner string) bool {
+	if owner == "" {
+		return false
+	}
 	for i := 0; i < s.TotalArgs(); i++ {
-		if isUserType(sigArgType(s, i)) {
+		if t := sigArgType(s, i); t != nil && t.OwnerID() == owner && IsNominalAnchor(t) {
 			return true
 		}
 	}
 	return false
 }
 
-// requireUserTypedSigs enforces the module-scope core-word rule over a
-// set of merge candidates: every signature must carry at least one
-// non-kernel argument type. word names the error source (`def` for a
-// module-body merge, `import` for a transplant).
-func requireUserTypedSigs(r *Registry, name, word string, sigs []Signature) error {
-	for i := range sigs {
-		if sigs[i].Fallback || sigHasUserType(&sigs[i]) {
+// sigHasModuleAnchor reports whether the signature carries a nominal
+// anchor minted by ANY module (owner neither kernel nor program). The
+// transplant admission accepts this for SOURCE clones so re-export
+// keeps working (design/OPEN-WORDS.1.md §2.4-carryover): a re-exported
+// chain's sigs stay anchored on the ORIGINAL module's types, and
+// reachability holds for any module-minted nominal anchor — the type
+// cannot predate the import chain that delivered it.
+func sigHasModuleAnchor(s *Signature) bool {
+	for i := 0; i < s.TotalArgs(); i++ {
+		t := sigArgType(s, i)
+		if t == nil || !IsNominalAnchor(t) {
 			continue
 		}
-		return r.AqlErrorHint("extend_user_type",
-			fmt.Sprintf("%s %s: a module may extend a core word only with at least one user-defined argument type per signature — %s has only built-in types",
+		if o := t.OwnerID(); o != OwnerKernel && o != OwnerProgram {
+			return true
+		}
+	}
+	return false
+}
+
+// requireOwnedAnchor enforces R1 over a set of merge candidates:
+// every signature must carry at least one nominal argument type the
+// extending author owns. owner is the author's provenance id — the
+// scope's TypeTable.MintOwner for a source def-merge, the extension's
+// ExtOwner for a host-authored clone. word names the error source
+// (`def` for a merge, `import` for a transplant).
+// allowModuleAnchors widens the accepted set to any module-minted
+// anchor — the transplant path's re-export carveout; def-time
+// admission passes false (the author must own the anchor where the
+// signature is WRITTEN).
+func requireOwnedAnchor(r *Registry, name, word string, sigs []Signature, owner string, allowModuleAnchors bool) error {
+	for i := range sigs {
+		// A ZERO-ARITY sig is provably additive-only — it can claim
+		// nothing but the bare application, and an exact 0-arg locked
+		// tuple is still replacement-refused — so, like a fallback, it
+		// needs no anchor (`def outer fn [[] …]` colliding with the
+		// higher-order `outer` word is everyday code, not an override).
+		if sigs[i].Fallback || sigs[i].TotalArgs() == 0 || sigHasOwnedAnchor(&sigs[i], owner) {
+			continue
+		}
+		if allowModuleAnchors && sigHasModuleAnchor(&sigs[i]) {
+			continue
+		}
+		return r.AqlErrorHint("extend_owner",
+			fmt.Sprintf("%s %s: a core word can be extended only with at least one NOMINAL argument type the extending scope owns per signature — %s has none",
 				word, name, sigTupleString(&sigs[i])),
 			word,
-			"a built-in-only tuple (kernel or aql:-module types) would change what core calls mean for every importer and breaks when a future version claims it; anchor the signature with a type your module mints (refine / class)")
+			"anchor the signature with a type this scope mints (refine / class), or pick a name that is not already a core word; content-based types (predicates, unions, member types) cannot anchor — their members can exist before the type does")
 	}
 	return nil
 }
@@ -240,7 +281,7 @@ func sigTupleString(s *Signature) string {
 // reached as a VALUE (namespaced `TimeUtil.add …` dot-access, which
 // compiles the authored sigs directly) or merged into the importer's
 // base word by TransplantExtension.
-func NewWordExtension(name string, sigs []Signature) FnDefInfo {
+func NewWordExtension(owner, name string, sigs []Signature) FnDefInfo {
 	compiled := make([]Signature, len(sigs))
 	for i := range sigs {
 		s := sigs[i]
@@ -256,24 +297,14 @@ func NewWordExtension(name string, sigs []Signature) FnDefInfo {
 		Signatures:     compiled,
 		MaxForwardArgs: calcMaxForwardArgs(compiled),
 		Extends:        name,
+		// ExtOwner is a HOST assertion (Go-only — source clones never
+		// set it): the author owner the transplant admission verifies
+		// anchors against. A kernel-shipped module may author sigs on
+		// kernel-owned types (aql:io's Pathon list/remove) by passing
+		// OwnerKernel; third-party hosts pass their own owner id and
+		// anchor on types they registered.
+		ExtOwner: owner,
 	}
-}
-
-// NewWordExtensionAnchored is NewWordExtension with the builtin-anchor
-// waiver set (AllowBuiltinAnchor): the returned clone's signatures may
-// extend a CORE word with builtin-only argument tuples, bypassing the
-// requireUserTypedSigs rule at both the def-time and transplant guards.
-// It is the FIRST-PARTY escape hatch for aql-shipped native modules — a
-// module versioned WITH the kernel, where the rule's forward-compat
-// rationale (a third party claiming a tuple core later locks) does not
-// apply. aql:io uses it to extend the core `list`/`remove` words with
-// Pathon-anchored signatures (Pathon being a kernel builtin the rule
-// would otherwise refuse). Third-party / source extensions must keep
-// using NewWordExtension and anchor on a type they mint.
-func NewWordExtensionAnchored(name string, sigs []Signature) FnDefInfo {
-	ext := NewWordExtension(name, sigs)
-	ext.AllowBuiltinAnchor = true
-	return ext
 }
 
 // InstallWordExtension performs the def-merge for `def name fn […]`
@@ -296,16 +327,15 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 			fmt.Sprintf("def %s: no existing word to extend", name), "def")
 	}
 	compiled := compileFnSigs(r, name, ext, false)
-	// Module-scope safety rule: extending a CORE word from a module
-	// body requires a user-defined argument type in every added
-	// signature. Enforced at def time so the module author sees the
-	// refusal immediately, not the importer at transplant. Top-level
-	// programs (no ModuleScope) extend freely — the author is standing
-	// at the point of change. Module-provided words (wrapper
-	// rebindings — locked but not builtin here) are exempt: they are
-	// versioned with the module dependency that owns them.
-	if r.ModuleScope && r.IsBuiltinWord(name) {
-		if err := requireUserTypedSigs(r, name, "def", compiled); err != nil {
+	// Ownership-anchored admission (R1, design/OPEN-WORDS.1.md §2):
+	// extending a CORE word — from ANY scope, top level included —
+	// requires every added signature to be anchored by a nominal type
+	// this scope owns. Enforced at def time so the author sees the
+	// refusal immediately. Module-provided words (wrapper rebindings —
+	// locked but not builtin here) are exempt: they are versioned with
+	// the module dependency that owns them.
+	if r.IsBuiltinWord(name) {
+		if err := requireOwnedAnchor(r, name, "def", compiled, r.Types.MintOwner, false); err != nil {
 			return err
 		}
 	}
@@ -356,7 +386,7 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 // then carries the sigs, and origin becomes that module: it takes
 // ownership). Idempotent per origin; returns without installing when
 // nothing new arrives.
-func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
+func TransplantExtension(r *Registry, ext FnDefInfo, origin, owner string) error {
 	name := ext.Extends
 	// The same sealed-word rejection InstallWordExtension applies for
 	// source-level `def`: a host/native module can construct a clone
@@ -398,14 +428,21 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin string) error {
 	if len(incoming) == 0 {
 		return nil
 	}
-	// Defence in depth for the module-scope core-word rule: the merge
-	// that built the exported clone already refused all-kernel tuples,
-	// but a transplant onto a CORE word re-checks so a hand-built /
-	// host-constructed clone can't smuggle one past the importer. The
-	// first-party anchor waiver (NewWordExtensionAnchored) skips both
-	// checks — aql:io extends core `list`/`remove` on Pathon, a builtin.
-	if r.IsBuiltinWord(name) && !ext.AllowBuiltinAnchor {
-		if err := requireUserTypedSigs(r, name, "import", incoming); err != nil {
+	// Defence in depth for R1: the merge that built the exported clone
+	// already verified its anchors, but a transplant onto a CORE word
+	// re-checks so a hand-built clone can't smuggle an unanchored tuple
+	// past the importer. The author is the extension's declared host
+	// owner (ExtOwner — how a kernel-shipped module authors sigs on
+	// kernel-owned types like Pathon) or, for source clones, the
+	// exporting module's own mint owner.
+	if r.IsBuiltinWord(name) {
+		author := ext.ExtOwner
+		if author == "" {
+			author = owner
+		}
+		// Source clones (no ExtOwner) may carry re-exported sigs whose
+		// anchors belong to a module deeper in the import chain.
+		if err := requireOwnedAnchor(r, name, "import", incoming, author, ext.ExtOwner == ""); err != nil {
 			return err
 		}
 	}

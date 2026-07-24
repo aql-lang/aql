@@ -26,9 +26,9 @@
 { a:1 }	{a:1}	single entry
 { a:1 b:2 }	{a:1 b:2}	two entries — insertion order preserved
 { a:1 b:2 c:3 }	{a:1 b:2 c:3}	three entries
-# Note: at runtime the map's keys are emitted in sorted order rather		
-# than literal-source order, so multi-key examples in this file use		
-# already-sorted source for clarity.		
+# Note: map keys are emitted in INSERTION (source) order (D1); the		
+# order-destroying serialization boundaries (jsonify, decode) stay		
+# sorted. See design/FLEX-ATTRS.1.md §3.		
 { age:30 name:'Alice' }	{age:30 name:'Alice'}	heterogeneous values
 { a:[ 1 2 ] b:{ x:9 } }	{a:[1 2] b:{x:9}}	nested list and map values
 		
@@ -174,8 +174,8 @@ def m {k:foo/q} m.k is Atom	true	/q stores a bare word as atom data
 # word modifier stays on the value (/r, /q) and a trailing ? makes the		
 # field optional. Only unquoted identifiers trigger it.		
 def foo 1 {foo}	{foo:1}	plain shorthand desugars to {foo: foo}
-def foo 1 def bar 2 {foo bar}	{bar:2 foo:1}	two shorthands, keys sorted
-def foo 1 {foo a:9}	{a:9 foo:1}	shorthand mixed with explicit pair
+def foo 1 def bar 2 {foo bar}	{foo:1 bar:2}	two shorthands, source order
+def foo 1 {foo a:9}	{foo:1 a:9}	shorthand mixed with explicit pair
 def foo 5 {a:{foo}}	{a:{foo:5}}	nested shorthand
 def f fn [[x:Integer] [Integer] [add x 1]] {f}	ERROR:signature	bare 1-arg fn shorthand cannot dispatch 0-arg
 def f fn [[x:Integer] [Integer] [add x 1]] ({f/r}).f 2	3	/r shorthand stores the fn as data; the arg calls it
@@ -186,3 +186,13 @@ def foo 1 ({foo/q}).foo is Atom	true	/q shorthand stores a bare word as atom dat
 {} keys	[]	empty map has no keys
 {} vals	[]	empty map has no values
 keys [1 2]	ERROR:signature	keys requires a map, not a list
+# === D1 — insertion-order normative pins (design/FLEX-ATTRS.1.md §3.5) ===		
+# Map literals preserve SOURCE key order; the order-destroying serialization		
+# boundaries (jsonify, decode) stay sorted — see the header doctrine.		
+{b:2 a:1 c:3}	{b:2 a:1 c:3}	literal renders in written order, not sorted
+{zz:1 aa:2 zz:3}	{zz:3 aa:2}	duplicate key keeps its first slot, takes the last value
+{b:(raise 'B-first') a:(raise 'A-second')}	ERROR:B-first	values eval in source order — first raise wins (b before a), not sorted (a)
+{a:1 b:2} deq {b:2 a:1}	true	deq is order-insensitive (content equality)
+{a:1 b:2} cmp {b:2 a:1}	0	cmp is order-insensitive too
+{a:1 b:2} keys	['a' 'b']	keys reflect source order (here already sorted)
+{b:1 a:2} keys	['b' 'a']	…and diverge from sorted when the source does

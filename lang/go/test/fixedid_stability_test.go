@@ -26,7 +26,7 @@ import (
 // failure here means EITHER a stable ID has drifted OR a new
 // type was added without registering it in the snapshot.
 //
-// To add a new entry: register it via RegisterExternalBuiltin
+// To add a new entry: register it via RegisterType
 // with a FixedID from the documented per-module allocation
 // range, then add the path → FixedID mapping below.
 func TestFixedIDStability(t *testing.T) {

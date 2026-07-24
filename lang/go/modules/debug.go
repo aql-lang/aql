@@ -41,7 +41,7 @@ func init() { moduleNamesFn = Names }
 func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
 	natives := append(debugNatives(), stepNatives()...)
 	natives = append(natives, dashboardNatives()...)
-	subReg, err := newModuleRegistry(natives)
+	subReg, err := newModuleRegistry("aql:debug", natives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

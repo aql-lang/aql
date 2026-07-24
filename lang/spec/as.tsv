@@ -1,0 +1,83 @@
+# AQL Language Specification: `as` — call-site signature selection (dispatch ascription)
+# Format: input<TAB>expected<TAB>description
+#
+# `v as T` returns v UNCHANGED, carrying a match-time ascription: the
+# NEXT signature match treats v as a T, then arg delivery strips it —
+# the value a handler / fn body receives is the real one. Upcast-only
+# (T must be an ancestor of v's tag). This is the delegation escape for
+# anchored override bodies (design/OPEN-WORDS.1.md §9): inside a
+# subtype's `set` override, `set k v (m as FlexMap)` dispatches the
+# BASE overload — the override's nominal anchor cannot match the
+# widened view — with no renamed shadow words and no retagging.
+#
+# ─────────────────────────────────────────────────────────────────────
+# §1  the value is unchanged — ascription is dispatch-only
+typeof (5 as Number)	Integer	typeof sees the REAL tag: ascription never retags
+(5 as Number) is Integer	true	is sees the real value too
+(5 as Number) add 1	6	the handler receives the real payload through the widened match
+(5 as Number) eq 5	true	equality is over the real value
+(5 as Integer)	5	self-ascription is a benign no-op; the value renders as itself
+size ('abc' as String)	3	same-family ascription flows through string words
+#
+# ─────────────────────────────────────────────────────────────────────
+# §2  user newtypes — widen to the base family, keep the tag
+def S (refine FlexMap)  def w:S (flex {a:1})  typeof (w as FlexMap)	S	the newtype tag survives the ascription (typeof consumes the real value)
+def S (refine FlexMap)  def w:S (flex {a:1})  (w as FlexMap) is S	true	the widened view is match-time only — the value is still an S
+def S (refine FlexMap)  def w:S (flex {a:1})  typeof ((w as FlexMap) as Node)	S	re-ascription replaces the previous ascription (last one wins); the tag still survives
+def L (refine FlexList)  def v:L (flex [1 2])  typeof (v as FlexList)	L	the list column ascribes identically
+def S (refine FlexMap)  def w:S (flex {a:1})  (set x/q 9 (w as FlexMap)) drop  [(typeof w) (size w)]	[S 2]	an in-place write through the widened view mutates the SAME payload; the binding keeps its tag
+#
+# ─────────────────────────────────────────────────────────────────────
+# §3  signature selection — the core: the ascribed type picks the overload
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag w	'sub'	specificity picks the subtype overload for a subtype value
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag (w as FlexMap)	'base'	the ascription forces the base overload — the S sig cannot match the widened view
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  [(tag (w as FlexMap)) (tag w)]	['base' 'sub']	one call widened, the next dispatches naturally — the ascription was consumed
+#
+# ─────────────────────────────────────────────────────────────────────
+# §4  one-call consumption — the ascription never leaks into storage
+def S (refine FlexMap)  def w:S (flex {a:1})  def y (w as FlexMap)  typeof y	S	def binds the REAL value: the ascription is consumed at arg delivery
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  def y (w as FlexMap)  tag y	'sub'	a binding made from an ascribed value dispatches on its real tag
+def S (refine FlexMap)  def w:S (flex {a:1})  def lst [(w as FlexMap)]  typeof (lst get 0)	S	a list element stores the real value — no ascription smuggled into containers
+def S (refine FlexMap)  def w:S (flex {a:1})  def m2 {v:(w as FlexMap)}  typeof (m2 get v/q)	S	a map value stores the real value too
+def S (refine FlexMap)  def w:S (flex {a:1})  def f fn [[x:Map] [Type] [typeof x]]  f (w as FlexMap)	S	a fn param binds the real value: the body sees the subtype tag
+#
+# ─────────────────────────────────────────────────────────────────────
+# §5  the delegation headline — an anchored core-word override delegates
+#     through as, in core vocabulary, with no renamed shadow words and no
+#     self-recursion. (The FULL sorted-map acceptance — the per-key resort
+#     loop — runs interpreted in lang/go/test/sorted_user_test.go: its
+#     dynamic get-result key feeding the now-multi-overload `set` is
+#     outside today's compiled dispatch-commit boundary, the same residual
+#     documented in design/OPEN-WORDS.1.md §9.)
+def SortedFlexMap (refine FlexMap)  def set fn [[k:Atom/q v:Any m:SortedFlexMap] [SortedFlexMap] [(set (k) v (m as FlexMap)) drop  m]]  def w:SortedFlexMap (flex { })  (set b/q 2 w) drop  [(keys w) (typeof w)]	[['b'] SortedFlexMap]	an anchored set override delegates to the base overload via as — the body says set, not a renamed shadow
+def SortedFlexMap (refine FlexMap)  def set fn [[k:Atom/q v:Any m:SortedFlexMap] [SortedFlexMap] [(set (k) v (m as FlexMap)) drop  m]]  def w:SortedFlexMap (flex { })  (set b/q 2 w) drop  (set a/q 1 w) drop  [(keys w) w.a (typeof w)]	[['b' 'a'] 1 SortedFlexMap]	repeated writes through the override terminate — the as-delegation can never re-enter the override
+def SortedFlexMap (refine FlexMap)  def wr fn [[k2:Atom v2:Any m2:SortedFlexMap] [SortedFlexMap] [(set (k2) v2 (m2 as FlexMap)) drop  m2]]  def set fn [[k:Atom/q v:Any m:SortedFlexMap] [SortedFlexMap] [(wr (k) v m) drop  m]]  def w:SortedFlexMap (flex { })  (set b/q 2 w) drop  [(keys w) (typeof w)]	[['b'] SortedFlexMap]	the override can route through a helper fn that itself delegates via as
+#
+# ─────────────────────────────────────────────────────────────────────
+# §6  refusals — upcast-only, types-only
+def S (refine FlexMap)  def m (flex {a:1})  (m as S)	ERROR:as_error	downcast refused: as widens dispatch, it never claims a subtype
+(1 as String)	ERROR:as_error	cross-family ascription refused: String is not an ancestor of Integer
+(1 as 2)	ERROR:as_error	the target operand must be a type
+(Integer as Scalar)	ERROR:as_error	as ascribes a VALUE, not a type literal
+(1 as Wat)	ERROR:undefined_word	an unknown type name fails as any unknown word does
+def wk (make WeakFlexMap { })  (set x/q 5 (wk as FlexMap))	ERROR:set_error	ascription widens DISPATCH only — the base handler still sees the real value and refuses the foreign payload (no invariant bypass)
+#
+# ─────────────────────────────────────────────────────────────────────
+# §7  gradual — a dynamic value ascribes optimistically, validated at run time
+def m (flex {a:1})  def d (m get (convert String 'a'))  ((d as Number) add 1)	2	a dynamic read the lattice cannot refute passes the check gradually; the runtime validation proves it and dispatch commits at the ascribed type
+def m (flex {a:1})  def d (m get (convert String 'a'))  (d as Map)	ERROR:as_error	the runtime validation catches a dynamic value that does not conform to the ascribed type
+#
+# ─────────────────────────────────────────────────────────────────────
+# §8  the fn-return boundary — an ascription never rides out of a call
+# A fn/lambda/module call is an abstraction boundary: the value it hands
+# back is its REAL self, so an ascription written in the body cannot leak
+# into the caller's dispatch (design/OPEN-WORDS.1.md §9). Everything else
+# is INLINE value-routing and stays transparent — a paren group, an
+# if-branch, and a code-body word (do/each/fold) all route the value to
+# the next dispatch, which consumes the ascription there (matching the
+# compiled path, where `as` folds into the static dispatch selection).
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  def helper fn [[] [S] [(w as FlexMap)]]  tag (helper)	'sub'	a helper returning an ascribed value hands back the REAL S — the caller's tag dispatches on the subtype, not the leaked ascription
+def S (refine FlexMap)  def w:S (flex {a:1})  def helper fn [[] [S] [(w as FlexMap)]]  typeof (helper)	S	the returned value is unchanged (the ascription was dispatch-only and is consumed at the fn-return boundary)
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  def h1 fn [[] [S] [(w as FlexMap)]]  def h2 fn [[] [S] [(h1)]]  tag (h2)	'sub'	the strip holds through a chain of returns — no frame lets the ascription escape
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag (if true [(w as FlexMap)] [w])	'base'	an if-branch is INLINE value-routing — the ascription flows to tag and is consumed there (transparent, not a fn boundary)
+def S (refine FlexMap)  def tag fn [[m:FlexMap] [String] ['base']]  def tag fn [[m:S] [String] ['sub']]  def w:S (flex {a:1})  tag (do [(w as FlexMap)])	'base'	a code-body `do` is inline too — its result routes the ascription onward (transparent, matching the compiled fold), unlike a fn return

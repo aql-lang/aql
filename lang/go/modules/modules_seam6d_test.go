@@ -159,7 +159,7 @@ func TestSeam6DInstallExportsHappyPaths(t *testing.T) {
 // registry, so only the seam can observe the propagation.
 func TestSeam6DTransplantFailurePropagates(t *testing.T) {
 	orig := transplantExtension
-	transplantExtension = func(r *native.Registry, ext native.FnDefInfo, origin string) error {
+	transplantExtension = func(r *native.Registry, ext native.FnDefInfo, origin, owner string) error {
 		return errSeam6D
 	}
 	t.Cleanup(func() { transplantExtension = orig })

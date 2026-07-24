@@ -912,8 +912,15 @@ stable:
    the language rather than parser compatibility?
 2. Which standard library profiles should be named for partial conformance
    (`kernel`, `native-core`, `io`, `network`, `sqlite`, `vault`, `cli`)?
-3. Should map entry order be specified as sorted-by-key for all constructed maps,
-   insertion order, or operation-specific?
+3. ~~Should map entry order be specified as sorted-by-key for all constructed maps,
+   insertion order, or operation-specific?~~ **Resolved (D1,
+   design/FLEX-ATTRS.1.md §3):** map entry order is **insertion order** at
+   every representation surface (construction, mutation, iteration, render,
+   canon, and value-evaluation order — literals preserve written key order).
+   The order-destroying canonical boundaries (`StructUtil.jsonify`, decode,
+   Ideal→Node projections) stay **sorted-by-key**, where the upstream is an
+   unordered map and sorted is the only stable choice. Two named orders —
+   representation (insertion) vs canonical (sorted) — not one policy.
 4. Which exact error-code strings are normative versus implementation details?
 5. What is the smallest Lean model that should be maintained as the mechanized
    core: parser-free abstract machine only, or parser plus abstract machine?

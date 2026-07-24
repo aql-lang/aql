@@ -951,6 +951,19 @@ func (e *Engine) stampErrPos(err error) error {
 // returnCountError builds a detailed AqlError for wrong number of return
 // values. The detail text is shared with the VM via returnCountErrorText;
 // the declaration span is interpreter-side enrichment (phase 5).
+// stripTapeAscriptions removes any dispatch ascription (`v as T`) from the
+// tape values in [lo, hi) — the frame-return strip: an ascription is scoped
+// to a dispatch WITHIN a body and must not ride out of the frame into the
+// caller (design/OPEN-WORDS.1.md §9). Extracted from stepCloseParen so that
+// hot path stays under the cyclomatic-complexity gate.
+func (e *Engine) stripTapeAscriptions(lo, hi int) {
+	for j := lo; j < hi; j++ {
+		if e.tape.At(j).AscribedType() != nil {
+			e.tape.Set(j, StripAscribed(e.tape.At(j)))
+		}
+	}
+}
+
 func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *AqlError {
 	return buildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, rc.Pos, rc.Decl)
 }
@@ -3355,6 +3368,12 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		defMutsBefore = e.registry.Defs.Mutations()
 	}
 	for i := range match.Args {
+		// Dispatch ascription (`v as T`): consumed by the signature match
+		// that just selected this sig — the handler / fn body receives the
+		// REAL value, so the ascription can never ride into a stored
+		// binding, a container write, or a returned receiver (design/
+		// OPEN-WORDS.1.md §9's match-time-only rule).
+		match.Args[i] = StripAscribed(match.Args[i])
 		if match.Args[i].Eval && !match.Args[i].Quoted {
 			if match.Args[i].Parent.Equal(TMap) &&
 				match.Args[i].Data != nil && !IsTypedMap(match.Args[i]) && !IsRecordType(match.Args[i]) && !IsOptionsType(match.Args[i]) {
@@ -4207,6 +4226,12 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
+	// An evaluated element is STORED (the list is data): consume any
+	// dispatch ascription here (`[(m as T)]` must not smuggle a live
+	// ascription into a container — the match-time-only rule).
+	for i := range result {
+		result[i] = StripAscribed(result[i])
+	}
 	out := NewList(result)
 	// In RECORDING mode a list whose elements are COMPUTED (an event carrier, not
 	// plain data — `[1 add 2]`, `[1 (2 add 3) 4]`) cannot bake as an inert const,
@@ -4789,6 +4814,14 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 					}
 				}
 			}
+		}
+	}
+	// An evaluated map value is STORED (the map is data): consume any
+	// dispatch ascription (`{a:(m as T)}`), mirroring autoEvalList's
+	// element strip — the match-time-only rule.
+	for _, k := range out.Keys() {
+		if mv, ok := out.Get(k); ok && mv.AscribedType() != nil {
+			out.Set(k, StripAscribed(mv))
 		}
 	}
 	res := NewMap(out)
@@ -5797,6 +5830,9 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// reaches the inner handler intact rather than being sub-Run'd.
 	// Mirrors the NoEvalArgs handling in execMatch (lines 977-1002).
 	for i := range args {
+		// Dispatch ascription: consumed at delivery, exactly as execMatch
+		// strips it — the fn body binds the REAL value.
+		args[i] = StripAscribed(args[i])
 		if args[i].Eval && !args[i].Quoted {
 			if args[i].Parent.Equal(TMap) &&
 				args[i].Data != nil && !IsTypedMap(args[i]) && !IsRecordType(args[i]) && !IsOptionsType(args[i]) {
@@ -7019,6 +7055,13 @@ func (e *Engine) stepCloseParen() error {
 			if err := e.validateReturnTypes(rc, results, extra); err != nil {
 				return err
 			}
+
+			// Strip any dispatch ascription (`v as T`) from the return
+			// values: an ascription is scoped to a single dispatch WITHIN
+			// the body and must not ride out of the frame into the caller's
+			// dispatch (design/OPEN-WORDS.1.md §9 — "can never ride into a
+			// returned receiver"). The top nret values are the returns.
+			e.stripTapeAscriptions(openIdx+1+extra, closeIdx)
 
 			// Discard unconsumed unnamed args from the bottom of the scope.
 			for j := 0; j < extra; j++ {

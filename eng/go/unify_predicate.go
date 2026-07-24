@@ -46,6 +46,8 @@ type predicateUnifier struct {
 // values) pass through: a type literal is "the type itself", not an
 // inhabitant, and carriers are placeholder values whose concreteness
 // is asserted at runtime by some other path.
+func (*predicateUnifier) ContentMembership() {}
+
 func (p *predicateUnifier) Match(v Value, t *Type) bool {
 	return matchMembership(v, t, p.prev, func(v Value) bool {
 		if p.registry == nil {

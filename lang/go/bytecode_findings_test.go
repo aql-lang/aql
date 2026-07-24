@@ -3797,8 +3797,9 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		{"arity modifier misses every sig", `add/3 2 3`, "signature_error"},
 		{"bare type-literal operand", `get 'a' Map`, "signature_error"},
 		// (Boolean add is now a defined within-type error, so the popped-
-		// clone probe uses a Map tuple — still unmatched after the undef.)
-		{"undef leaves no overload", `def add fn [[a:Map b:Map] [Map] [a]]  undef add  add {a:1} {b:2}`, "signature_error"},
+		// clone probe uses a Map tuple — anchored per the rev-2 ownership
+		// rule, and still unmatched after the undef.)
+		{"undef leaves no overload", `def MM (refine Map)  def add fn [[a:MM b:MM] [MM] [a]]  undef add  add {a:1} {b:2}`, "signature_error"},
 		{"map-literal member dispatch (unfinished unit stubbed)", `def f fn [[x:Integer] [Integer] [add x 1]] {f}`, "signature_error"},
 		{"void arg group at def", `def f fn [[x:Integer] [] []] def r (f 1)`, "def_error"},
 		{"void arg group at consumer", `def f fn [[x:Integer] [] []] 3 add (f 1)`, "no_value_error"},

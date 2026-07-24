@@ -80,6 +80,8 @@ type negationUnifier struct {
 // Match admits v iff v does not satisfy the inner type. A bare type
 // literal (the type itself, not an inhabitant) passes through to the
 // prev/Default walk — mirroring disjunctUnifier.
+func (*negationUnifier) ContentMembership() {}
+
 func (n *negationUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(n.prev).Match(v, t)

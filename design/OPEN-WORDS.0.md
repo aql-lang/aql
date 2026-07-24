@@ -1,5 +1,12 @@
 # Open Words — scoped `def` extension of existing words
 
+> **Revised (2026-07-23):** the SAFETY MODEL described in §2.3/§3.3 —
+> locked-first match ordering plus the user-type/waiver admission
+> rules — is superseded by **[OPEN-WORDS.1.md](OPEN-WORDS.1.md)**
+> (ownership-anchored signatures, natural specificity ordering).
+> The merge/scoping/transplant model in the rest of this note is
+> unchanged and still current.
+
 Status: **IMPLEMENTED (rev 1 model)**. Landed as described in §2, with
 the open questions resolved to their leans; see "Implementation notes"
 at the end for the decisions, the mechanism as built, and where each

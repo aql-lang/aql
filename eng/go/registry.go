@@ -937,6 +937,7 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"fn_body_error":         SeverityError,
 	"branch_error":          SeverityError,
 	"type_error":            SeverityError,
+	"as_error":              SeverityError,
 	"uncalled_function":     SeverityError,
 	"unreachable_signature": SeverityWarning,
 	"partial_dispatch":      SeverityWarning,
@@ -2018,6 +2019,13 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 			}
 			result = result[extra:]
 		}
+	}
+	// Strip any dispatch ascription (`v as T`) from the frame's results:
+	// the same match-time-only rule as the tape frame-collapse path — an
+	// ascription is scoped to a dispatch WITHIN the body and cannot ride
+	// out into the caller (design/OPEN-WORDS.1.md §9).
+	for i := range result {
+		result[i] = StripAscribed(result[i])
 	}
 	return result, nil
 }

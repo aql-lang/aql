@@ -313,8 +313,8 @@ value.
 def x 1
 {x}                           # returns {x:1}
 def a 10  def b 20
-{a b}                         # returns {a:10 b:20} — keys sort
-{a c:3 b}                     # returns {a:10 b:20 c:3} — mixes with explicit pairs
+{a b}                         # returns {a:10 b:20} — source order
+{a c:3 b}                     # returns {a:10 c:3 b:20} — mixes with explicit pairs
 {outer: {a}}                  # returns {outer:{a:10}} — nests
 ```
 
@@ -1457,9 +1457,9 @@ both parameter and return slots of that type (and of any supertype):
 
 ```
 def Box (class {v:0})
-def wrap fn [[n:Integer] [Box] [make Box {v:n}]]
-typeof (wrap 5)               # returns Box
-(wrap 5) get 'v'              # returns 5
+def boxed fn [[n:Integer] [Box] [make Box {v:n}]]
+typeof (boxed 5)              # returns Box
+(boxed 5) get 'v'             # returns 5
 ```
 
 **Bare refinement — a *newtype*.** `def Pos (refine Integer)` adds no

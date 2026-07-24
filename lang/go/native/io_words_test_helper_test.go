@@ -34,7 +34,7 @@ func registerIOWords(r *Registry) {
 	// transplant their Pathon overloads onto the core list / remove words so
 	// the bare-word behaviour tests can call `list`/`remove` on a Pathon.
 	for _, ext := range IOWordExtensions(fileType) {
-		if err := TransplantExtension(r, ext, "aql:io"); err != nil {
+		if err := TransplantExtension(r, ext, "aql:io", "aql:io"); err != nil {
 			panic(err)
 		}
 	}

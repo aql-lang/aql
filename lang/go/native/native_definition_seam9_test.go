@@ -364,7 +364,9 @@ func TestW9CheckModeWordExtensionLazyDefsUsed(t *testing.T) {
 	r := seam5Reg(t)
 	// An EMPTY fn body means InstallWordExtension's construction pass records
 	// no use, so DefsUsed is still nil when the lazy-allocation arm runs.
-	fnVal, err := seam5Run(seam5Reg(t), `fn [[a:Any b:Any] [Any] []]`)
+	// The sig anchors on a program-minted type (rev-2 ownership admission);
+	// the fn is built in the SAME registry so the anchor is owned there.
+	fnVal, err := seam5Run(r, `def Anc (refine Map)  fn [[a:Anc b:Any] [Any] []]`)
 	if err != nil || len(fnVal) != 1 {
 		t.Fatalf("build fn: %v %v", err, Canon(fnVal))
 	}

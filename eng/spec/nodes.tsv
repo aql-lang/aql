@@ -5,10 +5,20 @@
 # AQL's two structural Node types:		
 #		
 #   List  `[ … ]`     — ordered, heterogeneous sequence (Node/List).		
-#   Map   `{ k:v … }` — keyed associative collection (Node/Map). At		
-#                       runtime keys are emitted in sorted order, so		
-#                       multi-key examples here use already-sorted		
-#                       source for clarity.		
+#   Map   `{ k:v … }` — keyed associative collection (Node/Map). Keys		
+#                       are INSERTION-ORDERED (D1): a Map preserves the		
+#                       order its keys were written / added, and every		
+#                       REPRESENTATION surface — Keys(), render, canon,		
+#                       iteration, and value-eval order — reflects that		
+#                       source order (design/FLEX-ATTRS.1.md §3). The		
+#                       order-destroying CANONICAL boundaries stay		
+#                       sorted: StructUtil.jsonify (kg ids hash its sort;		
+#                       the $class-leads contract rides it) and every		
+#                       decode / Ideal→Node projection whose upstream is		
+#                       an unordered Go map. Two named orders —		
+#                       representation (insertion) vs canonical (sorted)		
+#                       — not one inconsistency. `IO.write` is		
+#                       representation-faithful; `jsonify` canonicalizes.		
 #		
 # Both are subtypes of the abstract `Node` (and, like everything, of		
 # `Any`). `typeof` on a bare `List`/`Map` type literal reports the		
@@ -48,9 +58,9 @@
 		
 { }	{}	empty map literal
 { a:1 }	{a:1}	single entry
-{ a:1 b:2 }	{a:1 b:2}	two entries (source already in sorted-key order)
+{ a:1 b:2 }	{a:1 b:2}	two entries (insertion order)
 { a:1 b:2 c:3 }	{a:1 b:2 c:3}	three entries
-{ age:30 name:'Alice' }	{age:30 name:'Alice'}	heterogeneous values; runtime emits keys sorted
+{ age:30 name:'Alice' }	{age:30 name:'Alice'}	heterogeneous values; keys in insertion (source) order
 { outer:{ inner:1 } }	{outer:{inner:1}}	nested map
 { xs:[ 1 2 3 ] }	{xs:[1 2 3]}	map whose value is a list
 { a:{ b:1 } c:[ 2 3 ] }	{a:{b:1} c:[2 3]}	mixed nested map + list values

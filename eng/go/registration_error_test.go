@@ -16,16 +16,16 @@ func TestBuiltinInitErrorNilOnHealthyBuild(t *testing.T) {
 	}
 }
 
-func TestRegisterExternalBuiltinDuplicateFixedIDErrors(t *testing.T) {
+func TestRegisterTypeDuplicateFixedIDErrors(t *testing.T) {
 	// A FixedID collision must return an error (it used to panic at the
 	// call sites that wrapped this). Use a fresh dynamic table so we do
 	// not perturb the shared Builtin table.
 	tt := NewDynamicTypeTable()
 	// Seed a parent the external paths can hang off.
-	if _, err := tt.RegisterExternalBuiltin("Zeta", 90001, nil); err != nil {
+	if _, err := tt.RegisterType("Zeta", 90001, "plugin:test", nil); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	_, err := tt.RegisterExternalBuiltin("Zeta", 90001, nil)
+	_, err := tt.RegisterType("Zeta", 90001, "plugin:test", nil)
 	if err == nil {
 		t.Fatal("duplicate path/FixedID registration returned nil error, want an error")
 	}
@@ -35,11 +35,11 @@ func TestRegisterExternalBuiltinDuplicateFixedIDErrors(t *testing.T) {
 	}
 }
 
-func TestRegisterExternalBuiltinBadPathErrors(t *testing.T) {
+func TestRegisterTypeBadPathErrors(t *testing.T) {
 	tt := NewDynamicTypeTable()
 	for _, bad := range []string{"", "lower", "Foo//Bar"} {
-		if _, err := tt.RegisterExternalBuiltin(bad, 90010, nil); err == nil {
-			t.Errorf("RegisterExternalBuiltin(%q) = nil error, want rejection", bad)
+		if _, err := tt.RegisterType(bad, 90010, "plugin:test", nil); err == nil {
+			t.Errorf("RegisterType(%q) = nil error, want rejection", bad)
 		}
 	}
 }
@@ -54,7 +54,7 @@ func TestNoPanicOnRepeatedRegistration(t *testing.T) {
 		}
 	}()
 	tt := NewDynamicTypeTable()
-	_, _ = tt.RegisterExternalBuiltin("Quux", 90020, nil)
-	_, _ = tt.RegisterExternalBuiltin("Quux", 90020, nil) // duplicate
-	_, _ = tt.RegisterExternalBuiltin("", 0, nil)         // malformed
+	_, _ = tt.RegisterType("Quux", 90020, "plugin:test", nil)
+	_, _ = tt.RegisterType("Quux", 90020, "plugin:test", nil) // duplicate
+	_, _ = tt.RegisterType("", 0, "plugin:test", nil)         // malformed
 }

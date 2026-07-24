@@ -758,21 +758,16 @@ type FnDefInfo struct {
 	// module import for the export transplant. Empty for every ordinary
 	// fn / native registration.
 	Extends string
-	// AllowBuiltinAnchor waives the requireUserTypedSigs safety rule for
-	// this extension clone: its added signatures may anchor on BUILTIN
-	// argument types (kernel or aql:-module) with no user-minted type.
-	// The rule normally refuses such tuples on a core word because a
-	// third-party module extending `add` with `[Integer Integer]` would
-	// change what core means for every importer and would break the day
-	// core claims that tuple. This flag is a FIRST-PARTY opt-in, set only
-	// by NewWordExtensionAnchored, which native module BUILDERS call: aql
-	// modules ship and version WITH the kernel, so the forward-compat
-	// rationale doesn't apply — aql:io deliberately extends the core
-	// `list`/`remove` words with Pathon-anchored signatures (Pathon is a
-	// kernel builtin), which the rule would otherwise refuse. Never set on
-	// a def-merge clone or a source-authored extension; a hand-built host
-	// clone that sets it is asserting the same first-party guarantee.
-	AllowBuiltinAnchor bool
+	// ExtOwner is the AUTHOR owner id of a HOST-authored word-extension
+	// clone (design/OPEN-WORDS.1.md §4): the provenance the transplant
+	// admission verifies the clone's anchor types against. Set only by
+	// NewWordExtension from Go module builders — aql:time-util passes
+	// its own id (matching the Date/duration types it registered),
+	// aql:io passes OwnerKernel (its Pathon list/remove sigs anchor on
+	// a kernel-owned type — the kernel-shipped host prerogative).
+	// Empty for every source-authored clone, whose author is the
+	// exporting module's TypeTable.MintOwner instead.
+	ExtOwner string
 }
 
 // CapturedBinding is one lexically-captured name in a closure. The
@@ -1268,6 +1263,17 @@ type Value struct {
 	// literal ({:[:Integer]}). Read via ElemConstraint() (nil-safe), set via
 	// SetElemConstraint. See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
 	elem *Value
+	// asc is the value's dispatch ASCRIPTION (`v as T` — design/
+	// OPEN-WORDS.1.md §9): an ancestor type that signature MATCHING treats
+	// as the value's tag while the value itself — payload, real Parent,
+	// rendering, equality — is untouched. Upcast-only (the `as` word
+	// refuses a non-ancestor), match-time-only: every arg-delivery boundary
+	// (execMatch, fn-param binding, the VM call/bind/make ops) strips it,
+	// so the ascription selects exactly one dispatch and never leaks into
+	// handlers, bindings, containers, or results. Behind a pointer so the
+	// overwhelming majority of values (no ascription) don't carry it. Read
+	// via AscribedType() (nil-safe), set/clear via SetAscribed.
+	asc *Type
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1297,7 +1303,7 @@ type Value struct {
 // typeMeta carries the integer lattice fields of a type node, held behind
 // Value.tmeta so ordinary values don't pay 40 inline bytes for metadata
 // only type nodes populate. All fields are assigned once at registration
-// (MintType / RegisterExternalBuiltin / the builtin-decl loop /
+// (MintType / RegisterType / the builtin-decl loop /
 // labelIntervals) and never mutated, so sharing one *typeMeta across
 // every copy of a type Value is sound.
 type typeMeta struct {
@@ -1329,6 +1335,15 @@ type typeMeta struct {
 	// the walk.
 	In  int
 	Out int
+	// Owner is the registration/mint provenance of the type node — the
+	// authority the ownership-anchored signature rules check against
+	// (design/OPEN-WORDS.1.md §4): OwnerKernel for kernel builtins and
+	// kernel-shipped global types, a module id (e.g. "aql:matrix-util",
+	// "module#N" for source modules) for module registrations and
+	// module-body mints, OwnerProgram for top-level program mints.
+	// Empty means UNOWNED (ad-hoc / test-fixture types) — an unowned
+	// type never anchors an extension and is never redefinable-by-owner.
+	Owner string
 }
 
 // ensureTMeta returns v's typeMeta, allocating it if absent. Writers of
@@ -1429,6 +1444,31 @@ func (v *Value) SetElemConstraint(c Value) {
 	v.elem = &c
 }
 
+// AscribedType returns the value's dispatch ascription (`v as T`), or nil
+// for the overwhelming majority of values that carry none. Nil-safe read
+// of the pointer; see the asc field doc for the semantics.
+func (v Value) AscribedType() *Type {
+	return v.asc
+}
+
+// SetAscribed attaches (t non-nil) or clears (t nil) the dispatch
+// ascription. The `as` word's handler is the sole attach site; the
+// arg-delivery boundaries (execMatch, fn-param binding, the VM call/bind/
+// make ops) clear it via StripAscribed.
+func (v *Value) SetAscribed(t *Type) {
+	v.asc = t
+}
+
+// StripAscribed returns v without its dispatch ascription — the
+// arg-delivery form of the value. The no-ascription fast path returns v
+// unchanged (no copy cost on the hot path).
+func StripAscribed(v Value) Value {
+	if v.asc != nil {
+		v.asc = nil
+	}
+	return v
+}
+
 // Name is the nil-safe read of the type-node leaf name — "" for an
 // ordinary value (no tmeta), matching the old empty inline field.
 func (v Value) Name() string {
@@ -1436,6 +1476,23 @@ func (v Value) Name() string {
 		return ""
 	}
 	return v.tmeta.Name
+}
+
+// OwnerID is the nil-safe read of the type node's registration/mint
+// provenance (design/OPEN-WORDS.1.md §4) — "" for an ordinary value or
+// an unowned ad-hoc type. See typeMeta.Owner for the sentinel table.
+func (v Value) OwnerID() string {
+	if v.tmeta == nil {
+		return ""
+	}
+	return v.tmeta.Owner
+}
+
+// SetOwner stamps the type node's provenance. Registration/mint paths
+// call it exactly once at the construction boundary; the stamp is
+// shared by every copy of the type Value via the tmeta pointer.
+func (v *Value) SetOwner(owner string) {
+	v.ensureTMeta().Owner = owner
 }
 
 // FixedID / Rank / Depth / In / Out are nil-safe reads of the lattice

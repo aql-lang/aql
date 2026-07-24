@@ -114,7 +114,7 @@ import "aql:parselang"  parse (fn [[source:String opts:Map] [Any] [opts get 'k']
 import "aql:parselang"  def json fn [[source:String opts:Map] [Any] ['shadowed']]  (parse json '{"a":1}') get 'a'	1	a registered kind wins over a same-named binding
 import "aql:parselang"  def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]  parse (mk) 'hi'	'hi'	a computed ParseLang value parses (compiled via the recorded fn dispatch)
 import "aql:parselang"  def mk fn [[] [Function] [([source:Any opts:Map] => [source])]]  parse (mk) 'hi'	'hi'	an ANONYMOUS computed ParseLang value parses (a captureless returned fn const-bakes to its FnDefInfo — PR #295 merge)
-import "aql:parselang"  def wrap fn [[p:Function] [Any] [parse p 'x']]  wrap (fn [[source:String opts:Map] [Any] [source]])	'x'	a Function param used as the parser by NAME — a carrier under analysis, dispatched at run time
+import "aql:parselang"  def wrapp fn [[p:Function] [Any] [parse p 'x']]  wrapp (fn [[source:String opts:Map] [Any] [source]])	'x'	a Function param used as the parser by NAME — a carrier under analysis, dispatched at run time
 import "aql:parselang"  def mk2 fn [[b:Boolean] [Function] [if b [fn [[source:String opts:Map] [Any] [source]]] [fn [[source:String opts:Map] [Any] ['n']]]]]  parse (mk2 true) {k:1} 'z'	'z'	a branch-computed parser is a Function CARRIER under analysis — dispatched at run time, 3-arg surface
 #
 # §10  value-form negatives — the [source opts] prefix contract is enforced

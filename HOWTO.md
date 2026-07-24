@@ -225,7 +225,7 @@ A bare name with no `: value` is **field shorthand** — `{foo}` means
 ```
 def x 1  def y 2
 {x y}                         # returns {x:1 y:2}
-{x z:3 y}                     # returns {x:1 y:2 z:3} — mix with explicit pairs
+{x z:3 y}                     # returns {x:1 z:3 y:2} — mix with explicit pairs
 ```
 
 The key is the base name and the value is the whole token, so word

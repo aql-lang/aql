@@ -182,12 +182,15 @@ export function canonValue(v: Value): string {
   }
   if (v.data instanceof OptionsData) {
     const m = v.data.map
-    const parts = m.sortedKeys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
+    // D1: render in INSERTION order (design/FLEX-ATTRS.1.md §3), matching
+    // Go's joinEntries which iterates Keys(). SortedKeys() stays for
+    // order-insensitive equality only (coretype.ts valuesEqual).
+    const parts = m.keys().map((k) => `${k}:${canonValue(m.get(k)!)}`)
     return `options{${parts.join(' ')}}`
   }
   if (v.vType.equal(TMap) && v.data instanceof OrderedMap) {
     const m = v.data
-    const parts = m.sortedKeys().map((k) => `${k}:${canonChild(m.get(k)!)}`)
+    const parts = m.keys().map((k) => `${k}:${canonChild(m.get(k)!)}`)
     return `{${parts.join(' ')}}`
   }
   // An inspection map renders in insertion order with bare word values

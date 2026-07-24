@@ -41,7 +41,7 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.SetHostLogSinks(parent, lsr)
 	}
 	logNatives := native.LogModuleNativeFuncs(lsr)
-	subReg, err := newModuleRegistry(logNatives)
+	subReg, err := newModuleRegistry("aql:log", logNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

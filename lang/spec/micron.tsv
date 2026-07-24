@@ -501,5 +501,5 @@ def Baron refine Micron {foo:String} end def Subon refine Baron end typeof (make
 #      a module cannot anchor a core-word extension on [Emailon
 #      Emailon] (the module-scope rule requires an OriginUserDef type);
 #      a user Micron minted inside the module DOES qualify.
-import module [def add fn [[a:Emailon b:Emailon] [Boolean] [true]] export "M" {add: add/r}]	ERROR:extend_user_type	builtin Micron leaves do not anchor module extensions
+import module [def add fn [[a:Emailon b:Emailon] [Boolean] [true]] export "M" {add: add/r}]	ERROR:extend_owner	builtin Micron leaves are kernel-owned — they do not anchor module extensions
 import module [def Baron refine Micron {v:Integer} def add fn [[a:Baron b:Baron] [Integer] [(a.v) add (b.v)]] def mk fn [[n:Integer] [Baron] [make Baron {v:n}]] export "M" {add: add/r mk: mk/r}]  (M.mk 2) add (M.mk 3)	5	a module-minted Micron anchors an add extension

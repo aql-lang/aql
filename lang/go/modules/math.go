@@ -18,7 +18,7 @@ import (
 // built-in and do not require this module.
 func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the module's Go words.
-	subReg, err := newModuleRegistry(MathNatives)
+	subReg, err := newModuleRegistry("aql:math-util", MathNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

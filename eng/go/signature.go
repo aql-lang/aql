@@ -267,6 +267,24 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // satisfy ordinary value slots (Carrier{Integer} matches TInteger)
 // and are rejected at TypeArgs slots by sigTypeMatchesAsType.
 func sigTypeMatches(v Value, t *Type) bool {
+	// Dispatch ascription (`v as T` — design/OPEN-WORDS.1.md §9): match as
+	// if the value were tagged with the ascribed ancestor type. The VIEW is
+	// a reparented copy used for this test only — the delivered arg is the
+	// real value (execMatch / the VM strip the ascription at delivery).
+	// Strictly non-dynamic: `as` validated (or will validate, for a dynamic
+	// input, at its own runtime step) that the value conforms to the
+	// ascribed type, so dispatch resolves at exactly that type — which is
+	// what makes an anchored subtype override unable to capture the call
+	// (the widened tag no longer conforms to the override's nominal
+	// anchor). Every matcher funnels through here — the interpreter's
+	// matchSignature arms, positionalMatch, the VM's guarded-native
+	// contract and poly re-match — so this one arm is the whole rule.
+	if a := v.AscribedType(); a != nil {
+		view := ReparentValue(v, a)
+		view.SetAscribed(nil)
+		view.Dynamic = false
+		return sigTypeMatches(view, t)
+	}
 	// Gradual (dynamic) carrier: matches the slot unless its bound is
 	// PROVABLY disjoint from t — the not-disjoint rule, the optimistic
 	// dual of strict ConformsTo (design/dynamic-modality-report.10.md).
@@ -550,19 +568,28 @@ func sigSlotValue(sig *Signature, i int) Value {
 // Fallback sigs need no special-case: a fallback is always 0-arg, so
 // the arity-first rule already sinks it to the end.
 //
-// Locked signatures (native registrations) sort strictly FIRST — before
-// every unlocked (def-merged) signature, across arity. This is the
-// locked-first ordering theorem (design/OPEN-WORDS.0.md §2.3/§3.3): an
-// unlocked merged addition can never pre-empt a locked match, so no
-// previously-valid call changes its dispatch under a merge. All-locked
-// lists (pure natives) and all-unlocked lists (user fns) are unaffected;
-// only word-extension clones and cross-stack aggregates mix the two.
+// There is NO tier key: locked and merged signatures sort together by
+// the natural specificity order. Dispatch stability under merges is
+// guaranteed by ADMISSION instead of ordering — every merged signature
+// must be anchored by a nominal type its author owns (the ownership
+// rules, design/OPEN-WORDS.1.md §2-3), so an added signature can only
+// ever match calls carrying values of the author's own types, which
+// cannot predate the merge. `Locked` survives only as the
+// replacement-refusal flag (mergeExtensionSigs) — never as an ordering
+// input; the rev-1 locked-first key this replaces is documented in
+// design/OPEN-WORDS.0.md §2.3/§3.3.
 func CompareSignatures(a, b *Signature) int {
-	if a.Locked != b.Locked {
-		if a.Locked {
-			return -1
+	// CoreDefault overloads (the within-type scalar/Micron field-wise
+	// arithmetic, RegisterCoreDefault) sort strictly LAST: they are the
+	// kernel's declared catch-afters, dispatched only when no specific
+	// overload — kernel, module, or user — claims the call. Under rev 1
+	// this fell out of their being unlocked behind the locked tier; rev
+	// 2 encodes the role explicitly.
+	if a.CoreDefault != b.CoreDefault {
+		if a.CoreDefault {
+			return 1
 		}
-		return 1
+		return -1
 	}
 	if c := cmpInt(b.TotalArgs(), a.TotalArgs()); c != 0 {
 		return c

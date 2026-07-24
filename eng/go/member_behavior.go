@@ -28,13 +28,15 @@ type memberBehavior struct {
 // range — so the type participates in `is`, signature dispatch, `case`,
 // and return checks identically to an AQL-defined refinement, from one
 // predicate. Pair it with TypeTable.MintMemberType (or pass it to
-// MintTypeWithBehavior / RegisterExternalBuiltin) to attach it to a node.
+// MintTypeWithBehavior / RegisterType) to attach it to a node.
 func MemberBehavior(member func(v Value) bool) TypeBehavior {
 	return memberBehavior{member: member}
 }
 
 // Match reports membership via the shared contract: a non-inhabitant
 // defers to the lattice walk; a concrete value is put to the predicate.
+func (memberBehavior) ContentMembership() {}
+
 func (b memberBehavior) Match(v Value, t *Type) bool {
 	return matchMembership(v, t, nil, b.member)
 }

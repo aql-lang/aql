@@ -28,7 +28,7 @@ import (
 var TKeyVal = registerKeyValType()
 
 func registerKeyValType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Node/Map/KeyVal", 5002, nil)
+	t, err := eng.Builtin.RegisterType("Node/Map/KeyVal", 5002, eng.OwnerKernel, nil)
 	if err != nil {
 		// Init-time registration error — recorded, not panicked.
 		// See ADR-005 and typeinit.go.

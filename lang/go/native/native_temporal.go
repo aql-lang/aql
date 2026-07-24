@@ -79,7 +79,7 @@ func MintTemporalModuleTypes(r *Registry) TemporalModuleTypes {
 }
 
 func registerTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, behavior)
+	t, err := eng.Builtin.RegisterType(path, fixedID, "aql:time-util", behavior)
 	if err != nil {
 		// Init-time registration error — recorded, not panicked.
 		// See ADR-005 and typeinit.go.

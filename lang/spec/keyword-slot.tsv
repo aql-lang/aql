@@ -12,12 +12,12 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  an unnamed keyword slot matches ONLY its literal word
-def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	7	`in/q` admits the literal word `in`; a=3, b=10 → 10-3
-def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 to 10	ERROR:signature_error	a different word (`to`) does not match the `in` keyword slot
+def betwixt fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  betwixt 3 in 10	7	`in/q` admits the literal word `in`; a=3, b=10 → 10-3
+def betwixt fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  betwixt 3 to 10	ERROR:signature_error	a different word (`to`) does not match the `in` keyword slot
 #
 # §2  a keyword slot is BINDING-AGNOSTIC — a value bound to the keyword
 #     name is irrelevant; the slot still matches only the literal word.
-def in 99  def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	7	`in` is bound to 99, but the keyword slot captures the literal word, not the binding
+def in 99  def betwixt fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  betwixt 3 in 10	7	`in` is bound to 99, but the keyword slot captures the literal word, not the binding
 #
 # §3  a named keyword slot binds the captured atom to its name
 def kw fn [[k:in/q] [Atom] [k]]  kw in	in/q	`k:in/q` matches `in` and binds k to the atom `in` (renders in canonical /q form)
@@ -29,5 +29,11 @@ def q fn [[from/q n:Integer] [Integer] [n]  [to/q n:Integer] [Integer] [n mul 10
 #
 # §5  a capture-ANY /q slot (Atom/q, where Atom IS a type) is unchanged —
 #     it captures any word, NOT a fixed literal.
-def any fn [[w:Atom/q] [Atom] [w]]  any anything	anything/q	`Atom/q` still captures any bare word as its atom (canonical /q render)
-def any fn [[w:Atom/q] [Atom] [w]]  any other	other/q	…any word at all
+def anyword fn [[w:Atom/q] [Atom] [w]]  anyword anything	anything/q	`Atom/q` still captures any bare word as its atom (canonical /q render)
+def anyword fn [[w:Atom/q] [Atom] [w]]  anyword other	other/q	…any word at all
+
+# ─────────────────────────────────────────────────────────────────────
+# §6  a keyword-slot fn whose name collides with a CORE word is an
+#     ownership refusal (design/OPEN-WORDS.1.md): unanchored sigs can
+#     no longer merge onto builtin words — pick a fresh name.
+def between fn [[a:Integer in/q b:Integer] [Integer] [b sub a]]  between 3 in 10	ERROR:extend_owner	`between` is a core query word; the unanchored merge refuses

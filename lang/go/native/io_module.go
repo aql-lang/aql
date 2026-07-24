@@ -438,11 +438,11 @@ func IOWordExtensions(fileType *Type) []FnDefInfo {
 		}
 	}
 	return []FnDefInfo{
-		NewWordExtensionAnchored("list", []Signature{
+		NewWordExtension(eng.OwnerKernel, "list", []Signature{
 			{Args: []*Type{TPathon, TMap}, Impl: Go(listImpl(true)), Returns: []*Type{TList}, BarrierPos: -1},
 			{Args: []*Type{TPathon}, Impl: Go(listImpl(false)), Returns: []*Type{TList}, BarrierPos: -1},
 		}),
-		NewWordExtensionAnchored("remove", []Signature{
+		NewWordExtension(eng.OwnerKernel, "remove", []Signature{
 			{Args: []*Type{TPathon, TMap}, Impl: Go(ioRemoveOptsHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 			{Args: []*Type{TPathon}, Impl: Go(ioRemoveHandler), Returns: []*Type{TPathon}, BarrierPos: -1},
 		}),

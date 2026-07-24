@@ -100,7 +100,7 @@ func TestDispatchRematchMatchDefers(t *testing.T) {
 // FULL window and renders over window[:NWritten] — byte-identical to the
 // interpreter, running COMPILED (formerly a whole-program refusal).
 func TestDispatchRematchWideWindowRendersBounded(t *testing.T) {
-	const src = `def f fn [[x:Boolean] [Boolean] [def add fn [[a:Boolean b:Boolean] [Boolean] [a or b]] add x false]]  (f true) add none none`
+	const src = `def Flag (refine Boolean)  def f fn [[x:Flag] [Boolean] [def add fn [[a:Flag b:Flag] [Boolean] [a or b]] add x x]]  def v:Flag true  (f v) add none none`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)

@@ -649,7 +649,7 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 	// aql:time-util ships with the kernel, so the waiver applies — the same
 	// escape hatch aql:io uses for its Pathon-anchored list/remove.
 	return []FnDefInfo{
-		NewWordExtensionAnchored("add", []Signature{
+		NewWordExtension("aql:time-util", "add", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(false)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(false)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(false)), Returns: []*Type{TInstant}, BarrierPos: -1},
@@ -658,7 +658,7 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, false)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, false)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
 		}),
-		NewWordExtensionAnchored("sub", []Signature{
+		NewWordExtension("aql:time-util", "sub", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(true)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(true)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(true)), Returns: []*Type{TInstant}, BarrierPos: -1},
@@ -671,10 +671,10 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, true)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, true)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
 		}),
-		NewWordExtensionAnchored("div", []Signature{
+		NewWordExtension("aql:time-util", "div", []Signature{
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurDivHandler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		}),
-		NewWordExtensionAnchored("mod", []Signature{
+		NewWordExtension("aql:time-util", "mod", []Signature{
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurModHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 		}),
 	}

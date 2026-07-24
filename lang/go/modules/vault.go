@@ -408,7 +408,7 @@ func vaultNatives() []native.NativeFunc {
 // exported under their clean spellings.
 func BuildVaultModule(parent *native.Registry) (native.ModuleDesc, error) {
 	natives := vaultNatives()
-	subReg, err := newModuleRegistry(natives)
+	subReg, err := newModuleRegistry("aql:vault", natives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

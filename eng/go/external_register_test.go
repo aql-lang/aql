@@ -61,7 +61,7 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 	// Register against a private dynamic table to avoid mutating
 	// the package-level Builtin under test parallelism.
 	tt := newBuiltinTypeTable()
-	tColor, err := tt.RegisterExternalBuiltin("Ideal/TestPluginColor", 99001, cb)
+	tColor, err := tt.RegisterType("Ideal/TestPluginColor", 99001, "plugin:test", cb)
 	if err != nil {
 		t.Fatalf("RegisterExternalBuiltin: %v", err)
 	}
@@ -111,10 +111,10 @@ func TestRegisterExternalBuiltin_PluginColor(t *testing.T) {
 // TestRegisterExternalBuiltin_DuplicatePath rejects re-registration.
 func TestRegisterExternalBuiltin_DuplicatePath(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Ideal/Dup1", 99100, nil); err != nil {
+	if _, err := tt.RegisterType("Ideal/Dup1", 99100, "plugin:test", nil); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	if _, err := tt.RegisterExternalBuiltin("Ideal/Dup1", 99101, nil); err == nil {
+	if _, err := tt.RegisterType("Ideal/Dup1", 99101, "plugin:test", nil); err == nil {
 		t.Fatal("re-registering same path should error")
 	}
 }
@@ -122,10 +122,10 @@ func TestRegisterExternalBuiltin_DuplicatePath(t *testing.T) {
 // TestRegisterExternalBuiltin_DuplicateFixedID rejects collision.
 func TestRegisterExternalBuiltin_DuplicateFixedID(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Ideal/DupID1", 99200, nil); err != nil {
+	if _, err := tt.RegisterType("Ideal/DupID1", 99200, "plugin:test", nil); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
-	if _, err := tt.RegisterExternalBuiltin("Ideal/DupID2", 99200, nil); err == nil {
+	if _, err := tt.RegisterType("Ideal/DupID2", 99200, "plugin:test", nil); err == nil {
 		t.Fatal("FixedID collision should error")
 	}
 }
@@ -133,7 +133,7 @@ func TestRegisterExternalBuiltin_DuplicateFixedID(t *testing.T) {
 // TestRegisterExternalBuiltin_MissingParent rejects orphan path.
 func TestRegisterExternalBuiltin_MissingParent(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Undeclared/Foo", 99300, nil); err == nil {
+	if _, err := tt.RegisterType("Undeclared/Foo", 99300, "plugin:test", nil); err == nil {
 		t.Fatal("missing parent should error")
 	}
 }
@@ -141,7 +141,7 @@ func TestRegisterExternalBuiltin_MissingParent(t *testing.T) {
 // TestRegisterExternalBuiltin_LowercasePart rejects bad casing.
 func TestRegisterExternalBuiltin_LowercasePart(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	if _, err := tt.RegisterExternalBuiltin("Ideal/lowercase", 99400, nil); err == nil {
+	if _, err := tt.RegisterType("Ideal/lowercase", 99400, "plugin:test", nil); err == nil {
 		t.Fatal("lowercase part should error")
 	}
 }
@@ -150,7 +150,7 @@ func TestRegisterExternalBuiltin_LowercasePart(t *testing.T) {
 // falls back to DefaultBehavior.
 func TestRegisterExternalBuiltin_DefaultBehavior(t *testing.T) {
 	tt := newBuiltinTypeTable()
-	def, err := tt.RegisterExternalBuiltin("Ideal/DefaultBeh", 99500, nil)
+	def, err := tt.RegisterType("Ideal/DefaultBeh", 99500, "plugin:test", nil)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}

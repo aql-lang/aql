@@ -38,7 +38,7 @@ import (
 var TPid = registerPidType()
 
 func registerPidType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Ideal/Pid", 5007, pidBehavior{})
+	t, err := eng.Builtin.RegisterType("Ideal/Pid", 5007, eng.OwnerKernel, pidBehavior{})
 	if err != nil {
 		recordTypeInitErr(fmt.Errorf("native_process: register Ideal/Pid: %w", err))
 	}

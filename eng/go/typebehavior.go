@@ -27,6 +27,51 @@ package eng
 // every implementor. Optional capability sub-interfaces (Comparer,
 // Hasher, Walker, Sizer — see below) let a type opt into extra
 // operations without expanding the required surface.
+// ContentMembership marks a TypeBehavior whose Match admits values by
+// CONTENT — a predicate, member function, union, negation, schema, or
+// type-shape test — rather than by construction tag. A content-based
+// type cannot ANCHOR a word-extension signature
+// (design/OPEN-WORDS.1.md §3.1): its members can exist before the type
+// does, so an anchored signature could capture pre-existing calls and
+// break the reachability theorem. Every new content-deciding Behavior
+// MUST add the marker; TestContentMembershipInventory pins the set.
+type ContentMembership interface{ ContentMembership() }
+
+// MatchDelegating is implemented by a wrapper Behavior whose Match
+// DELEGATES to an inner behavior rather than defining its own membership
+// rule — `behave`'s userBehavior is the one such wrapper (it layers
+// compare/canon/nodify over a type without touching Match). IsNominalAnchor
+// unwraps it (behaviorIsContent) so a CONTENT behavior hidden beneath a
+// Match-delegating wrapper is still found: without this, `behave`-ing a
+// predicate/surface and then anchoring a core-word extension on it would
+// slip past the marker check and break the reachability theorem (the same
+// hole as an unmarked content Behavior, reached through `behave`).
+//
+// Match-OVERRIDING wrappers (bareRefineUnifier and the membership unifiers,
+// which embed behaviorWrapper but define their own nominal/content Match)
+// deliberately do NOT implement this: their own Match decides membership,
+// so a nominal refine-of-a-predicate stays a valid anchor even though its
+// wrapped parent is content-based.
+type MatchDelegating interface{ DelegatesMatchTo() TypeBehavior }
+
+// behaviorIsContent reports whether b decides membership by content —
+// either it carries the ContentMembership marker directly, or it is a
+// Match-delegating wrapper (MatchDelegating) over a behavior that does.
+// The single source of truth for IsNominalAnchor.
+func behaviorIsContent(b TypeBehavior) bool {
+	for b != nil {
+		if _, ok := b.(ContentMembership); ok {
+			return true
+		}
+		d, ok := b.(MatchDelegating)
+		if !ok {
+			return false
+		}
+		b = d.DelegatesMatchTo()
+	}
+	return false
+}
+
 type TypeBehavior interface {
 	// Match reports whether v conforms to the type t. The
 	// canonical default is a lattice walk (v.Parent is t or a
@@ -114,7 +159,7 @@ type ConstBakeable interface {
 // refine-with-clause types so the predicate body runs at every Unify
 // callsite (closing the soundness gap where narrowing into a refined
 // type bypassed the constraint check). External plugin types can
-// install a Unifier directly via RegisterExternalBuiltin; user code
+// install a Unifier directly via RegisterType; user code
 // can install one via `behave unify/q (fn …)`.
 //
 // Symmetry is required: Unify(a, b) must equal Unify(b, a) up to

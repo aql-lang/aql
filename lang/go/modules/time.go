@@ -20,6 +20,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// so they must draw IDs from the importing tree's counter (see eng
 	// TypeTable.mintID and the BuildIOModule / StreamKind precedent).
 	subReg.Types.AdoptSeqFrom(parent.Types)
+	subReg.Types.MintOwner = "aql:time-util"
 	tt := native.MintTemporalModuleTypes(subReg)
 
 	for _, n := range timeNatives(tt) {

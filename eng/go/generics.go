@@ -234,6 +234,8 @@ type genParamUnifier struct {
 	param GenParam
 }
 
+func (*genParamUnifier) ContentMembership() {}
+
 func (g *genParamUnifier) Match(v Value, t *Type) bool {
 	if v.Parent != nil && v.Parent.ConformsTo(t) {
 		return true
@@ -356,6 +358,8 @@ type schemaUnifier struct {
 	behaviorWrapper
 	info *TypeSchemaInfo
 }
+
+func (*schemaUnifier) ContentMembership() {}
 
 func (s *schemaUnifier) Match(v Value, t *Type) bool { return baseBehavior(s.prev).Match(v, t) }
 

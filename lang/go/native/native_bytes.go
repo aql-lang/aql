@@ -20,7 +20,7 @@ import (
 var TBytes = registerBytesType()
 
 func registerBytesType() *eng.Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin("Scalar/Bytes", 1009, bytesBehavior{})
+	t, err := eng.Builtin.RegisterType("Scalar/Bytes", 1009, eng.OwnerKernel, bytesBehavior{})
 	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 		recordTypeInitErr(fmt.Errorf("native_bytes: register Scalar/Bytes: %w", err))
 	}

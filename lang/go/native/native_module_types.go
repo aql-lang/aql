@@ -43,7 +43,7 @@ var TModuleInst = registerModuleType("Ideal/Module", 5000)
 var TModuleExport = registerModuleType("Ideal/ModuleExport", 5001)
 
 func registerModuleType(path string, fixedID int) *Type {
-	t, err := eng.Builtin.RegisterExternalBuiltin(path, fixedID, moduleTypeBehavior{path: path})
+	t, err := eng.Builtin.RegisterType(path, fixedID, eng.OwnerKernel, moduleTypeBehavior{path: path})
 	if err != nil {
 		// Init-time registration error — recorded, not panicked.
 		// See ADR-005 and typeinit.go.

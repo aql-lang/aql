@@ -49,7 +49,7 @@ func TestW9TransplantExtensionEmptyIncoming(t *testing.T) {
 	err := TransplantExtension(r, FnDefInfo{
 		Extends:    "w9base",
 		Signatures: []Signature{{Fallback: true, BarrierPos: 0}},
-	}, "w9origin")
+	}, "w9origin", "")
 	if err != nil {
 		t.Errorf("empty-incoming transplant should be a no-op, got %v", err)
 	}
@@ -73,5 +73,5 @@ func TestW9TransplantExtensionAllForwardBarrier(t *testing.T) {
 			BarrierPos: BarrierAllForward,
 			Impl:       AQL([]Value{NewWord("b")}),
 		}},
-	}, "w9origin2")
+	}, "w9origin2", "")
 }

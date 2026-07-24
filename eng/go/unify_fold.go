@@ -38,6 +38,17 @@ func unifyFlexLiteral(a Value, sa ValueShape, b Value, sb ValueShape, flexType *
 	if IsConcrete(other) && other.Parent != nil && other.Parent.ConformsTo(flexType) {
 		return other, true, nil
 	}
+	// Gradual: a check-mode CARRIER tagged at (or under) the flex type
+	// — the residual of `(flex …)` and every flex-returning word — has
+	// no structure to inspect, but its static tag already proves family
+	// membership. Without this arm a typed def of a refine-of-flex
+	// newtype (`def S (refine FlexMap)  def w:S (flex m)`) check-fails
+	// while the identical program unifies at run time — the flex-retag
+	// gap that blocked pure-AQL sorted nodes (design/OPEN-WORDS.1.md
+	// follow-up).
+	if other.Carrier && other.Parent != nil && other.Parent.ConformsTo(flexType) {
+		return other, true, nil
+	}
 	return Value{}, true, unifyFail(name+" type literal needs a concrete "+name, lit, other)
 }
 
