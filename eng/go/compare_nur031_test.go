@@ -181,6 +181,45 @@ func TestNUR031TimerEquality(t *testing.T) {
 	}
 }
 
+// TestNUR031HandleFamilyByKind is the regression guard for the timer
+// deqFam defect the PR #311 review caught: a timer's deq is pointer
+// identity (Parent-independent), so a timer reparented to a `refine`
+// subtype — same handle pointer, different Parent — is DeepEqual to its
+// base and MUST share its deq scan family. deqFam therefore buckets
+// handles by PAYLOAD KIND, not by ValueType, so DeqIndex finds the
+// alias. A Store/Error, whose deq requires the same type, stays sound
+// under kind-bucketing too (DeepEqual settles the pair within the one
+// family).
+func TestNUR031HandleFamilyByKind(t *testing.T) {
+	to := &TimeoutInfo{ID: "t", Ms: 5}
+	base := NewValueRaw(TIdeal, to)      // "base type" timer
+	sub := NewValueRaw(TStoreSystem, to) // reparented alias: same pointer, other Parent
+	if !DeepEqual(base, sub) {
+		t.Fatal("a timer alias (same handle, different type) must be deq to its base")
+	}
+	if deqFam(base) != deqFam(sub) {
+		t.Fatalf("timer aliases must share a deq family: %q vs %q", deqFam(base), deqFam(sub))
+	}
+	var idx DeqIndex
+	idx.Add(base)
+	if idx.FirstMatch(sub) != 0 {
+		t.Fatal("DeqIndex must find a reparented timer alias (the P2 defect)")
+	}
+	// A Store and an Error are different kinds → different families, so
+	// the scan stays tight (they can never be deq).
+	if deqFam(storeVal(nil)) == deqFam(errVal("c", "m", nil)) {
+		t.Fatal("Store and Error must be in different deq families")
+	}
+	// handleKind classifies each handle and nothing else.
+	if handleKind(storeVal(nil)) != "Store" || handleKind(errVal("c", "m", nil)) != "Error" ||
+		handleKind(base) != "Timeout" || handleKind(NewValueRaw(TIdeal, &IntervalInfo{ID: "i"})) != "Interval" {
+		t.Fatal("handleKind must tag each deq-comparable handle by payload kind")
+	}
+	if handleKind(NewInteger(1)) != "" {
+		t.Fatal("handleKind must return empty for a non-handle")
+	}
+}
+
 // TestNUR031DeqKeyClassification pins that the newly deq-comparable
 // handles bucket as DeqUnkeyed (scanned pairwise) while the code/opaque
 // values remain DeqNeverEqual, and that a DeqIndex finds a store's

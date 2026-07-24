@@ -530,6 +530,17 @@ func DeepEqual(a, b Value) bool {
 		return a.Parent.Equal(b.Parent) && ValuesEqual(a, b)
 	}
 
+	// Type literals (NUR034): two bare type nodes are deq iff they are
+	// the same lattice type — reflexive and agreeing with `eq`'s
+	// type-body arm (`List eq List` → true). This covers the container /
+	// root literals (`List`, `Map`, `Any`) that the scalar path below
+	// leaves out, so `List deq List` → true and `List deq Map` → false.
+	// A mixed literal/concrete pair (`0 deq Integer`) needs both sides
+	// bare, so it falls through to scalarFamilyEqual's NUR032 guard.
+	if IsBareTypeNode(a) && IsBareTypeNode(b) {
+		return ValueType(a).Equal(ValueType(b))
+	}
+
 	// Scalars — the same shared leaf comparison eq uses
 	// (scalarFamilyEqual): deq must never disagree with eq on a scalar
 	// leaf (there is no identity / structural distinction to draw for an
@@ -758,13 +769,9 @@ func errorInfoEqual(a, b ErrorInfo) bool {
 // NUR031 made deq-comparable (Store, Error, Timeout, Interval) — as
 // opposed to a code/opaque value (Function, Module, Word) that remains
 // equal to nothing. Used by DeqKey to bucket these into a pairwise-scan
-// family instead of the DeqNeverEqual fast path.
+// family (by handleKind) instead of the DeqNeverEqual fast path.
 func isDeqComparableHandle(v Value) bool {
-	switch v.Data.(type) {
-	case *StoreInstanceInfo, ErrorInfo, *TimeoutInfo, *IntervalInfo:
-		return true
-	}
-	return false
+	return handleKind(v) != ""
 }
 
 // The comparison-word registrations (lt / gt / lte / gte / eq /

@@ -341,6 +341,30 @@ func TestDeepEqualLists(t *testing.T) {
 	}
 }
 
+// TestDeepEqualTypeLiterals pins NUR034: deq is reflexive on every bare
+// type literal and agrees with eq — two literals are deq iff they name
+// the same lattice type, so the container/root literals join the scalar
+// ones. A mixed literal/concrete pair stays unequal (NUR032).
+func TestDeepEqualTypeLiterals(t *testing.T) {
+	for _, tc := range []struct {
+		a, b Value
+		want bool
+	}{
+		{NewTypeLiteral(TList), NewTypeLiteral(TList), true},
+		{NewTypeLiteral(TMap), NewTypeLiteral(TMap), true},
+		{NewTypeLiteral(TAny), NewTypeLiteral(TAny), true},
+		{NewTypeLiteral(TInteger), NewTypeLiteral(TInteger), true},
+		{NewTypeLiteral(TList), NewTypeLiteral(TMap), false},
+		{NewTypeLiteral(TInteger), NewTypeLiteral(TFloat), false},
+		{NewTypeLiteral(TList), NewInteger(0), false},    // mixed: not both bare
+		{NewInteger(0), NewTypeLiteral(TInteger), false}, // NUR032 mixed guard
+	} {
+		if got := DeepEqual(tc.a, tc.b); got != tc.want {
+			t.Errorf("DeepEqual(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
 // TestDeepEqualTypeLevelContainers pins the residual render-comparison
 // path (NUR033): a type-level list/map operand — a Record/Options type
 // (Parent=TMap) or a Table type (Parent=TList) — carries no readable

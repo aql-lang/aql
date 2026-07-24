@@ -58,6 +58,14 @@ Integer deq Float	false	two DISTINCT numeric type literals are not deq-equal (de
 Integer eq Integer	true	the SAME numeric type literal is equal to itself (matches eq's type-body arm)
 Integer deq Integer	true	deq agrees on the same-type literal
 Integer teq Integer	true	the dedicated type-equality word is unaffected
+# deq is reflexive on EVERY type literal, agreeing with eq (NUR034): the
+# container/root literals join the scalar ones, so a type literal is deq
+# to itself and to no other type.
+List deq List	true	a container type literal is deq to itself (was false before NUR034)
+Map deq Map	true	…and so is the map literal
+Any deq Any	true	…and the root literal
+List deq Map	false	two DISTINCT type literals are not deq
+List eq List	true	eq already agreed; deq now matches it
 # ── deq compares typed containers by VALUE, not render (NUR033) ───────
 # A typed list `[:T v0 v1]` carries an element-type annotation. deq is
 # value equality, so it compares the ELEMENTS and ignores the tag, the

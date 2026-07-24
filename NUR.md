@@ -70,7 +70,6 @@ commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
-| [NUR034](#nur034) | `deq` is reflexive for scalar type literals but not container/root ones | 2026-07-24 NUR030–033 review |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -738,33 +737,3 @@ accepted:
 - `lang/spec/compare-restrict.tsv`, `lang/spec/edge-containers-1.tsv`
   §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
 
----
-
-## NUR034 — `deq` is reflexive for scalar type literals but not container/root ones {#nur034}
-
-**Status:** Pending · **Recorded:** 2026-07-24 · **Surfaced by:** NUR030–033 review
-
-**Rule:** every value is equal to itself, and `eq`/`deq` agree on a
-type literal (`eq` compares type literals structurally via `IsTypeBody`,
-so `List eq List` → true, `Integer eq Integer` → true).
-**Divergence:** `deq` has NO type-body arm. Scalar-family literals are
-`deq`-reflexive only because the scalar equality path handles them
-(`Integer deq Integer` → true, `String deq String` → true — the latter
-via `scalarSemanticEqual`, the former via the NUR032 same-type arm),
-while the container / root literals fall through to `false`:
-`List deq List`, `Map deq Map`, `Any deq Any` → false, even though
-`List eq List` → true. So `deq` disagrees with `eq` on the very values
-`eq` compares structurally, and reflexivity is not uniform across the
-type-literal families.
-**Evidence:** `eng/go/compare.go` — `ExactEqual`'s `IsTypeBody` arm vs
-`DeepEqual`, which has no counterpart; live probes 2026-07-24:
-`List deq List` → false, `List eq List` → true, `Integer deq Integer`
-→ true, `Map deq Map` → false.
-**Documentation status:** undocumented; no spec row pins the container
-cases.
-**Proposed verdict:** resolve — give `DeepEqual` the same type-literal
-arm `ExactEqual` has (two bare type nodes are `deq` iff they are the
-same lattice type), so `List deq List` → true and `List deq Map` →
-false, making `deq` reflexive and agreeing with `eq` on every type
-literal. Deferred out of the NUR030–033 change to avoid a late,
-separate behaviour shift in the collection words.

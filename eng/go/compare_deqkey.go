@@ -272,11 +272,33 @@ func deqFam(v Value) string {
 	if _, _, ok := flatInstanceParts(v); ok {
 		return "I:" + v.Parent.ID
 	}
-	// NUR031 handles scan within one family per handle type — a Store
-	// never deq-matches an Error, so keying by type ID keeps the scan
-	// tight.
-	if isDeqComparableHandle(v) {
-		return "H:" + ValueType(v).ID
+	// NUR031 handles scan within one family per PAYLOAD KIND, NOT per
+	// type ID: a timer's deq is pointer identity, which ignores Parent,
+	// so a timer reparented to a `refine` subtype (same handle pointer)
+	// is deq to its base and MUST share its scan family. Keying by kind
+	// (rather than ValueType) also stays sound for Store/Error, whose
+	// deq requires the same exact type — DeepEqual settles those pairs
+	// within the one family. A Store never deq-matches an Error, so the
+	// per-kind split keeps the scan tight.
+	if k := handleKind(v); k != "" {
+		return "H:" + k
+	}
+	return ""
+}
+
+// handleKind returns the payload-kind tag of a deq-comparable opaque
+// handle (Store, Error, Timeout, Interval), or "" for anything else.
+// Parent-independent by design — see deqFam.
+func handleKind(v Value) string {
+	switch v.Data.(type) {
+	case *StoreInstanceInfo:
+		return "Store"
+	case ErrorInfo:
+		return "Error"
+	case *TimeoutInfo:
+		return "Timeout"
+	case *IntervalInfo:
+		return "Interval"
 	}
 	return ""
 }
