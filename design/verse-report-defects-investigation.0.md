@@ -467,6 +467,29 @@ One suggestive datum: `IS istype` → **false**. A `Disjunct` is not a type
 `istype` would treat a union annotation as a value and fall back to
 dynamic.
 
+`check --strict` confirms the dynamism directly and shows it is
+union-specific rather than a general property of the shorthand form:
+
+| shorthand parameter type | exhaustive proved | dynamic operand |
+|---|---|---|
+| `x:Boolean` (true+false clauses) | yes | no |
+| `x:Pos` (`refine Integer`) | yes | no |
+| `x:Integer` (interval clauses `[gt 3]`/`[lte 3]`) | yes | no |
+| `x:IS` (`Integer tor String`) | **NO** | **YES** |
+
+The strict advisory reads "case dispatched over a dynamic operand —
+matched optimistically, re-checked at runtime"; the bracket form with the
+same union emits no such advisory.
+
+That also identifies what the dynamism costs. `disjunctPartitionReturns`
+(`eng/go/carrier.go:2178`) is the machinery for declared-union parameters,
+and it gates on `IsDisjunct(a) && a.Carrier && !a.Dynamic` (line 2185)
+plus `DisjunctInfo.Declared` (line 2187) — it needs a **strict** declared
+Disjunct carrier. A dynamic one skips the whole per-alternative partition,
+so the union parameter loses not just `case` exhaustiveness but the
+`partial_dispatch` analysis (line 2231) that reports a body with no
+overload for one alternative of its own declared domain.
+
 ### What is not yet established
 
 Which of the ~12 sites that set `Carrier.Dynamic` (`eng/go/carrier.go:48,
