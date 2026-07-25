@@ -28,10 +28,11 @@ Two ground rules were applied while writing it.
 below was checked against the tree at `ab0e1e0` — by reading the cited
 file, by `aql describe`, or by running the program shown. Where a
 documented behaviour and the observed behaviour disagree, the report says
-so and cites the run. Five incidental defects surfaced during that
-checking — four behavioural, one documentation. They are recorded in
-**§6** because they are not Verse lessons and should not be smuggled into
-one.
+so and cites the run. Seven incidental defects surfaced during that
+checking — five behavioural, one documentation, one already-recorded
+issue with an unrecorded manifestation. They are in **§6** because they
+are not Verse lessons and should not be smuggled into one. The most
+serious, §6(f), is a race-detector-confirmed data race.
 
 **Verse's unreleased surface is labelled as such.** The book documents a
 good deal of design intent that is not shipped: live variables
@@ -89,7 +90,7 @@ Stating this first keeps the recommendations honest.
 | Exhaustiveness-checked `case` | `case_not_exhaustive` is a **gating** check error; coverage proved by interval union, nominal boundaries respected | `aql describe case`, `design/case-exhaustiveness.0.md` |
 | Fallible cast that binds | `is` / `as` / `tis`, `unify` | `aql describe type` |
 | Named effect alphabet | 13 capability scopes (`fileops`, `network`, `sqlite`, `formats`, `env`, `process`, `clock`, `log`, `terminal`, `vault`, plus `global`/`engine`/`modules`) + policy profiles of `scope.op` rules | `lang/go/policy/policy.go:104-123` |
-| Structured parallelism | `TimeUtil.await` with `'all` / `'full` / `'first` / `'any`, a forked registry per branch | EXPLANATION.md → "Parallel execution model" |
+| Structured parallelism | `TimeUtil.await` with `'all` / `'full` / `'first` / `'any`, a forked registry per branch — isolating *scopes* only, not container payloads (§6(f)) | `eng/go/fork.go:38` |
 | Unstructured concurrency + message passing | `spawn` → `Pid`, `send`/`receive`, bounded mailboxes, `service`/`call` — a layer Verse has no counterpart for | `aql describe concurrent` |
 | Absence as a first-class value | `None` is its own type; a map/list miss yields it (`typeof ({a:1} dot b)` → `None`) | verified by run |
 | Failure-to-absence conversion | `guard` — `true guard 42` → `42`, `false guard 42` → `None` | `aql describe guard` |
@@ -839,8 +840,12 @@ are the parts worth taking.
 
 None of these are Verse lessons. They surfaced because §2 and §3 required
 running AQL rather than trusting its documentation, and they are recorded
-here so they are not lost. All five reproduce on `main` @ `ab0e1e0`;
-(a)–(d) are behavioural, (e) is documentation.
+here so they are not lost. All seven reproduce on `main` @ `ab0e1e0`.
+(a)–(d) and (f) are behavioural, (e) is documentation, and (g) is an
+already-recorded issue whose worst manifestation is not recorded. **(f)
+is the one to read first** — it is a data race, confirmed with the Go race
+detector, reachable from ordinary AQL, and the prose docs assert the
+opposite of the truth.
 
 **(a) Compiled `do`/`each` leak `context set` writes out of the
 sub-engine — a silent divergence.** EXPLANATION.md:727 says "sub-engines
@@ -946,3 +951,97 @@ others because it is exactly the drift AQL's
 it sits on the surface **V2** proposes to build on. It also argues for
 generating the error-code table from the registry the same way `describe`
 is generated, rather than maintaining it by hand.
+
+**(f) `await` branches share mutable container payloads with each other
+and with the parent — a data race, and the docs say the opposite.**
+This is the most serious item here, and it is a soundness bug rather than
+a documentation one.
+
+EXPLANATION.md:683 states that "Mutable side effects within a branch are
+local to that branch's sub-engine", and HOWTO.md:353 that "Each branch
+runs in a sub-engine, so writes to mutable objects inside one branch do
+not bleed into the others". Both are false for exactly the values they
+name. `ForkConcurrent` (`eng/go/fork.go:38`) clones the *execution
+scopes* — `Defs`, `Types`, `Contexts`, `Args` — and its own header says
+it "isolates every mutable execution scope". Cloning the binding table
+copies `Value`s, but a `FlexMap`/`FlexList`/class-instance `Value` holds
+a pointer to a shared `*OrderedMap`, so in-place mutation is visible
+everywhere:
+
+```
+$ cat two-keys.aql
+import "aql:time-util"
+def m (make FlexMap {})
+TimeUtil.await [[m set a 1] [m set b 2]] ;
+m
+$ aql --no-compile two-keys.aql
+[{b:2 a:1} {b:2 a:1}] {b:2 a:1}     # both branches AND the parent see both writes
+```
+
+A sibling reads the other branch's write (`m.n` in a later branch returns
+the value an earlier branch wrote), and the parent sees it after the
+`await`. An immutable `Map` behaves correctly by contrast — its `set` is
+copy-returning, so the parent still reads `0`.
+
+Because `OrderedMap.Set` (`eng/go/value.go:85-91`) is an unsynchronised
+Go map write plus a slice append, two branches mutating one container is
+undefined behaviour, and the race detector confirms it:
+
+```
+$ go build -race -o aql-race ./aql
+$ aql-race --no-compile race.aql        # two branches doing `m set kN i` in a loop
+WARNING: DATA RACE
+Read at 0x… by goroutine 17:
+  eng/go.(*OrderedMap).Set()            eng/go/value.go:87
+  native.setFlexMapHandler()            lang/go/native/native_storage.go:749
+  native.awaitAll.func1()               lang/go/native/native_temporal_await.go:104
+Previous write at 0x… by goroutine 16:
+  eng/go.(*OrderedMap).Set()            eng/go/value.go:90
+```
+
+`native_temporal_await.go:23-25` is careful and correct about what it
+does guarantee — forking happens on the dispatching goroutine, so *reads
+of parent scope state* are race-free. The gap is that nothing isolates,
+copies-on-write, or refuses a mutable payload crossing the fork boundary.
+Notably `send` already refuses to pass such containers between processes,
+so the safe rule exists in the tree — `await` and `spawn` just do not
+apply it.
+
+Fixing this needs a decision, not a patch: deep-clone mutable payloads
+into each branch (matching the documented semantics, at a copying cost),
+refuse them at the boundary as `send` does (loud, cheap, breaking), or
+document sharing as intended and add synchronisation (fast, but makes
+`await` a concurrency primitive users must reason about). The `-race`
+gate did not catch this because no spec row shares a flex container
+across `await` branches.
+
+**(g) Un-separated forward calls evaluate right-to-left, which silently
+yields stale reads — a recorded issue with an unrecorded manifestation.**
+`design/ERRORS.8.md:188-206` records this as VOXGIG **B2a**
+("`(1 add 1) print (2 add 2) print` prints `4` then `2` — un-separated
+chained forward calls evaluate right-to-left"), with the fix (§6.1)
+deferred to the structure-first lazy-resolution rework and statement
+separation (`;` / `end`) as the documented mitigation.
+
+The recorded symptom is output ordering. The sharper one is a wrong
+*value*, because a newline is not a separator:
+
+```
+def m (make FlexMap {n:0})
+m set n 1
+m.n                 # → 0, the pre-write value
+```
+
+Adding `;` after the write, or parenthesising it, yields `1`. Every
+mutate-then-read sequence written without an explicit barrier reads
+stale, which is a data-correctness face of B2a that the design note
+describes only as a print-ordering nuisance. Worth adding to that note's
+§6 and to NUR029's neighbourhood, since `mixed_form_call` already exists
+as the advisory hook.
+
+This one also carries a methodological lesson recorded here deliberately:
+the first version of this report used un-separated mutate-then-read
+programs to *test* branch isolation, read the stale values as evidence of
+isolation, and on that basis wrongly rejected a correct claim that
+`await` mutations escape. The barrier is load-bearing in test programs,
+not just in production ones.
