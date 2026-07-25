@@ -8,6 +8,10 @@
 > [GO-MODULES.10.md](GO-MODULES.10.md),
 > [go-modules/README.10.md](go-modules/README.10.md), and
 > [EXTENSION-MODULES.10.md](EXTENSION-MODULES.10.md) first.
+>
+> For a proposed *home* for everything still in buckets C and D — which
+> module absorbs it, which new module owns it, which seam it belongs to —
+> see [STDLIB-ALLOCATION.0.md](STDLIB-ALLOCATION.0.md).
 
 ## Framing
 
@@ -105,6 +109,8 @@ note: they have neither been claimed, excluded, nor logged as a gap. Each
 row carries a **suggested** destination bucket so the residue can be
 retired by decision rather than by re-derivation; the suggestion is
 advisory until someone moves the row.
+[STDLIB-ALLOCATION.0.md](STDLIB-ALLOCATION.0.md) works every §C and §D
+row through to a destination module or seam.
 
 ### D.1 Post-map Go additions (1.21 → 1.24)
 
