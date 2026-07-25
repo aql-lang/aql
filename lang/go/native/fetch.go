@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
@@ -244,13 +245,26 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 		timeout = time.Duration(tvInt) * time.Millisecond
 	}
 
+	// Resolve the transport through the host seam before the effect
+	// fence: picking a transport opens no socket, and a host whose
+	// HTTPOps refuses provably sent nothing.
+	// The code is `transport` per NETWORK-CLIENTS.0.md §8.2 so a guest
+	// can discriminate it in `do […] error [case …]`. The surrounding
+	// legacy paths still return bare fmt.Errorf (and so surface as
+	// internal_error); new paths do not inherit that.
+	transport, err := EffectiveHTTPOps(r).Transport(capabilities.TLSProfile{})
+	if err != nil {
+		return nil, r.AqlError("transport",
+			"fetch: could not obtain an HTTP transport: "+err.Error(), "fetch")
+	}
+
 	// Execute request. C1 effect fence (eng effects.go): once Do runs, the
 	// request may have reached the peer even when it returns an error (sent,
 	// response lost), so the effect is noted on the attempt — everything
 	// before this point (policy denial, a malformed request) provably sent
 	// nothing and stays uncounted.
 	r.NoteEffect()
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{Timeout: timeout, Transport: transport}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)

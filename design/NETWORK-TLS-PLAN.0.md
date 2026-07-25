@@ -123,13 +123,22 @@ func SetHostClientIdents(r *Registry, ids map[string]capabilities.ClientIdentity
 ```go
 // lang/go/capabilities/httpops.go
 type HTTPOps interface {
-    Client(p TLSProfile, timeout time.Duration) (*http.Client, error)
+    Transport(p TLSProfile) (http.RoundTripper, error)
 }
 ```
 
+> **Revised during Phase 1** (was `Client(p, timeout) (*http.Client, error)`).
+> The seam hands back a **transport, not a client**. The pool and the TLS
+> config live on the transport while the per-request timeout lives on the
+> client, so `fetch` builds a cheap client around a shared transport per
+> call. Returning a client instead would force the cache to be keyed on the
+> guest-supplied timeout — an unbounded cache keyed by untrusted input,
+> which is open question §9.3 answered the wrong way. As built.
+
 `TLSProfile` is the resolved, comparable result of parsing the guest's
 `tls:` map (identity name, verify flag, CA-set fingerprint, SNI, min
-version). The default implementation:
+version). It is an empty struct until Phase 2 populates it. The default
+implementation:
 
 - clones `http.DefaultTransport` and keeps **`ForceAttemptHTTP2: true`** —
   setting `TLSClientConfig` on a fresh `http.Transport` silently disables
@@ -137,8 +146,9 @@ version). The default implementation:
   every request to HTTP/1.1;
 - sets `GetClientCertificate` to a closure over the resolved
   `ClientIdentity`;
-- **caches one `*http.Client` per distinct `TLSProfile`** on the registry,
-  so connection reuse survives and a per-request transport is not built.
+- **caches one transport per distinct `TLSProfile`** (Phase 2, once the
+  profile has fields), so connection reuse survives and a per-request
+  transport is not built.
 
 This seam is independently valuable: it is the point where tests stub the
 network without touching the wire.
@@ -186,14 +196,24 @@ inherit it unchanged.
 
 Ordered so each lands green on its own. Phase 1 is the smallest useful PR.
 
-### Phase 1 — transport seam, no user-visible change
+### Phase 1 — transport seam, no user-visible change ✅ **DONE**
 `lang/go/native/fetch.go`, `lang/go/native/capabilities.go`,
-`lang/go/capabilities/httpops.go` (new), `lang/go/aql.go`.
+`lang/go/capabilities/httpops.go` (new), `lang/go/aql.go`,
+`lang/go/native/httpops_test.go` (new).
 
-Replace the inline client with `HTTPOps`, default implementation
-reproducing today's behaviour exactly (stock transport + timeout).
-**Done when:** existing `fetch_test.go` / `fetch_policy_test.go` /
-`fetch_seam6c1_test.go` pass unchanged and `make cover-gate` is green.
+Replaced the inline client with `HTTPOps`, default implementation
+reproducing today's behaviour exactly (`http.DefaultTransport`, which is
+what a nil `Transport` field resolved to anyway). Host entry point is
+`(*AQL).SetHTTPOps`.
+
+`CapHTTPOps` deliberately has **no policy-uninstall branch**, unlike
+`CapFormats`: the transport is not itself an authority, `fetch` is gated
+by `checkFetchPolicy` before any transport is resolved, and removing the
+slot would only fall back to the default — it could not deny anything.
+
+The transport is resolved **before** `r.NoteEffect()`, since choosing one
+opens no socket; a host whose `HTTPOps` refuses provably sent nothing, and
+`TestFetchTransportErrorIsUnsent` pins that against the effect ledger.
 
 ### Phase 2 — base TLS client options
 `parseTLSOpts` + `verify` / `ca` / `sni` / `min` on `fetch`. `tls-insecure`

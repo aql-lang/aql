@@ -22,7 +22,36 @@ const (
 	CapLogSinks       = "engine.logsinks"        // *LogSinkRegistry (aql:log fan-out sinks)
 	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
 	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
+	CapHTTPOps        = "engine.httpops"         // capabilities.HTTPOps (aql:net fetch transport)
 )
+
+// EffectiveHTTPOps returns the HTTP transport capability for the current
+// invocation. A host may install one under CapHTTPOps — to pin TLS
+// settings, route through its own proxy, or stub the network in tests.
+// When none is installed the default is used, which serves
+// http.DefaultTransport and so reproduces the behaviour of an
+// *http.Client with a nil Transport. Never returns nil.
+//
+// Unlike FileOps this has no policy-uninstall branch: the transport is
+// not itself an authority. `fetch` is gated by checkFetchPolicy before
+// any transport is resolved, so removing the slot would only fall back
+// to the default and could not deny anything.
+func EffectiveHTTPOps(r *Registry) capabilities.HTTPOps {
+	if ops, ok, _ := eng.Cap[capabilities.HTTPOps](r, CapHTTPOps); ok && ops != nil {
+		return ops
+	}
+	return capabilities.DefaultHTTPOps{}
+}
+
+// SetHostHTTPOps installs an HTTPOps capability (used by host embedders
+// and by tests supplying a stub transport). A nil registry or nil ops is
+// a no-op, matching SetHostDebugOps.
+func SetHostHTTPOps(r *Registry, ops capabilities.HTTPOps) {
+	if r == nil || ops == nil {
+		return
+	}
+	_ = r.Capabilities.Set(CapHTTPOps, ops)
+}
 
 // EffectiveDebugOps returns the installed DebugOps capability, or (nil,
 // false) when none is installed. Debug.step uses it for an interactive

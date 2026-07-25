@@ -472,6 +472,21 @@ func (a *AQL) SetClock(clk Clock) {
 	native.SetHostClock(a.registry, clk)
 }
 
+// HTTPOps is the outbound HTTP transport capability used by aql:net's
+// fetch — re-exported so hosts can pin TLS settings or stub the network
+// in tests. TLSProfile is the resolved per-request TLS configuration
+// handed to it.
+type HTTPOps = capabilities.HTTPOps
+
+// TLSProfile is the resolved TLS configuration for one outbound request.
+type TLSProfile = capabilities.TLSProfile
+
+// SetHTTPOps replaces the HTTP transport used by fetch. With none
+// installed, fetch uses http.DefaultTransport.
+func (a *AQL) SetHTTPOps(ops HTTPOps) {
+	native.SetHostHTTPOps(a.registry, ops)
+}
+
 // SetOutput replaces the writer used by print, help, and other output words.
 func (a *AQL) SetOutput(w io.Writer) {
 	a.registry.Output = w
