@@ -937,20 +937,42 @@ names no real scope, and neither `fileio`/`fetch`/`timers` as capability
 flags nor `cap_denied` occurs anywhere in the Go source or in
 `lang/spec/*.tsv`.
 
-The error code is not an isolated slip. Spot-checking REFERENCE.md's
-"Common codes" table against non-test Go source, four of its rows —
-`cap_denied`, `io_error`, `type_mismatch`, `out_of_range` — have **zero**
-occurrences, so the reference manual documents codes the engine cannot
-produce. (`io_error` is also the code used in EXPLANATION.md's worked
-error-handling example.) A handler written from the manual —
-`dup .code eq 'io_error if [...]` — therefore never fires.
+The error code is not an isolated slip, and the full audit of
+REFERENCE.md's 22-row "Common codes" table is worse than a spot check
+suggested. Four rows name codes that occur **nowhere** in the tree — not
+in Go source, not in tests, not in `lang/spec/*.tsv`:
 
-This is docs-only and cheap to fix, but it is worth listing beside the
-others because it is exactly the drift AQL's
-`describe`-from-the-live-registry doctrine exists to prevent, and because
-it sits on the surface **V2** proposes to build on. It also argues for
-generating the error-code table from the registry the same way `describe`
-is generated, rather than maintaining it by hand.
+| Documented | Reality |
+|---|---|
+| `cap_denied` | phantom; policy denial is `aql/permission_denied` |
+| `type_mismatch` | phantom; a real mismatch raises `aql/signature_error` |
+| `unify_fail` | phantom, twice over — a failed `unify` does not raise at all, it returns the value `~unify-fail false` |
+| `extend_user_type` | phantom |
+| `out_of_range` | wrong name, and the runtime error carries **no code at all** |
+| `io_error` | never engine-minted; exists only as a user-raisable atom in spec rows |
+
+Probing each documented case through `do […] error [dot code]` gives the
+real codes: a map miss is `not_found`, division by zero is `arith_error`,
+a signature mismatch is `signature_error`, `incomparable` and
+`user_error` are correct as documented. But an out-of-bounds index —
+documented as `out_of_range` — yields `None` for `dot code`: the runtime
+error is **code-less**, so it cannot be dispatched on at all. (The
+check-time diagnostic for the same condition is `index_out_of_range`,
+a third spelling.) `io_error`, used in EXPLANATION.md's worked
+error-handling example, is likewise not something the engine produces —
+a handler copied from that example fires only if user code raises the
+atom itself.
+
+Most of this is docs-only and cheap to fix, and it is worth listing
+because it is exactly the drift AQL's `describe`-from-the-live-registry
+doctrine exists to prevent — it argues for generating the code table from
+the registry rather than maintaining it by hand. But the `out_of_range`
+row is not a documentation bug: a runtime error with no code is
+undispatchable, which makes it the one row here that needs an engine fix
+rather than an edit. It is also a concrete instance of a systemic gap the
+`errors-failure` survey found independently: `lang/go/native` has 417
+non-test `fmt.Errorf` sites and `lang/go/modules` 119, each a potential
+failure that reaches the user with no `[aql/…]` code to dispatch on.
 
 **(f) `await` branches share mutable container payloads with each other
 and with the parent — a data race, and the docs say the opposite.**
