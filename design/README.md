@@ -93,7 +93,7 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `elixir-types-in-aql-report.10.md`, `fsharp-units-in-aql-report.0.md`,
   `dynamic-modality-report.10.md`, `LISP-ANALYSIS.5.md`,
   `RACKET-ANALYSIS.5.md`, `RACKET-FEATURES-EXAMPLES.5.md`,
-  `PORT_OBSERVATIONS.5.md`.
+  `PORT_OBSERVATIONS.5.md`, `verse-in-aql-report.0.md`.
 
 ## Legacy / historical — completed plans & phase docs
 
