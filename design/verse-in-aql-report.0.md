@@ -89,7 +89,8 @@ Stating this first keeps the recommendations honest.
 | Exhaustiveness-checked `case` | `case_not_exhaustive` is a **gating** check error; coverage proved by interval union, nominal boundaries respected | `aql describe case`, `design/case-exhaustiveness.0.md` |
 | Fallible cast that binds | `is` / `as` / `tis`, `unify` | `aql describe type` |
 | Named effect alphabet | 13 capability scopes (`fileops`, `network`, `sqlite`, `formats`, `env`, `process`, `clock`, `log`, `terminal`, `vault`, plus `global`/`engine`/`modules`) + policy profiles of `scope.op` rules | `lang/go/policy/policy.go:104-123` |
-| Structured parallelism | `TimeUtil.await` with `'all` / `'full` / `'first` / `'any`, isolated sub-engine per branch | EXPLANATION.md → "Parallel execution model" |
+| Structured parallelism | `TimeUtil.await` with `'all` / `'full` / `'first` / `'any`, a forked registry per branch | EXPLANATION.md → "Parallel execution model" |
+| Unstructured concurrency + message passing | `spawn` → `Pid`, `send`/`receive`, bounded mailboxes, `service`/`call` — a layer Verse has no counterpart for | `aql describe concurrent` |
 | Absence as a first-class value | `None` is its own type; a map/list miss yields it (`typeof ({a:1} dot b)` → `None`) | verified by run |
 | Failure-to-absence conversion | `guard` — `true guard 42` → `42`, `false guard 42` → `None` | `aql describe guard` |
 | Insertion-ordered maps | map literals preserve source key order | `58df45d` "D1: map literals preserve source key order" |
@@ -329,9 +330,23 @@ still releases its resources. `rush` and `branch` are **banned directly
 inside `loop`/`for` bodies**, because iteration would accumulate
 unbounded background tasks.
 
-AQL's `await` covers `sync` (`'all`), `'full` (all-settled, which Verse
-lacks), and two first-wins modes. It has no fire-and-forget, no task
-handle, and — the substantive finding — **no cancellation**:
+AQL's coverage is wider than the `await` modes alone suggest, and in one
+direction wider than Verse's. `await` covers `sync` (`'all`), `'full`
+(all-settled, which Verse lacks) and two first-wins modes; and alongside
+it AQL ships a whole **actor layer** that Verse has no counterpart for —
+a `concurrent` word category with `spawn` / `self` / `send` / `receive` /
+`register` / `whereis` / `unregister` over an opaque `Pid`, bounded
+mailboxes with `block`/`fail`/`drop` overflow policies, `receive […]
+after <ms> […]` timeouts, an in-process `service` / `call` / `state-of` /
+`wrap` gen_server analogue, and `process`-scope capability gating. So
+AQL has Verse's `spawn` (unstructured, outlives its scope, returns a
+handle) and then some.
+
+The gap is therefore narrower and sharper than "no fire-and-forget". It
+is **cancellation, and anything you can do with a handle**. Verse's
+`task(t)` can be cancelled or awaited; AQL's `Pid` can be neither — there
+is no kill, no join, no link, no monitor, no supervisor. And the
+first-wins `await` modes do not cancel their losers:
 
 ```go
 // lang/go/native/native_temporal_await.go:167
@@ -350,9 +365,12 @@ not its `race`** — which matters, because EXPLANATION.md calls it
 correction. A losing branch continues to consume its step budget, hold
 its capabilities and perform its side effects.
 
-Transferable: **V6** (a genuinely cancelling mode, and honest docs for
-the non-cancelling one), plus the loop restriction as a design constraint
-if AQL ever adds `branch`/`spawn`.
+Transferable: **V6** (a genuinely cancelling mode, honest docs for the
+non-cancelling one, and the `task(t)`-shaped operations AQL's `Pid` is
+missing). Verse's rule that `rush`/`branch` may not appear directly in a
+`loop`/`for` body is also worth adopting for `spawn`, since AQL's `spawn`
+has exactly the unbounded-accumulation property that restriction exists
+to prevent.
 
 Verse's `defer` also independently corroborates `design/RESOURCE-SAFETY.0.md`,
 which proposes `ensure`/`bracket` as a design RFC with no implementation.
@@ -723,7 +741,8 @@ Honesty about non-transfer is most of the value of a report like this.
 | Failure | first-class control flow; `<decides>`; failure contexts; speculative rollback | `raise` unwinds, `do […] error […]` reifies; `None` for absence; no failure-driven control flow |
 | Effects | six families in the signature, subtyped, joined, hidden by construct | named capability scopes + policy profiles, enforced at runtime only |
 | Purity guarantee | `<computes>` is compiler-enforced | none in the type system; policy denies at the call |
-| Concurrency | `sync`/`race`/`rush`/`branch`/`spawn` + `task(t)`, cancellation, `defer`-on-cancel | `await` × `'all`/`'full`/`'first`/`'any`; no cancellation, no handles |
+| Concurrency | `sync`/`race`/`rush`/`branch`/`spawn` + `task(t)`, cancellation, `defer`-on-cancel | `await` × `'all`/`'full`/`'first`/`'any`, **plus** an actor layer (`spawn`/`send`/`receive`/`Pid`, mailboxes, `service`) Verse has no analogue for |
+| Task handles | `task(t)`: cancellable, awaitable | `Pid`: opaque, not cancellable, not joinable — no links, monitors or supervisors |
 | Colouring | `<suspends>` is viral and excludes `<decides>` | colourless: `await` is a word, errors are values |
 | Refinement bounds | literals only (decidable) | arbitrary predicates, disjunctions, surfaces |
 | Exhaustiveness | enums, ints, strings, chars; not floats/objects/tuples | interval-union proofs, nominal boundaries, gating |
@@ -748,7 +767,7 @@ decision.
 | **V3** | **`aql check --compat <baseline>`, run by `aql publish`.** Compare a module's exported signatures against the last published version under four variance rules: parameters may widen, returns may narrow, effects may narrow, nothing may be removed or renamed or change kind. | Verse's catalogue is directly portable, the registry already has a publish step, and the spec rows give a second oracle. Turns README.md's hand-written upgrade notes into a mechanism. | medium |
 | **V4** | **`@deprecated` / `@experimental` / `@available` metadata on `def`s and exports**, with Verse's transitive rule: deprecated code may call deprecated code silently; non-deprecated code calling it raises an advisory. `experimental` gated by a flag; `available` carrying a minimum version. | `check` already has never-gating advisory tiers and `describe` already renders per-word metadata from the live registry. Small, and the natural companion to V3. | small |
 | **V5** | **A checked `Persistable` marker.** A predicate over a class's transitive field types (no function values, no opaque, no `Store`, no `Any`), verified by `check`, so `jsonify`/`reify` round-tripping is a type-level guarantee. Adopt Verse's missing-fields-take-defaults rule for forward compatibility. | Closes a verified silent data-loss path (`f:Any` holding a function round-trips to a string). Ideals are the home for the marker. | medium |
-| **V6** | **A cancelling `await` mode** (`'race`) distinct from the existing non-cancelling first-wins mode, plus a docs fix: `'first` is Verse's `rush`, not its `race`, and EXPLANATION.md currently calls it "race". | `awaitFirst`/`awaitAny` verifiably leave losers running (`native_temporal_await.go:167`). Needs a cancellation channel through sub-engines; the docs half is free. | small (docs) / medium (cancellation) |
+| **V6** | **Cancellation, and a `Pid` you can do something with.** Add a genuinely cancelling `'race` mode beside the existing non-cancelling first-wins one; give `Pid` the `task(t)` operations it lacks (kill, join/await); fix the docs — `'first` is Verse's `rush`, not its `race`, and EXPLANATION.md calls it "race". Adopt Verse's ban on fire-and-forget directly inside a loop body for `spawn`. | `awaitFirst`/`awaitAny` verifiably leave losers running (`native_temporal_await.go:167`), and AQL's actor layer ships `spawn`→`Pid` with no kill, join, link, monitor or supervisor. Needs a cancellation channel through forked registries; the docs half is free. | small (docs) / medium (cancellation) |
 | **V7** | **A fused comprehension**: one form that iterates, binds intermediates, filters and collects, where an absent (`None`) element is skipped rather than collected. Verse's `for (X : Xs, P[X], Y := f[X]) : g(Y)`. | `each` verifiably keeps `None`s (`[None None 3 4]`); `guard` already produces `None`; `filter` already selects. This is fusion plus a skip rule, not new semantics. A `first`-style single-result sibling falls out. | medium |
 | **V8** | **Let a default-less `case` be legal where failure can be absorbed** — inside `do […]`, or (once V2 lands) in any word whose declared raise-set admits `case_no_match`. | Verse's "incomplete coverage is allowed in a `<decides>` context". The hook already exists: the checker tracks `CaughtBodyDepth` (`eng/go/registry.go:662-670`) precisely to mean "analysis is inside an error-trapping `do […]`", and already uses it to silence other runtime mirrors. Removes the pressure to add a defensive default that then hides a genuine gap — the failure mode V9 also addresses. | small |
 | **V9** | **Declared open vs closed unions.** Let an exported union say whether it may grow: closed → exhaustiveness provable, membership frozen (a V3 compatibility rule); open → every `case` needs a default or an absorbing context. | Today adding an alternative to an exported union silently converts downstream default-less `case`s into gating errors. Verse prices this in the type. | medium |
@@ -772,7 +791,7 @@ correctness bug in a command users are told is inert.
 | Rollback silently cancels cleanup | a failed scope never runs its `defer`s | decide it explicitly in `RESOURCE-SAFETY.0.md` (**V11**) |
 | Colouring async splits the language | `<suspends>` is viral and cannot combine with `<decides>`; `spawn` cannot take failable work | keep `await` colourless and errors as values; do not import the exclusion |
 | Non-cancelling first-wins leaks work | `rush` keeps losers running; banned inside loops for that reason | AQL's `'first` is already `rush` and is documented as `race` (**V6**) |
-| Fire-and-forget inside iteration accumulates tasks | `rush`/`branch` prohibited in `loop`/`for` bodies | a constraint to adopt up front if `branch`/`spawn` ever land |
+| Fire-and-forget inside iteration accumulates tasks | `rush`/`branch` prohibited in `loop`/`for` bodies | AQL already ships `spawn` with no such restriction, and no way to kill what it starts (**V6**) |
 | A specifier vocabulary grows into a contract | six families, exclusive-vs-additive rules, per-family clearing, "duplicate specifier is an error" | keep **V2**'s surface inferred-by-default and printed by `describe`, not hand-written on every word |
 | Invisible separators changing semantics | `(1; 2)` = `2` versus `(1, 2)` = a tuple | do not add separator-sensitive forms; NUR.md already polices this |
 | Comparison operators returning an operand | `X := 0 < 10` binds `0` | do not adopt; it would make `lt`'s return context-dependent |
