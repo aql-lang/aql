@@ -249,14 +249,28 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Resolve the transport through the host seam before the effect
 	// fence: picking a transport opens no socket, and a host whose
 	// HTTPOps refuses provably sent nothing.
+	// TLS options (§4.3 of the TLS plan). Parsed and policy-gated
+	// before the effect fence — a denied `verify: false` must not send.
+	var tlsProfile capabilities.TLSProfile
+	if tv, ok := reqOM.Get("tls"); ok {
+		tlsProfile, err = ParseTLSOpts(r, tv, "fetch")
+		if err != nil {
+			return nil, err
+		}
+		host, port := hostPortFromURL(urlStr)
+		if err := CheckTLSPolicy(r, tlsProfile, host, port); err != nil {
+			return nil, err
+		}
+	}
+
 	// The code is `transport` per NETWORK-CLIENTS.0.md §8.2 so a guest
 	// can discriminate it in `do […] error [case …]`. The surrounding
 	// legacy paths still return bare fmt.Errorf (and so surface as
 	// internal_error); new paths do not inherit that.
-	transport, err := EffectiveHTTPOps(r).Transport(capabilities.TLSProfile{})
+	transport, err := EffectiveHTTPOps(r).Transport(tlsProfile)
 	if err != nil {
 		return nil, r.AqlError("transport",
-			"fetch: could not obtain an HTTP transport: "+err.Error(), "fetch")
+			"fetch: tls: "+err.Error(), "fetch")
 	}
 
 	// Execute request. C1 effect fence (eng effects.go): once Do runs, the
