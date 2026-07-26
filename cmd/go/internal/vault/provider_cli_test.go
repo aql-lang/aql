@@ -171,6 +171,43 @@ func TestProviderAddRejections(t *testing.T) {
 	}
 }
 
+// TestProviderFlagParseErrors: an unknown flag fails each sub-mode's
+// flag parse cleanly (exit 1, flag error on stderr) instead of being
+// swallowed as a positional.
+func TestProviderFlagParseErrors(t *testing.T) {
+	testHome(t)
+	for _, args := range [][]string{
+		{"provider", "add", "--bogus-flag", "corp"},
+		{"provider", "rm", "--bogus-flag", "corp"},
+		{"provider", "list", "--bogus-flag"},
+	} {
+		code, _, errOut := runVault(t, "", args...)
+		if code == 0 || !strings.Contains(errOut, "bogus-flag") {
+			t.Errorf("%v: code=%d err=%q, want a flag-parse failure", args, code, errOut)
+		}
+	}
+}
+
+// TestTUIControllerCustomProvidersLenient: the TUI picker helper
+// degrades to nil (built-ins only) on a missing store and surfaces the
+// vault's presets once one exists.
+func TestTUIControllerCustomProvidersLenient(t *testing.T) {
+	// Missing store: nil, no error.
+	if got := newTUIController(t.TempDir()).customProviders(); got != nil {
+		t.Errorf("customProviders without a vault = %+v, want nil", got)
+	}
+	// With a vault holding a preset: surfaced.
+	home := testHome(t)
+	mustInit(t)
+	if code, _, _ := runVault(t, "", "provider", "add", "--url=https://x.example", "corp"); code != 0 {
+		t.Fatal("provider add")
+	}
+	got := newTUIController(home).customProviders()
+	if len(got) != 1 || got[0].Name != "corp" {
+		t.Errorf("customProviders = %+v, want the corp preset", got)
+	}
+}
+
 // TestProviderAddRmRequireVaultState pairs the vault-state guards: both
 // mutations refuse an uninitialized vault and a locked one.
 func TestProviderAddRmRequireVaultState(t *testing.T) {
