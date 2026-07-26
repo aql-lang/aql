@@ -487,6 +487,36 @@ func (a *AQL) SetHTTPOps(ops HTTPOps) {
 	native.SetHostHTTPOps(a.registry, ops)
 }
 
+// ClientIdentity supplies a client certificate for mutual TLS.
+// CertRequest is what the peer asked for during the handshake.
+type ClientIdentity = capabilities.ClientIdentity
+
+// CertRequest is the AQL-facing projection of crypto/tls's
+// CertificateRequestInfo, handed to a ClientIdentity per handshake.
+type CertRequest = capabilities.CertRequest
+
+// StaticIdentity builds a ClientIdentity from a PEM chain and key held
+// in memory; FileIdentity reads them from host paths.
+var (
+	StaticIdentity = capabilities.StaticIdentity
+	FileIdentity   = capabilities.FileIdentity
+)
+
+// RegisterClientIdentity makes a client certificate available to AQL
+// source under a name, for mutual TLS:
+//
+//	a.RegisterClientIdentity("acme", id)
+//	// AQL: Net.fetch {url: "https://…"  tls: {identity: acme/q}}
+//
+// The guest can SELECT an identity but can never read or construct one
+// — the private key stays behind the ClientIdentity interface, which is
+// why an HSM- or vault-backed credential works here unchanged. Which
+// identity a program may actually present is a policy decision
+// (network/client-cert), not the program's.
+func (a *AQL) RegisterClientIdentity(name string, id ClientIdentity) {
+	native.RegisterClientIdentity(a.registry, name, id)
+}
+
 // SetOutput replaces the writer used by print, help, and other output words.
 func (a *AQL) SetOutput(w io.Writer) {
 	a.registry.Output = w

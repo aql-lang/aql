@@ -185,11 +185,14 @@ func TestParseTLSOptsAccepts(t *testing.T) {
 	}
 }
 
-// Equal profiles share a transport (so connection reuse survives) and
-// the zero profile stays on http.DefaultTransport.
-func TestDefaultHTTPOpsTransportCache(t *testing.T) {
+// DefaultHTTPOps is a pure BUILDER: the zero profile stays on
+// http.DefaultTransport, a configured profile gets a fresh transport
+// carrying it, and nothing is cached here. Caching is
+// ResolveTransport's job because a profile names its identity by a
+// registry-scoped name — see TestResolveTransportCachePerRegistry.
+func TestDefaultHTTPOpsBuilds(t *testing.T) {
 	ops := capabilities.DefaultHTTPOps{}
-	zero, err := ops.Transport(capabilities.TLSProfile{})
+	zero, err := ops.Transport(capabilities.TLSProfile{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,21 +201,21 @@ func TestDefaultHTTPOpsTransportCache(t *testing.T) {
 	}
 
 	p := capabilities.TLSProfile{ServerName: "cache.example"}
-	a, err := ops.Transport(p)
+	a, err := ops.Transport(p, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := ops.Transport(p)
+	b, err := ops.Transport(p, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a != b {
-		t.Error("equal profiles must yield the same transport")
+	if a == b {
+		t.Error("DefaultHTTPOps must not cache — that is ResolveTransport's job")
 	}
 	if a == http.DefaultTransport {
 		t.Error("a configured profile must not reuse the default transport")
 	}
-	other, err := ops.Transport(capabilities.TLSProfile{ServerName: "other.example"})
+	other, err := ops.Transport(capabilities.TLSProfile{ServerName: "other.example"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +239,7 @@ func TestDefaultHTTPOpsTransportCache(t *testing.T) {
 // Negative: a bad PEM fails at transport construction, before any dial.
 func TestDefaultHTTPOpsBadRoots(t *testing.T) {
 	_, err := capabilities.DefaultHTTPOps{}.Transport(
-		capabilities.TLSProfile{RootsPEM: "not a pem"})
+		capabilities.TLSProfile{RootsPEM: "not a pem"}, nil)
 	if err == nil {
 		t.Fatal("expected a bad-PEM error")
 	}

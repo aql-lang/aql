@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"net/http"
-	"sync"
 )
 
 // HTTPOps is the host capability that supplies the outbound HTTP
@@ -22,12 +21,15 @@ import (
 // guest-supplied timeout, which is an unbounded cache keyed by
 // untrusted input.
 //
-// The TLSProfile argument is the resolved TLS configuration for the
-// request (see TLSProfile). Implementations should treat it as a cache
-// key: it is comparable, and equal profiles must yield the same
-// transport so connection reuse survives.
+// TLSProfile is the resolved TLS configuration for the request; id is
+// the resolved client identity (nil when the profile names none).
+// Implementations build and return a transport — CACHING IS THE
+// CALLER'S JOB (native.ResolveTransport), because a profile names an
+// identity by a registry-scoped name, so a process-wide cache keyed on
+// the profile alone would serve registry A's transport to registry B's
+// identically-named identity.
 type HTTPOps interface {
-	Transport(p TLSProfile) (http.RoundTripper, error)
+	Transport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error)
 }
 
 // TLSProfile is the resolved TLS configuration for one outbound
@@ -55,6 +57,11 @@ type TLSProfile struct {
 	// MinVersion is a crypto/tls VersionTLSxx constant; 0 means Go's
 	// default minimum.
 	MinVersion uint16
+	// Identity names a host-registered ClientIdentity to present for
+	// mutual TLS. Empty means present none. It is a NAME, not a
+	// credential: the guest can select an identity but can never read
+	// or construct one.
+	Identity string
 }
 
 // ErrBadRootsPEM is returned when RootsPEM contains no usable
@@ -71,49 +78,26 @@ var ErrBadRootsPEM = errors.New("tls: ca contains no usable certificate")
 // http.DefaultTransport so those same defaults are kept.
 type DefaultHTTPOps struct{}
 
-// tlsTransportCacheMax bounds the profile→transport cache. The key
-// space is guest-influenced (any CA PEM, any SNI), so an unbounded map
-// would be a slow leak in a long-lived server. Past the cap a fresh
-// transport is built per call: correctness is unaffected, only
-// connection reuse for the overflow profiles.
-const tlsTransportCacheMax = 64
-
-var (
-	tlsTransportMu sync.Mutex
-	tlsTransports  = map[TLSProfile]http.RoundTripper{}
-)
-
-// Transport returns the transport for p, building and caching one when
-// p is not the zero profile.
-func (DefaultHTTPOps) Transport(p TLSProfile) (http.RoundTripper, error) {
-	if p == (TLSProfile{}) {
+// Transport returns http.DefaultTransport for the zero profile with no
+// identity — byte-for-byte the pre-TLS behaviour — and otherwise builds
+// a transport carrying p and id. It does not cache: see the HTTPOps
+// doc for why that is the caller's job.
+func (DefaultHTTPOps) Transport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) {
+	if p == (TLSProfile{}) && id == nil {
 		return http.DefaultTransport, nil
 	}
-	tlsTransportMu.Lock()
-	if rt, ok := tlsTransports[p]; ok {
-		tlsTransportMu.Unlock()
-		return rt, nil
-	}
-	tlsTransportMu.Unlock()
-
-	rt, err := buildTransport(p)
-	if err != nil {
-		return nil, err
-	}
-	tlsTransportMu.Lock()
-	if len(tlsTransports) < tlsTransportCacheMax {
-		tlsTransports[p] = rt
-	}
-	tlsTransportMu.Unlock()
-	return rt, nil
+	return buildTransport(p, id)
 }
 
 // buildTransport clones http.DefaultTransport and applies p.
-func buildTransport(p TLSProfile) (http.RoundTripper, error) {
+func buildTransport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: p.Insecure, //nolint:gosec // policy-gated; see network/tls-insecure
 		ServerName:         p.ServerName,
 		MinVersion:         p.MinVersion,
+	}
+	if id != nil {
+		cfg.GetClientCertificate = getClientCertificate(id, p.ServerName)
 	}
 	if p.RootsPEM != "" {
 		pool := x509.NewCertPool()

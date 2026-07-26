@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -267,8 +268,16 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// can discriminate it in `do […] error [case …]`. The surrounding
 	// legacy paths still return bare fmt.Errorf (and so surface as
 	// internal_error); new paths do not inherit that.
-	transport, err := EffectiveHTTPOps(r).Transport(tlsProfile)
+	transport, err := ResolveTransport(r, tlsProfile, "fetch")
 	if err != nil {
+		// An already-coded error (an unknown identity, a bad CA) passes
+		// through with ITS code — re-wrapping would both bury the
+		// specific code under `transport` and print the rendered inner
+		// error inside the outer one.
+		var coded *AqlError
+		if errors.As(err, &coded) {
+			return nil, err
+		}
 		return nil, r.AqlError("transport",
 			"fetch: tls: "+err.Error(), "fetch")
 	}

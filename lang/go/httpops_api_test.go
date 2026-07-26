@@ -31,7 +31,7 @@ func (s *stubRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 type stubHTTPOps struct{ rt http.RoundTripper }
 
-func (s stubHTTPOps) Transport(_ lang.TLSProfile) (http.RoundTripper, error) {
+func (s stubHTTPOps) Transport(_ lang.TLSProfile, _ lang.ClientIdentity) (http.RoundTripper, error) {
 	return s.rt, nil
 }
 

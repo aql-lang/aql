@@ -12,6 +12,7 @@ import (
 // every call site (fetch today, connect-raw next) so the two cannot
 // drift apart.
 //
+//	identity: Atom|String  a host-registered client identity (mutual TLS)
 //	verify: Boolean   false disables chain AND hostname checking
 //	ca:     Bytes|String   additional CA roots, PEM; REPLACES the system pool
 //	sni:    String    server-name override
@@ -43,6 +44,15 @@ func ParseTLSOpts(r *Registry, v Value, word string) (capabilities.TLSProfile, e
 					word+": tls: ca: must be Bytes or a String of PEM", word)
 			}
 			p.RootsPEM = pem
+		case "identity":
+			// Atom is the idiomatic spelling (`identity: acme/q`);
+			// String is accepted so a computed name works too.
+			name, ok := tlsIdentityArg(val)
+			if !ok {
+				return p, r.AqlError("fetch_error",
+					word+": tls: identity: must be an Atom or non-empty String", word)
+			}
+			p.Identity = name
 		case "sni":
 			s, sErr := val.AsConcreteString()
 			if sErr != nil || s == "" {
@@ -73,6 +83,17 @@ func ParseTLSOpts(r *Registry, v Value, word string) (capabilities.TLSProfile, e
 	return p, nil
 }
 
+// tlsIdentityArg accepts an Atom (the idiomatic `acme/q`) or a String.
+func tlsIdentityArg(v Value) (string, bool) {
+	if a, err := v.AsConcreteAtom(); err == nil && a != "" {
+		return a, true
+	}
+	if s, err := v.AsConcreteString(); err == nil && s != "" {
+		return s, true
+	}
+	return "", false
+}
+
 // tlsPEMArg accepts either a Bytes value (the natural output of reading
 // a .pem through aql:io) or a String holding PEM text.
 func tlsPEMArg(v Value) (string, bool) {
@@ -85,20 +106,35 @@ func tlsPEMArg(v Value) (string, bool) {
 	return "", false
 }
 
-// CheckTLSPolicy gates the parts of a TLSProfile that widen exposure.
-// Only `verify: false` is gated: supplying CA roots, an SNI override or
-// a minimum version narrows or re-points trust, while disabling
-// verification removes it, so that is the one a deployment must opt
-// into. The op sits in the existing `network` scope — a declared scope
-// default-denies ops it does not list, so a profile that gates network
-// at all gates this without further wiring.
+// CheckTLSPolicy gates the parts of a TLSProfile that carry authority:
+// `verify: false` (network/tls-insecure) removes verification, and
+// `identity:` (network/client-cert) presents a credential. Supplying CA
+// roots, an SNI override or a minimum version narrows or re-points
+// trust rather than widening it, so those are ungated. Both ops sit in
+// the existing `network` scope — a declared scope default-denies ops it
+// does not list, so a profile that gates network at all gates these
+// without further wiring.
 func CheckTLSPolicy(r *Registry, p capabilities.TLSProfile, host string, port int) error {
-	if !p.Insecure || r == nil {
+	if r == nil {
 		return nil
 	}
 	pol := HostPolicy(r)
 	if pol == nil {
 		return nil
 	}
-	return pol.Check("network", "tls-insecure", policy.Args{"host": host, "port": port})
+	args := policy.Args{"host": host, "port": port}
+	if p.Identity != "" {
+		// Presenting a credential is its own authority: the policy —
+		// not the program — decides WHICH identity may be used and
+		// against which host. The identity name rides in the args so a
+		// profile can allow-list per host.
+		args["identity"] = p.Identity
+		if err := pol.Check("network", "client-cert", args); err != nil {
+			return err
+		}
+	}
+	if p.Insecure {
+		return pol.Check("network", "tls-insecure", args)
+	}
+	return nil
 }

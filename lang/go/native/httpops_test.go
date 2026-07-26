@@ -34,7 +34,7 @@ type stubHTTPOps struct {
 	err error
 }
 
-func (s stubHTTPOps) Transport(_ capabilities.TLSProfile) (http.RoundTripper, error) {
+func (s stubHTTPOps) Transport(_ capabilities.TLSProfile, _ capabilities.ClientIdentity) (http.RoundTripper, error) {
 	return s.rt, s.err
 }
 
@@ -51,7 +51,7 @@ func TestEffectiveHTTPOpsDefault(t *testing.T) {
 	if _, isDefault := ops.(capabilities.DefaultHTTPOps); !isDefault {
 		t.Fatalf("expected DefaultHTTPOps with none installed, got %T", ops)
 	}
-	rt, tErr := ops.Transport(capabilities.TLSProfile{})
+	rt, tErr := ops.Transport(capabilities.TLSProfile{}, nil)
 	if tErr != nil {
 		t.Fatalf("default Transport: %v", tErr)
 	}

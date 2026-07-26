@@ -23,6 +23,8 @@ const (
 	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
 	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
 	CapHTTPOps        = "engine.httpops"         // capabilities.HTTPOps (aql:net fetch transport)
+	CapClientIdents   = "engine.clientidents"    // map[string]capabilities.ClientIdentity (mTLS)
+	CapHTTPTransports = "engine.httptransports"  // map[TLSProfile]http.RoundTripper (per-registry cache)
 )
 
 // EffectiveHTTPOps returns the HTTP transport capability for the current
