@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -270,34 +269,11 @@ func recvDeadline(args []native.Value, at int) (time.Duration, bool, error) {
 
 // mapNetErr converts a Go network error into the closed/timeout/transport
 // error vocabulary the RFCs specify.
+// mapNetErr delegates to the shared classifier in native so the socket
+// words and fetch raise the SAME code for the same wire condition —
+// see native.MapTransportErr and design/NETWORK-CLIENTS.0.md §8.2.
 func mapNetErr(r *native.Registry, word string, err error) error {
-	var nerr net.Error
-	switch {
-	case errors.Is(err, io.EOF), errors.Is(err, net.ErrClosed), errors.Is(err, io.ErrClosedPipe):
-		return r.AqlError("closed", word+": connection closed by peer", word)
-	case errors.As(err, &nerr) && nerr.Timeout():
-		return r.AqlError("timeout", word+": deadline exceeded", word)
-	default:
-		// Write-side peer resets surface as syscall errors; the closed
-		// code is what handler loops dispatch on.
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			return r.AqlError("timeout", word+": deadline exceeded", word)
-		}
-		msg := err.Error()
-		if containsAny(msg, "broken pipe", "connection reset", "use of closed network connection") {
-			return r.AqlError("closed", word+": "+msg, word)
-		}
-		return r.AqlError("transport", word+": "+msg, word)
-	}
-}
-
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if sub != "" && bytes.Contains([]byte(s), []byte(sub)) {
-			return true
-		}
-	}
-	return false
+	return native.MapTransportErr(r, word, err)
 }
 
 // ---- handlers ----

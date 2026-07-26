@@ -184,11 +184,11 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
-		return nil, fmt.Errorf("fetch: missing required \"url\" field")
+		return nil, r.AqlError("fetch_error", "fetch: missing required \"url\" field", "fetch")
 	}
 	urlStr, err := AsString(urlVal)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: url: %w", err)
+		return nil, r.AqlError("fetch_error", "fetch: url: "+err.Error(), "fetch")
 	}
 
 	// Policy gate: consult host policy before opening any socket.
@@ -201,7 +201,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if mv, ok := reqOM.Get("method"); ok {
 		mvStr, err := AsString(mv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: method: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: method: "+err.Error(), "fetch")
 		}
 		method = strings.ToUpper(mvStr)
 	}
@@ -211,7 +211,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if bv, ok := reqOM.Get("body"); ok {
 		bvStr, err := AsString(bv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: body: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: body: "+err.Error(), "fetch")
 		}
 		bodyReader = strings.NewReader(bvStr)
 	}
@@ -219,7 +219,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Build http.Request.
 	req, err := http.NewRequest(method, urlStr, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		return nil, r.AqlError("fetch_error", "fetch: "+err.Error(), "fetch")
 	}
 
 	// Set headers.
@@ -229,7 +229,8 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 			val, _ := hm.Get(key)
 			valStr, err := AsString(val)
 			if err != nil {
-				return nil, fmt.Errorf("fetch: header %q: %w", key, err)
+				return nil, r.AqlError("fetch_error",
+					fmt.Sprintf("fetch: header %q: %v", key, err), "fetch")
 			}
 			req.Header.Set(key, valStr)
 		}
@@ -240,7 +241,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if tv, ok := reqOM.Get("timeout"); ok {
 		tvInt, err := AsInteger(tv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: timeout: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: timeout: "+err.Error(), "fetch")
 		}
 		timeout = time.Duration(tvInt) * time.Millisecond
 	}
@@ -267,14 +268,16 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	client := &http.Client{Timeout: timeout, Transport: transport}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		// The wire failed: classify into closed/timeout/transport so a
+		// guest can retry a timeout and fail fast on the rest.
+		return nil, MapTransportErr(r, "fetch", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body.
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: reading body: %w", err)
+		return nil, MapTransportErrAs(r, "fetch", "fetch: reading body", err)
 	}
 
 	// Build response headers map with lowercase keys in sorted order.
