@@ -306,6 +306,8 @@ var (
 	IsEnd                     = eng.IsEnd
 	IsError                   = eng.IsError
 	IsForward                 = eng.IsForward
+	IsFrameOpen               = eng.IsFrameOpen
+	AsFrameOpen               = eng.AsFrameOpen
 	IsImplicitMap             = eng.IsImplicitMap
 	IsInterpString            = eng.IsInterpString
 	IsMark                    = eng.IsMark

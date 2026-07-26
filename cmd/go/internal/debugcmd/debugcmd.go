@@ -1,5 +1,13 @@
-// Package debugcmd implements the `aql debug` subcommand: the user-facing
-// front door to cross-process debugging (design/DEBUG-MODULE.0.md §7.2/§7.3).
+// Package debugcmd implements the `aql debug` subcommand: the interactive
+// debugger (design/AQL-DEBUGGER.0.md) and the front door to cross-process
+// debugging (design/DEBUG-MODULE.0.md §7.2/§7.3).
+//
+//	aql debug [--script F] [--no-check] [--color M] <file.aql> [args...]
+//	    Launch file.aql under the interactive debugger: pause between
+//	    source lines, stop on Debug.break, inspect the stack / scope /
+//	    backtrace, and evaluate expressions at a pause. --script reads
+//	    debugger commands from a file (batch/CI mode). Runs on the
+//	    interpreter (the trace does not fire on the compiled VM path).
 //
 //	aql debug serve [--bind 127.0.0.1:7777] [--token T] [file.aql]
 //	    Load file.aql (if given) into a runtime, then serve its registry's
@@ -10,16 +18,17 @@
 //	    Connect to a running `aql debug serve` (via the discovery file or an
 //	    explicit --url) and interrogate it.
 //
-// Transport is plain HTTP with an optional Bearer token (a static token or
-// a vault capability id), the same posture as the api service. This is the
-// host-level realization of the attach/serverless surfaces while the AQL
-// Service model (SERVICES.0.md) and a language-level socket primitive are
-// still RFC-only.
+// Serve/attach transport is plain HTTP with an optional Bearer token (a
+// static token or a vault capability id), the same posture as the api
+// service — the host-level realization of the attach/serverless surfaces
+// while the AQL Service model (SERVICES.0.md) and a language-level socket
+// primitive are still RFC-only.
 package debugcmd
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -30,9 +39,14 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/aql-lang/aql/cmd/go/internal/debugger"
+	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/aql-lang/aql/eng/go/parser"
 	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/debugserve"
+	"github.com/aql-lang/aql/lang/go/native"
 )
 
 // langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -52,12 +66,12 @@ func New() command.Command { return &cmdImpl{} }
 
 func (*cmdImpl) Name() string { return "debug" }
 func (*cmdImpl) Synopsis() string {
-	return "cross-process debugging: serve a runtime's introspection, or attach to one"
+	return "interactive debugger for a program; or serve/attach cross-process introspection"
 }
 
 func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: aql debug <serve|attach> ...")
+		fmt.Fprintln(stderr, "usage: aql debug [flags] <file.aql> | serve | attach ...")
 		return 1
 	}
 	switch args[0] {
@@ -66,9 +80,105 @@ func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) in
 	case "attach":
 		return runAttach(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "aql debug: unknown subcommand %q (want serve|attach)\n", args[0])
+		// Anything else is an interactive launch: aql debug [flags] <file.aql>
+		// (design/AQL-DEBUGGER.0.md §4).
+		return runLaunch(args, stdin, stdout, stderr)
+	}
+}
+
+// runLaunch is the interactive-debugger entry: read + preflight the file
+// exactly as `aql run` does, wire a registry, and run the program's
+// tokens under a debugger.Session (design/AQL-DEBUGGER.0.md §4-§5).
+func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("debug", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	script := fs.String("script", "", "read debugger commands from this file instead of stdin (batch/CI mode)")
+	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by AQL_NO_CHECK)")
+	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
+	if err := fs.Parse(args); err != nil {
 		return 1
 	}
+	file := fs.Arg(0)
+	if file == "" {
+		fmt.Fprintln(stderr, "usage: aql debug [--script F] [--no-check] [--color M] <file.aql> [args...]")
+		return 1
+	}
+	path := pathutil.Expand(file)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "aql debug: read %s: %s\n", file, err)
+		return 1
+	}
+	source := string(data)
+
+	// Check-by-default, mirroring `aql run` (run.Execute): quiet gate,
+	// --no-check / AQL_NO_CHECK to skip.
+	color := lang.ResolveColor(stderr, *colorMode)
+	if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
+		if cerr := check.PreflightColor(stderr, source, "", 0, false, color); cerr != nil {
+			fmt.Fprintf(stderr, "%s\n", cerr)
+			return 1
+		}
+	}
+
+	a, err := langNew()
+	if err != nil {
+		fmt.Fprintf(stderr, "aql debug: init: %s\n", err)
+		return 1
+	}
+	reg := a.NativeRegistry()
+	reg.Output = stdout
+	reg.BaseFile = path
+	if extra := fs.Args()[1:]; len(extra) > 0 {
+		// Positionals after the script path reach the program as IO.args,
+		// like `aql run`.
+		native.SetHostScriptArgs(reg, extra)
+	}
+
+	tokens, perr := parser.Parse(source)
+	if perr != nil {
+		fmt.Fprintf(stderr, "aql debug: parse %s: %s\n", file, perr)
+		return 1
+	}
+
+	cmdIn := stdin
+	if *script != "" {
+		f, oerr := os.Open(pathutil.Expand(*script))
+		if oerr != nil {
+			fmt.Fprintf(stderr, "aql debug: script: %s\n", oerr)
+			return 1
+		}
+		defer func() { _ = f.Close() }()
+		cmdIn = f
+	}
+
+	sess := debugger.New(reg, debugger.Config{
+		In:     cmdIn,
+		Out:    stdout,
+		File:   file,
+		Source: source,
+		Echo:   *script != "",
+	})
+	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
+	res, rerr := sess.RunProgram(tokens, source)
+	if rerr != nil {
+		var ae *lang.AqlError
+		if color && errors.As(rerr, &ae) {
+			fmt.Fprintln(stderr, ae.Render(lang.RenderOpts{Color: true}))
+		} else {
+			fmt.Fprintf(stderr, "%s\n", rerr)
+		}
+		return 1
+	}
+	if len(res) > 0 {
+		parts := make([]string, len(res))
+		for i, v := range res {
+			parts[i] = v.String()
+		}
+		fmt.Fprintln(stdout, strings.Join(parts, " "))
+	}
+	fmt.Fprintln(stdout, "(program exited)")
+	return 0
 }
 
 // discoveryPath is where `serve` advertises its URL+token for `attach`.

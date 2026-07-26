@@ -1,12 +1,36 @@
 # AQL-DEBUGGER — a first-class interactive `aql debug` debugger
 
-Status: **Living reference — design (not yet built).** This note designs
-the interactive `aql debug <file.aql>` debugger: launch a program, set
-breakpoints, single-step, inspect the stack / scope / call chain, and
-evaluate expressions at a pause. It is grounded in seams that already
-exist in the tree (verified against the engine, the `aql:debug` module,
-and the CLI as of 2026-07) and it is deliberately staged so a small,
-honest v1 ships on those seams before any kernel work.
+Status: **Living reference — Phase 1 SHIPPED (2026-07); later phases
+are design.** This note designs the interactive `aql debug <file.aql>`
+debugger: launch a program, set breakpoints, single-step, inspect the
+stack / scope / call chain, and evaluate expressions at a pause. It is
+grounded in seams that already exist in the tree (verified against the
+engine, the `aql:debug` module, and the CLI as of 2026-07) and it is
+deliberately staged so a small, honest v1 ships on those seams before
+any kernel work.
+
+> **Shipped — Phase 1** (`cmd/go/internal/debugger` +
+> `debugcmd.runLaunch`; see §10 for the phase definition): `aql debug
+> [--script F] [--no-check] [--color M] <file.aql> [args...]` with
+> source-line-coalesced `step`, `continue`, `quit` (detach-and-drain),
+> inline `Debug.break` / `break-when` stops, `stack`, `bt` (live inline
+> frames from the tape's `FrameOpenInfo` marks), `defs`, `print <expr>`
+> (child-engine eval), `list`, and `help`; a drained command input
+> (EOF / `--script`) detaches. The one interface widening shipped as
+> designed but with stdlib field types: `StepFrame` gained `Row`, `Col
+> int` and `File string` (not an `eng.SrcPos` — the capabilities
+> package stays engine-agnostic), populated by `runStepped` (token
+> position + `Registry.BaseFile`) and `pauseAtBreak` (file only; a
+> one-shot pause carries no position). Deltas from the design as
+> written: the prompt is `(adbg) `; the debugger session doubles as the
+> installed `DebugOps`, so a `Debug.step` run *by the program* prompts
+> the same session (re-entrant pauses during `print` evaluation are
+> suppressed, never nested); policy gating of the launch surface is
+> deferred with open Q4 (§13) — no perms flags in Phase 1; and the
+> scripted/CI front end is the same prompt loop reading a file, with
+> command echo. Tests: `debugcmd_launch_test.go` (scripted end-to-end
+> transcripts — the §11 discipline, incl. quit-drains and coalescing
+> negatives) + `debugger_test.go` (defensive arms).
 
 It **reconciles and supersedes `DEBUG-MODULE.0.md §6**` (the "engine
 seams" section), whose `DebugSession` struct, `StepOver` action, and
