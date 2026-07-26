@@ -107,8 +107,7 @@ func buildTransport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) 
 		cfg.RootCAs = pool
 	}
 	base, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		//covergate:allow http.DefaultTransport is a *http.Transport in every supported Go release
+	if !ok { //covergate:allow http.DefaultTransport is a *http.Transport in every supported Go release
 		return nil, errors.New("tls: http.DefaultTransport is not an *http.Transport")
 	}
 	tr := base.Clone()

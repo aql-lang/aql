@@ -1,6 +1,7 @@
 package lang_test
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,3 +64,38 @@ func TestSetHTTPOps(t *testing.T) {
 		t.Errorf("status = %v, want [204]", res)
 	}
 }
+
+// RegisterClientIdentity is the host's entry point for mutual TLS. The
+// guest names the identity; it can never read or construct one, so the
+// assertion here is that naming a REGISTERED one resolves while naming
+// an unregistered one fails.
+func TestRegisterClientIdentity(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.RegisterClientIdentity("acme", lang.ClientIdentity(
+		identityStub(func(lang.CertRequest) (*tls.Certificate, error) { return nil, nil })))
+
+	if _, err = a.RunInterp(`import "aql:net"`); err != nil {
+		t.Fatal(err)
+	}
+	// The host is unroutable, so this fails at the dial — the assertion
+	// is that it gets that far, i.e. the NAME resolved. (That the
+	// identity is then actually consulted during a handshake is proven
+	// by native's TestFetchMutualTLS against a real mTLS server.)
+	_, known := a.RunInterp(`Net.fetch {url: "https://stub.invalid/x"  tls: {identity: acme/q}}`)
+	if known != nil && strings.Contains(known.Error(), "no client identity") {
+		t.Errorf("a registered identity must resolve, got %v", known)
+	}
+
+	// An unregistered name is refused before any dial.
+	_, unknown := a.RunInterp(`Net.fetch {url: "https://stub.invalid/x"  tls: {identity: nope/q}}`)
+	if unknown == nil || !strings.Contains(unknown.Error(), `no client identity named "nope"`) {
+		t.Errorf("got %v, want an unknown-identity error", unknown)
+	}
+}
+
+type identityStub func(lang.CertRequest) (*tls.Certificate, error)
+
+func (f identityStub) Certificate(req lang.CertRequest) (*tls.Certificate, error) { return f(req) }

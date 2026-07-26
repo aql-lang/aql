@@ -8,9 +8,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -333,5 +336,79 @@ func TestClientCertPolicyGate(t *testing.T) {
 	}
 	if err := CheckTLSPolicy(rAllow, p, "example.com", 443); err != nil {
 		t.Errorf("a policy allowing client-cert must permit it: %v", err)
+	}
+}
+
+// StaticIdentity and FileIdentity validate the pair at REGISTRATION,
+// so a mismatched or malformed cert/key fails here rather than at the
+// first handshake — where it would surface as an opaque TLS error.
+func TestIdentityConstructors(t *testing.T) {
+	certPEM, keyPEM, _ := mintClientCert(t)
+
+	if _, err := capabilities.StaticIdentity(certPEM, keyPEM); err != nil {
+		t.Fatalf("StaticIdentity: %v", err)
+	}
+	if _, err := capabilities.StaticIdentity([]byte("not a pem"), keyPEM); err == nil {
+		t.Error("StaticIdentity must reject a malformed certificate")
+	}
+
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "client.pem")
+	keyPath := filepath.Join(dir, "client.key")
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, err := capabilities.FileIdentity(certPath, keyPath)
+	if err != nil {
+		t.Fatalf("FileIdentity: %v", err)
+	}
+	cert, err := id.Certificate(capabilities.CertRequest{Host: "example.com"})
+	if err != nil || cert == nil {
+		t.Fatalf("FileIdentity certificate: %v %v", cert, err)
+	}
+	if _, err := capabilities.FileIdentity(filepath.Join(dir, "absent.pem"), keyPath); err == nil {
+		t.Error("FileIdentity must reject a missing file")
+	}
+}
+
+// An identity that fails aborts the handshake with its own error
+// rather than silently proceeding without a certificate.
+func TestIdentityErrorAbortsHandshake(t *testing.T) {
+	_, _, clientCAs := mintClientCert(t)
+	ts, serverCA := mtlsServer(t, clientCAs)
+
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterClientIdentity(r, "broken",
+		capabilities.IdentityFunc(func(capabilities.CertRequest) (*tls.Certificate, error) {
+			return nil, errors.New("keystore unavailable")
+		}))
+	_, fErr := tlsFetch(t, r, ts.URL, tlsOpt(
+		"ca", NewString(serverCA), "identity", NewAtom("broken"),
+	))
+	if fErr == nil || !strings.Contains(fErr.Error(), "keystore unavailable") {
+		t.Fatalf("got %v, want the identity's own failure", fErr)
+	}
+}
+
+// A malformed tls: map fails inside doFetch, before any transport is
+// resolved or any packet sent.
+func TestFetchRejectsBadTLSMap(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := r.Effects.Count()
+	_, fErr := tlsFetch(t, r, "https://stub.invalid/x", tlsOpt("verifiy", NewBoolean(false)))
+	if fErr == nil || !strings.Contains(fErr.Error(), `unknown option "verifiy"`) {
+		t.Fatalf("got %v, want an unknown-option error", fErr)
+	}
+	if after := r.Effects.Count(); after != before {
+		t.Errorf("effects %d → %d: a rejected option map sends nothing", before, after)
 	}
 }

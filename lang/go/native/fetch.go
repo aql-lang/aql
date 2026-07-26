@@ -247,9 +247,6 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 		timeout = time.Duration(tvInt) * time.Millisecond
 	}
 
-	// Resolve the transport through the host seam before the effect
-	// fence: picking a transport opens no socket, and a host whose
-	// HTTPOps refuses provably sent nothing.
 	// TLS options (§4.3 of the TLS plan). Parsed and policy-gated
 	// before the effect fence — a denied `verify: false` must not send.
 	var tlsProfile capabilities.TLSProfile
