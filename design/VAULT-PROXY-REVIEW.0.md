@@ -334,6 +334,39 @@ In priority order. Items 1–2 are the reach gaps the three-way comparison
    approve-and-proceed workflow or rename it to reflect the hard-stop it
    is.
 
+## 5a. Implementation status (addendum)
+
+A first implementation slice landed on the branch that carries this
+review, after the report above was written:
+
+- **Rec 1 — user-definable providers: implemented.**
+  `vault provider add <name> --url=<base> [--auth-style=<style>]` /
+  `provider rm` / `provider list`, persisted as `Store.CustomProviders`
+  (schema **v7**, with the fail-loud version bump + no-op migration the
+  store doctrine requires). Resolution goes through a new
+  `LookupProviderIn(store, name)` with **built-ins-first** ordering, so a
+  store entry can never shadow — and so redirect — a compiled-in
+  provider; the proxy, the MCP server, the listing, and the TUI picker
+  all resolve through it. Mint-time validation covers name shape,
+  built-in collisions, URL shape (scheme/host/no query/no fragment,
+  trailing slash trimmed), and auth style; `rm` refuses while aliases
+  still reference the preset.
+- **Rec 4 — streaming flush: implemented.** The proxy's response copy
+  now flushes per upstream chunk (`flushingWriter` in `proxy.go`), so
+  SSE token streams pass through in real time; regression-tested by
+  holding an upstream mid-stream and asserting the first chunk arrives
+  before the response completes.
+- **Recs 5 and 6 — closed by documentation** (the option each
+  recommendation offered): CLI.md now states that `--max-calls` is a
+  soft cap under concurrency and that `--max-cost-cents` meters only the
+  `X-AQL-Vault-Cost-Cents` response header, which real providers do not
+  send.
+- **Recs 2, 3, 7, 8 — open.** The OAuth2 fork (2) and the MITM
+  forward-proxy mode (3) are maintainer/positioning decisions; the
+  store-rewrite throttle (7) trades away a deliberate crash-safety
+  property (quota persisted before streaming) and needs a maintainer's
+  call; `RequireApproval` (8) likewise awaits a workflow decision.
+
 ## 6. Relationship to the SERVICES roadmap
 
 `design/SERVICES.0.md` §6 already envisions generalizing this broker into

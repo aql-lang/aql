@@ -236,10 +236,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log(started, r, alias, http.StatusForbidden, "ip-denied")
 		return
 	}
-	provider := LookupProvider(aliasMeta.Provider)
+	provider := LookupProviderIn(s, aliasMeta.Provider)
 	if provider.BaseURL == "" {
 		writeDenied(w, http.StatusBadRequest,
-			"alias has no provider preset; tag it with --provider on vault add, or use a built-in preset")
+			"alias has no provider preset; tag it with --provider on vault add, use a built-in preset, or define one with vault provider add")
 		p.log(started, r, alias, http.StatusBadRequest, "no-provider")
 		return
 	}
@@ -302,8 +302,35 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	copyHeadersExceptHop(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	_, _ = io.Copy(flushingWriter(w), resp.Body)
 	p.log(started, r, alias, resp.StatusCode, "ok")
+}
+
+// flushingWriter wraps w so every chunk copied from the upstream is
+// flushed to the client as it arrives. Without this the response
+// buffer would hold small writes until it fills or the handler
+// returns, stalling exactly the traffic a credential broker for AI
+// agents carries most: server-sent-event token streams. A w that
+// cannot flush is returned unwrapped.
+func flushingWriter(w http.ResponseWriter) io.Writer {
+	f, ok := w.(http.Flusher)
+	if !ok {
+		return w
+	}
+	return &flushWriter{w: w, f: f}
+}
+
+type flushWriter struct {
+	w io.Writer
+	f http.Flusher
+}
+
+func (fw *flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	if n > 0 {
+		fw.f.Flush()
+	}
+	return n, err
 }
 
 // recordUse increments the call counter and cost meter on the

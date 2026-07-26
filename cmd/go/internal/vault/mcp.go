@@ -203,7 +203,7 @@ func mcpToolName(alias string) string {
 func (s *mcpServer) forEachAgentTool(st *Store, now time.Time, onSkip func(alias, tool, winner string), fn func(a Alias, tool string) bool) {
 	seen := map[string]string{} // tool name -> winning alias
 	for _, a := range st.SortedAliases() {
-		if LookupProvider(a.Provider).BaseURL == "" {
+		if LookupProviderIn(st, a.Provider).BaseURL == "" {
 			// Aliases without a provider preset cannot be brokered;
 			// skip rather than expose a half-working tool.
 			continue
@@ -242,7 +242,7 @@ func (s *mcpServer) listTools() ([]map[string]any, error) {
 	s.forEachAgentTool(st, time.Now(), func(alias, tool, winner string) {
 		fmt.Fprintf(s.stderr, "vault mcp: skipping tool %s for alias %s: name collides with alias %s\n", tool, alias, winner)
 	}, func(a Alias, tool string) bool {
-		prov := LookupProvider(a.Provider)
+		prov := LookupProviderIn(st, a.Provider)
 		out = append(out, map[string]any{
 			"name":        tool,
 			"description": fmt.Sprintf("Issue an HTTP request to %s via the %q vault alias. The real credential is not exposed.", prov.BaseURL, a.Name),
@@ -305,7 +305,7 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	if a == nil {
 		return fail(req, -32602, "unknown alias: "+alias)
 	}
-	prov := LookupProvider(a.Provider)
+	prov := LookupProviderIn(st, a.Provider)
 	if prov.BaseURL == "" {
 		return fail(req, -32603, "alias has no provider preset")
 	}
