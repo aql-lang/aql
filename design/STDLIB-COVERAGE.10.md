@@ -58,6 +58,7 @@ are listed in §D.
 | `archive/zip` (read) | `aql:io` `mount` (a zip mounts as a read-only `FileOps` backend) | shipped — `lang/go/capabilities/zipfs.go` |
 | `log`, `log/slog` | `aql:log` | shipped — [LOG-MODULE](LOG-MODULE.10.md) (phases 1–5) |
 | `crypto/{aes,cipher,subtle}`, KDFs, `crypto/rand` | `aql:crypto` | designed — [AQL-CRYPTO](AQL-CRYPTO.0.md), [AQL-CRYPTO-EXTRA](AQL-CRYPTO-EXTRA.0.md) |
+| `crypto/tls`, `crypto/x509` (verification only) | `aql:net` — `tls: {…}` options on `fetch` / `connect-raw`, incl. mutual TLS via host-registered identities | shipped — [NETWORK-TLS-PLAN](NETWORK-TLS-PLAN.0.md) phases 1-4 |
 | `io`, `io/fs`, all `os` filesystem | `aql:io` (all filesystem) | shipped + designed — [IO](go-modules/IO.10.md) |
 | `os` (env/args/identity/exit) | `aql:os` | designed — [OS](go-modules/OS.10.md) |
 | `os/exec` (run a command, capture output) | `aql:exec` | designed — [EXEC](go-modules/EXEC.10.md) |
@@ -93,7 +94,7 @@ effectful, a capability seam + policy scope).
 
 | Candidate | Go packages | Notes / priority |
 |---|---|---|
-| **signing / PKI / TLS** | `crypto/{rsa,ecdsa,ed25519,tls,x509}`, `encoding/{pem,asn1}` | **Biggest gap.** [AQL-CRYPTO](AQL-CRYPTO.0.md) designs symmetric AEAD, KDFs, hashes and `box` only — **signatures, certificates and TLS remain uncovered** and security-sensitive. |
+| **signing / PKI** | `crypto/{rsa,ecdsa,ed25519,x509}`, `encoding/{pem,asn1}` | **Biggest gap.** [AQL-CRYPTO](AQL-CRYPTO.0.md) designs symmetric AEAD, KDFs, hashes and `box` only — **signatures and certificate handling remain uncovered**. (TLS itself graduated to bucket A: `aql:net` verifies chains and presents client certificates, but exposes no certificate *documents* — that is what `aql:pki` would add.) |
 | **`aql:archive`** (tar; zip write) | `archive/{tar,zip}` | Zip *read* ships as an `aql:io` mount; `tar` and archive *creation* are gaps. Pairs with `Bytes`/`io`. |
 | **`aql:compress`** | `compress/{gzip,flate,zlib,bzip2}` | Byte→byte; sits beside `bin-util`. |
 | **DNS / mail transport** | `net.Lookup*` (DNS), `net/smtp`, `net/textproto` | Sockets ship (bucket A); name resolution and SMTP do not — no `lookup`-family word exists (security-sensitive, capability-gated). |

@@ -1,6 +1,9 @@
 # Allocating the remaining Go stdlib to AQL modules
 
-> **Status: recommendation.** Nothing here is implemented or approved. It
+> **Status: recommendation.** One row has since SHIPPED — `crypto/tls`
+> as `tls: {…}` options on `aql:net`, with mutual TLS through a
+> host-registered identity seam ([NETWORK-TLS-PLAN](NETWORK-TLS-PLAN.0.md)
+> phases 1-4). Everything else here is unimplemented and unapproved. It
 > takes the residue of [STDLIB-COVERAGE.10.md](STDLIB-COVERAGE.10.md) —
 > bucket **C** (coverable gaps) plus bucket **D** (never ruled on) — and
 > proposes a *home* for every part of it that is not Go-language-specific:
@@ -61,7 +64,7 @@ Derived from what the repo already does, not invented here.
 | **`aql:compress`** | **new** | `compress/{gzip,flate,zlib,bzip2,lzw}` |
 | **`aql:archive`** | **new** | `archive/{tar,zip}` (value-level; read-mount stays in `aql:io`) |
 | build wiring | non-module | `time/tzdata` |
-| host seam | non-module | `database/sql` (Store backends), `crypto/tls` (roots/certs), `log/syslog` |
+| host seam | non-module | `database/sql` (Store backends), `crypto/tls` client identities (**shipped**: `RegisterClientIdentity`), `log/syslog` |
 | internal only | non-module | `net/textproto` |
 | **bucket B** | closed | 34 packages — §7 |
 
@@ -169,7 +172,7 @@ current driver — leave it in bucket C, low priority.
 | cookies | `net/http/cookiejar` | A client option (`{jar: …}`), not a value type — sessions are the common case and today every request is stateless. |
 | reverse proxy | `net/http/httputil` | `Net.proxy` for [SERVICES](SERVICES.0.md); the dump helpers go to `aql:debug` (§5.8). |
 | HTTP forms | `mime/multipart` | Encode/decode multipart form bodies — file upload. Shares its Go core with `aql:mail` (§5.7); two word surfaces, one implementation. |
-| TLS | `crypto/tls` | **Options on an existing verb**, never a `TlsConfig` value: `connect`/`listen` take `{tls: true}` / `{tls: {cert: … roots: …}}`. Certificates arrive as `Bytes` from `aql:pki`; the host root pool comes through the same `RootsProvider` seam. Exposing `tls.Config` as a guest value would put a security-critical struct behind gradual typing — exactly what the sealed model exists to avoid. |
+| TLS | `crypto/tls` | **SHIPPED** ([NETWORK-TLS-PLAN](NETWORK-TLS-PLAN.0.md) phases 1-4). Options on an existing verb, never a `TlsConfig` value: `fetch`/`connect-raw` take `tls: {ca: … verify: … sni: … min: … identity: …}`. CA roots arrive as `Bytes`; the client **private key** does NOT — it stays behind a host-registered `ClientIdentity` interface, since a credential modelled as bytes cannot express an HSM- or agent-backed key. Exposing `tls.Config` as a guest value would put a security-critical struct behind gradual typing — exactly what the sealed model exists to avoid. |
 
 `aql:net` absorbs a lot here. It stays coherent because every entry is
 "the client or server does X" — the module's existing charter. The two

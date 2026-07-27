@@ -1,17 +1,21 @@
 # TLS and client certificates for `aql:net` — implementation plan
 
-> **Status: implementation plan.** Nothing here is built. It plans the
+> **Status: phases 1-4 and 7 BUILT; 5-6 outstanding.** It planned the
 > work behind the TLS options that [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
-> §4.4 and [NETWORK-SERVERS.0.md](NETWORK-SERVERS.0.md) §4.4 already
-> specify but which no code implements, and it **amends** their credential
-> grammar: a client certificate is named, not pathed. Read
+> §4.4 and [NETWORK-SERVERS.0.md](NETWORK-SERVERS.0.md) §4.4 specified
+> but which no code implemented, and it **amended** their credential
+> grammar: a client certificate is named, not pathed — an amendment now
+> carried in those notes themselves. §1 describes the tree as it was
+> BEFORE this work; §8 marks each phase; §8b records where the build
+> diverged from the plan. Read
 > [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md) §4 and §9 first.
 
 ## 1. Context — why
 
 Three facts, all verified against the tree:
 
-1. **There is no TLS surface at all.** `lang/go/native/fetch.go:253`
+1. **There was no TLS surface at all** (the state this plan was written
+   against). `lang/go/native/fetch.go:253`
    builds `&http.Client{Timeout: timeout}` — stock transport, system
    roots, no client certificates, and no injection point. `net_socket.go`
    has no `tls` handling, so `connect-raw` is plaintext TCP. Neither
@@ -123,7 +127,7 @@ func SetHostClientIdents(r *Registry, ids map[string]capabilities.ClientIdentity
 ```go
 // lang/go/capabilities/httpops.go
 type HTTPOps interface {
-    Transport(p TLSProfile) (http.RoundTripper, error)
+    Transport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error)
 }
 ```
 
@@ -133,7 +137,9 @@ type HTTPOps interface {
 > client, so `fetch` builds a cheap client around a shared transport per
 > call. Returning a client instead would force the cache to be keyed on the
 > guest-supplied timeout — an unbounded cache keyed by untrusted input,
-> which is open question §9.3 answered the wrong way. As built.
+> which is open question §9.3 answered the wrong way. As built. Phase 3
+> added the resolved `ClientIdentity` as a second parameter and moved
+> caching out of the implementation entirely — see §8b.
 
 `TLSProfile` is the resolved, comparable result of parsing the guest's
 `tls:` map (identity name, verify flag, CA-set fingerprint, SNI, min
@@ -215,13 +221,13 @@ The transport is resolved **before** `r.NoteEffect()`, since choosing one
 opens no socket; a host whose `HTTPOps` refuses provably sent nothing, and
 `TestFetchTransportErrorIsUnsent` pins that against the effect ledger.
 
-### Phase 2 — base TLS client options
+### Phase 2 — base TLS client options ✅ **DONE**
 `parseTLSOpts` + `verify` / `ca` / `sni` / `min` on `fetch`. `tls-insecure`
 policy op. Client certificates are meaningless before this exists.
 **Done when:** a `httptest` TLS server with a private CA is reachable via
 `tls: {ca: …}` and rejected without it.
 
-### Phase 3 — client identities (the actual mTLS)
+### Phase 3 — client identities (the actual mTLS) ✅ **DONE**
 `capabilities.ClientIdentity`, `CapClientIdents`,
 `(*AQL).RegisterClientIdentity`, `tls: {identity: …}`, `client-cert`
 policy op, identity name in `policy.Args`.
@@ -230,7 +236,7 @@ RequireAndVerifyClientCert` accepts a request carrying a registered
 identity, and the same request without it fails with a distinguishable
 error.
 
-### Phase 4 — sockets
+### Phase 4 — sockets ✅ **DONE**
 Wire the same `TLSProfile` into `connect-raw` via `parseNetAddr`
 (`net_socket.go`), so `Socket` may be a TLS stream. Per NETWORK-SERVERS
 §4.4 TLS is a socket option, not a separate API — the `Socket` type and
@@ -252,10 +258,13 @@ string is precisely the failure mode this design avoids.
 `ClientAuth`), and the verified peer chain surfaced as a Record
 (`Net.peer-cert`) so authorization can be written in AQL.
 
-### Phase 7 — docs
-- **NETWORK-CLIENTS.0.md §4.4** — replace `cert:`/`key:` paths with
-  `identity:`; record the confused-deputy rationale.
-- **NETWORK-SERVERS.0.md §4.4** — same for the `listen` example at §723.
+### Phase 7 — docs ✅ **DONE**
+- **NETWORK-CLIENTS.0.md §4.4** — replaced `cert:`/`key:` paths with
+  `identity:`, with the confused-deputy rationale in an AMENDED box; the
+  §8 gateway example follows.
+- **NETWORK-SERVERS.0.md §4.4** — same, plus the `listen` example at §723.
+  The server side itself is phase 6; the doc now says so instead of
+  implying a shipped path form.
 - **STDLIB-ALLOCATION.0.md §5.4** — the `crypto/tls` row says certificates
   arrive as `Bytes` from `aql:pki`; correct for the cert, incomplete for
   the key, which needs this seam.
@@ -331,6 +340,32 @@ Plus, specific to this work:
 6. **Spec** — `make spec-test` (excluded from `make test`) after adding
    `module-net.tsv` rows.
 
+## 8b. What the build changed about this plan
+
+Recorded so the note stays an account of what happened, not what was
+guessed:
+
+- **§4.2 seam shape** — `Transport(p)` not `Client(p, timeout)`; caching
+  moved to the caller (§4.2 box).
+- **Transport cache is per REGISTRY** (`native.ResolveTransport`), not
+  process-wide. Once a profile names its identity, a global cache keyed
+  on the profile would serve registry A's client certificate to
+  registry B's identically-named identity. Bounded at 64 — the answer to
+  §9.3.
+- **`TLSProfile.Insecure`, not `Verify`** — a Go `bool` zero value is
+  `false`, so a `Verify` field would make "unconfigured" mean "skip
+  verification". The guest still writes `verify: false`; the inversion
+  happens at the parser boundary.
+- **`ca:` REPLACES the system pool** rather than adding to it: pointing
+  at a private CA and also trusting the public web is rarely intended,
+  and the narrower reading is the recoverable mistake.
+- **Unknown `tls:` keys are rejected.** A silently-ignored `verifiy:`
+  would leave the caller believing they had configured something.
+- **`aql:net` had to start owning its minted types**
+  (`subReg.Types.MintOwner`), which every other module already did — a
+  word extension may only anchor on a nominal type the extending scope
+  owns.
+
 ## 9. Open questions
 
 1. **Identity naming**: Atom (`acme/q`) or String? Atom reads better and
@@ -339,8 +374,8 @@ Plus, specific to this work:
 2. **Does `ca:` belong in `tls:` or should roots be a host seam only?**
    A guest-supplied root set widens trust; the `RootsProvider` seam
    proposed in STDLIB-ALLOCATION §4.1 may be the better owner.
-3. **Client cache eviction** — an unbounded `TLSProfile → *http.Client`
-   map is a slow leak in a long-lived server. Bound it, or key it to the
-   registry lifetime?
+3. ~~**Client cache eviction**~~ — ANSWERED in the build: bounded at 64
+   AND keyed to the registry lifetime (both, not either). Past the cap a
+   transport is built per call: correctness unaffected, only reuse.
 4. **`min:` default** — TLS 1.2 (Go's default) or 1.3 (stricter, breaks
    older peers)?

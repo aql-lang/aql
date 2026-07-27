@@ -281,9 +281,19 @@ accept <Listener> -> Socket                     # blocks for the next connection
 ```
 
 `listen` options: `host:` (bind address, default all), `backlog:`, `reuse:`,
-and **`tls: {cert: …  key: …}`** (TLS termination; the `Socket` is then a
+and **`tls: {identity: <name>}`** (TLS termination; the `Socket` is then a
 decrypted stream — TLS is a socket option, not a separate API). `unix:` selects
 a Unix-domain socket instead of `tcp:`.
+
+> **AMENDED (as built).** This originally read `tls: {cert: … key: …}` with
+> file PATHS. The client half of that form was replaced by a host-registered
+> `identity:` — a guest-chosen path dereferenced under host authority is a
+> confused deputy, and a credential modelled as bytes cannot express an
+> HSM- or agent-backed key. See [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
+> §4.4 for the full rationale. The server side is not implemented yet
+> (phase 6 of [NETWORK-TLS-PLAN.0.md](NETWORK-TLS-PLAN.0.md)); when it lands
+> it uses the same named identities, plus `require-client:` for the client
+> CA pool.
 
 The idiomatic acceptor is a three-line actor; `serve-raw` is the blessed sugar
 for it so nobody hand-writes the accept loop wrong (forgetting to spawn, leaking
@@ -720,7 +730,7 @@ def make-session fn [[meta:Map] [Service] [
 serve ( server [
     ( listen {
         tcp: 9000
-        tls: {cert: "./srv.pem" key: "./srv.key"}          # TLS at the socket (§4.4)
+        tls: {identity: srv/q}                             # TLS at the socket (§4.4)
         codec: ( length-prefixed [ op:u8 len:u32 payload:bytes(len) ] )
         session: true                                       # one session per connection
       } make-session )
