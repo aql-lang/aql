@@ -96,6 +96,11 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by AQL_NO_CHECK)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	postMortem := fs.Bool("post-mortem", false, "on an uncaught error, open an inspection prompt over the fault state before exiting")
+	var breaks []string
+	fs.Func("break", "set a breakpoint before the run starts: a source line ('12', 'file:12') or a word name ('add'); repeatable", func(v string) error {
+		breaks = append(breaks, v)
+		return nil
+	})
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -171,6 +176,9 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Echo:   *script != "",
 	})
 	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
+	for _, b := range breaks {
+		fmt.Fprintln(stdout, sess.SetBreak(b))
+	}
 	res, rerr := sess.RunProgram(tokens, source)
 	if rerr != nil {
 		if *postMortem {

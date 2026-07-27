@@ -248,14 +248,22 @@ const (
 // The returned engine uses the sub-engine step limit.
 // Use NewTop for the top-level engine with a higher limit.
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
+	e := &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
+	if registry != nil {
+		e.trace = registry.debugTrace
+	}
+	return e
 }
 
 // NewTop creates a top-level Engine with the maximum step limit.
 // isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
 // as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
+	e := &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
+	if registry != nil {
+		e.trace = registry.debugTrace
+	}
+	return e
 }
 
 // SetSource sets the original source text for error reporting.

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -29,8 +30,16 @@ type stepMode int
 
 const (
 	// modeStep pauses at the next new source line (the zero value: a
-	// session starts paused at the program's first positioned token).
+	// session starts paused at the program's first positioned token),
+	// descending into body evaluations (§5.1).
 	modeStep stepMode = iota
+	// modeNext pauses at the next new source line at or above the
+	// recorded frame depth — deeper (called) frames and body
+	// evaluations auto-continue (§5.2 "over").
+	modeNext
+	// modeOut runs until the recorded frame is left — the first
+	// positioned token strictly above it (§5.2).
+	modeOut
 	// modeContinue runs to the next breakpoint (or completion).
 	modeContinue
 	// modeDetached never pauses again; the program drains to completion —
@@ -72,6 +81,17 @@ type Session struct {
 	mode    stepMode
 	prevRow int // row of the last positioned token stepped (line coalescing)
 	curRow  int // row of the current pause (0 = unknown)
+
+	// baseDepth is the live-frame depth recorded when `next`/`out` was
+	// issued; the pause rule compares against it (§5.2).
+	baseDepth int
+
+	// lineBPs / wordBPs are the prompt-settable breakpoints (§7): pause
+	// on entering a source line, or when a named word is about to
+	// dispatch. They fire in every mode except detached — including
+	// inside body evaluations (the sub-engine descent).
+	lineBPs map[int]bool
+	wordBPs map[string]bool
 
 	// Pause context: the whole-tape snapshot from the most recent trace
 	// fire, for `bt`. Storing the reference is free — the engine already
@@ -115,12 +135,14 @@ func New(reg *native.Registry, cfg Config) *Session {
 	// expression is a working command, not a silent detach.
 	in.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	return &Session{
-		reg:   reg,
-		in:    in,
-		out:   cfg.Out,
-		file:  cfg.File,
-		lines: strings.Split(cfg.Source, "\n"),
-		echo:  cfg.Echo,
+		reg:     reg,
+		in:      in,
+		out:     cfg.Out,
+		file:    cfg.File,
+		lines:   strings.Split(cfg.Source, "\n"),
+		echo:    cfg.Echo,
+		lineBPs: make(map[int]bool),
+		wordBPs: make(map[string]bool),
 	}
 }
 
@@ -143,11 +165,21 @@ func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Val
 	native.SetHostDebugOps(s.reg, s)
 	s.reg.Source = source
 	s.baseDefs = s.reg.Defs.Snapshot()
+	// The registry-level hook is what descends into body evaluations
+	// (each/fold/do bodies, paren groups, same-registry fn bodies): every
+	// engine the registry spawns starts with it (eng SetDebugTrace). The
+	// top-level engine gets the MAIN callback afterwards, so the session
+	// can tell its own tape's fires from a body's.
+	s.reg.SetDebugTrace(s.onSubTrace)
 	engine := native.NewTop(s.reg)
 	engine.SetSource(source)
 	engine.SetTrace(s.onTrace)
-	s.clearTrace = func() { engine.SetTrace(nil) }
+	s.clearTrace = func() {
+		engine.SetTrace(nil)
+		s.reg.SetDebugTrace(nil)
+	}
 	defer func() {
+		s.reg.SetDebugTrace(nil)
 		s.clearTrace = nil
 		s.reg.Source = prevSrc
 		if hadOps {
@@ -159,11 +191,28 @@ func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Val
 	return engine.Run(tokens)
 }
 
-// onTrace is the per-step TraceCallback — the debug event loop. It
-// coalesces raw engine steps to SOURCE LINES: one stop per contiguous
-// run of a Row, skipping position-less synthetic tokens (§5.1) — so
-// `step` means "advance one source line", not one tape token.
+// onTrace receives the MAIN engine's per-step fires; onSubTrace — the
+// registry-level hook — receives every OTHER engine's (body
+// evaluations, paren groups, same-registry fn bodies). The split is
+// what gives the modes their semantics: `step` descends into bodies,
+// `next`/`out` treat them as part of the line, and breakpoints fire in
+// both.
 func (s *Session) onTrace(_ int, pointer int, stack []native.Value, note string) {
+	s.trace(pointer, stack, note, false, false)
+}
+
+func (s *Session) onSubTrace(step int, pointer int, stack []native.Value, note string) {
+	// step 0 marks a FRESH body evaluation (each pooled run restarts its
+	// counter): line breakpoints re-arm there, so a loop body that stays
+	// on one source row still breaks on every iteration.
+	s.trace(pointer, stack, note, true, step == 0)
+}
+
+// trace is the debug event loop's pause decision. It coalesces raw
+// engine steps to SOURCE LINES — one stop per contiguous run of a Row,
+// skipping position-less synthetic tokens (§5.1) — so `step` means
+// "advance one source line", not one tape token.
+func (s *Session) trace(pointer int, stack []native.Value, note string, sub, freshRun bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.curStack, s.curPointer = stack, pointer
@@ -184,14 +233,99 @@ func (s *Session) onTrace(_ int, pointer int, stack []native.Value, note string)
 	if row != 0 {
 		s.prevRow = row
 	}
-	if s.mode != modeStep || row == 0 || row == prev {
-		// Fast path: continuing, a synthetic token, or the same source line.
-		return
+	newLine := row != 0 && row != prev
+
+	// Breakpoints pause in every mode: a line breakpoint once per line
+	// entry, a word breakpoint whenever the word is about to dispatch —
+	// inside body evaluations too (the sub-engine descent).
+	hit := ""
+	switch {
+	case row != 0 && s.lineBPs[row] && (newLine || freshRun):
+		hit = fmt.Sprintf("breakpoint: line %d", row)
+	case len(s.wordBPs) > 0:
+		if w, ok := wordNameAt(stack, pointer); ok && s.wordBPs[w] {
+			hit = "breakpoint: word " + w
+		}
+	}
+	if hit == "" {
+		switch s.mode {
+		case modeStep:
+			if !newLine {
+				return
+			}
+		case modeNext:
+			// A body evaluation is part of its line; a deeper inlined
+			// frame is a call in progress — both auto-continue.
+			if sub || !newLine || liveFrameDepth(stack, pointer) > s.baseDepth {
+				return
+			}
+		case modeOut:
+			if sub || row == 0 || liveFrameDepth(stack, pointer) >= s.baseDepth {
+				return
+			}
+		default: // modeContinue: only breakpoints pause
+			return
+		}
 	}
 	s.curRow = row
-	fmt.Fprintf(s.out, "at %s:%d  %s\n", s.file, row, s.sourceLine(row))
+	where := ""
+	if sub {
+		where = " (in body)"
+	}
+	if hit != "" {
+		fmt.Fprintf(s.out, "%s — at %s:%s%s  %s\n", hit, s.file, rowLabel(row), where, s.sourceLine(row))
+	} else {
+		fmt.Fprintf(s.out, "at %s:%s%s  %s\n", s.file, rowLabel(row), where, s.sourceLine(row))
+	}
 	s.showStack()
 	s.prompt()
+}
+
+// rowLabel renders a 1-based source row, "?" when unknown.
+func rowLabel(row int) string {
+	if row == 0 {
+		return "?"
+	}
+	return strconv.Itoa(row)
+}
+
+// wordNameAt returns the name of the Word about to execute, if any.
+func wordNameAt(stack []native.Value, pointer int) (string, bool) {
+	if pointer < 0 || pointer >= len(stack) || !native.IsWord(stack[pointer]) {
+		return "", false
+	}
+	// IsWord guarantees the payload; AsWord's error arm is unreachable.
+	w, _ := native.AsWord(stack[pointer])
+	return w.Name, true
+}
+
+// liveFrameDepth counts the fn frames open at the pointer — one O(n)
+// pass tracking paren nesting, counting only frame-marked opens
+// (IsFrameOpen) still unmatched when the pointer is reached.
+func liveFrameDepth(stack []native.Value, pointer int) int {
+	if pointer > len(stack) {
+		pointer = len(stack)
+	}
+	depth := 0
+	var frames []bool
+	for i := 0; i < pointer; i++ {
+		switch {
+		case native.IsOpenParen(stack[i]):
+			isFrame := native.IsFrameOpen(stack[i])
+			frames = append(frames, isFrame)
+			if isFrame {
+				depth++
+			}
+		case native.IsCloseParen(stack[i]):
+			if n := len(frames); n > 0 {
+				if frames[n-1] {
+					depth--
+				}
+				frames = frames[:n-1]
+			}
+		}
+	}
+	return depth
 }
 
 // OnStep implements capabilities.StepController. It receives the pauses
@@ -275,9 +409,28 @@ func (s *Session) prompt() stepMode {
 		case "step", "s":
 			s.mode = modeStep
 			return s.mode
+		case "next", "n":
+			s.mode = modeNext
+			s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
+			return s.mode
+		case "out", "o":
+			s.mode = modeOut
+			s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
+			if s.baseDepth == 0 {
+				fmt.Fprintln(s.out, "(out at top level runs to the next breakpoint or completion)")
+			}
+			return s.mode
 		case "continue", "c":
 			s.mode = modeContinue
 			return s.mode
+		case "break", "b":
+			if arg == "" {
+				s.listBreaks()
+			} else {
+				fmt.Fprintln(s.out, "  "+s.SetBreak(arg))
+			}
+		case "delete":
+			fmt.Fprintln(s.out, "  "+s.deleteBreak(arg))
 		case "quit", "q":
 			fmt.Fprintln(s.out, s.detachMsg())
 			return s.detach()
@@ -385,6 +538,74 @@ func (s *Session) detachMsg() string {
 		return "(post-mortem closed)"
 	}
 	return detachNotice
+}
+
+// SetBreak parses and installs one breakpoint spec — "N" or "file:N"
+// (a source line) or a word name — returning a confirmation line. The
+// prompt's `break <spec>` and the launch's `--break <spec>` share it.
+func (s *Session) SetBreak(spec string) string {
+	if n, ok := parseLineSpec(spec); ok {
+		s.lineBPs[n] = true
+		return fmt.Sprintf("breakpoint set: line %d", n)
+	}
+	s.wordBPs[spec] = true
+	return "breakpoint set: word " + spec
+}
+
+// deleteBreak removes one breakpoint (by the same spec grammar), or —
+// with an empty spec — every breakpoint.
+func (s *Session) deleteBreak(spec string) string {
+	if spec == "" {
+		s.lineBPs = make(map[int]bool)
+		s.wordBPs = make(map[string]bool)
+		return "all breakpoints deleted"
+	}
+	if n, ok := parseLineSpec(spec); ok {
+		if !s.lineBPs[n] {
+			return fmt.Sprintf("no breakpoint at line %d", n)
+		}
+		delete(s.lineBPs, n)
+		return fmt.Sprintf("deleted: line %d", n)
+	}
+	if !s.wordBPs[spec] {
+		return "no breakpoint on word " + spec
+	}
+	delete(s.wordBPs, spec)
+	return "deleted: word " + spec
+}
+
+// parseLineSpec reads "N" or "anything:N" as a positive source line.
+func parseLineSpec(spec string) (int, bool) {
+	numPart := spec
+	if i := strings.LastIndex(spec, ":"); i >= 0 {
+		numPart = spec[i+1:]
+	}
+	n, err := strconv.Atoi(numPart)
+	return n, err == nil && n > 0
+}
+
+// listBreaks renders the installed breakpoints.
+func (s *Session) listBreaks() {
+	lines := make([]int, 0, len(s.lineBPs))
+	for n := range s.lineBPs {
+		lines = append(lines, n)
+	}
+	sort.Ints(lines)
+	words := make([]string, 0, len(s.wordBPs))
+	for w := range s.wordBPs {
+		words = append(words, w)
+	}
+	sort.Strings(words)
+	if len(lines) == 0 && len(words) == 0 {
+		fmt.Fprintln(s.out, "  (no breakpoints)")
+		return
+	}
+	for _, n := range lines {
+		fmt.Fprintf(s.out, "  line %d\n", n)
+	}
+	for _, w := range words {
+		fmt.Fprintf(s.out, "  word %s\n", w)
+	}
 }
 
 // splitCommand splits a prompt line into its command word and argument.
@@ -538,7 +759,15 @@ func (s *Session) evalExpr(src string) {
 	// the suspended program's loop when it resumes.
 	savedSrc, savedFile, savedFlow := s.reg.Source, s.reg.BaseFile, s.reg.FlowCtrl
 	s.reg.Source, s.reg.BaseFile = src, ""
+	// Suppress the registry-level debug hook for the eval: its child
+	// engines (paren groups, bodies) must neither pause nor clobber the
+	// retained pause context. Re-armed only if a program run armed it.
+	if s.clearTrace != nil {
+		s.reg.SetDebugTrace(nil)
+		defer s.reg.SetDebugTrace(s.onSubTrace)
+	}
 	engine := native.New(s.reg)
+	engine.SetTrace(nil)
 	engine.SetSource(src)
 	res, err := engine.Run(toks)
 	s.reg.Source, s.reg.BaseFile = savedSrc, savedFile
@@ -596,8 +825,13 @@ func (s *Session) sourceLine(row int) string {
 // renderHelp lists the Phase-1 command set.
 func (s *Session) renderHelp() {
 	fmt.Fprint(s.out, `commands:
-  step, s        run to the next source line
+  step, s        run to the next source line (descends into bodies)
+  next, n        like step, but run through deeper frames and bodies
+  out, o         run until the current fn frame returns
   continue, c    run to the next breakpoint (or completion)
+  break <spec>   set a breakpoint: a line ('break 12'), or a word
+                 ('break add'); bare 'break' lists them
+  delete [spec]  delete one breakpoint (bare 'delete' clears all)
   quit, q        detach — the program continues to completion
   stack          show every data-stack entry (top first)
   bt             backtrace of live inline fn frames

@@ -94,6 +94,66 @@ func TestDataStackSnapshotFallback(t *testing.T) {
 	}
 }
 
+func TestParseLineSpec(t *testing.T) {
+	cases := []struct {
+		spec string
+		n    int
+		ok   bool
+	}{
+		{"12", 12, true},
+		{"prog.aql:7", 7, true},
+		{"/a/b/prog.aql:3", 3, true},
+		{"add", 0, false},  // a word, not a line
+		{"x:-3", 0, false}, // non-positive
+		{"0", 0, false},    // lines are 1-based
+		{"", 0, false},
+	}
+	for _, c := range cases {
+		if n, ok := parseLineSpec(c.spec); ok != c.ok || (ok && n != c.n) {
+			t.Errorf("parseLineSpec(%q) = (%d, %v), want (%d, %v)", c.spec, n, ok, c.n, c.ok)
+		}
+	}
+}
+
+func TestRowLabel(t *testing.T) {
+	if got := rowLabel(0); got != "?" {
+		t.Errorf("row 0 renders ?, got %q", got)
+	}
+	if got := rowLabel(7); got != "7" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestLiveFrameDepth(t *testing.T) {
+	meta := &eng.FnFrameMeta{Name: "f"}
+	openF, openP, closeP := eng.NewFrameOpen(meta), eng.NewOpenParen(), eng.NewCloseParen()
+	val := native.NewInteger(1)
+	if got := liveFrameDepth(nil, 0); got != 0 {
+		t.Errorf("empty = %d", got)
+	}
+	// An open frame counts; a plain paren does not.
+	if got := liveFrameDepth([]native.Value{openF, openP, val}, 3); got != 1 {
+		t.Errorf("frame+plain = %d, want 1", got)
+	}
+	// A closed frame stops counting; a stray close is tolerated.
+	if got := liveFrameDepth([]native.Value{openF, closeP, closeP, val}, 4); got != 0 {
+		t.Errorf("closed+stray = %d, want 0", got)
+	}
+	// Nested frames both count; the pointer clamp holds.
+	if got := liveFrameDepth([]native.Value{openF, openF, val}, 99); got != 2 {
+		t.Errorf("nested clamped = %d, want 2", got)
+	}
+}
+
+func TestWordNameAt(t *testing.T) {
+	if _, ok := wordNameAt(nil, 0); ok {
+		t.Error("out of range must not name a word")
+	}
+	if _, ok := wordNameAt([]native.Value{native.NewInteger(1)}, 0); ok {
+		t.Error("a non-word must not name a word")
+	}
+}
+
 // errReader always fails, driving the Scanner's error (not-EOF) arm.
 type errReader struct{}
 

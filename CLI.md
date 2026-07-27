@@ -525,8 +525,12 @@ per line, however many engine steps the line expands to. At the
 
 | Command | Does |
 |---------|------|
-| `step`, `s` | run to the next source line |
+| `step`, `s` | run to the next source line, **descending into body evaluations** (`each`/`fold`/`do` bodies, paren groups — labelled `(in body)`) |
+| `next`, `n` | like `step`, but run through deeper frames and bodies — stay at statement level |
+| `out`, `o` | run until the current fn frame returns |
 | `continue`, `c` | run to the next breakpoint (or completion) |
+| `break <spec>` | set a breakpoint: a source line (`break 12`) or a word (`break add`); bare `break` lists them |
+| `delete [spec]` | delete one breakpoint; bare `delete` clears all |
 | `quit`, `q` | **detach** — the program continues to completion |
 | `stack` | every data-stack entry, top (`#0`) first |
 | `bt` | backtrace of live inline fn frames (name + bound params) |
@@ -535,9 +539,14 @@ per line, however many engine steps the line expands to. At the
 | `list`, `l` | source around the current line |
 | `help`, `h`, `?` | the command list |
 
-Breakpoints are the `aql:debug` module's inline markers: `Debug.break`
-pauses whenever the debugger is attached (and is a no-op otherwise, so
-it is safe to commit), `Debug.break-when <cond>` pauses conditionally.
+Breakpoints come in three kinds. From the prompt (or `--break` at
+launch): a **source line** (`break 12` — pauses on entering the line,
+once per loop iteration, including inside body evaluations) and a
+**word** (`break add` — pauses whenever that word is about to
+dispatch). In source: the `aql:debug` module's inline markers —
+`Debug.break` pauses whenever the debugger is attached (and is a no-op
+otherwise, so it is safe to commit), `Debug.break-when <cond>` pauses
+conditionally.
 `quit` cannot kill the program mid-run — the engine has no preemption
 seam (ADR-005) — so it detaches and the program drains at full speed.
 End-of-input on the command stream (Ctrl-D, or a drained `--script`
@@ -552,13 +561,16 @@ before the error reaches stderr and the run exits 1. Errors a `do`
 handler catches are not faults; a session you already `quit` stays
 closed.
 
-Flags: `--script F`, `--post-mortem`, `--no-check` (also
-`AQL_NO_CHECK`), `--color auto|always|never`.
+Flags: `--script F`, `--break SPEC` (repeatable), `--post-mortem`,
+`--no-check` (also `AQL_NO_CHECK`), `--color auto|always|never`.
 
-Phase-1 limits (see the design note's roadmap): stepping does not
-descend into sub-engines (module fns, `each`/`fold` bodies run as one
-step), there is no `next`/`out` yet, and `file:line` breakpoints are a
-planned follow-on — use the inline markers.
+Current limits (see the design note's roadmap): module fns run in
+their own captured registries and are still stepped over as one unit;
+`bt` shows the pausing engine's frames only (no cross-engine chain
+yet); and `step` may surface engine-internal evaluations of multi-line
+fn literals as extra `(in body)` stops — scripted sessions should
+drive to a location with breakpoints or markers rather than counted
+steps.
 
 **Cross-process introspection** — serve a runtime's state over HTTP,
 and interrogate it:

@@ -292,6 +292,15 @@ type Registry struct {
 	// the parent's engines (a pooled engine pins its creating registry).
 	enginePool []*Engine
 
+	// debugTrace is the registry-level debug step hook (SetDebugTrace):
+	// every engine constructed on this registry — and every pooled
+	// sub-engine as it is re-taken — starts with it as its trace, so a
+	// debugging host observes per-element body evaluation (each/fold/do
+	// bodies, paren groups, interp holes) and same-registry fn-body runs,
+	// not just its own top-level tape. Nil (the default) costs one nil
+	// copy per engine take. Like enginePool, per-execution state.
+	debugTrace TraceCallback
+
 	// dispatchCache memoizes Lookup's aggregated dispatch table per name.
 	// aggregateDispatch rebuilds a fresh []Signature + *FnDefInfo on every
 	// word dispatch even in a hot loop where the name's bindings never
@@ -401,12 +410,22 @@ func (r *Registry) takeSubEngine() *Engine {
 		e := r.enginePool[n-1]
 		r.enginePool[n-1] = nil
 		r.enginePool = r.enginePool[:n-1]
+		// Refresh the debug hook: it can change between takes (a session
+		// arming, disarming, or suppressing itself around an eval), and a
+		// pooled engine must never replay a stale one.
+		e.trace = r.debugTrace
 		return e
 	}
 	e := New(r)
 	e.reuseTape = true
 	return e
 }
+
+// SetDebugTrace installs (nil clears) the registry-level debug step
+// hook — see the debugTrace field. An engine that installs its own
+// trace afterwards (Engine.SetTrace) overrides it for that engine, so
+// dedicated tracers (IO.trace, Debug.step) keep their private hooks.
+func (r *Registry) SetDebugTrace(cb TraceCallback) { r.debugTrace = cb }
 
 // putSubEngine returns an idle sub-engine to the pool. Engines whose tape
 // grew beyond the pooling bound are dropped (GC'd) instead, and per-call

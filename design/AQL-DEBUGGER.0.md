@@ -1,7 +1,8 @@
 # AQL-DEBUGGER — a first-class interactive `aql debug` debugger
 
-Status: **Living reference — Phase 1 SHIPPED (2026-07); later phases
-are design.** This note designs the interactive `aql debug <file.aql>`
+Status: **Living reference — Phases 1, 1.5, and the Phase-2 core
+SHIPPED (2026-07); the rest is design.** (Shipped notes: Phase 1
+below; Phase 1.5 at §6.1; Phase 2 at §10.) This note designs the interactive `aql debug <file.aql>`
 debugger: launch a program, set breakpoints, single-step, inspect the
 stack / scope / call chain, and evaluate expressions at a pause. It is
 grounded in seams that already exist in the tree (verified against the
@@ -584,14 +585,30 @@ ends and kernel work begins.
   raising step's error *before* the loop returns — is still the path to
   true pause-before-unwind (stopping at `do`-caught raises), now folded
   into Phase 2.
-- **Phase 2 — fidelity (the big one).** (a) `over`/`out` via frame-depth
-  tracking (host, using `fn_frame.go`); (b) **thread the trace/session
-  into sub-engines** so `into`/`over`/`out` cross module-fn / higher-
-  order / fork boundaries — fire the callback in `New`/`NewTop` children
-  and at `CallAQL`/`RunResolved`/the paren-group evaluators. This is the
-  single biggest fidelity gap and the highest-value engine investment;
-  (c) stamp sub-engine frames so `bt` names every frame (§5.3); (d)
-  `file:line` + `word` breakpoints (§7).
+- **Phase 2 — fidelity (the big one). CORE SHIPPED** (2026-07): (a)
+  `next`/`out` via live-frame-depth tracking over the tape's
+  `FrameOpenInfo` marks (host); (d) prompt-settable + `--break` **line
+  and word breakpoints** (§7 — line BPs re-arm per fresh body run, so a
+  same-row loop body breaks every iteration); and the heart of (b) as
+  **one engine seam**: `Registry.SetDebugTrace` — a registry-level hook
+  every engine constructed on the registry (`New`/`NewTop`, and pooled
+  sub-engines as they are re-taken in `takeSubEngine`) starts with as
+  its trace. That one seam reaches everything routed through
+  `runPooledSub`/`InvokeBody` — each/fold/do/filter bodies, paren
+  groups, interp holes — and `CallAQL`'s same-registry fn bodies. The
+  session installs TWO callbacks (main tape vs. the registry hook), so
+  the modes get their semantics: `step` descends into bodies (labelled
+  `(in body)`), `next`/`out` treat them as part of their line,
+  `continue` pauses in them only on breakpoints, and an engine's own
+  `SetTrace` (IO.trace, Debug.step) still overrides. An observed
+  wrinkle: multi-line fn-LITERAL construction can surface `(in body)`
+  stops under `step`, and process-warm caches can elide them — so
+  scripted sessions should navigate by breakpoints/markers, not step
+  counts (pinned in the launch tests). **Remaining in Phase 2:**
+  thread the hook across module-fn registries (a captured sub-registry
+  has its own, unset hook) and fork boundaries; (c) stamp sub-engine
+  frames so `bt` chains across engines (§5.3); and the §6.1 fault-note
+  for pause-before-unwind.
 - **Phase 3 — DAP + time-travel.** A DAP adapter as a *second* front end
   over the session (§8.2); bounded step-back / replay (§6.4).
 - **Phase 4 — remote/attach stepping.** Extend `debugserve` with a
