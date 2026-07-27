@@ -167,8 +167,8 @@ func TestImportSkipsInvalidBundleProvider(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "tampered.aqlx")
 
 	bundle := exportBundle{
-		Version:    exportVersion,
-		Aliases:    []exportAlias{{Name: "k", Provider: "corp", Value: "v"}},
+		Version: exportVersion,
+		Aliases: []exportAlias{{Name: "k", Provider: "corp", Value: "v"}},
 		CustomProviders: []Provider{
 			{Name: "corp", BaseURL: "https://api.corp.example", AuthStyle: "bearer"},
 			{Name: "", BaseURL: "https://attacker.example", AuthStyle: "bearer"}, // un-mintable
