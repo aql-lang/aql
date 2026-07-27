@@ -60,16 +60,55 @@ type Proxy struct {
 // file keyring when the store's backend is "file"; it is ignored
 // for OS keychain backends.
 func NewProxy(listen, homeDir, defaultPass string, stdout, stderr io.Writer) *Proxy {
+	// Bound the time to receive response *headers*, not the whole
+	// exchange: a dead or stalled upstream still fails fast, but a
+	// long-lived response body — an SSE token stream, a large download —
+	// is not guillotined mid-stream the way a client-wide Timeout would
+	// (that cut every stream over 60s and, because io.Copy's error is
+	// discarded, surfaced it to the caller as a clean EOF logged "ok").
+	// The transport is built explicitly rather than cloning
+	// http.DefaultTransport, whose *http.Transport type assertion would
+	// panic if another component swapped the global RoundTripper (the
+	// repo forbids panics outside init-time registration).
 	return &Proxy{
 		listen:      listen,
 		homeDir:     homeDir,
 		defaultPass: defaultPass,
 		stdout:      stdout,
 		stderr:      stderr,
-		client: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		client:      newBrokerClient(60 * time.Second),
 	}
+}
+
+// noRedirect stops a broker HTTP client from following upstream
+// redirects. A credential broker must never resend an injected secret to
+// a host the capability did not authorize, and net/http copies custom
+// auth headers (x-api-key, a header:<name> preset) across a redirect
+// even when it changes host — only Authorization is stripped cross-host.
+// Returning ErrUseLastResponse hands the 3xx back to the caller
+// unfollowed, so the secret only ever reaches the preset's own host.
+func noRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+// newBrokerClient builds the HTTP client both the proxy and the MCP
+// server use to reach upstreams: a transport whose response-header
+// timeout bounds time-to-first-byte (not the whole stream), env-proxy
+// support matching the standard default, and the no-follow redirect
+// policy above. Built explicitly so there is no panic-prone assertion on
+// the global default transport.
+func newBrokerClient(headerTimeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: headerTimeout,
+	}
+	return &http.Client{Transport: tr, CheckRedirect: noRedirect}
 }
 
 // runProxy implements `aql vault proxy`.
@@ -236,10 +275,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.log(started, r, alias, http.StatusForbidden, "ip-denied")
 		return
 	}
-	provider := LookupProvider(aliasMeta.Provider)
+	provider := LookupProviderIn(s, aliasMeta.Provider)
 	if provider.BaseURL == "" {
 		writeDenied(w, http.StatusBadRequest,
-			"alias has no provider preset; tag it with --provider on vault add, or use a built-in preset")
+			"alias has no provider preset; tag it with --provider on vault add, use a built-in preset, or define one with vault provider add")
 		p.log(started, r, alias, http.StatusBadRequest, "no-provider")
 		return
 	}
@@ -301,9 +340,57 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.recordUse(tok.ID, costCents)
 
 	copyHeadersExceptHop(w.Header(), resp.Header)
+	fw := flushingWriter(w)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
-	p.log(started, r, alias, resp.StatusCode, "ok")
+	// Push the status line and headers to the client immediately, before
+	// the first body chunk. An SSE upstream that opens the stream then
+	// idles until its first event would otherwise leave the client
+	// blocked awaiting headers, so the connection never appears
+	// established.
+	fw.flush()
+	_, cerr := io.Copy(fw, resp.Body)
+	outcome := "ok"
+	if cerr != nil {
+		// The stream broke after the status was already committed (upstream
+		// reset, client hang-up, header-timeout mid-body). The response
+		// can't be un-sent, but record the truncation honestly rather than
+		// logging a clean "ok" that reads as a complete response.
+		outcome = "stream-interrupted"
+	}
+	p.log(started, r, alias, resp.StatusCode, outcome)
+}
+
+// flushingWriter wraps w so every chunk copied from the upstream is
+// flushed to the client as it arrives. Without this the response
+// buffer would hold small writes until it fills or the handler
+// returns, stalling exactly the traffic a credential broker for AI
+// agents carries most: server-sent-event token streams. The returned
+// wrapper is always usable — its flush is a no-op when w cannot flush —
+// so callers never branch on flushability.
+func flushingWriter(w http.ResponseWriter) *flushWriter {
+	f, _ := w.(http.Flusher)
+	return &flushWriter{w: w, f: f}
+}
+
+type flushWriter struct {
+	w io.Writer
+	f http.Flusher // nil when the underlying writer cannot flush
+}
+
+func (fw *flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	if n > 0 {
+		fw.flush()
+	}
+	return n, err
+}
+
+// flush pushes buffered bytes to the client, or does nothing when the
+// underlying writer is not an http.Flusher.
+func (fw *flushWriter) flush() {
+	if fw.f != nil {
+		fw.f.Flush()
+	}
 }
 
 // recordUse increments the call counter and cost meter on the

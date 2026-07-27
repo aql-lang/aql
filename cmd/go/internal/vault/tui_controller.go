@@ -109,6 +109,17 @@ func (c *tuiController) switchVault(folder, suffix string) error {
 	return nil
 }
 
+// customProviders returns the active vault's operator-defined provider
+// presets, or nil when the store is absent or unreadable — the add-form
+// provider picker degrades to the built-in list rather than failing.
+func (c *tuiController) customProviders() []Provider {
+	s, err := LoadStore(c.homeDir)
+	if err != nil || s == nil {
+		return nil
+	}
+	return s.CustomProviders
+}
+
 // createVault initializes a new vault at (folder, suffix) with the given
 // backend, then makes it active. It drives the same init path as the CLI,
 // which records the vault in the index. folder defaults to the home ~/.aql.

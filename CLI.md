@@ -628,7 +628,9 @@ aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
 aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
-aql vault providers                     # list built-in provider presets
+aql vault providers                     # list provider presets (built-in + custom)
+aql vault provider add --url=https://api.corp.example --auth-style=header:X-Corp-Key corp   # define a custom upstream preset
+aql vault provider rm corp              # remove a custom preset (refused while aliases still use it)
 aql vault scan .                        # scan files for leaked secret-like strings
 aql vault scan --home                   # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …) for plaintext secrets
 aql vault scan --home --match-vault     # …and flag which on-disk creds are already vaulted
@@ -889,6 +891,35 @@ only unless you pass `--allow-public`. The MCP server (`aql vault mcp
 aliases the named agent has been granted a capability for, enforcing
 the same TTL, host/method allowlists, and call/cost quotas. The file
 backend requires a non-empty passphrase.
+
+Two quota caveats to know when relying on `grant`'s quantitative
+limits. **`--max-calls` is a soft cap under concurrency**: the check
+runs at request start and the counter persists after the response, so
+N simultaneous in-flight requests can overshoot the cap by up to N−1
+— use it for budget hygiene, not as a hard rate limiter.
+**`--max-cost-cents` is debited only from an `X-AQL-Vault-Cost-Cents`
+response header**, which the built-in providers' real APIs do not
+send; unless your upstream (or a middlebox you control) sets that
+header, the cost meter stays at zero and the budget never trips.
+
+**Upstream providers.** The broker forwards an alias's requests to the
+base URL of its provider preset — the compiled-in ones (`openai`,
+`anthropic`, `github`) or a **custom preset** minted with
+`aql vault provider add --url=<base> [--auth-style=<style>] <name>`
+(styles: `bearer`, `x-api-key`, `header:<name>`, `query:<name>`,
+`none`). Custom presets live in the vault store, are listed by
+`vault providers` with a `SOURCE` column, and are validated at mint
+time — URL shape (http/https, a real hostname, a valid port, no embedded
+`user:pass@`, no query or fragment), auth style (a `header:<name>` must
+be a valid HTTP header name and not one net/http controls itself, such
+as `Host`), and preset name; a plain-`http` base URL warns, since the
+secret would travel unencrypted. Custom presets referenced by an alias
+travel in `vault export` bundles, so a custom-backed alias still brokers
+after `vault import`. The broker never follows an upstream redirect —
+the injected secret only ever reaches the preset's own host. Built-in names can never be redefined or
+removed — a store entry can never redirect a compiled-in provider — and
+`provider rm` refuses while any alias still references the preset,
+naming the blockers. (Flags precede the name, as with `password add`.)
 
 **Moving a vault between machines or OSes.** A `file`-backend vault is
 already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`
