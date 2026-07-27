@@ -95,6 +95,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	script := fs.String("script", "", "read debugger commands from this file instead of stdin (batch/CI mode)")
 	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by AQL_NO_CHECK)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
+	postMortem := fs.Bool("post-mortem", false, "on an uncaught error, open an inspection prompt over the fault state before exiting")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -172,6 +173,9 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
 	res, rerr := sess.RunProgram(tokens, source)
 	if rerr != nil {
+		if *postMortem {
+			sess.PostMortem(rerr)
+		}
 		var ae *lang.AqlError
 		if color && errors.As(rerr, &ae) {
 			fmt.Fprintf(stderr, "error: %s\n", ae.Render(lang.RenderOpts{Color: true}))

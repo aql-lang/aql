@@ -56,6 +56,44 @@ func TestPromptEOFDetaches(t *testing.T) {
 	}
 }
 
+func TestPostMortemGuards(t *testing.T) {
+	// A detached session gets no post-mortem — the user already left.
+	s, buf := testSession(t, "q\n")
+	s.mode = modeDetached
+	s.PostMortem(errors.New("boom"))
+	if buf.Len() != 0 {
+		t.Errorf("detached PostMortem must render nothing; out = %q", buf.String())
+	}
+	// With no retained snapshot the banner still renders, locationless.
+	s2, buf2 := testSession(t, "q\n")
+	s2.PostMortem(errors.New("boom-2"))
+	out := buf2.String()
+	if !strings.Contains(out, "post-mortem\n") || !strings.Contains(out, "boom-2") {
+		t.Errorf("out = %q", out)
+	}
+	if !strings.Contains(out, "(post-mortem closed)") {
+		t.Errorf("quit at a post-mortem must not claim the program continues; out = %q", out)
+	}
+}
+
+func TestDataStackSnapshotFallback(t *testing.T) {
+	// With no engine running and no snapshot, there is nothing to show.
+	s, _ := testSession(t, "")
+	if _, ok := s.dataStack(); ok {
+		t.Error("a session that never ran has no data stack")
+	}
+	// A retained snapshot reconstructs the resolved region, markers
+	// filtered, and clamps a pointer beyond the snapshot.
+	s.curStack = []native.Value{
+		native.NewInteger(6), eng.NewOpenParen(), native.NewInteger(0),
+	}
+	s.curPointer = 99
+	vals, ok := s.dataStack()
+	if !ok || len(vals) != 2 {
+		t.Fatalf("got (%v, %v), want the 2 data values", vals, ok)
+	}
+}
+
 // errReader always fails, driving the Scanner's error (not-EOF) arm.
 type errReader struct{}
 

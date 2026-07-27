@@ -378,6 +378,21 @@ sequenced in §10.
 
 ### 6.1 Break-on-error / post-mortem  *(priority)*
 
+> **Shipped — the post-mortem half, host-only (Phase 1.5).**
+> `aql debug --post-mortem <file>`: when `RunProgram` returns an
+> uncaught error, the session opens one final inspection prompt over
+> the FAULT state — no engine change needed, because the per-step trace
+> fires immediately *before* the failing dispatch (so the retained
+> snapshot is exactly the state at the raise) and an error return
+> performs no frame unwind (so the registry still holds the fault's
+> bindings — `bt`, `defs`, `stack` (reconstructed from the snapshot's
+> resolved region), `list`, and `print` all work). A `do`-caught error
+> is not a fault; a detached session gets no post-mortem; any action
+> command closes it ("(post-mortem closed)" — the program cannot
+> resume). What still wants the engine fault-note below:
+> **pause-before-unwind** (stopping at a raise that a `do` handler will
+> catch, or resuming past it) — that remains the Phase-2 form.
+
 Stop **at the token that raised**, before the error unwinds — AQL's
 answer to `pdb.post_mortem` / `gdb`'s stop-on-signal. Two entry points:
 
@@ -561,9 +576,14 @@ ends and kernel work begins.
   registry's resolved **file** on `StepFrame` (§12) so stepping is
   source-aware and multi-file-correct — additive, per the codebase's
   contract-only-grows discipline.
-- **Phase 1.5 — break-on-error (§6.1).** A small engine affordance to
-  surface a raising step's error to the trace before the loop returns it
-  (a fault note on the existing `traceNote` channel). High value, bounded.
+- **Phase 1.5 — break-on-error (§6.1). SHIPPED in its host-only
+  post-mortem form** (`--post-mortem`, see §6.1's shipped note): the
+  retained pre-dispatch trace snapshot + the un-unwound registry give
+  full fault inspection with zero engine change. The engine affordance
+  as designed — a fault note on the `traceNote` channel surfacing the
+  raising step's error *before* the loop returns — is still the path to
+  true pause-before-unwind (stopping at `do`-caught raises), now folded
+  into Phase 2.
 - **Phase 2 — fidelity (the big one).** (a) `over`/`out` via frame-depth
   tracking (host, using `fn_frame.go`); (b) **thread the trace/session
   into sub-engines** so `into`/`over`/`out` cross module-fn / higher-

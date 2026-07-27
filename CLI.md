@@ -514,6 +514,7 @@ cross-process introspection server and client it grew out of.
 ```bash
 aql debug prog.aql                      # pause at the first source line
 aql debug --script cmds.dbg prog.aql    # drive the session from a command file (CI)
+aql debug --post-mortem prog.aql        # on an uncaught error, inspect the fault state
 aql debug --no-check prog.aql args...   # skip the pre-flight; args reach IO.args
 ```
 
@@ -542,8 +543,17 @@ seam (ADR-005) — so it detaches and the program drains at full speed.
 End-of-input on the command stream (Ctrl-D, or a drained `--script`
 file) also detaches. In `--script` mode each command is echoed after
 the prompt, so the transcript is a self-contained, reproducible record
-— the debugger's CI story. Flags: `--script F`, `--no-check`
-(also `AQL_NO_CHECK`), `--color auto|always|never`.
+— the debugger's CI story.
+
+With `--post-mortem`, an **uncaught** error opens one final inspection
+prompt over the fault state — the stack, backtrace, bindings, and
+source location at the raise, with `print` evaluating against them —
+before the error reaches stderr and the run exits 1. Errors a `do`
+handler catches are not faults; a session you already `quit` stays
+closed.
+
+Flags: `--script F`, `--post-mortem`, `--no-check` (also
+`AQL_NO_CHECK`), `--color auto|always|never`.
 
 Phase-1 limits (see the design note's roadmap): stepping does not
 descend into sub-engines (module fns, `each`/`fold` bodies run as one

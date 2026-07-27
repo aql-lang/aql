@@ -88,6 +88,10 @@ type Session struct {
 	// the registry's full native/def table; `defs all` shows everything.
 	baseDefs map[string]int
 
+	// dead marks a post-mortem session: the program has already
+	// terminated, so detach must not claim it "continues".
+	dead bool
+
 	// mu serializes the pause machinery. The per-step trace runs on the
 	// program's goroutine, but the installed DebugOps is shared registry
 	// state, so a concurrent fork (a timer body hitting Debug.break) can
@@ -257,7 +261,7 @@ func (s *Session) prompt() stepMode {
 			if err := s.in.Err(); err != nil {
 				fmt.Fprintf(s.out, "\ncommand input error: %s\n", err)
 			}
-			fmt.Fprintln(s.out, "\n"+detachNotice)
+			fmt.Fprintln(s.out, "\n"+s.detachMsg())
 			return s.detach()
 		}
 		line := strings.TrimSpace(s.in.Text())
@@ -275,7 +279,7 @@ func (s *Session) prompt() stepMode {
 			s.mode = modeContinue
 			return s.mode
 		case "quit", "q":
-			fmt.Fprintln(s.out, detachNotice)
+			fmt.Fprintln(s.out, s.detachMsg())
 			return s.detach()
 		case "stack":
 			s.renderFullStack()
@@ -295,6 +299,71 @@ func (s *Session) prompt() stepMode {
 	}
 }
 
+// PostMortem opens an inspection prompt over the FAULT state after
+// RunProgram returned an uncaught error (§6.1's post-mortem entry,
+// host-only): the per-step trace fired immediately BEFORE the failing
+// dispatch, so the retained snapshot (curStack/curPointer) is exactly
+// the program state at the raise, and an error return performs no
+// frame unwind, so the registry still holds the fault's bindings.
+// Every inspection command works; the program has already terminated,
+// so any action command (step/continue/quit) simply ends the session.
+// A detached session gets no post-mortem — the user already left.
+func (s *Session) PostMortem(runErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mode == modeDetached {
+		return
+	}
+	s.dead = true
+	loc := ""
+	if s.curPointer >= 0 && s.curPointer < len(s.curStack) {
+		if row := s.curStack[s.curPointer].Pos().Row; row != 0 {
+			s.curRow = row
+			loc = fmt.Sprintf(" at %s:%d  %s", s.file, row, s.sourceLine(row))
+		}
+	}
+	fmt.Fprintf(s.out, "uncaught error — post-mortem%s\n", loc)
+	fmt.Fprintf(s.out, "  %s\n", runErr)
+	fmt.Fprintln(s.out, "  (the program has terminated; inspect its state — step/continue/quit exit)")
+	s.showStack()
+	s.prompt()
+}
+
+// dataStack resolves the data stack an inspection command should show:
+// the live engine's (CurrentStack) while the program runs, or — in a
+// post-mortem, when no engine is running — a reconstruction from the
+// retained fault snapshot's resolved region. ok is false only when
+// there is neither (a session that never ran).
+func (s *Session) dataStack() ([]native.Value, bool) {
+	if vals, ok := s.reg.CurrentStack(); ok {
+		return vals, true
+	}
+	if s.curStack == nil {
+		return nil, false
+	}
+	n := s.curPointer
+	if n > len(s.curStack) {
+		n = len(s.curStack)
+	}
+	vals := make([]native.Value, 0, n)
+	for _, v := range s.curStack[:n] {
+		if isEngineMarker(v) {
+			continue
+		}
+		vals = append(vals, v)
+	}
+	return vals, true
+}
+
+// isEngineMarker reports whether a resolved-region tape value is engine
+// bookkeeping rather than program data — the same classes the live
+// CurrentStack view filters.
+func isEngineMarker(v native.Value) bool {
+	return native.IsWord(v) || native.IsForward(v) || native.IsMark(v) ||
+		native.IsMove(v) || native.IsOpenParen(v) || native.IsCloseParen(v) ||
+		native.IsEnd(v) || native.IsDefCleanup(v) || native.IsReturnCheck(v)
+}
+
 // detach puts the session in its terminal mode and disarms the per-step
 // trace, so the draining program stops paying the whole-tape snapshot
 // the armed trace forces every step — detach means "run at full speed".
@@ -309,6 +378,15 @@ func (s *Session) detach() stepMode {
 	return s.mode
 }
 
+// detachMsg is the leave-the-session notice: a running program drains
+// to completion; a post-mortem one is already gone.
+func (s *Session) detachMsg() string {
+	if s.dead {
+		return "(post-mortem closed)"
+	}
+	return detachNotice
+}
+
 // splitCommand splits a prompt line into its command word and argument.
 func splitCommand(line string) (cmd, arg string) {
 	cmd, arg, _ = strings.Cut(line, " ")
@@ -317,7 +395,7 @@ func splitCommand(line string) (cmd, arg string) {
 
 // showStack renders the one-line data-stack summary shown at each pause.
 func (s *Session) showStack() {
-	if vals, ok := s.reg.CurrentStack(); ok {
+	if vals, ok := s.dataStack(); ok {
 		fmt.Fprintf(s.out, "  stack: %s\n", summarizeStack(vals))
 	}
 }
@@ -339,7 +417,7 @@ func summarizeStack(vals []native.Value) string {
 
 // renderFullStack renders every data-stack entry, top (#0) first.
 func (s *Session) renderFullStack() {
-	vals, ok := s.reg.CurrentStack()
+	vals, ok := s.dataStack()
 	if !ok || len(vals) == 0 {
 		fmt.Fprintln(s.out, "  (stack empty)")
 		return

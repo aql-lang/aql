@@ -471,6 +471,64 @@ func TestLaunchRuntimeErrorPlainAndColor(t *testing.T) {
 	}
 }
 
+func TestLaunchPostMortem(t *testing.T) {
+	// §6.1 (host-only form): an uncaught error opens an inspection prompt
+	// over the fault state — the trace snapshot taken immediately before
+	// the failing dispatch, with the registry's bindings un-unwound.
+	path := writeProgram(t, "def f fn [[x:Integer] [Integer] [\nx div 0\n]]\nf 6\n")
+	stdin := "c\nbt\ndefs\nstack\nlist\nprint x add 1\nq\n"
+	code, out, errOut := launch(t, []string{"--no-check", "--post-mortem", path}, stdin)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 (the error still fails the run)", code)
+	}
+	requireOrder(t, out,
+		"uncaught error — post-mortem at "+path+":2", "x div 0",
+		"division by zero",
+		"stack: [6 0]", // the failing div's operands, from the fault snapshot
+		"#0  f  (x)",   // bt: the frame chain at the raise
+		"x = 6",        // defs: the param binding, un-unwound
+		"#0  0",        // stack: top-first reconstruction
+		"->    2  x div 0",
+		"7", // print x add 1 evaluates over the fault state
+		"(post-mortem closed)")
+	if strings.Contains(out, "continues to completion") {
+		t.Errorf("a post-mortem quit must not claim the program continues:\n%s", out)
+	}
+	if !strings.HasPrefix(errOut, "error: ") {
+		t.Errorf("the error still reaches stderr; got %q", errOut)
+	}
+}
+
+func TestLaunchPostMortemNegatives(t *testing.T) {
+	// Without the flag, an uncaught error exits directly — no prompt.
+	path := writeProgram(t, "1 div 0\n")
+	code, out, _ := launch(t, []string{"--no-check", path}, "c\nbt\n")
+	if code != 1 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(out, "post-mortem") {
+		t.Errorf("no --post-mortem flag, no post-mortem prompt:\n%s", out)
+	}
+	// A CAUGHT error is not uncaught: the program completes, no prompt.
+	caught := writeProgram(t, "do [1 div 0]\n")
+	code, out, _ = launch(t, []string{"--no-check", "--post-mortem", caught}, "c\n")
+	if code != 0 {
+		t.Fatalf("caught: exit = %d, out:\n%s", code, out)
+	}
+	if strings.Contains(out, "post-mortem") {
+		t.Errorf("a do-caught error must not post-mortem:\n%s", out)
+	}
+	// After a quit (detach) the user has left: a later fault exits
+	// directly rather than reopening a prompt on a dead session.
+	code, out, _ = launch(t, []string{"--no-check", "--post-mortem", path}, "q\n")
+	if code != 1 {
+		t.Fatalf("detached: exit = %d", code)
+	}
+	if strings.Contains(out, "post-mortem") {
+		t.Errorf("a detached session must not post-mortem:\n%s", out)
+	}
+}
+
 func TestLaunchInitError(t *testing.T) {
 	// The langNew seam (design/TEST-SEAMS.10.md): a registry-construction
 	// failure surfaces as an init error.
