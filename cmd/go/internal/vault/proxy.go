@@ -60,15 +60,21 @@ type Proxy struct {
 // file keyring when the store's backend is "file"; it is ignored
 // for OS keychain backends.
 func NewProxy(listen, homeDir, defaultPass string, stdout, stderr io.Writer) *Proxy {
+	// Bound the time to receive response *headers*, not the whole
+	// exchange: a dead or stalled upstream still fails fast, but a
+	// long-lived response body — an SSE token stream, a large download —
+	// is not guillotined mid-stream the way a client-wide Timeout would
+	// (that cut every stream over 60s and, because io.Copy's error is
+	// discarded, surfaced it to the caller as a clean EOF logged "ok").
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = 60 * time.Second
 	return &Proxy{
 		listen:      listen,
 		homeDir:     homeDir,
 		defaultPass: defaultPass,
 		stdout:      stdout,
 		stderr:      stderr,
-		client: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		client:      &http.Client{Transport: tr},
 	}
 }
 
@@ -301,36 +307,57 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.recordUse(tok.ID, costCents)
 
 	copyHeadersExceptHop(w.Header(), resp.Header)
+	fw := flushingWriter(w)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(flushingWriter(w), resp.Body)
-	p.log(started, r, alias, resp.StatusCode, "ok")
+	// Push the status line and headers to the client immediately, before
+	// the first body chunk. An SSE upstream that opens the stream then
+	// idles until its first event would otherwise leave the client
+	// blocked awaiting headers, so the connection never appears
+	// established.
+	fw.flush()
+	_, cerr := io.Copy(fw, resp.Body)
+	outcome := "ok"
+	if cerr != nil {
+		// The stream broke after the status was already committed (upstream
+		// reset, client hang-up, header-timeout mid-body). The response
+		// can't be un-sent, but record the truncation honestly rather than
+		// logging a clean "ok" that reads as a complete response.
+		outcome = "stream-interrupted"
+	}
+	p.log(started, r, alias, resp.StatusCode, outcome)
 }
 
 // flushingWriter wraps w so every chunk copied from the upstream is
 // flushed to the client as it arrives. Without this the response
 // buffer would hold small writes until it fills or the handler
 // returns, stalling exactly the traffic a credential broker for AI
-// agents carries most: server-sent-event token streams. A w that
-// cannot flush is returned unwrapped.
-func flushingWriter(w http.ResponseWriter) io.Writer {
-	f, ok := w.(http.Flusher)
-	if !ok {
-		return w
-	}
+// agents carries most: server-sent-event token streams. The returned
+// wrapper is always usable — its flush is a no-op when w cannot flush —
+// so callers never branch on flushability.
+func flushingWriter(w http.ResponseWriter) *flushWriter {
+	f, _ := w.(http.Flusher)
 	return &flushWriter{w: w, f: f}
 }
 
 type flushWriter struct {
 	w io.Writer
-	f http.Flusher
+	f http.Flusher // nil when the underlying writer cannot flush
 }
 
 func (fw *flushWriter) Write(p []byte) (int, error) {
 	n, err := fw.w.Write(p)
 	if n > 0 {
-		fw.f.Flush()
+		fw.flush()
 	}
 	return n, err
+}
+
+// flush pushes buffered bytes to the client, or does nothing when the
+// underlying writer is not an http.Flusher.
+func (fw *flushWriter) flush() {
+	if fw.f != nil {
+		fw.f.Flush()
+	}
 }
 
 // recordUse increments the call counter and cost meter on the

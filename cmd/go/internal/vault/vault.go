@@ -188,7 +188,7 @@ var modeDocs = []modeDoc{
 	{"unlock", "mark the vault unlocked"},
 	{"config", "view or set vault configuration"},
 	{"proxy", "run a local credential broker for agents and tools"},
-	{"providers", "list provider presets; `provider add NAME --url=U` defines a custom one"},
+	{"providers", "list provider presets; `provider add --url=U NAME` defines a custom one"},
 	{"folder", "list vault folders; `folder add <dir>` registers an existing vault"},
 	{"scan", "scan files for leaked secret-like strings (--home checks credential dotfiles)"},
 	{"audit", "show the structured audit log"},

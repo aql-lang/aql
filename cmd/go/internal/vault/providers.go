@@ -54,10 +54,16 @@ func LookupProvider(name string) Provider {
 // Built-ins winning means a store entry can never shadow — and so
 // silently redirect — a compiled-in provider, even if one is smuggled
 // into the file (`provider add` refuses built-in names at mint time; this
-// ordering is the defence in depth behind that refusal). A nil store
-// degrades to the built-in lookup.
+// ordering is the defence in depth behind that refusal). A store is only
+// consulted for a name that could have been legitimately minted
+// (validCustomProviderName) — critically, this makes the empty name (the
+// tag every provider-untagged alias carries) resolve to the URL-less
+// generic preset and be refused, rather than being captured by a
+// smuggled {"name":""} entry that would then broker every untagged
+// alias to an attacker host. A nil store degrades to the built-in
+// lookup.
 func LookupProviderIn(s *Store, name string) Provider {
-	if _, ok := providers[name]; ok || s == nil {
+	if s == nil || !validCustomProviderName(name) {
 		return LookupProvider(name)
 	}
 	if p, _ := s.FindCustomProvider(name); p != nil {
@@ -72,6 +78,16 @@ func LookupProviderIn(s *Store, name string) Provider {
 func builtinProvider(name string) bool {
 	_, ok := providers[name]
 	return ok
+}
+
+// validCustomProviderName reports whether name is one a custom preset
+// may legitimately carry: a single alias segment (so never "", never a
+// namespace-colon name) that does not collide with a built-in. Both the
+// resolver and the listing gate on it, so a store entry with any other
+// name (only reachable by tampering — the CLI enforces the same rule at
+// mint time) is inert rather than load-bearing.
+func validCustomProviderName(name string) bool {
+	return validAliasSegment(name) && !builtinProvider(name)
 }
 
 // ListProviders returns the built-in presets in stable name order.
@@ -99,7 +115,7 @@ func ListProvidersIn(s *Store) []Provider {
 		return out
 	}
 	for _, p := range s.CustomProviders {
-		if !builtinProvider(p.Name) {
+		if validCustomProviderName(p.Name) {
 			out = append(out, p)
 		}
 	}
@@ -116,25 +132,60 @@ func validateAuthStyle(style string) error {
 	case style == "" || style == "bearer" || style == "x-api-key" || style == "none":
 		return nil
 	case strings.HasPrefix(style, "header:"):
-		if strings.TrimPrefix(style, "header:") == "" {
+		name := strings.TrimPrefix(style, "header:")
+		if name == "" {
 			return fmt.Errorf("auth style %q needs a header name (e.g. header:X-Api-Key)", style)
+		}
+		// Validate the header field name now so a preset can never mint
+		// with a name net/http rejects at write time (which would fail
+		// every brokered request as an opaque 502, the very "fail one
+		// request at a time" mode mint-time validation exists to prevent).
+		if !validHeaderFieldName(name) {
+			return fmt.Errorf("auth style %q: %q is not a valid HTTP header name (letters, digits, and !#$%%&'*+-.^_`|~)", style, name)
 		}
 		return nil
 	case strings.HasPrefix(style, "query:"):
 		if strings.TrimPrefix(style, "query:") == "" {
 			return fmt.Errorf("auth style %q needs a parameter name (e.g. query:api_key)", style)
 		}
+		// A query parameter name needs no charset guard: InjectAuth writes
+		// it through url.Values.Encode, which percent-escapes anything odd.
 		return nil
 	}
 	return fmt.Errorf("unknown auth style %q (want bearer, x-api-key, header:<name>, query:<name>, or none)", style)
 }
 
+// validHeaderFieldName reports whether name is a non-empty RFC 7230
+// token (the character set net/http requires of a header field name);
+// it is the mint-time guard behind the `header:<name>` auth style.
+func validHeaderFieldName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune("!#$%&'*+-.^_`|~", r):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // validateProviderBaseURL checks and canonicalizes a `provider add`
 // base URL: it must parse, use the http or https scheme, and carry a
-// host; a query or fragment is refused (the broker appends the caller's
-// path and query, so either would be silently clobbered or spliced); a
-// trailing slash is trimmed to honour Provider.BaseURL's no-trailing-
-// slash contract. Returns the canonical form.
+// host; embedded userinfo (user:pass@host) is refused — it would be a
+// second, unsealed credential printed by `provider add`/`providers`,
+// stored in cleartext, shown to the model in the MCP tool description,
+// and (for non-bearer styles) injected upstream as Basic auth by
+// net/http; a query or fragment is refused, including a bare trailing
+// `?` (ForceQuery), since the broker appends the caller's own path and
+// query and either would be clobbered or misroute the request; a
+// trailing slash is trimmed — from both Path and RawPath so a
+// percent-escape like %2F is preserved rather than silently decoded to a
+// path separator — to honour Provider.BaseURL's no-trailing-slash
+// contract. Returns the canonical form.
 func validateProviderBaseURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -146,10 +197,14 @@ func validateProviderBaseURL(raw string) (string, error) {
 	if u.Host == "" {
 		return "", fmt.Errorf("base URL %q has no host", raw)
 	}
-	if u.RawQuery != "" || u.Fragment != "" {
+	if u.User != nil {
+		return "", fmt.Errorf("base URL must not embed credentials (user:pass@host); attach the secret via the alias, not the provider URL")
+	}
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return "", fmt.Errorf("base URL %q must not carry a query or fragment (the broker appends the request's own)", raw)
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = strings.TrimRight(u.RawPath, "/")
 	return u.String(), nil
 }
 

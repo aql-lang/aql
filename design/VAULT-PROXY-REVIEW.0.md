@@ -298,7 +298,7 @@ In priority order. Items 1–2 are the reach gaps the three-way comparison
 (§4) sharpened; 3–8 are the code-level findings from §3.
 
 1. **User-definable providers (closes §3.1).** Add
-   `vault provider add <name> --url=<base> --auth-style=<style>` persisting
+   `vault provider add --url=<base> [--auth-style=<style>] <name>` persisting
    custom presets in the store, so the broker fronts any API rather than
    three. The alias→provider→SSRF-boundary machinery already supports it;
    only the registry is closed. This is the cheapest gap to close and the
@@ -340,7 +340,7 @@ A first implementation slice landed on the branch that carries this
 review, after the report above was written:
 
 - **Rec 1 — user-definable providers: implemented.**
-  `vault provider add <name> --url=<base> [--auth-style=<style>]` /
+  `vault provider add --url=<base> [--auth-style=<style>] <name>` /
   `provider rm` / `provider list`, persisted as `Store.CustomProviders`
   (schema **v7**, with the fail-loud version bump + no-op migration the
   store doctrine requires). Resolution goes through a new
@@ -366,6 +366,57 @@ review, after the report above was written:
   store-rewrite throttle (7) trades away a deliberate crash-safety
   property (quota persisted before streaming) and needs a maintainer's
   call; `RequireApproval` (8) likewise awaits a workflow decision.
+
+### 5a.1 Adversarial review pass
+
+The implementation slice was then put through a multi-agent adversarial
+review (four dimensions — security, correctness, concurrency,
+convention — each finding independently verified by a skeptic agent with
+a runnable probe). It surfaced defects the first cut missed, all now
+fixed on the branch:
+
+- **Secret leak via the MCP error path (high).** For the `query:<name>`
+  auth style the secret rides in the request URL; the MCP server
+  returned the raw transport error (`"upstream: "+err.Error()`), whose
+  text embeds that full URL, straight to the model. Now opaque
+  (`"upstream request failed"`, matching the proxy), with an
+  alias-scoped, secret-free line to the operator's stderr.
+- **Empty-name provider hijack (high).** `LookupProviderIn` consulted
+  the store for *any* non-built-in name, including `""` — the tag every
+  provider-untagged alias carries — so a smuggled `{"name":""}` entry
+  would broker every untagged alias to an attacker host. The resolver
+  and the listing now gate on `validCustomProviderName` (a real alias
+  segment, non-built-in), so `""` and any other un-mintable name resolve
+  to the URL-less generic preset and are refused.
+- **Userinfo in the base URL (medium).** `--url=https://u:p@host` was
+  accepted, landing a second credential in cleartext in the store, in
+  `provider add`/`providers` output, in the MCP tool description shown to
+  the model, and — for non-bearer styles — injected upstream as Basic
+  auth by net/http. Now rejected at mint time.
+- **SSE truncation logged as `ok` (high).** The proxy client's
+  whole-exchange `Timeout: 60s` guillotined any stream over 60s and, the
+  error being discarded, surfaced it as a clean EOF logged `ok`.
+  Replaced with a transport `ResponseHeaderTimeout` (bounds
+  time-to-first-byte, not stream duration); a broken copy now logs
+  `stream-interrupted`.
+- **Idle-open streams (low).** Headers are now flushed immediately after
+  `WriteHeader`, so a stream that opens then idles before its first event
+  establishes the connection at the client.
+- **Mint-time validation gaps (medium/low).** A bare trailing `?`
+  (`ForceQuery`), an invalid `header:<name>` field name, and a
+  trailing-slash trim that silently decoded `%2F` are all now caught or
+  handled at mint time.
+- **Docs (medium).** The synopses documented `provider add <name>
+  --url=…`, which Go's flag parser rejects (flags must precede the
+  positional); corrected to flags-first in CLI.md, the mode help, and
+  this doc.
+
+Two flagged items were **rejected on verification** as pre-existing
+behaviour the slice did not introduce (the generic "copy errors logged
+as ok" observation, subsumed by the truncation fix above; and a claim of
+NUR-recordable non-uniformity vs the `folder` mode family, which does not
+hold — the vault CLI's dispatchers were already heterogeneous, and NUR
+scope is language semantics, not CLI UX).
 
 ## 6. Relationship to the SERVICES roadmap
 

@@ -385,7 +385,14 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 	}
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
-		return fail(req, -32603, "upstream: "+err.Error())
+		// The error is deliberately NOT echoed to the client: for the
+		// query:<name> auth style the secret rides in the request URL, and
+		// a transport error is a *url.Error whose text embeds that full URL
+		// — returning it would hand the credential straight to the model.
+		// The proxy returns an opaque message here for the same reason; the
+		// operator gets an alias-scoped, secret-free line on stderr.
+		fmt.Fprintf(s.stderr, "vault mcp: upstream request for alias %q failed\n", alias)
+		return fail(req, -32603, "upstream request failed")
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)

@@ -888,15 +888,17 @@ header, the cost meter stays at zero and the budget never trips.
 **Upstream providers.** The broker forwards an alias's requests to the
 base URL of its provider preset — the compiled-in ones (`openai`,
 `anthropic`, `github`) or a **custom preset** minted with
-`aql vault provider add <name> --url=<base> [--auth-style=<style>]`
+`aql vault provider add --url=<base> [--auth-style=<style>] <name>`
 (styles: `bearer`, `x-api-key`, `header:<name>`, `query:<name>`,
 `none`). Custom presets live in the vault store, are listed by
 `vault providers` with a `SOURCE` column, and are validated at mint
-time (URL shape, auth style, name); a plain-`http` base URL warns,
-since the secret would travel unencrypted. Built-in names can never be
-redefined or removed — a store entry can never redirect a compiled-in
-provider — and `provider rm` refuses while any alias still references
-the preset, naming the blockers.
+time — URL shape (scheme + host, no embedded `user:pass@`, no query or
+fragment), auth style (a `header:<name>` must be a valid HTTP header
+name), and preset name; a plain-`http` base URL warns, since the secret
+would travel unencrypted. Built-in names can never be redefined or
+removed — a store entry can never redirect a compiled-in provider — and
+`provider rm` refuses while any alias still references the preset,
+naming the blockers. (Flags precede the name, as with `password add`.)
 
 **Moving a vault between machines or OSes.** A `file`-backend vault is
 already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`

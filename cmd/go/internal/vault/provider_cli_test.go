@@ -145,10 +145,13 @@ func TestProviderAddRejections(t *testing.T) {
 		{"ftp scheme", []string{"provider", "add", "--url=ftp://x.example", "corp"}, "http:// or https://"},
 		{"no host", []string{"provider", "add", "--url=https://", "corp"}, "no host"},
 		{"unparseable url", []string{"provider", "add", "--url=https://bad host/", "corp"}, "invalid base URL"},
+		{"userinfo in url", []string{"provider", "add", "--url=https://u:p@x.example", "corp"}, "must not embed credentials"},
 		{"query in url", []string{"provider", "add", "--url=https://x.example?a=b", "corp"}, "query or fragment"},
+		{"forcequery in url", []string{"provider", "add", "--url=https://x.example?", "corp"}, "query or fragment"},
 		{"fragment in url", []string{"provider", "add", "--url=https://x.example#frag", "corp"}, "query or fragment"},
 		{"bad auth style", []string{"provider", "add", "--url=https://x.example", "--auth-style=bogus", "corp"}, "unknown auth style"},
 		{"empty header style", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:", "corp"}, "needs a header name"},
+		{"bad header name", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:X Key", "corp"}, "not a valid HTTP header name"},
 		{"empty query style", []string{"provider", "add", "--url=https://x.example", "--auth-style=query:", "corp"}, "needs a parameter name"},
 	}
 	for _, tc := range cases {
@@ -313,17 +316,30 @@ func TestProviderListEdges(t *testing.T) {
 
 // TestLookupProviderIn locks the resolution rules: built-ins first (a
 // store entry can never shadow one), then customs, then generic; a nil
-// store degrades to the built-in lookup.
+// store degrades to the built-in lookup; and — the security-critical
+// case — a smuggled entry with an un-mintable name (empty, built-in
+// collision, colon) is inert, so the empty tag every untagged alias
+// carries can never be captured to redirect a secret.
 func TestLookupProviderIn(t *testing.T) {
 	s := &Store{CustomProviders: []Provider{
 		{Name: "corp", BaseURL: "https://api.corp.example", AuthStyle: "bearer"},
-		{Name: "openai", BaseURL: "https://evil.example", AuthStyle: "bearer"}, // smuggled shadow
+		{Name: "openai", BaseURL: "https://evil.example", AuthStyle: "bearer"},  // smuggled shadow of a built-in
+		{Name: "", BaseURL: "https://attacker.example", AuthStyle: "bearer"},    // smuggled empty-name capture
+		{Name: "a:b", BaseURL: "https://attacker.example", AuthStyle: "bearer"}, // smuggled colon name
 	}}
 	if got := LookupProviderIn(s, "corp"); got.BaseURL != "https://api.corp.example" {
 		t.Errorf("custom lookup = %+v", got)
 	}
 	if got := LookupProviderIn(s, "openai"); got.BaseURL != "https://api.openai.com" {
 		t.Errorf("a smuggled store entry shadowed a built-in: %+v", got)
+	}
+	// The empty name is the tag every provider-untagged alias carries: it
+	// must resolve to the URL-less generic preset, never the smuggled URL.
+	if got := LookupProviderIn(s, ""); got.BaseURL != "" {
+		t.Errorf("empty-name smuggled preset captured untagged aliases: %+v", got)
+	}
+	if got := LookupProviderIn(s, "a:b"); got.BaseURL != "" {
+		t.Errorf("smuggled colon-name preset resolved: %+v", got)
 	}
 	if got := LookupProviderIn(s, "nope"); got.Name != "generic" || got.BaseURL != "" {
 		t.Errorf("unknown name should fall back to generic: %+v", got)
@@ -341,7 +357,8 @@ func TestLookupProviderIn(t *testing.T) {
 func TestListProvidersIn(t *testing.T) {
 	s := &Store{CustomProviders: []Provider{
 		{Name: "corp", BaseURL: "https://api.corp.example"},
-		{Name: "github", BaseURL: "https://evil.example"}, // smuggled shadow
+		{Name: "github", BaseURL: "https://evil.example"}, // smuggled built-in shadow
+		{Name: "", BaseURL: "https://evil.example"},       // smuggled empty name
 	}}
 	got := ListProvidersIn(s)
 	names := make([]string, 0, len(got))
@@ -378,11 +395,46 @@ func TestValidateProviderBaseURLCanonicalizes(t *testing.T) {
 		{"https://api.example.com/", "https://api.example.com"},
 		{"https://api.example.com/v2/", "https://api.example.com/v2"},
 		{"http://127.0.0.1:8080/base", "http://127.0.0.1:8080/base"},
+		// A percent-encoded slash in the path must survive the
+		// trailing-slash trim rather than being silently decoded to a
+		// path separator (which would address a different resource).
+		{"https://api.example.com/a%2Fb/", "https://api.example.com/a%2Fb"},
 	}
 	for _, tc := range cases {
 		got, err := validateProviderBaseURL(tc.in)
 		if err != nil || got != tc.want {
 			t.Errorf("validateProviderBaseURL(%q) = %q, %v; want %q", tc.in, got, err, tc.want)
+		}
+	}
+}
+
+// TestValidHeaderFieldName pairs accepted RFC-7230 header tokens with
+// the shapes net/http would reject at write time.
+func TestValidHeaderFieldName(t *testing.T) {
+	for _, ok := range []string{"X-Api-Key", "Authorization", "a", "X_Corp.Key-1"} {
+		if !validHeaderFieldName(ok) {
+			t.Errorf("validHeaderFieldName(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "X Key", "X:Key", "X\tKey", "X\nKey", "naïve"} {
+		if validHeaderFieldName(bad) {
+			t.Errorf("validHeaderFieldName(%q) = true, want false", bad)
+		}
+	}
+}
+
+// TestValidCustomProviderName: a legit segment passes; empty, colon, and
+// built-in names are rejected (the guard that neutralizes a smuggled
+// empty-name capture).
+func TestValidCustomProviderName(t *testing.T) {
+	for _, ok := range []string{"corp", "corp-2", "a.b_c"} {
+		if !validCustomProviderName(ok) {
+			t.Errorf("validCustomProviderName(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "a:b", "openai", "generic", "bad name"} {
+		if validCustomProviderName(bad) {
+			t.Errorf("validCustomProviderName(%q) = true, want false", bad)
 		}
 	}
 }
@@ -492,5 +544,44 @@ func TestMCPBrokersCustomProvider(t *testing.T) {
 	}
 	if fu.lastPath != "/ping" {
 		t.Errorf("upstream path = %q, want /ping", fu.lastPath)
+	}
+}
+
+// TestMCPUpstreamErrorHidesQuerySecret is the regression guard for the
+// query:<name> secret leak: with that auth style the secret rides in the
+// request URL, so a transport error (dead upstream) must NOT be echoed
+// to the model — the *url.Error text embeds the full URL. The MCP server
+// must return an opaque message, exactly as the proxy does.
+func TestMCPUpstreamErrorHidesQuerySecret(t *testing.T) {
+	home := testHome(t)
+	mustInit(t)
+
+	// A server we immediately close, so its URL is a valid-but-dead
+	// upstream: client.Do fails and the error carries the request URL.
+	dead := newFakeUpstream(t)
+	deadURL := dead.URL
+	dead.Server.Close()
+
+	const secret = "THE-QUERY-SECRET-9Z"
+	if code, _, errOut := runVault(t, "", "provider", "add",
+		"--url="+deadURL, "--auth-style=query:api_key", "corp"); code != 0 {
+		t.Fatalf("provider add: %s", errOut)
+	}
+	if code, _, _ := runVault(t, secret+"\n", "add", "--from-stdin", "--provider=corp", "k"); code != 0 {
+		t.Fatal("alias add")
+	}
+	w4GrantAgentCap(t, home, "k", nil)
+
+	srv := &mcpServer{homeDir: home, agent: "mcp", stderr: io.Discard,
+		client: &http.Client{Timeout: 5 * time.Second}}
+	resp := w4Dispatch(t, srv, "1", "tools/call", `{"name":"k_request","arguments":{"path":"/ping"}}`)
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("tools/call against a dead upstream should error: %+v", resp)
+	}
+	if strings.Contains(resp.Error.Message, secret) {
+		t.Fatalf("MCP error leaked the query secret to the model: %q", resp.Error.Message)
+	}
+	if resp.Error.Message != "upstream request failed" {
+		t.Errorf("MCP upstream error = %q, want the opaque \"upstream request failed\"", resp.Error.Message)
 	}
 }
