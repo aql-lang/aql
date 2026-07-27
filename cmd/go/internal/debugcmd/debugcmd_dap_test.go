@@ -83,6 +83,33 @@ func TestDAPFullSession(t *testing.T) {
 	}
 }
 
+func TestDAPFunctionBreakpoints(t *testing.T) {
+	// DAP "function" breakpoints are AQL word breakpoints: the stop
+	// fires when the named word is about to dispatch. The second
+	// setFunctionBreakpoints (while paused: the direct-mutate arm)
+	// REPLACES the set with nothing, so the program runs out.
+	path := writeProgram(t, "def n 1\nn add 2\nadd 3\n")
+	stdin := strings.Join([]string{
+		dapReq(1, "initialize", ""),
+		dapReq(2, "launch", "{}"),
+		dapReq(3, "setFunctionBreakpoints", `{"breakpoints":[{"name":"add"}]}`),
+		dapReq(4, "configurationDone", ""), // entry stop
+		dapReq(5, "continue", ""),          // → word add on line 2
+		dapReq(6, "setFunctionBreakpoints", `{"breakpoints":[]}`),
+		dapReq(7, "continue", ""), // no words left: runs to completion
+		dapReq(8, "disconnect", ""),
+	}, "")
+	code, out, _ := launch(t, []string{"--no-check", "--dap", path}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d\n%s", code, out)
+	}
+	requireOrder(t, out,
+		`"supportsFunctionBreakpoints":true`,
+		`"reason":"step"`, // entry
+		`"description":"breakpoint: word add"`, `"reason":"breakpoint"`,
+		`"exitCode":0`)
+}
+
 func TestDAPBreakOnErrorStopsAsException(t *testing.T) {
 	// --break-on-error under DAP: the fault pause arrives as a stopped
 	// event with reason "exception" and the error text.

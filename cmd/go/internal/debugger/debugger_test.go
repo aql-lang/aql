@@ -87,7 +87,7 @@ func TestPauseAtFaultUnknownRow(t *testing.T) {
 	// token) renders "?" rather than a bogus line, and still prompts.
 	s, buf := testSession(t, "q\n")
 	s.breakOnError = true
-	s.pauseAtFault(0, nil, "boom-fault")
+	s.pauseAtFault(0, nil, "boom-fault", s.reg, s.file, s.lines)
 	out := buf.String()
 	if !strings.Contains(out, "paused before unwind at unit.aql:?") {
 		t.Errorf("out = %q", out)
@@ -478,15 +478,15 @@ func TestRenderListUnknownRow(t *testing.T) {
 	}
 }
 
-func TestSourceLineOutOfRange(t *testing.T) {
+func TestLineAtOutOfRange(t *testing.T) {
 	s, _ := testSession(t, "")
-	if got := s.sourceLine(2); got != "line two" {
+	if got := lineAt(s.lines, 2); got != "line two" {
 		t.Errorf("got %q", got)
 	}
-	if got := s.sourceLine(0); got != "" {
+	if got := lineAt(s.lines, 0); got != "" {
 		t.Errorf("row 0 must render empty, got %q", got)
 	}
-	if got := s.sourceLine(999); got != "" {
+	if got := lineAt(s.lines, 999); got != "" {
 		t.Errorf("an out-of-range row must render empty, got %q", got)
 	}
 }
@@ -531,5 +531,162 @@ func TestLiveFramesEdges(t *testing.T) {
 	// …and once the pointer passes the frame's true close, it is dead.
 	if got := liveFrames(nested, 6); len(got) != 0 {
 		t.Errorf("a frame closed before the pointer is not live; got %v", got)
+	}
+}
+
+func TestReplayGuardArms(t *testing.T) {
+	// Every runReplay refusal answers rather than crashing: not
+	// browsing, no factory, a pre-first-stop entry, a failing factory,
+	// a parserless registry, and a parse failure.
+	s, buf := testSession(t, "")
+	s.runReplay() // browse == 0
+	if !strings.Contains(buf.String(), "replay needs a browsed entry") {
+		t.Errorf("out = %q", buf.String())
+	}
+
+	buf.Reset()
+	s.recordHistory(histEntry{row: 1, mainStops: 1})
+	s.recordHistory(histEntry{row: 2, mainStops: 2})
+	s.browse = 1
+	s.runReplay() // no factory configured
+	if !strings.Contains(buf.String(), "replay unavailable — no registry factory") {
+		t.Errorf("out = %q", buf.String())
+	}
+
+	buf.Reset()
+	s.newRegistry = func() (*native.Registry, error) { return nil, errors.New("boom-factory") }
+	s.history[len(s.history)-2].mainStops = 0
+	s.runReplay() // ordinal 0: nothing to replay to
+	if !strings.Contains(buf.String(), "nothing to replay to") {
+		t.Errorf("out = %q", buf.String())
+	}
+
+	buf.Reset()
+	s.history[len(s.history)-2].mainStops = 1
+	s.history[len(s.history)-2].sub = true
+	s.runReplay() // factory error (after the body-entry notice)
+	if !strings.Contains(buf.String(), "a body entry replays to its enclosing line stop") ||
+		!strings.Contains(buf.String(), "replay: boom-factory") {
+		t.Errorf("out = %q", buf.String())
+	}
+
+	buf.Reset()
+	s.history[len(s.history)-2].sub = false
+	s.newRegistry = func() (*native.Registry, error) {
+		r, err := native.DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.ParseFunc = nil
+		return r, nil
+	}
+	s.runReplay() // parserless registry
+	if !strings.Contains(buf.String(), "replay: the fresh registry has no parser") {
+		t.Errorf("out = %q", buf.String())
+	}
+
+	buf.Reset()
+	s.source = "(" // unclosed paren: the re-parse fails
+	s.newRegistry = func() (*native.Registry, error) {
+		r, err := native.DefaultRegistry()
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.ParseFunc = parser.Parse
+		return r, nil
+	}
+	s.runReplay()
+	if !strings.Contains(buf.String(), "replay: parse:") {
+		t.Errorf("out = %q", buf.String())
+	}
+}
+
+func TestWatchHelperArms(t *testing.T) {
+	s, buf := testSession(t, "")
+	// Empty list arm.
+	s.listWatches()
+	if !strings.Contains(buf.String(), "(no watches)") {
+		t.Errorf("out = %q", buf.String())
+	}
+	// Delete arms: missing name, then clear-all.
+	if got := s.deleteWatch("zz"); got != "no watch on zz" {
+		t.Errorf("got %q", got)
+	}
+	s.watches["a"] = "y"
+	s.watches["b"] = "x"
+	if got := s.deleteWatch(""); got != "all watches deleted" || len(s.watches) != 0 {
+		t.Errorf("got %q (%d left)", got, len(s.watches))
+	}
+	// checkWatches: two names change in one step — ONE pause label (the
+	// alphabetically first), but BOTH re-record, so neither re-fires.
+	s.watches["b"] = "x"
+	s.watches["a"] = "y"
+	hit := s.checkWatches()
+	if hit != "watch: a  y → (unset)" {
+		t.Errorf("hit = %q", hit)
+	}
+	if s.watches["b"] != watchUnset {
+		t.Errorf("b must re-record; got %q", s.watches["b"])
+	}
+	if again := s.checkWatches(); again != "" {
+		t.Errorf("no change must not re-fire; got %q", again)
+	}
+}
+
+func TestPauseHookWatchKind(t *testing.T) {
+	// A watch pause through an alternate front end carries kind "watch"
+	// (the DAP adapter maps it to stop reason "data breakpoint").
+	s, _ := testSession(t, "")
+	s.watches["zz-w"] = "old"
+	var kinds []string
+	s.pauseHook = func(info PauseInfo) string {
+		kinds = append(kinds, info.Kind)
+		return "continue"
+	}
+	s.trace(0, nil, "", false, false, s.reg)
+	if len(kinds) != 1 || kinds[0] != "watch" {
+		t.Errorf("kinds = %v, want [watch]", kinds)
+	}
+}
+
+func TestOnStepForeignFileMarker(t *testing.T) {
+	// A marker pause carrying ANOTHER file's identity has no source
+	// text to page: list answers honestly rather than showing the main
+	// file's lines at the module's row.
+	s, buf := testSession(t, "list\nc\n")
+	s.OnStep(capabilities.StepFrame{AtBreak: true, File: "other.aql", Row: 2})
+	if s.curFile != "other.aql" || s.curLines != nil {
+		t.Errorf("identity = (%q, %d lines)", s.curFile, len(s.curLines))
+	}
+	if !strings.Contains(buf.String(), "(source line unknown)") {
+		t.Errorf("out = %q", buf.String())
+	}
+}
+
+func TestDataStackFallsBackToSessionRegistry(t *testing.T) {
+	// A pause whose firing registry has no running engine (retained
+	// curFrom from an earlier module pause) falls back to the session
+	// registry's innermost engine.
+	s, _ := testSession(t, "")
+	other, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.curFrom = other
+	sawLive := false
+	s.reg.SetDebugTrace(func(int, int, []native.Value, string) {
+		if _, ok := s.dataStack(); ok {
+			sawLive = true
+		}
+	})
+	toks, perr := parser.Parse("1 add 2")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	if _, rerr := native.NewTop(s.reg).Run(toks); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if !sawLive {
+		t.Error("the session registry's engine must serve the data stack")
 	}
 }

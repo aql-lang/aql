@@ -1,9 +1,13 @@
 # AQL-DEBUGGER — a first-class interactive `aql debug` debugger
 
-Status: **Living reference — Phases 1, 1.5, 2, and 3 SHIPPED
-(2026-07); the rest is design.** (Shipped notes: Phase 1 below;
-Phase 1.5 at §6.1; Phase 2 at §10; Phase 3 at §6.4 — time-travel —
-and §8.2 — DAP.) This note designs the interactive `aql debug <file.aql>`
+Status: **Living reference — Phases 1, 1.5, 2, and 3 SHIPPED in
+full (2026-07), including every Phase-2/3 deferral: watchpoints
+(§6.2), replay (§6.4), DAP function breakpoints (§8.2), module-fn
+frames in `bt`, and per-engine file identity (§10). Remaining:
+Phase 4 (remote stepping — its own phase, seam ready) and the
+maintainer-gated items (§13).** (Shipped notes: Phase 1 below;
+Phase 1.5 at §6.1; watchpoints at §6.2; time-travel + replay at
+§6.4; DAP at §8.2; the fidelity remainder at §10.) This note designs the interactive `aql debug <file.aql>`
 debugger: launch a program, set breakpoints, single-step, inspect the
 stack / scope / call chain, and evaluate expressions at a pause. It is
 grounded in seams that already exist in the tree (verified against the
@@ -413,13 +417,24 @@ the trace before the loop returns it (a "fault note" on the existing
 `traceNote` channel, or an error-aware trace variant). That is the one
 non-trivial engine touch this feature needs; it is small and bounded.
 
-### 6.2 Data watchpoints
+### 6.2 Data watchpoints  *(SHIPPED)*
 
 `watch <name>` — pause when a def's binding changes value, the
 data-breakpoint analogue of hardware watchpoints. Maps onto the existing
 `Debug.watch` idea: the session snapshots `Registry.Defs.Top(name)` and,
 each step, compares; on change it stops and shows old → new. Cost is one
 lookup per watched name per step (only while watches are set).
+
+> **Shipped** (2026-07): as designed — `watch <name>` / `unwatch`
+> at the prompt; the compare is by RENDERED value (the one equality
+> every Value supports), runs on every trace fire in every mode, and
+> pauses like a breakpoint (`watch: n  old → new` in the banner; a
+> name watched before it is bound records `(unset)`, so the first
+> `def` is a change). When several watched names change in one step,
+> ONE pause reports the alphabetically first while all re-record —
+> one pause per transition, never one per step. Under DAP the pause
+> maps to stop reason `data breakpoint` (there is no DAP request
+> surface to SET watches yet — they are a prompt affordance).
 
 ### 6.3 Scripted / batch mode for CI
 
@@ -444,9 +459,23 @@ exercised by a scripted front end with no TTY.
 > history view does not rewind bindings)`) — the honest boundary of a
 > re-render that mutates nothing. Boundary arms answer rather than
 > wrap (`(no further history)` / `(already at the live pause)`), and
-> any resume clears the cursor. Delta from the design as written:
-> `replay` (re-run to a chosen step) did NOT ship — deterministic
-> re-execution remains future work; only the ring shipped.
+> any resume clears the cursor.
+>
+> **`replay` shipped too** (2026-07, the second wave): from a
+> browsed entry, `replay` re-runs the program FROM THE START on a
+> FRESH registry (`Config.NewRegistry`, the launch's own wiring) and
+> pauses at the entry's line stop — from there every command works,
+> including stepping FORWARD through a moment the live run already
+> passed. The re-run must be honest about two things: side effects
+> re-run (stated in the banner — determinism reproduces state, not
+> un-happened I/O), and the target is addressed by a monotonic
+> NON-BODY line-stop ordinal (`histEntry.mainStops`) rather than a
+> ring index, so it survives ring trimming AND the known
+> warm-cache variance in `(in body)` stops (§10) — a body entry
+> replays to its enclosing line stop, with a notice. The nested
+> session shares the command input (one scanner, consumed in
+> order), so scripted transcripts drive both sessions
+> deterministically; quitting the replay detaches only the re-run.
 
 Execution is a deterministic sequence of steps and the trace hands out a
 whole-tape snapshot each step, so *stepping backward* is unusually cheap
@@ -556,6 +585,10 @@ evaluated expression can never grant itself more than the program had.
 > `--dap` and `--script` are mutually exclusive. Delta from the sketch
 > below: the adapter lives inside `aql debug` itself, not under
 > `aql serve` — it shares the LSP's framing *idea*, not its server.
+> **Second wave** (2026-07): `setFunctionBreakpoints` maps onto WORD
+> breakpoints (a concatenative program's functions are its words;
+> replace-per-call, same lock discipline as `setBreakpoints`), and a
+> watchpoint pause (§6.2) arrives as stop reason `data breakpoint`.
 
 Editor users expect the **Debug Adapter Protocol** (`setBreakpoints`,
 `stackTrace`, `scopes`, `variables`, `next`/`stepOut`, `pause`,
@@ -663,21 +696,53 @@ ends and kernel work begins.
   trace once more (note `"fault: <err>"`, step −1) before the error
   surfaces, and `--break-on-error` pauses there — including raises a
   `do` handler will catch, the true pause-before-unwind — deduping the
-  note as the error bubbles through nested engines. **Still open:**
-  fork-boundary stamping (a fork's pauses are TryLock-safe but
-  unlabelled); module-fn FRAMES in `bt` (they live on the captured
-  registry, which the main registry's engine walk cannot see); and
-  per-engine file identity on pause banners (a module-fn pause names
-  the right row of the wrong file — the §12 file-identity gap).
+  note as the error bubbles through nested engines. **The "still
+  open" list closed** (2026-07, the remainder wave): *per-engine
+  file identity* — the registry hook's rich form
+  (`SetDebugTraceFrom` / `DebugTraceFrom`) stamps every fire with
+  the FIRING engine's constructing registry, resolved at fire time
+  through a thin closure (`effectiveDebugTrace`) that also re-reads
+  the hook, so suppression/detach now wins even for an engine that
+  resolved earlier; the session maps the registry to its
+  `BaseFile`/`Source` (file-imported modules carry their own), so
+  banner, `list`, history entries, and the DAP `stackTrace` name
+  the right row of the RIGHT file — and line coalescing keys on
+  (row, file), so stepping from main line N into a module's line N
+  still stops. *Module-fn FRAMES in `bt`* — two seams:
+  `RunningEngineChain` walks the debugParent registry chain from
+  the pause's registry up to the session's, collecting engines
+  outermost-first; and `CallAQLNamed` labels the body sub-engine
+  with the fn's name (`Engine.debugLabel` → `EngineState.Label` — a
+  Defs-based frame leaves no tape marks to reconstruct a name
+  from), which the session renders as the call's frame.
+  *Fork-boundary stamping* is ACCEPTED as a permanent gap rather
+  than shipped: a fork's pauses are advisory by design (the TryLock
+  contract drops them whenever the session is busy), so a label
+  would decorate a pause that is already best-effort — not worth
+  widening `ForkConcurrent` and `StepFrame` for. The multi-line
+  fn-LITERAL `(in body)` warm-cache variance is likewise accepted:
+  navigate by breakpoints/markers, and `replay` (§6.4) addresses
+  targets by non-body ordinals so it is immune.
 - **Phase 3 — DAP + time-travel. SHIPPED** (2026-07, host only —
   zero engine change): the DAP adapter as a *second* front end over
   the session (§8.2's shipped note) and the bounded read-only
-  step-back ring (§6.4's shipped note). `replay` did not ship;
-  neither did DAP word/conditional breakpoints (line BPs only —
-  `setBreakpoints` is the protocol's line surface; words and
-  `Debug.break-when` remain TTY/source affordances for now).
+  step-back ring (§6.4's shipped note). The first wave deferred
+  `replay` and DAP word breakpoints; **the remainder wave shipped
+  both** (2026-07 — §6.4 and §8.2's second-wave notes), plus
+  watchpoints (§6.2). `Debug.break-when` conditions remain a source
+  affordance (DAP has no surface for them beyond markers).
 - **Phase 4 — remote/attach stepping.** Extend `debugserve` with a
-  stepping control channel over the existing transport (§8.3).
+  stepping control channel over the existing transport (§8.3). The
+  session-side seam is READY: the `pauseHook` + `applyAction` pair
+  the DAP adapter runs on is exactly a remote adapter's contract —
+  park the engine on a published pause, deliver an action from a
+  transport. What remains is the serve/attach surface itself
+  (publish `PauseInfo` + accept actions over the existing HTTP
+  transport, with its lifecycle: an unattached paused program, a
+  client vanishing mid-pause). Trust posture is the one `attach
+  eval` already sets — remote eval is remote code execution, so
+  stepping adds no new authority — but the surface deserves its own
+  careful lifecycle work rather than a rushed rider on this wave.
 - **Beyond — cooperative cancellation.** A real "terminate now" seam so
   `quit` can stop a run mid-flight without a panic (§5.4). Collides with
   ADR-005's model and would want an NUR record; not committed.

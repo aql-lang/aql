@@ -666,6 +666,83 @@ func TestLaunchHistoryEmptyAtFirstPause(t *testing.T) {
 	requireOrder(t, out, "(no earlier steps recorded)", "(no further history)", "3\n(program exited)")
 }
 
+func TestLaunchReplay(t *testing.T) {
+	// §6.4 replay: from a browsed history entry, re-run the program on a
+	// FRESH registry to that entry's line stop — side effects (the
+	// print) genuinely re-run — then step forward from the replayed
+	// pause. Quit inside the replay detaches only the re-run.
+	path := writeProgram(t, "print \"zz-rr\"\n1\nadd 1\n")
+	stdin := strings.Join([]string{
+		"s", "s", // → line 3 (the print ran at the line-1 step)
+		"back",   // browse line 2
+		"replay", // fresh run to stop 2: prints zz-rr again, pauses at :2
+		"s",      // step forward INSIDE the replay → line 3
+		"c",      // replay runs out
+		"c",      // the live program runs out
+	}, "\n") + "\n"
+	code, out, _ := launch(t, []string{"--no-check", path}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d\n%s", code, out)
+	}
+	requireOrder(t, out,
+		"zz-rr", // the live run's print
+		"history -1  at "+path+":2",
+		"replaying "+path+" to line stop 2 — side effects re-run",
+		"zz-rr",                // the REPLAY's print: side effects re-run
+		"at "+path+":2  1",     // the replayed pause
+		"at "+path+":3  add 1", // stepping forward inside the replay
+		"(replay ended — back at the live pause)",
+		"2\n(program exited)")
+}
+
+func TestLaunchReplayRunError(t *testing.T) {
+	// A replay that runs INTO the program's error reports it and still
+	// returns control to the live prompt; the live run then errors the
+	// same way (determinism) and the launch exits 1.
+	path := writeProgram(t, "1\n2\n1 div 0\n")
+	stdin := strings.Join([]string{
+		"s", "s", // → line 3, before the raise
+		"back",   // browse line 2
+		"replay", // fresh run to stop 2
+		"c",      // the replay continues into the error
+		"c",      // the live run does too
+	}, "\n") + "\n"
+	code, out, _ := launch(t, []string{"--no-check", path}, stdin)
+	if code != 1 {
+		t.Fatalf("exit = %d\n%s", code, out)
+	}
+	requireOrder(t, out,
+		"replaying "+path+" to line stop 2",
+		"replay run error:", "division by zero",
+		"(replay ended — back at the live pause)")
+}
+
+func TestLaunchWatchpoints(t *testing.T) {
+	// §6.2 data watchpoints: `watch n` pauses when the binding's value
+	// changes — including its first definition (unset → value) — with
+	// old → new in the banner; `unwatch` stops the pauses.
+	path := writeProgram(t, "def n 1\ndef n 2\nn add 3\n")
+	stdin := strings.Join([]string{
+		"watch n",
+		"watch", // bare: list the installed watches
+		"c",     // → n defined: (unset) → 1
+		"c",     // → n re-defined: 1 → 2
+		"unwatch n",
+		"c", // no watches left: runs to completion
+	}, "\n") + "\n"
+	code, out, _ := launch(t, []string{"--no-check", path}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out,
+		"watch set: n (now (unset))",
+		"watch n = (unset)",
+		"watch: n  (unset) → 1",
+		"watch: n  1 → 2",
+		"watch deleted: n",
+		"5\n(program exited)")
+}
+
 func TestLaunchModuleFnDescent(t *testing.T) {
 	// Phase 2 remainder: a module fn's body runs on its CAPTURED
 	// sub-registry — the debugParent chain resolves the session's live
@@ -681,7 +758,7 @@ func TestLaunchModuleFnDescent(t *testing.T) {
 		[]byte("import \""+lib+"\"\nLib.twice 21\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stdin := "break add\nc\np (Lib.twice 3)\nc\nc\nc\n"
+	stdin := "break add\nc\nbt\nlist\np (Lib.twice 3)\nc\nc\nc\n"
 	code, out, errOut := launch(t, []string{"--no-check", main}, stdin)
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, errOut)
@@ -692,10 +769,17 @@ func TestLaunchModuleFnDescent(t *testing.T) {
 	if !strings.Contains(out, "(in body)") {
 		t.Errorf("the module-fn hit is a body evaluation:\n%s", out)
 	}
-	// The regression pin for the chain-read: `print` of a MODULE fn at a
-	// pause suppresses the hook through the chain — no nested pause, the
-	// eval completes.
-	requireOrder(t, out, "6", "42\n(program exited)")
+	// File identity (§12): the pause inside the module fn names the
+	// MODULE file and its own source text; `list` pages the module
+	// source; `bt` includes the module fn's frame (the cross-registry
+	// engine chain). Then the regression pin for the chain-read:
+	// `print` of a MODULE fn at a pause suppresses the hook through the
+	// chain — no nested pause, the eval completes.
+	requireOrder(t, out,
+		"at "+lib+":2 (in body)  x add x",
+		"#0  twice",
+		"->    2  x add x",
+		"6", "42\n(program exited)")
 }
 
 func TestLaunchBreakOnError(t *testing.T) {

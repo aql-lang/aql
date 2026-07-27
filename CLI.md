@@ -531,25 +531,30 @@ per line, however many engine steps the line expands to. At the
 | `continue`, `c` | run to the next breakpoint (or completion) |
 | `break <spec>` | set a breakpoint: a source line (`break 12`) or a word (`break add`); bare `break` lists them |
 | `delete [spec]` | delete one breakpoint; bare `delete` clears all |
+| `watch <name>` | pause when the binding's value changes (old → new); bare `watch` lists |
+| `unwatch [name]` | delete one watch; bare `unwatch` clears all |
 | `quit`, `q` | **detach** — the program continues to completion |
 | `stack` | every data-stack entry, top (`#0`) first |
-| `bt` | backtrace of live inline fn frames (name + bound params) |
+| `bt` | backtrace of live fn frames — including module fns' |
 | `back` | browse one recorded step earlier (time-travel, read-only) |
 | `forward`, `fwd` | browse one step later; at the newest entry, return to the live pause |
 | `history` | list the recorded trail, newest first |
+| `replay` | re-run from the start to the browsed entry (side effects re-run) |
 | `defs`, `locals` | the program's bindings (`defs all` for every binding) |
 | `print <expr>`, `p`, `eval` | evaluate in the paused program's scope |
 | `list`, `l` | source around the current line |
 | `help`, `h`, `?` | the command list |
 
-Breakpoints come in three kinds. From the prompt (or `--break` at
+Breakpoints come in four kinds. From the prompt (or `--break` at
 launch): a **source line** (`break 12` — pauses on entering the line,
 once per loop iteration, including inside body evaluations) and a
 **word** (`break add` — pauses whenever that word is about to
 dispatch). In source: the `aql:debug` module's inline markers —
 `Debug.break` pauses whenever the debugger is attached (and is a no-op
 otherwise, so it is safe to commit), `Debug.break-when <cond>` pauses
-conditionally.
+conditionally. And **data watchpoints**: `watch n` pauses when the
+binding `n` changes value — including its first definition — showing
+old → new (the compare runs per step, only while watches are set).
 `quit` cannot kill the program mid-run — the engine has no preemption
 seam (ADR-005) — so it detaches and the program drains at full speed.
 End-of-input on the command stream (Ctrl-D, or a drained `--script`
@@ -571,11 +576,18 @@ post-mortems; a session you already `quit` stays closed.
 read-only: `stack`, `bt`, and `list` follow the browsed snapshot,
 while `print` and `defs` stay live (bindings are not rewound — the
 view says so). `history` lists the trail. Resuming execution clears
-the browse cursor; replaying execution backwards is future work.
+the browse cursor. From a browsed entry, `replay` re-runs the program
+FROM THE START on a fresh registry and pauses at that entry's line
+stop — deterministic re-execution reproduces the state, and from
+there you can step **forward** through a moment the live run already
+passed. The price is stated up front: the program's side effects
+re-run.
 
 **Editor integration** — `--dap` speaks the Debug Adapter Protocol
 over stdio (Content-Length-framed JSON), so any DAP client can drive
-the same session: launch, line breakpoints, stepping
+the same session: launch, line breakpoints, function breakpoints
+(`setFunctionBreakpoints` maps onto word breakpoints — a
+concatenative program's functions ARE its words), stepping
 (`next`/`stepIn`/`stepOut`), stack/scopes/variables, evaluate, and
 stopped events (`breakpoint`, `step`, `exception` under
 `--break-on-error`). Program output arrives as `output` events; the
@@ -587,21 +599,25 @@ honestly (no preemption seam — same as `quit` above).
 registry — a pause inside an `each` body still shows the enclosing
 fn's frame — and breakpoints reach **module fn bodies** too (their
 captured registries resolve the session's hook through the import
-chain).
+chain). A pause inside a file-imported module names the MODULE file
+and its own source text — the banner, `list`, and the DAP
+`stackTrace` all follow the firing engine's file — and the module
+fn's own frame appears in `bt` (the engine chain spans the import
+registries, and each named call labels its body engine).
 
 Flags: `--script F`, `--break SPEC` (repeatable), `--break-on-error`,
 `--post-mortem`, `--dap`, `--no-check` (also `AQL_NO_CHECK`),
 `--color auto|always|never`.
 
-Current limits (see the design note's roadmap): a module fn's own
-frames live on its captured registry and are absent from `bt`; pause
-banners always show the MAIN file's text, so a pause inside an
-imported module's fn names the right row of the wrong file; relative
+Current limits (see the design note's roadmap): a concurrent fork's
+pauses are delivered best-effort (dropped whenever the session is
+busy) and are not labelled with the fork's identity; relative
 `import` paths resolve against the working directory (matching
-`aql run`); and `step` may surface engine-internal evaluations of
-multi-line fn literals as extra `(in body)` stops — scripted sessions
-should drive to a location with breakpoints or markers rather than
-counted steps.
+`aql run`); a marker pause inside an imported module names the module
+file but `list` has no module source to page there; and `step` may
+surface engine-internal evaluations of multi-line fn literals as
+extra `(in body)` stops — scripted sessions should drive to a
+location with breakpoints or markers rather than counted steps.
 
 **Cross-process introspection** — serve a runtime's state over HTTP,
 and interrogate it:

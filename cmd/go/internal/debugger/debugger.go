@@ -57,13 +57,21 @@ const maxStackShown = 8
 const historyCap = 64
 
 // histEntry is one recorded line visit — the tape snapshot the trace
-// fire handed over, its pointer, the source row, and whether it came
-// from a body evaluation.
+// fire handed over, its pointer, the source row, whether it came from a
+// body evaluation, and the FILE identity of the firing engine (a module
+// fn's body belongs to the module file). lines shares the split source
+// of that file (a slice reference, not a copy).
 type histEntry struct {
 	stack   []native.Value
 	pointer int
 	row     int
 	sub     bool
+	file    string
+	lines   []string
+	// mainStops is the session's non-body line-stop ordinal when this
+	// entry was recorded — the deterministic address `replay` re-runs to
+	// (a body entry addresses its enclosing line stop).
+	mainStops int
 }
 
 // detachNotice is printed whenever the session detaches (quit or EOF) —
@@ -82,6 +90,11 @@ type Config struct {
 	// `do` handler will catch. The state at the raise is inspectable;
 	// resuming lets the error proceed.
 	BreakOnError bool
+	// NewRegistry builds a FRESH registry wired like the launch's own
+	// (output, file identity, program args) — the seam `replay` (§6.4)
+	// uses to re-run the program from the start on a clean slate. Nil
+	// disables replay with a notice.
+	NewRegistry func() (*native.Registry, error)
 }
 
 // Session is the interactive debug session. It implements
@@ -97,9 +110,23 @@ type Session struct {
 	lines []string
 	echo  bool
 
-	mode    stepMode
-	prevRow int // row of the last positioned token stepped (line coalescing)
-	curRow  int // row of the current pause (0 = unknown)
+	mode     stepMode
+	prevRow  int    // row of the last positioned token stepped (line coalescing)
+	prevFile string // file of that token — a row in ANOTHER file is a new line
+	curRow   int    // row of the current pause (0 = unknown)
+
+	// Pause identity (§12): the registry the firing engine was
+	// constructed on (the DebugTraceFrom stamp), and the file + split
+	// source it resolves to — the module file inside a module fn's
+	// body, the main file otherwise. Banner, list, and the DAP
+	// stackTrace all render against these, so a module pause names the
+	// right row of the RIGHT file.
+	curFrom  *native.Registry
+	curFile  string
+	curLines []string
+	// srcCache memoizes each non-main registry's split Source, so a
+	// stepped module body doesn't re-split per trace fire.
+	srcCache map[*native.Registry][]string
 
 	// baseDepth is the live-frame depth recorded when `next`/`out` was
 	// issued; the pause rule compares against it (§5.2).
@@ -111,6 +138,14 @@ type Session struct {
 	// inside body evaluations (the sub-engine descent).
 	lineBPs map[int]bool
 	wordBPs map[string]bool
+
+	// watches are the data watchpoints (§6.2): name → last RENDERED
+	// value. Each trace fire compares the binding's current rendering
+	// and pauses on change, showing old → new. Rendered-string compare
+	// is the only equality every Value supports; the cost (one lookup +
+	// render per watched name per step) is paid only while watches are
+	// set. watchUnset marks a name watched before it is bound.
+	watches map[string]string
 
 	// Pause context: the whole-tape snapshot from the most recent trace
 	// fire, for `bt`. Storing the reference is free — the engine already
@@ -146,6 +181,19 @@ type Session struct {
 	// session's unlocked internals (frameEntries, evalText, …).
 	pauseHook func(PauseInfo) string
 
+	// source is the program text (Config.Source), kept for replay's
+	// fresh re-parse; newRegistry is the replay factory (Config).
+	source      string
+	newRegistry func() (*native.Registry, error)
+
+	// mainStops counts non-body line stops recorded since launch — a
+	// monotonic ordinal that survives the ring trimming, so a browsed
+	// entry can be located again in a deterministic re-run (`replay`).
+	// replayTarget, when non-zero, marks THIS session as a replay racing
+	// to that ordinal: every pause is suppressed until it is reached.
+	mainStops    int
+	replayTarget int
+
 	// history is the bounded time-travel ring (§6.4's Phase-3 form): one
 	// line-granular snapshot per source line VISITED — in every mode, so
 	// after a breakpoint you can look BACK at how execution got there.
@@ -180,17 +228,89 @@ func New(reg *native.Registry, cfg Config) *Session {
 	// Lift the Scanner's default 64KiB token cap so a long `print`
 	// expression is a working command, not a silent detach.
 	in.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	lines := strings.Split(cfg.Source, "\n")
 	return &Session{
 		reg:          reg,
 		in:           in,
 		out:          cfg.Out,
 		file:         cfg.File,
-		lines:        strings.Split(cfg.Source, "\n"),
+		lines:        lines,
+		curFile:      cfg.File,
+		curLines:     lines,
+		source:       cfg.Source,
+		newRegistry:  cfg.NewRegistry,
+		srcCache:     make(map[*native.Registry][]string),
 		echo:         cfg.Echo,
 		breakOnError: cfg.BreakOnError,
 		lineBPs:      make(map[int]bool),
 		wordBPs:      make(map[string]bool),
+		watches:      make(map[string]string),
 	}
+}
+
+// pauseSource resolves the file identity of a trace fire: the firing
+// engine's registry names its own file when it has one of its own (a
+// file-imported module's captured registry); everything else — the main
+// tape, pooled body engines, inline modules — is the main file.
+func (s *Session) pauseSource(from *native.Registry) (string, []string) {
+	if from == nil || from == s.reg || from.BaseFile == "" || from.BaseFile == s.file {
+		return s.file, s.lines
+	}
+	if cached, ok := s.srcCache[from]; ok {
+		return from.BaseFile, cached
+	}
+	lines := strings.Split(from.Source, "\n")
+	s.srcCache[from] = lines
+	return from.BaseFile, lines
+}
+
+// lineAt returns the trimmed text of a 1-based line of a split source.
+func lineAt(lines []string, row int) string {
+	if row >= 1 && row <= len(lines) {
+		return strings.TrimSpace(lines[row-1])
+	}
+	return ""
+}
+
+// watchUnset is the recorded rendering of a watched name that has no
+// binding yet: defining it later is a change (unset → value).
+const watchUnset = "(unset)"
+
+// watchValue renders a watched binding's current value, watchUnset when
+// the name is not bound.
+func (s *Session) watchValue(name string) string {
+	if v, ok := s.reg.Defs.Top(name); ok {
+		return native.FormatForPrint(v)
+	}
+	return watchUnset
+}
+
+// checkWatches compares every watched binding against its recorded
+// rendering, returning a pause label for the first change (and
+// re-recording ALL changes, so one pause per transition — not one per
+// step thereafter). Names are checked in sorted order so multi-change
+// steps pause deterministically.
+func (s *Session) checkWatches() string {
+	if len(s.watches) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(s.watches))
+	for n := range s.watches {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	hit := ""
+	for _, n := range names {
+		now := s.watchValue(n)
+		if now == s.watches[n] {
+			continue
+		}
+		if hit == "" {
+			hit = fmt.Sprintf("watch: %s  %s → %s", n, s.watches[n], now)
+		}
+		s.watches[n] = now
+	}
+	return hit
 }
 
 // Controller implements capabilities.DebugOps: the session is its own
@@ -246,16 +366,16 @@ func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Val
 	// engine the registry spawns starts with it (eng SetDebugTrace). The
 	// top-level engine gets the MAIN callback afterwards, so the session
 	// can tell its own tape's fires from a body's.
-	s.reg.SetDebugTrace(s.onSubTrace)
+	s.reg.SetDebugTraceFrom(s.onSubTrace)
 	engine := native.NewTop(s.reg)
 	engine.SetSource(source)
 	engine.SetTrace(s.onTrace)
 	s.clearTrace = func() {
 		engine.SetTrace(nil)
-		s.reg.SetDebugTrace(nil)
+		s.reg.SetDebugTraceFrom(nil)
 	}
 	defer func() {
-		s.reg.SetDebugTrace(nil)
+		s.reg.SetDebugTraceFrom(nil)
 		s.clearTrace = nil
 		s.reg.Source = prevSrc
 		if hadOps {
@@ -274,27 +394,29 @@ func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Val
 // `next`/`out` treat them as part of the line, and breakpoints fire in
 // both.
 func (s *Session) onTrace(_ int, pointer int, stack []native.Value, note string) {
-	s.trace(pointer, stack, note, false, false)
+	s.trace(pointer, stack, note, false, false, s.reg)
 }
 
-func (s *Session) onSubTrace(step int, pointer int, stack []native.Value, note string) {
+func (s *Session) onSubTrace(from *native.Registry, step, pointer int, stack []native.Value, note string) {
 	// step 0 marks a FRESH body evaluation (each pooled run restarts its
 	// counter): line breakpoints re-arm there, so a loop body that stays
-	// on one source row still breaks on every iteration.
-	s.trace(pointer, stack, note, true, step == 0)
+	// on one source row still breaks on every iteration. from stamps the
+	// firing engine's registry — the file-identity seam (§12).
+	s.trace(pointer, stack, note, true, step == 0, from)
 }
 
 // trace is the debug event loop's pause decision. It coalesces raw
 // engine steps to SOURCE LINES — one stop per contiguous run of a Row,
 // skipping position-less synthetic tokens (§5.1) — so `step` means
 // "advance one source line", not one tape token.
-func (s *Session) trace(pointer int, stack []native.Value, note string, sub, freshRun bool) {
+func (s *Session) trace(pointer int, stack []native.Value, note string, sub, freshRun bool, from *native.Registry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.curStack, s.curPointer = stack, pointer
 	if s.mode == modeDetached || s.inPrompt {
 		return
 	}
+	file, lines := s.pauseSource(from)
 	if strings.HasPrefix(note, "fault: ") {
 		// The engine fires this note at a raise, BEFORE the error unwinds
 		// (Engine.faultReturn). Pause once per raise — the same note
@@ -303,7 +425,7 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 			return
 		}
 		s.lastFault = note
-		s.pauseAtFault(pointer, stack, strings.TrimPrefix(note, "fault: "))
+		s.pauseAtFault(pointer, stack, strings.TrimPrefix(note, "fault: "), from, file, lines)
 		return
 	}
 	s.lastFault = ""
@@ -317,13 +439,29 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 	if pointer >= 0 && pointer < len(stack) {
 		row = stack[pointer].Pos().Row
 	}
-	prev := s.prevRow
+	prev, prevFile := s.prevRow, s.prevFile
 	if row != 0 {
-		s.prevRow = row
+		s.prevRow, s.prevFile = row, file
 	}
-	newLine := row != 0 && row != prev
+	// The same row number in ANOTHER file is a different source line:
+	// stepping from main line 3 into a module body's line 3 must stop.
+	newLine := row != 0 && (row != prev || file != prevFile)
 	if newLine {
-		s.recordHistory(histEntry{stack: stack, pointer: pointer, row: row, sub: sub})
+		if !sub {
+			s.mainStops++
+		}
+		s.recordHistory(histEntry{stack: stack, pointer: pointer, row: row, sub: sub,
+			file: file, lines: lines, mainStops: s.mainStops})
+	}
+	if s.replayTarget != 0 {
+		// A replay session races to its target ordinal: nothing pauses
+		// en route — not steps, not breakpoints. On arrival the session
+		// becomes an ordinary interactive pause at the replayed line.
+		if !newLine || sub || s.mainStops < s.replayTarget {
+			return
+		}
+		s.replayTarget = 0
+		s.mode = modeStep
 	}
 
 	// Breakpoints pause in every mode: a line breakpoint once per line
@@ -337,6 +475,12 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		if w, ok := wordNameAt(stack, pointer); ok && s.wordBPs[w] {
 			hit = "breakpoint: word " + w
 		}
+	}
+	if hit == "" {
+		// Data watchpoints (§6.2) pause in every mode, like breakpoints —
+		// the step whose dispatch changed the binding has already run, so
+		// the pause lands on the step AFTER the change, old → new in hand.
+		hit = s.checkWatches()
 	}
 	if hit == "" {
 		switch s.mode {
@@ -359,9 +503,13 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		}
 	}
 	s.curRow = row
+	s.curFrom, s.curFile, s.curLines = from, file, lines
 	if s.pauseHook != nil {
 		kind := "step"
-		if hit != "" {
+		switch {
+		case strings.HasPrefix(hit, "watch: "):
+			kind = "watch"
+		case hit != "":
 			kind = "breakpoint"
 		}
 		s.applyAction(s.pauseHook(PauseInfo{Kind: kind, Row: row, Detail: hit, InBody: sub}))
@@ -372,9 +520,9 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		where = " (in body)"
 	}
 	if hit != "" {
-		fmt.Fprintf(s.out, "%s — at %s:%s%s  %s\n", hit, s.file, rowLabel(row), where, s.sourceLine(row))
+		fmt.Fprintf(s.out, "%s — at %s:%s%s  %s\n", hit, file, rowLabel(row), where, lineAt(lines, row))
 	} else {
-		fmt.Fprintf(s.out, "at %s:%s%s  %s\n", s.file, rowLabel(row), where, s.sourceLine(row))
+		fmt.Fprintf(s.out, "at %s:%s%s  %s\n", file, rowLabel(row), where, lineAt(lines, row))
 	}
 	s.showStack()
 	s.prompt()
@@ -384,18 +532,19 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 // happened but not yet unwound, so the stack, scope, and backtrace are
 // the fault's own. Resuming (any action command) lets the error proceed
 // — to a `do` handler if one encloses it, else out of the program.
-func (s *Session) pauseAtFault(pointer int, stack []native.Value, errText string) {
+func (s *Session) pauseAtFault(pointer int, stack []native.Value, errText string, from *native.Registry, file string, lines []string) {
 	row := 0
 	if pointer >= 0 && pointer < len(stack) {
 		row = stack[pointer].Pos().Row
 	}
 	s.curRow = row
+	s.curFrom, s.curFile, s.curLines = from, file, lines
 	if s.pauseHook != nil {
 		s.applyAction(s.pauseHook(PauseInfo{Kind: "fault", Row: row, Detail: errText}))
 		return
 	}
 	fmt.Fprintf(s.out, "error raised — paused before unwind at %s:%s  %s\n",
-		s.file, rowLabel(row), s.sourceLine(row))
+		file, rowLabel(row), lineAt(lines, row))
 	fmt.Fprintf(s.out, "  %s\n", errText)
 	fmt.Fprintln(s.out, "  (resuming lets the error proceed — to a handler if one encloses it)")
 	s.showStack()
@@ -459,7 +608,7 @@ func (s *Session) renderHistoryView() {
 		where = " (in body)"
 	}
 	fmt.Fprintf(s.out, "  history -%d  at %s:%s%s  %s\n",
-		s.browse, s.file, rowLabel(e.row), where, s.sourceLine(e.row))
+		s.browse, e.file, rowLabel(e.row), where, lineAt(e.lines, e.row))
 	fmt.Fprintf(s.out, "  stack: %s\n", summarizeStack(resolvedData(e.stack, e.pointer)))
 }
 
@@ -476,7 +625,7 @@ func (s *Session) renderHistoryList() {
 		if e.sub {
 			where = " (in body)"
 		}
-		fmt.Fprintf(s.out, "  -%d  line %s%s  %s\n", k, rowLabel(e.row), where, s.sourceLine(e.row))
+		fmt.Fprintf(s.out, "  -%d  line %s%s  %s\n", k, rowLabel(e.row), where, lineAt(e.lines, e.row))
 	}
 }
 
@@ -543,6 +692,15 @@ func (s *Session) OnStep(f capabilities.StepFrame) capabilities.StepAction {
 		return capabilities.StepContinue
 	}
 	s.curRow = f.Row
+	// A one-shot pause carries a file but no registry: identity falls
+	// back to the session's own, and a marker in ANOTHER file has no
+	// source text to list (nil lines — `list` answers honestly).
+	s.curFrom = s.reg
+	if f.File == "" || f.File == s.file {
+		s.curFile, s.curLines = s.file, s.lines
+	} else {
+		s.curFile, s.curLines = f.File, nil
+	}
 	var mode stepMode
 	if s.pauseHook != nil {
 		kind := "inner-step"
@@ -630,6 +788,14 @@ func (s *Session) prompt() stepMode {
 			}
 		case "delete":
 			fmt.Fprintln(s.out, "  "+s.deleteBreak(arg))
+		case "watch":
+			if arg == "" {
+				s.listWatches()
+			} else {
+				fmt.Fprintln(s.out, "  "+s.setWatch(arg))
+			}
+		case "unwatch":
+			fmt.Fprintln(s.out, "  "+s.deleteWatch(arg))
 		case "quit", "q":
 			fmt.Fprintln(s.out, s.detachMsg())
 			return s.detach()
@@ -639,6 +805,8 @@ func (s *Session) prompt() stepMode {
 			s.stepForward()
 		case "history":
 			s.renderHistoryList()
+		case "replay":
+			s.runReplay()
 		case "stack":
 			s.renderFullStack()
 		case "bt":
@@ -679,7 +847,7 @@ func (s *Session) PostMortem(runErr error) {
 	if s.curPointer >= 0 && s.curPointer < len(s.curStack) {
 		if row := s.curStack[s.curPointer].Pos().Row; row != 0 {
 			s.curRow = row
-			loc = fmt.Sprintf(" at %s:%d  %s", s.file, row, s.sourceLine(row))
+			loc = fmt.Sprintf(" at %s:%d  %s", s.curFile, row, lineAt(s.curLines, row))
 		}
 	}
 	fmt.Fprintf(s.out, "uncaught error — post-mortem%s\n", loc)
@@ -690,11 +858,18 @@ func (s *Session) PostMortem(runErr error) {
 }
 
 // dataStack resolves the data stack an inspection command should show:
-// the live engine's (CurrentStack) while the program runs, or — in a
-// post-mortem, when no engine is running — a reconstruction from the
-// retained fault snapshot's resolved region. ok is false only when
-// there is neither (a session that never ran).
+// the FIRING engine's (the pause's registry — a module fn's body pause
+// shows the module engine's stack), falling back to the session
+// registry's innermost engine, or — in a post-mortem, when no engine is
+// running — a reconstruction from the retained fault snapshot's
+// resolved region. ok is false only when there is none of the three (a
+// session that never ran).
 func (s *Session) dataStack() ([]native.Value, bool) {
+	if s.curFrom != nil {
+		if vals, ok := s.curFrom.CurrentStack(); ok {
+			return vals, true
+		}
+	}
 	if vals, ok := s.reg.CurrentStack(); ok {
 		return vals, true
 	}
@@ -823,6 +998,42 @@ func (s *Session) listBreaks() {
 	}
 }
 
+// setWatch installs a data watchpoint on a name, snapshotting the
+// binding's current rendering as the compare baseline.
+func (s *Session) setWatch(name string) string {
+	s.watches[name] = s.watchValue(name)
+	return fmt.Sprintf("watch set: %s (now %s)", name, s.watches[name])
+}
+
+// deleteWatch removes one watchpoint, or — with an empty name — all.
+func (s *Session) deleteWatch(name string) string {
+	if name == "" {
+		s.watches = make(map[string]string)
+		return "all watches deleted"
+	}
+	if _, ok := s.watches[name]; !ok {
+		return "no watch on " + name
+	}
+	delete(s.watches, name)
+	return "watch deleted: " + name
+}
+
+// listWatches renders the installed watchpoints and their recorded values.
+func (s *Session) listWatches() {
+	if len(s.watches) == 0 {
+		fmt.Fprintln(s.out, "  (no watches)")
+		return
+	}
+	names := make([]string, 0, len(s.watches))
+	for n := range s.watches {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		fmt.Fprintf(s.out, "  watch %s = %s\n", n, s.watches[n])
+	}
+}
+
 // splitCommand splits a prompt line into its command word and argument.
 func splitCommand(line string) (cmd, arg string) {
 	cmd, arg, _ = strings.Cut(line, " ")
@@ -849,6 +1060,60 @@ func summarizeStack(vals []native.Value) string {
 			parts[len(parts)-maxStackShown:]...)
 	}
 	return "[" + strings.Join(parts, " ") + "]"
+}
+
+// runReplay re-runs the program FROM THE START on a fresh registry,
+// pausing at the browsed entry's line-stop ordinal (§6.4's replay):
+// deterministic re-execution reproduces the state exactly, and from
+// the replayed pause every command works — including stepping FORWARD
+// from a point the live run has already passed. The price is honest:
+// the program's side effects re-run. The nested session shares the
+// command input, so a script drives both in order; quitting the replay
+// detaches it (the re-run drains) and control returns here.
+func (s *Session) runReplay() {
+	e, browsing := s.viewEntry()
+	if !browsing {
+		fmt.Fprintln(s.out, "  (replay needs a browsed entry — use back first)")
+		return
+	}
+	if s.newRegistry == nil {
+		fmt.Fprintln(s.out, "  (replay unavailable — no registry factory)")
+		return
+	}
+	if e.mainStops == 0 {
+		fmt.Fprintln(s.out, "  (nothing to replay to before the first line stop)")
+		return
+	}
+	if e.sub {
+		fmt.Fprintln(s.out, "  (a body entry replays to its enclosing line stop)")
+	}
+	reg, err := s.newRegistry()
+	if err != nil {
+		fmt.Fprintf(s.out, "  replay: %s\n", err)
+		return
+	}
+	if reg.ParseFunc == nil {
+		fmt.Fprintln(s.out, "  replay: the fresh registry has no parser")
+		return
+	}
+	toks, perr := reg.ParseFunc(s.source)
+	if perr != nil {
+		fmt.Fprintf(s.out, "  replay: parse: %s\n", perr)
+		return
+	}
+	fmt.Fprintf(s.out, "replaying %s to line stop %d — side effects re-run\n", s.file, e.mainStops)
+	nested := New(reg, Config{
+		In: strings.NewReader(""), Out: s.out,
+		File: s.file, Source: s.source, Echo: s.echo,
+		NewRegistry: s.newRegistry,
+	})
+	nested.in = s.in // ONE command input, consumed in order across sessions
+	nested.mode = modeContinue
+	nested.replayTarget = e.mainStops
+	if _, rerr := nested.RunProgram(toks, s.source); rerr != nil {
+		fmt.Fprintf(s.out, "replay run error: %s\n", rerr)
+	}
+	fmt.Fprintln(s.out, "(replay ended — back at the live pause)")
 }
 
 // liveStateHint reminds a history-browsing user that bindings and
@@ -886,17 +1151,25 @@ type frameInfo struct {
 
 // frameEntries resolves the frame chain the current view describes:
 // the browsed history snapshot while time-travelling; the cross-engine
-// chain (outermost first) while engines run; the retained fault
-// snapshot at a post-mortem. Shared by `bt` and the DAP stackTrace.
+// chain (outermost first) while engines run — spanning the debugParent
+// registry chain down to the pause's own registry, so a module fn's
+// frames appear too; the retained fault snapshot at a post-mortem.
+// Shared by `bt` and the DAP stackTrace.
 func (s *Session) frameEntries() []frameInfo {
 	if e, browsing := s.viewEntry(); browsing {
 		// Time-travelling: the browsed snapshot is the only truth — the
 		// live engine chain describes NOW, not then.
 		return liveFrames(e.stack, e.pointer)
 	}
-	if states := s.reg.RunningEngineStates(); len(states) > 0 {
+	if states := s.reg.RunningEngineChain(s.curFrom); len(states) > 0 {
 		var frames []frameInfo
 		for _, st := range states {
+			if st.Label != "" {
+				// A labelled engine IS a fn call (CallAQLNamed): its
+				// Defs-based frame leaves no tape marks, so the label
+				// stands in as the frame — outer to any inside its tape.
+				frames = append(frames, frameInfo{name: st.Label})
+			}
 			frames = append(frames, liveFrames(st.Stack, st.Pointer)...)
 		}
 		return frames
@@ -1029,8 +1302,8 @@ func (s *Session) evalText(src string) string {
 	// engines (paren groups, bodies) must neither pause nor clobber the
 	// retained pause context. Re-armed only if a program run armed it.
 	if s.clearTrace != nil {
-		s.reg.SetDebugTrace(nil)
-		defer s.reg.SetDebugTrace(s.onSubTrace)
+		s.reg.SetDebugTraceFrom(nil)
+		defer s.reg.SetDebugTraceFrom(s.onSubTrace)
 	}
 	engine := native.New(s.reg)
 	engine.SetTrace(nil)
@@ -1056,13 +1329,14 @@ func (s *Session) evalText(src string) string {
 }
 
 // renderList shows the source around the current pause line — the
-// browsed entry's line while time-travelling.
+// browsed entry's line (and file) while time-travelling, the pause's
+// own file otherwise (a module fn's body lists the module source).
 func (s *Session) renderList() {
-	row := s.curRow
+	row, lines := s.curRow, s.curLines
 	if e, browsing := s.viewEntry(); browsing {
-		row = e.row
+		row, lines = e.row, e.lines
 	}
-	if row <= 0 || row > len(s.lines) {
+	if row <= 0 || row > len(lines) {
 		fmt.Fprintln(s.out, "  (source line unknown)")
 		return
 	}
@@ -1070,24 +1344,16 @@ func (s *Session) renderList() {
 	if lo < 1 {
 		lo = 1
 	}
-	if hi > len(s.lines) {
-		hi = len(s.lines)
+	if hi > len(lines) {
+		hi = len(lines)
 	}
 	for n := lo; n <= hi; n++ {
 		marker := "   "
 		if n == row {
 			marker = "-> "
 		}
-		fmt.Fprintf(s.out, "  %s%4d  %s\n", marker, n, s.lines[n-1])
+		fmt.Fprintf(s.out, "  %s%4d  %s\n", marker, n, lines[n-1])
 	}
-}
-
-// sourceLine returns the trimmed source text of a 1-based line.
-func (s *Session) sourceLine(row int) string {
-	if row >= 1 && row <= len(s.lines) {
-		return strings.TrimSpace(s.lines[row-1])
-	}
-	return ""
 }
 
 // renderHelp lists the Phase-1 command set.
@@ -1100,9 +1366,13 @@ func (s *Session) renderHelp() {
   break <spec>   set a breakpoint: a line ('break 12'), or a word
                  ('break add'); bare 'break' lists them
   delete [spec]  delete one breakpoint (bare 'delete' clears all)
+  watch <name>   pause when the binding changes (bare 'watch' lists)
+  unwatch [name] delete one watch (bare 'unwatch' clears all)
   back           view the previous line visited (time-travel, read-only)
   forward, fwd   move back toward the live pause
   history        list the recorded trail of visited lines
+  replay         re-run from the start to the browsed entry (side
+                 effects re-run; step forward from there)
   quit, q        detach — the program continues to completion
   stack          show every data-stack entry (top first)
   bt             backtrace of live inline fn frames

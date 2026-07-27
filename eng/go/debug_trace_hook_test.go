@@ -171,3 +171,128 @@ func TestRunningEngineStates(t *testing.T) {
 		_ = st // no live engines now; loop body unreachable
 	}
 }
+
+// TestDebugTraceFrom pins the rich hook form: every fire carries the
+// registry the firing engine was constructed on, so a host can resolve
+// module-file identity and the cross-registry engine chain at a pause.
+func TestDebugTraceFrom(t *testing.T) {
+	parent := poolTestRegistry(t)
+	child := poolTestRegistry(t)
+	child.SetDebugParent(parent)
+
+	var froms []*Registry
+	parent.SetDebugTraceFrom(func(from *Registry, _, _ int, _ []Value, _ string) {
+		froms = append(froms, from)
+	})
+	// A parent-side run stamps the parent; a child-side run resolves the
+	// parent's hook through the chain but stamps the CHILD.
+	if _, err := NewTop(parent).Run([]Value{NewInteger(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
+		t.Fatal(err)
+	}
+	sawParent, sawChild := false, false
+	for _, f := range froms {
+		switch f {
+		case parent:
+			sawParent = true
+		case child:
+			sawChild = true
+		}
+	}
+	if !sawParent || !sawChild {
+		t.Fatalf("fires must stamp their constructing registry; parent=%v child=%v", sawParent, sawChild)
+	}
+
+	// Fire-time read-through: an engine that RESOLVED the hook while it
+	// was armed goes silent the moment the owner clears it — the closure
+	// re-reads at fire time (an eval-suppression / detach must win).
+	e := New(child)
+	parent.SetDebugTraceFrom(nil)
+	froms = nil
+	if _, err := e.Run([]Value{NewInteger(3)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(froms) != 0 {
+		t.Error("a cleared hook must silence an already-resolved engine")
+	}
+}
+
+// TestRunningEngineChain pins the cross-registry chain walk: a linked
+// module registry's engines append after the root's (outermost first);
+// an unlinked or nil `from` degrades to the root's own engines.
+func TestRunningEngineChain(t *testing.T) {
+	root := poolTestRegistry(t)
+	mod := poolTestRegistry(t)
+	mod.SetDebugParent(root)
+
+	var chainLens []int
+	root.SetDebugTraceFrom(func(from *Registry, _, _ int, _ []Value, _ string) {
+		chainLens = append(chainLens, len(root.RunningEngineChain(from)))
+	})
+	// Run on the module registry while nothing runs on the root: the
+	// chain still reaches the module's engine (the degrade would not).
+	if _, err := NewTop(mod).Run([]Value{NewInteger(1)}); err != nil {
+		t.Fatal(err)
+	}
+	max := 0
+	for _, n := range chainLens {
+		if n > max {
+			max = n
+		}
+	}
+	if max < 1 {
+		t.Fatalf("the chain must include the module engine; max %d", max)
+	}
+	root.SetDebugTraceFrom(nil)
+
+	// Degrade arms: nil, self, and an UNLINKED registry all resolve to
+	// the root's own engines (none running here).
+	stray := poolTestRegistry(t)
+	if got := root.RunningEngineChain(nil); len(got) != 0 {
+		t.Errorf("nil from = %d states", len(got))
+	}
+	if got := root.RunningEngineChain(root); len(got) != 0 {
+		t.Errorf("self from = %d states", len(got))
+	}
+	if got := root.RunningEngineChain(stray); len(got) != 0 {
+		t.Errorf("unlinked from = %d states", len(got))
+	}
+}
+
+// TestCallAQLNamedLabelsEngine pins the backtrace label: the body
+// sub-engine of a named call carries the name in EngineState.Label
+// while it runs; CallAQL (the unnamed form) leaves it empty.
+func TestCallAQLNamedLabelsEngine(t *testing.T) {
+	r := poolTestRegistry(t)
+	var labels []string
+	r.SetDebugTraceFrom(func(_ *Registry, _, _ int, _ []Value, _ string) {
+		for _, st := range r.RunningEngineStates() {
+			if st.Label != "" {
+				labels = append(labels, st.Label)
+			}
+		}
+	})
+	sig := &FnSig{Impl: AQL([]Value{NewInteger(7)})}
+	if _, err := r.CallAQLNamed(sig, nil, nil, "zz-label"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, l := range labels {
+		if l == "zz-label" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the named call's engine must carry the label; got %v", labels)
+	}
+	// The unnamed form stays label-free.
+	labels = nil
+	if _, err := r.CallAQL(sig, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(labels) != 0 {
+		t.Errorf("CallAQL must not label; got %v", labels)
+	}
+}

@@ -129,26 +129,36 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	a, err := langNew()
+	// newRegistry builds a launch-wired registry: once for the session's
+	// own run, and again for each `replay` (a fresh re-run needs a clean
+	// slate with the same wiring — output, file identity, program args).
+	newRegistry := func() (*native.Registry, error) {
+		a, err := langNew()
+		if err != nil {
+			return nil, err
+		}
+		reg := a.NativeRegistry()
+		reg.Output = stdout
+		reg.BaseFile = path
+		if *script != "" {
+			// Batch mode: commands come from the --script file, so the launch
+			// stdin belongs entirely to the PROGRAM (IO.stdin). Interactive
+			// mode leaves reg.Input alone — the prompt's reader and a
+			// stdin-reading program cannot safely share one descriptor (the
+			// prompt's Scanner reads ahead), a documented Phase-1 limit.
+			reg.Input = stdin
+		}
+		if extra := fs.Args()[1:]; len(extra) > 0 {
+			// Positionals after the script path reach the program as IO.args,
+			// like `aql run`.
+			native.SetHostScriptArgs(reg, extra)
+		}
+		return reg, nil
+	}
+	reg, err := newRegistry()
 	if err != nil {
 		fmt.Fprintf(stderr, "aql debug: init: %s\n", err)
 		return 1
-	}
-	reg := a.NativeRegistry()
-	reg.Output = stdout
-	reg.BaseFile = path
-	if *script != "" {
-		// Batch mode: commands come from the --script file, so the launch
-		// stdin belongs entirely to the PROGRAM (IO.stdin). Interactive
-		// mode leaves reg.Input alone — the prompt's reader and a
-		// stdin-reading program cannot safely share one descriptor (the
-		// prompt's Scanner reads ahead), a documented Phase-1 limit.
-		reg.Input = stdin
-	}
-	if extra := fs.Args()[1:]; len(extra) > 0 {
-		// Positionals after the script path reach the program as IO.args,
-		// like `aql run`.
-		native.SetHostScriptArgs(reg, extra)
 	}
 
 	tokens, perr := parser.Parse(source)
@@ -189,6 +199,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Source:       source,
 		Echo:         *script != "",
 		BreakOnError: *breakOnError,
+		NewRegistry:  newRegistry,
 	})
 	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
 	for _, b := range breaks {

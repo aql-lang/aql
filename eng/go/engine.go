@@ -57,6 +57,12 @@ type Engine struct {
 	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	// debugLabel names the CALL this engine's run realises, when the
+	// dispatch knows it (CallAQLNamed: a module fn body run in its own
+	// sub-engine, whose Defs-based frame leaves no tape marks). A debug
+	// host reads it back through EngineState.Label so a backtrace can
+	// name the module fn. Empty for every other engine.
+	debugLabel string
 	// rrValues / rrReordered are reusable scratch buffers for
 	// rearrangeForForward's two per-call []Value allocations (forward
 	// collection is on the interpreter's hot path — see
@@ -5903,9 +5909,11 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// eng-only embedder, the kernel test harnesses) keeps the CallAQL
 		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
+		var fnLabel string
 		if valIdx < e.tape.Len() {
 			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {
 				captures = fd.Captured
+				fnLabel = fd.Name
 			}
 		}
 		restoreCheck := e.shareCheckState(capturedReg)
@@ -5915,7 +5923,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			// Check mode ANALYSES the body — always the interpreter path
 			// (running a stamped unit here would execute real side effects
 			// during static analysis).
-			result, err = capturedReg.CallAQL(sig, args, captures)
+			result, err = capturedReg.CallAQLNamed(sig, args, captures, fnLabel)
 		} else {
 			// Runtime: a module fn stamped at load (StampFnValueInPlace,
 			// RunModuleBody) runs its unit on the VM — the module

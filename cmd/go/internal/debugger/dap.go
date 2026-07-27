@@ -249,7 +249,10 @@ func (a *dapAdapter) serve(sess *Session, tokens []native.Value, source string) 
 			}
 			switch m.Command {
 			case "initialize":
-				a.respond(m, map[string]any{"supportsConfigurationDoneRequest": true})
+				a.respond(m, map[string]any{
+					"supportsConfigurationDoneRequest": true,
+					"supportsFunctionBreakpoints":      true,
+				})
 				a.event("initialized", map[string]any{})
 			case "launch":
 				// The program comes from the command line (`aql debug
@@ -263,6 +266,8 @@ func (a *dapAdapter) serve(sess *Session, tokens []native.Value, source string) 
 				maybeStart()
 			case "setBreakpoints":
 				a.respond(m, a.setBreakpoints(sess, m, !paused))
+			case "setFunctionBreakpoints":
+				a.respond(m, a.setFunctionBreakpoints(sess, m, !paused))
 			case "threads":
 				a.respond(m, map[string]any{"threads": []map[string]any{{"id": 1, "name": "main"}}})
 			case "stackTrace":
@@ -332,6 +337,8 @@ func stopReason(kind string) string {
 	switch kind {
 	case "breakpoint", "marker":
 		return "breakpoint"
+	case "watch":
+		return "data breakpoint"
 	case "fault":
 		return "exception"
 	}
@@ -363,6 +370,30 @@ func (a *dapAdapter) setBreakpoints(sess *Session, m dapMessage, needLock bool) 
 	return map[string]any{"breakpoints": verified}
 }
 
+// setFunctionBreakpoints REPLACES the session's word breakpoints with
+// the request's set — DAP's "function" breakpoints are AQL's word
+// breakpoints (a concatenative program's functions ARE its words). The
+// same lock discipline as setBreakpoints.
+func (a *dapAdapter) setFunctionBreakpoints(sess *Session, m dapMessage, needLock bool) map[string]any {
+	var args struct {
+		Breakpoints []struct {
+			Name string `json:"name"`
+		} `json:"breakpoints"`
+	}
+	_ = json.Unmarshal(m.Arguments, &args)
+	if needLock {
+		sess.mu.Lock()
+		defer sess.mu.Unlock()
+	}
+	sess.wordBPs = make(map[string]bool)
+	verified := make([]map[string]any, 0, len(args.Breakpoints))
+	for _, bp := range args.Breakpoints {
+		sess.wordBPs[bp.Name] = true
+		verified = append(verified, map[string]any{"verified": true})
+	}
+	return map[string]any{"breakpoints": verified}
+}
+
 // stackTrace renders the pause location plus the live frame chain. Only
 // the pausing token's row is known (frames carry no positions yet — the
 // design's file-identity gap), so deeper frames report line 0.
@@ -374,7 +405,7 @@ func (a *dapAdapter) stackTrace(sess *Session, info PauseInfo) map[string]any {
 	}
 	frames := []map[string]any{{
 		"id": 0, "name": top, "line": info.Row, "column": 1,
-		"source": map[string]any{"path": sess.file},
+		"source": map[string]any{"path": sess.curFile},
 	}}
 	for k := len(entries) - 2; k >= 0; k-- {
 		frames = append(frames, map[string]any{

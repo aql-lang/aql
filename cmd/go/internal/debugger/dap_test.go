@@ -71,3 +71,16 @@ func TestHistoryRendersBodyEntries(t *testing.T) {
 		t.Errorf("list must label body entries; out = %q", buf.String())
 	}
 }
+
+func TestStopReasonTable(t *testing.T) {
+	cases := map[string]string{
+		"breakpoint": "breakpoint", "marker": "breakpoint",
+		"watch": "data breakpoint", "fault": "exception",
+		"step": "step", "inner-step": "step",
+	}
+	for kind, want := range cases {
+		if got := stopReason(kind); got != want {
+			t.Errorf("stopReason(%q) = %q, want %q", kind, got, want)
+		}
+	}
+}
