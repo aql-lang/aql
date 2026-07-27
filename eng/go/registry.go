@@ -301,6 +301,15 @@ type Registry struct {
 	// copy per engine take. Like enginePool, per-execution state.
 	debugTrace TraceCallback
 
+	// debugParent links a module's captured sub-registry to its IMPORTING
+	// registry (SetDebugParent, set at export install): engines
+	// constructed on the sub-registry resolve the debug hook THROUGH the
+	// chain (effectiveDebugTrace), so module fn bodies fire the
+	// importer's LIVE hook — and a host's suppression or detach stays
+	// authoritative, where a copied callback could fire after the
+	// session disarmed itself.
+	debugParent *Registry
+
 	// dispatchCache memoizes Lookup's aggregated dispatch table per name.
 	// aggregateDispatch rebuilds a fresh []Signature + *FnDefInfo on every
 	// word dispatch even in a hot loop where the name's bindings never
@@ -413,7 +422,7 @@ func (r *Registry) takeSubEngine() *Engine {
 		// Refresh the debug hook: it can change between takes (a session
 		// arming, disarming, or suppressing itself around an eval), and a
 		// pooled engine must never replay a stale one.
-		e.trace = r.debugTrace
+		e.trace = r.effectiveDebugTrace()
 		return e
 	}
 	e := New(r)
@@ -426,6 +435,51 @@ func (r *Registry) takeSubEngine() *Engine {
 // trace afterwards (Engine.SetTrace) overrides it for that engine, so
 // dedicated tracers (IO.trace, Debug.step) keep their private hooks.
 func (r *Registry) SetDebugTrace(cb TraceCallback) { r.debugTrace = cb }
+
+// SetDebugParent links r (a module's captured sub-registry) to the
+// registry that imported it — see the debugParent field. Pass the
+// IMPORTING registry only: the links must form the acyclic import
+// tree. A self-link is refused so resolution always terminates.
+func (r *Registry) SetDebugParent(p *Registry) {
+	if p != r {
+		r.debugParent = p
+	}
+}
+
+// effectiveDebugTrace resolves the debug hook for engines constructed
+// on r: r's own, else the nearest ancestor's through the debugParent
+// chain. Reading through the chain (rather than copying the callback at
+// link time) keeps the owning host's arm/suppress/disarm live for
+// module registries.
+func (r *Registry) effectiveDebugTrace() TraceCallback {
+	for cur := r; cur != nil; cur = cur.debugParent {
+		if cur.debugTrace != nil {
+			return cur.debugTrace
+		}
+	}
+	return nil
+}
+
+// EngineState is one running engine's snapshot — see RunningEngineStates.
+type EngineState struct {
+	Stack   []Value
+	Pointer int
+}
+
+// RunningEngineStates returns a snapshot (tape + pointer) of each engine
+// currently running on this registry, outermost first — the raw material
+// for a debug host's cross-engine backtrace at a pause. Call only while
+// the engines are paused (a blocking trace callback): the snapshots are
+// copies, but the pointers are only meaningful while execution is held.
+func (r *Registry) RunningEngineStates() []EngineState {
+	out := make([]EngineState, 0, len(r.debugEngines))
+	for _, e := range r.debugEngines {
+		if e != nil && e.tape != nil {
+			out = append(out, EngineState{Stack: e.tape.Snapshot(), Pointer: e.pointer})
+		}
+	}
+	return out
+}
 
 // putSubEngine returns an idle sub-engine to the pool. Engines whose tape
 // grew beyond the pooling bound are dropped (GC'd) instead, and per-call

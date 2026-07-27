@@ -250,7 +250,7 @@ const (
 func New(registry *Registry) *Engine {
 	e := &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
 	if registry != nil {
-		e.trace = registry.debugTrace
+		e.trace = registry.effectiveDebugTrace()
 	}
 	return e
 }
@@ -261,7 +261,7 @@ func New(registry *Registry) *Engine {
 func NewTop(registry *Registry) *Engine {
 	e := &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
 	if registry != nil {
-		e.trace = registry.debugTrace
+		e.trace = registry.effectiveDebugTrace()
 	}
 	return e
 }
@@ -270,6 +270,19 @@ func NewTop(registry *Registry) *Engine {
 // When set, AqlErrors include source extracts showing the error location.
 func (e *Engine) SetSource(src string) {
 	e.source = src
+}
+
+// faultReturn fires the trace one final time — with a "fault: <err>"
+// note and step -1 — before Run surfaces err, so a debug host can pause
+// AT the raise with the tape and pointer still live (pause-before-
+// unwind, design/AQL-DEBUGGER.0.md §6.1). Every Run-loop error return
+// routes through it; a nil trace makes it a pass-through, so the
+// non-debug error path is unchanged.
+func (e *Engine) faultReturn(err error) error {
+	if e.trace != nil {
+		e.trace(-1, e.pointer, e.tape.Snapshot(), "fault: "+err.Error())
+	}
+	return err
 }
 
 // effectiveSource returns the source text for error reporting.
@@ -1300,7 +1313,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		switch {
 		case IsWord(val):
 			if err := e.stepWord(val); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsForward(val):
@@ -1311,12 +1324,12 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsCloseParen(val):
 			if err := e.stepCloseParen(); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsEnd(val):
 			if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsParenExpr(val):
@@ -1337,7 +1350,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// (push data / collect the forward arg) rather than expanding.
 			if val.Quoted || e.pendingForwardWantsRawParen() {
 				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-					return nil, err
+					return nil, e.faultReturn(err)
 				}
 			} else {
 				items, _ := AsParenExpr(val)
@@ -1363,14 +1376,14 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-					return nil, err
+					return nil, e.faultReturn(err)
 				}
 			}
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
 			if err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			// Replace with the evaluated string but do NOT advance the
 			// pointer. The resulting string value needs to go through
@@ -1384,7 +1397,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// IsInterpString case above.
 			result, err := e.evalXmlInterp(val)
 			if err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			e.tape.Set(e.pointer, result)
 
@@ -1393,7 +1406,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsMove(val):
 			if err := e.stepMove(val); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsReturnCheck(val):
@@ -1401,16 +1414,16 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsDefCleanup(val):
 			if err := e.stepDefCleanup(val, e.pointer); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			e.pointer++
 
 		default:
 			if val.Parent == nil && val.Behavior() == nil {
-				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
+				return nil, e.faultReturn(e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", ""))
 			}
 			if err := e.stepLiteral(); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 		}
 
@@ -1439,17 +1452,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// the run never reached) and blame a phantom "unmatched opening
 	// parenthesis". This is the honest diagnosis instead.
 	if !completed {
-		return nil, e.evalLimitError(limit)
+		return nil, e.faultReturn(e.evalLimitError(limit))
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
 	if err := e.resolveOrphanedForwards(); err != nil {
-		return nil, err
+		return nil, e.faultReturn(err)
 	}
 
 	for i := 0; i < e.tape.Len(); i++ {
 		if IsOpenParen(e.tape.At(i)) {
-			return nil, e.syntaxError("unmatched opening parenthesis", "(")
+			return nil, e.faultReturn(e.syntaxError("unmatched opening parenthesis", "("))
 		}
 	}
 
@@ -1461,7 +1474,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// Maps have their values evaluated recursively.
 	// Values marked Quoted (by the quote word) are left as-is.
 	if err := e.autoEvalStack(); err != nil {
-		return nil, err
+		return nil, e.faultReturn(err)
 	}
 
 	// Orphan GenSpec residue (generics plan D1/D2): a `gen [...]`

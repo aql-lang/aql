@@ -604,11 +604,28 @@ ends and kernel work begins.
   wrinkle: multi-line fn-LITERAL construction can surface `(in body)`
   stops under `step`, and process-warm caches can elide them — so
   scripted sessions should navigate by breakpoints/markers, not step
-  counts (pinned in the launch tests). **Remaining in Phase 2:**
-  thread the hook across module-fn registries (a captured sub-registry
-  has its own, unset hook) and fork boundaries; (c) stamp sub-engine
-  frames so `bt` chains across engines (§5.3); and the §6.1 fault-note
-  for pause-before-unwind.
+  counts (pinned in the launch tests). **The remainder shipped too**
+  (2026-07): *module-fn descent* — export install links each captured
+  sub-registry to its importer (`eng SetDebugParent`, called by
+  `linkModuleDebugParent` in every import form), and hook resolution
+  reads THROUGH the chain (`effectiveDebugTrace`), so the session's
+  arm/suppress/disarm stays authoritative for module registries (a
+  copied callback could fire after the session disarmed — the
+  eval-deadlock this design avoids, pinned by the print-a-module-fn
+  launch test); *(c) cross-engine `bt`* — `Registry.RunningEngineStates`
+  snapshots every engine live on the registry (outermost first) and the
+  session chains their frames, so a pause inside an each-body shows the
+  enclosing fn's frame; and *the §6.1 fault-note* — every Run-loop
+  error return routes through `Engine.faultReturn`, which fires the
+  trace once more (note `"fault: <err>"`, step −1) before the error
+  surfaces, and `--break-on-error` pauses there — including raises a
+  `do` handler will catch, the true pause-before-unwind — deduping the
+  note as the error bubbles through nested engines. **Still open:**
+  fork-boundary stamping (a fork's pauses are TryLock-safe but
+  unlabelled); module-fn FRAMES in `bt` (they live on the captured
+  registry, which the main registry's engine walk cannot see); and
+  per-engine file identity on pause banners (a module-fn pause names
+  the right row of the wrong file — the §12 file-identity gap).
 - **Phase 3 — DAP + time-travel.** A DAP adapter as a *second* front end
   over the session (§8.2); bounded step-back / replay (§6.4).
 - **Phase 4 — remote/attach stepping.** Extend `debugserve` with a

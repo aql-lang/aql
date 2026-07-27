@@ -96,6 +96,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by AQL_NO_CHECK)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	postMortem := fs.Bool("post-mortem", false, "on an uncaught error, open an inspection prompt over the fault state before exiting")
+	breakOnError := fs.Bool("break-on-error", false, "pause at every raise BEFORE it unwinds — including errors a do-handler will catch")
 	var breaks []string
 	fs.Func("break", "set a breakpoint before the run starts: a source line ('12', 'file:12') or a word name ('add'); repeatable", func(v string) error {
 		breaks = append(breaks, v)
@@ -171,9 +172,10 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		Out: stdout,
 		// The expanded path, matching reg.BaseFile, so pause locations
 		// and error attribution name one canonical file string.
-		File:   path,
-		Source: source,
-		Echo:   *script != "",
+		File:         path,
+		Source:       source,
+		Echo:         *script != "",
+		BreakOnError: *breakOnError,
 	})
 	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
 	for _, b := range breaks {

@@ -605,6 +605,98 @@ func TestLaunchOutAtTopLevel(t *testing.T) {
 	}
 }
 
+func TestLaunchModuleFnDescent(t *testing.T) {
+	// Phase 2 remainder: a module fn's body runs on its CAPTURED
+	// sub-registry — the debugParent chain resolves the session's live
+	// hook there, so breakpoints fire inside module fns too.
+	dir := t.TempDir()
+	lib := filepath.Join(dir, "lib.aql")
+	if err := os.WriteFile(lib,
+		[]byte("def twice fn [[x:Integer] [Integer] [\nx add x\n]]\nexport \"Lib\" {twice: twice/r}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	main := filepath.Join(dir, "main.aql")
+	if err := os.WriteFile(main,
+		[]byte("import \""+lib+"\"\nLib.twice 21\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdin := "break add\nc\np (Lib.twice 3)\nc\nc\nc\n"
+	code, out, errOut := launch(t, []string{"--no-check", main}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, errOut)
+	}
+	if got := strings.Count(out, "breakpoint: word add"); got == 0 {
+		t.Fatalf("the word breakpoint must fire inside the module fn body:\n%s", out)
+	}
+	if !strings.Contains(out, "(in body)") {
+		t.Errorf("the module-fn hit is a body evaluation:\n%s", out)
+	}
+	// The regression pin for the chain-read: `print` of a MODULE fn at a
+	// pause suppresses the hook through the chain — no nested pause, the
+	// eval completes.
+	requireOrder(t, out, "6", "42\n(program exited)")
+}
+
+func TestLaunchBreakOnError(t *testing.T) {
+	// §6.1 pause-before-unwind: --break-on-error stops AT the raise with
+	// the fault state live; resuming lets the error proceed.
+	path := writeProgram(t, "def a 10\n(1 div 0)\n")
+	code, out, errOut := launch(t, []string{"--no-check", "--break-on-error", path}, "c\nstack\nc\n")
+	if code != 1 {
+		t.Fatalf("exit = %d (the error still fails the run)", code)
+	}
+	requireOrder(t, out,
+		"error raised — paused before unwind at "+path+":2",
+		"division by zero",
+		"stack: [1 0]") // the failing div's operands, live at the raise
+	// Dedup: the error bubbles out of the paren-group's engine through
+	// the top level — ONE pause per raise, not one per unwind level.
+	if got := strings.Count(out, "error raised"); got != 1 {
+		t.Errorf("a bubbling raise pauses once, got %d:\n%s", got, out)
+	}
+	if !strings.Contains(errOut, "division by zero") {
+		t.Errorf("the error still reaches stderr; got %q", errOut)
+	}
+}
+
+func TestLaunchBreakOnErrorCaught(t *testing.T) {
+	// The whole point of BEFORE-unwind: an error a do-handler catches
+	// still pauses at the raise — and the program then COMPLETES.
+	path := writeProgram(t, "do [1 div 0]\n1 add 2\n")
+	code, out, _ := launch(t, []string{"--no-check", "--break-on-error", path}, "c\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d — the caught error must not fail the run:\n%s", code, out)
+	}
+	requireOrder(t, out, "error raised — paused before unwind", "division by zero", "(program exited)")
+}
+
+func TestLaunchNoBreakOnErrorByDefault(t *testing.T) {
+	// Negative pair: without the flag a raise never pauses.
+	path := writeProgram(t, "def a 10\n(1 div 0)\n")
+	code, out, _ := launch(t, []string{"--no-check", path}, "c\n")
+	if code != 1 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(out, "error raised") {
+		t.Errorf("no flag, no fault pause:\n%s", out)
+	}
+}
+
+func TestLaunchCrossEngineBacktrace(t *testing.T) {
+	// bt chains frames across every engine running on the registry: a
+	// pause inside an each-body (its own pooled engine) still shows the
+	// enclosing fn's frame from the outer engine's tape.
+	path := writeProgram(t, "def g fn [[k:Integer] [List] [\n[k] each [\ndrop 9\n]\n]]\ng 3\n")
+	code, out, _ := launch(t, []string{"--no-check", "--break", "3", path}, "c\nbt\nc\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d:\n%s", code, out)
+	}
+	requireOrder(t, out,
+		"breakpoint: line 3", "(in body)",
+		"#0  g  (k)", // the OUTER engine's frame, from the cross-engine chain
+		"(program exited)")
+}
+
 func TestLaunchPostMortem(t *testing.T) {
 	// §6.1 (host-only form): an uncaught error opens an inspection prompt
 	// over the fault state — the trace snapshot taken immediately before

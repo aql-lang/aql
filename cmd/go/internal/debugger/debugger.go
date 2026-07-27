@@ -63,6 +63,11 @@ type Config struct {
 	File   string    // program path, shown in pause locations
 	Source string    // program source text, for `list` and location lines
 	Echo   bool      // echo each command after the prompt (script/batch mode)
+	// BreakOnError pauses at every raise — the engine's "fault:" trace
+	// note, fired BEFORE the error unwinds (§6.1) — including raises a
+	// `do` handler will catch. The state at the raise is inspectable;
+	// resuming lets the error proceed.
+	BreakOnError bool
 }
 
 // Session is the interactive debug session. It implements
@@ -112,6 +117,12 @@ type Session struct {
 	// terminated, so detach must not claim it "continues".
 	dead bool
 
+	// breakOnError arms fault pauses (Config.BreakOnError); lastFault
+	// dedups an error's fault notes as it bubbles through nested engines
+	// — one pause per raise, not one per unwind level.
+	breakOnError bool
+	lastFault    string
+
 	// mu serializes the pause machinery. The per-step trace runs on the
 	// program's goroutine, but the installed DebugOps is shared registry
 	// state, so a concurrent fork (a timer body hitting Debug.break) can
@@ -135,14 +146,15 @@ func New(reg *native.Registry, cfg Config) *Session {
 	// expression is a working command, not a silent detach.
 	in.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	return &Session{
-		reg:     reg,
-		in:      in,
-		out:     cfg.Out,
-		file:    cfg.File,
-		lines:   strings.Split(cfg.Source, "\n"),
-		echo:    cfg.Echo,
-		lineBPs: make(map[int]bool),
-		wordBPs: make(map[string]bool),
+		reg:          reg,
+		in:           in,
+		out:          cfg.Out,
+		file:         cfg.File,
+		lines:        strings.Split(cfg.Source, "\n"),
+		echo:         cfg.Echo,
+		breakOnError: cfg.BreakOnError,
+		lineBPs:      make(map[int]bool),
+		wordBPs:      make(map[string]bool),
 	}
 }
 
@@ -219,6 +231,18 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 	if s.mode == modeDetached || s.inPrompt {
 		return
 	}
+	if strings.HasPrefix(note, "fault: ") {
+		// The engine fires this note at a raise, BEFORE the error unwinds
+		// (Engine.faultReturn). Pause once per raise — the same note
+		// repeats as the error bubbles through nested engines.
+		if !s.breakOnError || note == s.lastFault {
+			return
+		}
+		s.lastFault = note
+		s.pauseAtFault(pointer, stack, strings.TrimPrefix(note, "fault: "))
+		return
+	}
+	s.lastFault = ""
 	if strings.HasPrefix(note, "for next ") {
 		// A `for` iteration boundary is a line boundary: without this, a
 		// single-line loop body coalesces ALL its iterations into the
@@ -277,6 +301,24 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 	} else {
 		fmt.Fprintf(s.out, "at %s:%s%s  %s\n", s.file, rowLabel(row), where, s.sourceLine(row))
 	}
+	s.showStack()
+	s.prompt()
+}
+
+// pauseAtFault renders and prompts a break-on-error stop: the raise has
+// happened but not yet unwound, so the stack, scope, and backtrace are
+// the fault's own. Resuming (any action command) lets the error proceed
+// — to a `do` handler if one encloses it, else out of the program.
+func (s *Session) pauseAtFault(pointer int, stack []native.Value, errText string) {
+	row := 0
+	if pointer >= 0 && pointer < len(stack) {
+		row = stack[pointer].Pos().Row
+	}
+	s.curRow = row
+	fmt.Fprintf(s.out, "error raised — paused before unwind at %s:%s  %s\n",
+		s.file, rowLabel(row), s.sourceLine(row))
+	fmt.Fprintf(s.out, "  %s\n", errText)
+	fmt.Fprintln(s.out, "  (resuming lets the error proceed — to a handler if one encloses it)")
 	s.showStack()
 	s.prompt()
 }
@@ -654,12 +696,22 @@ type frameInfo struct {
 	installs []string
 }
 
-// renderBacktrace reconstructs the live inline fn-frame chain from the
-// tape snapshot (§5.3). Sub-engine frames (module fns, higher-order
-// bodies) are invisible to the trace in Phase 1 and so absent here — the
-// documented blindness (§3 principle 3).
+// renderBacktrace reconstructs the live fn-frame chain (§5.3). While
+// engines are running on the session's registry, the chain spans ALL of
+// them — the outer program's frames plus every nested body evaluation's
+// (RunningEngineStates, outermost first). At a post-mortem, when no
+// engine is running, the retained fault snapshot is scanned instead.
+// Module fns' own frames run on their captured registries and are still
+// absent — the remaining documented gap.
 func (s *Session) renderBacktrace() {
-	frames := liveFrames(s.curStack, s.curPointer)
+	var frames []frameInfo
+	if states := s.reg.RunningEngineStates(); len(states) > 0 {
+		for _, st := range states {
+			frames = append(frames, liveFrames(st.Stack, st.Pointer)...)
+		}
+	} else {
+		frames = liveFrames(s.curStack, s.curPointer)
+	}
 	if len(frames) == 0 {
 		fmt.Fprintln(s.out, "  (top level — no fn frames)")
 		return

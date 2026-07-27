@@ -56,6 +56,21 @@ func TestPromptEOFDetaches(t *testing.T) {
 	}
 }
 
+func TestPauseAtFaultUnknownRow(t *testing.T) {
+	// A fault at a position-less pointer (a post-loop limit, a synthetic
+	// token) renders "?" rather than a bogus line, and still prompts.
+	s, buf := testSession(t, "q\n")
+	s.breakOnError = true
+	s.pauseAtFault(0, nil, "boom-fault")
+	out := buf.String()
+	if !strings.Contains(out, "paused before unwind at unit.aql:?") {
+		t.Errorf("out = %q", out)
+	}
+	if !strings.Contains(out, "boom-fault") {
+		t.Errorf("the error text must render; out = %q", out)
+	}
+}
+
 func TestPostMortemGuards(t *testing.T) {
 	// A detached session gets no post-mortem — the user already left.
 	s, buf := testSession(t, "q\n")

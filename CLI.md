@@ -554,23 +554,34 @@ file) also detaches. In `--script` mode each command is echoed after
 the prompt, so the transcript is a self-contained, reproducible record
 — the debugger's CI story.
 
-With `--post-mortem`, an **uncaught** error opens one final inspection
-prompt over the fault state — the stack, backtrace, bindings, and
-source location at the raise, with `print` evaluating against them —
-before the error reaches stderr and the run exits 1. Errors a `do`
-handler catches are not faults; a session you already `quit` stays
-closed.
+Two error-debugging modes. With `--break-on-error`, every raise
+pauses **before it unwinds** — including errors a `do` handler will
+catch — with the stack, scope, and backtrace live at the fault;
+resuming lets the error proceed to its handler (or out of the
+program). With `--post-mortem`, an **uncaught** error opens one final
+inspection prompt over the fault state before the error reaches
+stderr and the run exits 1. Errors a `do` handler catches are not
+post-mortems; a session you already `quit` stays closed.
 
-Flags: `--script F`, `--break SPEC` (repeatable), `--post-mortem`,
-`--no-check` (also `AQL_NO_CHECK`), `--color auto|always|never`.
+`bt` chains frames across every engine running on the program's
+registry — a pause inside an `each` body still shows the enclosing
+fn's frame — and breakpoints reach **module fn bodies** too (their
+captured registries resolve the session's hook through the import
+chain).
 
-Current limits (see the design note's roadmap): module fns run in
-their own captured registries and are still stepped over as one unit;
-`bt` shows the pausing engine's frames only (no cross-engine chain
-yet); and `step` may surface engine-internal evaluations of multi-line
-fn literals as extra `(in body)` stops — scripted sessions should
-drive to a location with breakpoints or markers rather than counted
-steps.
+Flags: `--script F`, `--break SPEC` (repeatable), `--break-on-error`,
+`--post-mortem`, `--no-check` (also `AQL_NO_CHECK`),
+`--color auto|always|never`.
+
+Current limits (see the design note's roadmap): a module fn's own
+frames live on its captured registry and are absent from `bt`; pause
+banners always show the MAIN file's text, so a pause inside an
+imported module's fn names the right row of the wrong file; relative
+`import` paths resolve against the working directory (matching
+`aql run`); and `step` may surface engine-internal evaluations of
+multi-line fn literals as extra `(in body)` stops — scripted sessions
+should drive to a location with breakpoints or markers rather than
+counted steps.
 
 **Cross-process introspection** — serve a runtime's state over HTTP,
 and interrogate it:
