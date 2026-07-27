@@ -418,6 +418,59 @@ NUR-recordable non-uniformity vs the `folder` mode family, which does not
 hold — the vault CLI's dispatchers were already heterogeneous, and NUR
 scope is language semantics, not CLI UX).
 
+### 5a.2 PR-review round
+
+Opening the PR drew a second, automated review. The confirmed items
+were fixed on the branch (each with paired tests); the CI failure it also
+surfaced was fixed first:
+
+- **CI: `TestAuditProxyRequest` race (fixed first).** The new
+  header-flush made `Client.Do` return before the broker wrote the
+  post-stream `proxy.request` audit event, so the test's immediate
+  audit read raced it. The audit-after-response ordering is correct for
+  a streaming broker; the test now polls for the event (it was masking as
+  a pass only by luck locally).
+- **`http.DefaultTransport` assertion panic (P1).** `NewProxy` cloned
+  `http.DefaultTransport.(*http.Transport)`, which panics if the global
+  RoundTripper is swapped — forbidden by the no-panics invariant. The
+  transport is now built explicitly (`newBrokerClient`).
+- **Credential forwarding on redirect (P1).** Both broker clients
+  followed upstream redirects, and net/http copies custom auth headers
+  (`x-api-key`, a `header:<name>` preset) across a cross-host redirect
+  (only `Authorization` is stripped), so a 302 could exfiltrate the
+  secret to an unauthorized host. Both clients now use
+  `CheckRedirect: ErrUseLastResponse` — the 3xx is handed back
+  unfollowed, so the secret only ever reaches the preset's own host.
+- **Reserved credential headers (P2).** `header:Host` (and other headers
+  net/http controls, e.g. `Content-Length`) minted cleanly but would
+  silently drop the credential (Host comes from `Request.Host`). Rejected
+  at mint time.
+- **Hostname/port validation (P2).** `https://:443` (no host) and
+  `https://h:99999` (bad port) passed the `Host != ""` check. Now require
+  a non-empty hostname and a 1–65535 port.
+- **Export bundles lost custom presets (P2).** Exporting a custom-backed
+  alias then importing left the alias tagged for a preset the target
+  lacked, falling back to the URL-less generic preset. The bundle
+  (schema **v2**, fail-loud on an older aql) now carries the referenced
+  custom presets and restores them on import (kept unless `--overwrite`;
+  an un-mintable name in a tampered bundle is skipped).
+
+Two more were **not changed**, with the reasoning left on the PR:
+
+- **Rebuild the knowledge graph (P1) — false positive.** The graph models
+  `design/` as one collective node, not per-file; regenerating produces a
+  semantically identical graph (a normalized diff is empty), so adding
+  this doc leaves it current. No rebuild is needed.
+- **Require an authenticated session to change in-use provider routes
+  (P1) — deferred as a design decision.** `provider add` follows the
+  vault's uniform rule that an *unlocked* vault is mutable by the owning
+  user — the same gate as `add`, `rotate`, `grant`, and retagging an
+  alias's provider. Singling out `provider add` for per-operation auth
+  would not close the threat (the same actor can redirect secrets via
+  those other mutations) and would introduce exactly the kind of
+  non-uniformity NUR.md exists to prevent. Tightening the vault's whole
+  mutation-auth model is a maintainer decision, out of scope for this PR.
+
 ## 6. Relationship to the SERVICES roadmap
 
 `design/SERVICES.0.md` §6 already envisions generalizing this broker into

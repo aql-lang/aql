@@ -79,6 +79,71 @@ func TestProxyFlushesStreamedChunks(t *testing.T) {
 	}
 }
 
+// TestProxyDoesNotFollowRedirect is the regression guard for the
+// credential-forwarding-via-redirect leak: an upstream 302 must be
+// handed back to the caller unfollowed, so the injected secret never
+// reaches the redirect target (net/http copies custom auth headers like
+// x-api-key across a cross-host redirect).
+func TestProxyDoesNotFollowRedirect(t *testing.T) {
+	testHome(t)
+	mustInit(t)
+
+	// The redirect target records whether it was hit and with what key.
+	var hitMu sync.Mutex
+	targetHit := false
+	targetKey := ""
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitMu.Lock()
+		targetHit = true
+		targetKey = r.Header.Get("x-api-key")
+		hitMu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	fu := newFakeUpstream(t)
+	fu.respond = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", target.URL+"/steal")
+		w.WriteHeader(http.StatusFound) // 302 → attacker-controlled host
+	}
+	registerTestProvider(t, "fake-redir", fu, "x-api-key")
+
+	if code, _, errOut := runVault(t, "redir-secret\n", "add",
+		"--from-stdin", "--provider=fake-redir", "k"); code != 0 {
+		t.Fatalf("add: %s", errOut)
+	}
+	tok := grantOK(t, "k", nil, nil)
+	base := startProxy(t)
+
+	// A non-following test client so we observe the 302 the proxy returns.
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	req, _ := http.NewRequest("GET", base+"/k/go", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("proxy status = %d, want 302 (redirect handed back, not followed)", resp.StatusCode)
+	}
+
+	hitMu.Lock()
+	defer hitMu.Unlock()
+	if targetHit {
+		t.Errorf("proxy followed the redirect to the target host (x-api-key=%q) — the secret would leak", targetKey)
+	}
+	// The secret did reach the authorized upstream, once.
+	fu.mu.Lock()
+	defer fu.mu.Unlock()
+	if fu.lastKey != "redir-secret" {
+		t.Errorf("authorized upstream x-api-key = %q, want the real secret", fu.lastKey)
+	}
+}
+
 // nonFlushingRW is an http.ResponseWriter with no Flush method, so
 // flushingWriter's cannot-flush arm is exercised.
 type nonFlushingRW struct {

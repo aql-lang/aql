@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -143,6 +144,15 @@ func validateAuthStyle(style string) error {
 		if !validHeaderFieldName(name) {
 			return fmt.Errorf("auth style %q: %q is not a valid HTTP header name (letters, digits, and !#$%%&'*+-.^_`|~)", style, name)
 		}
+		// Reject headers net/http controls itself: e.g. an outgoing
+		// request's Host is taken from Request.Host, never Header["Host"],
+		// so a header:Host preset would silently drop the credential and
+		// every brokered request would look successful without ever sending
+		// the secret. Content-Length and the framing headers are computed
+		// by the transport too.
+		if reservedHeaderName(name) {
+			return fmt.Errorf("auth style %q: %q is a header net/http sets itself, so it cannot carry a credential; pick another header", style, name)
+		}
 		return nil
 	case strings.HasPrefix(style, "query:"):
 		if strings.TrimPrefix(style, "query:") == "" {
@@ -173,6 +183,19 @@ func validHeaderFieldName(name string) bool {
 	return true
 }
 
+// reservedHeaderName reports whether name is a header net/http populates
+// or manages itself, so a `header:<name>` credential set through
+// Header.Set would not be sent as written (Host most notably comes from
+// Request.Host). Such a preset would broker every request without the
+// credential; reject it at mint time.
+func reservedHeaderName(name string) bool {
+	switch http.CanonicalHeaderKey(name) {
+	case "Host", "Content-Length", "Connection", "Transfer-Encoding", "Trailer", "Upgrade":
+		return true
+	}
+	return false
+}
+
 // validateProviderBaseURL checks and canonicalizes a `provider add`
 // base URL: it must parse, use the http or https scheme, and carry a
 // host; embedded userinfo (user:pass@host) is refused — it would be a
@@ -194,8 +217,16 @@ func validateProviderBaseURL(raw string) (string, error) {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return "", fmt.Errorf("base URL %q must use http:// or https://", raw)
 	}
-	if u.Host == "" {
+	if u.Hostname() == "" {
+		// u.Host != "" is not enough — "https://:443" has a port but no
+		// host and would dial the local machine.
 		return "", fmt.Errorf("base URL %q has no host", raw)
+	}
+	if port := u.Port(); port != "" {
+		n, perr := strconv.Atoi(port)
+		if perr != nil || n < 1 || n > 65535 {
+			return "", fmt.Errorf("base URL %q has an invalid port %q (want 1-65535)", raw, port)
+		}
 	}
 	if u.User != nil {
 		return "", fmt.Errorf("base URL must not embed credentials (user:pass@host); attach the secret via the alias, not the provider URL")

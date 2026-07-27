@@ -88,7 +88,11 @@ func runMCP(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		homeDir: homeDir,
 		agent:   *agent,
 		stderr:  stderr,
-		client:  &http.Client{Timeout: 60 * time.Second},
+		// MCP buffers the whole upstream response (io.ReadAll below), so a
+		// whole-request Timeout is fine here — but it must not follow a
+		// redirect that would forward the injected secret to an
+		// unauthorized host (see noRedirect).
+		client: &http.Client{Timeout: 60 * time.Second, CheckRedirect: noRedirect},
 	}
 	// Open the session once (one scrypt) and reuse it across tool calls;
 	// nil falls back to a per-call authenticate.

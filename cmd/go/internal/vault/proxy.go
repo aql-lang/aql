@@ -66,16 +66,49 @@ func NewProxy(listen, homeDir, defaultPass string, stdout, stderr io.Writer) *Pr
 	// is not guillotined mid-stream the way a client-wide Timeout would
 	// (that cut every stream over 60s and, because io.Copy's error is
 	// discarded, surfaced it to the caller as a clean EOF logged "ok").
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = 60 * time.Second
+	// The transport is built explicitly rather than cloning
+	// http.DefaultTransport, whose *http.Transport type assertion would
+	// panic if another component swapped the global RoundTripper (the
+	// repo forbids panics outside init-time registration).
 	return &Proxy{
 		listen:      listen,
 		homeDir:     homeDir,
 		defaultPass: defaultPass,
 		stdout:      stdout,
 		stderr:      stderr,
-		client:      &http.Client{Transport: tr},
+		client:      newBrokerClient(60 * time.Second),
 	}
+}
+
+// noRedirect stops a broker HTTP client from following upstream
+// redirects. A credential broker must never resend an injected secret to
+// a host the capability did not authorize, and net/http copies custom
+// auth headers (x-api-key, a header:<name> preset) across a redirect
+// even when it changes host — only Authorization is stripped cross-host.
+// Returning ErrUseLastResponse hands the 3xx back to the caller
+// unfollowed, so the secret only ever reaches the preset's own host.
+func noRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+// newBrokerClient builds the HTTP client both the proxy and the MCP
+// server use to reach upstreams: a transport whose response-header
+// timeout bounds time-to-first-byte (not the whole stream), env-proxy
+// support matching the standard default, and the no-follow redirect
+// policy above. Built explicitly so there is no panic-prone assertion on
+// the global default transport.
+func newBrokerClient(headerTimeout time.Duration) *http.Client {
+	tr := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: headerTimeout,
+	}
+	return &http.Client{Transport: tr, CheckRedirect: noRedirect}
 }
 
 // runProxy implements `aql vault proxy`.

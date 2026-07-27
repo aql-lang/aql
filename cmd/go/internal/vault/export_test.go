@@ -100,6 +100,159 @@ func TestExportImportPreservesIPWhitelist(t *testing.T) {
 	}
 }
 
+// TestExportImportCarriesCustomProvider proves a custom-backed alias
+// still brokers after moving vaults: the referenced preset travels in the
+// bundle and is restored on import, rather than the alias landing with a
+// dangling provider tag that resolves to the URL-less generic preset.
+func TestExportImportCarriesCustomProvider(t *testing.T) {
+	t.Setenv(EnvExportPassphrase, "bundle-pass")
+	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+
+	src := t.TempDir()
+	initVaultAt(t, src, "src-pass")
+	// Two referenced presets (so the bundle sorts more than one), plus one
+	// no exported alias references (which must NOT travel).
+	if code, _, e := runVault(t, "", "provider", "add",
+		"--url=https://api.corp.example/v1", "--auth-style=x-api-key", "corp"); code != 0 {
+		t.Fatalf("provider add corp: %s", e)
+	}
+	if code, _, e := runVault(t, "", "provider", "add", "--url=https://bbb.example", "bbb"); code != 0 {
+		t.Fatalf("provider add bbb: %s", e)
+	}
+	if code, _, e := runVault(t, "", "provider", "add", "--url=https://unused.example", "unused"); code != 0 {
+		t.Fatalf("provider add unused: %s", e)
+	}
+	if code, _, e := runVault(t, "sekret\n", "add", "--from-stdin", "--provider=corp", "k"); code != 0 {
+		t.Fatalf("add k: %s", e)
+	}
+	if code, _, e := runVault(t, "sekret2\n", "add", "--from-stdin", "--provider=bbb", "k2"); code != 0 {
+		t.Fatalf("add k2: %s", e)
+	}
+	if code, _, e := runVault(t, "", "export", "--out="+bundle, "k", "k2"); code != 0 {
+		t.Fatalf("export: %s", e)
+	}
+
+	dst := t.TempDir()
+	initVaultAt(t, dst, "dst-pass")
+	code, out, e := runVault(t, "", "import", bundle)
+	if code != 0 {
+		t.Fatalf("import: %s", e)
+	}
+	if !strings.Contains(out, "restored 2 custom provider") {
+		t.Errorf("import should report the restored presets: %q", out)
+	}
+	s, _ := LoadStore(dst)
+	p, _ := s.FindCustomProvider("corp")
+	if p == nil || p.BaseURL != "https://api.corp.example/v1" || p.AuthStyle != "x-api-key" {
+		t.Fatalf("custom provider not carried through export/import: %+v", p)
+	}
+	if b, _ := s.FindCustomProvider("bbb"); b == nil || b.BaseURL != "https://bbb.example" {
+		t.Errorf("second referenced preset not carried: %+v", b)
+	}
+	if _, idx := s.FindCustomProvider("unused"); idx >= 0 {
+		t.Errorf("an unreferenced preset should not travel in the bundle")
+	}
+	// The alias resolves through the restored preset, so it would broker.
+	if got := LookupProviderIn(s, "corp"); got.BaseURL != "https://api.corp.example/v1" {
+		t.Errorf("imported alias does not resolve to the restored preset: %+v", got)
+	}
+}
+
+// TestImportSkipsInvalidBundleProvider: a tampered bundle carrying a
+// custom provider with an un-mintable name is warned about and dropped,
+// never smuggled into the store (defence in depth behind the CLI's
+// mint-time name check).
+func TestImportSkipsInvalidBundleProvider(t *testing.T) {
+	t.Setenv(EnvExportPassphrase, "bundle-pass")
+	dir := filepath.Join(t.TempDir(), "tampered.aqlx")
+
+	bundle := exportBundle{
+		Version:    exportVersion,
+		Aliases:    []exportAlias{{Name: "k", Provider: "corp", Value: "v"}},
+		CustomProviders: []Provider{
+			{Name: "corp", BaseURL: "https://api.corp.example", AuthStyle: "bearer"},
+			{Name: "", BaseURL: "https://attacker.example", AuthStyle: "bearer"}, // un-mintable
+		},
+	}
+	plain, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob, err := sealExport(plain, "bundle-pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir, blob, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	dst := t.TempDir()
+	initVaultAt(t, dst, "dst-pass")
+	code, out, errOut := runVault(t, "", "import", dir)
+	if code != 0 {
+		t.Fatalf("import: %s", errOut)
+	}
+	if !strings.Contains(errOut, "skipping invalid custom provider") {
+		t.Errorf("import should warn about the invalid preset: %q", errOut)
+	}
+	if !strings.Contains(out, "restored 1 custom provider") {
+		t.Errorf("only the valid preset should be restored: %q", out)
+	}
+	s, _ := LoadStore(dst)
+	if len(s.CustomProviders) != 1 || s.CustomProviders[0].Name != "corp" {
+		t.Errorf("invalid preset leaked into the store: %+v", s.CustomProviders)
+	}
+}
+
+// TestImportCustomProviderOverwrite: an existing preset is kept unless
+// --overwrite, mirroring alias import semantics.
+func TestImportCustomProviderOverwrite(t *testing.T) {
+	t.Setenv(EnvExportPassphrase, "bundle-pass")
+	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+
+	src := t.TempDir()
+	initVaultAt(t, src, "src-pass")
+	if code, _, e := runVault(t, "", "provider", "add", "--url=https://new.example", "corp"); code != 0 {
+		t.Fatalf("provider add: %s", e)
+	}
+	if code, _, e := runVault(t, "sekret\n", "add", "--from-stdin", "--provider=corp", "k"); code != 0 {
+		t.Fatalf("add: %s", e)
+	}
+	if code, _, e := runVault(t, "", "export", "--out="+bundle, "k"); code != 0 {
+		t.Fatalf("export: %s", e)
+	}
+
+	dst := t.TempDir()
+	initVaultAt(t, dst, "dst-pass")
+	// A preset with the same name already exists on the target.
+	if code, _, e := runVault(t, "", "provider", "add", "--url=https://old.example", "corp"); code != 0 {
+		t.Fatalf("dst provider add: %s", e)
+	}
+	// Plain import keeps the existing preset (alias k is imported anew).
+	if code, out, _ := runVault(t, "sekret\n", "add", "--from-stdin", "--provider=corp", "seed"); code != 0 {
+		t.Fatalf("seed alias: %s", out)
+	}
+	code, _, errOut := runVault(t, "", "import", bundle)
+	if code != 0 {
+		t.Fatalf("import: %s", errOut)
+	}
+	if !strings.Contains(errOut, "skipping existing custom provider") {
+		t.Errorf("import should report the kept preset on stderr: %q", errOut)
+	}
+	s, _ := LoadStore(dst)
+	if p, _ := s.FindCustomProvider("corp"); p == nil || p.BaseURL != "https://old.example" {
+		t.Errorf("plain import overwrote an existing preset: %+v", p)
+	}
+	// --overwrite replaces it.
+	if code, _, e := runVault(t, "", "import", "--overwrite", bundle); code != 0 {
+		t.Fatalf("import --overwrite: %s", e)
+	}
+	s, _ = LoadStore(dst)
+	if p, _ := s.FindCustomProvider("corp"); p == nil || p.BaseURL != "https://new.example" {
+		t.Errorf("--overwrite did not replace the preset: %+v", p)
+	}
+}
+
 // TestExportOutTildeExpanded guards that a leading ~ in --out that the
 // shell left verbatim (e.g. --out=~/bundle.aqlx) resolves under the home
 // folder rather than writing to a literal "~" directory in the cwd.

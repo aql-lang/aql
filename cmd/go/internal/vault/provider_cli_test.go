@@ -144,6 +144,9 @@ func TestProviderAddRejections(t *testing.T) {
 		{"no scheme", []string{"provider", "add", "--url=api.example.com", "corp"}, "http:// or https://"},
 		{"ftp scheme", []string{"provider", "add", "--url=ftp://x.example", "corp"}, "http:// or https://"},
 		{"no host", []string{"provider", "add", "--url=https://", "corp"}, "no host"},
+		{"port but no host", []string{"provider", "add", "--url=https://:443", "corp"}, "no host"},
+		{"invalid port", []string{"provider", "add", "--url=https://x.example:99999", "corp"}, "invalid port"},
+		{"zero port", []string{"provider", "add", "--url=https://x.example:0", "corp"}, "invalid port"},
 		{"unparseable url", []string{"provider", "add", "--url=https://bad host/", "corp"}, "invalid base URL"},
 		{"userinfo in url", []string{"provider", "add", "--url=https://u:p@x.example", "corp"}, "must not embed credentials"},
 		{"query in url", []string{"provider", "add", "--url=https://x.example?a=b", "corp"}, "query or fragment"},
@@ -152,6 +155,8 @@ func TestProviderAddRejections(t *testing.T) {
 		{"bad auth style", []string{"provider", "add", "--url=https://x.example", "--auth-style=bogus", "corp"}, "unknown auth style"},
 		{"empty header style", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:", "corp"}, "needs a header name"},
 		{"bad header name", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:X Key", "corp"}, "not a valid HTTP header name"},
+		{"reserved header host", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:Host", "corp"}, "sets itself"},
+		{"reserved header lowercase", []string{"provider", "add", "--url=https://x.example", "--auth-style=header:content-length", "corp"}, "sets itself"},
 		{"empty query style", []string{"provider", "add", "--url=https://x.example", "--auth-style=query:", "corp"}, "needs a parameter name"},
 	}
 	for _, tc := range cases {
@@ -419,6 +424,22 @@ func TestValidHeaderFieldName(t *testing.T) {
 	for _, bad := range []string{"", "X Key", "X:Key", "X\tKey", "X\nKey", "naïve"} {
 		if validHeaderFieldName(bad) {
 			t.Errorf("validHeaderFieldName(%q) = true, want false", bad)
+		}
+	}
+}
+
+// TestReservedHeaderName: headers net/http controls itself are rejected
+// (case-insensitively) as credential carriers; ordinary custom headers
+// are allowed.
+func TestReservedHeaderName(t *testing.T) {
+	for _, r := range []string{"Host", "host", "Content-Length", "connection", "Transfer-Encoding", "Trailer", "Upgrade"} {
+		if !reservedHeaderName(r) {
+			t.Errorf("reservedHeaderName(%q) = false, want true", r)
+		}
+	}
+	for _, ok := range []string{"X-Api-Key", "Authorization", "X-Corp-Key", "hostname"} {
+		if reservedHeaderName(ok) {
+			t.Errorf("reservedHeaderName(%q) = true, want false", ok)
 		}
 	}
 }
