@@ -6,6 +6,14 @@ func init() {
 		"fetch":   "Perform an HTTP request.",
 		"prepare": "Build a request from an API descriptor without sending.",
 
+		// Accessor overloads on the Fetch family (word extensions of the
+		// core accessors), so a Response answers `.status` directly.
+		"dot":  "Read a field of a Fetch Request/Response by literal name (word extension of core dot).",
+		"get":  "Read a field of a Fetch Request/Response by computed key (word extension of core get).",
+		"dotr": "Strict `dot` on a Fetch value: a missing field raises (word extension of core dotr).",
+		"getr": "Strict `get` on a Fetch value: a missing field raises (word extension of core getr).",
+		"has":  "Whether a Fetch Request/Response carries the named field (word extension of core has).",
+
 		// Tier-1 low-level sockets (net_socket.go).
 		"listen":      "Bind a listening socket ({tcp: port}); with a codec and a Service, expose the service on the wire.",
 		"accept":      "Block for the next connection on a Listener; returns a Socket. {within: ms} bounds the wait.",

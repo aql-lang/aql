@@ -349,3 +349,117 @@ func (fetchConvertBehavior) ToList(v Value) (Value, error) {
 	}
 	return NewList(vals), nil
 }
+
+// fetchFieldAt reads a field from a map-backed Fetch value (Request or
+// Response). Returns the value and whether the key was present.
+func fetchFieldAt(recv Value, key string) (Value, bool) {
+	m, err := AsMap(recv)
+	if err != nil || m == nil {
+		return NewTypeLiteral(TNone), false
+	}
+	v, ok := m.Get(key)
+	if !ok {
+		return NewTypeLiteral(TNone), false
+	}
+	return v, true
+}
+
+// fetchFieldKey extracts the key from an accessor's first argument,
+// which is an Atom for the `.field` sugar and a String for `get "k"`.
+func fetchFieldKey(v Value) (string, bool) {
+	if a, err := v.AsConcreteAtom(); err == nil && a != "" {
+		return a, true
+	}
+	if s, err := v.AsConcreteString(); err == nil {
+		return s, true
+	}
+	return "", false
+}
+
+// fetchGetHandler is the lenient read (`dot` / `get`): a missing field
+// reads none, matching how the accessor family treats Maps.
+func fetchGetHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	key, ok := fetchFieldKey(args[0])
+	if !ok {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	v, _ := fetchFieldAt(args[1], key)
+	return []Value{v}, nil
+}
+
+// fetchGetrHandler is the strict twin (`dotr` / `getr`): a missing field
+// is an error rather than none.
+func fetchGetrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	key, ok := fetchFieldKey(args[0])
+	if !ok {
+		return nil, r.AqlError("key_error", "getr: key must be an Atom or String", "getr")
+	}
+	v, found := fetchFieldAt(args[1], key)
+	if !found {
+		return nil, r.AqlError("key_error",
+			"getr: no field \""+key+"\" on this Fetch value", "getr")
+	}
+	return []Value{v}, nil
+}
+
+// fetchHasHandler answers whether the field is present.
+func fetchHasHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	key, ok := fetchFieldKey(args[0])
+	if !ok {
+		return []Value{NewBoolean(false)}, nil
+	}
+	_, found := fetchFieldAt(args[1], key)
+	return []Value{NewBoolean(found)}, nil
+}
+
+// FetchAccessorExtensions builds the accessor WORD EXTENSIONS that make
+// a Response answer `.status` directly, instead of requiring the
+// undiscoverable `convert Map` step first.
+//
+// This is the aql:time-util / aql:matrix-util pattern
+// (design/OPEN-WORDS.0.md): a module extends a CORE word with overloads
+// anchored on its own minted type, and `import` transplants them onto
+// the importer's bare word. It is the only mechanism available here —
+// the Fetch family is minted per import, so no static signature in
+// native_storage.go could name it, and a catch-all sig on TIdeal would
+// hand dot access to Error, Table, Record and every other Ideal.
+//
+// The sigs are anchored on ft.Fetch, the family root, so Request and
+// Response both match via ConformsTo.
+func FetchAccessorExtensions(ft FetchModuleTypes) []FnDefInfo {
+	lenient := func(quote bool) []Signature {
+		atom := Signature{Args: []*Type{TAtom, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchGetHandler), Returns: []*Type{TAny}}
+		if quote {
+			atom.QuoteArgs = map[int]bool{0: true}
+		}
+		return []Signature{atom,
+			{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+				Impl: Go(fetchGetHandler), Returns: []*Type{TAny}}}
+	}
+	strict := func(quote bool) []Signature {
+		atom := Signature{Args: []*Type{TAtom, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchGetrHandler), Returns: []*Type{TAny}}
+		if quote {
+			atom.QuoteArgs = map[int]bool{0: true}
+		}
+		return []Signature{atom,
+			{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+				Impl: Go(fetchGetrHandler), Returns: []*Type{TAny}}}
+	}
+	hasSigs := []Signature{
+		{Args: []*Type{TAtom, ft.Fetch}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1,
+			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},
+		{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},
+	}
+	return []FnDefInfo{
+		// dot quotes a bare-word key (the `.field` sugar); get evaluates
+		// it — the split documented in lang/go/CLAUDE.md.
+		NewWordExtension("aql:net", "dot", lenient(true)),
+		NewWordExtension("aql:net", "get", lenient(false)),
+		NewWordExtension("aql:net", "dotr", strict(true)),
+		NewWordExtension("aql:net", "getr", strict(false)),
+		NewWordExtension("aql:net", "has", hasSigs),
+	}
+}

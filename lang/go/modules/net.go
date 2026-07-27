@@ -27,6 +27,13 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Response values escape to the importer, so the Fetch-family mints
 	// draw IDs from the importing tree's counter.
 	subReg.Types.AdoptSeqFrom(parent.Types)
+	// Stamp this module's provenance onto the types it mints, as
+	// aql:matrix-util / aql:time-util / aql:io already do. Beyond
+	// consistency it is load-bearing: a word extension may only be
+	// anchored on a nominal type the extending scope OWNS
+	// (requireOwnedAnchor), so without this the accessor overloads below
+	// are refused with extend_owner.
+	subReg.Types.MintOwner = "aql:net"
 	ft := native.MintFetchTypes(subReg)
 	netNatives := native.NetModuleNatives(ft)
 	netNatives = append(netNatives, socketNatives()...) // Tier-1 sockets (net_socket.go)
@@ -44,6 +51,13 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// The global socket handle types, as literals for `x is Net.Socket`.
 	exports.Set("Socket", native.NewTypeLiteral(TSocket))
 	exports.Set("Listener", native.NewTypeLiteral(TListener))
+	// Accessor overloads, exported as WORD EXTENSIONS: import transplants
+	// them onto the importer's bare dot/get/dotr/getr/has so a Response
+	// answers `.status` directly. Same mechanism aql:matrix-util uses for
+	// add/sub/mul, anchored on this import's minted Fetch type.
+	for _, ext := range native.FetchAccessorExtensions(ft) {
+		exports.Set(ext.Extends, native.NewFnDef(ext))
+	}
 	// Built-in codec values (plain {decode encode} maps whose functions
 	// carry Go handlers): `listen {tcp: 8080 codec: Net.http} svc`.
 	exports.Set("lines", makeLinesCodec())
