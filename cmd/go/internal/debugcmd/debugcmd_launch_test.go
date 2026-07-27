@@ -57,7 +57,12 @@ func TestLaunchStepsSourceLines(t *testing.T) {
 		"at "+path+":1", "def x 1",
 		"at "+path+":2", "def y 2",
 		"at "+path+":3", "x add y",
-		"3", "(program exited)")
+		"3\n(program exited)")
+	// Negative (§6.3 inverse): interactive mode must NOT echo commands
+	// after the prompt — only --script mode does.
+	if strings.Contains(out, "(adbg) step") {
+		t.Errorf("interactive mode must not echo commands:\n%s", out)
+	}
 }
 
 func TestLaunchCoalescesOneLineToOneStop(t *testing.T) {
@@ -71,8 +76,28 @@ func TestLaunchCoalescesOneLineToOneStop(t *testing.T) {
 	if got := strings.Count(out, "at "+path+":1"); got != 1 {
 		t.Errorf("one source line must pause once, got %d stops:\n%s", got, out)
 	}
-	if !strings.Contains(out, "6") {
+	// Anchored to the exit notice so a stray path digit can't satisfy it.
+	if !strings.Contains(out, "6\n(program exited)") {
 		t.Errorf("result missing:\n%s", out)
+	}
+}
+
+func TestLaunchLoopIterationsEachPause(t *testing.T) {
+	// A single-line loop body shares one Row across every iteration, so
+	// plain contiguity-coalescing would fold ALL iterations into the first
+	// stop; the engine's "for next" trace note marks each iteration
+	// boundary as a line boundary. `for [1 4]` iterates i=1,2,3: the
+	// initial stop plus one per iteration ADVANCE = 3 stops.
+	path := writeProgram(t, "for [1 4] [ 9 ]\n")
+	code, out, _ := launch(t, []string{"--no-check", path}, "s\ns\ns\ns\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := strings.Count(out, "at "+path+":1"); got != 3 {
+		t.Errorf("a 3-iteration same-row loop must stop 3 times, got %d:\n%s", got, out)
+	}
+	if !strings.Contains(out, "9 9 9\n(program exited)") {
+		t.Errorf("loop result missing:\n%s", out)
 	}
 }
 
@@ -85,7 +110,7 @@ func TestLaunchContinueRunsToCompletion(t *testing.T) {
 	if got := strings.Count(out, "at "+path+":"); got != 1 {
 		t.Errorf("continue must not pause again without breakpoints; got %d stops", got)
 	}
-	requireOrder(t, out, "3", "(program exited)")
+	requireOrder(t, out, "3\n(program exited)")
 }
 
 func TestLaunchQuitDetachesAndProgramDrains(t *testing.T) {
@@ -249,7 +274,55 @@ func TestLaunchInnerDebugStepReachesSession(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	requireOrder(t, out, "step 0 at "+path+":2", "step 1 at ", "3", "(program exited)")
+	// The row digit is pinned on BOTH stops: a Row/Col transposition in
+	// runStepped would render the column here instead.
+	requireOrder(t, out,
+		"step 0 at "+path+":2", "step 1 at "+path+":2", "3\n(program exited)")
+}
+
+func TestLaunchStepAtBreakPausesNextLine(t *testing.T) {
+	// `step` at a Debug.break works ONLY via the session-side mode change
+	// — pauseAtBreak discards OnStep's returned action — so pin the
+	// break → step → next-source-line transition end to end.
+	path := writeProgram(t, `import "aql:debug"
+Debug.break
+def z 5
+z add 1
+`)
+	code, out, _ := launch(t, []string{path}, "continue\nstep\nstep\ncontinue\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out, "break hit", "at "+path+":3", "at "+path+":4", "6\n(program exited)")
+}
+
+func TestLaunchEvalErrorsRenderExpressionSource(t *testing.T) {
+	// A failing `print` must render its extract against the EXPRESSION,
+	// not the paused program's source/file (the registry's Source and
+	// BaseFile are swapped for the duration of the eval).
+	path := writeProgram(t, "def a 10\na add 1\n")
+	code, out, _ := launch(t, []string{"--no-check", path}, "step\nprint 5 div 0\ncontinue\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out, "division by zero", "5 div 0")
+	// Negative: the extract must not be the program's line-1 text.
+	errAt := strings.Index(out, "division by zero")
+	if strings.Contains(out[errAt:], "def a 10") {
+		t.Errorf("eval error extract shows the program, not the expression:\n%s", out[errAt:])
+	}
+}
+
+func TestLaunchEvalFlowSignalDiscarded(t *testing.T) {
+	// A `break` evaluated at a pause must NOT leak into the suspended
+	// program's control flow — the signal is discarded with a notice and
+	// the loop completes all its iterations.
+	path := writeProgram(t, "for [1 3] [ 7 ]\n")
+	code, out, _ := launch(t, []string{"--no-check", path}, "print break\nc\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out, "signal", "discarded", "7 7\n(program exited)")
 }
 
 func TestLaunchEvalBreakDoesNotNest(t *testing.T) {
@@ -315,6 +388,49 @@ func TestLaunchUsageAndFlagErrors(t *testing.T) {
 	}
 }
 
+func TestLaunchAliases(t *testing.T) {
+	// The short spellings drive the same command blocks as the long forms.
+	path := writeProgram(t, "def n 41\nn add 1\n")
+	stdin := strings.Join([]string{
+		"l",      // list
+		"locals", // defs
+		"h",      // help
+		"?",      // help again
+		"s",      // step
+		"eval n add 9",
+		"q", // quit → detach
+	}, "\n") + "\n"
+	code, out, _ := launch(t, []string{path}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out,
+		"->    1  def n 41",
+		"defs (0):",
+		"commands:",
+		"commands:",
+		"at "+path+":2",
+		"50",
+		"(detached", "42\n(program exited)")
+}
+
+func TestLaunchPreflightEnvSkip(t *testing.T) {
+	// Negative pair for the preflight gate: AQL_NO_CHECK skips the check,
+	// so a checker-rejected program reaches runtime (and fails there).
+	t.Setenv("AQL_NO_CHECK", "1")
+	path := writeProgram(t, "boguswordxyz\n")
+	code, out, errOut := launch(t, []string{path}, "continue\n")
+	if code != 1 {
+		t.Errorf("exit = %d, want the runtime failure", code)
+	}
+	if !strings.Contains(out, "type 'help' for commands") {
+		t.Errorf("with AQL_NO_CHECK the debugger must start:\n%s", out)
+	}
+	if !strings.Contains(errOut, "boguswordxyz") {
+		t.Errorf("stderr = %q, want the runtime error", errOut)
+	}
+}
+
 func TestLaunchPreflightGate(t *testing.T) {
 	// Check-by-default: a program the checker rejects never starts.
 	path := writeProgram(t, "boguswordxyz\n")
@@ -342,10 +458,16 @@ func TestLaunchRuntimeErrorPlainAndColor(t *testing.T) {
 	if code != 1 || !strings.Contains(errOut, "boguswordxyz") {
 		t.Errorf("plain: exit = %d, stderr = %q", code, errOut)
 	}
+	if !strings.HasPrefix(errOut, "error: ") {
+		t.Errorf("runtime errors carry the run-style prefix; stderr = %q", errOut)
+	}
 	// Forced color takes the structured-render arm.
 	code, _, errOut = launch(t, []string{"--no-check", "--color", "always", path}, "continue\n")
 	if code != 1 || !strings.Contains(errOut, "boguswordxyz") {
 		t.Errorf("color: exit = %d, stderr = %q", code, errOut)
+	}
+	if !strings.HasPrefix(errOut, "error: ") {
+		t.Errorf("color arm carries the prefix too; stderr = %q", errOut)
 	}
 }
 

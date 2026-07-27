@@ -129,6 +129,14 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	reg := a.NativeRegistry()
 	reg.Output = stdout
 	reg.BaseFile = path
+	if *script != "" {
+		// Batch mode: commands come from the --script file, so the launch
+		// stdin belongs entirely to the PROGRAM (IO.stdin). Interactive
+		// mode leaves reg.Input alone — the prompt's reader and a
+		// stdin-reading program cannot safely share one descriptor (the
+		// prompt's Scanner reads ahead), a documented Phase-1 limit.
+		reg.Input = stdin
+	}
 	if extra := fs.Args()[1:]; len(extra) > 0 {
 		// Positionals after the script path reach the program as IO.args,
 		// like `aql run`.
@@ -153,9 +161,11 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	sess := debugger.New(reg, debugger.Config{
-		In:     cmdIn,
-		Out:    stdout,
-		File:   file,
+		In:  cmdIn,
+		Out: stdout,
+		// The expanded path, matching reg.BaseFile, so pause locations
+		// and error attribution name one canonical file string.
+		File:   path,
 		Source: source,
 		Echo:   *script != "",
 	})
@@ -164,16 +174,18 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if rerr != nil {
 		var ae *lang.AqlError
 		if color && errors.As(rerr, &ae) {
-			fmt.Fprintln(stderr, ae.Render(lang.RenderOpts{Color: true}))
+			fmt.Fprintf(stderr, "error: %s\n", ae.Render(lang.RenderOpts{Color: true}))
 		} else {
-			fmt.Fprintf(stderr, "%s\n", rerr)
+			fmt.Fprintf(stderr, "error: %s\n", rerr)
 		}
 		return 1
 	}
 	if len(res) > 0 {
+		// Residuals render print-style (FormatForPrint), matching `aql run`
+		// and the session's own stack/defs renderers.
 		parts := make([]string, len(res))
 		for i, v := range res {
-			parts[i] = v.String()
+			parts[i] = native.FormatForPrint(v)
 		}
 		fmt.Fprintln(stdout, strings.Join(parts, " "))
 	}

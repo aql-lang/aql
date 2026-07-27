@@ -358,14 +358,23 @@ func TestDebugStepDrivesController(t *testing.T) {
 		t.Errorf("single-step should consult the controller per step; got %d calls", ctl.calls)
 	}
 	// Source awareness (StepFrame widening): every frame carries the
-	// registry's file, and at least one stepped token carries its source Row.
+	// registry's file, and every positioned token of this single-line
+	// source pins Row == 1 with a real column — so a Row/Col transposition
+	// cannot survive (Col varies per token, Row must not).
 	sawRow := false
 	for i, f := range ctl.frames {
 		if f.File != "test.aql" {
 			t.Errorf("frame %d File = %q, want the registry's BaseFile", i, f.File)
 		}
-		if f.Row >= 1 {
-			sawRow = true
+		if f.Row == 0 {
+			continue // synthetic token — carries no position
+		}
+		sawRow = true
+		if f.Row != 1 {
+			t.Errorf("frame %d Row = %d, want 1 (single-line source)", i, f.Row)
+		}
+		if f.Col < 1 {
+			t.Errorf("frame %d Col = %d, want >= 1 for a positioned token", i, f.Col)
 		}
 	}
 	if !sawRow {

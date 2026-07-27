@@ -22,6 +22,8 @@ supports.
   * [`aql fmt`](#aql-fmt)
   * [`aql model`](#aql-model)
   * [`aql build`](#aql-build)
+* [Debugging](#debugging)
+  * [`aql debug`](#aql-debug)
 * [Project lifecycle](#project-lifecycle)
   * [`aql prep`](#aql-prep)
   * [`aql pack`](#aql-pack)
@@ -498,6 +500,69 @@ Flags:
 
 A missing source file, an unbundlable import, or (for `--native`) a failed
 `go build` exits non-zero with the error on stderr.
+
+
+## Debugging
+
+### `aql debug`
+
+The interactive debugger (design/AQL-DEBUGGER.0.md), plus the
+cross-process introspection server and client it grew out of.
+
+**Interactive launch** — run a program under the debugger:
+
+```bash
+aql debug prog.aql                      # pause at the first source line
+aql debug --script cmds.dbg prog.aql    # drive the session from a command file (CI)
+aql debug --no-check prog.aql args...   # skip the pre-flight; args reach IO.args
+```
+
+The program runs on the interpreter (the per-step trace does not fire
+on the compiled VM path) and pauses **between source lines** — one stop
+per line, however many engine steps the line expands to. At the
+`(adbg)` prompt:
+
+| Command | Does |
+|---------|------|
+| `step`, `s` | run to the next source line |
+| `continue`, `c` | run to the next breakpoint (or completion) |
+| `quit`, `q` | **detach** — the program continues to completion |
+| `stack` | every data-stack entry, top (`#0`) first |
+| `bt` | backtrace of live inline fn frames (name + bound params) |
+| `defs`, `locals` | the program's bindings (`defs all` for every binding) |
+| `print <expr>`, `p`, `eval` | evaluate in the paused program's scope |
+| `list`, `l` | source around the current line |
+| `help`, `h`, `?` | the command list |
+
+Breakpoints are the `aql:debug` module's inline markers: `Debug.break`
+pauses whenever the debugger is attached (and is a no-op otherwise, so
+it is safe to commit), `Debug.break-when <cond>` pauses conditionally.
+`quit` cannot kill the program mid-run — the engine has no preemption
+seam (ADR-005) — so it detaches and the program drains at full speed.
+End-of-input on the command stream (Ctrl-D, or a drained `--script`
+file) also detaches. In `--script` mode each command is echoed after
+the prompt, so the transcript is a self-contained, reproducible record
+— the debugger's CI story. Flags: `--script F`, `--no-check`
+(also `AQL_NO_CHECK`), `--color auto|always|never`.
+
+Phase-1 limits (see the design note's roadmap): stepping does not
+descend into sub-engines (module fns, `each`/`fold` bodies run as one
+step), there is no `next`/`out` yet, and `file:line` breakpoints are a
+planned follow-on — use the inline markers.
+
+**Cross-process introspection** — serve a runtime's state over HTTP,
+and interrogate it:
+
+```bash
+aql debug serve [--bind 127.0.0.1:7777] [--token T] [file.aql]
+aql debug attach <words|defs|heap|eval SRC|events ID> [--url U] [--token T]
+```
+
+`serve` loads `file.aql` (if given), then serves the registry's
+introspection endpoints until interrupted, writing a discovery file
+(`$TMPDIR/aql-debug.json`) that `attach` reads by default. The optional
+Bearer token is a static string or a vault capability id; binds are
+loopback-only unless `--allow-public`.
 
 
 ## Project lifecycle

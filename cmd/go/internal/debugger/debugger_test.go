@@ -2,11 +2,13 @@ package debugger
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	eng "github.com/aql-lang/aql/eng/go"
 	"github.com/aql-lang/aql/eng/go/parser"
+	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 )
@@ -53,6 +55,87 @@ func TestPromptEOFDetaches(t *testing.T) {
 		t.Error("a detached session must not render trace pauses")
 	}
 }
+
+// errReader always fails, driving the Scanner's error (not-EOF) arm.
+type errReader struct{}
+
+func (errReader) Read([]byte) (int, error) { return 0, errors.New("boom-read") }
+
+func TestPromptInputErrorNamesItself(t *testing.T) {
+	// Negative pair for the EOF detach: a read FAILURE must say so before
+	// detaching, not masquerade as a clean end of input.
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	s := New(reg, Config{In: errReader{}, Out: &buf})
+	if got := s.prompt(); got != modeDetached {
+		t.Errorf("prompt on input error = %v, want detach", got)
+	}
+	if !strings.Contains(buf.String(), "command input error: boom-read") {
+		t.Errorf("the failure must be named; out = %q", buf.String())
+	}
+}
+
+func TestOnStepContendedContinues(t *testing.T) {
+	// A pause delivered while another goroutine holds the session (at the
+	// prompt, or mid-pause) must continue immediately — exactly one
+	// goroutine may ever read the command input.
+	s, buf := testSession(t, "")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if got := s.OnStep(capabilities.StepFrame{AtBreak: true}); got != capabilities.StepContinue {
+		t.Errorf("contended OnStep = %v, want StepContinue", got)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("a contended pause must render nothing; out = %q", buf.String())
+	}
+}
+
+func TestRunProgramRestoresRegistry(t *testing.T) {
+	// The session BORROWS the registry: after RunProgram the prior
+	// DebugOps (none, or a pre-installed host controller) and Source are
+	// restored, so a reused registry doesn't pause into a dead session.
+	reg, err := native.DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.SetParseFunc(parser.Parse)
+	reg.Source = "prior-source"
+	toks, perr := parser.Parse("1 add 2")
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	var buf bytes.Buffer
+	s := New(reg, Config{In: strings.NewReader(""), Out: &buf, Source: "1 add 2"})
+	if _, rerr := s.RunProgram(toks, "1 add 2"); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if _, ok := native.EffectiveDebugOps(reg); ok {
+		t.Error("no prior DebugOps: the slot must be empty again after the run")
+	}
+	if reg.Source != "prior-source" {
+		t.Errorf("Source must be restored; got %q", reg.Source)
+	}
+	// With a PRIOR controller installed, it is what must come back.
+	prior := &fakeOps{}
+	native.SetHostDebugOps(reg, prior)
+	s2 := New(reg, Config{In: strings.NewReader(""), Out: &buf, Source: "1 add 2"})
+	if _, rerr := s2.RunProgram(toks, "1 add 2"); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if got, ok := native.EffectiveDebugOps(reg); !ok || got != capabilities.DebugOps(prior) {
+		t.Error("a pre-installed DebugOps must be restored after the run")
+	}
+	// RemoveHostDebugOps nil-guard (panic prevention).
+	native.RemoveHostDebugOps(nil)
+}
+
+// fakeOps is a stand-in prior DebugOps for the restore test.
+type fakeOps struct{}
+
+func (f *fakeOps) Controller() capabilities.StepController { return nil }
 
 func TestOnStepDetachedQuitsInnerSteppers(t *testing.T) {
 	s, buf := testSession(t, "")
@@ -126,6 +209,14 @@ func TestSummarizeStack(t *testing.T) {
 	if strings.Contains(got, "[0 ") {
 		t.Errorf("the bottom of a deep stack must be elided; got %q", got)
 	}
+	// Boundary: exactly maxStackShown renders in full, no ellipsis.
+	exact := make([]native.Value, maxStackShown)
+	for i := range exact {
+		exact[i] = native.NewInteger(int64(i))
+	}
+	if got := summarizeStack(exact); got != "[0 1 2 3 4 5 6 7]" {
+		t.Errorf("a stack of exactly maxStackShown renders in full; got %q", got)
+	}
 }
 
 func TestShowStackOutsideRunRendersNothing(t *testing.T) {
@@ -167,6 +258,14 @@ func TestRenderDefs(t *testing.T) {
 	if !strings.Contains(buf.String(), "zz-unit = 7") {
 		t.Errorf("defs all must show baseline bindings; out = %q", buf.String())
 	}
+	// DEEPENED past the baseline (a shadow) is program state and shows
+	// under the bare filter — the "or deepened" half of the contract.
+	s.reg.Defs.Push("zz-unit", native.NewInteger(8))
+	buf.Reset()
+	s.renderDefs(false)
+	if !strings.Contains(buf.String(), "zz-unit = 8") {
+		t.Errorf("a shadow deepened past the baseline must show; out = %q", buf.String())
+	}
 }
 
 func TestEvalExprArms(t *testing.T) {
@@ -189,6 +288,38 @@ func TestEvalExprArms(t *testing.T) {
 	s.evalExpr("def zz-eval 9")
 	if !strings.Contains(buf.String(), "(no result)") {
 		t.Errorf("out = %q", buf.String())
+	}
+	// A leaked flow signal is discarded with a notice — and the session
+	// still evaluates normally afterwards (FlowCtrl restored).
+	buf.Reset()
+	s.evalExpr("break")
+	if !strings.Contains(buf.String(), "discarded") {
+		t.Errorf("a loop-less break must be discarded with a notice; out = %q", buf.String())
+	}
+	buf.Reset()
+	s.evalExpr("1 add 2")
+	if !strings.Contains(buf.String(), "3") {
+		t.Errorf("evaluation must recover after a discarded signal; out = %q", buf.String())
+	}
+}
+
+func TestEvalExprHonorsGrants(t *testing.T) {
+	// §8.1/§9: an eval can never exceed the program's grants. With the
+	// fileops capability uninstalled, a read attempted from the prompt is
+	// refused, not silently satisfied.
+	a, err := lang.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := a.NativeRegistry()
+	native.SetHostFileOps(reg, nil)
+	var buf bytes.Buffer
+	reg.Output = &buf
+	s := New(reg, Config{In: strings.NewReader(""), Out: &buf})
+	s.evalExpr(`import "aql:io" IO.read (make Pathon "/zz-no-such-file")`)
+	if !strings.Contains(buf.String(), "error:") ||
+		!strings.Contains(buf.String(), "capability") {
+		t.Errorf("an ungranted read must be refused as a capability error; out = %q", buf.String())
 	}
 }
 
@@ -249,5 +380,17 @@ func TestLiveFramesEdges(t *testing.T) {
 	// Negative: a plain grouping paren is not a frame.
 	if got := liveFrames([]native.Value{eng.NewOpenParen(), val}, 2); len(got) != 0 {
 		t.Errorf("a plain paren must not appear; got %v", got)
+	}
+	// Nested parens: the frame's close is the DEPTH-MATCHED one — an inner
+	// group's close must not be mistaken for it.
+	nested := []native.Value{
+		openF, eng.NewOpenParen(), val, closeP, val, eng.NewCloseParen(),
+	}
+	if got := liveFrames(nested, 5); len(got) != 1 || got[0].name != "f" {
+		t.Errorf("inner close must not close the frame; got %v", got)
+	}
+	// …and once the pointer passes the frame's true close, it is dead.
+	if got := liveFrames(nested, 6); len(got) != 0 {
+		t.Errorf("a frame closed before the pointer is not live; got %v", got)
 	}
 }

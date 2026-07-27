@@ -25,12 +25,24 @@ any kernel work.
 > written: the prompt is `(adbg) `; the debugger session doubles as the
 > installed `DebugOps`, so a `Debug.step` run *by the program* prompts
 > the same session (re-entrant pauses during `print` evaluation are
-> suppressed, never nested); policy gating of the launch surface is
-> deferred with open Q4 (§13) — no perms flags in Phase 1; and the
-> scripted/CI front end is the same prompt loop reading a file, with
-> command echo. Tests: `debugcmd_launch_test.go` (scripted end-to-end
-> transcripts — the §11 discipline, incl. quit-drains and coalescing
-> negatives) + `debugger_test.go` (defensive arms).
+> suppressed, never nested — the session is TryLock-guarded, so a
+> concurrent fork's pause continues rather than interleaving prompts);
+> `defs` shows only bindings new/deepened since a launch-time def-depth
+> baseline (`defs all` lifts the filter); a `for` iteration boundary
+> (the engine's `"for next"` trace note) counts as a line boundary, so
+> a single-line loop body stops once per iteration; detach (quit/EOF)
+> disarms the trace so the drain runs at full speed; `print` evaluation
+> swaps `Source`/`BaseFile` to the expression for correct error
+> extracts and discards a leaked `break`/`continue` signal with a
+> notice; policy gating of the launch surface is deferred — the scope
+> shape is open Q4 of `DEBUG-MODULE.0.md §11` ("Scope granularity"), no
+> perms flags in Phase 1; and the scripted/CI front end is the same
+> prompt loop reading a file, with command echo. The session borrows
+> the registry: prior `DebugOps`/`Source` are restored when the run
+> ends. User docs: `CLI.md § Debugging`. Tests:
+> `debugcmd_launch_test.go` (scripted end-to-end transcripts — the §11
+> discipline, incl. quit-drains and coalescing negatives) +
+> `debugger_test.go` (defensive arms).
 
 It **reconciles and supersedes `DEBUG-MODULE.0.md §6**` (the "engine
 seams" section), whose `DebugSession` struct, `StepOver` action, and
@@ -60,7 +72,7 @@ several are cheaper here than on bare metal.
 
 | Article (native x64) | AQL equivalent | Status in-tree |
 |----------------------|----------------|----------------|
-| Part 1 — attach to / launch a process | `aql debug <file>` (launch); `aql debug attach` (already exists via `debugserve`) | launch: **missing** |
+| Part 1 — attach to / launch a process | `aql debug <file>` (launch); `aql debug attach` (already exists via `debugserve`) | launch: **shipped** (Phase 1) |
 | Part 2 — register state & stepping (`GetThreadContext`, trap flag) | the **data stack** + `pointer` are the "registers"; step = one engine step | seam **present** (`SetTrace`) |
 | Part 3 — reading memory (`ReadProcessMemory`) | read AQL values on the stack, in scope, in stores | present (`CurrentStack`, `Defs`) |
 | Part 4 — exports & private symbols | the registry's live word + def tables | present (`Debug.words`/`defs`) |
@@ -132,9 +144,11 @@ type DebugOps interface        { Controller() StepController }
 
 - Installed with `native.SetHostDebugOps(r, ops)`, read with
   `native.EffectiveDebugOps(r)` (capability key `CapDebugOps`).
-- **No production caller today** — the socket is clean and empty. A test
-  `scriptedController` proves it drives correctly; the TTY host does not
-  exist yet.
+- At the time this note was written the socket had **no production
+  caller** — a test `scriptedController` proved it drives correctly,
+  and nothing else. *Phase 1 filled it:* the `aql debug` session
+  (`cmd/go/internal/debugger`) installs itself here for the duration of
+  the run, restoring the prior state on the way out.
 
 ### 2.3 The reference driver
 
@@ -644,11 +658,12 @@ built, and this note replaces them with what shipped:
    record.
 6. **Doc placement.** Keep this as a standalone `design/` note, or also
    add a one-line entry to `design/README.md`'s index and a user-facing
-   section to `CLI.md` once Phase 1 ships? (No index/`CLI.md` edit made
-   yet — Phase-1 landing is the natural trigger.)
+   section to `CLI.md` once Phase 1 ships? (*Outcome:* Phase-1 landing
+   added `CLI.md § Debugging`; the `design/README.md` index — an
+   argument-ordering-focused audit artifact — was left untouched.)
 
 No ADR entry is proposed — per repo policy (`lang/go/CLAUDE.md`, `ADR.md`
 header) this stays a `design/` note until a maintainer says otherwise.
-This change adds a design note only and does not alter the repository's
-tracked structure/tooling or the knowledge-graph's module/doc set, so no
-`kg/` update is required.
+The knowledge graph's module/doc set is unchanged by this work (the
+debugger is host code inside the existing `cmd/go` module and `aql
+debug` subcommand), so no `kg/` update is required.

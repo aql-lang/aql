@@ -18,6 +18,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
@@ -86,13 +87,32 @@ type Session struct {
 	// can show the PROGRAM's bindings (new or deepened since) rather than
 	// the registry's full native/def table; `defs all` shows everything.
 	baseDefs map[string]int
+
+	// mu serializes the pause machinery. The per-step trace runs on the
+	// program's goroutine, but the installed DebugOps is shared registry
+	// state, so a concurrent fork (a timer body hitting Debug.break) can
+	// call OnStep from another goroutine. onTrace holds mu across a
+	// pause; OnStep only TryLocks — a caller that cannot acquire the
+	// session (another pause is at the prompt, or the pause was raised by
+	// the prompt's own `print` evaluation) continues immediately, so
+	// exactly one goroutine ever reads the command input.
+	mu sync.Mutex
+
+	// clearTrace disarms the engine's per-step trace; set by RunProgram.
+	// Called on detach so the draining program stops paying the per-step
+	// snapshot the trace forces (detach means "run at full speed").
+	clearTrace func()
 }
 
 // New builds a Session over the registry the program will run in.
 func New(reg *native.Registry, cfg Config) *Session {
+	in := bufio.NewScanner(cfg.In)
+	// Lift the Scanner's default 64KiB token cap so a long `print`
+	// expression is a working command, not a silent detach.
+	in.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	return &Session{
 		reg:   reg,
-		in:    bufio.NewScanner(cfg.In),
+		in:    in,
 		out:   cfg.Out,
 		file:  cfg.File,
 		lines: strings.Split(cfg.Source, "\n"),
@@ -111,12 +131,27 @@ func (s *Session) Controller() capabilities.StepController { return s }
 // path, exactly as Debug.step does (§5.5: the compiled VM does not fire
 // the per-token trace).
 func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Value, error) {
+	// The session borrows the registry for the run: restore the prior
+	// DebugOps (usually none) and Source on the way out, so a host that
+	// reuses the registry afterwards doesn't keep prompting a dead session.
+	prevOps, hadOps := native.EffectiveDebugOps(s.reg)
+	prevSrc := s.reg.Source
 	native.SetHostDebugOps(s.reg, s)
 	s.reg.Source = source
 	s.baseDefs = s.reg.Defs.Snapshot()
 	engine := native.NewTop(s.reg)
 	engine.SetSource(source)
 	engine.SetTrace(s.onTrace)
+	s.clearTrace = func() { engine.SetTrace(nil) }
+	defer func() {
+		s.clearTrace = nil
+		s.reg.Source = prevSrc
+		if hadOps {
+			native.SetHostDebugOps(s.reg, prevOps)
+		} else {
+			native.RemoveHostDebugOps(s.reg)
+		}
+	}()
 	return engine.Run(tokens)
 }
 
@@ -124,10 +159,18 @@ func (s *Session) RunProgram(tokens []native.Value, source string) ([]native.Val
 // coalesces raw engine steps to SOURCE LINES: one stop per contiguous
 // run of a Row, skipping position-less synthetic tokens (§5.1) — so
 // `step` means "advance one source line", not one tape token.
-func (s *Session) onTrace(_ int, pointer int, stack []native.Value, _ string) {
+func (s *Session) onTrace(_ int, pointer int, stack []native.Value, note string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.curStack, s.curPointer = stack, pointer
 	if s.mode == modeDetached || s.inPrompt {
 		return
+	}
+	if strings.HasPrefix(note, "for next ") {
+		// A `for` iteration boundary is a line boundary: without this, a
+		// single-line loop body coalesces ALL its iterations into the
+		// first stop (every token shares one Row, contiguously).
+		s.prevRow = 0
 	}
 	row := 0
 	if pointer >= 0 && pointer < len(stack) {
@@ -151,7 +194,16 @@ func (s *Session) onTrace(_ int, pointer int, stack []native.Value, _ string) {
 // that arrive OUTSIDE the session's own trace: the one-shot pause the
 // Debug.break / break-when handler raises (Step == -1, AtBreak), and the
 // per-step frames of any Debug.step the debugged program runs itself.
+// These can arrive from another goroutine (a fork's body hitting a
+// break), so the session is only TryLock-acquired: a pause that loses
+// the race — or one raised by the prompt's own `print` evaluation —
+// continues immediately rather than interleaving two prompts on one
+// command input.
 func (s *Session) OnStep(f capabilities.StepFrame) capabilities.StepAction {
+	if !s.mu.TryLock() {
+		return capabilities.StepContinue
+	}
+	defer s.mu.Unlock()
 	if s.mode == modeDetached {
 		// Detached: tell any inner stepper to stand down too.
 		return capabilities.StepQuit
@@ -198,11 +250,15 @@ func (s *Session) prompt() stepMode {
 	for {
 		fmt.Fprint(s.out, "(adbg) ")
 		if !s.in.Scan() {
-			// EOF on the command input (Ctrl-D, or a drained --script
-			// file): detach (§5.4) — the program runs to completion.
+			// End of the command input: detach (§5.4) — the program runs
+			// to completion. Say WHY: a read failure (an oversized line,
+			// an I/O error) must not masquerade as a clean Ctrl-D or a
+			// drained --script file.
+			if err := s.in.Err(); err != nil {
+				fmt.Fprintf(s.out, "\ncommand input error: %s\n", err)
+			}
 			fmt.Fprintln(s.out, "\n"+detachNotice)
-			s.mode = modeDetached
-			return s.mode
+			return s.detach()
 		}
 		line := strings.TrimSpace(s.in.Text())
 		if s.echo {
@@ -220,8 +276,7 @@ func (s *Session) prompt() stepMode {
 			return s.mode
 		case "quit", "q":
 			fmt.Fprintln(s.out, detachNotice)
-			s.mode = modeDetached
-			return s.mode
+			return s.detach()
 		case "stack":
 			s.renderFullStack()
 		case "bt":
@@ -238,6 +293,20 @@ func (s *Session) prompt() stepMode {
 			fmt.Fprintf(s.out, "unknown command %q — try 'help'\n", cmd)
 		}
 	}
+}
+
+// detach puts the session in its terminal mode and disarms the per-step
+// trace, so the draining program stops paying the whole-tape snapshot
+// the armed trace forces every step — detach means "run at full speed".
+// Clearing the trace from inside the callback is safe: the step loop
+// re-checks it each iteration. Nil-guarded for a session that never ran
+// a program (a bare prompt unit test).
+func (s *Session) detach() stepMode {
+	s.mode = modeDetached
+	if s.clearTrace != nil {
+		s.clearTrace()
+	}
+	return s.mode
 }
 
 // splitCommand splits a prompt line into its command word and argument.
@@ -382,7 +451,25 @@ func (s *Session) evalExpr(src string) {
 		fmt.Fprintf(s.out, "  parse error: %s\n", err)
 		return
 	}
-	res, err := native.New(s.reg).Run(toks)
+	// Error positions must render against the EXPRESSION, not the paused
+	// program: the registry's Source/BaseFile are the program's (AqlError
+	// bakes r.Source in at construction), so swap them to the expression
+	// for the duration of the child run — the module loader's established
+	// swap/restore shape. FlowCtrl is snapshotted too: a bare `break` /
+	// `continue` in the expression would otherwise leak the signal into
+	// the suspended program's loop when it resumes.
+	savedSrc, savedFile, savedFlow := s.reg.Source, s.reg.BaseFile, s.reg.FlowCtrl
+	s.reg.Source, s.reg.BaseFile = src, ""
+	engine := native.New(s.reg)
+	engine.SetSource(src)
+	res, err := engine.Run(toks)
+	s.reg.Source, s.reg.BaseFile = savedSrc, savedFile
+	if s.reg.FlowCtrl != savedFlow {
+		leaked := s.reg.FlowCtrl
+		s.reg.FlowCtrl = savedFlow
+		fmt.Fprintf(s.out, "  (expression raised a %v signal with no enclosing loop — discarded)\n", leaked)
+		return
+	}
 	if err != nil {
 		fmt.Fprintf(s.out, "  error: %s\n", err)
 		return
@@ -393,7 +480,7 @@ func (s *Session) evalExpr(src string) {
 	}
 	parts := make([]string, len(res))
 	for i, v := range res {
-		parts[i] = v.String()
+		parts[i] = native.FormatForPrint(v)
 	}
 	fmt.Fprintln(s.out, "  "+strings.Join(parts, " "))
 }
