@@ -89,8 +89,12 @@ func (DefaultHTTPOps) Transport(p TLSProfile, id ClientIdentity) (http.RoundTrip
 	return buildTransport(p, id)
 }
 
-// buildTransport clones http.DefaultTransport and applies p.
-func buildTransport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) {
+// TLSConfigFor builds the crypto/tls configuration a profile
+// describes. It is exported because BOTH transports need it — the HTTP
+// client here and the raw sockets in aql:net — and a second
+// hand-written copy is exactly how the two would drift into disagreeing
+// about what `verify: false` or `ca:` mean.
+func TLSConfigFor(p TLSProfile, id ClientIdentity) (*tls.Config, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: p.Insecure, //nolint:gosec // policy-gated; see network/tls-insecure
 		ServerName:         p.ServerName,
@@ -105,6 +109,15 @@ func buildTransport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) 
 			return nil, ErrBadRootsPEM
 		}
 		cfg.RootCAs = pool
+	}
+	return cfg, nil
+}
+
+// buildTransport clones http.DefaultTransport and applies p.
+func buildTransport(p TLSProfile, id ClientIdentity) (http.RoundTripper, error) {
+	cfg, err := TLSConfigFor(p, id)
+	if err != nil {
+		return nil, err
 	}
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok { //covergate:allow http.DefaultTransport is a *http.Transport in every supported Go release

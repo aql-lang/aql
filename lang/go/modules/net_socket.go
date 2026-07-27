@@ -3,6 +3,7 @@ package modules
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
@@ -199,6 +201,28 @@ type netAddrOpts struct {
 	addr    string // dial/bind address
 	host    string // policy host (dial: remote host; listen: bind host)
 	port    int
+	// tlsProfile is the parsed `tls: {…}` sub-map; hasTLS distinguishes
+	// "no tls: key" from "tls: {}" (the latter means TLS with defaults,
+	// which is the documented spelling in NETWORK-CLIENTS.0.md §5).
+	tlsProfile capabilities.TLSProfile
+	hasTLS     bool
+}
+
+// parseTLSSubMap reads the optional `tls:` key shared by the dial and
+// bind paths, using the SAME parser fetch uses so the two surfaces
+// cannot disagree about what an option means.
+func parseTLSSubMap(r *native.Registry, mp native.ReadMap, word string, out *netAddrOpts) error {
+	tv, ok := mp.Get("tls")
+	if !ok {
+		return nil
+	}
+	prof, err := native.ParseTLSOpts(r, tv, word)
+	if err != nil {
+		return err
+	}
+	out.tlsProfile = prof
+	out.hasTLS = true
+	return nil
 }
 
 func parseNetAddr(r *native.Registry, v native.Value, word string, listening bool) (netAddrOpts, error) {
@@ -211,7 +235,14 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 		if sErr != nil || path == "" {
 			return netAddrOpts{}, r.AqlError("net_error", word+": unix: must be a socket path", word)
 		}
-		return netAddrOpts{network: "unix", addr: path, host: "unix:" + path}, nil
+		out := netAddrOpts{network: "unix", addr: path, host: "unix:" + path}
+		// A unix socket can carry TLS too, and — more to the point —
+		// silently DROPPING a tls: option here would be the same
+		// mislead ParseTLSOpts rejects unknown keys to prevent.
+		if err := parseTLSSubMap(r, mp, word, &out); err != nil {
+			return netAddrOpts{}, err
+		}
+		return out, nil
 	}
 	tv, ok := mp.Get("tcp")
 	if !ok {
@@ -226,12 +257,16 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 		if hv, ok := mp.Get("host"); ok {
 			host, _ = hv.AsConcreteString()
 		}
-		return netAddrOpts{
+		out := netAddrOpts{
 			network: "tcp",
 			addr:    net.JoinHostPort(host, strconv.FormatInt(port, 10)),
 			host:    host,
 			port:    int(port),
-		}, nil
+		}
+		if err := parseTLSSubMap(r, mp, word, &out); err != nil {
+			return netAddrOpts{}, err
+		}
+		return out, nil
 	}
 	addr, sErr := tv.AsConcreteString()
 	if sErr != nil || addr == "" {
@@ -244,7 +279,11 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 	} else {
 		host = addr
 	}
-	return netAddrOpts{network: "tcp", addr: addr, host: host, port: port}, nil
+	out := netAddrOpts{network: "tcp", addr: addr, host: host, port: port}
+	if err := parseTLSSubMap(r, mp, word, &out); err != nil {
+		return netAddrOpts{}, err
+	}
+	return out, nil
 }
 
 // recvDeadline reads an optional trailing `{within: <ms>}` options map.
@@ -337,11 +376,62 @@ func connectRawHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if has {
 		dialer.Timeout = within
 	}
+	if opts.hasTLS {
+		if pErr := native.CheckTLSPolicy(r, opts.tlsProfile, opts.host, opts.port); pErr != nil {
+			return nil, pErr
+		}
+	}
 	conn, cErr := dialer.Dial(opts.network, opts.addr)
 	if cErr != nil {
 		return nil, mapNetErr(r, "connect-raw", cErr)
 	}
+	if opts.hasTLS {
+		tconn, tErr := tlsClientConn(r, conn, opts, within, has)
+		if tErr != nil {
+			_ = conn.Close()
+			return nil, tErr
+		}
+		conn = tconn
+	}
 	return []native.Value{newSocketValue(conn)}, nil
+}
+
+// tlsClientConn wraps a dialled connection in a TLS client and completes
+// the handshake before the Socket escapes, so a `recv` never returns
+// plaintext from a connection whose peer was never verified. TLS is a
+// socket OPTION, not a separate API (NETWORK-SERVERS.0.md §4.4): the
+// returned Socket is the same type with the same words.
+func tlsClientConn(r *native.Registry, conn net.Conn, opts netAddrOpts, within time.Duration, hasDeadline bool) (net.Conn, error) {
+	cfg, err := native.TLSConfigForProfile(r, opts.tlsProfile, "connect-raw")
+	if err != nil {
+		return nil, err
+	}
+	if cfg.ServerName == "" && !cfg.InsecureSkipVerify {
+		// Unlike http.Transport, a raw dial has no URL to derive SNI
+		// and the verified name from — without this every TLS socket
+		// would fail verification.
+		cfg.ServerName = opts.host
+	}
+	tconn := tls.Client(conn, cfg)
+	if hasDeadline {
+		// SetDeadline's error is deliberately dropped: it fails only on
+		// an already-closed connection, and this one was just dialled.
+		// Were it somehow closed, Handshake below reports that properly
+		// — checking here would only produce a second, less specific
+		// error for the same condition.
+		_ = tconn.SetDeadline(time.Now().Add(within))
+	}
+	if hErr := tconn.Handshake(); hErr != nil {
+		return nil, mapNetErr(r, "connect-raw", hErr)
+	}
+	if hasDeadline {
+		// The connect deadline bounds the handshake only; recv/send
+		// carry their own {within:}. Same reasoning as above — a
+		// failure here means a dead conn, which the next recv reports
+		// as `closed`.
+		_ = tconn.SetDeadline(time.Time{})
+	}
+	return tconn, nil
 }
 
 // serveRawHandler — `serve-raw {tcp: port} [handler]`: bind, then run an

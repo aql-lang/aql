@@ -1,6 +1,7 @@
 package native
 
 import (
+	"crypto/tls"
 	"net/http"
 
 	"github.com/aql-lang/aql/eng/go"
@@ -60,6 +61,20 @@ func resolveIdentity(r *Registry, p capabilities.TLSProfile, word string) (capab
 				"AQL source can name one but cannot create one")
 	}
 	return id, nil
+}
+
+// TLSConfigForProfile resolves the profile's identity against r and
+// builds the crypto/tls configuration. It is the seam the raw-socket
+// words use: they need a *tls.Config rather than an http.RoundTripper,
+// but must resolve identities and interpret options identically to
+// fetch — so both go through one parser (ParseTLSOpts) and one config
+// builder (capabilities.TLSConfigFor).
+func TLSConfigForProfile(r *Registry, p capabilities.TLSProfile, word string) (*tls.Config, error) {
+	id, err := resolveIdentity(r, p, word)
+	if err != nil {
+		return nil, err
+	}
+	return capabilities.TLSConfigFor(p, id)
 }
 
 // transportCacheMax bounds the per-registry profile→transport cache.
