@@ -605,6 +605,67 @@ func TestLaunchOutAtTopLevel(t *testing.T) {
 	}
 }
 
+func TestLaunchTimeTravelHistory(t *testing.T) {
+	// §6.4 Phase-3 form: a bounded ring of line-granular snapshots.
+	// `back` re-renders past state read-only; `forward` returns; the
+	// boundary arms answer rather than wrap.
+	path := writeProgram(t, "1\n2\nadd\n")
+	stdin := strings.Join([]string{
+		"s", "s", // → row 3 with [1 2]
+		"history",
+		"back", "back", "back", // -1, -2, then past the oldest
+		"stack",      // browsed: row-1 state, empty
+		"bt", "list", // browsed: frames + source follow the snapshot
+		"forward", "forward", "forward", // -1, live, then past live
+		"c",
+	}, "\n") + "\n"
+	code, out, _ := launch(t, []string{path}, stdin)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out,
+		"-1  line 2", "-2  line 1", // the trail, newest first
+		"history -1  at "+path+":2", "stack: [1]",
+		"history -2  at "+path+":1", "stack: []",
+		"(no further history)",
+		"(stack empty)",              // `stack` follows the browsed entry
+		"(top level — no fn frames)", // `bt` follows the browsed snapshot
+		"->    1  1",                 // `list` centers on the browsed line, not the live one
+		"history -1  at "+path+":2",
+		"(back at the live pause)",
+		"(already at the live pause)",
+		"3\n(program exited)")
+}
+
+func TestLaunchHistoryRecordsUnderContinue(t *testing.T) {
+	// The ring records in EVERY mode — after a breakpoint you can look
+	// back at how execution got there, and `print` reminds that bindings
+	// are live, not rewound.
+	path := writeProgram(t, "1\n2\nadd\n")
+	code, out, _ := launch(t, []string{"--no-check", "--break", "3", path},
+		"c\nback\nprint 40 add 2\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out,
+		"breakpoint: line 3",
+		"history -1  at "+path+":2", "stack: [1]",
+		"(live state — the history view does not rewind bindings)",
+		"42",
+		"3\n(program exited)")
+}
+
+func TestLaunchHistoryEmptyAtFirstPause(t *testing.T) {
+	// Negative: at the very first pause the only entry is the pause
+	// itself — nothing earlier to list or browse.
+	path := writeProgram(t, "1 add 2\n")
+	code, out, _ := launch(t, []string{path}, "history\nback\nc\n")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	requireOrder(t, out, "(no earlier steps recorded)", "(no further history)", "3\n(program exited)")
+}
+
 func TestLaunchModuleFnDescent(t *testing.T) {
 	// Phase 2 remainder: a module fn's body runs on its CAPTURED
 	// sub-registry — the debugParent chain resolves the session's live

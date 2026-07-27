@@ -97,6 +97,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	postMortem := fs.Bool("post-mortem", false, "on an uncaught error, open an inspection prompt over the fault state before exiting")
 	breakOnError := fs.Bool("break-on-error", false, "pause at every raise BEFORE it unwinds — including errors a do-handler will catch")
+	dapMode := fs.Bool("dap", false, "serve the Debug Adapter Protocol over stdio (for editors); the program still comes from the command line")
 	var breaks []string
 	fs.Func("break", "set a breakpoint before the run starts: a source line ('12', 'file:12') or a word name ('add'); repeatable", func(v string) error {
 		breaks = append(breaks, v)
@@ -154,6 +155,18 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if perr != nil {
 		fmt.Fprintf(stderr, "aql debug: parse %s: %s\n", file, perr)
 		return 1
+	}
+
+	if *dapMode {
+		// Editor mode: stdout carries DAP frames only — no banner, no
+		// prompt, no residual prints. The adapter owns the session.
+		if *script != "" {
+			fmt.Fprintln(stderr, "aql debug: --dap and --script are mutually exclusive")
+			return 1
+		}
+		return debugger.RunDAP(reg, debugger.Config{
+			File: path, Source: source, BreakOnError: *breakOnError,
+		}, tokens, source, stdin, stdout)
 	}
 
 	cmdIn := stdin

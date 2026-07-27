@@ -52,6 +52,20 @@ const (
 // the `stack` command shows every entry.
 const maxStackShown = 8
 
+// historyCap bounds the time-travel ring: how many line-granular
+// snapshots `back` can reach. Each entry retains one tape snapshot.
+const historyCap = 64
+
+// histEntry is one recorded line visit — the tape snapshot the trace
+// fire handed over, its pointer, the source row, and whether it came
+// from a body evaluation.
+type histEntry struct {
+	stack   []native.Value
+	pointer int
+	row     int
+	sub     bool
+}
+
 // detachNotice is printed whenever the session detaches (quit or EOF) —
 // it must say the program CONTINUES, because that is what detach means.
 const detachNotice = "(detached — program continues to completion)"
@@ -123,6 +137,27 @@ type Session struct {
 	breakOnError bool
 	lastFault    string
 
+	// pauseHook, when set, is an ALTERNATE front end (the DAP adapter):
+	// each pause calls it — with mu held, blocking the engine — instead
+	// of rendering and prompting; the returned action string goes through
+	// applyAction, the same transition the prompt commands use, so the
+	// two front ends can never diverge on semantics (§8.2). While the
+	// hook blocks, the hook's owner is the only actor and may call the
+	// session's unlocked internals (frameEntries, evalText, …).
+	pauseHook func(PauseInfo) string
+
+	// history is the bounded time-travel ring (§6.4's Phase-3 form): one
+	// line-granular snapshot per source line VISITED — in every mode, so
+	// after a breakpoint you can look BACK at how execution got there.
+	// `back`/`forward` move browse through it as a read-only re-render;
+	// entry 0 is the oldest, the last entry is the current pause. The
+	// engine already allocated each snapshot for the trace fire —
+	// recording retains at most historyCap of them.
+	history []histEntry
+	// browse is the history cursor: 0 = the live pause; k>0 = viewing k
+	// entries back. Reset at each new pause.
+	browse int
+
 	// mu serializes the pause machinery. The per-step trace runs on the
 	// program's goroutine, but the installed DebugOps is shared registry
 	// state, so a concurrent fork (a timer body hitting Debug.break) can
@@ -161,6 +196,35 @@ func New(reg *native.Registry, cfg Config) *Session {
 // Controller implements capabilities.DebugOps: the session is its own
 // step controller.
 func (s *Session) Controller() capabilities.StepController { return s }
+
+// PauseInfo describes one pause to an alternate front end (§8.2).
+type PauseInfo struct {
+	Kind   string // "step", "breakpoint", "fault", "marker", "inner-step"
+	Row    int    // 1-based source row, 0 unknown
+	Detail string // breakpoint label / fault text / inner-step counter
+	InBody bool   // the pause is inside a body evaluation
+}
+
+// applyAction performs one control transition — the single semantics
+// both front ends share: the prompt's action commands and the DAP
+// adapter's requests all land here.
+func (s *Session) applyAction(action string) stepMode {
+	switch action {
+	case "step":
+		s.mode = modeStep
+	case "next":
+		s.mode = modeNext
+		s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
+	case "out":
+		s.mode = modeOut
+		s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
+	case "quit":
+		return s.detach()
+	default: // an unknown action continues — fail-safe for a foreign front end
+		s.mode = modeContinue
+	}
+	return s.mode
+}
 
 // RunProgram executes the parsed program under the session: installs the
 // session as the host DebugOps (filling the socket Debug.break pauses
@@ -258,6 +322,9 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		s.prevRow = row
 	}
 	newLine := row != 0 && row != prev
+	if newLine {
+		s.recordHistory(histEntry{stack: stack, pointer: pointer, row: row, sub: sub})
+	}
 
 	// Breakpoints pause in every mode: a line breakpoint once per line
 	// entry, a word breakpoint whenever the word is about to dispatch —
@@ -292,6 +359,14 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		}
 	}
 	s.curRow = row
+	if s.pauseHook != nil {
+		kind := "step"
+		if hit != "" {
+			kind = "breakpoint"
+		}
+		s.applyAction(s.pauseHook(PauseInfo{Kind: kind, Row: row, Detail: hit, InBody: sub}))
+		return
+	}
 	where := ""
 	if sub {
 		where = " (in body)"
@@ -315,6 +390,10 @@ func (s *Session) pauseAtFault(pointer int, stack []native.Value, errText string
 		row = stack[pointer].Pos().Row
 	}
 	s.curRow = row
+	if s.pauseHook != nil {
+		s.applyAction(s.pauseHook(PauseInfo{Kind: "fault", Row: row, Detail: errText}))
+		return
+	}
 	fmt.Fprintf(s.out, "error raised — paused before unwind at %s:%s  %s\n",
 		s.file, rowLabel(row), s.sourceLine(row))
 	fmt.Fprintf(s.out, "  %s\n", errText)
@@ -329,6 +408,76 @@ func rowLabel(row int) string {
 		return "?"
 	}
 	return strconv.Itoa(row)
+}
+
+// recordHistory appends one line visit to the bounded ring.
+func (s *Session) recordHistory(e histEntry) {
+	s.history = append(s.history, e)
+	if len(s.history) > historyCap {
+		s.history = s.history[1:]
+	}
+}
+
+// viewEntry returns the browsed history entry, ok=false when live.
+func (s *Session) viewEntry() (histEntry, bool) {
+	if s.browse > 0 && s.browse < len(s.history) {
+		return s.history[len(s.history)-1-s.browse], true
+	}
+	return histEntry{}, false
+}
+
+// stepBack moves the history cursor one entry further into the past.
+func (s *Session) stepBack() {
+	if s.browse+1 >= len(s.history) {
+		fmt.Fprintln(s.out, "  (no further history)")
+		return
+	}
+	s.browse++
+	s.renderHistoryView()
+}
+
+// stepForward moves the cursor back toward the live pause.
+func (s *Session) stepForward() {
+	if s.browse == 0 {
+		fmt.Fprintln(s.out, "  (already at the live pause)")
+		return
+	}
+	s.browse--
+	if s.browse == 0 {
+		fmt.Fprintln(s.out, "  (back at the live pause)")
+		return
+	}
+	s.renderHistoryView()
+}
+
+// renderHistoryView renders the browsed entry — a read-only re-render
+// of past state: the snapshot is the truth, the registry is NOT rewound.
+func (s *Session) renderHistoryView() {
+	e, _ := s.viewEntry()
+	where := ""
+	if e.sub {
+		where = " (in body)"
+	}
+	fmt.Fprintf(s.out, "  history -%d  at %s:%s%s  %s\n",
+		s.browse, s.file, rowLabel(e.row), where, s.sourceLine(e.row))
+	fmt.Fprintf(s.out, "  stack: %s\n", summarizeStack(resolvedData(e.stack, e.pointer)))
+}
+
+// renderHistoryList lists the recorded trail, most recent first. The
+// newest entry is the current pause itself, so browsing starts at -1.
+func (s *Session) renderHistoryList() {
+	if len(s.history) <= 1 {
+		fmt.Fprintln(s.out, "  (no earlier steps recorded)")
+		return
+	}
+	for k := 1; k < len(s.history); k++ {
+		e := s.history[len(s.history)-1-k]
+		where := ""
+		if e.sub {
+			where = " (in body)"
+		}
+		fmt.Fprintf(s.out, "  -%d  line %s%s  %s\n", k, rowLabel(e.row), where, s.sourceLine(e.row))
+	}
 }
 
 // wordNameAt returns the name of the Word about to execute, if any.
@@ -394,13 +543,25 @@ func (s *Session) OnStep(f capabilities.StepFrame) capabilities.StepAction {
 		return capabilities.StepContinue
 	}
 	s.curRow = f.Row
-	if f.AtBreak {
-		fmt.Fprintf(s.out, "break hit (Debug.break)%s\n", frameLoc(f))
+	var mode stepMode
+	if s.pauseHook != nil {
+		kind := "inner-step"
+		if f.AtBreak {
+			kind = "marker"
+		}
+		mode = s.applyAction(s.pauseHook(PauseInfo{
+			Kind: kind, Row: f.Row, Detail: fmt.Sprintf("step %d", f.Step),
+		}))
 	} else {
-		fmt.Fprintf(s.out, "step %d%s\n", f.Step, frameLoc(f))
+		if f.AtBreak {
+			fmt.Fprintf(s.out, "break hit (Debug.break)%s\n", frameLoc(f))
+		} else {
+			fmt.Fprintf(s.out, "step %d%s\n", f.Step, frameLoc(f))
+		}
+		s.showStack()
+		mode = s.prompt()
 	}
-	s.showStack()
-	switch s.prompt() {
+	switch mode {
 	case modeContinue:
 		return capabilities.StepContinue
 	case modeDetached:
@@ -426,6 +587,7 @@ func frameLoc(f capabilities.StepFrame) string {
 // returning the session's resulting mode. Inspection commands loop.
 func (s *Session) prompt() stepMode {
 	s.inPrompt = true
+	s.browse = 0 // each pause starts at the live view
 	defer func() { s.inPrompt = false }()
 	for {
 		fmt.Fprint(s.out, "(adbg) ")
@@ -449,22 +611,17 @@ func (s *Session) prompt() stepMode {
 		case "":
 			continue
 		case "step", "s":
-			s.mode = modeStep
-			return s.mode
+			return s.applyAction("step")
 		case "next", "n":
-			s.mode = modeNext
-			s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
-			return s.mode
+			return s.applyAction("next")
 		case "out", "o":
-			s.mode = modeOut
-			s.baseDepth = liveFrameDepth(s.curStack, s.curPointer)
+			m := s.applyAction("out")
 			if s.baseDepth == 0 {
 				fmt.Fprintln(s.out, "(out at top level runs to the next breakpoint or completion)")
 			}
-			return s.mode
+			return m
 		case "continue", "c":
-			s.mode = modeContinue
-			return s.mode
+			return s.applyAction("continue")
 		case "break", "b":
 			if arg == "" {
 				s.listBreaks()
@@ -476,13 +633,21 @@ func (s *Session) prompt() stepMode {
 		case "quit", "q":
 			fmt.Fprintln(s.out, s.detachMsg())
 			return s.detach()
+		case "back":
+			s.stepBack()
+		case "forward", "fwd":
+			s.stepForward()
+		case "history":
+			s.renderHistoryList()
 		case "stack":
 			s.renderFullStack()
 		case "bt":
 			s.renderBacktrace()
 		case "defs", "locals":
+			s.liveStateHint()
 			s.renderDefs(arg == "all")
 		case "print", "p", "eval":
+			s.liveStateHint()
 			s.evalExpr(arg)
 		case "list", "l":
 			s.renderList()
@@ -536,18 +701,26 @@ func (s *Session) dataStack() ([]native.Value, bool) {
 	if s.curStack == nil {
 		return nil, false
 	}
-	n := s.curPointer
-	if n > len(s.curStack) {
-		n = len(s.curStack)
+	return resolvedData(s.curStack, s.curPointer), true
+}
+
+// resolvedData reconstructs the data stack from a tape snapshot's
+// resolved region, filtering engine markers — the offline twin of the
+// live CurrentStack view, shared by the post-mortem fallback and the
+// time-travel history views.
+func resolvedData(stack []native.Value, pointer int) []native.Value {
+	n := pointer
+	if n > len(stack) {
+		n = len(stack)
 	}
 	vals := make([]native.Value, 0, n)
-	for _, v := range s.curStack[:n] {
+	for _, v := range stack[:n] {
 		if isEngineMarker(v) {
 			continue
 		}
 		vals = append(vals, v)
 	}
-	return vals, true
+	return vals
 }
 
 // isEngineMarker reports whether a resolved-region tape value is engine
@@ -678,10 +851,25 @@ func summarizeStack(vals []native.Value) string {
 	return "[" + strings.Join(parts, " ") + "]"
 }
 
-// renderFullStack renders every data-stack entry, top (#0) first.
+// liveStateHint reminds a history-browsing user that bindings and
+// evaluation reflect the LIVE pause — the snapshot ring re-renders past
+// stacks, it does not rewind the registry.
+func (s *Session) liveStateHint() {
+	if s.browse > 0 {
+		fmt.Fprintln(s.out, "  (live state — the history view does not rewind bindings)")
+	}
+}
+
+// renderFullStack renders every data-stack entry, top (#0) first — the
+// browsed history entry's stack while time-travelling.
 func (s *Session) renderFullStack() {
-	vals, ok := s.dataStack()
-	if !ok || len(vals) == 0 {
+	var vals []native.Value
+	if e, browsing := s.viewEntry(); browsing {
+		vals = resolvedData(e.stack, e.pointer)
+	} else if live, ok := s.dataStack(); ok {
+		vals = live
+	}
+	if len(vals) == 0 {
 		fmt.Fprintln(s.out, "  (stack empty)")
 		return
 	}
@@ -696,6 +884,26 @@ type frameInfo struct {
 	installs []string
 }
 
+// frameEntries resolves the frame chain the current view describes:
+// the browsed history snapshot while time-travelling; the cross-engine
+// chain (outermost first) while engines run; the retained fault
+// snapshot at a post-mortem. Shared by `bt` and the DAP stackTrace.
+func (s *Session) frameEntries() []frameInfo {
+	if e, browsing := s.viewEntry(); browsing {
+		// Time-travelling: the browsed snapshot is the only truth — the
+		// live engine chain describes NOW, not then.
+		return liveFrames(e.stack, e.pointer)
+	}
+	if states := s.reg.RunningEngineStates(); len(states) > 0 {
+		var frames []frameInfo
+		for _, st := range states {
+			frames = append(frames, liveFrames(st.Stack, st.Pointer)...)
+		}
+		return frames
+	}
+	return liveFrames(s.curStack, s.curPointer)
+}
+
 // renderBacktrace reconstructs the live fn-frame chain (§5.3). While
 // engines are running on the session's registry, the chain spans ALL of
 // them — the outer program's frames plus every nested body evaluation's
@@ -704,14 +912,7 @@ type frameInfo struct {
 // Module fns' own frames run on their captured registries and are still
 // absent — the remaining documented gap.
 func (s *Session) renderBacktrace() {
-	var frames []frameInfo
-	if states := s.reg.RunningEngineStates(); len(states) > 0 {
-		for _, st := range states {
-			frames = append(frames, liveFrames(st.Stack, st.Pointer)...)
-		}
-	} else {
-		frames = liveFrames(s.curStack, s.curPointer)
-	}
+	frames := s.frameEntries()
 	if len(frames) == 0 {
 		fmt.Fprintln(s.out, "  (top level — no fn frames)")
 		return
@@ -767,20 +968,28 @@ func liveFrames(stack []native.Value, pointer int) []frameInfo {
 // snapshot (params, locals, its defs and imports) — because the full def
 // table also mirrors every native word; `defs all` lifts the filter.
 func (s *Session) renderDefs(all bool) {
+	defs := s.programDefs(all)
+	fmt.Fprintf(s.out, "  defs (%d):\n", len(defs))
+	for _, d := range defs {
+		fmt.Fprintf(s.out, "  %s = %s\n", d[0], d[1])
+	}
+}
+
+// programDefs lists current bindings as (name, rendered value) pairs,
+// sorted — the program's own by default, everything under all. Shared
+// by `defs` and the DAP variables view.
+func (s *Session) programDefs(all bool) [][2]string {
 	names := s.reg.Defs.Names()
 	sort.Strings(names)
-	shown := make([]string, 0, len(names))
+	out := make([][2]string, 0, len(names))
 	for _, n := range names {
 		if all || s.reg.Defs.Depth(n) > s.baseDefs[n] {
-			shown = append(shown, n)
+			if v, ok := s.reg.Defs.Top(n); ok {
+				out = append(out, [2]string{n, native.FormatForPrint(v)})
+			}
 		}
 	}
-	fmt.Fprintf(s.out, "  defs (%d):\n", len(shown))
-	for _, n := range shown {
-		if v, ok := s.reg.Defs.Top(n); ok {
-			fmt.Fprintf(s.out, "  %s = %s\n", n, native.FormatForPrint(v))
-		}
-	}
+	return out
 }
 
 // evalExpr parses and runs an expression against the paused program's
@@ -793,14 +1002,19 @@ func (s *Session) evalExpr(src string) {
 		fmt.Fprintln(s.out, "usage: print <expr>")
 		return
 	}
+	fmt.Fprintln(s.out, "  "+s.evalText(src))
+}
+
+// evalText is evalExpr's engine: it returns the rendered result (or the
+// error / no-result notice) as one line, so the prompt and the DAP
+// evaluate request share the evaluation exactly.
+func (s *Session) evalText(src string) string {
 	if s.reg.ParseFunc == nil {
-		fmt.Fprintln(s.out, "  (no parser configured)")
-		return
+		return "(no parser configured)"
 	}
 	toks, err := s.reg.ParseFunc(src)
 	if err != nil {
-		fmt.Fprintf(s.out, "  parse error: %s\n", err)
-		return
+		return fmt.Sprintf("parse error: %s", err)
 	}
 	// Error positions must render against the EXPRESSION, not the paused
 	// program: the registry's Source/BaseFile are the program's (AqlError
@@ -826,31 +1040,33 @@ func (s *Session) evalExpr(src string) {
 	if s.reg.FlowCtrl != savedFlow {
 		leaked := s.reg.FlowCtrl
 		s.reg.FlowCtrl = savedFlow
-		fmt.Fprintf(s.out, "  (expression raised a %v signal with no enclosing loop — discarded)\n", leaked)
-		return
+		return fmt.Sprintf("(expression raised a %v signal with no enclosing loop — discarded)", leaked)
 	}
 	if err != nil {
-		fmt.Fprintf(s.out, "  error: %s\n", err)
-		return
+		return fmt.Sprintf("error: %s", err)
 	}
 	if len(res) == 0 {
-		fmt.Fprintln(s.out, "  (no result)")
-		return
+		return "(no result)"
 	}
 	parts := make([]string, len(res))
 	for i, v := range res {
 		parts[i] = native.FormatForPrint(v)
 	}
-	fmt.Fprintln(s.out, "  "+strings.Join(parts, " "))
+	return strings.Join(parts, " ")
 }
 
-// renderList shows the source around the current pause line.
+// renderList shows the source around the current pause line — the
+// browsed entry's line while time-travelling.
 func (s *Session) renderList() {
-	if s.curRow <= 0 || s.curRow > len(s.lines) {
+	row := s.curRow
+	if e, browsing := s.viewEntry(); browsing {
+		row = e.row
+	}
+	if row <= 0 || row > len(s.lines) {
 		fmt.Fprintln(s.out, "  (source line unknown)")
 		return
 	}
-	lo, hi := s.curRow-2, s.curRow+2
+	lo, hi := row-2, row+2
 	if lo < 1 {
 		lo = 1
 	}
@@ -859,7 +1075,7 @@ func (s *Session) renderList() {
 	}
 	for n := lo; n <= hi; n++ {
 		marker := "   "
-		if n == s.curRow {
+		if n == row {
 			marker = "-> "
 		}
 		fmt.Fprintf(s.out, "  %s%4d  %s\n", marker, n, s.lines[n-1])
@@ -884,6 +1100,9 @@ func (s *Session) renderHelp() {
   break <spec>   set a breakpoint: a line ('break 12'), or a word
                  ('break add'); bare 'break' lists them
   delete [spec]  delete one breakpoint (bare 'delete' clears all)
+  back           view the previous line visited (time-travel, read-only)
+  forward, fwd   move back toward the live pause
+  history        list the recorded trail of visited lines
   quit, q        detach — the program continues to completion
   stack          show every data-stack entry (top first)
   bt             backtrace of live inline fn frames

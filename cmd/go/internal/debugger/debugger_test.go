@@ -56,6 +56,32 @@ func TestPromptEOFDetaches(t *testing.T) {
 	}
 }
 
+func TestHistoryRingBounds(t *testing.T) {
+	// The ring caps at historyCap: recording beyond it drops the oldest.
+	s, _ := testSession(t, "")
+	for i := 1; i <= historyCap+10; i++ {
+		s.recordHistory(histEntry{row: i})
+	}
+	if len(s.history) != historyCap {
+		t.Fatalf("ring len = %d, want %d", len(s.history), historyCap)
+	}
+	if s.history[0].row != 11 {
+		t.Errorf("oldest surviving row = %d, want 11 (the first 10 dropped)", s.history[0].row)
+	}
+	// viewEntry: live at browse 0; bounded at the ring's edge.
+	if _, ok := s.viewEntry(); ok {
+		t.Error("browse 0 is the live view")
+	}
+	s.browse = historyCap // beyond the last valid cursor
+	if _, ok := s.viewEntry(); ok {
+		t.Error("a cursor past the ring resolves to live, never panics")
+	}
+	s.browse = 1
+	if e, ok := s.viewEntry(); !ok || e.row != historyCap+9 {
+		t.Errorf("browse 1 = row %d, want %d", e.row, historyCap+9)
+	}
+}
+
 func TestPauseAtFaultUnknownRow(t *testing.T) {
 	// A fault at a position-less pointer (a post-loop limit, a synthetic
 	// token) renders "?" rather than a bogus line, and still prompts.

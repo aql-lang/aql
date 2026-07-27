@@ -1,8 +1,9 @@
 # AQL-DEBUGGER — a first-class interactive `aql debug` debugger
 
-Status: **Living reference — Phases 1, 1.5, and the Phase-2 core
-SHIPPED (2026-07); the rest is design.** (Shipped notes: Phase 1
-below; Phase 1.5 at §6.1; Phase 2 at §10.) This note designs the interactive `aql debug <file.aql>`
+Status: **Living reference — Phases 1, 1.5, 2, and 3 SHIPPED
+(2026-07); the rest is design.** (Shipped notes: Phase 1 below;
+Phase 1.5 at §6.1; Phase 2 at §10; Phase 3 at §6.4 — time-travel —
+and §8.2 — DAP.) This note designs the interactive `aql debug <file.aql>`
 debugger: launch a program, set breakpoints, single-step, inspect the
 stack / scope / call chain, and evaluate expressions at a pause. It is
 grounded in seams that already exist in the tree (verified against the
@@ -430,7 +431,22 @@ can check in a repro script. This is also how the debugger satisfies the
 repo's headless-test discipline (§11): every interactive path is
 exercised by a scripted front end with no TTY.
 
-### 6.4 Time-travel / step-backward  *(designed; later phase)*
+### 6.4 Time-travel / step-backward  *(Phase-3 form SHIPPED)*
+
+> **Shipped — Phase 3** (2026-07): the bounded, read-only form below,
+> as designed. Every *line-level* stop (not every raw step — the ring
+> records at the session's coalescing granularity, in every run mode
+> including `continue`) appends a `{stack, pointer, row, sub}`
+> snapshot to a 64-entry ring. `back`/`forward` move a browse cursor;
+> `history` lists the trail newest-first. While browsing, the
+> *snapshot* is the single source of truth for `stack`, `bt`, and
+> `list`; `print`/`defs` stay **live** and say so (`(live state — the
+> history view does not rewind bindings)`) — the honest boundary of a
+> re-render that mutates nothing. Boundary arms answer rather than
+> wrap (`(no further history)` / `(already at the live pause)`), and
+> any resume clears the cursor. Delta from the design as written:
+> `replay` (re-run to a chosen step) did NOT ship — deterministic
+> re-execution remains future work; only the ring shipped.
 
 Execution is a deterministic sequence of steps and the trace hands out a
 whole-tape snapshot each step, so *stepping backward* is unusually cheap
@@ -512,7 +528,34 @@ prompt:
 registry — the same isolation `Debug.trace`/`aql:vm` use, so an
 evaluated expression can never grant itself more than the program had.
 
-### 8.2 DAP-ready architecture (editors — later phase)
+### 8.2 DAP-ready architecture (editors)  *(SHIPPED)*
+
+> **Shipped — Phase 3** (2026-07): `aql debug --dap <file.aql>`
+> (`cmd/go/internal/debugger/dap.go`) — the second front end this
+> section committed to, over the SAME session: the TTY prompt was
+> refactored to a `pauseHook` seam + `applyAction` (the shared
+> step/next/out/quit semantics), and the adapter is one goroutine
+> speaking `Content-Length`-framed DAP over stdio while the engine
+> parks in the hook. Supported: `initialize` (capability advert),
+> `launch` + `configurationDone` (entry stop), `setBreakpoints`
+> (line BPs, replace-per-call, settable paused or idle), `threads`
+> (one), `stackTrace` (top frame = innermost fn or `main` at the pause
+> row; deeper frames from the cross-engine chain, line-0/subtle),
+> `scopes`/`variables` (Defs = the baseline-filtered program bindings;
+> Stack = top-first `#N`), `evaluate` (the same child-engine eval;
+> refused while running), `continue`/`next`/`stepIn`/`stepOut`,
+> `stopped` reasons `step`/`breakpoint`/`exception`
+> (`--break-on-error`), program output as `output` events (stdout via
+> a writer shim; errors on `stderr` category), `exited` + `terminated`
+> with the real exit code, and `disconnect` = detach-and-drain.
+> `pause` is refused honestly (no preemption — §5.4). Determinism +
+> deadlock-freedom come from *request gating*: while the engine runs,
+> the serve loop reads ONLY the pause/done channels (requests queue in
+> the reader goroutine), so a fixed request script always sees the
+> same interleaving — the property the scripted DAP tests pin.
+> `--dap` and `--script` are mutually exclusive. Delta from the sketch
+> below: the adapter lives inside `aql debug` itself, not under
+> `aql serve` — it shares the LSP's framing *idea*, not its server.
 
 Editor users expect the **Debug Adapter Protocol** (`setBreakpoints`,
 `stackTrace`, `scopes`, `variables`, `next`/`stepOut`, `pause`,
@@ -626,8 +669,13 @@ ends and kernel work begins.
   registry, which the main registry's engine walk cannot see); and
   per-engine file identity on pause banners (a module-fn pause names
   the right row of the wrong file — the §12 file-identity gap).
-- **Phase 3 — DAP + time-travel.** A DAP adapter as a *second* front end
-  over the session (§8.2); bounded step-back / replay (§6.4).
+- **Phase 3 — DAP + time-travel. SHIPPED** (2026-07, host only —
+  zero engine change): the DAP adapter as a *second* front end over
+  the session (§8.2's shipped note) and the bounded read-only
+  step-back ring (§6.4's shipped note). `replay` did not ship;
+  neither did DAP word/conditional breakpoints (line BPs only —
+  `setBreakpoints` is the protocol's line surface; words and
+  `Debug.break-when` remain TTY/source affordances for now).
 - **Phase 4 — remote/attach stepping.** Extend `debugserve` with a
   stepping control channel over the existing transport (§8.3).
 - **Beyond — cooperative cancellation.** A real "terminate now" seam so

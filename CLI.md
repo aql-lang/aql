@@ -534,6 +534,9 @@ per line, however many engine steps the line expands to. At the
 | `quit`, `q` | **detach** — the program continues to completion |
 | `stack` | every data-stack entry, top (`#0`) first |
 | `bt` | backtrace of live inline fn frames (name + bound params) |
+| `back` | browse one recorded step earlier (time-travel, read-only) |
+| `forward`, `fwd` | browse one step later; at the newest entry, return to the live pause |
+| `history` | list the recorded trail, newest first |
 | `defs`, `locals` | the program's bindings (`defs all` for every binding) |
 | `print <expr>`, `p`, `eval` | evaluate in the paused program's scope |
 | `list`, `l` | source around the current line |
@@ -563,6 +566,23 @@ inspection prompt over the fault state before the error reaches
 stderr and the run exits 1. Errors a `do` handler catches are not
 post-mortems; a session you already `quit` stays closed.
 
+**Time travel** — every line-level stop is recorded in a bounded ring
+(the last 64, in every run mode), and `back`/`forward` browse it
+read-only: `stack`, `bt`, and `list` follow the browsed snapshot,
+while `print` and `defs` stay live (bindings are not rewound — the
+view says so). `history` lists the trail. Resuming execution clears
+the browse cursor; replaying execution backwards is future work.
+
+**Editor integration** — `--dap` speaks the Debug Adapter Protocol
+over stdio (Content-Length-framed JSON), so any DAP client can drive
+the same session: launch, line breakpoints, stepping
+(`next`/`stepIn`/`stepOut`), stack/scopes/variables, evaluate, and
+stopped events (`breakpoint`, `step`, `exception` under
+`--break-on-error`). Program output arrives as `output` events; the
+program's exit code is reported in the `terminated`/`exited` events.
+`--dap` and `--script` are mutually exclusive; `pause` is refused
+honestly (no preemption seam — same as `quit` above).
+
 `bt` chains frames across every engine running on the program's
 registry — a pause inside an `each` body still shows the enclosing
 fn's frame — and breakpoints reach **module fn bodies** too (their
@@ -570,7 +590,7 @@ captured registries resolve the session's hook through the import
 chain).
 
 Flags: `--script F`, `--break SPEC` (repeatable), `--break-on-error`,
-`--post-mortem`, `--no-check` (also `AQL_NO_CHECK`),
+`--post-mortem`, `--dap`, `--no-check` (also `AQL_NO_CHECK`),
 `--color auto|always|never`.
 
 Current limits (see the design note's roadmap): a module fn's own
