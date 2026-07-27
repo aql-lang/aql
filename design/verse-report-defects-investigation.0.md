@@ -7,10 +7,17 @@ follow-up: for each, the cause **in the source**, the blast radius as
 *tested*, and what a fix has to decide. Reproduced against `main` @
 `ab0e1e0`.
 
-Nothing here is a decision. Two items (A, B) are unambiguous engine bugs
-whose fix shape is clear; three (C, D, F) need a design call named below;
-one (E) is mostly documentation with one engine defect inside it; one (G)
-is an already-recorded issue whose worst face is not recorded.
+Nothing here is a decision. Three items (A, B, F) are unambiguous engine
+bugs whose fix shape is clear — F's fix is written and its blast radius
+measured; two (C, D) need a design call named below; one (E) is mostly
+documentation with one engine defect inside it; one (G) is an
+already-recorded issue whose worst face is not recorded.
+
+Two findings grew materially during investigation. **F** was reported as a
+`case`-exhaustiveness precision gap and turned out to be a parameter-type
+erasure that also changes arity silently. **E** was reported as four
+phantom error codes and turned out to include an engine defect (a
+code-less runtime error) alongside two claims that were simply wrong.
 
 | | Defect | Kind | Severity |
 |---|---|---|---|
@@ -19,7 +26,7 @@ is an already-recorded issue whose worst face is not recorded.
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — three variants, user-visible by default |
 | **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command |
 | **E** | Error-code table documents codes the engine can't produce | docs + 1 engine bug | medium |
-| **F** | `case` exhaustiveness works in only 1 of 4 union spellings | checker precision | medium — gating error on correct code |
+| **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently makes a 1-arg fn callable with 0 args |
 | **G** | Un-separated forward calls evaluate right-to-left → stale reads | recorded, deferred | medium — invalidates tests silently |
 
 
@@ -420,100 +427,166 @@ source for `aql explain <code>` (R4 in
 out-of-bounds runtime error a code.
 
 
-## F. `case` exhaustiveness works in only one of four union spellings
+## F. The shorthand `fn` form silently discards a `def`-bound union/enum type
 
-### The symptom is narrower and odder than first reported
+This started as "`case` exhaustiveness is lost in the shorthand form".
+The case symptom is real but minor; the actual defect is that **the
+shorthand `fn` form loses the declared type of any parameter whose type
+name resolves to a payload-carrying value**, and `case` is only the
+loudest of five consequences. Two of the others are silent wrong
+behaviour.
 
-The report described this as "the shorthand `fn` form loses the union".
-Completing the matrix shows the working cell is the exception, not the
-broken one:
+### Root cause
 
-| | `def`-bound union name | inline `(Integer tor String)` |
+`NoEvalArgs` does not gate *map* auto-evaluation — only `NoEvalMapArgs`
+does (`eng/go/engine.go:3378-3390`). `fn`'s 3-arg triple signature
+(`lang/go/native/native_definition.go:155-161`) declares
+`NoEvalArgs: {0,1,2}` and no `NoEvalMapArgs`.
+
+Both forms parse identically — the annotation is the map `{x: word(IS)}`
+either way — so the divergence is entirely post-parse:
+
+- **Bracket form.** Slot 0 is a *List*, which `NoEvalArgs{0}` does
+  suppress, so the nested map is never visited. `IS` reaches
+  `ResolveSigType` as a raw **Word** and takes the authoritative name path
+  (`eng/go/fn_params.go:487-495`, `r.LookupTypeName("IS")`), yielding the
+  minted lattice node with its `*disjunctUnifier` behaviour.
+- **Shorthand form.** Slot 0 *is* the map, so `autoEvalMap` dispatches the
+  word `IS`, pushing the type's **body** — a `Disjunct` *value* carrying
+  `DisjunctInfo`, not a lattice node. `ResolveSigType` has no branch that
+  mints a `*Type` from a Disjunct value, so it falls to the inline-disjunct
+  branch (`eng/go/fn_params.go:536-542`) and returns `(TAny, &pattern,
+  nil)`.
+
+The declared type is gone before any analysis runs. Downstream,
+`paramBodyCarrier` (`eng/go/core_helpers.go:701-720`) reads only `p.Type`
+and calls `ParamInputCarrier(TAny)` → `NewDynamicCarrier(TAny)`
+(`carrier.go:307-310`), instead of the distributing declared-union carrier
+`UnionCarrierForType` builds (`carrier.go:316-323`).
+`checkCaseExhaustiveness` then sees `v.Dynamic` and takes its dynamic
+branch (`case_exhaustive.go:727`) before ever computing alternatives.
+
+**Nothing in the case checker is wrong.** It is fed a `dynamic(Any)`.
+
+Why `Boolean` and `refine` newtypes are unaffected: their `def`'d bodies
+evaluate to *bare type nodes* (`Data == nil`), which `IsBareTypeNode`
+catches at `fn_params.go:443` and returns as the node itself. Only bodies
+that evaluate to a payload-carrying value lose the name.
+
+### Causation proved by patch
+
+Adding `NoEvalMapArgs: {0: true}` to `fn`'s triple signature makes the
+shorthand parameter resolve to the named union and the finding disappear.
+(Patch applied, observed, reverted; tree clean.)
+
+### Consequences, all verified on the pristine binary
+
+| Consequence | shorthand | bracket |
 |---|---|---|
-| shorthand `fn x:IS R [body]` | FAIL | FAIL |
-| bracket `fn [[x:IS] [R] [body]]` | **PASS** | FAIL |
+| `case` over a union | `case_not_exhaustive` | proves exhaustive |
+| `case` over an **enum** (`def E enum [a b c]`) | `case_not_exhaustive` | proves exhaustive |
+| `=>` / `afn` with a union param | `case_not_exhaustive` | n/a (same gap) |
+| `case_redundant_default` advisory | lost (0 emitted) | emitted |
+| **arity**: `def IN (Integer tor None)`, `f` called with **no** argument | **runs, returns `0`** | `no_signature` |
+| **return type**: `def f fn x:Integer IS [x]` then `1 f` | bogus `type_error: f: expected 1 return value(s), got 2` | `1` |
 
-Controls pass in both forms: `Boolean` (true+false clauses) and a
-`refine Integer` newtype. So three of four union cells emit
-`case_not_exhaustive` on a correct program, and only bracket-plus-named
-proves coverage.
+The arity row is the serious one: a declared one-parameter function
+becomes callable with zero arguments, silently, because the evaluated
+disjunct hits `ParseFnParams`' `None`-stripping branch
+(`fn_params.go:158-176`) that is only meant to fire for inline disjuncts,
+synthesising a 0-arg overload.
 
-### What is established
+Dispatch remains *sound* in the shorthand form — the `Pattern` still
+enforces the union at call time, and `f true` is rejected in both forms.
+Only the analysis and the diagnostics degrade.
 
-The decision point is `v.Dynamic` on the scrutinee carrier
-(`lang/go/native/case_exhaustive.go:727`): a dynamic scrutinee has no
-static type to prove coverage against, so the clause list must carry its
-own catch-all, and the diagnostic at line 732 is emitted. Everything
-therefore turns on why a declared union parameter arrives as a *dynamic*
-carrier in three of the four spellings.
+### The documentation is wrong, and the test that would catch it opts out
 
-Type identity is **not** the difference. All of these hold:
+`case`'s own hand-authored examples ship two false claims
+(`lang/go/native/help/help_control.go:113-114`):
 
 ```
-def IS (Integer tor String)
-typeof IS                          → Disjunct
-IS teq (Integer tor String)        → true      # named and inline are the same node
-(Integer tor String) teq (Integer tor String)  → true
-5 is IS                            → true
+def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s"]]
+  ; # exhaustive over IS — no default needed          ← actually errors
+def f fn x:IS Integer [case x [Integer 1]]
+  ; # check ERROR case_not_exhaustive — uncovered: String
+                                                     ← actually reports "the scrutinee is dynamic"
 ```
 
-Nor is the declared type lost for dispatch — the shorthand form still
-rejects a wrong argument (`f true` → `[aql/signature_error]`). So the type
-is recorded and enforced; it is specifically the carrier the
-exhaustiveness analysis sees that is dynamic.
+`TestHelpExamplesCorrect` skips hand-authored examples **by
+construction** (`lang/go/test/help_examples_test.go:145-152`, `if e :=
+help.Lookup(word); e != nil && len(e.Examples) > 0 { continue }`), with a
+reasoned comment: they are curated prose, not the `;# <exact-stack>` shape
+the matcher validates.
 
-One suggestive datum: `IS istype` → **false**. A `Disjunct` is not a type
-*literal*, so any path that decides "is this annotation a type?" by
-`istype` would treat a union annotation as a value and fall back to
-dynamic.
+This is worth stating plainly because AGENTS.md rests real weight on the
+opposite property — that `describe` output is "generated from the *live
+engine* … so they cannot drift from the code the way prose can"
+(AGENTS.md:30). For auto-generated signature and lattice output that
+holds. For hand-authored `Entry.Examples` it does not: they are prose that
+merely *lives* in Go, and nothing executes them. `describe case`
+currently tells the user something false.
 
-`check --strict` confirms the dynamism directly and shows it is
-union-specific rather than a general property of the shorthand form:
+### Fixes
 
-| shorthand parameter type | exhaustive proved | dynamic operand |
-|---|---|---|
-| `x:Boolean` (true+false clauses) | yes | no |
-| `x:Pos` (`refine Integer`) | yes | no |
-| `x:Integer` (interval clauses `[gt 3]`/`[lte 3]`) | yes | no |
-| `x:IS` (`Integer tor String`) | **NO** | **YES** |
+1. **(verified)** Add `NoEvalMapArgs: {0: true}` to `fn`'s triple
+   signature (`native_definition.go:155-161`) and `{1: true}` to `afn`'s
+   (`:187-194`). This is the same suppression `def`'s typed-name signature
+   already carries at `native_definition.go:29`, and
+   `registerDefKeywordForms` already propagates it into the synthesized
+   `def … fn …` forms via `shiftPosFlags` (`:517`). Fixes the union, enum,
+   `=>`/afn, arity and lost-advisory rows at once.
+2. **(verified)** Add `|| IsDisjunct(v)` to `IsSigTypeValue`
+   (`eng/go/fn_def.go:185-187`) so a Disjunct in the output slot is not
+   read as a concrete return-by-value. Still needed after (1), because
+   `NoEvalMapArgs` does not gate a bare Word in the output slot.
+3. **(design decision)** The inline union `x:(Integer tor String)` is a
+   *different route into the same defect*, not a second bug:
+   `ParseFnParams` deliberately evaluates a paren annotation itself
+   (`fn_params.go:135-152`) and hands the Disjunct to the same branch.
+   Neither fix above touches it. Either mint anonymous disjunct lattice
+   nodes (today `installDisjunctUnifier` is reachable only from
+   `InstallType`, `core_type.go:496` — so this introduces unnamed disjunct
+   types, with knock-on effects on `Type.Equal`, dispatch sorting and error
+   rendering), or — smaller and strictly local — teach `paramBodyCarrier`
+   to build the distributing declared carrier from a Disjunct `Pattern`
+   when `p.Type` is `TAny`. The latter also fixes the shorthand row
+   independently of (1).
+4. **Diagnostic wording.** "the scrutinee is dynamic — no static type can
+   prove the clauses cover it" is reachable for genuinely-annotated
+   parameters independent of this bug — `paramBodyCarrier` marks
+   `{:T}`/`[:T]` typed-container params dynamic (`core_helpers.go:703-716`).
+   It should not deny the annotation: "no static type is available for
+   this scrutinee (it is gradual here)" or similar. Rewording alone fixes
+   nothing — do it *in addition to* 1-3.
 
-The strict advisory reads "case dispatched over a dynamic operand —
-matched optimistically, re-checked at runtime"; the bracket form with the
-same union emits no such advisory.
+Measured fix blast radius: with (1) + (2) applied, the full
+`eng/go/... lang/go/...` suite passes with exactly one golden update —
+4 lines of `lang/go/native/testdata/fnmodel_equivalence.golden` (the
+sig-table rows for `fn`, `afn` and the two synthesized `def` keyword
+forms). Zero behaviour-corpus drift.
 
-That also identifies what the dynamism costs. `disjunctPartitionReturns`
-(`eng/go/carrier.go:2178`) is the machinery for declared-union parameters,
-and it gates on `IsDisjunct(a) && a.Carrier && !a.Dynamic` (line 2185)
-plus `DisjunctInfo.Declared` (line 2187) — it needs a **strict** declared
-Disjunct carrier. A dynamic one skips the whole per-alternative partition,
-so the union parameter loses not just `case` exhaustiveness but the
-`partial_dispatch` analysis (line 2231) that reports a body with no
-overload for one alternative of its own declared domain.
+### Test gap
 
-### What is not yet established
+The suite pins case exhaustiveness **exclusively through the bracket
+form**. Every union/enum row in `lang/go/test/case_exhaustive_check_test.go`
+is written `fn [[x:IS][…][…]]` — lines 65, 69, 73, 77, 81, 219, 268, 272,
+275, 298, 306, 310, 339, 349, 428. There is not one shorthand row and not
+one `=>`/afn row in that file. The `Boolean`, `refine` and interval rows
+that *are* form-insensitive pass either way, so a form-agnostic reader
+would not notice the omission.
 
-Which of the ~12 sites that set `Carrier.Dynamic` (`eng/go/carrier.go:48,
-57, 83, 231, 875, 890, 985, 1031, 2978, 3006, 3025, 3271`) fires for a
-union parameter, and why the bracket-plus-named path avoids it. The
-working hypothesis — that an inline annotation is *computed under
-check-mode carriers*, and `tor` over carriers yields a dynamic result,
-whereas a `def`-bound union was computed at `def` time outside the fn — is
-consistent with the matrix but **not traced to code**, so it is
-speculative and stated as such.
+The tests that would have caught it, in order of leverage:
 
-### Independently, the diagnostic is misleading
-
-"the scrutinee is dynamic — no static type can prove the clauses cover it"
-is wrong wording for these cases: the scrutinee *has* a declared type; the
-analysis lost it. The message should distinguish "genuinely untyped
-scrutinee" from "declared type not recoverable here", because the two ask
-different things of the author.
-
-### Fix
-
-Blocked on finishing the trace above. The wording fix is independent and
-can land now.
-
+1. A **form-equivalence** assertion: the shorthand and bracket spellings of
+   the same signature must produce the *same* diagnostic set. This
+   generalises past `case` and would also have caught the arity and
+   return-type divergences.
+2. An `FnParam`-level golden asserting `ParseFnParams` yields
+   `Type=IS, Pattern=nil` for both forms.
+3. Running hand-authored help `Examples` through `check` — a weak
+   "must not error" gate is enough and does not need the exact-stack
+   matcher.
 
 ## G. Un-separated forward calls evaluate right-to-left → stale reads
 
@@ -572,8 +645,28 @@ B's doc half). Both times the Go-level comment is accurate and the
 user-facing doc generalises it. `eng/go/fork.go`'s header says "execution
 scope"; EXPLANATION.md says "side effects".
 
-**Two would have been caught by tests that already exist** — B's
+**Three would have been caught by tests that already exist** — B's
 semantics are asserted in `context_test.go` but only against the
-interpreter, and A's shape is one spec row away from the existing `-race`
-gate. Neither needs new machinery, only coverage of the second execution
-path.
+interpreter; A's shape is one spec row away from the existing `-race`
+gate; and F's correct behaviour is asserted fifteen times in
+`case_exhaustive_check_test.go`, every one of them in the bracket form.
+None needs new machinery, only coverage of the second spelling or the
+second execution path.
+
+**The recurring shape is "one axis is exercised, its sibling is not."**
+Interpreter but not compiler (B, C). One call spelling but not the other
+(F). One container kind but not the mutable one (A). Where the suite has a
+choice of surface, it has consistently pinned one and left the other to
+inference — and every defect here lives in the unpinned half. A gate that
+asserted *equivalence between sibling surfaces* — same program, both
+engines; same signature, both forms — would have caught four of the seven
+without anyone predicting the specific bug.
+
+**Two documentation claims are load-bearing and false.** EXPLANATION.md
+and HOWTO.md assert branch isolation for exactly the values that race (A),
+and `describe case` ships an example asserting exhaustiveness for a
+program that errors (F). The second matters beyond its own row: AGENTS.md
+rests real weight on `describe` being generated from the live engine and
+therefore unable to drift. That holds for signatures and lattice output;
+it does not hold for hand-authored `Entry.Examples`, which are prose that
+merely lives in Go and which the example test skips by construction.
