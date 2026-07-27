@@ -242,12 +242,12 @@ Wire the same `TLSProfile` into `connect-raw` via `parseNetAddr`
 §4.4 TLS is a socket option, not a separate API — the `Socket` type and
 every socket word stay unchanged.
 
-### Phase 5 — vault-backed identity (opaque handle)
+### Phase 5 — vault-backed identity (opaque handle) ✅ **DONE**
 `Vault.identity "acme-mtls"` → an opaque, module-minted external type
-usable **only** as a `tls: {identity: …}` argument. Registered via
-`RegisterExternalBuiltin` with a FixedID from the documented `10000+`
-range, `Format` behaviour printing `<identity acme-mtls>`, no reveal path.
-Add it to `lang/go/test/fixedid_stability_test.go`.
+usable **only** as a `tls: {identity: …}` argument, with no reveal path.
+Pinned in `lang/go/test/fixedid_stability_test.go`. See §8b for the two
+places the build departed from the sketch above (the FixedID band and
+what `Format` prints).
 
 This exists because `Vault.reveal` returns a `String`
 (`lang/go/modules/vault.go:186`) — revealing a private key into a guest
@@ -365,6 +365,29 @@ guessed:
   (`subReg.Types.MintOwner`), which every other module already did — a
   word extension may only anchor on a nominal type the extending scope
   owns.
+- **`Vault.identity` is FixedID 5012, not `10000+`.** The `10000+` band
+  in §5 was a guess; the tree's actual convention is that a module's
+  minted Ideal types sit in the 5000 band next to their siblings
+  (Module 5000, ModuleExport 5001, Socket 5009, Listener 5010,
+  Terminal 5011). It is minted with the same `eng.Builtin.RegisterType`
+  helper `aql:net` uses, not `RegisterExternalBuiltin`.
+- **The handle formats as `<vault identity>`, not `<identity acme-mtls>`.**
+  Printing the alias would leak *which* credential a program uses into
+  every log that formats the value — a smaller leak than the key, but a
+  free one to avoid, and the alias is recoverable from the vault by
+  anyone entitled to it. §8.4's redaction check reads the stricter form.
+- **The credential resolves lazily, at the handshake, not at `identity`.**
+  `Vault.identity` registers a `capabilities.IdentityFunc` closure and
+  returns; the `reveal` through the host backend happens inside
+  `GetClientCertificate`. So a rotated secret is picked up without
+  re-running the program, a program that never dials never reveals
+  anything, and minting a handle needs no vault backend at all (the
+  spec rows in `module-vault.tsv` §6 pin exactly that).
+- **`native` cannot import `modules`,** so `ParseTLSOpts` cannot know the
+  handle type directly. `native.TLSIdentityHandles` is a slice of
+  `func(Value) (string, bool)` probes that `modules` appends to in
+  `init()` — the dependency points the way the module graph already
+  allows.
 
 ## 9. Open questions
 

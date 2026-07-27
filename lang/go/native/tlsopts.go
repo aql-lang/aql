@@ -12,7 +12,8 @@ import (
 // every call site (fetch today, connect-raw next) so the two cannot
 // drift apart.
 //
-//	identity: Atom|String  a host-registered client identity (mutual TLS)
+//	identity: Atom|String|handle  a host-registered client identity, or
+//	          the opaque handle `Vault.identity` returns (mutual TLS)
 //	verify: Boolean   false disables chain AND hostname checking
 //	ca:     Bytes|String   additional CA roots, PEM; REPLACES the system pool
 //	sni:    String    server-name override
@@ -83,8 +84,24 @@ func ParseTLSOpts(r *Registry, v Value, word string) (capabilities.TLSProfile, e
 	return p, nil
 }
 
-// tlsIdentityArg accepts an Atom (the idiomatic `acme/q`) or a String.
+// TLSIdentityHandles lets a module teach ParseTLSOpts an opaque handle
+// shape that names a registered identity — aql:vault registers one so
+// `tls: {identity: (Vault.identity "acme")}` works without a private key
+// ever becoming an AQL value.
+//
+// It is a hook rather than a direct call because the handle types live
+// in lang/go/modules, which imports this package; the dependency cannot
+// run the other way.
+var TLSIdentityHandles []func(Value) (string, bool)
+
+// tlsIdentityArg accepts an Atom (the idiomatic `acme/q`), a String, or
+// a registered opaque handle.
 func tlsIdentityArg(v Value) (string, bool) {
+	for _, h := range TLSIdentityHandles {
+		if name, ok := h(v); ok {
+			return name, true
+		}
+	}
 	if a, err := v.AsConcreteAtom(); err == nil && a != "" {
 		return a, true
 	}

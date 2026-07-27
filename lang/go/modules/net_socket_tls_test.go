@@ -24,6 +24,21 @@ import (
 // address without an sni: override.
 func tlsEchoServer(t *testing.T) (addr, caPEM string) {
 	t.Helper()
+	return tlsEchoServerCAs(t, nil)
+}
+
+// mtlsEchoServer is the same listener with client authentication turned
+// on: only a peer holding a certificate signed by clientCAs gets in.
+func mtlsEchoServer(t *testing.T, clientCAs *x509.CertPool) (addr, caPEM string) {
+	t.Helper()
+	return tlsEchoServerCAs(t, clientCAs)
+}
+
+// tlsEchoServerCAs backs both. A nil clientCAs leaves ClientAuth at its
+// zero value (no client certificate asked for), so the server-auth-only
+// and mutual cases share one implementation.
+func tlsEchoServerCAs(t *testing.T, clientCAs *x509.CertPool) (addr, caPEM string) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -44,10 +59,15 @@ func tlsEchoServer(t *testing.T) (addr, caPEM string) {
 		t.Fatal(err)
 	}
 	cert := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+	cfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
-	})
+	}
+	if clientCAs != nil {
+		cfg.ClientCAs = clientCAs
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

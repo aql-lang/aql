@@ -2,6 +2,7 @@ package modules
 
 func init() {
 	registerDocs("aql:vault", map[string]string{
+		"identity":             "An opaque handle to a vault-held TLS client credential, for `tls: {identity: …}`. Unlike `reveal` it never yields the secret as a value.",
 		"status":               "The active vault's status map: {ok backend locked aliases …} from the host backend.",
 		"needs-passphrase":     "Whether the active vault requires a passphrase that has not been collected this session.",
 		"authed":               "Whether the host adapter holds a verified passphrase for the active vault.",

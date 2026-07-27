@@ -184,6 +184,22 @@ set from the bottom up.
 > Which identity a program may present, and against which host, is a policy
 > decision (`network`/`client-cert`), not the program's.
 >
+> A program that must choose its own credential without the host naming it
+> in advance gets one from the vault:
+>
+> ```
+> import "aql:vault"
+> fetch {url: "https://api.internal/v1"  tls: {identity: (Vault.identity "acme-mtls")}}
+> ```
+>
+> `Vault.identity` returns an **opaque handle**, not a String. `Vault.reveal`
+> returns a String, which is right for an API token a program pastes into a
+> header and wrong for a private key: the moment a key is a guest value it
+> can be printed, logged, stored, or sent somewhere. The handle formats as
+> `<vault identity>` — it does not even print its alias — and the vault is
+> read lazily, inside the handshake, so a rotated secret is picked up
+> without re-running the program.
+>
 > Explicit `cert:`/`key:` **`Bytes`** (obtained through `aql:io` or
 > `aql:pki` under their own gates) remain available as a deliberate escape
 > hatch — but never as a path the network layer dereferences.

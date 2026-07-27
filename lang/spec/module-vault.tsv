@@ -92,3 +92,14 @@ import "aql:vault"  Vault.scan [5]	ERROR:paths: elements must be Strings	scan pa
 import "aql:vault"  Vault.reveal 5	ERROR:uncalled_function	reveal requires a String alias
 import "aql:vault"  Vault.restore "x"	ERROR:uncalled_function	restore requires an Integer generation
 import "aql:vault"  Vault.set-expiry "a" 5	ERROR:uncalled_function	set-expiry requires String args
+#
+# §6  `identity` — an opaque handle to a vault-held TLS client
+#     credential (design/NETWORK-TLS-PLAN.0.md §5). It is deliberately
+#     NOT a String: `reveal` yields a secret an AQL program can print,
+#     which is right for an API token and wrong for a private key. The
+#     handle is accepted only as `tls: {identity: …}` and needs no
+#     backend to mint — the vault is read lazily, at the handshake.
+import "aql:vault"  Vault.identity "acme-mtls"	<vault identity>	minting a credential handle needs no vault backend
+import "aql:vault"  typeof (Vault.identity "acme-mtls")	VaultIdentity	the handle carries its own opaque type
+import "aql:vault"  Vault.identity ""	ERROR:alias must be a non-empty String	an empty alias names no credential
+import "aql:vault"  Vault.identity 5	ERROR:uncalled_function	identity requires a String alias

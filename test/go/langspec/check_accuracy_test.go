@@ -121,7 +121,7 @@ var unflaggedPins = map[string]int{
 	"module-time.tsv":       2,
 	"module-tui.tsv":        20,
 	"module-vault-tui.tsv":  1,
-	"module-vault.tsv":      54,
+	"module-vault.tsv":      55,
 	"open-words.tsv":        3,
 	"patrun.tsv":            1,
 	"reach.tsv":             3,
