@@ -285,3 +285,32 @@ func TestParseNetAddrListenRejectsBadTLS(t *testing.T) {
 		t.Errorf("listen tls: not parsed: %+v", opts)
 	}
 }
+
+// InstallNetExports is the test/host shim for `import "aql:net"`. It
+// must transplant the accessor word extensions exactly as the real
+// import does — otherwise a test using the shim and a guest using
+// import would disagree about whether a Response answers .status.
+func TestInstallNetExportsTransplants(t *testing.T) {
+	r := nscReg(t)
+	if err := InstallNetExports(r); err != nil {
+		t.Fatalf("InstallNetExports: %v", err)
+	}
+	// The bare accessor must now carry the Fetch overloads the module
+	// exported; before the transplant it carried only the core sigs.
+	fn := r.Lookup("dot")
+	if fn == nil {
+		t.Fatal("dot is not registered")
+	}
+	var sawFetch bool
+	for _, sig := range fn.Signatures {
+		for i := 0; i < sig.TotalArgs(); i++ {
+			if len(sig.Args) > i && sig.Args[i] != nil &&
+				strings.Contains(sig.Args[i].String(), "Fetch") {
+				sawFetch = true
+			}
+		}
+	}
+	if !sawFetch {
+		t.Error("InstallNetExports did not transplant the Fetch accessor overloads")
+	}
+}

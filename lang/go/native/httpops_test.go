@@ -164,3 +164,47 @@ func TestFetchTransportErrorIsUnsent(t *testing.T) {
 		t.Errorf("effects %d → %d: a refused transport sent nothing", before, after)
 	}
 }
+
+// The strict accessor's SUCCESS path, and the nil-Data guard. A type
+// literal has Data == nil (lang/go/CLAUDE.md, "Type literals have nil
+// Data"), so an accessor reaching one must read a miss rather than
+// panic — the TestTypeLiteralNoPanic discipline applied to this family.
+func TestFetchAccessorHandlers(t *testing.T) {
+	r, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft := MintFetchTypes(r)
+
+	om := NewOrderedMap()
+	om.Set("status", NewInteger(200))
+	resp := NewMap(om)
+	resp.Parent = ft.Response
+
+	// getr succeeds on a present field (the miss half is pinned by the
+	// spec rows; this is the half they cannot reach through `do/error`).
+	out, gErr := fetchGetrHandler([]Value{NewAtom("status"), resp}, nil, nil, r)
+	if gErr != nil || len(out) != 1 {
+		t.Fatalf("getr on a present field: %v %v", out, gErr)
+	}
+	if n, _ := AsInteger(out[0]); n != 200 {
+		t.Errorf("getr = %v, want 200", out[0])
+	}
+
+	// A type literal carries no map: every accessor must degrade, not
+	// panic.
+	lit := NewTypeLiteral(ft.Response)
+	if got, hErr := fetchGetHandler([]Value{NewAtom("status"), lit}, nil, nil, r); hErr != nil ||
+		len(got) != 1 || !IsBareTypeNode(got[0]) {
+		t.Errorf("dot on a type literal = %v %v, want none", got, hErr)
+	}
+	if _, sErr := fetchGetrHandler([]Value{NewAtom("status"), lit}, nil, nil, r); sErr == nil {
+		t.Error("getr on a type literal must raise, not panic")
+	}
+	if got, hErr := fetchHasHandler([]Value{NewAtom("status"), lit}, nil, nil, r); hErr != nil ||
+		len(got) != 1 {
+		t.Fatalf("has on a type literal: %v %v", got, hErr)
+	} else if b, _ := AsBoolean(got[0]); b {
+		t.Error("has on a type literal must be false")
+	}
+}

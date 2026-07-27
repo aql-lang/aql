@@ -366,34 +366,30 @@ func fetchFieldAt(recv Value, key string) (Value, bool) {
 
 // fetchFieldKey extracts the key from an accessor's first argument,
 // which is an Atom for the `.field` sugar and a String for `get "k"`.
-func fetchFieldKey(v Value) (string, bool) {
+//
+// It cannot fail: the signatures admit only TAtom and TString in this
+// position, so there is no third shape to reject. An unusable value
+// (a DepScalar constraint in the String slot) yields "", which reads
+// as a miss — the same answer a genuinely absent field gives.
+func fetchFieldKey(v Value) string {
 	if a, err := v.AsConcreteAtom(); err == nil && a != "" {
-		return a, true
+		return a
 	}
-	if s, err := v.AsConcreteString(); err == nil {
-		return s, true
-	}
-	return "", false
+	s, _ := v.AsConcreteString()
+	return s
 }
 
 // fetchGetHandler is the lenient read (`dot` / `get`): a missing field
 // reads none, matching how the accessor family treats Maps.
 func fetchGetHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	key, ok := fetchFieldKey(args[0])
-	if !ok {
-		return []Value{NewTypeLiteral(TNone)}, nil
-	}
-	v, _ := fetchFieldAt(args[1], key)
+	v, _ := fetchFieldAt(args[1], fetchFieldKey(args[0]))
 	return []Value{v}, nil
 }
 
 // fetchGetrHandler is the strict twin (`dotr` / `getr`): a missing field
 // is an error rather than none.
 func fetchGetrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	key, ok := fetchFieldKey(args[0])
-	if !ok {
-		return nil, r.AqlError("key_error", "getr: key must be an Atom or String", "getr")
-	}
+	key := fetchFieldKey(args[0])
 	v, found := fetchFieldAt(args[1], key)
 	if !found {
 		return nil, r.AqlError("key_error",
@@ -404,11 +400,7 @@ func fetchGetrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 
 // fetchHasHandler answers whether the field is present.
 func fetchHasHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	key, ok := fetchFieldKey(args[0])
-	if !ok {
-		return []Value{NewBoolean(false)}, nil
-	}
-	_, found := fetchFieldAt(args[1], key)
+	_, found := fetchFieldAt(args[1], fetchFieldKey(args[0]))
 	return []Value{NewBoolean(found)}, nil
 }
 
