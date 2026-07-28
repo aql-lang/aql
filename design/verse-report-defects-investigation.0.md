@@ -243,9 +243,20 @@ handler to `invokeClosureOn` fixes every leaking word at once and lets
 ### That fix was implemented, validated, and REVERTED — read this first
 
 The three-line patch above was applied and put through the full gate and
-an adversarial sweep. **It must not be landed as written.** It is
-recorded here so the next attempt starts from the findings rather than
-from the same confident paragraph.
+an adversarial sweep (1668 test programs across four lenses). **It must
+not be landed as written.** It is recorded here so the next attempt starts
+from the findings rather than from the same confident paragraph.
+
+**The gate was not the reason.** Two checklist runs failed on the patched
+tree — once on `TestTuiServeAllViewersGoneQuits`, once on the
+`cover-gate` profile-generation step — and *both were contention
+artifacts* on a 4-core box, reproduced clean in isolation afterwards
+(`covergate` itself reported 100.0%, 64888/64888 statements). Neither was
+caused by the patch. The patch was reverted for the three substantive
+blockers below, all found by the adversarial sweep rather than by any
+gate. That distinction matters for the next attempt: **`make test` and
+`make cover-gate` both pass with this patch applied**, which is precisely
+why the sweep was necessary.
 
 **What worked.** Every divergence in the table above closed: `do`, `each`,
 `fold`, `filter`, `outer`, `walk`, nested `do`, the per-element
