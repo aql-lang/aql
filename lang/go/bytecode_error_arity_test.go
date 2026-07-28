@@ -69,6 +69,12 @@ x`},
 					"limit so the next reader knows which model is short, not which "+
 					"word is unsupported", reason)
 			}
+			if !strings.Contains(reason, "no value") {
+				t.Errorf("refusal reason %q should say the handler nets NO value: "+
+					"the refusal is deliberately scoped to zero, not to \"any arity "+
+					"but one\" — see TestErrorHandlerMultiResidualStillCompiles",
+					reason)
+			}
 			// Refusal is only acceptable because the fallback is sound: the
 			// program must still run, and agree with the interpreter. Each
 			// arm gets a FRESH instance — a CompileCheck pass installs the
@@ -123,6 +129,36 @@ func TestErrorHandlerFencedFallbackIsUserVisible(t *testing.T) {
 	want, _ := b.RunInterp(src)
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("default-mode %v != interpreter %v", got, want)
+	}
+}
+
+// TestErrorHandlerMultiResidualStillCompiles is the boundary that scopes the
+// refusal to ZERO rather than to "any arity but one".
+//
+// A residual of two or more is NOT broken. Its bottom is the unconsumed
+// seeded error, and the paired closure path nets one from it with a runtime
+// strip. The compile-time strip in errorReturnsFn only removes that bottom
+// when its identity probe matches, and after a dup/drop it does not — so
+// `error [dup drop "k"]` measures 2 there while running perfectly well.
+// Refusing on `!= 1` regressed exactly that shape (TestErrorStripInputClosure
+// caught it), which is why the condition is `== 0`.
+func TestErrorHandlerMultiResidualStillCompiles(t *testing.T) {
+	const src = `do [raise x "e"] error [dup drop "k"]`
+	a, _ := New()
+	prog, reason, _, _ := a.CompileCheck(src)
+	if prog == nil {
+		t.Fatalf("a handler whose extra residual is the unconsumed error is "+
+			"handled by the runtime strip and must still compile, refused: %q",
+			reason)
+	}
+	got, err := a.RunCompiledStrict(src)
+	if err != nil {
+		t.Fatalf("RunCompiledStrict: %v", err)
+	}
+	b, _ := New()
+	want, _ := b.RunInterp(src)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("compiled %v != interpreter %v (MISCOMPILE)", got, want)
 	}
 }
 

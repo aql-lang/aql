@@ -1,7 +1,5 @@
 package native
 
-import "fmt"
-
 // controlNatives covers the control-flow words: do, if, for, break,
 // continue, error.
 //
@@ -1288,10 +1286,10 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 	if len(stk) >= 2 && stk[0].ID == seeded[0].ID {
 		stk = stk[1:]
 	}
-	if len(stk) != 1 {
+	if len(stk) == 0 {
 		// We RAN the handler, so this arity is KNOWN — not unknown, which is
 		// what `wide` means everywhere else in this function. Widening a
-		// known-wrong arity to a one-value bound is the whole of defect C:
+		// known-ZERO arity to a one-value bound is the whole of defect C:
 		// `error`'s dispatch is then recorded as a single-output fallback
 		// island (RecordFallback takes outs[0]), FallbackSpan has no
 		// out-count field to say otherwise, lowerFallback pushes exactly one
@@ -1306,14 +1304,24 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 		// interpreter fallback is always sound. It is also what the adjacent
 		// no-error path already does for its own unrepresentable shape (a
 		// baked arg beyond BarrierPos — carrier.go's island decline).
+		//
+		// ZERO specifically, not "!= 1". A residual of two or more is NOT
+		// broken: its bottom is the unconsumed seeded error, and the paired
+		// CLOSURE path nets one from it with a runtime strip
+		// (TestErrorStripInputClosure pins `error [dup drop "k"]`, which
+		// measures 2 here because the compile-time strip's identity probe
+		// does not match after a dup/drop). Refusing those regressed a shape
+		// that compiles correctly today. A residual >1 that the strip cannot
+		// reduce is already declined further down the pipeline, so it needs
+		// nothing from here either.
 		if es := r.Check.Recorder(); es.Active() {
-			es.MarkUncompilable(fmt.Sprintf(
-				"error: handler nets %d value(s) — the fallback island model is single-output",
-				len(stk)))
+			es.MarkUncompilable(
+				"error: handler nets no value — the single-output island model " +
+					"would leave the stack one short")
 		}
 		return wide
 	}
-	if stk[0].Parent == nil {
+	if len(stk) != 1 || stk[0].Parent == nil {
 		return wide
 	}
 	// A PROVEN-Error do-result (a strict Error carrier — the body always

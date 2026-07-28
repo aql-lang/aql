@@ -679,10 +679,21 @@ behaviour the error-fired path is missing.
 Two independent repairs, both worth doing:
 
 1. **Make `errorReturnsFn` refuse instead of widening.** It already knows
-   the true arity — it ran the handler. When `len(stk) != 1`, call
-   `MarkUncompilable` rather than returning a one-value bound. Under
+   the true arity — it ran the handler. When the handler nets **zero**,
+   call `MarkUncompilable` rather than returning a one-value bound. Under
    ADR-005 and the refusal architecture (fallback is always sound), that
    is the sanctioned response and it fixes all three variants at once.
+
+   **Zero, not `!= 1`** — this note originally said `!= 1` and that is
+   wrong. A residual of two or more is not broken: its bottom is the
+   unconsumed seeded error, and the paired CLOSURE path nets one from it
+   with a runtime strip. `errorReturnsFn`'s own compile-time strip only
+   removes that bottom when its identity probe matches, and after a
+   `dup`/`drop` it does not — so `error [dup drop "k"]` measures 2 there
+   while compiling and running correctly. Refusing on `!= 1` regressed
+   exactly that shape; `TestErrorStripInputClosure` caught it, which is a
+   good advertisement for the repo's habit of pinning the shapes that must
+   keep working, not only the ones that must fail.
 2. **Give `FallbackSpan` an out-count.** The island model being
    structurally single-output is the reason a correct arity could not be
    expressed even if known. Adding `NOut` and honouring it in
@@ -702,11 +713,12 @@ Two independent repairs, both worth doing:
 ### FIXED via (1) — and what the ratchets say about (2)
 
 (1) is applied: `errorReturnsFn` now calls `MarkUncompilable` when the
-handler it just ran nets anything other than one value. All three
-underflow variants refuse cleanly instead of leaking an `internal_error`,
-and a handler that nets exactly one value still compiles to the same
-answer. Regression tests in `lang/go/bytecode_error_arity_test.go` pin
-both halves.
+handler it just ran nets **zero** values. All three underflow variants
+refuse cleanly instead of leaking an `internal_error`, and handlers that
+net one — or that net more because the seeded error is still under the
+result — keep compiling to the same answer. Regression tests in
+`lang/go/bytecode_error_arity_test.go` pin every half, including the
+`>1` boundary that the first attempt at this fix broke.
 
 While implementing it, two ratchets turned up that were not in the
 original analysis and that bear directly on whether (2) should follow:
