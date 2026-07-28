@@ -1077,6 +1077,21 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// hard dispatch rejection at check AND run time. Classified here so a
 	// future precise emitter inherits the intended severity.
 	"options_key_unchecked": SeverityInfo,
+	// `aql check` RUNS module bodies for real: `import`'s signatures are
+	// registered RunInCheck (the checker cannot type `Mod.v` without the
+	// module's actual exports) and check mode is deliberately NOT
+	// propagated into the body (carrier-stripping would destroy the
+	// concrete string literals used as export names and map keys). So a
+	// module body's effects execute with full ambient authority during a
+	// command documented as "type-check without running", and because file
+	// modules are never cached, a default run — which pre-flight checks
+	// first — executes each body TWICE per importer.
+	//
+	// Info, not a warning: nothing is wrong with the program, and the
+	// behaviour is the composition of two deliberate decisions. What was
+	// missing is that it was invisible. One entry per body execution, not
+	// deduped — the count IS the finding.
+	"module_body_executed_in_check": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a

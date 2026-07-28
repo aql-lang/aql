@@ -12,13 +12,24 @@ clear; two (C, D) need a design call named below; one (E) is mostly
 documentation with one engine defect inside it; one (G) is an
 already-recorded issue whose worst face is not recorded.
 
-**Status of the repairs**, as of the latest revision: **F is partly
-fixed** — its two verified patches are landed with regression tests, and
-writing the negative half of those tests exposed a sixth consequence
-(a declared union RETURN is accepted but never enforced) that is recorded
-and pinned rather than closed. **B's** fix was implemented, validated and
-reverted; read §B before attempting another. Everything else is still
-diagnosis.
+**Status of the repairs**, as of the latest revision:
+
+- **C is fixed.** `errorReturnsFn` refuses instead of widening a known
+  arity. §C now records exactly what its "user-visible by default"
+  severity rests on: the effects fence, which blocks the rescuing
+  fallback once the guarded block has emitted output.
+- **F is fixed except its return side.** Fixes (1)-(4) are all landed
+  with regression tests — the two verified patches, the inline-union route
+  via `paramBodyCarrier`, and the diagnostic reword. Writing the negative
+  half of those tests exposed a sixth consequence (a declared union
+  RETURN is accepted but never enforced) that is recorded and pinned
+  rather than closed; it needs return patterns on `FnSig`.
+- **D is reported, not repaired.** Check-time module-body execution now
+  emits an info diagnostic per execution and `CLI.md` documents the
+  exception; the split-mode repair is untouched.
+- **B's** fix was implemented, validated and reverted; read §B before
+  attempting another.
+- **A, D, E, G** are still diagnosis.
 
 Two findings grew materially during investigation. **F** was reported as a
 `case`-exhaustiveness precision gap and turned out to be a parameter-type
@@ -57,8 +68,8 @@ paragraph in B and "Blocker 2 is worse than the table says".
 |---|---|---|---|
 | **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs assert the opposite |
 | **B** | Compiled `do`/`each` leak `context set` to the parent | miscompile | high — silent wrong answer, default path |
-| **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — three variants, user-visible by default |
-| **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command |
+| **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — user-visible by default once the block emits output; **FIXED** |
+| **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
 | **E** | Error-code table documents codes the engine can't produce | docs + 1 engine bug | medium |
 | **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently makes a 1-arg fn callable with 0 args — **PARAM SIDE FIXED**, return side still unenforced |
 | **G** | Un-separated forward calls evaluate right-to-left → stale reads | recorded, deferred | medium — invalidates tests silently |
@@ -608,6 +619,40 @@ The check pass shows the mis-model without compiling at all: `aql check`
 on the repro reports the residual as `dynamic(Any) Integer` where the
 interpreter's real residual is the single value `5`.
 
+### What "user-visible by default" rests on — the effects fence
+
+The severity claim turns entirely on one detail, worth stating plainly
+because two of the three headline variants do *not* support it on their
+own. Measured against a binary built from the commit before the fix:
+
+| Program | `-force-compile` | **default** | interpreted |
+|---|---|---|---|
+| `do [1 div 0] error [drop]` ⏎ `2 add 3` | `CALL_DYNAMIC underflow` | `5` | `5` |
+| `1` ⏎ `do [1 div 0] error [drop]` | `CALL_DYNAMIC underflow` | `1` | `1` |
+| `def x (do […] error [drop])` ⏎ `x` | `BIND_GLOBAL underflow` | `undefined_word: x` | same |
+| **`do [1 print  1 div 0] error [drop]`** ⏎ `2 add 3` | `CALL_DYNAMIC underflow` | **`internal_error`** | `1` then `5` |
+
+For the first three the whole-program fallback catches the underflow and
+silently re-runs, so the answer is right and the only costs are a wasted
+compile and an unreported runtime bail. The fourth is the one that bites:
+once the guarded block has emitted output the fallback is **deliberately
+blocked** — re-running would duplicate the output — and the engine says so
+in the note it attaches:
+
+> the interpreter fallback was blocked: output was already emitted, so
+> re-running would duplicate it; run with --no-compile and report this as
+> a compiler bug
+
+So an `internal_error` reaches the user in the default configuration, from
+ordinary source, with the engine itself asking to be told about it. The
+report's §6(b) had this exactly right; an earlier revision of *this* note
+called the claim overstated, on the evidence of the three variants that
+are rescued — which is the mistake of generalising from the cases that
+happen not to trip the fence.
+
+Post-fix, that fourth program refuses at compile time, prints `1`, and
+returns `5`.
+
 ### Three variants, one cause
 
 | Program | compiled | interpreted |
@@ -653,6 +698,55 @@ Two independent repairs, both worth doing:
    has no assertion at all. `runFallback` ends `return append(stack,
    results...)`, and `screenResults` (`vm.go:217-222`) checks only
    `tapeCoupled`, never a count.
+
+### FIXED via (1) — and what the ratchets say about (2)
+
+(1) is applied: `errorReturnsFn` now calls `MarkUncompilable` when the
+handler it just ran nets anything other than one value. All three
+underflow variants refuse cleanly instead of leaking an `internal_error`,
+and a handler that nets exactly one value still compiles to the same
+answer. Regression tests in `lang/go/bytecode_error_arity_test.go` pin
+both halves.
+
+While implementing it, two ratchets turned up that were not in the
+original analysis and that bear directly on whether (2) should follow:
+
+```go
+// test/go/langspec/compiled_coverage_test.go
+const refusalCeiling = 0   // "Never raise it."
+const islandCeiling  = 0
+```
+
+Every spec row compiles, and **no compiled program in the corpus embeds an
+interpreter island at all**. Both must stay at zero before the fallback
+and `OpFallback` machinery can be deleted (plan P7). At first read this
+looks like an argument against (1) — it adds a refusal category. Three
+things say otherwise:
+
+- Neither ceiling moved. They count **spec rows**, and no row exercises a
+  zero-netting `error` handler — which is precisely why the defect
+  survived. `TestCompiledCoverage` passes unchanged.
+- `tryRecordFallback` already declines `len(outs) != 1`
+  (`carrier.go:1748`), so the single-output constraint the fix respects is
+  the one that code already enforces.
+- Its sibling guard states the preference outright: letting a shape island
+  "would convert a clean refusal into a NEW interpreter island (a
+  regression on islandCeiling)". **Refusal is the preferred direction in
+  this code**, not a last resort.
+
+The consequence for the test gap is that defect C's repro **cannot become
+a spec row** — under the fix it would refuse and breach `refusalCeiling`;
+without it, it miscompiles. That is why the regression lives in Go tests.
+It is also the reason the gap existed: a shape that cannot be expressed in
+the corpus is invisible to the corpus-driven gates.
+
+So (2) — `FallbackSpan.NOut` — is no longer obviously "worth doing too".
+It would let this shape compile as a zero-output island, which *raises*
+`islandCeiling` off its floor and moves against P7. If the arity model is
+to be fixed properly, the aligned repair is to compile `error` **natively**
+(no island), not to make the island model more expressive. That is a
+different, larger piece of work, and the note's earlier framing of (2) as
+a straightforward companion to (1) should not be read as endorsing it.
 
 ### A note for the coverage allowlist
 
@@ -757,6 +851,33 @@ Cheaper measures, in increasing order of honesty:
 Recommend **(2) now** — it is the only option with no semantic risk, and
 it converts a false doc claim into a true one immediately. The split-mode
 change is the actual repair. (1) is blocked on MODULE-CACHE.0.
+
+### (2) is DONE
+
+`runModuleBodyCover` emits `module_body_executed_in_check` (info) once per
+body execution when the parent registry is in check mode, naming the
+module — the import string for a file module, "an inline module body"
+otherwise. No semantic change: `import` still runs, the body still runs
+outside check mode, and nothing is cached.
+
+Two decisions in it worth stating:
+
+- **Not deduped.** The count *is* the finding. Three importers produce
+  three entries, which is what makes "effects multiply by importers, not
+  by a fixed 2" visible. A deduped entry would say "a module body ran" and
+  conceal the multiplication this note exists to document.
+- **Info, not warning.** Nothing about the program is wrong; the
+  behaviour is the composition of two deliberate decisions, each correct
+  on its own. The defect was that it was invisible.
+
+`CLI.md` now states the exception under `aql check` rather than only
+promising "type-check without running", including the 2N figure and the
+`--no-check` escape. Tests in `lang/go/test/module_check_effects_test.go`
+pin the count, the severity, and — the negative that keeps the advisory
+from becoming noise — that a program importing nothing draws no entry.
+
+The split-mode repair (a third mode: substitute effectful handlers, keep
+values concrete) is still the real fix and is untouched by this.
 
 ### Test gap
 
@@ -938,8 +1059,9 @@ currently tells the user something false.
    (`eng/go/fn_def.go:185-187`) so a Disjunct in the output slot is not
    read as a concrete return-by-value. Still needed after (1), because
    `NoEvalMapArgs` does not gate a bare Word in the output slot.
-3. **(design decision)** The inline union `x:(Integer tor String)` is a
-   *different route into the same defect*, not a second bug:
+3. **(DONE — took the local option)** The inline union
+   `x:(Integer tor String)` is a *different route into the same defect*,
+   not a second bug:
    `ParseFnParams` deliberately evaluates a paren annotation itself
    (`fn_params.go:135-152`) and hands the Disjunct to the same branch.
    Neither fix above touches it. Either mint anonymous disjunct lattice
@@ -950,13 +1072,32 @@ currently tells the user something false.
    to build the distributing declared carrier from a Disjunct `Pattern`
    when `p.Type` is `TAny`. The latter also fixes the shorthand row
    independently of (1).
-4. **Diagnostic wording.** "the scrutinee is dynamic — no static type can
-   prove the clauses cover it" is reachable for genuinely-annotated
-   parameters independent of this bug — `paramBodyCarrier` marks
-   `{:T}`/`[:T]` typed-container params dynamic (`core_helpers.go:703-716`).
-   It should not deny the annotation: "no static type is available for
-   this scrutinee (it is gradual here)" or similar. Rewording alone fixes
-   nothing — do it *in addition to* 1-3.
+
+   **The local option is applied.** `paramBodyCarrier` now builds the same
+   distributing `Declared` carrier for an inline Disjunct pattern that
+   `ParamInputCarrier` builds for a named union, so the two spellings of
+   the same domain analyse identically. Worth noting the route failed in
+   the **bracket** form too, which is what marks it a separate defect
+   rather than another face of the shorthand bug — and means (1) could
+   never have covered it. No lattice nodes are minted, so none of the
+   `Type.Equal` / dispatch-sorting / error-rendering knock-ons apply.
+4. **(DONE) Diagnostic wording.** "the scrutinee is dynamic — no static
+   type can prove the clauses cover it" is reachable for
+   genuinely-annotated parameters independent of this bug —
+   `paramBodyCarrier` marks `{:T}`/`[:T]` typed-container params dynamic
+   (`core_helpers.go:703-716`), which I re-confirmed: `def f fn
+   m:{:Integer} String [case m […]]` drew it. It should not deny the
+   annotation. Now reads:
+
+   > case: this scrutinee is gradual here — no static type is available to
+   > prove the clauses cover it; add a trailing default (or an Any clause)
+
+   Describing the POSITION rather than asserting the parameter is untyped.
+   Six existing test fragments moved from matching `"dynamic"` to
+   `"gradual"`, and a new test forbids the old phrasing outright for the
+   three shapes that reach it.
+
+   The documentation half of (4) needed no edit — see below.
 
 Measured fix blast radius: with (1) + (2) applied, the full
 `eng/go/... lang/go/...` suite passes with exactly one golden update —

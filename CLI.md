@@ -60,7 +60,7 @@ aql -version
 aql                                 # start the REPL
 aql do 'add 1 2'                    # one-shot expression
 aql script.aql                      # run a file
-aql check script.aql                # type-check without running
+aql check script.aql                # type-check without running (but see below re: imports)
 aql fmt script.aql                  # format in place (always rewrites)
 ```
 
@@ -233,6 +233,20 @@ Run the static type-checker without executing. It drives the same
 engine in carrier mode — so checking stays in lockstep with runtime
 dispatch — reports diagnostics to stderr, and exits non-zero when any
 Error-severity diagnostic is found (exit 0 with `--soft`).
+
+**One exception: imported module bodies do run.** The checker cannot
+type `Mod.value` without the module's real exports, so `import` executes
+during the check pass — and module bodies deliberately do not run in
+check mode (carrier-stripping would destroy the string literals a body
+uses as export names). Any effect in a module body — a print, a file
+write, a network call — therefore happens while you are "only checking",
+with the same authority a run would have. Each execution is reported as
+an info diagnostic (`module_body_executed_in_check`) naming the module.
+
+File modules are not cached, so a plain `aql script.aql` — which
+pre-flight checks before running — executes each imported body **twice**,
+and 2N times for a module imported from N places. Use `--no-check` to run
+without the pre-flight pass.
 
 ```bash
 aql check script.aql

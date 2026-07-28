@@ -34,6 +34,27 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 // under `Test.cover` passes the import string + file text; every other caller
 // passes "" (no tagging, no cost).
 func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc string) (ModuleDesc, error) {
+	// `aql check` runs this for real (see the CheckMode note below and
+	// eng's "module_body_executed_in_check" severity entry), so say so.
+	// The command is documented as "type-check without running", and a
+	// module body's effects — file writes, network calls, prints — happen
+	// here with full ambient authority. Emitted per execution and not
+	// deduped: file modules are never cached, so N importers under the
+	// default pre-flight check means 2N executions, and the repeated entry
+	// is what makes that visible.
+	if parent != nil && parent.Check.IsActive() {
+		ref := coverID
+		if ref == "" {
+			ref = "an inline module body"
+		}
+		parent.Check.AddDiagnostic(CheckDiagnostic{
+			Code: "module_body_executed_in_check",
+			Detail: "check executed " + ref + " for real: `import` runs during " +
+				"check so the module's exports can be typed, and module bodies " +
+				"do not run in check mode, so any effects in the body happened",
+			Word: "import",
+		})
+	}
 	modReg, err := newSubRegistry()
 	if err != nil {
 		return ModuleDesc{}, fmt.Errorf("module init: %w", err)
