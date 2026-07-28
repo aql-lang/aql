@@ -27,7 +27,10 @@ func ParseConfig(s string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid options syntax: %w", err)
 	}
-	m, ok := v.(map[string]any)
+	// Options are order-agnostic config; flatten the parser's ordered node
+	// (and any nested ones) to plain maps so callers keep the simple
+	// map[string]any contract.
+	m, ok := jsonic.Plainify(v).(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("options must be a map of key:value pairs, got %T", v)
 	}
