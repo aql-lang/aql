@@ -1,13 +1,14 @@
 # AQL-DEBUGGER — a first-class interactive `aql debug` debugger
 
-Status: **Living reference — Phases 1, 1.5, 2, and 3 SHIPPED in
-full (2026-07), including every Phase-2/3 deferral: watchpoints
-(§6.2), replay (§6.4), DAP function breakpoints (§8.2), module-fn
-frames in `bt`, and per-engine file identity (§10). Remaining:
-Phase 4 (remote stepping — its own phase, seam ready) and the
-maintainer-gated items (§13).** (Shipped notes: Phase 1 below;
-Phase 1.5 at §6.1; watchpoints at §6.2; time-travel + replay at
-§6.4; DAP at §8.2; the fidelity remainder at §10.) This note designs the interactive `aql debug <file.aql>`
+Status: **Living reference — EVERY phase SHIPPED (2026-07):
+Phases 1, 1.5, 2, 3 (with every deferral: watchpoints §6.2,
+replay §6.4, DAP function breakpoints §8.2, module-fn frames,
+per-engine file identity §10) and Phase 4 (remote stepping,
+§8.3). Remaining: only the "Beyond" items gated on maintainer
+decisions (§13 — cooperative cancellation vs ADR-005, compiled-VM
+stepping).** (Shipped notes: Phase 1 below; Phase 1.5 at §6.1;
+watchpoints at §6.2; time-travel + replay at §6.4; DAP at §8.2;
+remote stepping at §8.3; the fidelity remainder at §10.) This note designs the interactive `aql debug <file.aql>`
 debugger: launch a program, set breakpoints, single-step, inspect the
 stack / scope / call chain, and evaluate expressions at a pause. It is
 grounded in seams that already exist in the tree (verified against the
@@ -606,7 +607,42 @@ compiled-path line breakpoints) is exactly what the TTY v1 also can't do,
 so a DAP v1 would be no more constrained than the session already is.
 DAP is Phase 3 (§10).
 
-### 8.3 Local now, attach later
+### 8.3 Local now, attach later  *(Phase 4 SHIPPED)*
+
+> **Shipped — Phase 4** (2026-07): `aql debug serve --step <file.aql>`
+> + the `attach` stepping verbs. The shape the section below asked for
+> — "reuses the *same session* behind the handlers" — is exactly what
+> shipped: a THIRD front end (`cmd/go/internal/debugger/remote.go`)
+> over the same `pauseHook`/`applyAction` seam the DAP adapter runs
+> on. The program runs concurrently with the HTTP server and parks at
+> each pause (holding the session lock) until an action arrives over
+> POST `/debug/action`; GET `/debug/pause` serves the current stop
+> (state paused/running/exited, seq, kind, row, file, source line,
+> stack summary — pre-rendered into `PauseInfo` at the pause, so polls
+> never touch live session state from another goroutine). POST
+> `/debug/break` sets/deletes line and word breakpoints (parked or
+> exited: mutate under the adapter's busy claim; running: TryLock the
+> session between trace fires — a plain lock could park behind a pause
+> and hang). The adapter also SHADOWS `/debug/eval`: a raw registry
+> eval would fire the armed debug hook from the HTTP goroutine and
+> block behind the parked engine's session lock, so stepping-mode eval
+> routes through the session's own eval (hook suppressed) under the
+> busy claim — and still works after exit, over the final state.
+> Delivery discipline: claiming an action flips `paused` before the
+> channel send, so a second action cannot double-resume; `busy`
+> excludes actions during an eval (resuming mid-eval would race the
+> program against the evaluator). Server shutdown with a parked
+> program detaches (quit) and DRAINS before exit, the TTY/DAP rule.
+> The wire types + client verbs live in `debugserve`
+> (`StepState`, `StepPause`/`StepAction`/`StepBreak`), sharing the
+> Bearer/loopback/`$TMPDIR` triad; `attach eval` already sets the
+> trust bar (remote code execution), so stepping adds no new
+> authority. Deltas from the sketch below: the control channel is
+> poll-based (`pause` + action verbs), not a `StepFrame` stream over
+> the event ring — the CLI verbs (`attach step` waits briefly for the
+> next stop and prints it) make polling invisible in practice; and
+> attach-time LAUNCH control (`--step` is chosen by the serving side)
+> stays out — the serve owner decides whether a process is steppable.
 
 v1 is **local launch** — `aql debug <file>` runs the file in-process
 under `SetTrace`. Debugging a *running* process (`debugserve` attach) is a
@@ -731,18 +767,15 @@ ends and kernel work begins.
   both** (2026-07 — §6.4 and §8.2's second-wave notes), plus
   watchpoints (§6.2). `Debug.break-when` conditions remain a source
   affordance (DAP has no surface for them beyond markers).
-- **Phase 4 — remote/attach stepping.** Extend `debugserve` with a
-  stepping control channel over the existing transport (§8.3). The
-  session-side seam is READY: the `pauseHook` + `applyAction` pair
-  the DAP adapter runs on is exactly a remote adapter's contract —
-  park the engine on a published pause, deliver an action from a
-  transport. What remains is the serve/attach surface itself
-  (publish `PauseInfo` + accept actions over the existing HTTP
-  transport, with its lifecycle: an unattached paused program, a
-  client vanishing mid-pause). Trust posture is the one `attach
-  eval` already sets — remote eval is remote code execution, so
-  stepping adds no new authority — but the surface deserves its own
-  careful lifecycle work rather than a rushed rider on this wave.
+- **Phase 4 — remote/attach stepping. SHIPPED** (2026-07, host only):
+  `aql debug serve --step` + the `attach` stepping verbs — a third
+  front end on the `pauseHook`/`applyAction` seam, over the existing
+  debugserve transport. See §8.3's shipped note for the lifecycle
+  discipline (parked-engine claims, the shadowed eval, TryLock
+  breakpoint edits, detach-and-drain shutdown). An unattached
+  `--step` program simply waits at its entry stop; a client that
+  vanishes mid-pause costs nothing (polling is stateless, and the
+  serve owner's interrupt detaches + drains).
 - **Beyond — cooperative cancellation.** A real "terminate now" seam so
   `quit` can stop a run mid-flight without a panic (§5.4). Collides with
   ADR-005's model and would want an NUR record; not committed.

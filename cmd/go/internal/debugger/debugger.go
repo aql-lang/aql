@@ -317,12 +317,18 @@ func (s *Session) checkWatches() string {
 // step controller.
 func (s *Session) Controller() capabilities.StepController { return s }
 
-// PauseInfo describes one pause to an alternate front end (§8.2).
+// PauseInfo describes one pause to an alternate front end (§8.2 DAP,
+// §8.3 remote). File/Line/Stack are pre-rendered at the pause so a
+// remote adapter can serve them without touching live session state
+// from another goroutine.
 type PauseInfo struct {
-	Kind   string // "step", "breakpoint", "fault", "marker", "inner-step"
+	Kind   string // "step", "breakpoint", "watch", "fault", "marker", "inner-step"
 	Row    int    // 1-based source row, 0 unknown
 	Detail string // breakpoint label / fault text / inner-step counter
 	InBody bool   // the pause is inside a body evaluation
+	File   string // the pause's file identity (a module pause names the module file)
+	Line   string // the source text of Row in File ("" unknown)
+	Stack  string // the one-line data-stack summary at the pause
 }
 
 // applyAction performs one control transition — the single semantics
@@ -512,7 +518,8 @@ func (s *Session) trace(pointer int, stack []native.Value, note string, sub, fre
 		case hit != "":
 			kind = "breakpoint"
 		}
-		s.applyAction(s.pauseHook(PauseInfo{Kind: kind, Row: row, Detail: hit, InBody: sub}))
+		s.applyAction(s.pauseHook(PauseInfo{Kind: kind, Row: row, Detail: hit, InBody: sub,
+			File: file, Line: lineAt(lines, row), Stack: s.stackSummary()}))
 		return
 	}
 	where := ""
@@ -540,7 +547,8 @@ func (s *Session) pauseAtFault(pointer int, stack []native.Value, errText string
 	s.curRow = row
 	s.curFrom, s.curFile, s.curLines = from, file, lines
 	if s.pauseHook != nil {
-		s.applyAction(s.pauseHook(PauseInfo{Kind: "fault", Row: row, Detail: errText}))
+		s.applyAction(s.pauseHook(PauseInfo{Kind: "fault", Row: row, Detail: errText,
+			File: file, Line: lineAt(lines, row), Stack: s.stackSummary()}))
 		return
 	}
 	fmt.Fprintf(s.out, "error raised — paused before unwind at %s:%s  %s\n",
@@ -709,6 +717,7 @@ func (s *Session) OnStep(f capabilities.StepFrame) capabilities.StepAction {
 		}
 		mode = s.applyAction(s.pauseHook(PauseInfo{
 			Kind: kind, Row: f.Row, Detail: fmt.Sprintf("step %d", f.Step),
+			File: s.curFile, Line: lineAt(s.curLines, f.Row), Stack: s.stackSummary(),
 		}))
 	} else {
 		if f.AtBreak {
@@ -1045,6 +1054,15 @@ func (s *Session) showStack() {
 	if vals, ok := s.dataStack(); ok {
 		fmt.Fprintf(s.out, "  stack: %s\n", summarizeStack(vals))
 	}
+}
+
+// stackSummary is showStack's string form, for PauseInfo ("" when the
+// session has no stack to show).
+func (s *Session) stackSummary() string {
+	if vals, ok := s.dataStack(); ok {
+		return summarizeStack(vals)
+	}
+	return ""
 }
 
 // summarizeStack renders a data stack on one line, truncating to the

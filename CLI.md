@@ -619,12 +619,13 @@ surface engine-internal evaluations of multi-line fn literals as
 extra `(in body)` stops — scripted sessions should drive to a
 location with breakpoints or markers rather than counted steps.
 
-**Cross-process introspection** — serve a runtime's state over HTTP,
-and interrogate it:
+**Cross-process introspection & remote stepping** — serve a runtime's
+state over HTTP, and interrogate or DRIVE it:
 
 ```bash
-aql debug serve [--bind 127.0.0.1:7777] [--token T] [file.aql]
+aql debug serve [--bind 127.0.0.1:7777] [--token T] [--step] [file.aql]
 aql debug attach <words|defs|heap|eval SRC|events ID> [--url U] [--token T]
+aql debug attach <pause|step|next|out|continue|quit|break SPEC|delete SPEC>
 ```
 
 `serve` loads `file.aql` (if given), then serves the registry's
@@ -632,6 +633,23 @@ introspection endpoints until interrupted, writing a discovery file
 (`$TMPDIR/aql-debug.json`) that `attach` reads by default. The optional
 Bearer token is a static string or a vault capability id; binds are
 loopback-only unless `--allow-public`.
+
+With `--step`, `serve` instead runs the program **under the remote
+stepping debugger**: it pauses at the first source line and waits, and
+a separate process drives it with the `attach` stepping verbs —
+`pause` shows the current stop (location, source line, stack summary),
+`step`/`next`/`out`/`continue` deliver the same actions the `(adbg)`
+prompt has (each waits briefly for the next stop and prints it; a
+long-running program answers `running` — check again with `pause`),
+`break`/`delete` manage line and word breakpoints, and `quit` detaches
+(the program drains to completion, exactly like the TTY `quit`).
+`attach eval` at a pause evaluates in the paused program's scope —
+the stepping server routes it through the session, so it cannot
+deadlock against the parked engine. Interrupting the server while the
+program is parked also detaches and drains before exit. The stepping
+surface shares the introspection transport's auth and its trust
+posture: `attach eval` is already remote code execution, so gate both
+with `--token`.
 
 
 ## Project lifecycle

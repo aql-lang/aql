@@ -32,12 +32,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/check"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
@@ -248,6 +250,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	bind := fs.String("bind", "127.0.0.1:7777", "loopback address to serve on")
 	token := fs.String("token", "", "require this Bearer token (a static token or vault capability id)")
 	allowPublic := fs.Bool("allow-public", false, "permit a non-loopback bind (exposes introspection to the network)")
+	step := fs.Bool("step", false, "run the program under the REMOTE stepping debugger: it pauses at the first line awaiting `aql debug attach` actions")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -257,10 +260,45 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "debug serve: init: %s\n", err)
 		return 1
 	}
+	reg := a.NativeRegistry()
 
-	// Load the program (if given) so its defs populate the registry that
-	// `attach` will introspect.
-	if file := fs.Arg(0); file != "" {
+	var rem *debugger.Remote
+	if *step {
+		// Stepping mode (AQL-DEBUGGER.0.md §8.3 Phase 4): the program
+		// runs CONCURRENTLY with the server, under a session whose
+		// pauses park awaiting remote actions. It starts paused at the
+		// first line, so an attach client finds it waiting.
+		file := fs.Arg(0)
+		if file == "" {
+			fmt.Fprintln(stderr, "usage: aql debug serve --step [--bind A] [--token T] <file.aql>")
+			return 1
+		}
+		path := pathutil.Expand(file)
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			fmt.Fprintf(stderr, "debug serve: read %s: %s\n", file, rerr)
+			return 1
+		}
+		source := string(data)
+		tokens, perr := parser.Parse(source)
+		if perr != nil {
+			fmt.Fprintf(stderr, "debug serve: parse %s: %s\n", file, perr)
+			return 1
+		}
+		reg.Output = stdout
+		reg.BaseFile = path
+		sess := debugger.New(reg, debugger.Config{
+			In: strings.NewReader(""), Out: io.Discard,
+			File: path, Source: source,
+		})
+		rem = debugger.NewRemote(sess)
+		go func() {
+			_, runErr := sess.RunProgram(tokens, source)
+			rem.Finish(runErr)
+		}()
+	} else if file := fs.Arg(0); file != "" {
+		// Load the program (if given) so its defs populate the registry
+		// that `attach` will introspect.
 		src, rerr := os.ReadFile(file)
 		if rerr != nil {
 			fmt.Fprintf(stderr, "debug serve: read %s: %s\n", file, rerr)
@@ -272,7 +310,18 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	srv := debugserve.NewServer(a.NativeRegistry(), *token)
+	srv := debugserve.NewServer(reg, *token)
+	handler := srv.Handler()
+	if rem != nil {
+		// The stepping routes mount in FRONT: /debug/eval is shadowed by
+		// the session-aware eval (a raw registry eval would fire the
+		// armed debug hook from the HTTP goroutine and block behind the
+		// parked engine's session lock).
+		mux := http.NewServeMux()
+		rem.Register(mux, srv.Auth)
+		mux.Handle("/", handler)
+		handler = mux
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -283,9 +332,19 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	defer func() { _ = os.Remove(dp) }()
 
 	fmt.Fprintf(stdout, "aql debug: serving introspection on http://%s (token: %v)\n", *bind, *token != "")
-	if err := srv.ListenAndServe(ctx, *bind, *allowPublic); err != nil {
+	if err := srv.ListenAndServeHandler(ctx, *bind, *allowPublic, handler); err != nil {
 		fmt.Fprintf(stderr, "debug serve: %s\n", err)
 		return 1
+	}
+	if rem != nil {
+		// Release a parked engine with quit (detach) and DRAIN the run
+		// before returning — side effects complete, exactly like the TTY
+		// and DAP detach paths.
+		rem.Shutdown()
+		if e := rem.ExitError(); e != "" {
+			fmt.Fprintf(stderr, "debug serve: program: %s\n", e)
+			return 1
+		}
 	}
 	return 0
 }
@@ -333,7 +392,8 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: aql debug attach [--url U] [--token T] <words|defs|heap|eval SRC|events ID>")
+		fmt.Fprintln(stderr, "usage: aql debug attach [--url U] [--token T] "+
+			"<words|defs|heap|eval SRC|events ID|pause|step|next|out|continue|quit|break SPEC|delete SPEC>")
 		return 1
 	}
 	c := debugserve.NewClient(*url, *token)
@@ -395,11 +455,98 @@ func attachVerb(c *debugserve.Client, rest []string, stdout, stderr io.Writer) i
 		for _, e := range evs {
 			fmt.Fprintf(stdout, "[%d] %s = %s\n", e.Seq, e.Label, e.Value)
 		}
+	case "pause":
+		st, err := c.StepPause()
+		if err != nil {
+			return fail(stderr, err)
+		}
+		fmt.Fprintln(stdout, renderStepState(st))
+	case "step", "next", "out", "continue":
+		st, err := c.StepAction(rest[0])
+		if err != nil {
+			return fail(stderr, err)
+		}
+		fmt.Fprintln(stdout, renderStepState(waitForStop(c, st.Seq)))
+	case "quit":
+		if _, err := c.StepAction("quit"); err != nil {
+			return fail(stderr, err)
+		}
+		fmt.Fprintln(stdout, "(detached — the program continues to completion)")
+	case "break", "delete":
+		if len(rest) < 2 {
+			fmt.Fprintf(stderr, "usage: aql debug attach %s <line|word>\n", rest[0])
+			return 1
+		}
+		result, err := c.StepBreak(rest[1], rest[0] == "delete")
+		if err != nil {
+			return fail(stderr, err)
+		}
+		fmt.Fprintln(stdout, result)
 	default:
 		fmt.Fprintf(stderr, "aql debug attach: unknown query %q\n", rest[0])
 		return 1
 	}
 	return 0
+}
+
+// stepPollDeadline / stepPollInterval bound waitForStop's polling; the
+// deadline is a test seam (design/TEST-SEAMS.10.md).
+var (
+	stepPollDeadline = 5 * time.Second
+	stepPollInterval = 20 * time.Millisecond
+)
+
+// waitForStop polls the remote pause state after an action until the
+// program stops again (a NEW pause — seq beyond the delivered action's
+// — or exit), or the deadline passes (the state then reads "running":
+// a long computation, checkable again with `attach pause`).
+func waitForStop(c *debugserve.Client, afterSeq int) debugserve.StepState {
+	deadline := time.Now().Add(stepPollDeadline)
+	for {
+		st, err := c.StepPause()
+		if err == nil && (st.State == "exited" || (st.State == "paused" && st.Seq > afterSeq)) {
+			return st
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return debugserve.StepState{State: "running"}
+			}
+			return st
+		}
+		time.Sleep(stepPollInterval)
+	}
+}
+
+// renderStepState renders one StepState as the attach CLI's answer —
+// the remote twin of the TTY pause banner.
+func renderStepState(st debugserve.StepState) string {
+	switch st.State {
+	case "paused":
+		where := ""
+		if st.InBody {
+			where = " (in body)"
+		}
+		loc := fmt.Sprintf("at %s:%s%s  %s", st.File, rowLabel(st.Row), where, st.Line)
+		head := loc
+		if st.Detail != "" {
+			head = st.Detail + " — " + loc
+		}
+		return "paused " + head + "\n  stack: " + st.Stack
+	case "exited":
+		if st.Exit != "" {
+			return "exited: " + st.Exit
+		}
+		return "exited"
+	}
+	return st.State
+}
+
+// rowLabel renders a 1-based source row, "?" when unknown.
+func rowLabel(row int) string {
+	if row == 0 {
+		return "?"
+	}
+	return fmt.Sprintf("%d", row)
 }
 
 func fail(stderr io.Writer, err error) int {
