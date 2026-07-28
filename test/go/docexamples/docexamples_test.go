@@ -51,15 +51,24 @@ type mismatchKey struct {
 // PASSES fails loudly ("stale xfail") and an entry that matches no example
 // fails loudly too, so the list can't rot. See the package's completion
 // report for the triage rationale behind each entry.
-// The registry is currently EMPTY — the documentation gate runs at
-// zero xfails, and it should stay that way: resolve a new mismatch as
-// a doc bug or an engine bug promptly rather than letting entries
-// accumulate. (The four historical entries — the `Integer lt 0`
-// refinement-vs-ordering confusion, MathUtil.log float precision, the
-// absent-optional `none`/`None` render convention, and the bare
-// `set`/`get` `end` demo — were resolved in the June 2026 doc review;
-// see design/REVIEW-NOTES.*.md.)
-var knownMismatch = map[mismatchKey]string{}
+// The registry should run at zero entries in the steady state: resolve
+// a new mismatch as a doc bug or an engine bug promptly rather than
+// letting entries accumulate. (The four historical entries — the
+// `Integer lt 0` refinement-vs-ordering confusion, MathUtil.log float
+// precision, the absent-optional `none`/`None` render convention, and
+// the bare `set`/`get` `end` demo — were resolved in the June 2026 doc
+// review; see design/REVIEW-NOTES.*.md.)
+//
+// The two current entries are the aql→boru rename transition:
+// README.md already documents the renamed `boru:*` module names (its
+// §"module renames" table), which the engine's module table does not
+// serve yet. The stale-xfail guard makes these self-retiring — the
+// moment the module renames land, both entries fail loudly and must be
+// removed.
+var knownMismatch = map[mismatchKey]string{
+	{"README.md", `import "boru:time-util" TimeUtil.await [[add 1 2] [add 3 4]]`}: "aql→boru rename in flight: the boru:* module names are documented ahead of the engine",
+	{"README.md", "3 7 MathUtil.min"}:                                             "aql→boru rename in flight: the setup line imports boru:math-util, documented ahead of the engine",
+}
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
 
