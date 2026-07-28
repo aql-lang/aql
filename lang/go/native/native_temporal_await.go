@@ -23,12 +23,22 @@ type parallelResult struct {
 // interleaved or raced. Forking happens here, on the dispatching
 // goroutine, while the parent is not yet parked — ForkConcurrent's
 // reads of the parent state are therefore race-free.
+//
+// ForkConcurrentIsolated, not ForkConcurrent: `await` is the one fork
+// site whose branches are DOCUMENTED to be independent of each other
+// ("writes to mutable objects inside one branch do not bleed into the
+// others" — HOWTO.md), and scope isolation alone does not deliver that
+// for a pointer-backed container. The other fork sites deliberately keep
+// the shallower fork: a `timeout` / `interval` callback accumulating into
+// a captured Store is a reasonable idiom that nothing documents as
+// isolated, and `send` already refuses to pass mutable containers between
+// processes, so the process paths have their own answer to this.
 func makeBranchForks(r *Registry, n int) []*Registry {
 	out := NewSyncWriter(r.Output)
 	errOut := NewSyncWriter(r.ErrOutput)
 	forks := make([]*Registry, n)
 	for i := range forks {
-		f := r.ForkConcurrent()
+		f := r.ForkConcurrentIsolated()
 		f.Output = out
 		f.ErrOutput = errOut
 		forks[i] = f

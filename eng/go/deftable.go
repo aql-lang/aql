@@ -357,11 +357,20 @@ func (dt *DefTable) Restore(snap map[string]int) {
 
 // Clone returns a deep copy of the def table: every name's binding
 // stack is copied into a fresh slice so the clone and the original can
-// be pushed to and popped from independently. DefEntry values are
-// copied shallowly — a bound Body Value and its *Type identity are
-// immutable snapshots, so sharing them across the clone boundary is
-// safe. Used by Registry.ForkConcurrent to give a concurrently-running
-// fork its own binding scope seeded from the parent's current bindings.
+// be pushed to and popped from independently.
+//
+// DefEntry values are copied SHALLOWLY. That is correct for the *Type
+// identity (a lattice node is a shared immutable), and correct for a
+// bound Body only insofar as the binding itself is a snapshot: a `def`
+// on the clone cannot disturb the original. It does NOT make the bound
+// VALUE independent — a FlexMap / FlexList / Store / class-instance
+// Value holds a pointer to shared state, so an in-place mutation
+// through the clone's binding is visible through the original's.
+//
+// For sequential shadowing scopes that is exactly right (the whole
+// point of a mutable container is that everyone holding it sees the
+// writes). For CONCURRENT forks it is not — see IsolateValues, which
+// the concurrency path uses instead.
 func (dt *DefTable) Clone() *DefTable {
 	if dt == nil {
 		return NewDefTable()
@@ -385,4 +394,34 @@ func (dt *DefTable) Clone() *DefTable {
 		gen[name] = g
 	}
 	return &DefTable{stacks: stacks, gen: gen}
+}
+
+// IsolateValues deep-clones every bound value in place, so no binding in
+// this table shares mutable state with the table it was cloned from.
+// Call it on a FRESH Clone(), on the goroutine that owns the parent,
+// before the clone is published to another goroutine.
+//
+// Clone() alone gives a fork its own binding SCOPE — a `def` on the fork
+// cannot disturb the parent. It does not give the fork its own DATA: a
+// FlexMap / FlexList / Store / class-instance / Table Value carries a
+// pointer, so an in-place write through the fork's binding lands in the
+// parent's object and in every sibling fork's. For concurrent branches
+// that is both a broken isolation promise and a genuine data race —
+// OrderedMap.Set is an unsynchronised map assign plus a slice append.
+//
+// The per-value work is CloneValue's, which is deliberate: it already
+// classifies every kernel payload as mutable (deep-copied, cycle-safely)
+// or immutable (shared), and reusing it means this cannot drift from
+// that classification. Notably it SHARES ExtensionPayload unless the host
+// opts in via DeepCloner, so process handles and timer handles ride
+// through intact rather than being severed from what they refer to.
+func (dt *DefTable) IsolateValues() {
+	if dt == nil {
+		return
+	}
+	for _, st := range dt.stacks {
+		for i := range st {
+			st[i].Body = CloneValue(st[i].Body)
+		}
+	}
 }

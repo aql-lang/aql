@@ -14,6 +14,10 @@ already-recorded issue whose worst face is not recorded.
 
 **Status of the repairs**, as of the latest revision:
 
+- **A is fixed for `await`.** Its branches now deep-clone mutable
+  payloads, so the two documentation claims are true as written. The
+  other five `ForkConcurrent` call sites are deliberately unchanged —
+  see §A.
 - **C is fixed.** `errorReturnsFn` refuses instead of widening a known
   arity. §C now records exactly what its "user-visible by default"
   severity rests on: the effects fence, which blocks the rescuing
@@ -66,7 +70,7 @@ paragraph in B and "Blocker 2 is worse than the table says".
 
 | | Defect | Kind | Severity |
 |---|---|---|---|
-| **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs assert the opposite |
+| **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs assert the opposite; **`await` FIXED**, other fork sites unchanged by design |
 | **B** | Compiled `do`/`each` leak `context set` to the parent | miscompile | high — silent wrong answer, default path |
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — user-visible by default once the block emits output; **FIXED** |
 | **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
@@ -150,6 +154,69 @@ containers between processes — and `await`/`spawn` do not apply it.
    `deq`/rendering racing too.
 
 Recommend (1), with (2) as the interim if a copy cost is unacceptable.
+
+### (1) is DONE — scoped to `await`
+
+`Registry.ForkConcurrentIsolated` is `ForkConcurrent` plus
+`DefTable.IsolateValues`, which maps `CloneValue` over every binding.
+`await`'s `makeBranchForks` uses it; **no other fork site does**.
+
+**Why scoped rather than applied at `ForkConcurrent`.** That primitive is
+shared by `await`, the timers, `spawn`, `service` and the two net
+listeners. The false claim is specifically about `await` branches —
+EXPLANATION.md's is in the `await` modes section and HOWTO.md's directly
+follows the `await` examples — and both statements are now **true as
+written**, so no prose had to be weakened. Cloning at the shared primitive
+would additionally break a `timeout` / `interval` callback that
+accumulates into a captured Store, which nothing documents as isolated and
+which is a reasonable idiom; and the process paths already have their own
+answer, since `send` refuses to pass mutable containers between processes.
+Fixing the documented claim is the job; changing concurrency semantics
+across five other call sites is not.
+
+**Why `CloneValue` rather than a bespoke walk.** It already classifies
+every kernel payload as mutable (deep-copied, cycle-safely) or immutable
+(shared), so reusing it means the isolation cannot drift from that
+classification. It also SHARES `ExtensionPayload` unless the host opts into
+`DeepCloner` — so process handles and timer handles ride through intact
+rather than being severed from what they refer to.
+
+**The oracle made this cheap to verify.** An immutable `Map` always had the
+documented behaviour (`set` returns a copy), so the contract did not have
+to be invented: the tests assert that a `FlexMap` produces the *same*
+observable result as a `Map` on the same program. Pre-fix both spellings
+of the repro produce `[{b:2 a:1} {b:2 a:1}] {b:2 a:1}`; post-fix both
+produce the oracle's `[{a:1} {b:2}] {}`.
+
+**Verified as a race gate, not just a semantics gate.** `make test-race`
+runs this whole package under the detector. Reverting the fix and
+re-running the new tests produces **three `WARNING: DATA RACE` reports and
+three failures**; with the fix they are clean. A test that cannot fail is
+not a gate, so this was checked rather than assumed.
+
+**Measured cost** (4 branches, a 10-element list in scope, 200 iterations):
+
+| | allocs/op | B/op | ns/op |
+|---|---|---|---|
+| before | 7470 | 2246486 | 2826727 |
+| after | 8677 | 2622926 | 3252268 |
+| | **+16%** | **+17%** | **+15%** |
+
+Paid per `await` CALL, not per loop element — the distinction that made
+defect B's equivalent cost unacceptable. No alloc guard is breached. The
+available optimisation, if it ever matters, is to walk for an
+in-place-mutable node first and clone only when one is present: most of
+that 16% is copying plain `List`/`Map` bindings, which are not aliasing
+hazards (their `set` returns a copy). It is deliberately NOT taken here,
+because it means maintaining a second traversal alongside `CloneValue`'s
+classification, and drift between the two would silently reopen the bug.
+
+**Still shared, deliberately:** the fork's context stack. `ForkConcurrent`
+already gives each branch a private COW layer so `context set` is
+isolated, but a mutable container *stored in* the context is reachable by
+pointer. The published repro binds through `def`, which is what this
+closes. That path is untested here and should be checked before anyone
+claims context-stored containers are isolated too.
 
 ### Test gap
 
