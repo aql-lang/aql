@@ -65,13 +65,25 @@ func EffectiveDebugOps(r *Registry) (capabilities.DebugOps, bool) {
 	return nil, false
 }
 
-// SetHostDebugOps installs a DebugOps capability (used by the REPL/TTY
-// host and by tests supplying a scripted controller).
+// SetHostDebugOps installs a DebugOps capability (used by the `aql debug`
+// session, the REPL/TTY host, and tests supplying a scripted controller).
 func SetHostDebugOps(r *Registry, ops capabilities.DebugOps) {
 	if r == nil || ops == nil {
 		return
 	}
 	_ = r.Capabilities.Set(CapDebugOps, ops)
+}
+
+// RemoveHostDebugOps uninstalls the DebugOps capability — the uninstall
+// affordance SetHostDebugOps deliberately lacks (nil there is a no-op).
+// A borrowing host (the `aql debug` session) restores the registry with
+// this on the way out so a reused registry doesn't keep pausing into a
+// dead controller.
+func RemoveHostDebugOps(r *Registry) {
+	if r == nil {
+		return
+	}
+	_, _ = r.Capabilities.Delete(CapDebugOps)
 }
 
 // EffectiveClock returns the time source for the current invocation. The

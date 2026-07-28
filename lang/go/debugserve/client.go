@@ -72,6 +72,55 @@ func (c *Client) Eval(src string) (result string, evalErr string, err error) {
 	return out.Result, out.Error, nil
 }
 
+// StepState is the wire shape of the remote stepping surface
+// (AQL-DEBUGGER.0.md §8.3 Phase 4): the debugged program's current
+// pause, as served by GET /debug/pause and returned by POST
+// /debug/action. State is "paused", "running", or "exited"; the
+// location fields are meaningful only while paused; Exit carries the
+// program's error text after a failed run.
+type StepState struct {
+	State  string `json:"state"`
+	Seq    int    `json:"seq"`
+	Kind   string `json:"kind,omitempty"`
+	Row    int    `json:"row,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	InBody bool   `json:"in_body,omitempty"`
+	File   string `json:"file,omitempty"`
+	Line   string `json:"line,omitempty"`
+	Stack  string `json:"stack,omitempty"`
+	Exit   string `json:"exit,omitempty"`
+}
+
+// StepPause reads the remote program's current pause state.
+func (c *Client) StepPause() (StepState, error) {
+	var out StepState
+	err := c.getJSON("/debug/pause", &out)
+	return out, err
+}
+
+// StepAction delivers one step action ("step", "next", "out",
+// "continue", "quit") to the paused remote program. The returned state
+// is the post-delivery one ("running" — the next pause arrives via
+// StepPause polling); a program that is not paused refuses (an error).
+func (c *Client) StepAction(action string) (StepState, error) {
+	body, _ := json.Marshal(map[string]string{"action": action})
+	var out StepState
+	err := c.postJSON("/debug/action", body, &out)
+	return out, err
+}
+
+// StepBreak sets (or, with del, deletes) a breakpoint on the remote
+// program — a line spec ("12", "file:12") or a word name — returning
+// the session's confirmation line.
+func (c *Client) StepBreak(spec string, del bool) (string, error) {
+	body, _ := json.Marshal(map[string]any{"spec": spec, "delete": del})
+	var out struct {
+		Result string `json:"result"`
+	}
+	err := c.postJSON("/debug/break", body, &out)
+	return out.Result, err
+}
+
 // Emit appends a serverless-channel event for invocation id (the function
 // side of §7.3).
 func (c *Client) Emit(id string, ev Event) error {

@@ -22,6 +22,8 @@ supports.
   * [`aql fmt`](#aql-fmt)
   * [`aql model`](#aql-model)
   * [`aql build`](#aql-build)
+* [Debugging](#debugging)
+  * [`aql debug`](#aql-debug)
 * [Project lifecycle](#project-lifecycle)
   * [`aql prep`](#aql-prep)
   * [`aql pack`](#aql-pack)
@@ -500,6 +502,156 @@ A missing source file, an unbundlable import, or (for `--native`) a failed
 `go build` exits non-zero with the error on stderr.
 
 
+## Debugging
+
+### `aql debug`
+
+The interactive debugger (design/AQL-DEBUGGER.0.md), plus the
+cross-process introspection server and client it grew out of.
+
+**Interactive launch** — run a program under the debugger:
+
+```bash
+aql debug prog.aql                      # pause at the first source line
+aql debug --script cmds.dbg prog.aql    # drive the session from a command file (CI)
+aql debug --post-mortem prog.aql        # on an uncaught error, inspect the fault state
+aql debug --no-check prog.aql args...   # skip the pre-flight; args reach IO.args
+```
+
+The program runs on the interpreter (the per-step trace does not fire
+on the compiled VM path) and pauses **between source lines** — one stop
+per line, however many engine steps the line expands to. At the
+`(adbg)` prompt:
+
+| Command | Does |
+|---------|------|
+| `step`, `s` | run to the next source line, **descending into body evaluations** (`each`/`fold`/`do` bodies, paren groups — labelled `(in body)`) |
+| `next`, `n` | like `step`, but run through deeper frames and bodies — stay at statement level |
+| `out`, `o` | run until the current fn frame returns |
+| `continue`, `c` | run to the next breakpoint (or completion) |
+| `break <spec>` | set a breakpoint: a source line (`break 12`) or a word (`break add`); bare `break` lists them |
+| `delete [spec]` | delete one breakpoint; bare `delete` clears all |
+| `watch <name>` | pause when the binding's value changes (old → new); bare `watch` lists |
+| `unwatch [name]` | delete one watch; bare `unwatch` clears all |
+| `quit`, `q` | **detach** — the program continues to completion |
+| `stack` | every data-stack entry, top (`#0`) first |
+| `bt` | backtrace of live fn frames — including module fns' |
+| `back` | browse one recorded step earlier (time-travel, read-only) |
+| `forward`, `fwd` | browse one step later; at the newest entry, return to the live pause |
+| `history` | list the recorded trail, newest first |
+| `replay` | re-run from the start to the browsed entry (side effects re-run) |
+| `defs`, `locals` | the program's bindings (`defs all` for every binding) |
+| `print <expr>`, `p`, `eval` | evaluate in the paused program's scope |
+| `list`, `l` | source around the current line |
+| `help`, `h`, `?` | the command list |
+
+Breakpoints come in four kinds. From the prompt (or `--break` at
+launch): a **source line** (`break 12` — pauses on entering the line,
+once per loop iteration, including inside body evaluations) and a
+**word** (`break add` — pauses whenever that word is about to
+dispatch). In source: the `aql:debug` module's inline markers —
+`Debug.break` pauses whenever the debugger is attached (and is a no-op
+otherwise, so it is safe to commit), `Debug.break-when <cond>` pauses
+conditionally. And **data watchpoints**: `watch n` pauses when the
+binding `n` changes value — including its first definition — showing
+old → new (the compare runs per step, only while watches are set).
+`quit` cannot kill the program mid-run — the engine has no preemption
+seam (ADR-005) — so it detaches and the program drains at full speed.
+End-of-input on the command stream (Ctrl-D, or a drained `--script`
+file) also detaches. In `--script` mode each command is echoed after
+the prompt, so the transcript is a self-contained, reproducible record
+— the debugger's CI story.
+
+Two error-debugging modes. With `--break-on-error`, every raise
+pauses **before it unwinds** — including errors a `do` handler will
+catch — with the stack, scope, and backtrace live at the fault;
+resuming lets the error proceed to its handler (or out of the
+program). With `--post-mortem`, an **uncaught** error opens one final
+inspection prompt over the fault state before the error reaches
+stderr and the run exits 1. Errors a `do` handler catches are not
+post-mortems; a session you already `quit` stays closed.
+
+**Time travel** — every line-level stop is recorded in a bounded ring
+(the last 64, in every run mode), and `back`/`forward` browse it
+read-only: `stack`, `bt`, and `list` follow the browsed snapshot,
+while `print` and `defs` stay live (bindings are not rewound — the
+view says so). `history` lists the trail. Resuming execution clears
+the browse cursor. From a browsed entry, `replay` re-runs the program
+FROM THE START on a fresh registry and pauses at that entry's line
+stop — deterministic re-execution reproduces the state, and from
+there you can step **forward** through a moment the live run already
+passed. The price is stated up front: the program's side effects
+re-run.
+
+**Editor integration** — `--dap` speaks the Debug Adapter Protocol
+over stdio (Content-Length-framed JSON), so any DAP client can drive
+the same session: launch, line breakpoints, function breakpoints
+(`setFunctionBreakpoints` maps onto word breakpoints — a
+concatenative program's functions ARE its words), stepping
+(`next`/`stepIn`/`stepOut`), stack/scopes/variables, evaluate, and
+stopped events (`breakpoint`, `step`, `exception` under
+`--break-on-error`). Program output arrives as `output` events; the
+program's exit code is reported in the `terminated`/`exited` events.
+`--dap` and `--script` are mutually exclusive; `pause` is refused
+honestly (no preemption seam — same as `quit` above).
+
+`bt` chains frames across every engine running on the program's
+registry — a pause inside an `each` body still shows the enclosing
+fn's frame — and breakpoints reach **module fn bodies** too (their
+captured registries resolve the session's hook through the import
+chain). A pause inside a file-imported module names the MODULE file
+and its own source text — the banner, `list`, and the DAP
+`stackTrace` all follow the firing engine's file — and the module
+fn's own frame appears in `bt` (the engine chain spans the import
+registries, and each named call labels its body engine).
+
+Flags: `--script F`, `--break SPEC` (repeatable), `--break-on-error`,
+`--post-mortem`, `--dap`, `--no-check` (also `AQL_NO_CHECK`),
+`--color auto|always|never`.
+
+Current limits (see the design note's roadmap): a concurrent fork's
+pauses are delivered best-effort (dropped whenever the session is
+busy) and are not labelled with the fork's identity; relative
+`import` paths resolve against the working directory (matching
+`aql run`); a marker pause inside an imported module names the module
+file but `list` has no module source to page there; and `step` may
+surface engine-internal evaluations of multi-line fn literals as
+extra `(in body)` stops — scripted sessions should drive to a
+location with breakpoints or markers rather than counted steps.
+
+**Cross-process introspection & remote stepping** — serve a runtime's
+state over HTTP, and interrogate or DRIVE it:
+
+```bash
+aql debug serve [--bind 127.0.0.1:7777] [--token T] [--step] [file.aql]
+aql debug attach <words|defs|heap|eval SRC|events ID> [--url U] [--token T]
+aql debug attach <pause|step|next|out|continue|quit|break SPEC|delete SPEC>
+```
+
+`serve` loads `file.aql` (if given), then serves the registry's
+introspection endpoints until interrupted, writing a discovery file
+(`$TMPDIR/aql-debug.json`) that `attach` reads by default. The optional
+Bearer token is a static string or a vault capability id; binds are
+loopback-only unless `--allow-public`.
+
+With `--step`, `serve` instead runs the program **under the remote
+stepping debugger**: it pauses at the first source line and waits, and
+a separate process drives it with the `attach` stepping verbs —
+`pause` shows the current stop (location, source line, stack summary),
+`step`/`next`/`out`/`continue` deliver the same actions the `(adbg)`
+prompt has (each waits briefly for the next stop and prints it; a
+long-running program answers `running` — check again with `pause`),
+`break`/`delete` manage line and word breakpoints, and `quit` detaches
+(the program drains to completion, exactly like the TTY `quit`).
+`attach eval` at a pause evaluates in the paused program's scope —
+the stepping server routes it through the session, so it cannot
+deadlock against the parked engine. Interrupting the server while the
+program is parked also detaches and drains before exit. The stepping
+surface shares the introspection transport's auth and its trust
+posture: `attach eval` is already remote code execution, so gate both
+with `--token`.
+
+
 ## Project lifecycle
 
 An AQL "project" is a directory with an `aql.jsonic` manifest plus
@@ -628,7 +780,9 @@ aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
 aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
-aql vault providers                     # list built-in provider presets
+aql vault providers                     # list provider presets (built-in + custom)
+aql vault provider add --url=https://api.corp.example --auth-style=header:X-Corp-Key corp   # define a custom upstream preset
+aql vault provider rm corp              # remove a custom preset (refused while aliases still use it)
 aql vault scan .                        # scan files for leaked secret-like strings
 aql vault scan --home                   # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …) for plaintext secrets
 aql vault scan --home --match-vault     # …and flag which on-disk creds are already vaulted
@@ -889,6 +1043,35 @@ only unless you pass `--allow-public`. The MCP server (`aql vault mcp
 aliases the named agent has been granted a capability for, enforcing
 the same TTL, host/method allowlists, and call/cost quotas. The file
 backend requires a non-empty passphrase.
+
+Two quota caveats to know when relying on `grant`'s quantitative
+limits. **`--max-calls` is a soft cap under concurrency**: the check
+runs at request start and the counter persists after the response, so
+N simultaneous in-flight requests can overshoot the cap by up to N−1
+— use it for budget hygiene, not as a hard rate limiter.
+**`--max-cost-cents` is debited only from an `X-AQL-Vault-Cost-Cents`
+response header**, which the built-in providers' real APIs do not
+send; unless your upstream (or a middlebox you control) sets that
+header, the cost meter stays at zero and the budget never trips.
+
+**Upstream providers.** The broker forwards an alias's requests to the
+base URL of its provider preset — the compiled-in ones (`openai`,
+`anthropic`, `github`) or a **custom preset** minted with
+`aql vault provider add --url=<base> [--auth-style=<style>] <name>`
+(styles: `bearer`, `x-api-key`, `header:<name>`, `query:<name>`,
+`none`). Custom presets live in the vault store, are listed by
+`vault providers` with a `SOURCE` column, and are validated at mint
+time — URL shape (http/https, a real hostname, a valid port, no embedded
+`user:pass@`, no query or fragment), auth style (a `header:<name>` must
+be a valid HTTP header name and not one net/http controls itself, such
+as `Host`), and preset name; a plain-`http` base URL warns, since the
+secret would travel unencrypted. Custom presets referenced by an alias
+travel in `vault export` bundles, so a custom-backed alias still brokers
+after `vault import`. The broker never follows an upstream redirect —
+the injected secret only ever reaches the preset's own host. Built-in names can never be redefined or
+removed — a store entry can never redirect a compiled-in provider — and
+`provider rm` refuses while any alias still references the preset,
+naming the blockers. (Flags precede the name, as with `password add`.)
 
 **Moving a vault between machines or OSes.** A `file`-backend vault is
 already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`

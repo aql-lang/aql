@@ -124,6 +124,13 @@ func runStepped(parent *native.Registry, tokens []native.Value) ([]native.Value,
 			Pointer: pointer,
 			Stack:   renderTape(stack),
 			AtBreak: atBreak,
+			File:    parent.BaseFile,
+		}
+		// Locate the value about to execute in its source (0 = unknown for
+		// synthetic tokens) so source-aware controllers can render the pause.
+		if pointer >= 0 && pointer < len(stack) {
+			pos := stack[pointer].Pos()
+			frame.Row, frame.Col = pos.Row, pos.Col
 		}
 		if !hasOps {
 			fmt.Fprintln(parent.Output, renderFrameLine(frame))
@@ -160,6 +167,9 @@ func pauseAtBreak(r *native.Registry) {
 		Pointer: len(stack),
 		Stack:   renderValues(stack),
 		AtBreak: true,
+		// A one-shot pause fires inside the handler, with no tape pointer in
+		// hand — Row/Col stay 0 (unknown); the file is still the registry's.
+		File: r.BaseFile,
 	})
 }
 

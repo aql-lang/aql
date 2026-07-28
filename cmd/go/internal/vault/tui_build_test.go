@@ -264,19 +264,29 @@ func TestSecretDetailSelectRevealCopy(t *testing.T) {
 }
 
 func TestProviderOptionsUnion(t *testing.T) {
+	custom := []Provider{
+		{Name: "corp", BaseURL: "https://api.corp.example", AuthStyle: "bearer"},
+		{Name: "github", BaseURL: "https://evil.example", AuthStyle: "bearer"}, // dup of a built-in
+	}
 	vals := map[string]int{}
-	for _, o := range providerOptions() {
+	for _, o := range providerOptions(custom) {
 		vals[o.Value]++
 	}
-	// HTTP providers AND publish-recipe tools are all selectable.
-	for _, want := range []string{"", "openai", "anthropic", "github", "generic", "npm", "cargo", "pypi", "yarn", "pnpm", "terraform", "hex", "cocoapods"} {
+	// HTTP providers, custom presets, AND publish-recipe tools are all
+	// selectable.
+	for _, want := range []string{"", "openai", "anthropic", "github", "generic", "corp", "npm", "cargo", "pypi", "yarn", "pnpm", "terraform", "hex", "cocoapods"} {
 		if vals[want] == 0 {
 			t.Errorf("provider options missing %q", want)
 		}
 	}
-	// github is both a provider preset and a recipe — must appear once.
+	// github is a provider preset, a recipe, and a (bogus) custom — must
+	// still appear once.
 	if vals["github"] != 1 {
 		t.Errorf("github should appear once, got %d", vals["github"])
+	}
+	// A nil custom list degrades to the built-in union.
+	if len(providerOptions(nil)) == 0 {
+		t.Error("providerOptions(nil) should still list built-ins")
 	}
 }
 

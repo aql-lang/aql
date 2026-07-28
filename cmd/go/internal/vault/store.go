@@ -145,6 +145,12 @@ type Store struct {
 	// key new writes seal under. A rekey transiently leaves an old and a
 	// new id both decryptable, but only the current id seals new values.
 	CurrentNDK map[string]string `json:"current_ndk,omitempty"`
+	// CustomProviders holds operator-defined provider presets minted by
+	// `vault provider add` — the same shape as the built-in presets, so
+	// the broker can front any upstream, not just the compiled-in three.
+	// Built-in names always win a lookup, so a store entry can never
+	// shadow (and so redirect) a compiled-in provider.
+	CustomProviders []Provider `json:"custom_providers,omitempty"`
 }
 
 // maxPasswordSlots bounds the slot table so authenticate's per-slot work
@@ -179,7 +185,13 @@ const maxPasswordSlots = 64
 //	     older binary refuse a v6 store rather than silently dropping a
 //	     slot's expiry on its next save — which would quietly turn a
 //	     deliberately temporary password into a permanent one.
-const storeVersion = 6
+//	v7 — stores gain the optional CustomProviders field (operator-defined
+//	     provider presets via `vault provider add`). The bump makes an
+//	     older binary refuse a v7 store rather than silently dropping the
+//	     presets on its next save — which would break brokering for every
+//	     alias tagged with a custom provider (its lookup would quietly
+//	     fall back to the URL-less generic preset and be refused).
+const storeVersion = 7
 
 // storeMigrations[i] upgrades a store from schema version i+1 to i+2.
 // Each is a pure, in-place transform; the slice length must be
@@ -190,7 +202,16 @@ var storeMigrations = []func(*Store) error{
 	migrateStoreV3ToV4, // index 2: v3 -> v4
 	migrateStoreV4ToV5, // index 3: v4 -> v5
 	migrateStoreV5ToV6, // index 4: v5 -> v6
+	migrateStoreV6ToV7, // index 5: v6 -> v7
 }
+
+// migrateStoreV6ToV7 is a no-op. v7 only adds the optional
+// CustomProviders field; a v6 store loads with no custom presets, which
+// is exactly the pre-v7 behaviour (built-ins only). The version bump
+// alone is the migration — it makes an older binary refuse a v7 store
+// rather than silently dropping presets it cannot model (which would
+// break every alias tagged with one).
+func migrateStoreV6ToV7(*Store) error { return nil }
 
 // migrateStoreV4ToV5 is a no-op. v5 only adds the optional per-alias
 // IPWhitelist field; a v4 store loads with every alias unrestricted,
@@ -449,6 +470,55 @@ func (s *Store) RenameAlias(from, to string, revokeCaps bool) (int, bool) {
 func (s *Store) SortedAliases() []Alias {
 	out := append([]Alias(nil), s.Aliases...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// FindCustomProvider returns a pointer to the named operator-defined
+// provider preset and its index, or (nil, -1) if absent. Built-in
+// presets are not consulted — that is LookupProviderIn's job.
+func (s *Store) FindCustomProvider(name string) (*Provider, int) {
+	for i := range s.CustomProviders {
+		if s.CustomProviders[i].Name == name {
+			return &s.CustomProviders[i], i
+		}
+	}
+	return nil, -1
+}
+
+// UpsertCustomProvider inserts a new custom provider preset or replaces
+// an existing one by name, so `provider add` on a taken name updates the
+// preset in place (e.g. to fix a base URL) rather than duplicating it.
+func (s *Store) UpsertCustomProvider(p Provider) {
+	if _, idx := s.FindCustomProvider(p.Name); idx >= 0 {
+		s.CustomProviders[idx] = p
+		return
+	}
+	s.CustomProviders = append(s.CustomProviders, p)
+}
+
+// RemoveCustomProvider drops the named custom preset. Returns true if it
+// existed. Aliases tagged with the name are left untouched — the caller
+// is responsible for refusing the removal while any still reference it.
+func (s *Store) RemoveCustomProvider(name string) bool {
+	_, idx := s.FindCustomProvider(name)
+	if idx < 0 {
+		return false
+	}
+	s.CustomProviders = append(s.CustomProviders[:idx], s.CustomProviders[idx+1:]...)
+	return true
+}
+
+// ProvidersInUse returns the sorted alias names tagged with the named
+// provider, so `provider rm` can refuse (and name the blockers) while
+// the preset is still load-bearing.
+func (s *Store) ProvidersInUse(name string) []string {
+	var out []string
+	for i := range s.Aliases {
+		if s.Aliases[i].Provider == name {
+			out = append(out, s.Aliases[i].Name)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
