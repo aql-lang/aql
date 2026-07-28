@@ -211,6 +211,51 @@ hazards (their `set` returns a copy). It is deliberately NOT taken here,
 because it means maintaining a second traversal alongside `CloneValue`'s
 classification, and drift between the two would silently reopen the bug.
 
+### `make test-race` is RED on main — an unrelated, pre-existing leak
+
+Running the race lane for A's verification surfaced a failure that has
+nothing to do with A: `lang/go/test`'s `TestListAPIWithQuery` reports a
+data race and fails under `-race`.
+
+It is a **leaked `interval` callback**. The two stacks are a test's
+`a.Run` → `CompileCheck` → `CheckState.Begin` *writing* check state
+(`check.go:98`), against `RunTimerCallback` → `Engine.Run` → `stepWord` →
+`CheckState.IsActive` *reading* it (`check.go:77`), on a goroutine created
+by `startInterval` (`natives.go:706`). An interval started by an earlier
+test in the package is still firing while a later test drives a check pass
+on the same registry.
+
+Measured on a git worktree at the **untouched branch base** `ab0e1e0`:
+
+| tree | `WARNING: DATA RACE` reports |
+|---|---|
+| `ab0e1e0` (base, before any of this work) | **26**, test FAILS |
+| this branch before the A fix | 6, test FAILS |
+| this branch with the A fix | 1, test FAILS |
+
+So the gate was already red before any change here, and A moved the count
+down rather than up. (Counts are nondeterministic; the direction is what
+matters, and no run of any tree was clean.)
+
+Recorded rather than fixed, because it is a distinct defect with a
+distinct owner: an interval that outlives the test that started it. The
+repair is lifecycle — `cancel` the interval, or have the test harness
+drain live timers between tests — not anything in the registry. It is
+worth someone's attention precisely because `make test-race` is *the*
+data-race gate: while it is red for this reason, a genuine new race is
+easy to miss in the noise. That is the same failure mode this note keeps
+finding — a gate whose signal is masked, so what it would have caught goes
+unnoticed.
+
+**Methodological note.** The first control I ran for this was wrong: I
+used `git stash push` on files that were already committed, so it stashed
+nothing and I re-tested the *fixed* tree while believing it was the
+baseline. The conclusion happened to be right; the evidence was worthless.
+The worktree at `ab0e1e0` is what actually establishes it. Two of this
+note's corrections now trace to a bad control — see also §C's severity —
+which is an argument for building the baseline from a known commit rather
+than from the working tree.
+
 **Still shared, deliberately:** the fork's context stack. `ForkConcurrent`
 already gives each branch a private COW layer so `context set` is
 isolated, but a mutable container *stored in* the context is reachable by
