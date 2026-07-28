@@ -35,6 +35,43 @@ func registerDocs(ref string, docs map[string]string) {
 	}
 }
 
+// moduleExamples is the docs table's twin for `describe` EXAMPLES: import
+// id → export name → the lines shown verbatim under "Examples:".
+//
+// It exists because the fallback is worse than nothing for a capability
+// word. With no authored examples, describe generates positional
+// permutations from the signature — for `Net.fetch` that yields
+// `Net.fetch 'a' {a:1,b:2}`, which is well-formed, runs nowhere, and
+// hides the only thing a reader needs (what goes IN the options map).
+// A summary line cannot carry that; a worked call can.
+//
+// Unlike moduleDocs this is OPT-IN: an export with no entry keeps the
+// generated permutations, which are genuinely useful for the pure
+// helpers (`ArrayUtil.reshape 2 3 [1 2 3 4 5 6]` reads fine). The
+// ratchet is the other direction — TestModuleExampleKeys asserts every
+// key names a real export, so the table cannot rot as words are renamed.
+//
+// Authoring rules, so the lines stay trustworthy:
+//   - Write what a user would actually type, including the `import` when
+//     the example needs one to make sense on its own.
+//   - Comment with `;# …` in the same style as the core words' examples.
+//   - Never show a result that is not what the word returns.
+var moduleExamples = map[string]map[string][]string{}
+
+// registerExamples records per-export `describe` examples for one module,
+// keyed by its import id. Called from per-module docs_*.go init()
+// functions, next to that module's registerDocs call.
+func registerExamples(ref string, examples map[string][]string) {
+	m := moduleExamples[ref]
+	if m == nil {
+		m = make(map[string][]string, len(examples))
+		moduleExamples[ref] = m
+	}
+	for k, v := range examples {
+		m[k] = v
+	}
+}
+
 func init() {
 	registerDocs("aql:array-util", map[string]string{
 		"shape":     "Shape: the length along each axis of a nested list.",

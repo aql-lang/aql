@@ -1,6 +1,31 @@
 package modules
 
 func init() {
+	// `identity` and `reveal` are the pair a reader most needs told
+	// apart, and no signature line can tell them apart: both take an
+	// alias String, and only the examples show that one hands back a
+	// secret and the other deliberately does not.
+	registerExamples("aql:vault", map[string][]string{
+		"identity": {
+			`def cred (Vault.identity "acme-mtls")                   ;# <vault identity> — opaque, redacts`,
+			`Net.fetch "https://internal.example.com" {tls: {identity: cred}}`,
+			`Net.connect-raw {tcp: "db.internal:5432"  tls: {identity: cred}}`,
+			`;# The vault is read INSIDE the handshake, so a rotated secret is`,
+			`;# picked up without re-running, and a program that never dials`,
+			`;# never reveals anything. There is no path from the handle back`,
+			`;# to the key — that is the difference from Vault.reveal.`,
+		},
+		"reveal": {
+			`def token (Vault.reveal "github-pat")                   ;# a String — the actual secret`,
+			`Net.fetch "https://api.github.com/user" {`,
+			`  headers: {authorization: (join "" ["Bearer " token])}`,
+			`}`,
+			`;# Right for a token a program must paste into a header. For a`,
+			`;# PRIVATE KEY use Vault.identity instead: the moment a key is a`,
+			`;# guest String it can be printed, logged, or sent somewhere.`,
+		},
+	})
+
 	registerDocs("aql:vault", map[string]string{
 		"identity":             "An opaque handle to a vault-held TLS client credential, for `tls: {identity: …}`. Unlike `reveal` it never yields the secret as a value.",
 		"status":               "The active vault's status map: {ok backend locked aliases …} from the host backend.",

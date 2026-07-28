@@ -120,6 +120,11 @@ func stampExportProvenance(desc native.ModuleDesc) {
 					fn.Doc, changed = d, true
 				}
 			}
+			if len(fn.Examples) == 0 {
+				if ex := moduleExamples[desc.Ref][key]; len(ex) > 0 {
+					fn.Examples, changed = ex, true
+				}
+			}
 			if !changed {
 				continue
 			}
