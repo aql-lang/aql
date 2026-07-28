@@ -7,11 +7,18 @@ follow-up: for each, the cause **in the source**, the blast radius as
 *tested*, and what a fix has to decide. Reproduced against `main` @
 `ab0e1e0`.
 
-Nothing here is a decision. Three items (A, B, F) are unambiguous engine
-bugs whose fix shape is clear — F's fix is written and its blast radius
-measured; two (C, D) need a design call named below; one (E) is mostly
+Three items (A, B, F) are unambiguous engine bugs whose fix shape is
+clear; two (C, D) need a design call named below; one (E) is mostly
 documentation with one engine defect inside it; one (G) is an
 already-recorded issue whose worst face is not recorded.
+
+**Status of the repairs**, as of the latest revision: **F is partly
+fixed** — its two verified patches are landed with regression tests, and
+writing the negative half of those tests exposed a sixth consequence
+(a declared union RETURN is accepted but never enforced) that is recorded
+and pinned rather than closed. **B's** fix was implemented, validated and
+reverted; read §B before attempting another. Everything else is still
+diagnosis.
 
 Two findings grew materially during investigation. **F** was reported as a
 `case`-exhaustiveness precision gap and turned out to be a parameter-type
@@ -53,7 +60,7 @@ paragraph in B and "Blocker 2 is worse than the table says".
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — three variants, user-visible by default |
 | **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command |
 | **E** | Error-code table documents codes the engine can't produce | docs + 1 engine bug | medium |
-| **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently makes a 1-arg fn callable with 0 args |
+| **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently makes a 1-arg fn callable with 0 args — **PARAM SIDE FIXED**, return side still unenforced |
 | **G** | Un-separated forward calls evaluate right-to-left → stale reads | recorded, deferred | medium — invalidates tests silently |
 
 
@@ -956,6 +963,85 @@ Measured fix blast radius: with (1) + (2) applied, the full
 4 lines of `lang/go/native/testdata/fnmodel_equivalence.golden` (the
 sig-table rows for `fn`, `afn` and the two synthesized `def` keyword
 forms). Zero behaviour-corpus drift.
+
+### LANDED — and a sixth consequence the negative tests found
+
+(1) and (2) are applied, with the predicted 4-line golden update and
+nothing else. Five of the six rows in the consequence table above now
+match the bracket form exactly, including the arity row (`f` with no
+argument is `no_signature` again) and the `case_redundant_default`
+advisory. The `case_not_exhaustive` message on a genuinely-incomplete
+shorthand `case` is now the precise `uncovered: String` rather than the
+"scrutinee is dynamic" misdiagnosis.
+
+Writing the *negative* half of the regression tests — per this repo's
+"always pair positive with negative" discipline — turned up a
+consequence the original investigation missed, because every row in that
+table asserted the shorthand did something WRONG and none asserted what it
+must REJECT:
+
+| | shorthand | bracket |
+|---|---|---|
+| a body returning `Boolean` under a declared union return `IS` | **accepted silently** | `type_error: return value 1: expected IS, got Boolean` |
+
+The declared union return is not merely mis-analysed, it is **unenforced**.
+Cause is the mirror image of (1) and is *not* closed by it: `NoEvalArgs`
+and `NoEvalMapArgs` gate container auto-evaluation, but a bare Word in the
+OUTPUT slot is resolved by forward collection itself, which no flag gates.
+So `ResolveSigType` receives the Disjunct VALUE, takes its inline-disjunct
+branch (`fn_params.go:536-542`) and answers `(TAny, &pattern)` — and
+`ParseFnReturns` (`fn_params.go:429-436`) reads only the `*Type`, dropping
+the pattern on the floor. `TAny` accepts everything.
+
+Fix (2) is still doing its job here: it stopped the Disjunct being read as
+a return-BY-VALUE, which is what produced the bogus `expected 1 return
+value(s), got 2`. It cannot supply enforcement, because there is nowhere
+on `FnSig` to put a return pattern — `Returns` is `[]*Type`
+(`eng/go/value.go:249`).
+
+**`QuoteArgs: {1: true}` is not the fix — measured, not assumed.** It is
+the obvious move (quote the output Word so the NAME survives, exactly as
+`def`'s typed-name sig quotes its name slot) and it breaks the language:
+`QuoteArgs` participates in forward collection, so every `def f fn …`
+call starts failing with *"def is still waiting for 1 argument(s) when
+`fn` begins its own dispatch"*. It takes down the synthesized `def`
+keyword forms, the plain-builtin output (`fn x:Integer Integer […]`), the
+list output and the paren output — all four measured. Reverted.
+
+Closing this needs a return-pattern channel on `FnSig` (the symmetric twin
+of `FnParam`'s pattern), which is a design change rather than a flag, and
+it should be taken together with fix (3) — both are "the pattern side of
+`ResolveSigType` has nowhere to go" in different slots.
+
+The residual is pinned rather than left silent:
+`TestShorthandFnUnionReturnType` asserts the divergence and **fails loudly
+when it is fixed**, with a message saying so — so the gap is counted, and
+the way out is a deliberate test edit rather than a quiet one.
+
+### `describe case`'s two false examples fixed themselves
+
+The documentation half of fix (4) needs **no edit**. Both hand-authored
+examples this note flagged as shipping false claims
+(`help_control.go:113-114`) are now true, verified against the patched
+binary:
+
+| Example's claim | Now |
+|---|---|
+| `def IS (Integer tor String) def f fn x:IS String [case x […]]` — "exhaustive over IS — no default needed" | 0 errors ✓ |
+| `def f fn x:IS Integer [case x [Integer 1]]` — "check ERROR case_not_exhaustive — uncovered: String" | exactly that message ✓ |
+
+All four other shorthand `case` examples in the same block (Boolean,
+intervals, newtype, dynamic-with-default) were re-run and behave as their
+comments claim.
+
+This is the better outcome by some distance — the alternative was editing
+the docs to describe the bug. It does not close the *structural* problem
+the note raised: `TestHelpExamplesCorrect` still skips hand-authored
+examples by construction (`help_examples_test.go:145-152`), so these two
+were false for as long as they were precisely because nothing executes
+them. Two of them are now pinned directly by
+`TestDescribeCaseShorthandExamplesAreTrue`, which is a spot fix, not the
+general one.
 
 ### Test gap
 

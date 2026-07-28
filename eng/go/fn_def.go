@@ -186,6 +186,16 @@ func IsSigTypeValue(r *Registry, v Value) bool {
 		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
 		return true
 	}
+	// A Disjunct is a TYPE too — `def IS (Integer tor String)` then
+	// `fn [[…] [IS] […]]`. When the name has already been evaluated to
+	// its body (a Disjunct VALUE rather than the Word), reading it as a
+	// concrete return-by-value forces the static return type to Any and
+	// splices the value onto the body stack — the same spurious
+	// "expected N return value(s)" the registry lookup above was added
+	// to stop, one value-shape further along.
+	if IsDisjunct(v) {
+		return true
+	}
 	if IsWord(v) {
 		_as0, _ := AsWord(v)
 		return isSigTypeName(r, _as0.Name)

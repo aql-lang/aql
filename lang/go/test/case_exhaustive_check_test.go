@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -313,6 +314,165 @@ func TestCaseRedundantDefaultAdvisory(t *testing.T) {
 	// advisory, even when provably covered: only the author-declared
 	// union domain is stable across call shapes.
 	wantCase(t, `case 2 [2 "two" "d"]`, "case_redundant_default", false)
+}
+
+// errorCodes returns the codes of the error-severity diagnostics only.
+func errorCodes(res lang.CheckResult) []string {
+	var out []string
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			out = append(out, d.Code)
+		}
+	}
+	return out
+}
+
+// TestCaseExhaustiveShorthandFnForm pins the SHORTHAND spelling
+// (`fn x:IS Out [body]`) against the bracket spelling every other test in
+// this file uses. The two forms parse to the same annotation — the map
+// `{x: word(IS)}` either way — so any divergence is post-parse, and there
+// was one: `fn`'s triple sig carried NoEvalArgs (list-only) but not
+// NoEvalMapArgs, so the shorthand's map slot was auto-evaluated and the
+// type NAME was replaced by its BODY. A union/enum body is a payload-
+// carrying Disjunct value rather than a lattice node, so the declared
+// type was erased before ParseFnParams ran and the scrutinee arrived
+// here as dynamic(Any) — the case checker was being fed a lie.
+//
+// The bracket form was immune only because its slot is a List, which
+// NoEvalArgs does suppress. Every row below is asserted in BOTH forms:
+// the point is equivalence, so a future change that fixes one spelling
+// and not the other fails here.
+func TestCaseExhaustiveShorthandFnForm(t *testing.T) {
+	both := func(shorthand, bracket, code string, want bool, fragments ...string) {
+		t.Helper()
+		wantCase(t, shorthand, code, want, fragments...)
+		wantCase(t, bracket, code, want, fragments...)
+	}
+
+	// A declared union proves exhaustive in both forms…
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] f 5`,
+		"case_not_exhaustive", false)
+	// …and a MISSING alternative errors with the same precise message in
+	// both. Naming the uncovered alternative is the load-bearing half: the
+	// erased-type bug still produced an error here, but the WRONG one
+	// ("the scrutinee is dynamic"), which denies the annotation the user
+	// wrote and sends them to add a default they do not need.
+	both(`def IS (Integer tor String) def f fn x:IS Integer [case x [Integer 1]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][Integer][case x [Integer 1]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// An ENUM-shaped union behaves identically.
+	both(`def Color (red/q tor green/q tor blue/q) def f fn c:Color String [case c [red/q "r" green/q "g" blue/q "b"]] f red/q`,
+		`def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][String][case c [red/q "r" green/q "g" blue/q "b"]]] f red/q`,
+		"case_not_exhaustive", false)
+	both(`def Color (red/q tor green/q tor blue/q) def f fn c:Color Integer [case c [red/q 1 green/q 2]] f red/q`,
+		`def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][Integer][case c [red/q 1 green/q 2]]] f red/q`,
+		"case_not_exhaustive", true, "uncovered", "blue")
+	// The redundant-default advisory survives the shorthand: it is emitted
+	// only for an author-DECLARED union domain, so erasing the declaration
+	// silently dropped it (0 emitted, no error anywhere — the quietest of
+	// the consequences).
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s" "d"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s" "d"]]] f 5`,
+		"case_redundant_default", true)
+	// Partial coverage keeps the default live in both forms — the negative
+	// that makes the row above mean something.
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" "d"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" "d"]]] f 5`,
+		"case_redundant_default", false)
+	// A genuinely dynamic shorthand param is still dynamic: the fix must
+	// not manufacture a static type where none was declared.
+	wantCase(t, `def f fn x:Any String [case x [1 "one" 2 "two"]] f 9`,
+		"case_not_exhaustive", true, "dynamic")
+}
+
+// TestShorthandFnLambdaFormUnionParam is the `=>` twin of the test above.
+// `afn`'s input sig sits at slot 1 (its canonical call is the swap
+// `input afn body`), so it needed the same map-eval suppression `fn`'s
+// slot 0 does.
+func TestShorthandFnLambdaFormUnionParam(t *testing.T) {
+	wantCase(t,
+		`def IS (Integer tor String) def f (x:IS => [case x [Integer "i" String "s"]]) f 5`,
+		"case_not_exhaustive", false)
+	wantCase(t,
+		`def IS (Integer tor String) def f (x:IS => [case x [Integer 1]]) f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// An unannotated lambda param stays dynamic.
+	wantCase(t, `def f (x:Any => [case x [1 "one"]]) f 9`,
+		"case_not_exhaustive", true, "dynamic")
+}
+
+// TestShorthandFnPreservesArity is the sharpest consequence of the erased
+// annotation and the reason this defect outranks the case-coverage
+// symptom it was reported as. When the union body reached ParseFnParams
+// as a VALUE it hit the None-stripping branch meant for INLINE disjuncts,
+// which synthesised a 0-arg overload: a declared one-parameter function
+// became callable with no arguments, silently, returning its body.
+func TestShorthandFnPreservesArity(t *testing.T) {
+	src := `def IN (Integer tor None) def f fn x:IN Integer [0] f`
+	res := checkDiag(t, src)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Fatalf("calling a 1-param shorthand fn with no argument must not "+
+			"dispatch — want no_signature, got: %v", diagCodes(res))
+	}
+	// The bracket form has always rejected it; equivalence is the contract.
+	res = checkDiag(t, `def IN (Integer tor None) def f fn [[x:IN][Integer][0]] f`)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Fatalf("bracket form: want no_signature, got: %v", diagCodes(res))
+	}
+	// Passing the argument still works in both forms.
+	for _, ok := range []string{
+		`def IN (Integer tor None) def f fn x:IN Integer [0] f 5`,
+		`def IN (Integer tor None) def f fn [[x:IN][Integer][0]] f 5`,
+	} {
+		if res := checkDiag(t, ok); len(errorCodes(res)) != 0 {
+			t.Errorf("%q: want clean, got %v", ok, diagCodes(res))
+		}
+	}
+}
+
+// TestShorthandFnUnionReturnType pins the OUTPUT slot. A Disjunct in the
+// return position was read as a concrete return-by-value, which spliced
+// the type onto the body stack and produced a bogus arity complaint —
+// `IsSigTypeValue` recognised a type NAME (the Word) but not the
+// evaluated union VALUE, so suppressing the map eval alone was not
+// enough.
+func TestShorthandFnUnionReturnType(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	out, err := a.Run(`def IS (Integer tor String) def f fn x:Integer IS [x] 1 f`)
+	if err != nil {
+		t.Fatalf("union return type in shorthand fn: %v", err)
+	}
+	if len(out) != 1 || fmt.Sprint(out[0]) != "1" {
+		t.Fatalf("want [1], got %v", out)
+	}
+	// KNOWN RESIDUAL, pinned deliberately. The bracket form ENFORCES the
+	// declared union return — a Boolean body is a type_error — and the
+	// shorthand does not, because the output slot's bare Word is resolved
+	// by forward collection (no NoEval flag gates that), so ResolveSigType
+	// sees a Disjunct VALUE and answers TAny plus a pattern that
+	// ParseFnReturns has nowhere to store. Suppressing the map eval fixed
+	// the INPUT slot; the output slot needs return patterns on FnSig.
+	//
+	// This asserts the divergence rather than the desired behaviour so the
+	// gap is visible and counted. When the residual is fixed, this test
+	// fails loudly and both halves become "must reject" — that is the
+	// intended way out, not a quiet edit.
+	bracket := checkDiag(t, `def IS (Integer tor String) def f fn [[x:Integer][IS][true]] 1 f`)
+	if len(errorCodes(bracket)) == 0 {
+		t.Errorf("bracket form must reject a Boolean body under a declared "+
+			"union return, got clean: %v", diagCodes(bracket))
+	}
+	short := checkDiag(t, `def IS (Integer tor String) def f fn x:Integer IS [true] 1 f`)
+	if len(errorCodes(short)) != 0 {
+		t.Fatalf("RESIDUAL CLOSED — the shorthand now enforces its declared "+
+			"union return (%v). Update this test: both forms should now "+
+			"assert rejection, and §F's residual note can be struck.",
+			errorCodes(short))
+	}
 }
 
 func TestCaseExhaustiveSeverities(t *testing.T) {
