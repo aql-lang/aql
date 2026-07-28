@@ -19,6 +19,23 @@ erasure that also changes arity silently. **E** was reported as four
 phantom error codes and turned out to include an engine defect (a
 code-less runtime error) alongside two claims that were simply wrong.
 
+### How much to trust this
+
+B, C, D and F were each put through two independent adversarial reviews
+briefed to *refute* them — one attacking citations first, one attacking by
+experiment first. Result: **no root cause was refuted**, every symptom
+re-reproduced, one verdict CONFIRMED and seven PARTIAL. The PARTIALs were
+citation drift (off-by-one line numbers, one term of art used loosely),
+blast-radius omissions, and one overstated rule — all folded in here, with
+each correction re-verified before it was written down. The causal stories
+in A-G are what survived that; the fix *scopes* moved more than the
+diagnoses did.
+
+Corrections worth naming because they change what a fix must touch: `case`
+does **not** leak (B), the leak rule is not "lowered to a closure" alone
+(B), `outer` and `walk` also leak (B), and one of this note's own earlier
+fix recommendations for D was retracted as blocked rather than cheap.
+
 | | Defect | Kind | Severity |
 |---|---|---|---|
 | **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs assert the opposite |
@@ -128,9 +145,10 @@ The bytecode VM has no equivalent. `eng/go/vm.go` never calls
 `TopData()` handler arguments (vm.go:518, :1127, :1627) — and there is no
 context-frame opcode anywhere in the VM or emitter. So when `InvokeBody`
 (`eng/go/invoke.go:21`) routes a body through `r.Invoker`, the compiled
-body runs at `eng/go/vm.go:411` (`return vc.run(cl.Unit, locals, nil)`)
-inside the **caller's** context layer. `context set` then COWs and
-replaces that layer through `ContextStack.UpdateChain`
+body runs at `eng/go/vm.go:410` (`return vc.run(cl.Unit, locals, nil)`;
+`invokeClosureOn` spans :389-411) inside the **caller's** context layer.
+`context set` then COWs and replaces that layer through
+`ContextStack.UpdateChain`
 (`eng/go/core_helpers.go:1999`, implemented at
 `eng/go/contextstack.go:88-105`, which scans from the top and *replaces*
 the matching entry). With no child entry to replace, it replaces the
@@ -150,6 +168,39 @@ Words that still island keep the correct semantics **by accident**:
 (`native_array.go:334-335`), so its body reaches `invokeClosureOn`, misses
 the `ClosurePayload` cast (vm.go:390-395) and falls through to
 `RunResolved` → `runPooledAt` → `Engine.Run`, which pushes.
+
+**The rule is not simply "lowered to a closure".** Adversarial review
+produced a live counterexample: `with-decimal` carries a `CallableSpec`
+(`native_math.go:406`), lowers to a closure, runs through
+`invokeClosureOn` — and does **not** leak (measured 1/1 compiled and
+interpreted, against `each`'s 2/1 on the same shape). Its handler pushes
+its own frame:
+
+```go
+// native_math.go:435-436
+r.Contexts.Push(r.Contexts.Top())
+defer r.Contexts.Pop()
+```
+
+The accurate rule is: **a word leaks iff its body lowers to a closure and
+nothing else on the path pushes a frame.**
+
+That counterexample is also the single best argument for the fix below —
+it *is* the fix, already in production for one word, and the spec comment
+above it (`native_math.go:404-405`) states the reason outright: "the
+handler pushes the context around `InvokeBody` so the VM-run body's
+BigDecimal ops read the override."
+
+Two further leaking words were found on review and are confirmed here —
+`outer` (`CallableSpec` at `native_array.go:428`) and `walk`
+(`natives.go:337`), both measured compiled 2 / interpreted 1. So the
+leaking set is at least `do`, `each`, `fold`, `scan`, `filter`, `outer`,
+`walk`, plus nested `do`, list- and map-literal elements and
+interpolated-string holes. `case` does **not** leak and must not be added
+to it: `caseHandler` → `caseClauses` (`conditional.go:78`) →
+`runCaseBody` (`:355-363`) calls `RunResolved` directly, and `case` has no
+`CallableSpec` — despite `invoke.go`'s own stale doc comment at line 10
+listing `case` among `InvokeBody`'s clients.
 
 The other two rows of the report's table also have explanations:
 
@@ -181,6 +232,13 @@ around `invokeClosureOn`'s closure-unit run (`vm.go:389-411`) and pop it
 on every exit path, mirroring `engine.go:1172-1175`. A frame-scoped
 push/pop is preferable to an opcode, since it belongs to body invocation
 rather than to any instruction.
+
+Confidence here is unusually high because the patch already exists: it is
+the two lines `with-decimal` runs today (`native_math.go:435-436`), on the
+same seam, producing the interpreter's answer. Hoisting them from one
+handler to `invokeClosureOn` fixes every leaking word at once and lets
+`with-decimal`'s local copy be dropped. Use the handler's own registry
+(`invoke.go:23` calls `r.Invoker(r, …)`), not the sub-registry.
 
 ### Test gap — the sharpest one here
 
