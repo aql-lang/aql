@@ -26,6 +26,7 @@ func init() {
 		"shutdown":    "Half-close a TCP Socket (\"read\", \"write\" or \"both\").",
 		"close":       "Close a Socket, Listener, or connected Endpoint.",
 		"peer":        "The remote {host port} of a Socket.",
+		"peer-cert":   "The VERIFIED peer certificate of a TLS Socket as a Map, or None (plain socket, or no client certificate demanded).",
 		"addr":        "The bound {host port} of a Listener.",
 
 		// Tier-2 codecs + endpoints (net_codec.go).

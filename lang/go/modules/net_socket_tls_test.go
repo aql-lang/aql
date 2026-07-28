@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
@@ -283,8 +284,9 @@ func TestConnectRawTLSSNIOverride(t *testing.T) {
 	}
 }
 
-// The bind path shares the same tls: parser, so a malformed option is
-// rejected there too rather than reaching the listener.
+// The bind path parses the SERVER side of the option grammar, so a
+// malformed option is rejected there too rather than reaching the
+// listener — and the result lands in serverTLS, not the dial profile.
 func TestParseNetAddrListenRejectsBadTLS(t *testing.T) {
 	r := nscReg(t)
 	if _, err := parseNetAddr(r, nscMap(
@@ -296,13 +298,18 @@ func TestParseNetAddrListenRejectsBadTLS(t *testing.T) {
 	// And a well-formed one is carried through.
 	opts, err := parseNetAddr(r, nscMap(
 		"tcp", native.NewInteger(0),
-		"tls", nscMap("min", native.NewString("1.3")),
+		"tls", nscMap("identity", native.NewAtom("srv"), "min", native.NewString("1.3")),
 	), "listen", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !opts.hasTLS || opts.tlsProfile.MinVersion == 0 {
+	if !opts.hasTLS || opts.serverTLS.MinVersion == 0 || opts.serverTLS.Identity != "srv" {
 		t.Errorf("listen tls: not parsed: %+v", opts)
+	}
+	// The dial profile stays untouched on the bind path — the two sides
+	// never share a slot, so a listener cannot inherit a dial option.
+	if opts.tlsProfile != (capabilities.TLSProfile{}) {
+		t.Errorf("listen must not populate the dial profile: %+v", opts.tlsProfile)
 	}
 }
 

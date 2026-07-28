@@ -77,6 +77,19 @@ func TLSConfigForProfile(r *Registry, p capabilities.TLSProfile, word string) (*
 	return capabilities.TLSConfigFor(p, id)
 }
 
+// TLSServerConfigForProfile is the listen-side twin of
+// TLSConfigForProfile: it resolves the named credential against r and
+// builds the server configuration. The identity is REQUIRED here (a
+// server with no certificate cannot handshake), so an unnamed or
+// unregistered one is an error rather than "present none".
+func TLSServerConfigForProfile(r *Registry, p capabilities.ServerTLSProfile, word string) (*tls.Config, error) {
+	id, err := resolveIdentity(r, capabilities.TLSProfile{Identity: p.Identity}, word)
+	if err != nil {
+		return nil, err
+	}
+	return capabilities.TLSServerConfigFor(p, id)
+}
+
 // transportCacheMax bounds the per-registry profile→transport cache.
 // The key space is guest-influenced (any CA PEM, any SNI), so an
 // unbounded map is a slow leak in a long-lived server. Past the cap a

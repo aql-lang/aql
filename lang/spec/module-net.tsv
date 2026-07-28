@@ -90,3 +90,19 @@ import "aql:net" Net.dotr	fn dotr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]
 import "aql:net" Net.getr	fn getr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
 import "aql:net" Net.has	fn has[[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
 import "aql:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are anchored on the Fetch type: a Map is NOT a receiver for the qualified form
+
+# --- Server-side TLS (design/NETWORK-TLS-PLAN.0.md §5 phase 6). A
+# listener PRESENTS a credential and may DEMAND one back; a dial
+# verifies one and may present one. Each side rejects the other's keys
+# by name — a `verify: false` quietly accepted on a listener would read
+# as configured while configuring nothing. The positive round trip needs
+# a host-registered credential, which AQL source cannot create by
+# design, so it lives in net_socket_tlsserver_test.go.
+import "aql:net" Net.listen {tcp: 0  tls: {}}	ERROR:needs identity:	a TLS server with no certificate has nothing to present
+import "aql:net" Net.listen {tcp: 0  tls: {identity: nobody/q}}	ERROR:no client identity named "nobody"	guest source names a credential; only the host registers one
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  verify: false}}	ERROR:verify: is not available here	verify: is a dial option — a server verifies no server chain
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  ca: "x"}}	ERROR:ca: is not available here	a server names its client roots with require-client:
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  sni: "x"}}	ERROR:sni: is not available here	sni: is what a client sends, not what a server reads
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  nope: 1}}	ERROR:unknown option "nope"	an unknown listen tls: key is refused, never ignored
+import "aql:net" Net.connect-raw {tcp: "127.0.0.1:1"  tls: {require-client: "x"}}	ERROR:require-client: is not available here	require-client: is a listen option
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv c 1 {within: 5000} ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def v (Net.peer-cert s) Net.close s; Net.close l; v	none	peer-cert on a plain socket is None — no TLS means no proven peer

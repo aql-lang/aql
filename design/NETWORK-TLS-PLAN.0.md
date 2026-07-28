@@ -253,10 +253,12 @@ This exists because `Vault.reveal` returns a `String`
 (`lang/go/modules/vault.go:186`) — revealing a private key into a guest
 string is precisely the failure mode this design avoids.
 
-### Phase 6 — server side
+### Phase 6 — server side ✅ **DONE**
 `listen {tls: {identity: … require-client: <Bytes>}}` (`ClientCAs` +
-`ClientAuth`), and the verified peer chain surfaced as a Record
-(`Net.peer-cert`) so authorization can be written in AQL.
+`ClientAuth`), and the verified peer chain surfaced as a Map
+(`Net.peer-cert`) so authorization can be written in AQL. `serve-raw`
+inherits it, since it binds through `listen`. See §8b for the four
+places the build sharpened this.
 
 ### Phase 7 — docs ✅ **DONE**
 - **NETWORK-CLIENTS.0.md §4.4** — replaced `cert:`/`key:` paths with
@@ -383,6 +385,35 @@ guessed:
   re-running the program, a program that never dials never reveals
   anything, and minting a handle needs no vault backend at all (the
   spec rows in `module-vault.tsv` §6 pin exactly that).
+- **The server side is a SEPARATE profile type,** `ServerTLSProfile`, not
+  extra fields on `TLSProfile`. §4.3's one option grammar turned out to
+  describe two overlapping ones: a listener presents a certificate and
+  may demand one (`identity:`, `require-client:`, `min:`), while a dial
+  verifies one and may present one (`identity:`, `verify:`, `ca:`,
+  `sni:`, `min:`). Sharing a struct would also have put a server-only
+  field in the outbound transport cache key. The shared keys still go
+  through the SAME helpers (`tlsIdentityArg`, `tlsPEMArg`,
+  `tlsMinVersion`), which is what §4.3 was actually protecting. Each
+  side rejects the other's keys BY NAME rather than as generic unknowns.
+- **`require-client:` REQUIRES; there is no request-but-do-not-verify
+  setting.** Go offers `RequestClientCert` and `VerifyClientCertIfGiven`;
+  neither is exposed. A certificate nobody checks is decoration, and the
+  gap between "a peer sent one" and "a peer proved one" is exactly the
+  confusion `Net.peer-cert` must not create — it reads
+  `VerifiedChains`, never `PeerCertificates`.
+- **Presenting a SERVER certificate is its own policy op,** `server-cert`,
+  not the `client-cert` of §4.4. A client certificate proves who a
+  program is when it calls out; a server certificate lets it answer AS a
+  service. A deployment may grant one and refuse the other.
+- **`accept` completes the handshake before the Socket escapes** (the
+  dial side already did), so `recv` never returns plaintext from an
+  unauthenticated peer and a `require-client:` rejection lands on
+  `accept`. `{within:}` bounds it. `serve-raw` handshakes on the
+  PER-CONNECTION goroutine instead, so a peer that connects and then
+  stalls costs one goroutine rather than the whole acceptor. Wrapping
+  the listener also cost `accept {within:}` its deadline —
+  `tls.NewListener` does not forward `SetDeadline` — so `netListener`
+  now keeps the bound listener alongside the wrapped one.
 - **`native` cannot import `modules`,** so `ParseTLSOpts` cannot know the
   handle type directly. `native.TLSIdentityHandles` is a slice of
   `func(Value) (string, bool)` probes that `modules` appends to in

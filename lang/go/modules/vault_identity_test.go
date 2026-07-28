@@ -27,12 +27,16 @@ func mintTLSClientCert(t *testing.T) (certPEM, keyPEM []byte, pool *x509.CertPoo
 		t.Fatal(err)
 	}
 	tmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(3),
-		Subject:               pkix.Name{CommonName: "aql-vault-client"},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		SerialNumber: big.NewInt(3),
+		Subject:      pkix.Name{CommonName: "aql-vault-client"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		// SANs a server might authorize on, so `Net.peer-cert` has both
+		// name lists to report rather than two empty ones.
+		DNSNames:              []string{"client.internal"},
+		EmailAddresses:        []string{"ops@example.invalid"},
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}

@@ -290,10 +290,44 @@ a Unix-domain socket instead of `tcp:`.
 > `identity:` — a guest-chosen path dereferenced under host authority is a
 > confused deputy, and a credential modelled as bytes cannot express an
 > HSM- or agent-backed key. See [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
-> §4.4 for the full rationale. The server side is not implemented yet
-> (phase 6 of [NETWORK-TLS-PLAN.0.md](NETWORK-TLS-PLAN.0.md)); when it lands
-> it uses the same named identities, plus `require-client:` for the client
-> CA pool.
+> §4.4 for the full rationale. The server side (phase 6 of
+> [NETWORK-TLS-PLAN.0.md](NETWORK-TLS-PLAN.0.md)) has since landed, using
+> the same named identities plus `require-client:` for the client CA pool:
+>
+> ```
+> listen {tcp: 8443  tls: {identity: gw/q  require-client: ca-bundle}}
+> ```
+>
+> `identity:` is required — a TLS server with no certificate has nothing
+> to present, and quietly serving cleartext on a socket the program asked
+> to be TLS is the worst reading of that mistake. `require-client:` takes
+> PEM roots and makes a client certificate MANDATORY and verified; there
+> is no request-but-do-not-verify middle setting, because a certificate
+> nobody checks is decoration. `min:` is shared with the dial side; the
+> dial-only keys (`verify:`, `ca:`, `sni:`) are rejected by name here.
+>
+> `accept` completes the handshake before the `Socket` escapes, so a
+> `recv` never returns plaintext from an unauthenticated peer and a
+> `require-client:` rejection surfaces at `accept` rather than later as
+> an opaque read error; `{within: ms}` bounds the handshake too.
+> `serve-raw` inherits all of it (it binds through `listen`), handshaking
+> on the per-connection goroutine so a stalled peer costs one goroutine
+> rather than the acceptor.
+>
+> **`peer-cert <Socket>`** returns the VERIFIED peer certificate as a map
+> — `{subject common-name issuer serial not-before not-after dns-names
+> emails}` — or `none` on a plain socket or where no client certificate
+> was demanded. Only the verified chain is surfaced, never
+> `PeerCertificates`: an unauthenticated name that looks exactly like an
+> authenticated one is the whole failure mode this word exists to avoid.
+> It is what makes `require-client:` useful rather than merely
+> restrictive — TLS proves the peer holds a trusted key, and `peer-cert`
+> hands that identity to AQL so the *authorization* rule can be written
+> in the language.
+>
+> Presenting a server certificate is gated by `network`/`server-cert`,
+> its own op: answering AS a service is a different authority from
+> calling out as a client (`network`/`client-cert`).
 
 The idiomatic acceptor is a three-line actor; `serve-raw` is the blessed sugar
 for it so nobody hand-writes the accept loop wrong (forgetting to spawn, leaking
