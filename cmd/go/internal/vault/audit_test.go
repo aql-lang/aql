@@ -2,10 +2,12 @@ package vault
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // findEvent returns the first audit event whose Action matches.
@@ -19,6 +21,32 @@ func findEvent(t *testing.T, events []AuditEvent, action string) AuditEvent {
 	}
 	t.Fatalf("no event with action=%q in %v", action, events)
 	return AuditEvent{}
+}
+
+// waitForAuditEvent polls the audit log until an event with the given
+// action appears, or fails after a short deadline. The proxy writes its
+// proxy.request event *after* streaming the response body, so once the
+// broker flushes response headers for streaming a client can observe the
+// full response before that event lands on disk — a poll, not an
+// immediate read, is the race-free way to assert it.
+func waitForAuditEvent(t *testing.T, home, action string) AuditEvent {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		events, err := ReadAudit(home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ev := range events {
+			if ev.Action == action {
+				return ev
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no event with action=%q after 2s: %v", action, events)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestAuditInitAddRm(t *testing.T) {
@@ -108,13 +136,12 @@ func TestAuditProxyRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 
-	events, err := ReadAudit(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pr := findEvent(t, events, "proxy.request")
+	// The broker logs proxy.request after streaming the body, so poll
+	// rather than read once (see waitForAuditEvent).
+	pr := waitForAuditEvent(t, home, "proxy.request")
 	if pr.Alias != "k" || pr.Method != "GET" || pr.Status != 200 || pr.Outcome != "ok" {
 		t.Errorf("proxy.request event missing fields: %+v", pr)
 	}

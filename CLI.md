@@ -780,7 +780,9 @@ aql vault export --out=vault.aqlx       # portable, passphrase-encrypted bundle
 aql vault import vault.aqlx             # restore a bundle (or a .env file)
 aql vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
 aql vault revoke <token-id>             # revoke a token
-aql vault providers                     # list built-in provider presets
+aql vault providers                     # list provider presets (built-in + custom)
+aql vault provider add --url=https://api.corp.example --auth-style=header:X-Corp-Key corp   # define a custom upstream preset
+aql vault provider rm corp              # remove a custom preset (refused while aliases still use it)
 aql vault scan .                        # scan files for leaked secret-like strings
 aql vault scan --home                   # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …) for plaintext secrets
 aql vault scan --home --match-vault     # …and flag which on-disk creds are already vaulted
@@ -792,6 +794,7 @@ aql vault config                        # show vault config
 aql vault config --set namespace.default=proj   # set a config key (also --unset)
 aql vault password add --scope=read --namespaces=ci ci-bot  # scoped password (keyslot)
 aql vault password add --scope=read --ttl=30m --generate agent  # TEMPORARY password: random, printed once, expires in 30m (hand to an agent)
+aql vault password add --rotate --scope=read --ttl=12h --generate agent  # RE-ISSUE under the same name: fresh password + reset TTL, old one invalidated
 aql vault password rm --temp            # revoke ALL temporary passwords at once
 aql vault password list                 # list keyslots (with scope/namespaces + EXPIRES)
 aql vault history                       # content-revision history (newest first)
@@ -857,6 +860,22 @@ A few modes that need more than one line:
   <name>` mints a **time-boxed** slot with a **randomly generated**
   password printed once. It stops authenticating the moment `--ttl`
   elapses (enforced at every `openSession`), and is never admin-scoped.
+  **Re-issue** an expiring token under the **same name** with `password
+  add --rotate <name>` — it mints a fresh password and resets the TTL,
+  invalidating **that name's** old password, so you don't have to keep
+  inventing new names (a plain `add` over an existing name is refused and
+  points you at `--rotate`; `--rotate` over a name that doesn't exist yet just
+  creates it). The new password must **differ** from the current one —
+  re-issuing a slot with the same secret is refused (it would leave the old
+  password still working); `--generate` always mints a fresh random one.
+  Rotation is scoped to the one named slot: if a **different** slot happens to
+  share the same password (reuse is allowed), it is a separate credential and
+  is untouched — revoke it on its own name. Rotation re-issues
+  *access* — it does not re-encrypt already-reachable namespaces, and a
+  long-running agent that already opened a `proxy`/`mcp` session keeps its
+  in-memory data keys until it restarts; rotation stops the old credential
+  from opening **new** sessions, but to cut a live agent off immediately use
+  `password rm --rekey <name>` (incident response).
   Revoke one early with `password rm <name>`, or pull **every** temporary
   password at once with `password rm --temp`. `list`'s `EXPIRES` column
   shows each slot's expiry (marked `(expired)` once past). The interactive
@@ -1024,6 +1043,35 @@ only unless you pass `--allow-public`. The MCP server (`aql vault mcp
 aliases the named agent has been granted a capability for, enforcing
 the same TTL, host/method allowlists, and call/cost quotas. The file
 backend requires a non-empty passphrase.
+
+Two quota caveats to know when relying on `grant`'s quantitative
+limits. **`--max-calls` is a soft cap under concurrency**: the check
+runs at request start and the counter persists after the response, so
+N simultaneous in-flight requests can overshoot the cap by up to N−1
+— use it for budget hygiene, not as a hard rate limiter.
+**`--max-cost-cents` is debited only from an `X-AQL-Vault-Cost-Cents`
+response header**, which the built-in providers' real APIs do not
+send; unless your upstream (or a middlebox you control) sets that
+header, the cost meter stays at zero and the budget never trips.
+
+**Upstream providers.** The broker forwards an alias's requests to the
+base URL of its provider preset — the compiled-in ones (`openai`,
+`anthropic`, `github`) or a **custom preset** minted with
+`aql vault provider add --url=<base> [--auth-style=<style>] <name>`
+(styles: `bearer`, `x-api-key`, `header:<name>`, `query:<name>`,
+`none`). Custom presets live in the vault store, are listed by
+`vault providers` with a `SOURCE` column, and are validated at mint
+time — URL shape (http/https, a real hostname, a valid port, no embedded
+`user:pass@`, no query or fragment), auth style (a `header:<name>` must
+be a valid HTTP header name and not one net/http controls itself, such
+as `Host`), and preset name; a plain-`http` base URL warns, since the
+secret would travel unencrypted. Custom presets referenced by an alias
+travel in `vault export` bundles, so a custom-backed alias still brokers
+after `vault import`. The broker never follows an upstream redirect —
+the injected secret only ever reaches the preset's own host. Built-in names can never be redefined or
+removed — a store entry can never redirect a compiled-in provider — and
+`provider rm` refuses while any alias still references the preset,
+naming the blockers. (Flags precede the name, as with `password add`.)
 
 **Moving a vault between machines or OSes.** A `file`-backend vault is
 already portable: copy `~/.aql/vault.jsonic` and `~/.aql/vault.keyring`

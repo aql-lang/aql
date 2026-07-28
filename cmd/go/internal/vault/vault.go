@@ -119,8 +119,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runConfig(rest, homeDir, stdout, stderr)
 	case "proxy":
 		return runProxy(rest, homeDir, stdout, stderr)
-	case "providers":
-		return runProviders(stdout)
+	case "provider", "providers":
+		return runProvider(rest, homeDir, stdout, stderr)
 	case "folder", "folders", "vaults", "list-vaults":
 		return runVaults(rest, homeDir, stdout, stderr)
 	case "scan":
@@ -188,7 +188,7 @@ var modeDocs = []modeDoc{
 	{"unlock", "mark the vault unlocked"},
 	{"config", "view or set vault configuration"},
 	{"proxy", "run a local credential broker for agents and tools"},
-	{"providers", "list built-in provider presets"},
+	{"providers", "list provider presets; `provider add --url=U NAME` defines a custom one"},
 	{"folder", "list vault folders; `folder add <dir>` registers an existing vault"},
 	{"scan", "scan files for leaked secret-like strings (--home checks credential dotfiles)"},
 	{"audit", "show the structured audit log"},
@@ -1358,21 +1358,6 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
-}
-
-// runProviders prints the built-in provider presets. Aliases tag
-// themselves with one of these via `vault add --provider=...` so
-// the proxy knows how to attach credentials to outbound requests.
-func runProviders(stdout io.Writer) int {
-	fmt.Fprintf(stdout, "%-12s %-32s %s\n", "NAME", "BASE-URL", "AUTH-STYLE")
-	for _, p := range ListProviders() {
-		base := p.BaseURL
-		if base == "" {
-			base = "-"
-		}
-		fmt.Fprintf(stdout, "%-12s %-32s %s\n", p.Name, base, p.AuthStyle)
-	}
-	return 0
 }
 
 // validAlias accepts a stored alias name: either one segment of the
