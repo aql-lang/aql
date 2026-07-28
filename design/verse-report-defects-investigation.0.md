@@ -12,6 +12,13 @@ clear; two (C, D) need a design call named below; one (E) is mostly
 documentation with one engine defect inside it; one (G) is an
 already-recorded issue whose worst face is not recorded.
 
+That was the assessment on arrival. Four of the seven have since been
+repaired and one attempt was reverted, so read the status block next —
+and note that **three of this note's own claims were corrected during the
+repairs** (B's exemption for `case`, C's severity, and C's fix
+condition). Each correction is kept in place rather than edited away,
+because in every case the mistake is more instructive than the fix.
+
 **Status of the repairs**, as of the latest revision:
 
 - **A is fixed for `await`.** Its branches now deep-clone mutable
@@ -32,8 +39,15 @@ already-recorded issue whose worst face is not recorded.
   emits an info diagnostic per execution and `CLI.md` documents the
   exception; the split-mode repair is untouched.
 - **B's** fix was implemented, validated and reverted; read §B before
-  attempting another.
-- **A, D, E, G** are still diagnosis.
+  attempting another. The fourth adversarial lens landed after the revert
+  and widened the defect further — see §B.
+- **E and G** are still diagnosis only. E needs a registry-side error-code
+  enumeration that does not exist; G is a pre-existing recorded issue.
+
+One defect found *by* this work, not by the report, is recorded in §A:
+**`make test-race` is red on main** — a leaked `interval` callback races a
+later test's check pass. 26 race reports at `ab0e1e0`, before any change
+here.
 
 Two findings grew materially during investigation. **F** was reported as a
 `case`-exhaustiveness precision gap and turned out to be a parameter-type

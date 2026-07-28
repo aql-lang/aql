@@ -841,6 +841,15 @@ are the parts worth taking.
 None of these are Verse lessons. They surfaced because §2 and §3 required
 running AQL rather than trusting its documentation, and they are recorded
 here so they are not lost. All seven reproduce on `main` @ `ab0e1e0`.
+
+> **This section is a snapshot of what was found, not of what is still
+> broken.** Several have since been repaired, one was attempted and
+> reverted, and two of the descriptions below were corrected once they
+> were investigated properly. The follow-up note
+> ([`verse-report-defects-investigation.0.md`](verse-report-defects-investigation.0.md))
+> carries the root causes, the current status of each, and the
+> corrections — read it before acting on anything here.
+
 (a)–(d) and (f) are behavioural, (e) is documentation, and (g) is an
 already-recorded issue whose worst manifestation is not recorded. **(f)
 is the one to read first** — it is a data race, confirmed with the Go race
