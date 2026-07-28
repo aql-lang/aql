@@ -119,6 +119,13 @@ type Options struct {
 	// everything after the script path; nil leaves the slot uninstalled,
 	// which IO.args renders as an empty list.
 	ScriptArgs []string
+	// Steps caps evaluation: the interpreter's Run loop, a single
+	// paren-group evaluation, and the VM's step counter. Zero uses the
+	// engine defaults (eng.DefaultStepLimit / DefaultSubStepLimit). Set
+	// via the CLI's --options flag (e.g. `--options steps:50000000`) when
+	// a legitimately long computation trips the default ceiling, or
+	// downward to bound an untrusted program.
+	Steps int
 }
 
 // TapeOptions configures the execution tape's bounded growth — see
@@ -157,6 +164,7 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.TapeConfig = o.Tape
+	reg.StepLimit = o.Steps
 	if o.ScriptArgs != nil {
 		native.SetHostScriptArgs(reg, o.ScriptArgs)
 	}

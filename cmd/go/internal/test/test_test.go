@@ -149,6 +149,40 @@ func TestRunReadResultsError(t *testing.T) {
 	}
 }
 
+// A suite that errors PART WAY THROUGH still reports the cases it completed.
+// Discarding them made a file of passing cases plus one stray error report
+// "0 passed, 0 failed" — indistinguishable from an empty file.
+func TestRunErroredFileKeepsCompletedCases(t *testing.T) {
+	f := write(t, filepath.Join(t.TempDir(), "partial_test.aql"),
+		"import \"aql:test\"\nTest.test \"ok\" [1 1 Assert.equal]\nraise boom \"after the case\"\n")
+	code, stdout, stderr := runCmd(f)
+	if code != 1 {
+		t.Errorf("code = %d, want 1 — the error still fails the run", code)
+	}
+	if !strings.Contains(stderr, "boom") {
+		t.Errorf("stderr = %q, want the run error", stderr)
+	}
+	if !strings.Contains(stdout, "1 passed") {
+		t.Errorf("stdout = %q, want the completed case counted", stdout)
+	}
+}
+
+// A suite that errors BEFORE aql:test loads has no tally to salvage, so it
+// counts nothing — and the failed read is not piled on as a second error.
+func TestRunErroredBeforeFrameworkCountsNothing(t *testing.T) {
+	f := write(t, filepath.Join(t.TempDir(), "early_test.aql"), "nosuchword 1 2\n")
+	code, stdout, stderr := runCmd(f)
+	if code != 1 {
+		t.Errorf("code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout, "0 passed, 0 failed") {
+		t.Errorf("stdout = %q, want no cases counted", stdout)
+	}
+	if strings.Contains(stderr, "reading results") {
+		t.Errorf("stderr = %q, want no second results-read error", stderr)
+	}
+}
+
 // coverageFixture writes calc.aql (add2 is exercised, triple is not — its body
 // on row 5 stays uncovered → 71.4% coverage) plus a suite importing it, and
 // returns their paths.

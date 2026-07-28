@@ -2,11 +2,25 @@ package run
 
 import (
 	"bytes"
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// splitFlagSet mirrors Execute's registration closely enough for the split
+// table: the eval flag, a value-taking flag in both spellings, and a
+// boolean. The Execute-level tests cover the real set.
+func splitFlagSet() *flag.FlagSet {
+	fs := flag.NewFlagSet("aql", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.String("e", "", "")
+	fs.Int64("s", 0, "")
+	fs.Bool("version", false, "")
+	return fs
+}
 
 func writeArgsScript(t *testing.T) string {
 	t.Helper()
@@ -29,6 +43,39 @@ func TestExecuteScriptArgs(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, "notes.json") || !strings.Contains(got, "--fast") {
 		t.Errorf("stdout %q does not carry the script args", got)
+	}
+}
+
+// A `-e` among the script's positionals is the program's own argument, not
+// this CLI's eval flag: the whole tail reaches IO.args. Previously the split
+// matched that `-e` and silently discarded everything after its next token.
+func TestExecuteScriptArgsDashEIsNotEval(t *testing.T) {
+	file := writeArgsScript(t)
+	var out, errb bytes.Buffer
+	if code := Execute([]string{file, "a", "-e", "b", "c", "d"}, strings.NewReader(""), &out, &errb); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	got := out.String()
+	for _, want := range []string{`'a'`, `'-e'`, `'b'`, `'c'`, `'d'`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout %q dropped %s", got, want)
+		}
+	}
+}
+
+// The same, with a value-taking flag before the script path: reaching the
+// path means stepping over `5`, so the later `-e` still is not the eval flag.
+func TestExecuteScriptArgsDashEAfterValueFlag(t *testing.T) {
+	file := writeArgsScript(t)
+	var out, errb bytes.Buffer
+	if code := Execute([]string{"-s", "5", file, "-e", "b", "c"}, strings.NewReader(""), &out, &errb); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	got := out.String()
+	for _, want := range []string{`'-e'`, `'b'`, `'c'`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout %q dropped %s", got, want)
+		}
 	}
 }
 
@@ -161,10 +208,37 @@ func TestSplitEvalTail(t *testing.T) {
 		{"double-dash e", []string{"--e", "x", "y"}, []string{"--e", "x"}, []string{"y"}},
 		{"separator before -e", []string{"--", "-e", "x"}, []string{"--", "-e", "x"}, nil},
 		{"no -e (script)", []string{"prog.aql", "--fast"}, []string{"prog.aql", "--fast"}, nil},
+
+		// A `-e` AFTER the script path is the program's own argument, so
+		// there is no eval split and nothing may be dropped.
+		{"-e after script path", []string{"prog.aql", "a", "-e", "b", "c", "d"},
+			[]string{"prog.aql", "a", "-e", "b", "c", "d"}, nil},
+		{"-e=x after script path", []string{"prog.aql", "-e=x", "c"},
+			[]string{"prog.aql", "-e=x", "c"}, nil},
+		{"script path only", []string{"prog.aql"}, []string{"prog.aql"}, nil},
+
+		// Reaching the script path means stepping over earlier flags'
+		// values: `5` below is -s's value, not a positional.
+		{"value flag before -e", []string{"-s", "5", "-e", "x", "--fast"},
+			[]string{"-s", "5", "-e", "x"}, []string{"--fast"}},
+		{"attached value flag before -e", []string{"-s=5", "-e", "x", "y"},
+			[]string{"-s=5", "-e", "x"}, []string{"y"}},
+		{"bool flag before -e", []string{"-version", "-e", "x", "y"},
+			[]string{"-version", "-e", "x"}, []string{"y"}},
+		{"value flag then script then -e", []string{"-s", "5", "prog.aql", "-e", "b"},
+			[]string{"-s", "5", "prog.aql", "-e", "b"}, nil},
+		{"bool flag then script then -e", []string{"-version", "prog.aql", "-e", "b"},
+			[]string{"-version", "prog.aql", "-e", "b"}, nil},
+
+		// An unregistered flag is assumed to take a value. fs.Parse rejects
+		// it regardless, so the guess cannot change the outcome.
+		{"unknown flag before -e", []string{"-zzz", "v", "-e", "x", "y"},
+			[]string{"-zzz", "v", "-e", "x"}, []string{"y"}},
 	}
+	fs := splitFlagSet()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			gotFlags, gotTail := splitEvalTail(c.in)
+			gotFlags, gotTail := splitEvalTail(fs, c.in)
 			if !eq(gotFlags, c.wantFlags) || !eq(gotTail, c.wantTail) {
 				t.Errorf("splitEvalTail(%v) = (%v, %v), want (%v, %v)",
 					c.in, gotFlags, gotTail, c.wantFlags, c.wantTail)

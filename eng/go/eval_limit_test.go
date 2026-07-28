@@ -63,3 +63,69 @@ func TestEvalLimitNotTrippedByNormalProgram(t *testing.T) {
 		t.Errorf("add 2 3 = %d, want 5", n)
 	}
 }
+
+// stepLimitFor is the single resolution boundary: a host-configured
+// Registry.StepLimit wins, anything else falls back to the caller's
+// default. Zero is "unset", never "abort immediately" — the option parser
+// rejects an explicit 0 so the two meanings cannot collide.
+func TestStepLimitFor(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	cases := []struct {
+		name string
+		reg  *Registry
+		set  int
+		want int
+	}{
+		{"nil registry falls back", nil, 0, 777},
+		{"unset falls back", r, 0, 777},
+		{"configured wins", r, 42, 42},
+		{"negative falls back", r, -1, 777},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.reg != nil {
+				c.reg.StepLimit = c.set
+			}
+			if got := stepLimitFor(c.reg, 777); got != c.want {
+				t.Errorf("stepLimitFor(%d) = %d, want %d", c.set, got, c.want)
+			}
+		})
+	}
+}
+
+// A host-configured Registry.StepLimit reaches the engine through the
+// constructors, so a runaway trips at the configured budget rather than
+// the 10M default. Before this the field did not exist and the ceiling
+// was unreachable from any API.
+func TestRegistryStepLimitReachesEngine(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	registerSpin(r)
+	if err := r.Err(); err != nil {
+		t.Fatalf("registration: %v", err)
+	}
+	r.InitRootContext()
+	r.StepLimit = 2000
+
+	e := NewTop(r)
+	if e.stepLimit != 2000 {
+		t.Fatalf("NewTop stepLimit = %d, want the registry's 2000", e.stepLimit)
+	}
+	if sub := New(r); sub.stepLimit != 2000 {
+		t.Errorf("New stepLimit = %d, want the registry's 2000", sub.stepLimit)
+	}
+
+	_, err = e.Run([]Value{NewWord("spin")})
+	var ae *AqlError
+	if !errors.As(err, &ae) || ae.Code != "evaluation_limit" {
+		t.Fatalf("error = %v, want code evaluation_limit", err)
+	}
+	if !strings.Contains(ae.Error(), "2000") {
+		t.Errorf("error %q does not report the configured budget", ae.Error())
+	}
+}

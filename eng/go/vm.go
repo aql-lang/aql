@@ -48,7 +48,7 @@ import (
 // words honour this by forking an isolated registry per branch
 // (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
-	return runProgram(p, r, DefaultStepLimit)
+	return runProgram(p, r, stepLimitFor(r, DefaultStepLimit))
 }
 
 // vmLoop is one open counted loop's iteration state. exitPC / nextPC / unit /
@@ -248,7 +248,7 @@ func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
 	if ref.Unit < 0 || ref.Unit >= len(ref.Prog.Fns) {
 		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
 	}
-	return runVMEntry(ref.Prog, r, DefaultStepLimit, func(vc *vmContext) ([]Value, error) {
+	return runVMEntry(ref.Prog, r, stepLimitFor(r, DefaultStepLimit), func(vc *vmContext) ([]Value, error) {
 		return vc.run(ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures), nil)
 	})
 }
@@ -2386,7 +2386,7 @@ func vmEvalLimitAt(debug []SrcPos, pc int, r *Registry, limit int) error {
 	err := r.AqlErrorHint("evaluation_limit",
 		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
 		"",
-		"if this is a legitimately long computation, raise the limit via the engine's step budget; otherwise check for a loop or recursion that never terminates")
+		"if this is a legitimately long computation, raise the limit with `--options steps:N` (or lang.Options.Steps); otherwise check for a loop or recursion that never terminates")
 	return stampAt(err, debug, pc, r)
 }
 

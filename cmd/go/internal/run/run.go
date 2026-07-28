@@ -50,8 +50,20 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 // separator seen BEFORE any `-e` means the `-e` is a positional, not the
 // eval flag, so parsing stays normal. No `-e` (script mode, or REPL) →
 // tail is nil and flagArgs is the whole slice.
-func splitEvalTail(args []string) (flagArgs, tail []string) {
-	for i, a := range args {
+//
+// The scan stops at the first non-flag token — the script path. Every `-e`
+// after it is the program's own argument, not this CLI's eval flag, so
+// `aql run prog.aql a -e b c` must reach the program whole. Scanning past
+// the script path split there instead and silently dropped everything after
+// the false match (`c` in that example).
+//
+// Recognising the script path requires knowing which flags consume a
+// following token: in `aql -s 5 -e …` the `5` is -s's value, not a
+// positional. fs supplies that — a registered bool flag stands alone,
+// anything else in the separated form (no `=`) takes the next token.
+func splitEvalTail(fs *flag.FlagSet, args []string) (flagArgs, tail []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "--":
 			return args, nil
@@ -63,9 +75,28 @@ func splitEvalTail(args []string) (flagArgs, tail []string) {
 			return args[:end], args[end:]
 		case strings.HasPrefix(a, "-e=") || strings.HasPrefix(a, "--e="):
 			return args[:i+1], args[i+1:]
+		case len(a) > 1 && a[0] == '-':
+			if !strings.Contains(a, "=") && !isBoolFlag(fs, a) {
+				i++ // skip this flag's value token
+			}
+		default:
+			return args, nil // the script path: no eval split
 		}
 	}
 	return args, nil
+}
+
+// isBoolFlag reports whether the `-x` / `--x` token names a flag the flag
+// package parses without a following value. An unrecognised name is treated
+// as value-taking; fs.Parse rejects it either way, so the split's guess
+// cannot change the outcome.
+func isBoolFlag(fs *flag.FlagSet, tok string) bool {
+	f := fs.Lookup(strings.TrimLeft(tok, "-"))
+	if f == nil {
+		return false
+	}
+	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && bf.IsBoolFlag()
 }
 
 // Execute is the legacy CLI body. It owns the flag set for the
@@ -104,7 +135,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// dash arg errors out. Split the eval tail off before parsing; a
 	// trailing script file already stops parsing naturally, so only -e
 	// needs this.
-	flagArgs, evalTail := splitEvalTail(args)
+	flagArgs, evalTail := splitEvalTail(fs, args)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
 	}

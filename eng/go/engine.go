@@ -232,30 +232,37 @@ func (e *Engine) SetTrace(t TraceCallback) { e.trace = t }
 // before tripping, which is worse than the cure). When the cap IS hit it
 // now raises an explicit `evaluation_limit` error (see the Run loop and
 // evalParenGroupAt), never the old phantom "unmatched opening
-// parenthesis". Callers that genuinely need more can raise the budget
-// per engine.
+// parenthesis". Callers that genuinely need more raise the budget by
+// setting Registry.StepLimit — from a host via lang.Options.Steps, or on
+// the CLI via `--options steps:N`. Unset (zero) keeps the defaults below.
 const (
 	DefaultStepLimit    = 10_000_000 // top-level engine cap
 	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallAQL, etc.)
-
-	// maxParenGroupSteps bounds a single paren-group evaluation in
-	// evalParenGroupAt. Same role and ceiling as the Run-loop cap, for
-	// the nested-evaluation path.
-	maxParenGroupSteps = 10_000_000
 )
+
+// stepLimitFor resolves the effective step budget: the registry's
+// StepLimit when a host configured one, else the supplied default. This is
+// the single resolution boundary — every engine constructor and the VM
+// entry point go through it, so no consumer sees an unresolved zero.
+func stepLimitFor(r *Registry, def int) int {
+	if r != nil && r.StepLimit > 0 {
+		return r.StepLimit
+	}
+	return def
+}
 
 // New creates an Engine with the given function registry.
 // The returned engine uses the sub-engine step limit.
 // Use NewTop for the top-level engine with a higher limit.
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: DefaultSubStepLimit}
+	return &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultSubStepLimit)}
 }
 
 // NewTop creates a top-level Engine with the maximum step limit.
 // isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
 // as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: DefaultStepLimit, isTop: true}
+	return &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultStepLimit), isTop: true}
 }
 
 // SetSource sets the original source text for error reporting.
@@ -1056,7 +1063,7 @@ func (e *Engine) evalLimitError(limit int) *AqlError {
 	return e.runtimeError("evaluation_limit",
 		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
 		"",
-		"if this is a legitimately long computation, raise the limit via the engine's step budget; otherwise check for a loop or recursion that never terminates")
+		"if this is a legitimately long computation, raise the limit with `--options steps:N` (or lang.Options.Steps); otherwise check for a loop or recursion that never terminates")
 }
 
 // tapeExhaustedError reports that the tape hit its growth ceiling — the
@@ -2275,7 +2282,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// depth so inner parens are processed without prematurely breaking on
 	// their ")" tokens.
 	depth := 1
-	for limit := 0; limit < maxParenGroupSteps && depth > 0; limit++ {
+	for limit := 0; limit < e.stepLimit && depth > 0; limit++ {
 		if e.pointer >= e.tape.Len() {
 			break
 		}
@@ -2374,7 +2381,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// phantom "unmatched opening parenthesis" at the top-level drain.
 	if depth > 0 && e.pointer < e.tape.Len() { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		e.pointer = savedPointer
-		return e.evalLimitError(maxParenGroupSteps)
+		return e.evalLimitError(e.stepLimit)
 	}
 
 	// Guard-fact attachment (A3): the group reduced to exactly one
