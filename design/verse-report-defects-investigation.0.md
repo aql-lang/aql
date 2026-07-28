@@ -289,6 +289,17 @@ Two independent repairs, both worth doing:
    expressed even if known. Adding `NOut` and honouring it in
    `lowerFallback` + `runFallback` removes the whole class.
 
+   The codebase already makes the symmetric assertion on the *input*
+   side, which is the strongest argument for adding the output one.
+   `runFallback` refuses an island threading more than one input
+   (`eng/go/vm.go:1155-1158`) with the rationale: "Assert it so a future
+   lowering bug degrades to a loud internal_error → whole-program
+   fallback rather than silently mis-ordering the island's inputs." That
+   is exactly the failure mode the output side has — and the output side
+   has no assertion at all. `runFallback` ends `return append(stack,
+   results...)`, and `screenResults` (`vm.go:217-222`) checks only
+   `tapeCoupled`, never a count.
+
 ### A note for the coverage allowlist
 
 `eng/go/vm.go:1811` carries
@@ -329,17 +340,27 @@ Together: `check` runs `import` for real, and the body it runs has check
 mode off — so every effect in a module body executes with full ambient
 authority during a type check.
 
-### The doubling
+### The multiplication
 
-The pre-flight check runs by default before execution and file modules are
-not cached, so a default run imports twice. Counted with a `print` in the
-body:
+The pre-flight check runs by default before execution, and file modules
+are **never** cached, so the two factors multiply. Counted with a `print`
+in the body:
 
-| Invocation | body executions |
-|---|---|
-| `aql main.aql` (default) | **2** |
-| `aql -no-check main.aql` | 1 |
-| `aql check main.aql` | 1 |
+| Program | `-no-check` | `check` | default |
+|---|---|---|---|
+| one import of `m.aql` | 1 | 1 | **2** |
+| two imports of `m.aql` | 2 | 2 | **4** |
+| diamond (`a.aql` and `b.aql` each import `m.aql`) | 2 | 2 | **4** |
+
+So the effect count is *importers × passes*, not a fixed 2 — a module
+imported from N places in a program run with the default pre-flight check
+executes its body 2N times.
+
+`design/MODULE-CACHE.0.md` confirms the caching asymmetry and its status:
+native `aql:` modules load "at most once per registry" via an `IsLoaded`
+short-circuit, file modules are "never cached — `loadFileModule` re-reads,
+re-parses, and re-runs the file body on every `import`", and the note is
+**"analysis only — not implemented."**
 
 CLI.md:63 documents `check` as "type-check without running".
 
@@ -361,8 +382,16 @@ names while `IO.write` is modelled rather than performed.
 
 Cheaper measures, in increasing order of honesty:
 
-1. **Cache the check-pass module instance for the run.** Kills the
-   doubling; check still performs effects once.
+1. **Cache the check-pass module instance for the run.** ~~Kills the
+   doubling; check still performs effects once.~~ **Retracted on
+   follow-up** — this is not the cheap option it looked like.
+   `design/MODULE-CACHE.0.md` exists precisely because "a cache is *not* a
+   transparent optimization — it changes observable semantics", and it
+   gates the work on an unresolved singleton question. Sharing an instance
+   across the check→run boundary is additionally riskier than a
+   same-pass cache, since a module instance built while the parent was
+   carrier-stripping could carry check-pass state into the real run. This
+   option is blocked on MODULE-CACHE.0, not adjacent to it.
 2. **Report it.** Emit an info diagnostic naming each module whose body
    was executed during check. No semantic change, and it makes CLI.md's
    claim true-with-a-caveat rather than false.
@@ -371,7 +400,9 @@ Cheaper measures, in increasing order of honesty:
    it only works if denial on this path becomes a silent stub, which is
    new policy behaviour.
 
-Recommend (1) + (2) now, split-mode as the repair.
+Recommend **(2) now** — it is the only option with no semantic risk, and
+it converts a false doc claim into a true one immediately. The split-mode
+change is the actual repair. (1) is blocked on MODULE-CACHE.0.
 
 ### Test gap
 
@@ -439,9 +470,22 @@ behaviour.
 ### Root cause
 
 `NoEvalArgs` does not gate *map* auto-evaluation — only `NoEvalMapArgs`
-does (`eng/go/engine.go:3378-3390`). `fn`'s 3-arg triple signature
-(`lang/go/native/native_definition.go:155-161`) declares
-`NoEvalArgs: {0,1,2}` and no `NoEvalMapArgs`.
+does. The engine says so itself, at the exact site
+(`eng/go/engine.go:3380-3386`):
+
+> `NoEvalMapArgs` (separate from the list-only `NoEvalArgs`) suppresses
+> map auto-evaluation at this slot. Used by `def`'s typed-name sig so a
+> **Word at the type position arrives raw** — important when the type is a
+> fn that's also a registered callable.
+
+The scenario that comment describes *is* this defect, and the gate that
+prevents it is applied to exactly one of the three words that need it:
+
+| Signature | `NoEvalArgs` | `NoEvalMapArgs` |
+|---|---|---|
+| `def` typed-name (`native_definition.go:29`) | — | **`{0: true}`** |
+| `fn` 3-arg triple (`:155-161`) | `{0,1,2}` | **absent** |
+| `afn` (`:187-194`) | `{0,1}` | **absent** |
 
 Both forms parse identically — the annotation is the map `{x: word(IS)}`
 either way — so the divergence is entirely post-parse:
