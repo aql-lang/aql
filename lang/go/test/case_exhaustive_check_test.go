@@ -230,7 +230,7 @@ func TestCaseExhaustiveDynamic(t *testing.T) {
 	// against, so it REQUIRES a trailing default…
 	wantCase(t,
 		`def f fn [[x:Any][][case x [1 "one" 2 "two"]]] f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 	wantCase(t,
 		`def f fn [[x:Any][String][case x [1 "one" "other"]]] f 9`,
 		"case_not_exhaustive", false)
@@ -239,7 +239,7 @@ func TestCaseExhaustiveDynamic(t *testing.T) {
 		`def f fn [[x:Any][String][case x [1 "one" Any "other"]]] f 9`,
 		"case_not_exhaustive", false)
 	// A code-body scrutinee computes its value — dynamic, same rule.
-	wantCase(t, `case [1 add 1] [5 "five"]`, "case_not_exhaustive", true, "dynamic")
+	wantCase(t, `case [1 add 1] [5 "five"]`, "case_not_exhaustive", true, "gradual")
 	wantCase(t, `case [1 add 1] [2 "two" "other"]`, "case_not_exhaustive", false)
 	wantCase(t, `case [1 add 1] [1 "one" Any "other"]`, "case_not_exhaustive", false)
 }
@@ -383,7 +383,7 @@ func TestCaseExhaustiveShorthandFnForm(t *testing.T) {
 	// A genuinely dynamic shorthand param is still dynamic: the fix must
 	// not manufacture a static type where none was declared.
 	wantCase(t, `def f fn x:Any String [case x [1 "one" 2 "two"]] f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 }
 
 // TestShorthandFnLambdaFormUnionParam is the `=>` twin of the test above.
@@ -399,7 +399,7 @@ func TestShorthandFnLambdaFormUnionParam(t *testing.T) {
 		"case_not_exhaustive", true, "uncovered", "String")
 	// An unannotated lambda param stays dynamic.
 	wantCase(t, `def f (x:Any => [case x [1 "one"]]) f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 }
 
 // TestShorthandFnPreservesArity is the sharpest consequence of the erased
@@ -473,6 +473,105 @@ func TestShorthandFnUnionReturnType(t *testing.T) {
 			"assert rejection, and §F's residual note can be struck.",
 			errorCodes(short))
 	}
+}
+
+// TestCaseExhaustiveInlineUnionParam covers the OTHER route into the
+// erased-union defect, which the NoEvalMapArgs fix does not touch: an
+// INLINE union annotation `x:(Integer tor String)`. ParseFnParams evaluates
+// a paren annotation itself, so ResolveSigType gets a Disjunct value with no
+// minted lattice node to name and answers (TAny, &pattern) — and
+// paramBodyCarrier read only p.Type, binding the body a dynamic(Any).
+//
+// Both spellings denote the same domain, so both must analyse the same. This
+// failed in the BRACKET form too, which is what marks it a separate route
+// rather than another symptom of the shorthand bug.
+func TestCaseExhaustiveInlineUnionParam(t *testing.T) {
+	for _, form := range []struct{ name, src string }{
+		{"shorthand", `def f fn x:(Integer tor String) String [case x [Integer "i" String "s"]] f 5`},
+		{"bracket", `def f fn [[x:(Integer tor String)][String][case x [Integer "i" String "s"]]] f 5`},
+	} {
+		wantCase(t, form.src, "case_not_exhaustive", false)
+	}
+	// A missing alternative names it, exactly as the NAMED union does — the
+	// inline form is not merely accepted, it is analysed.
+	wantCase(t,
+		`def f fn x:(Integer tor String) String [case x [Integer "i"]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	wantCase(t,
+		`def f fn [[x:(Integer tor String)][String][case x [Integer "i"]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// The redundant-default advisory follows the domain, so it fires for the
+	// inline union too.
+	wantCase(t,
+		`def f fn x:(Integer tor String) String [case x [Integer "i" String "s" "d"]] f 5`,
+		"case_redundant_default", true)
+	// NEGATIVE: widening the annotation must NOT manufacture a domain.
+	wantCase(t, `def f fn x:Any String [case x [Integer "i" String "s"]] f 5`,
+		"case_not_exhaustive", true, "gradual")
+	// NEGATIVE: dispatch still enforces the inline union at the call.
+	res := checkDiag(t, `def f fn x:(Integer tor String) Integer [0] f true`)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Errorf("an inline union param must still reject a Boolean argument, "+
+			"got: %v", diagCodes(res))
+	}
+}
+
+// TestCaseDynamicDiagnosticDoesNotDenyTheAnnotation pins the wording fix.
+// `paramBodyCarrier` marks a typed-CONTAINER param (`{:Integer}` / `[:Integer]`)
+// dynamic — correctly, the element type does not fix the container value's
+// type here — so the diagnostic is reachable for a parameter the author DID
+// annotate. Saying "the scrutinee is dynamic" reads as "you did not type
+// this" and sends them to re-annotate something already annotated; the text
+// now describes the POSITION ("gradual here") instead of denying the
+// declaration.
+func TestCaseDynamicDiagnosticDoesNotDenyTheAnnotation(t *testing.T) {
+	for _, src := range []string{
+		`def f fn m:{:Integer} String [case m [Map "m"]] f {a:1}`,
+		`def f fn l:[:Integer] String [case l [List "l"]] f [1]`,
+		`def f fn x:Any String [case x [1 "one"]] f 9`,
+	} {
+		res := checkDiag(t, src)
+		d, ok := diagWithCode(res, "case_not_exhaustive")
+		if !ok {
+			t.Fatalf("%q: want case_not_exhaustive, got %v", src, diagCodes(res))
+		}
+		if strings.Contains(d.Detail, "the scrutinee is dynamic") {
+			t.Errorf("%q: the diagnostic must not assert the scrutinee is "+
+				"untyped — an annotation may be present and still be gradual "+
+				"at this position: %q", src, d.Detail)
+		}
+		if !strings.Contains(d.Detail, "gradual") {
+			t.Errorf("%q: detail %q should say the position is gradual", src, d.Detail)
+		}
+	}
+}
+
+// TestDescribeCaseShorthandExamplesAreTrue executes the two hand-authored
+// `describe case` examples that shipped FALSE claims. TestHelpExamplesCorrect
+// skips hand-authored examples by construction (they are prose, not the
+// `;# <exact-stack>` shape its matcher validates), which is exactly why these
+// two could be wrong for as long as they were. Nothing here generalises that
+// gap away — it pins these two, because these two are documented promises
+// about the feature this file tests.
+func TestDescribeCaseShorthandExamplesAreTrue(t *testing.T) {
+	// "exhaustive over IS — no default needed"
+	wantCase(t,
+		`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s"]]`,
+		"case_not_exhaustive", false)
+	// "check ERROR case_not_exhaustive — uncovered: String"
+	wantCase(t,
+		`def IS (Integer tor String) def f fn x:IS Integer [case x [Integer 1]]`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// The four neighbours in the same block, so a future edit to any of them
+	// is checked rather than merely plausible.
+	wantCase(t, `def f fn b:Boolean Integer [case b [true 1 false 0]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def f fn x:Integer Integer [case x [[gt 3] 1 [lte 3] 2]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def Pos refine Integer def f fn x:Pos String [case x [Pos "p"]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def f fn x:Any String [case x [1 "one" "other"]]`,
+		"case_not_exhaustive", false)
 }
 
 func TestCaseExhaustiveSeverities(t *testing.T) {
@@ -642,11 +741,11 @@ func TestCaseExhaustivePredicateShapes(t *testing.T) {
 	wantCase(t, `case [1 add 1] Integer`, "case_not_exhaustive", false)
 	// An empty even-length clause list over a computed scrutinee still
 	// demands the catch-all…
-	wantCase(t, `case [1 add 1] []`, "case_not_exhaustive", true, "dynamic")
+	wantCase(t, `case [1 add 1] []`, "case_not_exhaustive", true, "gradual")
 	// …and predicate clauses alone cannot satisfy a dynamic scrutinee.
 	wantCase(t,
 		`def f fn [[x:Any][String][case x [[gt 3] "hi" 1 "one"]]] f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 }
 
 func TestCaseUnreachableIntervalAdvisories(t *testing.T) {

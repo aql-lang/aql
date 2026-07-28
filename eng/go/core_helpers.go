@@ -716,6 +716,31 @@ func paramBodyCarrier(p FnParam) Value {
 				return v
 			}
 		}
+		// An INLINE union param — `x:(Integer tor String)`. ResolveSigType
+		// hands the paren annotation's Disjunct back as the PATTERN with
+		// Type=TAny (it has no minted lattice node to name), so without this
+		// the body binds dynamic(Any) and every downstream analysis that
+		// asks "what is this parameter?" is told "unknown" — a case over it
+		// reports the scrutinee as dynamic despite the author having written
+		// the union out in full.
+		//
+		// The named form `x:T` with `def T (Integer tor String)` binds the
+		// DISTRIBUTING declared carrier (ParamInputCarrier's union arm). The
+		// two spellings denote the same domain, so they get the same carrier;
+		// Declared is set for the same reason it is there — the annotation
+		// claims every alternative is a valid input, so a body dispatch that
+		// fails for one is an error rather than an analysis-join warning.
+		if IsDisjunct(pat) && (p.Type == nil || p.Type.Equal(TAny)) {
+			if di, err := AsDisjunct(pat); err == nil && len(di.Alternatives) > 0 {
+				dv := NewDisjunct(SimplifyDisjunctAlts(di.Alternatives))
+				dv.Carrier = true
+				if ndi, ok := dv.Data.(DisjunctInfo); ok {
+					ndi.Declared = true
+					dv.Data = ndi
+				}
+				return dv
+			}
+		}
 	}
 	return ParamInputCarrier(p.Type)
 }
