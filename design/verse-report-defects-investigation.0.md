@@ -240,6 +240,118 @@ handler to `invokeClosureOn` fixes every leaking word at once and lets
 `with-decimal`'s local copy be dropped. Use the handler's own registry
 (`invoke.go:23` calls `r.Invoker(r, …)`), not the sub-registry.
 
+### That fix was implemented, validated, and REVERTED — read this first
+
+The three-line patch above was applied and put through the full gate and
+an adversarial sweep. **It must not be landed as written.** It is
+recorded here so the next attempt starts from the findings rather than
+from the same confident paragraph.
+
+**What worked.** Every divergence in the table above closed: `do`, `each`,
+`fold`, `filter`, `outer`, `walk`, nested `do`, the per-element
+accumulation (`[1 2]` → `[1 1]`), and the new-key repro (compiled `7` →
+`unknown_key`, matching the interpreter). Shadowing inside a body,
+`for-each`, `with-decimal` and prototype-chain reads were unaffected. No
+wall-clock regression at 200k elements. A differential regression test was
+written and verified to fail on 10 subtests without the patch.
+
+**Blocker 1 — it turns a latent bug into an uncatchable crash.** This is
+ship-blocking on its own.
+
+```
+context set 'mode' "test" end
+do [ context.__sys.fs set mem true  1 ]
+context has nope
+```
+
+Pre-patch: `1 false`, exit 0. Post-patch: `fatal error: stack overflow`, a
+Go runtime fatal that the engine's `recover()` cannot catch and that no
+interpreter fallback can rescue — **on the default path**, from a
+documented idiom (the in-memory-FS toggle).
+
+`ContextStack.UpdateChain` (`eng/go/contextstack.go:87-105`) relinks
+`p.Prototype` *while walking* the chain. With two stack entries that both
+reach `origRoot` only through their prototypes, the second walk re-finds
+the already-relinked `newRoot` and sets `newRoot.Prototype = newRoot` — a
+self-cycle. Pre-patch a compiled body had only one such entry, so the
+cycle was unreachable; the patch adds the second. Any later missing-key
+lookup then spins forever, and misses are routine: `native_helpers.go:73`
+does a `ContextStoreLookup(r, "$decimal-precision")` on **every** BigDecimal
+operation.
+
+So `UpdateChain` must be made cycle-safe *before* any second context frame
+exists — stop at `newRoot`, or skip entries already relinked.
+
+**Blocker 2 — it is incomplete, so the invariant it advertises is false.**
+The patch brackets only the `InvokeBody` closure seam. Still leaking,
+each verified compiled-vs-interpreted:
+
+| Path | Why the bracket misses it |
+| --- | --- |
+| `case` clause bodies | the compiler desugars `case` to an inline nested-`if` chain (`conditional.go:141-148`); no closure is ever created |
+| module-exported `fn` bodies | compiled to a unit reached by the user-call opcode, not through `InvokeBody` |
+| `service` handler callbacks | routed via `InvokeCallback` → `runUnitNested` (`vm.go:365`) / `RunUnit` (`vm.go:244`), neither bracketed |
+| `def f [body]` | compiled to a user-fn unit reached through CALL_USER/RET |
+
+`vm.go` itself documents `RunUnit` as "the DURABLE-callback twin of
+`vmContext.invokeClosureOn`" — so the twin seams are named in the source
+and the patch covered one of them. The service case is the worst: handler
+dispatch is serialized but *shared*, so an escaping `context set` becomes
+cross-request state (observed `2/3/3` compiled against the interpreter's
+`2/2/1`).
+
+**Blocker 3 — an unbudgeted per-invocation allocation.**
+`ContextStack.Push` allocates a `StoreInstanceInfo` *and* an empty
+`map[string]Value`: +2 allocs and +112 bytes per closure-body invocation,
+on every `each`/`fold`/`filter` element, whether or not the body mentions
+`context`. Measured with the repo's own `allocStatsPerOp` helper: +29-33%
+allocs/op on each/fold, and the `do_body` alloc-guard row went 212 → 412
+against its 500 ceiling — consuming two thirds of the headroom silently,
+because it still fits. `bytecode_allocguard_test.go` states that
+allocations are "the hard regression signal" and that a ceiling must never
+be raised "without a documented reason"; the guard table has **no**
+each/fold/filter row, so the largest regression class is uncovered.
+
+The cost is avoidable: a frame is only observable if the body can reach a
+context-writing word, so it can be gated on a static per-`CompiledFn` flag
+set by the emitter, or the map made lazy.
+
+### What a correct fix requires, in order
+
+1. Make `UpdateChain` cycle-safe. Nothing else can land first.
+2. Bracket **all** body-entry seams, not one: `invokeClosureOn`,
+   CALL_USER/RET, `RunUnit`, `runUnitNested`, and the `case` desugaring —
+   or establish a narrower, honestly-stated invariant.
+3. Gate the frame on a static "this body may touch context" flag so the
+   allocation is paid only where it is observable, and add an
+   each/fold/filter row to the alloc guard.
+4. Land the differential regression test (written, and confirmed to fail
+   on 10 subtests without the fix).
+5. Only then correct EXPLANATION.md's boundary list, which is
+   independently wrong: it names `for` (not a boundary in either engine)
+   and omits `for-each` (a boundary in both).
+
+### Pre-existing defects found while validating the patch
+
+Not caused by it, reproduced on the unpatched binary, all
+`-force-compile`-only unless noted:
+
+- `do [context set a 2 end do [context set a 3 end] (context dot a)]` →
+  `STORE_LOCAL stack underflow`; interpreter is clean.
+- `do [var b 5 (context dot a)]` → `CALL_DYNAMIC underflow`; interpreter
+  gives a clean `signature_error`.
+- `({k:1} each [drop (outer [drop 7] [1]) get 0]) dot k` → recovered panic
+  "index out of range [2] with length 2"; interpreter clean.
+- A module fn cannot read a caller-scope context key on the compiled path
+  (`unknown_key` compiled, value interpreted) — `RunModuleBody` snapshots
+  the parent's top layer at import time (`native_module_module.go:162-163`),
+  and under the VM the top-level run has no such layer. This is the mirror
+  image of defect B and belongs in the same audit.
+- The compiled path renders the `unknown_key` caret span with 11 carets
+  where the interpreter uses 3 — harmless today, but it will break any
+  future gate that compares stderr byte-for-byte, and defect B's fix
+  routes *more* programs onto exactly this error.
+
 ### Test gap — the sharpest one here
 
 The intended semantics are **already asserted by name in Go tests**, but
