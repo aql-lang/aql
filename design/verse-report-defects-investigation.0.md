@@ -31,10 +31,20 @@ each correction re-verified before it was written down. The causal stories
 in A-G are what survived that; the fix *scopes* moved more than the
 diagnoses did.
 
-Corrections worth naming because they change what a fix must touch: `case`
-does **not** leak (B), the leak rule is not "lowered to a closure" alone
-(B), `outer` and `walk` also leak (B), and one of this note's own earlier
-fix recommendations for D was retracted as blocked rather than cheap.
+Corrections worth naming because they change what a fix must touch: the
+leak rule is not "lowered to a closure" alone (B), `outer` and `walk` also
+leak (B), and one of this note's own earlier fix recommendations for D was
+retracted as blocked rather than cheap.
+
+One of those corrections was itself wrong and has since been reversed: an
+earlier revision of this note recorded that **`case` does not leak**. It
+does. The argument for the exemption (no `CallableSpec`, `runCaseBody`
+calls `RunResolved`) is accurate about the interpreter and irrelevant to
+the compiled path, which desugars `case` inline. That mistake is worth
+keeping visible, because it is the same mistake in miniature that the
+whole of B turns on: reasoning about one engine's call graph and reporting
+the conclusion as if it were the language's semantics. See the corrected
+paragraph in B and "Blocker 2 is worse than the table says".
 
 | | Defect | Kind | Severity |
 |---|---|---|---|
@@ -196,11 +206,36 @@ Two further leaking words were found on review and are confirmed here —
 (`natives.go:337`), both measured compiled 2 / interpreted 1. So the
 leaking set is at least `do`, `each`, `fold`, `scan`, `filter`, `outer`,
 `walk`, plus nested `do`, list- and map-literal elements and
-interpolated-string holes. `case` does **not** leak and must not be added
-to it: `caseHandler` → `caseClauses` (`conditional.go:78`) →
-`runCaseBody` (`:355-363`) calls `RunResolved` directly, and `case` has no
-`CallableSpec` — despite `invoke.go`'s own stale doc comment at line 10
-listing `case` among `InvokeBody`'s clients.
+interpolated-string holes.
+
+**`case` leaks too — an earlier correction in this note said otherwise and
+was wrong.** The reasoning behind that correction was sound but answered a
+different question: `caseHandler` → `caseClauses` (`conditional.go:78`) →
+`runCaseBody` (`:355-363`) does call `RunResolved` directly and `case` does
+have no `CallableSpec`, so `case` never reaches `InvokeBody` (`invoke.go`'s
+doc comment at line 10 listing `case` among its clients really is stale).
+But "no closure" means the closure-seam patch *cannot reach it*, not that
+it is correct. Compiled, `case` does not run `runCaseBody` at all:
+`caseReturnsFn` desugars the whole form to a nested-`if` chain
+(`conditional.go:141-148`) that is emitted **inline into the caller's
+unit**, so the clause body has no sub-engine and no frame. Measured on the
+pristine tree, default mode, no fallback warning:
+
+```
+case 1 [ 1 [ context set y 77 5 ] 2 [ 6 ] ]
+context has y
+→ compiled: 1 5 true      interpreted: 1 5 false
+```
+
+So `case` is a context boundary interpreted and is not one compiled —
+the same divergence as `do`, arrived at by a different route. It belongs
+in the leaking set, and it is the clearest single case of why a
+seam-level patch cannot finish this job (see "the VM inlines bodies"
+below).
+
+`otherwise` with a list argument is the same shape:
+`false otherwise [ context set y 77 5 ]` then `context has y` gives
+compiled `false true` against the interpreter's `false false`.
 
 The other two rows of the report's table also have explanations:
 
@@ -243,8 +278,10 @@ handler to `invokeClosureOn` fixes every leaking word at once and lets
 ### That fix was implemented, validated, and REVERTED — read this first
 
 The three-line patch above was applied and put through the full gate and
-an adversarial sweep (1668 test programs across four lenses). **It must
-not be landed as written.** It is recorded here so the next attempt starts
+an adversarial sweep (1762 test programs across four lenses — differential
+hunting, the context model, cost and unwind lifecycle, and registry
+choice; the fourth reported after the revert and is folded in below).
+**It must not be landed as written.** It is recorded here so the next attempt starts
 from the findings rather than from the same confident paragraph.
 
 **The gate was not the reason.** Two checklist runs failed on the patched
@@ -300,6 +337,8 @@ each verified compiled-vs-interpreted:
 | Path | Why the bracket misses it |
 | --- | --- |
 | `case` clause bodies | the compiler desugars `case` to an inline nested-`if` chain (`conditional.go:141-148`); no closure is ever created |
+| `otherwise [list]` | the list argument is evaluated in the caller's unit |
+| a body bound or passed as a **value** (`def b […]`, a `List` param) | the list is auto-evaluated inline as `OpMakeList` operands — and the write lands at *bind* time, before any `do`/`each` runs |
 | module-exported `fn` bodies | compiled to a unit reached by the user-call opcode, not through `InvokeBody` |
 | `service` handler callbacks | routed via `InvokeCallback` → `runUnitNested` (`vm.go:365`) / `RunUnit` (`vm.go:244`), neither bracketed |
 | `def f [body]` | compiled to a user-fn unit reached through CALL_USER/RET |
@@ -327,12 +366,126 @@ The cost is avoidable: a frame is only observable if the body can reach a
 context-writing word, so it can be gated on a static per-`CompiledFn` flag
 set by the emitter, or the map made lazy.
 
+### Blocker 2 is worse than the table says — the VM inlines bodies
+
+The fourth adversarial lens (registry choice) landed after the revert and
+sharpened the picture materially. Its own question came back **negative**,
+which is good news for the patch's shape, and its incidental findings are
+bad news for the patch's scope. Everything below re-reproduced by hand on
+the pristine tree in **default** mode with no fallback warning.
+
+**A third body-execution surface: list auto-evaluation.** A code body that
+arrives as a *value* rather than a literal leaks — and it leaks at the
+moment it is bound, not when it is run:
+
+```
+def b [ context set y 77 5 ] end
+print (context has y) end          # compiled: true    interpreted: false
+print "no-call" end                # b is never invoked
+print (context has y) end          # compiled: true    interpreted: false
+```
+
+`def name [list]` auto-evaluates the list and binds the result (both
+engines bind `[5]` — documented behaviour, `lang/go/CLAUDE.md` "`def name
+<node>` binds a value"). The interpreter runs that evaluation in a
+sub-engine (`autoEvalList` → `runPooledSub`, `engine.go:4218-4224`) and so
+gets the `Engine.Run` frame; the emitter records the same list as an
+`OpMakeList` over operands emitted **inline into the caller's unit**
+(`RecordMakeList` / `recordMakeListInner`, same function), so there is no
+frame. The identical divergence appears when the list is a fn argument,
+with a body the callee never touches:
+
+```
+def run fn [[b:List] [Any] [ 0 ]] end
+print (run [ context set y 77 5 ]) end   # 0 on both
+print (context has y) end                # compiled: true   interpreted: false
+```
+
+**A correction to the lens's own report.** It filed the named-body `for`
+and `if` divergences (`def b [context set y 77]` then `for 3 b`) as a
+`for`/`if` seam gap. They are not: the write has already happened at
+`def` time, and `b` is by then the inert list `[5]`. Deleting the `for`
+line entirely leaves the divergence unchanged. `for` and `if` remain
+non-boundaries in **both** engines, exactly as this note recorded. The
+distinction matters because a fixer chasing the reported symptom would
+instrument the wrong two words.
+
+**The registry choice is right.** The lens instrumented `invokeClosureOn`
+to compare the registry the patch pushes on against the body unit's actual
+dispatch registry, and ran it over the repo's own corpora (`langspec`
+including `TestSpecCompiledDifferential`, `docexamples`, `cliexamples`,
+`engspec`) plus 94 hand-written cross-registry programs: **zero
+mismatches**. Cross-registry closure travel is refused by the compiler and
+falls back; `await`, `spawn` and `service` bodies run through `RunUnit` on
+a fork whose `vc.r` *is* the fork. So `reg` is the correct stack, and the
+patch's cross-registry surfaces (await branch bodies, module fn `do`/`each`,
+timer and interval callbacks, service handlers' nested `do`) all moved to
+agree with the interpreter. Nothing about the revert is a verdict on the
+push target.
+
+**The formulation that makes the scope obvious.** The interpreter pushes a
+context frame at exactly **one** site — `engine.go:1172-1174` — and every
+nested body reaches it, because spawning a sub-engine is the interpreter's
+only way to run one. The VM runs bodies through at least **four** paths:
+closure units (`invokeClosureOn`), user-fn units (CALL_USER/RET), durable
+callbacks (`RunUnit` / `runUnitNested`), and inlining into the caller's
+unit (`case`, `otherwise`, list auto-evaluation, and `if`/`for` — the last
+two correctly). The reverted patch bracketed one of the four, and **the
+inline path cannot be bracketed by any seam patch at all**: there is no
+call to wrap. Either those forms stop being inlined when their tokens can
+touch the context, or the frame becomes an emitted opcode pair rather than
+a Go-side push around a call.
+
+### What the sweep could not break
+
+Recording the negatives, because they are what a second attempt gets to
+keep rather than re-derive:
+
+- **No behavioural regression, at scale.** The differential lens ran ~1425
+  distinct programs — a 720-program combinatorial corpus (every ordered
+  pair of twelve body-taking words nested two deep × five context
+  payloads), 400 randomized 1-3-level programs, and targeted batteries —
+  and found **zero** cases where the patch changed an answer the old
+  compiled path had got right. Every behaviour change moved compiled
+  *toward* the interpreter.
+- **The unwind is balanced.** The deferred `Pop` was exercised through
+  error, `raise`, `break`/`continue`, early return and tail calls without
+  leaking or double-popping, including through `with-decimal`'s
+  now-doubled push.
+- **No new race at the closure seam.** A `-race` build under 400
+  concurrent service calls and parallel `await` bodies each doing
+  `do [context set …]` reported nothing new.
+- The repo's compiled-differential gates (`TestSpecCompiledDifferential`,
+  `TestSpecCompiledOrFallback`, `TestCompiledCombination`,
+  `TestPropertyDifferential`) all pass on the patched tree — which is the
+  point made above about the gate, restated from the other side: the
+  corpus contains no row that would have caught any of this.
+
+### One residual that belongs with defect A
+
+`reg` can be a **shared module sub-registry**, and module sub-registries
+are not forked. The patch's `Push`/`Pop` therefore mutates a
+`ContextStack` that concurrent branches also touch. Under `-race`, a
+module fn called from several `await` branches reports the patch's own
+`Pop` racing the interpreter's `Engine.Run` — but the *unpatched* tree
+reports **more** races on the same program (95 against 85, 65 of the old
+ones already inside `ContextStack` via `CowSet`/`UpdateChain`), the
+interpreter dies on it with `fatal error: concurrent map iteration and map
+write`, and the compiled answers are nondeterministic. There is no oracle,
+so it is not a defect of the patch — it is defect **A**'s hole seen from
+another angle, and the patch adds one more writer to it. Whatever fixes A
+has to cover module sub-registries, not just container payloads.
+
 ### What a correct fix requires, in order
 
 1. Make `UpdateChain` cycle-safe. Nothing else can land first.
 2. Bracket **all** body-entry seams, not one: `invokeClosureOn`,
-   CALL_USER/RET, `RunUnit`, `runUnitNested`, and the `case` desugaring —
-   or establish a narrower, honestly-stated invariant.
+   CALL_USER/RET, `RunUnit`, `runUnitNested` — or establish a narrower,
+   honestly-stated invariant. Note that this step cannot be completed by
+   bracketing alone: the `case` desugaring, `otherwise`'s list argument
+   and list auto-evaluation are **inlined**, so they need either an
+   emitted frame opcode pair or a rule that stops inlining a body whose
+   tokens can reach a context-writing word.
 3. Gate the frame on a static "this body may touch context" flag so the
    allocation is paid only where it is observable, and add an
    each/fold/filter row to the alloc guard.
@@ -362,6 +515,19 @@ Not caused by it, reproduced on the unpatched binary, all
   where the interpreter uses 3 — harmless today, but it will break any
   future gate that compares stderr byte-for-byte, and defect B's fix
   routes *more* programs onto exactly this error.
+- `[1 2 3] each [ do [ 9 drop ] ]` → compiled raises `[aql/each_error]:
+  element 0: body produced no result`; the interpreter returns `[1 2 3]`.
+  **Default mode**, no fallback rescue. A nested body that leaves no
+  residual is a value the two engines disagree about, unrelated to
+  context; the fn-shaped twin (`def run fn [[b:List] [Any] [ do b ]]` over
+  `[ 9 drop ]`) fails the same way as a return-arity error.
+- A lambda in a **map slot**, called as a method, loses its context write
+  compiled but keeps it interpreted (`def m {f: ([a:Integer] => [context
+  set zz 9 end a])}`) — the *opposite* direction to defect B, and
+  pre-existing. So the interpreter is itself inconsistent about which call
+  forms are context boundaries. That inconsistency has to be settled
+  before EXPLANATION.md's boundary list can be made correct, since there
+  is currently no single true list to write down.
 
 ### Test gap — the sharpest one here
 
@@ -864,6 +1030,18 @@ prior `--compile != interpret` divergences and the same seam keeps
 producing them, which argues for a differential gate specifically over
 *body-invoking words × observable side effects* rather than over the
 corpus at large.
+
+**The two engines have different *numbers* of body-entry points, and that
+is the structural root of the seam's productivity.** The interpreter has
+one (`Engine.Run`), so any invariant installed there is automatically
+universal. The VM has four, so an invariant has to be installed four
+times and nobody can tell by reading one of them whether the other three
+agree. Every fix in this seam that is written as "wrap the call" inherits
+that asymmetry, which is why the reverted patch was simultaneously correct
+in shape and 25% complete. The durable version of this observation is not
+a bug list: it is that the VM needs *one* named body-entry function that
+every path routes through, in the way `matchSignature` is the one place
+argument positions are decided.
 
 **Two are "the guarantee is real but narrower than the prose"** (A, and
 B's doc half). Both times the Go-level comment is accurate and the

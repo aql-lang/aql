@@ -871,6 +871,15 @@ variety — no error, no refusal, no fallback — which implies
 `make verify-bytecode` has no spec row pairing a `context set` inside
 `do`/`each` with a parent-scope read-back.
 
+The follow-up note
+([`verse-report-defects-investigation.0.md`](verse-report-defects-investigation.0.md)
+§B) found the leaking set is larger than this paragraph reports — it also
+covers `fold`, `scan`, `filter`, `outer`, `walk`, `case`, `otherwise`,
+module-exported fns, `service` handlers, and any body bound or passed as a
+*value* (where the write lands at bind time, before the body is ever
+invoked). It also records a three-line fix that was implemented, validated
+and then reverted; read that section before attempting one.
+
 **(b) `do […] error [handler]` followed by another expression underflows
 the VM.** When the handler leaves the stack empty and any expression
 follows, the compiled path raises
