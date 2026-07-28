@@ -6,6 +6,49 @@ func init() {
 	// alias String, and only the examples show that one hands back a
 	// secret and the other deliberately does not.
 	registerExamples("aql:vault", map[string][]string{
+		// The operational words are almost all {alias …} option maps, and
+		// which keys each accepts is exactly what a signature of [Map]
+		// cannot say.
+		"status": {
+			`Vault.status                                     ;# {ok backend locked aliases …}`,
+			`Vault.status-text                                ;# the same, as the CLI renders it`,
+		},
+		"secrets": {
+			`Vault.secrets                                    ;# metadata rows — ALIASES ONLY, never values`,
+			`Vault.secret "github-pat"                        ;# one alias's metadata, or none`,
+		},
+		"add": {
+			`Vault.add {alias: "github-pat"  value: tok}`,
+			`Vault.add {alias: "db"  value: pw  provider: "postgres"  expiry: "2027-01-01"}`,
+		},
+		"rotate": {
+			`Vault.rotate {alias: "github-pat"  value: new-tok}`,
+			`Vault.rotate {alias: "db"  value: pw  revoke-caps: true}   ;# also kill the tokens it backed`,
+		},
+		"remove": {`Vault.remove "stale-key"`},
+		"rename": {`Vault.rename {from: "old"  to: "new"}`},
+		"grant": {
+			`Vault.grant {alias: "github-pat"  agent: "ci"  hosts: ["api.github.com"]  ttl: 3600}`,
+			`;# Returns a ONE-TIME token; a capability, not the secret itself.`,
+		},
+		"revoke":       {`Vault.revoke "cap-01H…"                          ;# by token id`},
+		"capabilities": {`Vault.capabilities                               ;# {caps active}`},
+		"authenticate": {
+			`Vault.needs-passphrase                           ;# true when the vault wants one`,
+			`Vault.authenticate pass                          ;# the host caches it for the session`,
+			`Vault.authed                                     ;# true afterwards`,
+		},
+		"lock": {
+			`Vault.lock`,
+			`Vault.locked                                     ;# true — reveal and friends now refuse`,
+			`Vault.unlock`,
+		},
+		"verify": {`Vault.verify {}                                  ;# {text ok}; {prune: true} also prunes`},
+		"scan":   {`Vault.scan ["src" "docs"]                       ;# report any leaked secret VALUES in those paths`},
+		"audit":  {`Vault.audit {}                                  ;# the audit log, as the CLI renders it`},
+		"recipes": {
+			`Vault.recipes "github-pat"                       ;# {cmd desc} rows: how to inject it into a command`,
+		},
 		"identity": {
 			`def cred (Vault.identity "acme-mtls")                   ;# <vault identity> — opaque, redacts`,
 			`Net.fetch "https://internal.example.com" {tls: {identity: cred}}`,

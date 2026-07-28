@@ -96,4 +96,48 @@ func init() {
 		"window":    "All contiguous sub-slices of the given width.",
 		"pairs":     "Consecutive overlapping 2-tuples.",
 	})
+
+	// Every result below is copied from a verified lang/spec/module-array.tsv
+	// row. The words worth authoring here are the ones whose meaning is in
+	// the SHAPE of the operands, which a signature of [List List] cannot
+	// show; the arithmetic-flavoured ones keep the generated permutations.
+	registerExamples("aql:array-util", map[string][]string{
+		"shape":     {`ArrayUtil.shape [[1 2 3] [4 5 6]]                ;# [2 3] — length along each axis`},
+		"rank":      {`ArrayUtil.rank [[1 2 3] [4 5 6]]                 ;# 2 — number of axes`},
+		"reshape":   {`ArrayUtil.reshape [2 3] [1 2 3 4 5 6]            ;# [[1 2 3] [4 5 6]]`},
+		"transpose": {`ArrayUtil.transpose [[1 2 3] [4 5 6]]            ;# [[1 4] [2 5] [3 6]]`},
+		"where":     {`ArrayUtil.where [true false true false true]     ;# [0 2 4] — indices of the truthy slots`},
+		"grade": {
+			`ArrayUtil.grade [30 10 20]                       ;# [1 2 0] — the indices that WOULD sort it`,
+			`ArrayUtil.at (ArrayUtil.grade [30 10 20]) [30 10 20]   ;# [10 20 30] — apply the grading`,
+		},
+		"at":      {`ArrayUtil.at [0 2] [10 20 30 40]                  ;# [10 30] — select by index list`},
+		"member":  {`ArrayUtil.member [1 5 3] [1 2 3]                  ;# [true false true] — mask, one per needle`},
+		"indices": {`ArrayUtil.indices [20 99 10] [10 20 30]           ;# [1 -1 0] — position, -1 when absent`},
+		"unique":  {`ArrayUtil.unique [1 2 2 3 3 3]                    ;# [1 2 3] — first-seen order`},
+		"group": {
+			`ArrayUtil.group [1 2 3]                          ;# {1:[0] 2:[1] 3:[2]} — by VALUE, to index`,
+			`ArrayUtil.group ['a' 'b' 'a'] [1 2 3]            ;# {'a':[1 3] 'b':[2]} — by parallel key list`,
+		},
+		"window":    {`ArrayUtil.window 2 [1 2 3 4]                     ;# [[1 2] [2 3] [3 4]] — overlapping slices`},
+		"pairs":     {`ArrayUtil.pairs [1 2 3 4]                        ;# [[1 2] [2 3] [3 4]] — window 2`},
+		"compress":  {`ArrayUtil.compress [true false true] [1 2 3]     ;# [1 3] — keep where the mask is true`},
+		"expand":    {`ArrayUtil.expand [true false true] [7 8]         ;# [7 0 8] — spread into the true slots`},
+		"replicate": {`ArrayUtil.replicate [2 0 3] [1 2 3]              ;# [1 1 3 3 3] — repeat each by its count`},
+		"sortby":    {`ArrayUtil.sortby [3 1 2] ['c' 'a' 'b']           ;# ['a' 'b' 'c'] — reorder by parallel keys`},
+		"insert-at": {
+			`ArrayUtil.insert-at 1 99 [1 2 3]                 ;# [1 99 2 3] — a NEW list; the input is untouched`,
+			`ArrayUtil.insert-at 3 99 [1 2 3]                 ;# [1 2 3 99] — index len appends`,
+			`ArrayUtil.insert-at 4 99 [1 2 3]                 ;# raises index_out_of_range`,
+		},
+		"remove-at": {`ArrayUtil.remove-at 1 [1 2 3]                    ;# [1 3] — a NEW list`},
+		"eachrank": {
+			`ArrayUtil.eachrank 0 [mul 2] [[1 2] [3 4]]       ;# [[2 4] [6 8]] — body per rank-0 cell (each leaf)`,
+			`;# The BODY is the middle operand, not the last: rank, body, data.`,
+		},
+		"foldaxis": {
+			`ArrayUtil.foldaxis 0 [add] [[1 2] [3 4]]         ;# [4 6] — reduce down each column`,
+			`ArrayUtil.foldaxis 1 [add] [[1 2] [3 4]]         ;# [3 7] — reduce along each row`,
+		},
+	})
 }

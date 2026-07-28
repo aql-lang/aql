@@ -32,4 +32,40 @@ func init() {
 		"histogram":    "Create a histogram instrument: histogram NAME (then h.record V).",
 		"measurements": "Return the measurements captured by the memory sink.",
 	})
+
+	// Levels and sinks are ATOMS (info/q, console/q), which the [Atom]
+	// signature names but does not enumerate — and the default sink set
+	// matters as much as the API. Results are from verified
+	// lang/spec/module-log.tsv rows.
+	registerExamples("aql:log", map[string][]string{
+		"info":  {`Log.info "started"                               ;# levels: trace debug info warn error fatal`},
+		"warn":  {`Log.warn "retrying" {attempt: 2}                 ;# the second operand is structured context`},
+		"error": {`Log.error "failed" {err: e.message}`},
+		"set-level": {
+			`Log.set-level warn/q`,
+			`Log.get-level                                    ;# warn/q — an Atom, not a String`,
+			`Log.enabled debug/q                              ;# false — cheap to ask before building a message`,
+		},
+		"get-level":  {`Log.get-level                                    ;# info/q by default`},
+		"enabled":    {`Log.enabled debug/q                              ;# false at the default level`},
+		"set-format": {`Log.set-format json/q                            ;# text/q by default`},
+		"sinks":      {`Log.sinks                                        ;# [console/q] by default`},
+		"add-sink": {
+			`Log.add-sink memory/q`,
+			`Log.remove-sink console/q                        ;# capture instead of printing`,
+			`Log.info "a"`,
+			`Log.dump size                                    ;# 1 — the memory sink's records`,
+		},
+		"dump": {`Log.dump                                         ;# the memory sink's records, as data`},
+		"span": {
+			`Log.span "request" [                             ;# times the body and nests inside any open span`,
+			`  Log.info "handling"`,
+			`]`,
+		},
+		"with":      {`Log.with {request-id: rid} [ Log.info "start" ]  ;# context added to every record in the body`},
+		"counter":   {`Log.counter "requests" 1                         ;# a metric, read back with Log.measurements`},
+		"gauge":     {`Log.gauge "queue-depth" 12`},
+		"histogram": {`Log.histogram "latency-ms" 37`},
+		"logger":    {`def l (Log.logger "billing")                     ;# a named logger; l.info "…" tags every record`},
+	})
 }

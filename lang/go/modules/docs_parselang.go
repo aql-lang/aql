@@ -31,4 +31,40 @@ func init() {
 		"source": "Resolve a `parse` source value to its String: a String passes through, " +
 			"a {src:'…'} map yields its src, a {file:…} map is not yet supported.",
 	})
+
+	// As with emit, the per-kind exports exist but `parse <kind> <src>` is
+	// the spelling people use, and it is the one the signatures cannot
+	// show. Results are from verified lang/spec/module-parselang.tsv rows.
+	registerExamples("aql:parselang", map[string][]string{
+		"kinds": {`ParseLang.kinds                                  ;# [ini/q json/q jsonic/q json5/q … markdown/q feed/q]`},
+		"parse_ini": {
+			`(parse ini 'b = hello') get 'b'                  ;# 'hello'`,
+			`((parse ini 'a = 1\n[sec]\nx = true') get 'sec') get 'x'   ;# true`,
+			`(ParseLang.parse_ini 'b = hello' {} end) get 'b' ;# the direct form: source, options, end`,
+		},
+		"parse_json":     {`(ParseLang.parse_json '{"a":1,"b":"hi"}' {} end) get 'b'   ;# 'hi'`},
+		"parse_jsonic":   {`parse jsonic 'a:1,b:hi'                          ;# bare keys and values`},
+		"parse_json5":    {`parse json5 "{a:1, b:2,}"                        ;# trailing commas, comments`},
+		"parse_jsonc":    {`parse jsonc '{"a":1}'`},
+		"parse_csv":      {`parse csv "a,b\n1,2"                             ;# [['a' 'b'] [1 2]] — a List per row, header included`},
+		"parse_toml":     {`parse toml 'a = 1'`},
+		"parse_yaml":     {`parse yaml 'a: 1'`},
+		"parse_xml":      {`parse xml '<r><a>1</a></r>'`},
+		"parse_markdown": {`parse markdown '# Title\n\ntext'`},
+		"parse_feed":     {`parse feed rss-source                            ;# RSS/Atom to a common shape`},
+		"parse_zon":      {`parse zon '.{ .a = 1 }'`},
+		"parse_aontu":    {`parse aontu 'a: 1'`},
+		"source": {
+			`ParseLang.source 'x + y'                         ;# 'x + y'`,
+			`ParseLang.source {src:'a b'}                     ;# 'a b' — accepts either shape`,
+			`;# Call this FIRST in a custom parser: it takes whatever operand`,
+			`;# parse passed (a String or a {src:…} map) and yields the text.`,
+		},
+		"register": {
+			`def calc (fn [[source:Any opts:Map] [List] [`,
+			`  StringUtil.split ' ' (ParseLang.source source)`,
+			`]])`,
+			`(parse calc 'x + y') get 1                       ;# '+' — any fn of that shape is a parser`,
+		},
+	})
 }
