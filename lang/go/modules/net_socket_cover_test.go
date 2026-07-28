@@ -563,6 +563,18 @@ func TestNSCRecvBytesClosedArms(t *testing.T) {
 	if got := nscCode(t, err); got != "closed" {
 		t.Errorf("recv-bytes after peer close code = %q (%v)", got, err)
 	}
+
+	// A PARTIAL frame then EOF (peer wrote fewer bytes than asked, then
+	// closed) is the mid-frame arm: ReadFull's io.ErrUnexpectedEOF, not a
+	// clean EOF. TCP orders the data before the FIN, so the read
+	// deterministically sees the 2 bytes and then the close.
+	client3, server3 := nscTCPPair(t)
+	if _, wErr := server3.Write([]byte("ab")); wErr != nil {
+		t.Fatal(wErr)
+	}
+	_ = server3.Close()
+	_, err = recvBytesHandler([]native.Value{newSocketValue(client3), native.NewInteger(5)}, nil, nil, reg)
+	nscErrContains(t, err, "connection closed mid-frame")
 }
 
 // ---- recv-until ----

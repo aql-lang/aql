@@ -327,7 +327,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			if callReg.AnalysisScopeID() == r.AnalysisScopeID() {
 				target = callReg
 			}
-			return target.CallAQL(&s, args, fnDefCopy.Captured)
+			return target.CallAQLNamed(&s, args, fnDefCopy.Captured, fnDefCopy.Name)
 		}
 		// Retag typed-container args up front so EVERY access path in the body —
 		// named binding, the args stack (args.N), and unnamed body-token pushes —

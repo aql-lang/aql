@@ -147,6 +147,15 @@ func TestExtract_AqlTaggedFenceRuns(t *testing.T) {
 	}
 }
 
+func TestExtract_BoruTaggedFenceRuns(t *testing.T) {
+	// The aql→boru rename retags doc fences; both tags are live during
+	// the transition.
+	src := "```boru\n2 mul 3   # returns 6\n```\n"
+	if got := Extract("X.md", src); len(got) != 1 {
+		t.Errorf("```boru fence should run, got %+v", got)
+	}
+}
+
 func TestExtract_ResultOnOwnLine(t *testing.T) {
 	// The expression is one line; its `# returns result` is the next line.
 	src := "```\naql> make Inventory [[1] [2]]\n# returns [{a:1} {a:2}]\n```\n"

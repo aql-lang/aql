@@ -58,13 +58,15 @@ func TestRunNoArgs(t *testing.T) {
 	}
 }
 
-func TestRunUnknownSubcommand(t *testing.T) {
+func TestRunBarePositionalIsLaunch(t *testing.T) {
+	// A bare positional that is not serve|attach is an interactive-debugger
+	// launch (design/AQL-DEBUGGER.0.md §4); a nonexistent file fails its read.
 	code, _, errOut := runDebug(t, "frobnicate")
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut, `unknown subcommand "frobnicate"`) {
-		t.Errorf("stderr = %q", errOut)
+	if !strings.Contains(errOut, "read frobnicate") {
+		t.Errorf("stderr = %q, want a read error for the launch file", errOut)
 	}
 }
 
