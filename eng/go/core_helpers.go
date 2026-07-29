@@ -286,14 +286,15 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		skeleton = append(skeleton, make([]Value, u)...) // arg placeholder cells
 		skeleton = append(skeleton, s.body()...)
 		skeleton = AppendFrameTail(skeleton, FrameTailSpec{
-			Registry:     r,
-			SkipCleanup:  true,
-			Names:        fnInstallNames(s, fnDefCopy.Captured),
-			Returns:      s.Returns,
-			Decl:         s.Decl,
-			UnnamedCount: u,
-			FuncName:     name,
-			EvalResidual: !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
+			Registry:       r,
+			SkipCleanup:    true,
+			Names:          fnInstallNames(s, fnDefCopy.Captured),
+			Returns:        s.Returns,
+			ReturnPatterns: s.ReturnPatterns,
+			Decl:           s.Decl,
+			UnnamedCount:   u,
+			FuncName:       name,
+			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
 		})
 		skeleton = append(skeleton, NewCloseParen())
 		// When the body provably never reads `args` (sound under the
@@ -459,14 +460,15 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// captures+params, and the ReturnCheck when returns are
 		// declared (Pos left zero — execMatch stamps the call site).
 		result = AppendFrameTail(result, FrameTailSpec{
-			Registry:     r,
-			Snapshot:     defSnapshot,
-			Names:        names,
-			Returns:      s.Returns,
-			Decl:         s.Decl,
-			UnnamedCount: unnamedCount,
-			FuncName:     name,
-			EvalResidual: !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
+			Registry:       r,
+			Snapshot:       defSnapshot,
+			Names:          names,
+			Returns:        s.Returns,
+			ReturnPatterns: s.ReturnPatterns,
+			Decl:           s.Decl,
+			UnnamedCount:   unnamedCount,
+			FuncName:       name,
+			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
 		})
 		result = append(result, NewCloseParen())
 		return result, nil
@@ -850,7 +852,7 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 // guaranteed program error. argsConcrete gates it to real concrete-arg
 // calls — the install-time synthetic example eval and generalised analyses
 // use carriers and never fire it.
-func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unnamedCount int, argsConcrete bool, stk []Value, pos, bodyEnd SrcPos) {
+func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patterns []*Value, unnamedCount int, argsConcrete bool, stk []Value, pos, bodyEnd SrcPos) {
 	if len(declared) == 0 || !r.Check.IsActive() {
 		return
 	}
@@ -922,10 +924,32 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, unna
 		}
 	}
 	for k, exp := range declared {
+		got := stk[extra+k]
+		// The PATTERN check comes first and is not gated on exp: a declared
+		// union return degrades its *Type to Any precisely because the union
+		// has no lattice node to name, so the `exp.Equal(TAny)` skip below
+		// would drop the only contract there is. `Type` aliases `Value`, so
+		// the pattern doubles as the "expected" rendering.
+		if k < len(patterns) && patterns[k] != nil &&
+			!got.Dynamic && got.Parent != nil && !IsBareTypeNode(got) && !got.Parent.Equal(TNone) {
+			if _, ok := Unify(*patterns[k], got); !ok {
+				detail, _ := returnTypeErrorText(name, k+1, patterns[k], got)
+				if !hasCheckDiagnostic(r, "type_error", detail) {
+					r.Check.AddDiagnostic(CheckDiagnostic{
+						Code:          "type_error",
+						Detail:        detail,
+						Word:          name,
+						Row:           pos.Row,
+						Col:           pos.Col,
+						RuntimeMirror: true,
+					})
+				}
+				continue
+			}
+		}
 		if exp == nil || exp.Equal(TAny) {
 			continue
 		}
-		got := stk[extra+k]
 		if got.Dynamic || got.Parent == nil || IsBareTypeNode(got) || got.Parent.Equal(TNone) {
 			continue
 		}
@@ -1275,8 +1299,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		paramPatterns[i] = p.Pattern
 	}
 	declaredReturns := append([]*Type(nil), s.Returns...)
+	declaredReturnPatterns := append([]*Value(nil), s.ReturnPatterns...)
 	if fnDef.Anonymous {
 		declaredReturns = nil
+		declaredReturnPatterns = nil
 	}
 	declSite := s.Decl
 	bodyCopy := append([]Value(nil), s.body()...)
@@ -1506,6 +1532,11 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					pats[i] = sigParams[i].Pattern
 				}
 				es.SetUnitParamTypes(fnUnit, pts, pats)
+				// The RET-side twin: a declared union return degrades its
+				// *Type to Any, so without the pattern the compiled path —
+				// the DEFAULT path — enforces nothing while the interpreter
+				// and the check pass both reject.
+				es.SetUnitReturnPatterns(fnUnit, declaredReturnPatterns)
 				// The return-contract declaration site, so a compiled RET
 				// return error labels the declaration exactly as the
 				// interpreter's ReturnCheck does.
@@ -1542,8 +1573,8 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					unnamedCount++
 				}
 			}
-			checkBodyReturnConformance(r, nameCopy, declaredReturns, unnamedCount,
-				allConcreteArgs(args), stk, retPos, bodySpanEnd(bodyCopy))
+			checkBodyReturnConformance(r, nameCopy, declaredReturns, declaredReturnPatterns,
+				unnamedCount, allConcreteArgs(args), stk, retPos, bodySpanEnd(bodyCopy))
 		}
 		if len(declaredReturns) > 0 {
 			out := make([]Value, len(declaredReturns))
@@ -2483,10 +2514,11 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 				expandedBarrier = len(reducedParams)
 			}
 			expanded = append(expanded, FnSig{
-				Params:     reducedParams,
-				Returns:    sig.Returns,
-				Impl:       AQL(body),
-				BarrierPos: expandedBarrier,
+				Params:         reducedParams,
+				Returns:        sig.Returns,
+				ReturnPatterns: sig.ReturnPatterns,
+				Impl:           AQL(body),
+				BarrierPos:     expandedBarrier,
 			})
 		}
 	}

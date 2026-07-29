@@ -21,25 +21,26 @@ because in every case the mistake is more instructive than the fix.
 
 **Status of the repairs**, as of the latest revision:
 
-- **A is fixed for `await` — with one hole still open, and it is the
-  worst item in this note.** A branch that can reach a stateful container
-  is REFUSED at the boundary, the answer `send` gives between processes.
-  Cloning was implemented and measured first, then replaced: it made the
-  same programs work silently. The other five `ForkConcurrent` call sites
-  are deliberately unchanged. **But** the compiled path still fails to
-  refuse a fn-local lambda that WRITES a shared container, and that is a
-  real data race on the default path — see §A's correction, which
-  supersedes this note's earlier "narrow divergence" wording.
+- **A is fixed for `await`, including the compiled-path hole.** A branch
+  that can reach a stateful container is REFUSED at the boundary, the
+  answer `send` gives between processes. Cloning was implemented and
+  measured first, then replaced: it made the same programs work silently.
+  The other five `ForkConcurrent` call sites are deliberately unchanged.
+  The compiled path used to permit a fn-local lambda that WRITES a shared
+  container — a real data race, and this note twice described it wrongly
+  (first as "narrow", then with the wrong mechanism). Both corrections and
+  the fix are in §A; all four shapes now refuse in both engines.
 - **C is fixed.** `errorReturnsFn` refuses instead of widening a known
   arity. §C now records exactly what its "user-visible by default"
   severity rests on: the effects fence, which blocks the rescuing
   fallback once the guarded block has emitted output.
-- **F is fixed except its return side.** Fixes (1)-(4) are all landed
-  with regression tests — the two verified patches, the inline-union route
-  via `paramBodyCarrier`, and the diagnostic reword. Writing the negative
-  half of those tests exposed a sixth consequence (a declared union
-  RETURN is accepted but never enforced) that is recorded and pinned
-  rather than closed; it needs return patterns on `FnSig`.
+- **F is fixed, return side included.** Fixes (1)-(4) landed earlier with
+  regression tests — the two verified patches, the inline-union route via
+  `paramBodyCarrier`, and the diagnostic reword. The sixth consequence
+  those tests exposed (a declared union RETURN accepted but never
+  enforced) is now closed too: `FnSig.ReturnPatterns` carries the
+  constraint `ParseFnReturns` used to discard, enforced at both the
+  runtime and check-mode return boundaries.
 - **D is reported, not repaired.** Check-time module-body execution now
   emits an info diagnostic per execution and `CLI.md` documents the
   exception; the split-mode repair is untouched.
@@ -105,7 +106,7 @@ paragraph in B and "Blocker 2 is worse than the table says".
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — user-visible by default once the block emits output; **FIXED** |
 | **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
 | **E** | Error-code table documents codes the engine can't produce | docs + 1 engine bug | medium |
-| **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently makes a 1-arg fn callable with 0 args — **PARAM SIDE FIXED**, return side still unenforced |
+| **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently made a 1-arg fn callable with 0 args — **FIXED**, param and return sides both |
 | **G** | Un-separated forward calls evaluate right-to-left → stale reads | recorded, deferred | medium — invalidates tests silently |
 
 
@@ -258,52 +259,97 @@ COW context layer, but a pointer stored in it is reachable. The published
 repro binds through `def`, which is what this closes; the context path is
 unverified and should not be claimed as covered.
 
-### CORRECTION: the compiled-path gap is a live data race, not a narrow divergence
+### CORRECTION, then FIXED: the compiled-path gap was a live data race
 
-An earlier revision of this section described the known limit —
-`TestAwaitRefusalMissesCompiledFnLocalLambda` — as "narrow", on the
-grounds that both engines catch a container named directly in a branch
-and both catch the identical lambda at module level. **That
-understated it.** Running the pinned program under `-race` reports a
-genuine `WARNING: DATA RACE`: two branch goroutines inside
-`OrderedMap.Set` at once, via `runParallelBranch` → `vmContext.run`. On
-the DEFAULT execution path.
+An earlier revision of this section described the known limit as
+"narrow", on the grounds that both engines catch a container named
+directly in a branch. **That understated it.** Running the pinned program
+under `-race` reported a genuine `WARNING: DATA RACE`: two branch
+goroutines inside `OrderedMap.Set` at once, via `runParallelBranch` →
+`vmContext.run`. On the DEFAULT execution path.
 
 Measured, with `def m (make FlexMap {a:0})` inside a fn body and both
 branches invoking the same fn-local lambda:
 
-| lambda body | compiled | interpreted |
+| lambda body | compiled (before) | interpreted |
 |---|---|---|
 | `[m]` | refused | refused |
 | `[m get a]` | refused | refused |
 | `[m size]` | **ALLOWED** | refused |
 | `[m set a 1]` | **ALLOWED** — races | refused |
 
-The compiled path refuses the two harmless shapes and permits the
+The compiled path refused the two harmless shapes and permitted the
 mutating one. That is the worst possible shape for a partial check: it
-fires where it does not matter and is silent where it does. The
-interpreter refuses all four, so the divergence is entirely on the side
-that ships by default.
+fired where it did not matter and was silent where it did.
 
-**How this was found is the point.** It was not found by reasoning about
-the check — I wrote the limit down as narrow and believed it. It was
-found because `make test-race`, once the interval leak stopped drowning
-it, reported the race in a test I had written myself to *document* the
-limit. The gate could only say this after the noise was removed; that is
-the argument for fixing red gates rather than working around them,
-restated by example.
+**How it was found is the point.** Not by reasoning — the limit was
+written down as narrow and believed. It was found because `make
+test-race`, once the interval leak stopped drowning it, reported the race
+in a test written to *document* the limit.
 
-**What changed here, and what did not.** The test now pins the divergence
-with `[m size]` — same gap, no mutation, no race — plus a companion
-asserting the two refused shapes stay refused, so a future widening from
-"the mutating case" to "any case" fails loudly. The *hole itself is not
-fixed*: a user program with a fn-local lambda writing a shared FlexMap
-across `await` branches is still undefined behaviour under the default
-compiler. Closing it means the reachability walk seeing fn-body locals
-that live in frame slots rather than the def table, which is an engine
-change, not a check tweak.
+#### The stated cause was wrong too
 
-This is the highest-severity item left in this note.
+The comment blamed "`w` is unbound, so the indirection is not followed",
+which does not survive contact: if `w` were simply unbound, all four rows
+would be ALLOWED. Instrumenting the walk gave the actual mechanism:
+
+- `[m]` / `[m get a]` — the branch element arrives as a **raw token
+  list**, and `w` IS in `r.Defs`. The walk works.
+- `[m size]` / `[m set a 1]` — the body compiles, so the element arrives
+  as a **compiled fn-value carrier** and `w` is NOT in `r.Defs`.
+
+So the split was never about the lambda; it was about whether the branch
+body compiled. And the value is genuinely out of reach: `w` is not in the
+carrier's `Captured`, not in `CompiledFnRef.Captures`, and not in the
+unit's constant pool — the branch calls the lambda's unit by index, and
+`m` exists only as a live value in a VM frame that a native handler
+cannot address.
+
+#### The fix: ask a different question
+
+The measurement that mattered: **`m` was in `r.Defs` the whole time.**
+Only `w` was missing. The walk dead-ended one step short of the container
+it was looking for.
+
+So the fix does not resolve `w` — it cannot. It records that a reference
+went **opaque** (unresolvable in `r.Defs`, and not a bare literal) and,
+when the walk finds nothing directly, asks the only sound question left:
+*is anything mutable in scope for that opaque reference to have reached?*
+If yes, refuse.
+
+The opaque test began with three more exemptions — registered word, type
+name, literal — and coverage showed two of them never firing. They are
+not merely untested, they are **unreachable from this call site**: the
+test runs only where `r.Defs.Top(name)` already missed, every registered
+word also carries a `r.Defs` binding (`undef` of a builtin is refused as
+`reserved_word`), and a kernel type name is converted by the parser into
+a type literal so it never arrives as a Word at all. Instrumenting the
+predicate across the whole Go test corpus, every name that reached it
+missed both lookups. They were deleted rather than allowlisted — a guard
+that cannot fire reads as protection that isn't there.
+
+The literal case is the one that fires, and it is load-bearing: `true` /
+`false` / `none` DO arrive as Words and never resolve, so without the
+exemption `await [[true] [false]]` with any FlexMap in scope refuses two
+branches that touch nothing. That case is now pinned.
+
+All four rows now refuse in both engines, and `-race` is clean.
+
+**The conditional is what makes it usable, and it was not optional.** An
+unconditional "opaque reference → refuse" rejects the two idioms the docs
+promote, because unresolvable words are everywhere: a map key walks as a
+bare Word (`m set a 1` yields `a`), and a branch-local `def` is
+unresolvable by construction. A first attempt at the naive rule would
+have broken `[m set a 1]` over an immutable Map and the
+build-one-per-branch pattern — both of which are in the accepted-cases
+test, which is why they were caught before the rule was written rather
+than after.
+
+The residual imprecision is stated rather than hidden: a mutable
+container in scope that the opaque reference could not actually have
+reached is refused anyway. That is the conservative direction, and it is
+the direction this boundary already chose when it picked refusal over
+cloning.
 
 ### `make test-race` was RED on main — and it was a product defect
 
@@ -1610,15 +1656,93 @@ call starts failing with *"def is still waiting for 1 argument(s) when
 keyword forms, the plain-builtin output (`fn x:Integer Integer […]`), the
 list output and the paren output — all four measured. Reverted.
 
-Closing this needs a return-pattern channel on `FnSig` (the symmetric twin
-of `FnParam`'s pattern), which is a design change rather than a flag, and
-it should be taken together with fix (3) — both are "the pattern side of
-`ResolveSigType` has nowhere to go" in different slots.
+#### FIXED — `FnSig.ReturnPatterns`
 
-The residual is pinned rather than left silent:
-`TestShorthandFnUnionReturnType` asserts the divergence and **fails loudly
-when it is fixed**, with a message saying so — so the gap is counted, and
-the way out is a deliberate test edit rather than a quiet one.
+The missing channel is now there: `ReturnPatterns []*Value` on `FnSig`,
+positional against `Returns`, the symmetric twin of `FnParam.Pattern`.
+`ParseFnReturns` stops discarding what `ResolveSigType` already computed
+and returns the patterns alongside the types; they thread through
+`FrameTailSpec` onto `ReturnCheckInfo` and are enforced in both the
+runtime check (`validateReturnTypes`) and the check-mode mirror
+(`checkBodyReturnConformance`), with `Unify(pattern, got)` as the
+predicate.
+
+Two details worth keeping:
+
+- **The pattern check must run BEFORE the `exp == TAny` skip.** Both
+  enforcement sites short-circuit on a declared `Any`, and a declared
+  union degrades its `*Type` to `Any` *precisely when* the pattern is the
+  only contract there is. Ordering it after the skip would have compiled,
+  passed the positive tests, and enforced nothing.
+- **`Type` is an alias of `Value`**, so the pattern pointer doubles as
+  the `*Type` the error builder wants. The shorthand's message renders as
+  `expected Integer tor String, got Boolean` rather than the useless
+  `expected Any`.
+
+Measured:
+
+| form | before | now |
+|---|---|---|
+| shorthand, `Boolean` body | accepted silently | `expected Integer tor String, got Boolean` |
+| bracket, `Boolean` body | `expected IS, got Boolean` | unchanged |
+| shorthand, `Integer` or `String` body | accepted | still accepted |
+
+`TestShorthandFnUnionReturnType` was written to **fail loudly when this
+was fixed**, and it did — the way out was the deliberate test edit it
+asked for. It now asserts rejection for both forms plus the negative half
+(a body returning either alternative is still accepted), because a
+pattern check that rejected everything would have satisfied the
+rejection assertions and been useless.
+
+#### CORRECTION: that fix shipped enforcing nothing on the default path
+
+The table above was measured in **check mode**, and check mode was the
+only place the fix worked. Coverage flagged the real state of it: the
+enforcement branch in `validateReturnTypes` was never executed by the
+suite, because `TestShorthandFnUnionReturnType` calls `checkDiag` and
+nothing else. Re-measured across all three engines:
+
+| form, `Boolean` body | `aql check` | `RunInterp` | **compiled `Run`** |
+|---|---|---|---|
+| shorthand union return | rejects | rejects | **accepted, returned `true`** |
+| inline union return | rejects | rejects | **accepted, returned `true`** |
+| bracket (named union) | rejects | rejects | rejects |
+
+This is defect A's shape exactly: a contract wired into every path except
+the one that ships by default. `ReturnPatterns` reached `FnSig`,
+`FrameTailSpec` and `ReturnCheckInfo` — all interpreter-side — but never
+reached `CompiledFn`, so the VM's RET contract (`checkReturnContract`)
+still saw only `Returns`, and a declared union's `Returns` entry is `Any`.
+`Is(Any)` passes everything.
+
+The bracket form's rejection is what made it look fine: a NAMED union
+resolves through `r.LookupTypeName` to a real lattice node, so its
+`*Type` is `IS` rather than `Any` and the plain type check catches the
+Boolean without any pattern. Only the two forms that degrade to `Any` —
+shorthand and inline — depend on the pattern, and both were open.
+
+Closed by carrying the patterns the rest of the way:
+`CompiledFn.ReturnPatterns` (the RET-side twin of the existing
+`ParamPatterns`), populated via a new `SetUnitReturnPatterns` at the same
+two sites that already set `SetUnitParamTypes` / `SetUnitDecl`, and
+enforced in `checkReturnContract` with the same `Unify(*pat, got)` the
+interpreter runs. All three engines now produce the byte-identical
+`f: return value 1: expected Integer tor String, got Boolean`.
+
+Threading the patterns to the VM also closed a second, wider gap that had
+nothing to do with unions: a **list** output signature carrying a
+structural element (`fn [[…] [[:Integer]] […]]`, `[{:String}]`) reaches
+`ParseFnReturns`' per-element loop, and that loop's pattern slot was
+equally unenforced — `[[:Integer]]` accepted a `["a"]` body on every
+engine, while the identical declaration in a PARAM slot raised
+`signature_error`. Params and returns are the same contract read in two
+directions, and they now refuse the same values.
+
+`TestShorthandFnUnionReturnType` asserts all three engines, and
+`TestListOutputSigStructuralReturn` covers the list-output route with
+both halves. The general lesson is the one defect A already paid for:
+**a green check-mode test is not evidence about the VM.** Where a
+contract has more than one enforcement site, the test has to name them.
 
 ### `describe case`'s two false examples fixed themselves
 

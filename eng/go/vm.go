@@ -2295,8 +2295,36 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 		if !stack[base+k].Is(CanonicalType(r, exp)) {
 			return stack, vmReturnTypeErr(r, fn, k+1, exp, stack[base+k])
 		}
+		// A declared return whose *Type degraded to Any carries its real
+		// domain in the pattern — the RET-side twin of the ParamPatterns
+		// guard at CALL_USER, and the same Unify the interpreter's
+		// ReturnCheck runs (engine.go validateReturnTypes). Without it the
+		// COMPILED path accepted `def IS (Integer tor String)` /
+		// `def f fn x:Integer IS [true]` that the interpreter and the check
+		// pass both reject: `Is(Any)` passes everything, so the union read
+		// as a comment on the only path most programs take.
+		//
+		// `Type` aliases `Value`, so the pattern pointer doubles as the
+		// "expected" the error builder renders — `expected Integer tor
+		// String` rather than the useless `expected Any`.
+		if pat := fn.ReturnPattern(k); pat != nil {
+			if _, ok := Unify(*pat, stack[base+k]); !ok {
+				return stack, vmReturnTypeErr(r, fn, k+1, pat, stack[base+k])
+			}
+		}
 	}
 	return stack, nil
+}
+
+// ReturnPattern returns the declared pattern for return position k, or nil
+// when that position has none (or the unit carries no patterns at all).
+// Mirrors ReturnCheckInfo.ReturnPattern so the compiled and interpreted RET
+// contracts read the same.
+func (f *CompiledFn) ReturnPattern(k int) *Value {
+	if k < 0 || k >= len(f.ReturnPatterns) {
+		return nil
+	}
+	return f.ReturnPatterns[k]
 }
 
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and

@@ -998,6 +998,19 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 		if !got.Is(exp) {
 			return e.returnTypeError(rc, k+1, exp, got)
 		}
+		// A declared return whose *Type degraded to Any carries its real
+		// domain in the pattern — a union output (`def IS (Integer tor
+		// String)`) has no lattice node to name, so `exp` is Any and admits
+		// everything. Checking the pattern is what makes such a return a
+		// contract rather than a comment.
+		// `Type` is an alias of `Value`, so the pattern pointer IS a *Type
+		// and renders as the declared union rather than as the useless
+		// "expected Any" the degraded type would produce.
+		if pat := rc.ReturnPattern(k); pat != nil {
+			if _, ok := Unify(*pat, got); !ok {
+				return e.returnTypeError(rc, k+1, pat, got)
+			}
+		}
 	}
 	return nil
 }
@@ -6011,15 +6024,16 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	tokens = append(tokens, sig.body()...)
 
 	tokens = AppendFrameTail(tokens, FrameTailSpec{
-		Registry:     e.registry,
-		Snapshot:     defSnapshot,
-		Names:        names,
-		Returns:      sig.Returns,
-		Decl:         sig.Decl,
-		UnnamedCount: unnamedCount,
-		FuncName:     "<fn>",
-		Pos:          callPos,
-		EvalResidual: !anonymous || BodyEvalsResidual(sig.body()),
+		Registry:       e.registry,
+		Snapshot:       defSnapshot,
+		Names:          names,
+		Returns:        sig.Returns,
+		ReturnPatterns: sig.ReturnPatterns,
+		Decl:           sig.Decl,
+		UnnamedCount:   unnamedCount,
+		FuncName:       "<fn>",
+		Pos:            callPos,
+		EvalResidual:   !anonymous || BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 

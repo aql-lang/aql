@@ -2,6 +2,7 @@ package native
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	eng "github.com/aql-lang/aql/eng/go"
@@ -48,35 +49,21 @@ type parallelResult struct {
 // LIMITS, stated rather than implied — this is a boundary rule, not a
 // proof of non-aliasing. Reachability is what a branch body REFERENCES,
 // followed one level into any referenced function (its captures and its
-// body). Two things it does not see:
+// body), plus a scope-wide fallback when a reference cannot be resolved
+// at all (branchRefIsOpaque / scopeSharedMutable).
 //
-//   - a container reached only through a longer chain of calls;
-//   - a binding that is not in `r.Defs` at await time. Compiled, some
-//     fn-body locals live in frame slots rather than the def table, so a
-//     lambda defined INSIDE a fn body can be unbound here.
+// What it does NOT see: a container reached only through a longer chain
+// of calls, and one held in a VM frame slot with nothing mutable visible
+// in `r.Defs` to trip the opaque fallback.
 //
-// The second is an engine-mode divergence in the check itself, and it is
-// worse than "some shapes are missed" — it misses exactly the dangerous
-// ones. With `def m (make FlexMap {a:0})` inside a fn body and both
-// branches invoking the same fn-local lambda:
-//
-//	lambda body     compiled     interpreted
-//	[m]             refused      refused
-//	[m get a]       refused      refused
-//	[m size]        ALLOWED      refused
-//	[m set a 1]     ALLOWED      refused   <-- real DATA RACE under -race
-//
-// So the compiled path refuses the harmless shapes and permits the
-// mutating one, which is undefined behaviour on the path that ships by
-// default. Naming `m` directly in the branch is caught on both paths, as
-// is the same lambda at MODULE level, so the hole is bounded — but it is
-// a live memory-safety hole, not a cosmetic divergence.
-//
-// Pinned by TestAwaitRefusalMissesCompiledFnLocalLambda (which uses the
-// non-racing `[m size]` shape, so `make test-race` stays usable) and by
-// TestAwaitRefusalCatchesFnLocalLambdaReads (the refused half). Closing
-// it means reaching compiled frame locals from a native handler, which is
-// a different layer's job. See design/verse-report-defects-investigation.0.md §A.
+// The fn-local hole this used to have is CLOSED. Compiled, `def w ([] =>
+// [m set a 1])` inside a fn body puts `w` in a frame slot, so the walk
+// dead-ended at `w`; the check then refused the harmless shapes (`[m]`,
+// `[m get a]`) and permitted the mutating one — a real data race under
+// `-race`, on the default path. All four shapes now refuse in both
+// engines, pinned by TestAwaitRefusesFnLocalLambdaInBothEngines, with
+// TestAwaitOpaqueRefIsNotRefusedWithoutAMutable holding the other side so
+// the fallback cannot grow into refusing map keys and branch-locals.
 func sharedMutableKind(v Value) string {
 	if v.Parent == nil {
 		return ""
@@ -132,9 +119,61 @@ func branchTokens(elem Value) []Value {
 	return body.Slice()
 }
 
+// branchRefIsOpaque reports whether a branch-body word resolves to
+// NOTHING the check can inspect.
+//
+// It is consulted only for a name the walk already failed to resolve in
+// `r.Defs`, and that failure is the whole signal: compiled, a fn-body
+// local is exactly what it looks like — `def w ([] => …)` inside a fn
+// body lives in a VM frame slot, not in r.Defs, and a native handler has
+// no path to frame locals.
+//
+// The one exception is a bare LITERAL. `true` / `false` / `none` arrive
+// as Words and never resolve, but they are values, not bindings — a
+// branch body of `[true]` reaches nothing. Without this case an
+// `await [[true] [false]]` with any FlexMap in scope would be refused
+// outright.
+//
+// Registered words and type names deliberately have no case here. Both
+// were tried, and both are unreachable from this call site: every
+// registered word also carries a `r.Defs` binding (and `undef` of a
+// builtin is refused as `reserved_word`), while a kernel type name is
+// converted by the parser into a type literal and never arrives as a
+// Word at all. Measured across the whole Go test corpus, every name
+// reaching this function misses both lookups. A guard that cannot fire
+// is worse than no guard: it reads as protection that isn't there.
+func branchRefIsOpaque(name string) bool {
+	switch name {
+	case "true", "false", "none":
+		return false
+	}
+	return true
+}
+
+// scopeSharedMutable returns the first binding in scope that is an
+// in-place-mutable container. It answers the only question that matters
+// once a branch reference has gone opaque: is there anything here for it
+// to reach?
+func scopeSharedMutable(r *Registry) (string, string) {
+	names := r.Defs.Names()
+	sort.Strings(names) // deterministic: the same program names the same binding
+	for _, n := range names {
+		if v, ok := r.Defs.Top(n); ok {
+			if bad := sharedMutableKind(v); bad != "" {
+				return n, bad
+			}
+		}
+	}
+	return "", ""
+}
+
 func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 	seen := map[string]bool{}
 	var offender, kind string
+	// opaque records a branch reference the check could not resolve. It is
+	// not a violation by itself — a map key (`m set a 1` walks `a` as a bare
+	// Word) and a branch-local `def` are both opaque and both harmless.
+	var opaque string
 	inspect := func(name string, v Value) bool {
 		if bad := sharedMutableKind(v); bad != "" {
 			offender, kind = name, bad
@@ -180,6 +219,9 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 			seen[w.Name] = true
 			bound, ok := r.Defs.Top(w.Name)
 			if !ok {
+				if branchRefIsOpaque(w.Name) {
+					opaque = w.Name
+				}
 				return
 			}
 			if inspect(w.Name, bound) {
@@ -199,7 +241,38 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 			}
 		})
 	}
-	return offender, kind
+	if offender != "" {
+		return offender, kind
+	}
+	// Nothing was reached DIRECTLY, but a reference went opaque. The check
+	// cannot bound what that reference reaches, so fall back to the only
+	// sound question left: is there a mutable container in scope at all?
+	//
+	// This is what closes the compiled fn-local hole. `def w ([] => [m set
+	// a 1])` inside a fn body compiles `w` into a frame slot, so the walk
+	// dead-ends at `w` — while `m` sits in r.Defs the whole time, one step
+	// out of reach. Two branches then wrote the same OrderedMap
+	// concurrently on the DEFAULT path: a real data race, not a
+	// theoretical one.
+	//
+	// It is deliberately conditional on something mutable existing. An
+	// unconditional "opaque reference => refuse" would reject the two
+	// shapes the docs promote — `[m set a 1]` over an IMMUTABLE map (the
+	// key `a` walks as a bare Word) and `[def a (make FlexMap {}) a set k
+	// 1]` (branch-local, private by construction) — because a map key and
+	// a branch-local binding are indistinguishable from a fn-local
+	// function here.
+	//
+	// The residual imprecision is stated rather than hidden: a mutable
+	// container in scope that the opaque reference could not actually have
+	// reached is refused anyway. That is the conservative direction, and
+	// it is the direction this boundary already chose over cloning.
+	if opaque != "" {
+		if name, bad := scopeSharedMutable(r); name != "" {
+			return name, bad
+		}
+	}
+	return "", ""
 }
 
 // makeBranchForks builds one isolated registry per branch so the

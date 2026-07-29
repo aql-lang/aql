@@ -114,6 +114,7 @@ type EmitRecorder interface {
 	// --- fn-unit compilation ---------------------------------------------
 	StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool)
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
+	SetUnitReturnPatterns(unit int, returnPatterns []*Value)
 	SetUnitDecl(unit int, decl DeclSite)
 	unitVariadic(unit int) bool
 	unitNetsZero(unit int) bool
@@ -229,6 +230,7 @@ func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, 
 	return -1, nil, false
 }
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}
+func (inactiveEmit) SetUnitReturnPatterns(int, []*Value)      {}
 func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
 func (inactiveEmit) unitVariadic(int) bool                    { return false }
 func (inactiveEmit) unitNetsZero(int) bool                    { return false }

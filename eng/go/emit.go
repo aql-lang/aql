@@ -842,6 +842,10 @@ type fnUnitRec struct {
 	returns       []*Type  // declared return types — enforced at the VM's RET
 	paramTypes    []*Type  // declared PARAM types — enforced at the VM's CALL_USER entry
 	paramPatterns []*Value // per-param structural/value patterns — also enforced at CALL_USER
+	// returnPatterns are the per-return structural/value patterns
+	// (FnSig.ReturnPatterns) — the RET-side twin of paramPatterns, enforced
+	// at the VM's RET alongside returns.
+	returnPatterns []*Value
 	// decl is the return-contract declaration site (FnSig.Decl), stamped
 	// on CompiledFn.Decl so a compiled RET return error labels the
 	// declaration as a secondary span exactly as the interpreter does.
@@ -3571,6 +3575,23 @@ func (es *EmitState) SetUnitParamTypes(unit int, paramTypes []*Type, paramPatter
 	}
 	es.fnRecs[unit].paramTypes = paramTypes
 	es.fnRecs[unit].paramPatterns = paramPatterns
+}
+
+// SetUnitReturnPatterns records the declared return PATTERNS for a compiled fn
+// unit (FnSig.ReturnPatterns), so the VM enforces them at RET — the RET-side
+// twin of SetUnitParamTypes' patterns.
+//
+// It is a separate setter rather than a StartFnCompile argument because the
+// patterns are only meaningful where the FnSig is in hand, which is the same
+// pair of call sites that set the declaration site. Without it the compiled
+// path — the DEFAULT path — accepted a body that both the interpreter and the
+// check pass reject, because a declared union's *Type degrades to Any and the
+// pattern is the only contract there is.
+func (es *EmitState) SetUnitReturnPatterns(unit int, returnPatterns []*Value) {
+	if unit < 0 || unit >= len(es.fnRecs) {
+		return
+	}
+	es.fnRecs[unit].returnPatterns = returnPatterns
 }
 
 // SetUnitDecl records the return-contract declaration site for a compiled fn
@@ -7693,7 +7714,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 		// (added during loop lowering) stay anonymous.
 		names := make([]string, rec.numLoc)
 		copy(names, rec.locals)
-		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, Decl: rec.decl, LocalNames: names, Render: rec.render}
+		cf := CompiledFn{Name: rec.name, NParams: rec.nParams + len(rec.caps), NArgs: rec.nParams, NCaptures: len(rec.caps), NUnnamed: rec.nUnnamed, NLocals: rec.numLoc, InShape: rec.inShape, Returns: rec.returns, ReturnPatterns: rec.returnPatterns, Params: rec.paramTypes, ParamPatterns: rec.paramPatterns, Decl: rec.decl, LocalNames: names, Render: rec.render}
 		if rec.reg != nil && rec.reg != es.progReg {
 			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
 			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):

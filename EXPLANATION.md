@@ -710,14 +710,11 @@ await [
 ```
 
 The refusal covers what a branch body references, including one level
-into a function it names. It is a boundary rule, not a proof: a
-container reached only through a longer chain of calls is not detected,
-and neither is one *written* through a lambda defined **inside a fn
-body** when that program is compiled. That last case is a known hole,
-not a design choice — such a program is a real data race rather than a
-refusal, so do not rely on the check to catch it. Naming the container
-directly in the branch is caught, as is the same lambda at module level,
-and building the container inside each branch is always safe.
+into a function it names — and when a reference cannot be resolved at
+all, it falls back to refusing if any mutable container is in scope. It
+is a boundary rule, not a proof: a container reached only through a
+longer chain of calls, with nothing mutable visible at the boundary, is
+not detected. Building the container inside each branch is always safe.
 
 
 ## Errors as values

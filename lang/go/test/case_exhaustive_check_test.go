@@ -449,29 +449,127 @@ func TestShorthandFnUnionReturnType(t *testing.T) {
 	if len(out) != 1 || fmt.Sprint(out[0]) != "1" {
 		t.Fatalf("want [1], got %v", out)
 	}
-	// KNOWN RESIDUAL, pinned deliberately. The bracket form ENFORCES the
-	// declared union return — a Boolean body is a type_error — and the
-	// shorthand does not, because the output slot's bare Word is resolved
-	// by forward collection (no NoEval flag gates that), so ResolveSigType
-	// sees a Disjunct VALUE and answers TAny plus a pattern that
-	// ParseFnReturns has nowhere to store. Suppressing the map eval fixed
-	// the INPUT slot; the output slot needs return patterns on FnSig.
+	// BOTH forms must now REJECT a Boolean body under a declared union
+	// return. The shorthand used to accept it silently: the output slot's
+	// bare Word is resolved by forward collection (no NoEval flag gates
+	// that), so ResolveSigType saw a Disjunct VALUE and answered
+	// `(TAny, &pattern)` — and `Any` accepts everything. The pattern had
+	// nowhere to live, because FnSig.Returns is []*Type.
 	//
-	// This asserts the divergence rather than the desired behaviour so the
-	// gap is visible and counted. When the residual is fixed, this test
-	// fails loudly and both halves become "must reject" — that is the
-	// intended way out, not a quiet edit.
-	bracket := checkDiag(t, `def IS (Integer tor String) def f fn [[x:Integer][IS][true]] 1 f`)
-	if len(errorCodes(bracket)) == 0 {
-		t.Errorf("bracket form must reject a Boolean body under a declared "+
-			"union return, got clean: %v", diagCodes(bracket))
+	// FnSig.ReturnPatterns is that missing channel, and the enforcement
+	// runs BEFORE the `exp == TAny` skip, because a declared union
+	// degrades its type to Any precisely when the pattern is the only
+	// contract left.
+	//
+	// Asserted on ALL THREE engines, and that is the point rather than
+	// thoroughness for its own sake. This test was written check-only, and
+	// check-only is exactly what let the fix ship half-done: the pattern was
+	// threaded onto ReturnCheckInfo (interpreter) and into
+	// checkBodyReturnConformance (check pass) but NOT onto CompiledFn, so
+	// `aql check` and `RunInterp` rejected the Boolean body while the
+	// DEFAULT compiled run accepted it and returned `true`. A declared union
+	// return was a comment on the one path most programs take. Whenever a
+	// contract is enforced in more than one engine, assert it in every one —
+	// a green check-mode test is not evidence about the VM.
+	for _, form := range []struct{ name, src string }{
+		{"bracket", `def IS (Integer tor String) def f fn [[x:Integer][IS][true]] 1 f`},
+		{"shorthand", `def IS (Integer tor String) def f fn x:Integer IS [true] 1 f`},
+	} {
+		got := checkDiag(t, form.src)
+		if len(errorCodes(got)) == 0 {
+			t.Errorf("%s form must reject a Boolean body under a declared union "+
+				"return, got clean: %v", form.name, diagCodes(got))
+		}
+		for _, mode := range []string{"compiled", "interpreted"} {
+			e, _ := lang.New()
+			var err error
+			if mode == "compiled" {
+				_, err = e.Run(form.src)
+			} else {
+				_, err = e.RunInterp(form.src)
+			}
+			if err == nil {
+				t.Errorf("%s form, %s: a Boolean body under a declared union return "+
+					"must raise; it was ACCEPTED", form.name, mode)
+			} else if !strings.Contains(err.Error(), "return value 1") {
+				t.Errorf("%s form, %s: want a return-value type_error, got %v",
+					form.name, mode, err)
+			}
+		}
 	}
-	short := checkDiag(t, `def IS (Integer tor String) def f fn x:Integer IS [true] 1 f`)
-	if len(errorCodes(short)) != 0 {
-		t.Fatalf("RESIDUAL CLOSED — the shorthand now enforces its declared "+
-			"union return (%v). Update this test: both forms should now "+
-			"assert rejection, and §F's residual note can be struck.",
-			errorCodes(short))
+	// The negative half, and the one that keeps the rule honest: a body
+	// returning EITHER alternative of the union must still be accepted. A
+	// pattern check that rejected everything would pass the two assertions
+	// above and be useless.
+	for _, ok := range []struct{ name, src string }{
+		{"Integer alternative", `def IS (Integer tor String) def f fn x:Integer IS [x] 1 f`},
+		{"String alternative", `def IS (Integer tor String) def f fn x:Integer IS ["s"] 1 f`},
+	} {
+		got := checkDiag(t, ok.src)
+		if codes := errorCodes(got); len(codes) != 0 {
+			t.Errorf("%s: a body returning a valid member of the declared union "+
+				"must be accepted, got %v", ok.name, codes)
+		}
+		for _, mode := range []string{"compiled", "interpreted"} {
+			e, _ := lang.New()
+			var err error
+			if mode == "compiled" {
+				_, err = e.Run(ok.src)
+			} else {
+				_, err = e.RunInterp(ok.src)
+			}
+			if err != nil {
+				t.Errorf("%s, %s: a valid member of the declared union must run: %v",
+					ok.name, mode, err)
+			}
+		}
+	}
+}
+
+// TestListOutputSigStructuralReturn covers the OTHER route into
+// FnSig.ReturnPatterns: a LIST output signature (`fn [[…] [[:Integer]] […]]`)
+// whose element resolves to a structural pattern. The union cases above all
+// take ParseFnReturns' single-value branch; this one takes its per-element
+// loop, and the two allocate the pattern slice differently.
+//
+// It is also the direction that makes the feature coherent. A typed container
+// is already enforced on the PARAM side — `f ["a"]` against `x:[:Integer]` is
+// `signature_error` — and before ReturnPatterns the same declaration in the
+// RETURN slot admitted anything list-shaped, because ParseFnReturns kept only
+// the `*Type` (TList) and dropped the element constraint. Params and returns
+// are the same contract read in two directions; they must refuse the same
+// values.
+func TestListOutputSigStructuralReturn(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		src  string
+		bad  bool
+	}{
+		{"typed list, wrong element", `def f fn [[x:Integer] [[:Integer]] [["a"]]] 1 f`, true},
+		{"typed list, right element", `def f fn [[x:Integer] [[:Integer]] [[1 2]]] 1 f`, false},
+		{"typed map, wrong value", `def f fn [[x:Integer] [{:String}] [{a:1}]] 1 f`, true},
+		{"typed map, right value", `def f fn [[x:Integer] [{:String}] [{a:"z"}]] 1 f`, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, mode := range []string{"compiled", "interpreted"} {
+				e, _ := lang.New()
+				var err error
+				if mode == "compiled" {
+					_, err = e.Run(c.src)
+				} else {
+					_, err = e.RunInterp(c.src)
+				}
+				switch {
+				case c.bad && err == nil:
+					t.Errorf("%s: a declared structural return must refuse a "+
+						"non-conforming body; it was ACCEPTED", mode)
+				case c.bad && !strings.Contains(err.Error(), "return value 1"):
+					t.Errorf("%s: want a return-value type_error, got %v", mode, err)
+				case !c.bad && err != nil:
+					t.Errorf("%s: a conforming body must run: %v", mode, err)
+				}
+			}
+		})
 	}
 }
 

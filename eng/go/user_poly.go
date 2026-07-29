@@ -264,6 +264,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 	// guard OpCallUser runs), so the runtime re-match's pick is double-checked
 	// against the arm's own contract.
 	es.SetUnitParamTypes(unit, pts, pats)
+	es.SetUnitReturnPatterns(unit, s.ReturnPatterns)
 	es.SetUnitDecl(unit, s.Decl)
 	if finishFn != nil {
 		// Drop any summary cached by a prior plain analysis so AnalyseFnBody

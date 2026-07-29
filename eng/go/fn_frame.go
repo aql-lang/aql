@@ -146,10 +146,13 @@ type FrameTailSpec struct {
 	// no ReturnCheck is emitted when Returns is empty. A zero Pos means
 	// "stamp later": execMatch stamps handler-produced ReturnChecks
 	// with the call-site position (stampResultPos keys on Pos.Row == 0).
-	Returns      []*Type
-	UnnamedCount int
-	FuncName     string
-	Pos          SrcPos
+	Returns []*Type
+	// ReturnPatterns mirrors Returns positionally: the structural
+	// constraint for a declared return whose *Type degraded to Any.
+	ReturnPatterns []*Value
+	UnnamedCount   int
+	FuncName       string
+	Pos            SrcPos
 	// Decl is the return contract's declaration site (FnSig.Decl),
 	// forwarded onto the ReturnCheck for two-span return errors.
 	Decl DeclSite
@@ -196,11 +199,12 @@ func AppendFrameTail(tokens []Value, spec FrameTailSpec) []Value {
 	}
 	if len(spec.Returns) > 0 {
 		tokens = append(tokens, NewReturnCheck(ReturnCheckInfo{
-			FuncName:     spec.FuncName,
-			Returns:      spec.Returns,
-			UnnamedCount: spec.UnnamedCount,
-			Pos:          spec.Pos,
-			Decl:         spec.Decl,
+			FuncName:       spec.FuncName,
+			Returns:        spec.Returns,
+			ReturnPatterns: spec.ReturnPatterns,
+			UnnamedCount:   spec.UnnamedCount,
+			Pos:            spec.Pos,
+			Decl:           spec.Decl,
 		}))
 	}
 	return tokens

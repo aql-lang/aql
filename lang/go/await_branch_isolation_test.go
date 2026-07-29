@@ -132,69 +132,36 @@ TimeUtil.await [[fact 5] [fact 6]] end`, "[[120 720]]"},
 	}
 }
 
-// TestAwaitRefusalMissesCompiledFnLocalLambda pins a KNOWN LIMIT of the
-// check, deliberately, so it is counted rather than believed away.
+// TestAwaitRefusesFnLocalLambdaInBothEngines closes what was this check's
+// worst hole, and the shape of the hole is why it is worth a long comment.
 //
-// The check sees what is bound in the def table when `await` dispatches.
-// Compiled, some fn-body locals live in frame slots instead, so a lambda
-// defined inside a fn body can be unbound at that point and the
-// indirection through it is not followed. Interpreted, it always is.
+// The check resolves branch-body words through `r.Defs`. Compiled, a
+// lambda defined INSIDE a fn body (`def w ([] => …)`) is placed in a VM
+// frame slot instead, and a native handler has no path to frame locals —
+// so the walk dead-ended at `w` and never reached what `w` touches. It was
+// not a uniform miss, which is what made it dangerous:
 //
-// The gap is NOT uniform, and its shape is the alarming part. Measured
-// with `def m (make FlexMap {a:0})` inside a fn body and both branches
-// invoking the same fn-local lambda:
+//	lambda body     compiled (before)   interpreted
+//	[m]             refused             refused
+//	[m get a]       refused             refused
+//	[m size]        ALLOWED             refused
+//	[m set a 1]     ALLOWED             refused   <-- real DATA RACE
 //
-//	lambda body     compiled     interpreted
-//	[m]             refused      refused
-//	[m get a]       refused      refused
-//	[m size]        ALLOWED      refused
-//	[m set a 1]     ALLOWED      refused
+// The compiled path refused the harmless shapes and permitted the mutating
+// one — under `-race`, two branch goroutines in `OrderedMap.Set` at once,
+// on the path that ships by default.
 //
-// So the compiled path refuses the two harmless shapes and permits the
-// mutating one. `[m set a 1]` is not a theoretical hazard: run under
-// `-race` it reports a genuine DATA RACE on the OrderedMap, two branch
-// goroutines in OrderedMap.Set at once. On the DEFAULT execution path.
+// The fix does NOT resolve `w` (it cannot: `m` and `w` are runtime values
+// in a frame this layer cannot see). It observes instead that `m` was in
+// `r.Defs` the whole time, one step out of reach, and that an unresolvable
+// reference means the check can no longer BOUND what a branch touches. So
+// an opaque reference falls back to asking whether anything mutable is in
+// scope at all. See branchRefIsOpaque / scopeSharedMutable.
 //
-// This test therefore uses `[m size]` — the same divergence, no
-// mutation, no race. Using the mutating shape would make `make test-race`
-// permanently red, which is the exact failure mode this investigation
-// keeps running into: a gate whose signal is drowned by a known failure
-// stops reporting the unknown ones. The hazard is recorded in
-// design/verse-report-defects-investigation.0.md §A rather than
-// performed here.
-func TestAwaitRefusalMissesCompiledFnLocalLambda(t *testing.T) {
-	const src = awaitPrelude + `def outer fn [[] [Any] [
-  def m (make FlexMap {a:0})
-  def w ([] => [m size])
-  TimeUtil.await [[w] [w]]
-]]
-outer`
-	a, _ := New()
-	if _, err := a.Run(src); err != nil {
-		t.Fatalf("LIMIT CLOSED — the compiled path now refuses a fn-local "+
-			"lambda indirection (%v). Good: check whether the MUTATING shape "+
-			"(`[m set a 1]`, the one that actually races) is refused too, then "+
-			"delete this test and update the LIMITS comment in "+
-			"native_temporal_await.go, the note in EXPLANATION.md, and §A of "+
-			"design/verse-report-defects-investigation.0.md.", err)
-	}
-	// Interpreted, the same program IS refused — which is what makes this a
-	// divergence rather than a uniform limitation.
-	b, _ := New()
-	if _, err := b.RunInterp(src); err == nil {
-		t.Error("interpreted, this shape must still be refused; if it is not, " +
-			"the walk into referenced function bodies has regressed")
-	}
-}
-
-// TestAwaitRefusalCatchesFnLocalLambdaReads is the other half of the table
-// above, and it is what makes the limit *narrow* rather than *total*: the
-// compiled path DOES follow a fn-local lambda for these two shapes. If
-// these ever start being allowed, the hole has widened from "the mutating
-// case" to "any case", and the pinned limit above would no longer bound
-// it.
-func TestAwaitRefusalCatchesFnLocalLambdaReads(t *testing.T) {
-	for _, body := range []string{"[m]", "[m get a]"} {
+// All four shapes now refuse in both engines. If any row here starts
+// passing, the walk has regressed to the state that raced.
+func TestAwaitRefusesFnLocalLambdaInBothEngines(t *testing.T) {
+	for _, body := range []string{"[m]", "[m get a]", "[m size]", "[m set a 1]"} {
 		t.Run(body, func(t *testing.T) {
 			src := awaitPrelude + `def outer fn [[] [Any] [
   def m (make FlexMap {a:0})
@@ -202,12 +169,67 @@ func TestAwaitRefusalCatchesFnLocalLambdaReads(t *testing.T) {
   TimeUtil.await [[w] [w]]
 ]]
 outer`
+			for _, mode := range []string{"compiled", "interpreted"} {
+				a, _ := New()
+				var err error
+				if mode == "compiled" {
+					_, err = a.Run(src)
+				} else {
+					_, err = a.RunInterp(src)
+				}
+				if err == nil {
+					t.Errorf("%s: a fn-local lambda reaching a shared FlexMap must "+
+						"be refused; %s ALLOWED it, which is the data race this "+
+						"check exists to stop", mode, mode)
+				} else if !strings.Contains(fmt.Sprint(err), "not_sendable") {
+					t.Errorf("%s: want not_sendable, got %v", mode, err)
+				}
+			}
+		})
+	}
+}
+
+// TestAwaitOpaqueRefIsNotRefusedWithoutAMutable is the negative half of the
+// fix above, and it carries the weight: the fallback fires on an
+// UNRESOLVABLE reference, and unresolvable references are everywhere.
+//
+// A map key walks as a bare Word (`m set a 1` yields `a`), and a
+// branch-local `def` is unresolvable by construction. Refusing on either
+// would reject the two idioms the docs actively promote. What makes the
+// rule safe is that it only refuses when something mutable is actually in
+// scope for the opaque reference to have reached.
+func TestAwaitOpaqueRefIsNotRefusedWithoutAMutable(t *testing.T) {
+	cases := []struct{ name, src string }{
+		// `a` and `b` are map KEYS, not bindings — opaque, and harmless
+		// because `m` is an immutable Map.
+		{"immutable map keys", awaitPrelude + `def m {}
+TimeUtil.await [[m set a 1] [m set b 2]] end`},
+		// `a` is bound INSIDE the branch: private by construction, and the
+		// documented way to use a container concurrently.
+		{"branch-local container", awaitPrelude +
+			`TimeUtil.await [[def a (make FlexMap {}) a set k 1] [def b (make FlexMap {}) b set k 2]] end`},
+		// A fn-local lambda that touches nothing mutable, with nothing
+		// mutable in scope: opaque, and still legal.
+		{"fn-local lambda, nothing mutable in scope", awaitPrelude + `def outer fn [[] [Any] [
+  def w ([] => [1 add 2])
+  TimeUtil.await [[w] [w]]
+]]
+outer`},
+		// The literal case, and the one with a mutable ACTUALLY in scope —
+		// so it is the fallback firing or not firing, not the guard being
+		// vacuous. `true` / `false` reach the walk as bare Words and never
+		// resolve in r.Defs (measured), so without the literal exemption in
+		// branchRefIsOpaque this program goes opaque, finds `m`, and refuses
+		// two branches that touch nothing at all.
+		{"bare literals with a FlexMap in scope", awaitPrelude + `def m (make FlexMap {})
+TimeUtil.await [[true] [false]] end`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			a, _ := New()
-			if _, err := a.Run(src); err == nil {
-				t.Errorf("compiled: %s must still be refused — the known limit "+
-					"is meant to cover the MUTATING shape only", body)
-			} else if !strings.Contains(fmt.Sprint(err), "not_sendable") {
-				t.Errorf("compiled: want not_sendable, got %v", err)
+			if _, err := a.Run(c.src); err != nil {
+				t.Errorf("must remain legal — an unresolvable reference is only a "+
+					"hazard when there is something mutable for it to reach: %v", err)
 			}
 		})
 	}

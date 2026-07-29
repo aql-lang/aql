@@ -10,6 +10,16 @@ func TestSetUnitDeclGuard(t *testing.T) {
 	NewEmitState().SetUnitDecl(-1, DeclSite{}) // out-of-range → no-op
 }
 
+// TestSetUnitReturnPatternsGuard is the RET-side twin of the two guards
+// above: SetUnitReturnPatterns carries FnSig.ReturnPatterns onto the compiled
+// unit so the VM's RET enforces a declared union / structural return, and it
+// takes the same out-of-range no-op as its param-side and decl-site
+// neighbours. Both real callers pass a unit StartFnCompile returned and have
+// already screened `unit < 0`, so the guard is reachable only here.
+func TestSetUnitReturnPatternsGuard(t *testing.T) {
+	NewEmitState().SetUnitReturnPatterns(-1, nil) // out-of-range → no-op
+}
+
 // TestRecordTrapErrNil covers RecordTrapErr's nil-error guard: a nil AqlError
 // records nothing and reports "not owned here". Callers always pass a
 // freshly-built interpreter error, so this is the defensive floor.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -1287,11 +1288,11 @@ func orderedKeys(union map[string]any, ko []string) []string {
 			rest = append(rest, k)
 		}
 	}
-	for i := 1; i < len(rest); i++ {
-		for j := i; j > 0 && rest[j] < rest[j-1]; j-- {
-			rest[j], rest[j-1] = rest[j-1], rest[j]
-		}
-	}
+	// sort.Strings, not a hand-rolled insertion sort: the swap body of the
+	// latter runs only when Go's map iteration happens to yield `rest` out
+	// of order, which made its coverage a coin flip and the 100% gate
+	// intermittently red for a reason no source change explained.
+	sort.Strings(rest)
 	return append(out, rest...)
 }
 

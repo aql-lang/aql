@@ -61,8 +61,9 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		concreteReturns := OutputSigIsConcreteReturns(r, outputSig)
 
 		var returns []*Type
+		var returnPatterns []*Value
 		if !concreteReturns {
-			returns, err = ParseFnReturns(r, outputSig)
+			returns, returnPatterns, err = ParseFnReturns(r, outputSig)
 			if err != nil {
 				return FnDefInfo{}, err
 			}
@@ -95,12 +96,13 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params:     params,
-			Returns:    returns,
-			Decl:       decl,
-			Impl:       AQL(bodyElems),
-			BarrierPos: barrierPos,
-			QuoteArgs:  QuoteArgsFromParams(params),
+			Params:         params,
+			Returns:        returns,
+			ReturnPatterns: returnPatterns,
+			Decl:           decl,
+			Impl:           AQL(bodyElems),
+			BarrierPos:     barrierPos,
+			QuoteArgs:      QuoteArgsFromParams(params),
 		})
 	}
 	return FnDefInfo{Signatures: sigs}, nil
@@ -133,7 +135,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 			return FnUndefInfo{}, err
 		}
 
-		returns, err := ParseFnReturns(r, outputSig)
+		returns, _, err := ParseFnReturns(r, outputSig)
 		if err != nil {
 			return FnUndefInfo{}, err
 		}
