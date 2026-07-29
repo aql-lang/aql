@@ -1,4 +1,4 @@
-# VALUE-TRACING — infectious value provenance and the `boru:trace` module
+# VALUE-TRACING — infectious value provenance and the `boru:origin` module
 
 Status: **Discovery draft** (2026-07). No code shipped. This note designs a
 runtime **value-provenance** facility: mark a value *traceable*, and the engine
@@ -39,8 +39,8 @@ repeatedly, guessing where the divergence began. Provenance answers it in one
 step:
 
 ```boru
-import "boru:trace"
-Trace.why total
+import "boru:origin"
+Origin.why total
 # add 3 4          invoice.boru:41
 #   ├─ 3  ← mul 1 3           invoice.boru:38   (line-item subtotal)
 #   └─ 4  ← Order.shipping    invoice.boru:12   (marked here)
@@ -159,7 +159,7 @@ log (`stamp_report.go`), and the registry-level debug trace with its
 ### 2.4 Region scoping has an exact precedent
 
 `Test.cover [body]` (`lang/go/modules/test_coverage.go:204-218`) is the shape
-`Trace.region [body]` should copy verbatim:
+`Origin.region [body]` should copy verbatim:
 
 ```go
 Args:       []*native.Type{native.TList},
@@ -422,7 +422,7 @@ for. A COW `set` that returns a new container produces a new node plus a
 type ProvKind uint8
 
 const (
-	ProvBirth   ProvKind = iota // Trace.mark made this value traceable
+	ProvBirth   ProvKind = iota // Origin.mark made this value traceable
 	ProvDerive                  // produced by a dispatch from traced inputs
 	ProvPass                    // returned verbatim by a dispatch (dup, tap)
 	ProvMutate                  // mutated in place by a dispatch
@@ -551,12 +551,12 @@ early in a long-running program and eventually everything descends from it.
 Four bounds, all explicit, all reported:
 
 - **A bounded global event ring** (`ProvConfig.MaxEvents`, default ~100 000)
-  with `ProvStore.dropped` counted and surfaced by `Trace.stats`. A report
+  with `ProvStore.dropped` counted and surfaced by `Origin.stats`. A report
   built on a ring that dropped events says so.
 - **A per-node event cap** (`ProvConfig.MaxEventsPerNode`, default ~64) with
   `ProvNode.Dropped` per node, so one hot value in a loop cannot starve the
   ring.
-- **Region scoping** — `Trace.region [body]` arms only for the body's dynamic
+- **Region scoping** — `Origin.region [body]` arms only for the body's dynamic
   extent, the `Test.cover` pattern (§2.4). This is the recommended default
   usage and should be what the documentation leads with.
 - **Generation depth** (`ProvConfig.MaxDepth`, default unlimited) — stop
@@ -570,16 +570,16 @@ as the program drops it.
 ### 7.4 What this does *not* solve
 
 A trace that has dropped events cannot always answer "why". The honest position
-is that `Trace.why` reports the chain it has and marks where the chain was
-truncated, and `Trace.stats` reports the drop counts, so the user knows to
-re-run with a tighter `Trace.region` or a larger ring. A provenance tool that
+is that `Origin.why` reports the chain it has and marks where the chain was
+truncated, and `Origin.stats` reports the drop counts, so the user knows to
+re-run with a tighter `Origin.region` or a larger ring. A provenance tool that
 silently returns a shorter chain is worse than one that says it lost the thread.
 
 ---
 
 ## 8. The module surface
 
-### 8.1 Namespace collision — read this first
+### 8.1 Naming — why `origin`, not `trace`
 
 Three unrelated things in this codebase are already called *trace*:
 
@@ -589,17 +589,37 @@ Three unrelated things in this codebase are already called *trace*:
 | `Debug.trace` | the same, re-exported as the discoverable home |
 | `Log.trace` | the lowest severity level (OTel TRACE) |
 
-The user-facing name for this feature is `boru:trace`, namespace `Trace`. That
-is defensible — the namespaces are disjoint, and ADR-001 governs shadowing of
-*core words*, which this does not do. But it is a genuine legibility hazard and
-it is open question Q4. Whatever is chosen, **there must be no `Trace.trace`**.
+A fourth meaning is one too many. `boru:trace` / namespace `Trace` was
+considered and **rejected**: it is technically legal — the namespaces are
+disjoint, and ADR-001 governs shadowing of *core words*, which this would not
+do — but a reader landing on `Trace.why` has no way to know whether it relates
+to `Debug.trace` or `Log.trace`, and it would have forced the awkward
+non-word `Trace.trace`.
 
-An alternative worth weighing: `boru:origin` / namespace `Origin`, which reads
-better at the call site (`Origin.why total`) and collides with nothing.
+The module is therefore **`boru:origin`**, namespace `Origin`. It reads better
+at the call site (`Origin.why total`, `Origin.root total`) and collides with
+nothing in the word namespace.
+
+Two consequences worth stating plainly rather than leaving as loose ends:
+
+- **The concept is still *tracing*.** The note is `VALUE-TRACING.0.md`, the
+  kernel predicate is `IsTraced`, and a value on a recorded lineage is a
+  *traced* value. Only the **module** is named `origin` — for the question it
+  answers, not the mechanism it uses. That split is deliberate; it is not
+  leftover naming.
+- **`Origin` already means something in Go.** `OriginKind` classifies where a
+  `*Type` was registered, and is read as `Value.Origin` / `Signature.Origin`
+  (`eng/go/typetable.go:10`). There is no AQL-level clash, and this work's
+  kernel types are `Prov*` (`ProvStore`, `ProvNode`, `ProvEvent`, `ProvKind`),
+  so nothing actually collides — but a reader of `eng/go` should not be
+  surprised twice by the same word.
+
+Whatever else changes, **there must be no `Origin.origin`** — which is why the
+root-finding word in §8.2 is `Origin.root`.
 
 ### 8.2 The words
 
-Module id `aql:trace` in code, documented as `boru:trace` — the resolver still
+Module id `aql:origin` in code, documented as `boru:origin` — the resolver still
 matches `strings.HasPrefix(path, "aql:")` (`native_module_module.go:743`) while
 the docs run ahead of the engine, exactly as
 `test/go/docexamples/docexamples_test.go:69-70` already allows for other
@@ -607,47 +627,47 @@ modules.
 
 | Word | Shape | Does |
 |---|---|---|
-| `Trace.mark` | `Any ~> Any` | Mark and **return the value unchanged** — tap-shaped like `Debug.tap`, so it drops into a pipeline without restructuring it |
-| `Trace.marked?` | `Any ~> Boolean` | Is this value traced? |
-| `Trace.id` | `Any ~> String` | The traced id, or `None` |
-| `Trace.region` | `List ~> Any` | Run the body with tracing armed; disarm on exit (`NoEvalArgs`) |
-| `Trace.on` / `Trace.off` | `Map ~> None` / `None ~> None` | Explicit arm/disarm with config, for REPL and long-running use |
-| `Trace.why` | `Any ~> List` | The derivation chain, nearest-first: the ancestor events that produced this value |
-| `Trace.origin` | `Any ~> List` | The root marked value(s) this descends from |
-| `Trace.uses` | `Any ~> List` | Forward: the values derived from this one |
-| `Trace.events` | `Any ~> List` | This value's own event log |
-| `Trace.graph` | `Any ~> Map` | The ancestry subgraph as `{nodes, edges}` — the data the tooling renders |
-| `Trace.explain` | `Any ~> String` | A rendered human explanation tree, as a String so it can be embedded |
-| `Trace.stats` | `None ~> Map` | Node count, event count, **dropped counts**, estimated bytes |
-| `Trace.checkpoint` | `Pathon ~> None` | Flush the log to disk |
-| `Trace.load` | `Pathon ~> Map` | Read a checkpoint back as data (pure — this is what makes offline tooling possible) |
-| `Trace.clear` | `None ~> None` | Drop the store |
+| `Origin.mark` | `Any ~> Any` | Mark and **return the value unchanged** — tap-shaped like `Debug.tap`, so it drops into a pipeline without restructuring it |
+| `Origin.marked?` | `Any ~> Boolean` | Is this value traced? |
+| `Origin.id` | `Any ~> String` | The traced id, or `None` |
+| `Origin.region` | `List ~> Any` | Run the body with tracing armed; disarm on exit (`NoEvalArgs`) |
+| `Origin.on` / `Origin.off` | `Map ~> None` / `None ~> None` | Explicit arm/disarm with config, for REPL and long-running use |
+| `Origin.why` | `Any ~> List` | The derivation chain, nearest-first: the ancestor events that produced this value |
+| `Origin.root` | `Any ~> List` | The root marked value(s) this descends from |
+| `Origin.uses` | `Any ~> List` | Forward: the values derived from this one |
+| `Origin.events` | `Any ~> List` | This value's own event log |
+| `Origin.graph` | `Any ~> Map` | The ancestry subgraph as `{nodes, edges}` — the data the tooling renders |
+| `Origin.explain` | `Any ~> String` | A rendered human explanation tree, as a String so it can be embedded |
+| `Origin.stats` | `None ~> Map` | Node count, event count, **dropped counts**, estimated bytes |
+| `Origin.checkpoint` | `Pathon ~> None` | Flush the log to disk |
+| `Origin.load` | `Pathon ~> Map` | Read a checkpoint back as data (pure — this is what makes offline tooling possible) |
+| `Origin.clear` | `None ~> None` | Drop the store |
 
 Composition is the point:
 
 ```boru
-import "boru:trace"
+import "boru:origin"
 
-Trace.region [
-  def order (Trace.mark (load-order 42))
+Origin.region [
+  def order (Origin.mark (load-order 42))
   def total (compute-invoice order)
-  print (Trace.explain total)
+  print (Origin.explain total)
 ]
 ```
 
 ### 8.3 Obligations this incurs
 
 - **ADR-003** — every export needs at least one row in
-  `lang/spec/module-trace.tsv`, gated by
+  `lang/spec/module-origin.tsv`, gated by
   `test/go/langspec/coverage_test.go::TestModuleExportCoverage`. Words whose
-  behaviour is not hermetically expressible (`Trace.checkpoint` writes a file)
+  behaviour is not hermetically expressible (`Origin.checkpoint` writes a file)
   go in `hermeticExempt` with a justification, or are driven through the
   in-memory `FileOps`.
 - **ADR-001** — no export may shadow a core word. None of the above does.
 - **`BarrierPos: -1`** on every inner native registered into the module
   sub-registry (`lang/go/CLAUDE.md` § "Module FnDef Wrappers", gated by
   `lang/go/modules/wrapper_dispatch_test.go`).
-- `registerDocs("aql:trace", …)` in `lang/go/modules/docs_trace.go` (gated by
+- `registerDocs("aql:origin", …)` in `lang/go/modules/docs_origin.go` (gated by
   `TestModuleExportDocs`) and a `moduleCatalog` row in
   `lang/go/native/help/help_render.go` (gated by
   `TestModuleCatalogMatchesModules`).
@@ -670,21 +690,21 @@ crashed.
 {"seq":2,"kind":"derive","id":"S~c3d4...","in":["S~a1b2..."],"word":"mul","cap":"126","row":38,"file":"invoice.boru"}
 ```
 
-`Trace.load` parses it back into the same `{nodes, edges}` shape `Trace.graph`
+`Origin.load` parses it back into the same `{nodes, edges}` shape `Origin.graph`
 returns, so **online and offline analysis run the same code**.
 
 ### 9.2 The tooling, in boru
 
 `kg/` is the precedent: 14 `.aql` modules, 6 test suites, driven by a Makefile
 target that is literally `aql main.aql`. The trace tooling follows it —
-`tools/trace/*.boru` with a `main.boru` entry point — and renders three views
-from `Trace.load`'s output:
+`tools/origin/*.boru` with a `main.boru` entry point — and renders three views
+from `Origin.load`'s output:
 
-1. **explanation tree** — the default; the `Trace.explain` rendering, offline;
+1. **explanation tree** — the default; the `Origin.explain` rendering, offline;
 2. **DOT** — for graphviz, for large graphs;
 3. **mermaid** — for pasting into docs and issues.
 
-Writing it in boru is not decoration: it dogfoods `boru:trace` against a real
+Writing it in boru is not decoration: it dogfoods `boru:origin` against a real
 graph workload, and it keeps the renderers out of the Go binary. A `boru trace`
 CLI subcommand is deliberately **not** proposed for Phase 1 — a script that
 reads a checkpoint file has no CLI surface to maintain.
@@ -693,7 +713,7 @@ reads a checkpoint file has no CLI surface to maintain.
 
 `aql debug` already has the session, the prompt and the pause. A `why <expr>`
 command at the prompt — evaluate the expression in the existing child engine,
-then render `Trace.why` over the result — is a small addition to
+then render `Origin.why` over the result — is a small addition to
 `cmd/go/internal/debugger` and is the single highest-value integration. It
 turns "stop where it went wrong" and "explain how it got that way" into one
 tool. Phase 3.
@@ -704,16 +724,16 @@ tool. Phase 3.
 
 **Captured renders can contain secrets.** This is the sharpest edge in the whole
 design: a trace of a request handler will capture tokens, passwords and personal
-data, and `Trace.checkpoint` writes them to a file.
+data, and `Origin.checkpoint` writes them to a file.
 
 The stance:
 
 - in-memory default is `summary` (truncated render), which is what makes the
   tool useful;
 - **disk checkpoints downgrade to `shape` unless the caller explicitly opts in**
-  (`Trace.checkpoint path {capture: summary}`), so the dangerous thing requires
+  (`Origin.checkpoint path {capture: summary}`), so the dangerous thing requires
   a deliberate act;
-- `Trace.on {capture: shape}` is the documented posture for anything running
+- `Origin.on {capture: shape}` is the documented posture for anything running
   against production data;
 - checkpoint writes go through the `FileOps` capability like every other file
   effect, are gated by the existing `fileops` policy scope, and **must call
@@ -722,7 +742,7 @@ The stance:
 
 **Module gating is free.** `modules.Resolve` (`lang/go/modules/modules.go:63`)
 already checks `pol.Installed("modules")`, `pol.Check("modules","import",…)` and
-the per-module subscope, so a profile can deny `aql:trace` outright with no new
+the per-module subscope, so a profile can deny `aql:origin` outright with no new
 machinery. `KnownScopes` (`lang/go/policy/policy.go:108`) has no `debug` scope —
 the one `DEBUG-MODULE.0.md` §8 proposed was never added — so a dedicated
 `trace` scope would be new policy surface. Whether that is wanted is Q2.
@@ -734,24 +754,24 @@ the one `DEBUG-MODULE.0.md` §8 proposed was never added — so a dedicated
 **Phase 1 — the kernel seam and a minimal module.**
 New: `eng/go/provenance.go` (the store, `IsTraced`, the traced mint,
 `noteDerivation`, arm/disarm, `InheritObserveHooks` participation),
-`lang/go/native/trace_module.go` (the natives), `lang/go/modules/trace.go`
-(`BuildTraceModule`), `lang/go/modules/docs_trace.go`,
-`lang/spec/module-trace.tsv`.
+`lang/go/native/origin_module.go` (the natives), `lang/go/modules/origin.go`
+(`BuildOriginModule`), `lang/go/modules/docs_origin.go`,
+`lang/spec/module-origin.tsv`.
 Modified: `eng/go/engine.go` (one hook in `execMatch`), `eng/go/vm.go` (three
 hooks), `eng/go/registry.go` (the holder field), `eng/go/interp_entry.go`
 (`InheritObserveHooks`), `eng/go/fork.go` if the shallow copy needs help,
 `lang/go/modules/modules.go` (the map entry),
 `lang/go/native/help/help_render.go` (the catalog row), `REFERENCE.md`.
-Words: `mark`, `marked?`, `id`, `region`, `why`, `origin`, `uses`, `stats`,
+Words: `mark`, `marked?`, `id`, `region`, `why`, `root`, `uses`, `stats`,
 `clear`.
 Ships element-level taint only (§5.3), documented as such.
 
 **Phase 2 — completeness and persistence.** Container-level taint at the five
 sites in §5.3 (interpolated strings first). Binding-read events via
-`DefTable.Top` (§5.4). `Trace.events`, `Trace.graph`, `Trace.explain`,
-`Trace.checkpoint`, `Trace.load`.
+`DefTable.Top` (§5.4). `Origin.events`, `Origin.graph`, `Origin.explain`,
+`Origin.checkpoint`, `Origin.load`.
 
-**Phase 3 — tooling and integration.** `tools/trace/*.boru`. The `aql debug`
+**Phase 3 — tooling and integration.** `tools/origin/*.boru`. The `aql debug`
 `why <expr>` command (§9.3).
 
 **Beyond.** Store sharding if the mutex measures badly (§7.2); using the
@@ -766,26 +786,26 @@ Per `lang/go/CLAUDE.md` and ADR-008, and pairing every positive with a negative:
 - **Unarmed is free** — a test asserting `TestInterpAllocCeilings` /
   `TestCompiledAllocCeilings` pass **unchanged**, plus a `benchstat` comparison
   recorded in the Phase-1 commit message.
-- **Propagation positive** — `add (Trace.mark 3) 4` produces a traced result
-  whose `Trace.why` names `add`; **negative** — `add 3 4` with tracing armed but
+- **Propagation positive** — `add (Origin.mark 3) 4` produces a traced result
+  whose `Origin.why` names `add`; **negative** — `add 3 4` with tracing armed but
   nothing marked produces an untraced result and zero events.
 - **Infection through every path** — one row each for binding, container
   element, fn argument, closure capture, sub-engine body, fork.
 - **Identity words** — `dup` on a traced value yields two values sharing one
-  node, not two nodes; `Trace.mark` twice does not create two nodes.
+  node, not two nodes; `Origin.mark` twice does not create two nodes.
 - **The container gap is pinned as a negative**, so Phase 2 changing it is a
   visible, deliberate diff rather than an accident.
 - **VM parity** — the same program traced compiled and interpreted yields the
   same graph; and the compiled corpus runs green under `-tags aqldebug`
   (`vmFreshArgsPerCall`) to prove the hook does not retain `argScratch`.
 - **Bounds are honest** — a run that overflows the ring reports a non-zero
-  `dropped` from `Trace.stats`, and `Trace.why` marks the truncated chain.
+  `dropped` from `Origin.stats`, and `Origin.why` marks the truncated chain.
 - **Determinism** — same seed, same program, byte-identical trace transcript.
-- **Policy refusal** — importing `aql:trace` under a denying profile fails with
+- **Policy refusal** — importing `aql:origin` under a denying profile fails with
   the documented error and leaks no state.
-- **Secrets** — `Trace.checkpoint` without an explicit capture level writes
+- **Secrets** — `Origin.checkpoint` without an explicit capture level writes
   `shape` records containing no payload bytes.
-- Spec-style rows for every export in `lang/spec/module-trace.tsv` (ADR-003);
+- Spec-style rows for every export in `lang/spec/module-origin.tsv` (ADR-003);
   host-level behaviour in Go tests beside `eng/go/provenance.go`.
 
 ---
@@ -798,22 +818,20 @@ Per `lang/go/CLAUDE.md` and ADR-008, and pairing every positive with a negative:
    *Leaning: the prefix.* The audit says concrete-value IDs are inert, the
    collision argument is verified, and 9% on the hottest copy is a real,
    permanent cost for a feature that is off by default.
-2. **A `trace` policy scope.** Is per-module gating via the existing `modules`
-   scope enough, or should `trace` join `KnownScopes` so a profile can permit
-   the import but deny arming? *Leaning: `modules` is enough for Phase 1;
-   revisit if `Trace.on` (as opposed to `Trace.region`) proves popular.*
+2. **An `origin` policy scope.** Is per-module gating via the existing
+   `modules` scope enough, or should `origin` join `KnownScopes` so a profile
+   can permit the import but deny arming? *Leaning: `modules` is enough for
+   Phase 1; revisit if `Origin.on` (as opposed to `Origin.region`) proves
+   popular.*
 3. **Container-level taint (§5.3).** Is element-level taint an acceptable
    shipping semantics, or is a traced list a hard requirement? Interpolated
    strings are the case where the gap is most visible.
-4. **The `Trace` namespace (§8.1).** Live with three unrelated meanings of
-   "trace", or name it `boru:origin` / `Origin`? *Leaning: worth renaming —
-   `Origin.why total` reads better and collides with nothing.*
-5. **Is an NUR record owed?** A traced run mints value IDs an untraced run does
+4. **Is an NUR record owed?** A traced run mints value IDs an untraced run does
    not (§4.4). Nothing at runtime reads them, so it is not a behavioural
    divergence — but "the same program allocates differently under observation"
    is exactly the shape of thing `NUR.md` exists to record. *Leaning: record it
    once Phase 1 lands and the effect is measured, not before.*
-6. **Scope of the `aql:debug` overlap.** Should this be a new module at all, or
+5. **Scope of the `aql:debug` overlap.** Should this be a new module at all, or
    should the words join `aql:debug` as a sixth surface? *Leaning: separate —
    `aql:debug` is already 27 words across five surfaces, and provenance has its
    own lifecycle, policy story and on-disk format.*
