@@ -28,6 +28,12 @@ func TestSharedMutableKindClassifiesEveryContainer(t *testing.T) {
 		{"FlexMap", NewFlexMap(om), "FlexMap"},
 		{"FlexList", NewFlexList([]Value{NewInteger(1)}), "FlexList"},
 		{"Store", NewStore(TStore), "Store"},
+		// Table and a class instance are the two remaining in-place-mutable
+		// kinds. Both are reachable as await-branch bindings, and both are
+		// caught by a different arm of the classifier — Table by its type
+		// tag, an Object by its ClassInstanceInfo payload.
+		{"Table", NewValueRaw(TTable, TableData{}), "Table"},
+		{"Object", NewValueRaw(TAny, ClassInstanceInfo{}), "Object"},
 	}
 	for _, c := range mutable {
 		t.Run(c.name, func(t *testing.T) {

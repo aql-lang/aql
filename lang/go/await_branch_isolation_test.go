@@ -168,6 +168,26 @@ outer`
 	}
 }
 
+// TestAwaitRefusalAppliesToEveryMode pins the gate on all four combinator
+// modes, not just the default. They are four separate entry points that
+// each fork independently, so a check wired into only one of them would
+// leave the other three open — the same "one seam of several" shape that
+// made the compiled branch case ship inert.
+func TestAwaitRefusalAppliesToEveryMode(t *testing.T) {
+	for _, mode := range []string{`"all"`, `"full"`, `"first"`, `"any"`} {
+		t.Run(mode, func(t *testing.T) {
+			src := awaitPrelude + `def m (make FlexMap {})
+TimeUtil.await {mode: ` + mode + `} [[m set a 1] [m set b 2]] end`
+			a, _ := New()
+			if _, err := a.Run(src); err == nil {
+				t.Errorf("mode %s must refuse a shared mutable container", mode)
+			} else if !strings.Contains(fmt.Sprint(err), "not_sendable") {
+				t.Errorf("mode %s: want not_sendable, got %v", mode, err)
+			}
+		})
+	}
+}
+
 // TestAwaitRefusalNamesTheContainerKind pins the message content. A
 // refusal that says only "something is wrong" costs the author the
 // debugging session the check was meant to save, so the kind and the
