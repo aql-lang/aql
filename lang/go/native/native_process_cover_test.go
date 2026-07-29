@@ -9,12 +9,12 @@ package native
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 func wantProcErr(t *testing.T, err error, sub string) {
@@ -129,8 +129,11 @@ func TestProcessCoverSpawnDeniedByPolicy(t *testing.T) {
 	if err == nil {
 		t.Fatal("sandbox policy must deny spawn")
 	}
-	if _, ok := err.(*policy.Denied); !ok {
-		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	// The gate codes the refusal (policy_error.go), so what escapes is a
+	// dispatchable AqlError rather than the internal *policy.Denied.
+	var ae *AqlError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
 	}
 }
 

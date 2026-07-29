@@ -169,7 +169,7 @@ func (listenerBehavior) Format(v native.Value) string {
 // checkNetPolicy gates a socket word behind the network capability scope
 // (NETWORK-SERVERS.0.md §9): op is "listen" (bind) or "connect" (dial).
 // Mirrors fetch.go::checkFetchPolicy.
-func checkNetPolicy(r *native.Registry, op, host string, port int) error {
+func checkNetPolicy(r *native.Registry, word, op, host string, port int) error {
 	if r == nil {
 		return nil
 	}
@@ -179,16 +179,16 @@ func checkNetPolicy(r *native.Registry, op, host string, port int) error {
 	}
 	args := policy.Args{"host": host, "port": port}
 	if !pol.Installed("network") {
-		return &policy.Denied{
+		return native.PolicyRefusal(r, word, &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "network",
 			Op:      op,
 			Profile: pol.Name(),
 			Blame:   "network.install=false",
 			Args:    args,
-		}
+		})
 	}
-	return pol.Check("network", op, args)
+	return native.PolicyRefusal(r, word, pol.Check("network", op, args))
 }
 
 // ---- option parsing ----
@@ -307,7 +307,7 @@ func listenHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if err != nil {
 		return nil, err
 	}
-	if err := checkNetPolicy(r, "listen", opts.host, opts.port); err != nil {
+	if err := checkNetPolicy(r, "listen", "listen", opts.host, opts.port); err != nil {
 		return nil, err
 	}
 	ln, lErr := net.Listen(opts.network, opts.addr)
@@ -350,7 +350,7 @@ func connectRawHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if err != nil {
 		return nil, err
 	}
-	if err := checkNetPolicy(r, "connect", opts.host, opts.port); err != nil {
+	if err := checkNetPolicy(r, "connect-raw", "connect", opts.host, opts.port); err != nil {
 		return nil, err
 	}
 	within, has, dErr := recvDeadline(args, 0) // within: may ride the same options map

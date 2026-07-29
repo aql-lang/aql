@@ -1161,6 +1161,13 @@ func NewRegistry() (*Registry, error) {
 	if err := builtinInitError(); err != nil {
 		return nil, err
 	}
+	// Same treatment for the error-code enumeration: a code that breaks the
+	// naming rule, or one two layers both claim to own, is an init-time
+	// programmer error and is reported here rather than silently accepted
+	// into a dispatch contract users write `case` arms against.
+	if err := errorCodeInitError(); err != nil {
+		return nil, err
+	}
 	r := &Registry{
 		Defs:         NewDefTable(),
 		Contexts:     NewContextStack(),

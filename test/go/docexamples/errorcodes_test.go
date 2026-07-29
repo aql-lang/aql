@@ -13,18 +13,39 @@
 // `extend_user_type`, `io_error`, `cap_denied`, `cancelled`), plus one
 // duplicated row. See design/verse-report-defects-investigation.0.md §E.
 //
-// There is no registry-side enumeration of codes to compare against —
-// codes are string literals at ~700 construction sites across eng, lang
-// and cmd — so the truth set is EXTRACTED from those sites. Two
-// consequences worth stating:
+// There are now TWO truth sets, and the gate cross-checks all three
+// artefacts against each other:
 //
-//   - The gate is ONE-DIRECTIONAL on purpose. It proves every DOCUMENTED
-//     code is mintable. It says nothing about the ~200 mintable codes the
-//     table omits, because the table is "common codes", not a census.
-//   - A code being mintable does NOT prove the row's DESCRIPTION is
-//     right, only that the name is real. `type_mismatch` would have
-//     failed here; a row that named `signature_error` but described the
-//     wrong condition would not. That part still needs a reader.
+//   - MINTED — extracted from the construction sites themselves (codes are
+//     string literals at ~700 of them), which is what a program can actually
+//     observe.
+//   - REGISTERED — the engine-owned enumeration, eng.ErrorCodes()
+//     (eng/go/errorcodes.go plus each layer's registration). This did not
+//     exist when the gate was first written, which is why the gate was
+//     one-directional then.
+//   - DOCUMENTED — REFERENCE.md's "Common codes" table.
+//
+// The checks, and what each one is for:
+//
+//   - documented ⊆ minted — the original gate. A documented code nothing
+//     mints is a `case` arm that can never fire.
+//   - minted == registered, BOTH WAYS. A new code cannot reach users without
+//     a deliberate entry in the enumeration, which is the review point the
+//     naming and stability rules need in order to mean anything; and an
+//     entry for a code no site mints is a phantom in the enumeration, the
+//     same defect as a phantom in the table.
+//   - documented ⊆ registered — so tooling that reads the enumeration
+//     (`aql explain <code>`) can resolve every code a reader can look up.
+//
+// Two limits remain, stated because they bound what this proves:
+//
+//   - The table is still allowed to omit codes: it is "common codes", not a
+//     census, so `registered ⊆ documented` is NOT checked.
+//   - A code being minted and registered does NOT prove the row's
+//     DESCRIPTION is right, only that the name is real. `type_mismatch`
+//     would have failed here; a row that named `signature_error` but
+//     described the wrong condition would not. That part still needs a
+//     reader.
 package docexamples
 
 import (
@@ -32,14 +53,28 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
+
+	eng "github.com/aql-lang/aql/eng/go"
+	_ "github.com/aql-lang/aql/lang/go/native"
 )
 
-// codeSourceRoots are the trees searched for code-minting sites,
-// relative to this package (repo root is two dirs up from
-// test/go/docexamples).
-var codeSourceRoots = []string{"eng/go", "lang/go", "cmd/go"}
+// codeSourceRoots are the trees searched for code-minting sites, relative to
+// this package (repo root is three dirs up from test/go/docexamples).
+//
+// `cmd/go` is deliberately NOT scanned. Its only two matches are
+// `Code: "aql/init"` and `Code: "aql/check"` in the LSP server
+// (cmd/go/internal/lsp/diagnostics.go) — fields of an LSP `Diagnostic`, not
+// of an AqlError. No AQL program can dispatch on them, and they are not AQL
+// error codes; including them would force two protocol strings into the
+// language's enumeration to keep the bidirectional check green. The one-way
+// gate tolerated them because extra entries only made it more permissive.
+// The blank import of lang/go/native is what registers the language layer's
+// codes — the enumeration is per-build by design (see eng/go/errorcodes.go),
+// so the gate has to link the layers it means to check.
+var codeSourceRoots = []string{"eng/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.
@@ -190,5 +225,105 @@ func TestReferenceErrorCodeTableHasNoDuplicates(t *testing.T) {
 			t.Errorf("REFERENCE.md's codes table lists `%s` twice", code)
 		}
 		seen[code] = true
+	}
+}
+
+// registeredCodes returns the engine-owned enumeration as a set.
+func registeredCodes() map[string]string {
+	out := map[string]string{}
+	for _, ec := range eng.ErrorCodes() {
+		out[ec.Code] = ec.Owner
+	}
+	return out
+}
+
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestEveryMintedCodeIsRegistered is the direction that did not exist before
+// the enumeration did, and it is the one that makes the enumeration worth
+// having: a code cannot reach users without a deliberate entry.
+//
+// That is the whole enforcement mechanism behind the naming rule and the
+// stability contract in eng/go/errorcodes.go. Neither can be enforced by
+// inspection — 232 codes across ~700 sites is more than anyone re-reads — but
+// both are enforced by a failing build the first time a new literal appears.
+func TestEveryMintedCodeIsRegistered(t *testing.T) {
+	minted := mintableCodes(t)
+	if len(minted) < 100 {
+		t.Fatalf("extracted only %d codes from %v — the mint patterns have "+
+			"stopped matching; fix codeMintPatterns before reading any failure "+
+			"below as a missing registration", len(minted), codeSourceRoots)
+	}
+	registered := registeredCodes()
+
+	var unregistered []string
+	for code := range minted {
+		if _, ok := registered[code]; !ok {
+			unregistered = append(unregistered, code+" ("+minted[code]+")")
+		}
+	}
+	sort.Strings(unregistered)
+	if len(unregistered) > 0 {
+		t.Errorf("%d code(s) are attached by a site but not registered in the "+
+			"enumeration:\n  %s\n\nAdd each to kernelErrorCodes "+
+			"(eng/go/errorcodes.go) or langErrorCodes "+
+			"(lang/go/native/errorcodes.go), whichever layer owns it. A code is "+
+			"a dispatch contract — `do [...] error [dot code case [...]]` — so "+
+			"this is the moment to check the NAME reads like its neighbours, "+
+			"because renaming it later silently stops every handler that "+
+			"matched it.", len(unregistered), strings.Join(unregistered, "\n  "))
+	}
+}
+
+// TestEveryRegisteredCodeIsMinted is the other direction: an entry for a code
+// no site attaches. It is the same defect as a phantom row in REFERENCE.md,
+// one level down — tooling built on the enumeration (`aql explain <code>`, an
+// editor completion list) would offer a code that can never appear.
+//
+// It also catches the likelier bookkeeping error: a code deleted from the
+// source but left in the list, which would otherwise keep the rename that
+// caused it invisible.
+func TestEveryRegisteredCodeIsMinted(t *testing.T) {
+	minted := mintableCodes(t)
+	if len(minted) < 100 {
+		t.Fatalf("extracted only %d codes — fix codeMintPatterns first", len(minted))
+	}
+	registered := registeredCodes()
+
+	var phantom []string
+	for _, code := range sortedKeys(registered) {
+		if _, ok := minted[code]; !ok {
+			phantom = append(phantom, code+" [owner "+registered[code]+"]")
+		}
+	}
+	if len(phantom) > 0 {
+		t.Errorf("%d code(s) are registered in the enumeration but attached by "+
+			"NO site:\n  %s\n\nEither the site was removed (drop the entry) or "+
+			"the code was renamed (fix the entry AND check whether REFERENCE.md "+
+			"and any user handler named the old spelling).",
+			len(phantom), strings.Join(phantom, "\n  "))
+	}
+}
+
+// TestDocumentedCodesAreRegistered closes the triangle. A code a reader can
+// look up in REFERENCE.md must be resolvable through the enumeration, because
+// that is what an `aql explain <code>` would consult — a documented code the
+// enumeration cannot resolve would report "no such code" for something the
+// manual describes.
+func TestDocumentedCodesAreRegistered(t *testing.T) {
+	registered := registeredCodes()
+	for _, code := range documentedCodes(t) {
+		if _, ok := registered[code]; !ok {
+			t.Errorf("REFERENCE.md documents `%s`, which is not in the "+
+				"engine-owned enumeration — tooling that reads eng.ErrorCodes() "+
+				"cannot resolve a code the manual tells readers to handle", code)
+		}
 	}
 }

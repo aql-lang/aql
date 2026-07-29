@@ -1429,7 +1429,7 @@ It deliberately does **not** count constant DECLARATIONS as minting.
 declarations would have let `cap_denied`'s successor pass the gate while
 still never reaching a user. A code is real when a site attaches it.
 
-### Partly open: the other capabilities' refusals are still code-less
+### CLOSED: every gated capability's refusal now carries a code
 
 Before this pass, **every** policy refusal reached the user without a
 code — `fileops`, `network`, `process`, `vault`, `tui` alike:
@@ -1449,35 +1449,135 @@ REFERENCE table is mostly about. The first line above returns
 `permission_denied`, an uninstalled `fileops` returns
 `capability_not_installed`; the second line still returns `None`.
 
-The remaining capabilities are one decision away, and it is not a
-plumbing decision. Giving `Denied` an `Unwrap() error` that returns an
-`AqlError` would fix all of them at a stroke — and would also flip
-`runtimeShouldFallback` (`lang/go/aql.go`) from "foreign error, re-run on
-the interpreter" to "AQL error, surface", for every denial, in compiled
-mode. That is probably the *right* answer — `eng.PolicyDenied` already
-gets exactly that treatment at the VM dispatch gate, with a comment
-explaining that a re-run would evaluate the program twice — but it is a
-semantic call about the fallback fence and belongs to whoever owns it.
+The `Unwrap` route was NOT taken. Giving `Denied` an `Unwrap() error`
+returning an `AqlError` would fix all of them at a stroke — and would also
+flip `runtimeShouldFallback` (`lang/go/aql.go`) from "foreign error, re-run
+on the interpreter" to "AQL error, surface", for every denial, in compiled
+mode, including denials from sites nobody has audited. That is probably the
+right answer eventually — `eng.PolicyDenied` already gets exactly that
+treatment at the VM dispatch gate, with a comment explaining that a re-run
+would evaluate the program twice — but it is a semantic call about the
+fallback fence and belongs to whoever owns it.
 
-The alternative is to repeat `fileOpError`'s trick at each remaining wrap
-site (`fetch.go`, `native_process.go`, `net_socket.go`, `vault.go`,
-`tui.go`): no fallback risk, but it has to be redone for every future
-gated capability.
+The note's own alternative was "repeat `fileOpError`'s trick at each
+remaining wrap site … but it has to be redone for every future gated
+capability." What landed is that alternative with its one objection
+removed: **one** shared adapter (`PolicyRefusal`,
+`lang/go/native/policy_error.go`), called from inside each capability's
+GATE function rather than at each handler. Nine call sites reach five
+gates today and the count only grows; wrapping at the gate is what makes a
+new caller unable to forget, which is exactly how four capabilities stayed
+code-less after the fileops half was fixed. `fileOpError` now shares the
+adapter's classifier and keeps only its own detail (a file op has already
+built a message naming the path, which beats the raw blame trail).
 
-The REFERENCE table documents `permission_denied` on the strength of the
-fileops half only, and the capability section says plainly that a refusal
-from the other scopes does not yet carry a stable code.
+Measured, all ten combinations — five scopes × refused-by-rule and
+uninstalled:
 
-### Not done: the enumeration itself
+| scope | by rule | uninstalled |
+|---|---|---|
+| fileops | `permission_denied` | `capability_not_installed` |
+| network | `permission_denied` | `capability_not_installed` |
+| process | `permission_denied` | `capability_not_installed` |
+| vault | `permission_denied` | `capability_not_installed` |
+| terminal | `permission_denied` | `capability_not_installed` |
+
+(The tui scope is named `terminal` in policy. A test written against the
+module's name fails at policy-load time with `unknown scope "tui"`, which
+is how that was discovered.)
+
+`TestEveryGatedCapabilityRefusalCarriesACode` pins all ten, and the
+negative half carries the weight as it did for fileops:
+`TestGatedCapabilityFailuresAreNotReportedAsRefusals` proves an unreachable
+host and a vault with no backend do NOT report a refusal when no policy is
+installed. An adapter that stamped `permission_denied` on every failure
+from a gated word would satisfy the positive table and be strictly worse
+than the missing code — it would send authors to edit a policy that is not
+the cause.
+
+**A regression the gate caught, worth recording because it proves the gate
+earns its keep.** The first draft hoisted the two code literals into a
+classifier that merely *returned* them, leaving `r.AqlError(code, …)` with
+a variable. `test/go/docexamples/errorcodes_test.go` immediately reported
+`permission_denied` as unmintable — correct, from its point of view: it
+extracts codes from construction sites and deliberately ignores anything
+that only *names* a code, because policy's four constants sat
+declared-and-never-attached for as long as they existed. The refactor had
+made a live code invisible to the one check that keeps REFERENCE.md
+honest. The switch now sits directly on top of the `r.AqlError` calls, and
+`policy_error.go` says why in a comment so the next reader does not
+re-hoist it.
+
+REFERENCE.md's two claims that only fileops carried a code are corrected,
+and the capability section now shows the dispatch idiom.
+
+### DONE: the enumeration itself
 
 The original plan was to generate the table FROM a registry-side
 enumeration of codes — the doctrine that makes `aql describe` unable to
 drift, and the data source `aql explain <code>` would need (R4 in
-`rust-zig-roc-faber-in-aql-report.0.md`). That is still worth doing, and
-it is a bigger commitment than it looks: 233 codes across ~700
-construction sites, needing a naming policy and a stability guarantee
-before the first entry is written. The gate above buys the anti-drift
-property for the documented subset without pre-committing to any of that.
+`rust-zig-roc-faber-in-aql-report.0.md`). It exists now:
+`eng/go/errorcodes.go` owns the mechanism and the kernel's 45 codes;
+`lang/go/native/errorcodes.go` registers the language layer's 188.
+`eng.ErrorCodes()` / `eng.LookupErrorCode(code)` are the accessors.
+
+Four decisions in it, each of which was the smaller of two options:
+
+- **Names and owners, no descriptions.** Restating 233 descriptions in Go
+  — authored in one pass, in a file that reads as authoritative — would
+  create a large body of unreviewed prose competing with the reviewed copy
+  in REFERENCE.md. A wrong description is worse than a pointer to the
+  right one. Completeness of the NAME list is what the enumeration is for;
+  the gate ties it to the documentation rather than duplicating it.
+- **Layered registration, like type registration.** eng cannot enumerate
+  lang's codes without inverting the dependency, so each layer registers
+  its own under an owner id (`OwnerKernel` / the new `OwnerLang`), exactly
+  as `RegisterType` works. A consequence worth stating: the enumeration is
+  per-BUILD. A binary linking only eng reports only the kernel's codes,
+  which is the honest answer to "what can this program raise?" rather than
+  a superset copied from a larger build.
+- **A code minted in both eng and lang is owned by eng** (twelve are:
+  `type_error`, `undefined_word`, `index_out_of_range`, …). A lang site
+  raising `type_error` is raising the kernel's error, not defining its
+  own. Registering it twice is refused as double-owned, deliberately.
+- **Registration errors are accumulated, not returned** — the call site is
+  a package initialiser. `ErrorCodeInitError()` is surfaced by
+  `NewRegistry`, following `BuiltinInitError`'s precedent and ADR-005's
+  no-init-time-panic rule.
+
+The naming policy the note said was needed first is now a one-line
+enforced rule (`^[a-z][a-z0-9_]*$`, checked at registration; all 233
+existing codes already conform), and the stability guarantee is stated
+where it can be read: renaming or removing a code is a breaking change to
+every handler that names it, and a SILENT one — the old `case` arm simply
+stops firing. The enumeration cannot prevent a rename; making it
+impossible to do by accident is the guarantee it can actually offer.
+
+**The gate is now bidirectional, which is the part that makes any of this
+hold.** `test/go/docexamples/errorcodes_test.go` cross-checks three
+artefacts: minted (extracted from construction sites), registered
+(`eng.ErrorCodes()`), documented (REFERENCE.md).
+
+| check | catches |
+|---|---|
+| documented ⊆ minted | the original seven phantoms |
+| minted ⊆ registered | a new code reaching users with no deliberate entry |
+| registered ⊆ minted | an entry for a code no site attaches — a phantom one level down |
+| documented ⊆ registered | a documented code `aql explain` could not resolve |
+
+Both new directions were verified to fail when violated. `registered ⊆
+documented` is deliberately NOT checked: the table is "common codes", not
+a census.
+
+**One correction to the extraction, found while making it
+bidirectional.** The `Code:` regex also matched `Code: "aql/init"` and
+`Code: "aql/check"` in the LSP server — fields of an LSP `Diagnostic`, not
+of an `AqlError`. They are protocol strings no AQL program can dispatch
+on. A one-directional gate tolerated them, because extra entries only made
+it more permissive; a bidirectional one would have forced two LSP strings
+into the language's enumeration to stay green. `cmd/go` is therefore no
+longer scanned, and the exclusion is stated at the source roots so it
+cannot be quietly widened back.
 
 
 ## F. The shorthand `fn` form silently discards a `def`-bound union/enum type

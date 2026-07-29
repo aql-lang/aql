@@ -182,3 +182,104 @@ IO.read (make Pathon "` + path + `")`)
 		t.Errorf("got %v, want %s", got, want)
 	}
 }
+
+// TestEveryGatedCapabilityRefusalCarriesACode is the general half of what
+// fileops got first, and the reason it is a table over all five capabilities
+// rather than five separate tests is that the gap was a COUNT: the fileops
+// adapter was written, the note recorded "the other capabilities' refusals
+// are still code-less", and nothing in the suite would have noticed if a
+// sixth capability shipped the same way.
+//
+// Both answers are asserted for each scope, because they are different
+// answers with different remedies — a rule said no (widen the rule) versus
+// the capability is not installed (install it) — and a classifier that
+// collapsed them would satisfy a single-code assertion while telling every
+// user the wrong thing.
+//
+// The words are reached without any host backend registered on purpose: the
+// gate runs BEFORE the backend lookup, so the refusal is observable with no
+// network, no terminal and no vault present. That is also what makes the
+// negative half below meaningful.
+func TestEveryGatedCapabilityRefusalCarriesACode(t *testing.T) {
+	const fetchSrc = `import "aql:net"
+Net.fetch {url:"http://127.0.0.1:1/x"}`
+	const vaultSrc = `import "aql:vault"
+Vault.status`
+	const tuiSrc = `import "aql:tui"
+Tui.open {}`
+
+	cases := []struct{ name, pol, src, want string }{
+		{"network refused by rule",
+			`{name:"n" scopes:{network:{words:{default:"deny"}}}}`,
+			fetchSrc, "permission_denied"},
+		{"network uninstalled",
+			`{name:"n" scopes:{network:{install:false}}}`,
+			fetchSrc, "capability_not_installed"},
+		{"process refused by rule",
+			`{name:"p" scopes:{process:{words:{default:"deny"}}}}`,
+			`spawn [1]`, "permission_denied"},
+		{"process uninstalled",
+			`{name:"p" scopes:{process:{install:false}}}`,
+			`spawn [1]`, "capability_not_installed"},
+		{"vault refused by rule",
+			`{name:"v" scopes:{vault:{words:{default:"deny"}}}}`,
+			vaultSrc, "permission_denied"},
+		{"vault uninstalled",
+			`{name:"v" scopes:{vault:{install:false}}}`,
+			vaultSrc, "capability_not_installed"},
+		// The tui scope is named `terminal` in policy, not `tui` — an
+		// unknown scope name is refused at policy-load time, so a test
+		// written against the module's name would fail before it ran.
+		{"terminal refused by rule",
+			`{name:"t" scopes:{terminal:{words:{default:"deny"}}}}`,
+			tuiSrc, "permission_denied"},
+		{"terminal uninstalled",
+			`{name:"t" scopes:{terminal:{install:false}}}`,
+			tuiSrc, "capability_not_installed"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := lang.New(lang.Options{Policy: inlinePolicy(t, c.pol)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := codeOf(t, a, c.src); got != c.want {
+				t.Errorf("code = %q, want %q — a refusal with no code cannot "+
+					"be dispatched on, so `do [...] error [dot code case [...]]` "+
+					"has no arm that can fire", got, c.want)
+			}
+		})
+	}
+}
+
+// The negative half, and the one that keeps the classifier honest: the same
+// words must NOT report a refusal when nothing was refused. An adapter that
+// stamped permission_denied on every failure from a gated word would pass
+// every assertion above and be strictly worse than the missing code it
+// replaced — it would send authors to edit a policy that is not the problem.
+//
+// No policy is installed here at all, so every failure below is the
+// capability's own: an unreachable host, and a vault with no backend
+// registered.
+func TestGatedCapabilityFailuresAreNotReportedAsRefusals(t *testing.T) {
+	cases := []struct{ name, src string }{
+		{"unreachable host", `import "aql:net"
+Net.fetch {url:"http://127.0.0.1:1/x"}`},
+		{"vault with no backend", `import "aql:vault"
+Vault.status`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := lang.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch got := codeOf(t, a, c.src); got {
+			case "permission_denied", "capability_not_installed":
+				t.Errorf("code = %q, but no policy is installed — nothing was "+
+					"refused, and reporting a refusal points the author at a "+
+					"policy that is not the cause", got)
+			}
+		})
+	}
+}

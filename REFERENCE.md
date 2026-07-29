@@ -2708,8 +2708,8 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
 | `read_error` | A read failed — a missing path, an unreadable stream, undecodable content. |
 | `write_error` | A write failed — an unwritable path, a refused exclusive create, a failed atomic rename. |
-| `permission_denied` | The policy refused a **file** operation — widen the rule. A refusal from the other gated scopes (network, process, vault, terminal) does not yet carry a stable code. |
-| `capability_not_installed` | A **file** operation ran with the `fileops` capability uninstalled (`install: false`) — install it; no rule change will help. |
+| `permission_denied` | The policy refused the operation by RULE — widen the rule. Carried by every gated capability: fileops, network, process, vault, terminal. |
+| `capability_not_installed` | The operation ran with its capability uninstalled (`install: false`) — install it; no rule change will help. Carried by every gated capability. |
 
 `unify` is deliberately absent: it does **not** raise when two values
 cannot unify, it returns the value `~unify-fail false`, so test its
@@ -2764,13 +2764,24 @@ disable any of them.
 | `vault` | secret lookup via vault |
 
 A word attempting to use a disabled capability fails with a
-permission-denied error. File operations carry a code, so
-`do [...] error [dot code]` can dispatch on them, and the two answers
-are distinct: `permission_denied` means a rule said no, while
-`capability_not_installed` means the capability isn't there at all.
-Refusals from the other scopes (network, subprocess, vault, terminal)
-do not yet carry a stable code — match on the message, or refuse the
-call up front, for those.
+permission-denied error, and **every** gated capability carries a code,
+so `do [...] error [dot code]` can dispatch on the refusal. The two
+answers are distinct on purpose, because they have different remedies:
+`permission_denied` means a rule said no (widen the rule), while
+`capability_not_installed` means the capability isn't there at all
+(install it — no rule change will help).
+
+The refusal's message keeps the blame trail — which profile, which rule,
+and the arguments that were refused — so the code is what you branch on
+and the message is what you read:
+
+```
+do [ Net.fetch {url:"http://example.com"} ]
+error [ dot code case [
+  permission_denied/q       "blocked by policy"
+  capability_not_installed/q "network capability is off"
+] ]
+```
 
 
 ## CLI reference

@@ -219,10 +219,10 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	if err != nil {
 		return nil, err
 	}
-	if err := checkNetPolicy(r, "listen", "", opts.port); err != nil {
+	if err := checkNetPolicy(r, "serve", "listen", "", opts.port); err != nil {
 		return nil, err
 	}
-	if err := checkTuiPolicy(r, "serve"); err != nil {
+	if err := checkTuiPolicy(r, "serve", "serve"); err != nil {
 		return nil, err
 	}
 	app, err := parseTuiApp(args[1], "serve", r)

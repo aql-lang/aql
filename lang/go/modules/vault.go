@@ -117,7 +117,7 @@ func hostVaultSpec(r *native.Registry) *VaultSpec {
 // (ops: read / reveal / mutate / admin / clipboard — see
 // policy.GlobalsFor for the global caps each touches). Mirrors
 // checkTuiPolicy.
-func checkVaultPolicy(r *native.Registry, op string) error {
+func checkVaultPolicy(r *native.Registry, word, op string) error {
 	if r == nil {
 		return nil
 	}
@@ -127,16 +127,16 @@ func checkVaultPolicy(r *native.Registry, op string) error {
 	}
 	args := policy.Args{}
 	if !pol.Installed("vault") {
-		return &policy.Denied{
+		return native.PolicyRefusal(r, word, &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "vault",
 			Op:      op,
 			Profile: pol.Name(),
 			Blame:   "vault.install=false",
 			Args:    args,
-		}
+		})
 	}
-	return pol.Check("vault", op, args)
+	return native.PolicyRefusal(r, word, pol.Check("vault", op, args))
 }
 
 // ---- the op table ----
@@ -340,7 +340,7 @@ func vaultAnyToValue(v any) native.Value {
 // (lang/spec/module-vault.tsv).
 func makeVaultHandler(op vaultOp) func([]native.Value, map[string]native.Value, []native.Value, *native.Registry) ([]native.Value, error) {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-		if err := checkVaultPolicy(r, op.pol); err != nil {
+		if err := checkVaultPolicy(r, op.name, op.pol); err != nil {
 			return nil, err
 		}
 		params, err := vaultCollectParams(op, args, r)

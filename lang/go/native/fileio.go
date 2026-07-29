@@ -10,7 +10,6 @@ import (
 
 	"github.com/aql-lang/aql/eng/go/parser"
 	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -29,39 +28,34 @@ const (
 // `case` arm can dispatch on. policy.Denied has carried that code
 // (`permission_denied`, `capability_not_installed`, …) all along, and
 // `lang/go/policy/error.go` says an engine adapter copies it onto the
-// produced AqlError — this is the fileops half of that adapter, finally
-// written. Every other gated capability (network, process, vault, tui)
-// still drops its code; see design/verse-report-defects-investigation.0.md
-// §E for why the general fix is a fallback-semantics decision rather than
-// a plumbing one.
+// produced AqlError — this was the fileops half of that adapter, written
+// first because REFERENCE.md's codes table is mostly about fileops. The
+// general form now lives in policy_error.go and covers network, process,
+// vault and terminal too; this function is the one site that wants a
+// different DETAIL, so it keeps its own shape and shares the classifier.
 //
 // def is the word's own code (`read_error` / `write_error`), used when the
 // failure is an ordinary I/O error with nothing more specific to say.
 //
-// The denial codes are spelled as LITERALS. Trimming "aql/" off
-// denied.Code would be shorter and equally correct, and it would make
-// these codes INVISIBLE to the documentation gate
-// (test/go/docexamples/errorcodes_test.go) — that gate reads codes out of
-// construction sites and deliberately ignores constant declarations,
-// precisely because policy's four constants sat declared and never
-// attached for as long as they existed. A code the gate cannot see is a
-// code REFERENCE.md can silently stop matching.
+// The uninstalled-capability arm stays local rather than moving to the
+// shared classifier because it is a different error TYPE: fileops signals
+// an uninstalled capability with `notInstalledError`, not with a
+// `*policy.Denied`, since the FileOps wrapper is swapped out wholesale
+// rather than consulted and refused.
 //
-// Only the two refusals a file operation can actually produce are
-// listed, and they are DIFFERENT answers: a rule said no (widen the
-// rule) versus the capability isn't there at all (install it). The other
-// two policy codes are out of reach here — CodeModulesDisabled is
-// produced nowhere in the tree, and CodePolicyAttenuation belongs to
-// child-policy composition — so an arm for either would be unreachable
-// and unprovable.
+// The two answers are kept apart on purpose: a rule said no (widen the
+// rule) versus the capability isn't there at all (install it).
 func fileOpError(r *Registry, def, word, detail string, err error) error {
-	var denied *policy.Denied
-	if errors.As(err, &denied) && denied.Code == policy.CodePermissionDenied {
-		return r.AqlError("permission_denied", detail, word)
-	}
 	var missing *notInstalledError
 	if errors.As(err, &missing) {
 		return r.AqlError("capability_not_installed", detail, word)
+	}
+	// The shared adapter (policy_error.go), so fileops and every other gated
+	// capability answer a refusal with the same code. This site passes its OWN
+	// detail: a file op has already built a "read: …" / "write: …" message
+	// naming the path, which is more use to the reader than the blame trail.
+	if coded, ok := policyRefusalCoded(r, word, detail, err); ok {
+		return coded
 	}
 	return r.AqlError(def, detail, word)
 }

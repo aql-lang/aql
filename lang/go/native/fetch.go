@@ -46,16 +46,16 @@ func checkFetchPolicy(r *Registry, urlStr string) error {
 	// via Check; install:false on the network scope produces
 	// capability_not_installed.
 	if !pol.Installed("network") {
-		return &policy.Denied{
+		return PolicyRefusal(r, "fetch", &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "network",
 			Op:      "connect",
 			Profile: pol.Name(),
 			Blame:   "network.install=false",
 			Args:    args,
-		}
+		})
 	}
-	return pol.Check("network", "connect", args)
+	return PolicyRefusal(r, "fetch", pol.Check("network", "connect", args))
 }
 
 // hostPortFromURL extracts (host, port) from a URL. port is

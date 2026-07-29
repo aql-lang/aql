@@ -437,6 +437,7 @@ var (
 	// Owner sentinels for the ownership-anchored signature rules
 	// (design/OPEN-WORDS.1.md §4).
 	OwnerKernel              = eng.OwnerKernel
+	OwnerLang                = eng.OwnerLang
 	OwnerProgram             = eng.OwnerProgram
 	NewPathonFromString      = eng.NewPathonFromString
 	IsBareTypeNode           = eng.IsBareTypeNode

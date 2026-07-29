@@ -10,3 +10,10 @@ package eng
 // valid build it is always nil; the seam lets a test exercise NewRegistry's
 // ADR-005 init-error return without corrupting the shared builtin table.
 var builtinInitError = BuiltinInitError
+
+// errorCodeInitError reports a malformed or double-owned error-code
+// registration (errorcodes.go). Same shape and same reason as the seam above:
+// in a valid build it is always nil, because every layer's list conforms and
+// the bidirectional doc gate keeps it that way — so the only way to reach
+// NewRegistry's return arm is to swap this seam.
+var errorCodeInitError = ErrorCodeInitError

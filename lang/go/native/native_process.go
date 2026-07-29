@@ -167,15 +167,15 @@ func checkProcessPolicy(r *Registry) error {
 		return nil
 	}
 	if !pol.Installed("process") {
-		return &policy.Denied{
+		return PolicyRefusal(r, "spawn", &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "process",
 			Op:      "spawn",
 			Profile: pol.Name(),
 			Blame:   "process.install=false",
-		}
+		})
 	}
-	return pol.Check("process", "spawn", policy.Args{})
+	return PolicyRefusal(r, "spawn", pol.Check("process", "spawn", policy.Args{}))
 }
 
 // procRuntime returns the registry's shared process runtime, creating one
