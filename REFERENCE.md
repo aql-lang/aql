@@ -2706,7 +2706,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `out_of_range` | Index or numeric value outside the legal range. |
 | `unify_fail` | Two values cannot unify. |
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
-| `io_error` | File I/O failed. |
+| `read_error`, `write_error`, `stat_error`, `list_error`, `remove_error`, `move_error`, `copy_error`, `link_error`, `touch_error` | File I/O failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
 | `cap_denied` | Operation needed a capability that wasn't enabled. |
 | `cancelled` | Operation cancelled (timer, await branch). |
 

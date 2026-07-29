@@ -260,7 +260,7 @@ func readHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	if format == "" {
 		format = "text"
 	}
-	return doRead(r, path, "utf8", format, "lf", nil)
+	return doRead(r, path, "utf8", format, "lf", nil, args[0].Pos())
 }
 
 func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
@@ -279,7 +279,7 @@ func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			format = extFmt
 		}
 	}
-	return doRead(r, path, enc, format, nl, parserOpts)
+	return doRead(r, path, enc, format, nl, parserOpts, args[0].Pos())
 }
 
 // Reversed handler for stack-first usage: "path" {opts} read
@@ -291,7 +291,7 @@ func readOptsRevHandler(args []Value, ctx map[string]Value, stack []Value, r *Re
 func writeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	content, _ := args[1].AsConcreteString()
-	result, err := doWrite(r, path, content, "utf8", "text", "write", "lf", false, false)
+	result, err := doWrite(r, path, content, "utf8", "text", "write", "lf", false, false, args[0].Pos())
 	if err != nil {
 		return result, err
 	}
@@ -305,7 +305,7 @@ func writeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if err := checkWritableFormat(r, format, fmtExplicit); err != nil {
 		return nil, err
 	}
-	result, err := doWrite(r, path, content, enc, format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false))
+	result, err := doWrite(r, path, content, enc, format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false), args[0].Pos())
 	if err != nil {
 		return result, err
 	}
@@ -338,7 +338,7 @@ func checkWritableFormat(r *Registry, format string, fmtExplicit bool) error {
 func writeAnyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path := extractPath(args[0])
 	content := valueToJsonic(args[1])
-	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf", false, false)
+	result, err := doWrite(r, path, content, "utf8", "jsonic", "write", "lf", false, false, args[0].Pos())
 	if err != nil {
 		return result, err
 	}
@@ -356,7 +356,7 @@ func writeAnyOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		format = "jsonic"
 	}
 	content := valueToJsonic(args[1])
-	result, err := doWrite(r, path, content, "utf8", format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false))
+	result, err := doWrite(r, path, content, "utf8", format, mode, nl, mapBoolOpt(args[2], "atomic", false), mapBoolOpt(args[2], "exclusive", false), args[0].Pos())
 	if err != nil {
 		return result, err
 	}

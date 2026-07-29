@@ -155,7 +155,7 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 	// Plain and append writes reuse doWrite (which also handles the stdio
 	// streams). nl="raw" means no newline rewriting; doWrite writes the
 	// content bytes verbatim, so a Go string over raw bytes round-trips.
-	if _, err := doWrite(r, path, string(data), "utf8", "text", mode, "raw", atomic, exclusive); err != nil {
+	if _, err := doWrite(r, path, string(data), "utf8", "text", mode, "raw", atomic, exclusive, args[0].Pos()); err != nil {
 		return nil, err
 	}
 	return []Value{returnPath(args[0])}, nil

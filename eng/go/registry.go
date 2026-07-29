@@ -2064,6 +2064,34 @@ func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
 	return makeAqlError(code, detail, word, src, hint)
 }
 
+// AqlErrorAt is AqlError carrying an explicit source position — the
+// positioned twin every handler should prefer when it has a Value in hand.
+//
+// AqlError reports Row 0, which renders as "source position unknown", and
+// there is deliberately no text-search fallback (a guessed location is
+// wrong whenever the word appears more than once). A handler almost always
+// CAN do better: its arguments carry their own positions, so
+// `r.AqlErrorAt(code, detail, word, args[i].Pos())` blames the argument
+// that actually failed. Prefer that over AqlError wherever an argument
+// identifies the fault; reserve AqlError for errors with no argument to
+// blame.
+func (r *Registry) AqlErrorAt(code, detail, word string, pos SrcPos) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlErrorAt(code, detail, word, src, "", pos)
+}
+
+// AqlErrorHintAt is AqlErrorAt with an explicit hint string.
+func (r *Registry) AqlErrorHintAt(code, detail, word, hint string, pos SrcPos) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlErrorAt(code, detail, word, src, hint, pos)
+}
+
 // ResolveTypedName resolves a name to its bound value. Post the
 // TYPE-UNIFORM Phase 4 collapse there is a single binding store
 // (DefTable) holding both type and value bindings, so this is one

@@ -192,7 +192,7 @@ func TestDoReadErrorAndOptsArms(t *testing.T) {
 
 	// stdin read failure.
 	r.Input = failingReader{}
-	if _, err := doRead(r, pathStdin, "utf8", "text", "lf", nil); err == nil ||
+	if _, err := doRead(r, pathStdin, "utf8", "text", "lf", nil, SrcPos{}); err == nil ||
 		!strings.Contains(err.Error(), "stdin broke") {
 		t.Fatalf("expected stdin error, got %v", err)
 	}
@@ -201,7 +201,7 @@ func TestDoReadErrorAndOptsArms(t *testing.T) {
 	if err := mem.WriteFile("conf.ini", []byte("[a]\nb=1\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := doRead(r, "conf.ini", "utf8", "ini", "lf", map[string]any{"bogus": true})
+	out, err := doRead(r, "conf.ini", "utf8", "ini", "lf", map[string]any{"bogus": true}, SrcPos{})
 	if err != nil {
 		t.Fatalf("ini DecodeOpts: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestDoReadErrorAndOptsArms(t *testing.T) {
 	if err := mem.WriteFile("bad.json", []byte("{bad"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := doRead(r, "bad.json", "utf8", "json", "lf", nil); err == nil ||
+	if _, err := doRead(r, "bad.json", "utf8", "json", "lf", nil, SrcPos{}); err == nil ||
 		!strings.Contains(err.Error(), "read:") {
 		t.Fatalf("expected decode error, got %v", err)
 	}
@@ -228,7 +228,7 @@ func TestDoReadSQLiteArms(t *testing.T) {
 	if err := mem.WriteFile(`C:\data\planets.csv`, []byte("a,b\n1,2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := doRead(r, `C:\data\planets.csv`, "utf8", "csv", "lf", nil)
+	out, err := doRead(r, `C:\data\planets.csv`, "utf8", "csv", "lf", nil, SrcPos{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestDoReadSQLiteArms(t *testing.T) {
 	if err := HostSQLite(r).Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := doRead(r, `C:\data\planets.csv`, "utf8", "csv", "lf", nil); err == nil ||
+	if _, err := doRead(r, `C:\data\planets.csv`, "utf8", "csv", "lf", nil, SrcPos{}); err == nil ||
 		!strings.Contains(err.Error(), "sqlite store") {
 		t.Fatalf("expected sqlite store error, got %v", err)
 	}
@@ -250,12 +250,12 @@ func TestDoReadSQLiteArms(t *testing.T) {
 func TestDoWriteStdoutError(t *testing.T) {
 	r := seam5Reg(t)
 	r.Output = failingWriter{}
-	if _, err := doWrite(r, pathStdout, "content", "utf8", "text", "write", "lf", false, false); err == nil ||
+	if _, err := doWrite(r, pathStdout, "content", "utf8", "text", "write", "lf", false, false, SrcPos{}); err == nil ||
 		!strings.Contains(err.Error(), "stdout broke") {
 		t.Fatalf("expected stdout write error, got %v", err)
 	}
 	// Positive pair: stderr writes still succeed with a healthy writer.
-	out, err := doWrite(r, pathStderr, "content", "utf8", "text", "write", "lf", false, false)
+	out, err := doWrite(r, pathStderr, "content", "utf8", "text", "write", "lf", false, false, SrcPos{})
 	if err != nil {
 		t.Fatal(err)
 	}

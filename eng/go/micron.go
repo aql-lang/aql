@@ -2375,7 +2375,25 @@ func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 }
 
 // micronInstantiate is `make ‹kind› data` for the family.
+//
+// The instance carries the CONSTRUCTOR ARGUMENT's source position. `make
+// Pathon "/etc/hosts"` builds a fresh Value, and a fresh Value has no
+// position of its own — so without this every later failure that blames
+// the micron could only report "source position unknown", however
+// carefully the reporting site was threaded. That is not hypothetical:
+// it is why `IO.read (make Pathon "/nope")` had no location to point at.
+// WithPos is the documented seam for a handler constructing a value from
+// an input (lang/go/CLAUDE.md, "Pos threading"); doing it here covers
+// every Micron kind at one choke point rather than per-constructor.
 func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
+	out, err := micronInstantiateAt(typ, data, r)
+	for i := range out {
+		out[i] = WithPos(out[i], data)
+	}
+	return out, err
+}
+
+func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 	if IsMicronType(typ) {
 		info, _ := AsMicronType(typ)
 		return makeMicronUser(info, data, r)

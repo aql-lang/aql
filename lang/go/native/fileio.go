@@ -214,23 +214,23 @@ func valueToJsonic(v Value) string {
 	return s
 }
 
-func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]Value, error) {
+func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos SrcPos) ([]Value, error) {
 	var data []byte
 	var err error
 
 	if path == pathStdout || path == pathStderr {
-		return nil, r.AqlError("read_error", "read: cannot read from an output stream", "read")
+		return nil, r.AqlErrorAt("read_error", "read: cannot read from an output stream", "read", pos)
 	}
 
 	if path == pathStdin {
 		data, err = io.ReadAll(r.Input)
 		if err != nil {
-			return nil, fmt.Errorf("read: stdin: %w", err)
+			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
 		}
 	} else {
 		data, err = EffectiveFileOps(r).ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read: %w", err)
+			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
 		}
 	}
 
@@ -254,7 +254,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 		result, err = f.Decode(content)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
 	}
 
 	// Store table data in SQLite for formats that produce tables.
@@ -273,7 +273,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 			}
 
 			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
-				return nil, fmt.Errorf("read: sqlite store: %w", err)
+				return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: sqlite store: %v", err), "read", pos)
 			}
 			td.SQLite = true
 			td.TableName = baseName
@@ -284,11 +284,11 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 	return result, nil
 }
 
-func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool) ([]Value, error) {
+func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool, pos SrcPos) ([]Value, error) {
 	content = applyNL(content, nl)
 
 	if exclusive && (atomic || mode == "append") {
-		return nil, r.AqlError("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write")
+		return nil, r.AqlErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
 	}
 
 	// Handle stdout/stderr special paths.
@@ -300,7 +300,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			w = r.ErrOutput
 		}
 		if _, err := fmt.Fprint(w, content); err != nil {
-			return nil, fmt.Errorf("write: %w", err)
+			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
@@ -313,7 +313,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 		if existing, rerr := EffectiveFileOps(r).ReadFile(path); rerr == nil {
 			prev, derr := decodeEnc(existing, enc)
 			if derr != nil {
-				return nil, r.AqlError("write_error", fmt.Sprintf("write: append: %v", derr), "write")
+				return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: append: %v", derr), "write", pos)
 			}
 			content = prev + content
 		}
@@ -321,7 +321,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 
 	data, encErr := encodeEnc(content, enc)
 	if encErr != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", encErr), "write")
+		return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", encErr), "write", pos)
 	}
 
 	// C1 effect fence (eng effects.go): a filesystem write is an observable
@@ -339,19 +339,19 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			// treats the refusal as intentional and does not attempt a
 			// fallback — which a prior statement's effect would block,
 			// surfacing as a spurious internal_error (compiled_fullcorpus).
-			return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
 	r.NoteEffect()
 	if atomic {
 		if err := writeAtomic(r, path, data); err != nil {
-			return nil, fmt.Errorf("write: %w", err)
+			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
 	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
-		return nil, fmt.Errorf("write: %w", err)
+		return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 	}
 
 	return []Value{NewString(path)}, nil

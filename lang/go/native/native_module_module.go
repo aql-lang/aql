@@ -366,7 +366,7 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
-	result, err := doRead(parent, resolved, "utf8", format, "lf", nil)
+	result, err := doRead(parent, resolved, "utf8", format, "lf", nil, SrcPos{})
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
@@ -454,7 +454,7 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
 		}
 		filePath := filepath.Join(modDir, filename)
-		vals, err := doRead(r, filePath, "utf8", format, "lf", nil)
+		vals, err := doRead(r, filePath, "utf8", format, "lf", nil, SrcPos{})
 		if err != nil {
 			return fmt.Errorf("resource %q: %w", key, err)
 		}
