@@ -132,6 +132,42 @@ TimeUtil.await [[fact 5] [fact 6]] end`, "[[120 720]]"},
 	}
 }
 
+// TestAwaitRefusalMissesCompiledFnLocalLambda pins a KNOWN LIMIT of the
+// check, deliberately, so it is counted rather than believed away.
+//
+// The check sees what is bound in the def table when `await` dispatches.
+// Compiled, some fn-body locals live in frame slots instead, so a lambda
+// defined inside a fn body is simply unbound at that point and the
+// indirection through it is not followed. Interpreted, it is.
+//
+// Both engines DO catch the same container named directly in a branch,
+// and both catch the identical lambda at module level — so the gap is
+// narrow. It is still an engine-mode divergence inside a check written to
+// stop engine-mode divergences, which is exactly the sort of thing that
+// should be visible in a test rather than in a comment nobody reads.
+func TestAwaitRefusalMissesCompiledFnLocalLambda(t *testing.T) {
+	const src = awaitPrelude + `def outer fn [[] [Any] [
+  def m (make FlexMap {})
+  def w ([] => [m set a 1])
+  TimeUtil.await [[w] [w]]
+]]
+outer`
+	a, _ := New()
+	if _, err := a.Run(src); err != nil {
+		t.Fatalf("LIMIT CLOSED — the compiled path now refuses a fn-local "+
+			"lambda indirection (%v). Good: delete this test, and update the "+
+			"LIMITS comment in native_temporal_await.go and the note in "+
+			"EXPLANATION.md that both describe it as uncaught.", err)
+	}
+	// Interpreted, the same program IS refused — which is what makes this a
+	// divergence rather than a uniform limitation.
+	b, _ := New()
+	if _, err := b.RunInterp(src); err == nil {
+		t.Error("interpreted, this shape must still be refused; if it is not, " +
+			"the walk into referenced function bodies has regressed")
+	}
+}
+
 // TestAwaitRefusalNamesTheContainerKind pins the message content. A
 // refusal that says only "something is wrong" costs the author the
 // debugging session the check was meant to save, so the kind and the

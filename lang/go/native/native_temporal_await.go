@@ -45,11 +45,24 @@ type parallelResult struct {
 // here. So this discriminates on the TYPE TAG, which is what actually
 // separates in-place mutation from copy-on-write.
 //
-// Reachability is what a branch body REFERENCES, plus one hop through a
-// referenced function's captures (the `def w ([] => [m set …])` shape).
-// A container reached only through a chain of calls is not detected —
-// stated here rather than implied, because the check is a boundary rule,
-// not a proof of non-aliasing.
+// LIMITS, stated rather than implied — this is a boundary rule, not a
+// proof of non-aliasing. Reachability is what a branch body REFERENCES,
+// followed one level into any referenced function (its captures and its
+// body). Two things it does not see:
+//
+//   - a container reached only through a longer chain of calls;
+//   - a binding that is not in `r.Defs` at await time. Compiled, some
+//     fn-body locals live in frame slots rather than the def table, so
+//     `def outer fn [[] [Any] [ def m (make FlexMap {})
+//     def w ([] => [m set a 1]) await [[w] [w]] ]]` is refused
+//     INTERPRETED and not refused COMPILED — `w` is simply unbound here.
+//     Naming `m` directly in the branch is caught on both paths;
+//     the same lambda at MODULE level is caught on both paths.
+//
+// The second is an engine-mode divergence in the check itself and is
+// pinned by TestAwaitRefusalMissesCompiledFnLocalLambda, which fails when
+// someone closes it. Closing it means reaching compiled frame locals from
+// a native handler, which is a different layer's job.
 func sharedMutableKind(v Value) string {
 	if v.Parent == nil {
 		return ""

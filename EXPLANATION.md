@@ -709,9 +709,12 @@ await [
 # [{k:1} {k:2}]
 ```
 
-The refusal covers what a branch body references, including through a
-function it names. A container reached only through a longer chain of
-calls is not detected — the check is a boundary rule, not a proof.
+The refusal covers what a branch body references, including one level
+into a function it names. It is a boundary rule, not a proof: a
+container reached only through a longer chain of calls is not detected,
+and neither is one held by a lambda defined *inside a fn body* when that
+program is compiled (naming the container directly is caught on both
+paths, as is the same lambda at module level).
 
 
 ## Errors as values
