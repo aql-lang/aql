@@ -295,10 +295,18 @@ func TestExecuteDescribeCategory(t *testing.T) {
 	if !strings.Contains(out, "math —") {
 		t.Errorf("expected 'math —' category header, got:\n%s", out)
 	}
-	for _, want := range []string{"add", "sqrt", "math-pi"} {
+	// `add` is core; `sqrt` and `pi` come from aql:math-util and are listed
+	// under that import. `pi` was previously listed as `math-pi`, a name no
+	// word has ever had — the export is MathUtil.pi.
+	for _, want := range []string{"add", "sqrt", "pi"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q listed in math category, got:\n%s", want, out)
 		}
+	}
+	// The module words must be shown under the import that binds them, not
+	// mixed in with the core words as though they were callable bare.
+	if !strings.Contains(out, "import \"aql:math-util\"") {
+		t.Errorf("math-util words listed without naming the import they need, got:\n%s", out)
 	}
 	// A word from another category must not leak into the listing. Anchor on
 	// the "  <word> " line format so we don't trip over the substring "concat"
