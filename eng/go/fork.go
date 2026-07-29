@@ -87,35 +87,6 @@ func (r *Registry) ForkConcurrent() *Registry {
 	return &fork
 }
 
-// ForkConcurrentIsolated is ForkConcurrent plus isolation of the bound
-// VALUES, not just the binding scopes. Use it wherever the branches are
-// documented to be independent of each other; use plain ForkConcurrent
-// where they are documented to share, or where nothing is promised.
-//
-// ForkConcurrent's guarantee is exact and narrower than it reads: it
-// isolates every mutable execution SCOPE, so a `def` or a `context set`
-// on the fork stays private. But cloning a binding table copies Values,
-// and a FlexMap / FlexList / Store / class-instance / Table Value holds a
-// POINTER to shared state. An in-place write through one fork's binding
-// therefore lands in the parent's object and in every sibling's — which
-// is not merely surprising but undefined behaviour, since OrderedMap.Set
-// is an unsynchronised map assign plus a slice append.
-//
-// An immutable Map was always correct here (its `set` returns a copy), so
-// the semantics this restores are not invented: they are the ones the
-// language already has for its non-mutable containers, extended to the
-// mutable ones that the prose already claimed them for.
-//
-// Cost is a deep copy of each bound mutable container per fork. That is
-// the price of the guarantee and it is paid per await CALL, not per loop
-// element. CloneValue shares every immutable payload, so a table of
-// scalars, functions and type bodies costs a walk and no copies.
-func (r *Registry) ForkConcurrentIsolated() *Registry {
-	fork := r.ForkConcurrent()
-	fork.Defs.IsolateValues()
-	return fork
-}
-
 // SyncWriter serializes concurrent Write calls so that several forked
 // registries sharing one underlying writer (e.g. os.Stdout, or a test
 // buffer) do not race or interleave a single write. Wrap the parent's

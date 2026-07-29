@@ -679,8 +679,39 @@ familiar semantics:
 * **`'any`** — the first non-error result wins.
 
 Each branch runs under `do` semantics: the list is evaluated as a
-sub-program, and the final stack value becomes the result. Mutable
-side effects within a branch are local to that branch's sub-engine.
+sub-program, and the final stack value becomes the result. A branch's
+`def` and `context set` writes are local to that branch's sub-engine.
+
+Sharing a **stateful container** — `FlexMap`, `FlexList`, `Store`,
+`Table`, a class instance — across branches is **refused**, not
+isolated. Branches run on separate goroutines, so an in-place write to
+one is a data race; `await` rejects the program at the boundary rather
+than letting it corrupt state, the same answer `send` gives at a
+process boundary:
+
+<!-- aql-test: skip -->
+```aql
+def m (make FlexMap {})
+await [[m set a 1] [m set b 2]]
+# error: not_sendable — branch reaches `m`, a mutable FlexMap
+```
+
+Immutable values are unaffected: a plain `Map` or `List` returns a copy
+from `set`, so branches never share one. Build the container inside
+each branch and combine the results:
+
+<!-- aql-test: skip -->
+```aql
+await [
+  [def a (make FlexMap {}) a set k 1]
+    [def b (make FlexMap {}) b set k 2]
+]
+# [{k:1} {k:2}]
+```
+
+The refusal covers what a branch body references, including through a
+function it names. A container reached only through a longer chain of
+calls is not detected — the check is a boundary rule, not a proof.
 
 
 ## Errors as values

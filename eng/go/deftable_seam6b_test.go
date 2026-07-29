@@ -54,65 +54,6 @@ func TestS6b2DefTableNilReceiverGuards(t *testing.T) {
 	} else if got.Depth("x") != 0 {
 		t.Error("nil Clone must be empty")
 	}
-	dt.IsolateValues() // must not panic
-}
-
-// TestDefTableIsolateValuesDeepCopies pins the primitive behind
-// ForkConcurrentIsolated at the unit level, where the aliasing is visible
-// directly rather than through await's goroutines.
-//
-// Clone alone copies the binding STACKS, so the clone can be pushed to and
-// popped from independently. It does not copy the bound VALUES: a
-// pointer-backed payload stays shared, and an in-place write through one
-// table lands in the other. IsolateValues is what breaks that link.
-func TestDefTableIsolateValuesDeepCopies(t *testing.T) {
-	orig := NewDefTable()
-	shared := NewMap(NewOrderedMap())
-	orig.Push("m", shared)
-	orig.Push("n", NewInteger(7))
-
-	// Clone WITHOUT isolation: the payload pointer is shared, which is the
-	// property the concurrent path could not tolerate.
-	aliased := orig.Clone()
-	got, _ := aliased.Top("m")
-	if am, _ := AsMap(got); am == nil {
-		t.Fatal("clone lost the map payload")
-	} else if om, _ := AsMap(shared); om != am {
-		t.Fatal("precondition failed: a plain Clone should still ALIAS the " +
-			"payload — if it no longer does, IsolateValues is redundant and " +
-			"this whole mechanism needs re-examining")
-	}
-
-	// Clone WITH isolation: same value, independent payload.
-	isolated := orig.Clone()
-	isolated.IsolateValues()
-	iso, _ := isolated.Top("m")
-	im, _ := AsMap(iso)
-	om, _ := AsMap(shared)
-	if im == nil {
-		t.Fatal("isolated clone lost the map payload")
-	}
-	if im == om {
-		t.Error("IsolateValues must give the clone its own payload")
-	}
-	// An immutable scalar needs no copy and must survive intact.
-	if n, ok := isolated.Top("n"); !ok || fmtInt(t, n) != 7 {
-		t.Errorf("scalar binding must survive isolation, got %v (ok=%v)", n, ok)
-	}
-	// The original is untouched by any of it.
-	if orig.Depth("m") != 1 {
-		t.Errorf("isolating a CLONE must not disturb the original: depth %d",
-			orig.Depth("m"))
-	}
-}
-
-func fmtInt(t *testing.T, v Value) int64 {
-	t.Helper()
-	n, err := AsInteger(v)
-	if err != nil {
-		t.Fatalf("AsInteger: %v", err)
-	}
-	return n
 }
 
 func TestS6b2DefTableReplaceEmptyStack(t *testing.T) {
