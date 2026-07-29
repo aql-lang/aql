@@ -13,9 +13,9 @@ import "./schema.aql"
 def KgEntity KgSchema.KgEntity
 
 # id -> entity index.
-def index-by-id fn [[entities:List] [Map] [
+def index-by-id fn entities:List Map [
   fold [var [[e acc] acc set (e.id) e]] entities {}
-]]
+]
 
 def find-by-id fn [[entities:List id:String] [Any] [
   def hits (filter [dot id eq id] entities)
@@ -26,21 +26,31 @@ def find-by-id fn [[entities:List id:String] [Any] [
 # (a loser points at its winner, which may itself have lost a later
 # merge), so the chase is BOUNDED at 8 hops — never an unbounded walk.
 def canonical-id fn [[index:Map id:String] [String] [
-  fold [var [[step cur]
-    def e (index get cur)
-    if (e is None) [cur] [
-      def tgt (e.attributes get "merged_into")
-      if (tgt is None) [cur] [tgt]
+  fold
+    [var
+        [[step cur]
+          def e (index get cur)
+          if (e is None) [cur]
+            [def tgt (e.attributes get "merged_into")
+              if (tgt is None) [cur] [tgt]
+            ]
+        ]
     ]
-  ]] (iota 8) id
+    (iota 8) id
 ]]
 
 # Distinct sorted string list.
-def distinct-sorted fn [[xs:List] [List] [
-  sort (fold [var [[x acc]
-    if (((filter [eq x] acc) size) gt 0) [acc] [push x acc]
-  ]] xs [])
-]]
+def distinct-sorted fn xs:List List [
+  sort
+    (fold
+        [var
+            [[x acc]
+              if (((filter [eq x] acc) size) gt 0) [acc] [push x acc]
+            ]
+        ]
+        xs []
+    )
+]
 
 # Merge `loser` into `winner` (already decided by resolve.aql):
 #   - winner keeps its label; gains the loser's label + aliases as aliases
@@ -50,48 +60,58 @@ def distinct-sorted fn [[xs:List] [List] [
 #   - loser -> status "merged", attributes.merged_into = winner id
 # Returns {winner loser}.
 def merge-pair fn [[winner:Map loser:Map] [Map] [
-  def aliases (filter [neq winner.label] (distinct-sorted
-    (flatten [winner.aliases (push loser.label loser.aliases)])))
-  def new-winner (make KgEntity {
-    id: winner.id
-    type: winner.type
-    label: winner.label
-    normalized_label: winner.normalized_label
-    aliases: aliases
-    external_ids: (StructUtil.merge loser.external_ids winner.external_ids)
-    attributes: (StructUtil.merge loser.attributes winner.attributes)
-    status: winner.status
-  })
-  def new-loser (make KgEntity {
-    id: loser.id
-    type: loser.type
-    label: loser.label
-    normalized_label: loser.normalized_label
-    aliases: loser.aliases
-    external_ids: loser.external_ids
-    attributes: (loser.attributes set merged_into winner.id)
-    status: "merged"
-  })
-  KgUtil.as-map {winner: new-winner loser: new-loser}
+  def aliases
+    (filter [neq winner.label]
+        (distinct-sorted
+            (flatten [winner.aliases (push loser.label loser.aliases)])
+        )
+    )
+  def new-winner
+    (make KgEntity
+        {id:winner.id
+          type:winner.type
+          label:winner.label
+          normalized_label:winner.normalized_label
+          aliases:aliases
+          external_ids:(StructUtil.merge loser.external_ids winner.external_ids)
+          attributes:(StructUtil.merge loser.attributes winner.attributes)
+          status:winner.status
+        }
+    )
+  def new-loser
+    (make KgEntity
+        {id:loser.id
+          type:loser.type
+          label:loser.label
+          normalized_label:loser.normalized_label
+          aliases:loser.aliases
+          external_ids:loser.external_ids
+          attributes:(loser.attributes set merged_into winner.id)
+          status:"merged"
+        }
+    )
+    KgUtil.as-map {winner:new-winner loser:new-loser}
 ]]
 
 # Unify entities that share one deterministic id (the same record
 # arriving from different candidate bundles): the first occurrence wins
 # and later duplicates fold in via merge-pair (their labels, aliases,
 # external ids, and attributes survive on the winner).
-def unify-by-id fn [[entities:List] [List] [
-  fold [var [[e acc]
-    def existing (filter [dot id eq e.id] acc)
-    if ((existing size) gt 0)
-      [
-        def unified (merge-pair (existing get 0) e)
-        each [var [[x]
-          if (x.id eq e.id) [unified get "winner"] [x]
-        ]] acc
-      ]
-      [push e acc]
-  ]] entities []
-]]
+def unify-by-id fn entities:List List [
+  fold
+    [var
+        [[e acc]
+          def existing (filter [dot id eq e.id] acc)
+          if ((existing size) gt 0)
+            [def unified (merge-pair (existing get 0) e) each
+                [var [[x] if (x.id eq e.id) [unified get "winner"] [x]]]
+                acc
+            ]
+            [push e acc]
+        ]
+    ]
+    entities []
+]
 
 # Drop EXACT duplicates: a record whose id and full content deep-equal
 # an already-kept record is the same object arriving again (overlapping
@@ -99,19 +119,30 @@ def unify-by-id fn [[entities:List] [List] [
 # duplicate-id violation. A record that shares an id but DIFFERS in
 # content is kept, so validation still reports the genuine
 # duplicate-id inconsistency instead of silently picking a winner.
-def dedupe-identical fn [[xs:List] [List] [
-  fold [var [[x acc]
-    def seen (((filter [var [[y] (y.id eq x.id) and (y deq x)]] acc) size) gt 0)
-    if seen [acc] [push x acc]
-  ]] xs []
-]]
+def dedupe-identical fn xs:List List [
+  fold
+    [var
+        [[x acc]
+          def seen
+            (((filter [var [[y] (y.id eq x.id) and (y deq x)]]
+                        acc
+                    )
+                    size
+                )
+                gt 0
+            )
+          if seen [acc] [push x acc]
+        ]
+    ]
+    xs []
+]
 
 export "KgEnt" {
-  index-by-id: index-by-id/r
-  find-by-id: find-by-id/r
-  canonical-id: canonical-id/r
-  unify-by-id: unify-by-id/r
-  dedupe-identical: dedupe-identical/r
-  distinct-sorted: distinct-sorted/r
-  merge-pair: merge-pair/r
+  index-by-id:index-by-id/r
+  find-by-id:find-by-id/r
+  canonical-id:canonical-id/r
+  unify-by-id:unify-by-id/r
+  dedupe-identical:dedupe-identical/r
+  distinct-sorted:distinct-sorted/r
+  merge-pair:merge-pair/r
 }

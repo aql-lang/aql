@@ -9,151 +9,267 @@ import "./resolve.aql"
 import "./ingest.aql"
 import "./assertions.aql"
 
-def mk fn [[id:String label:String nlabel:String eids:Map attrs:Map] [Map] [
-  KgSchema.mk-entity {
-    id: id type: "Person" label: label normalized_label: nlabel
-    aliases: [] external_ids: eids attributes: attrs status: "accepted"
-  }
+def mk fn [[id:String label:String nlabel:String eids:Map attrs:Map]
+  [Map] [
+  KgSchema.mk-entity
+    {id:id
+      type:"Person"
+      label:label
+      normalized_label:nlabel
+      aliases:[]
+      external_ids:eids
+      attributes:attrs
+      status:"accepted"
+    }
 ]]
 
 # -- safe merge: shared authoritative identifier --------------------------
 
-def nova1 (mk "ent:Person:10" "Lin Nova" "lin nova" {orcid: "0000-1"} {})
-def nova2 (mk "ent:Person:11" "L. Nova" "l. nova" {orcid: "0000-1"} {})
+def nova1 (mk "ent:Person:10" "Lin Nova" "lin nova" {orcid:"0000-1"} {})
+def nova2 (mk "ent:Person:11" "L. Nova" "l. nova" {orcid:"0000-1"} {})
 def r1 (KgResolve.resolve-entities [nova1 nova2] [])
 def d1 ((r1 get "decisions") get 0)
-[ d1.decision "same_entity" Assert.equal ]
-  "shared external id decides same_entity" Test.test end
-[ d1.review_required false Assert.equal ]
-  "identifier-backed merge needs no review" Test.test end
+[d1.decision "same_entity" Assert.equal]
+"shared external id decides same_entity" Test.test end
+[d1.review_required false Assert.equal]
+"identifier-backed merge needs no review" Test.test end
 def merged1 (filter [dot status eq "merged"] (r1 get "entities"))
-[ (merged1 size) 1 Assert.equal ]
-  "identifier match auto-merges exactly one entity" Test.test end
+[(merged1 size) 1 Assert.equal]
+"identifier match auto-merges exactly one entity" Test.test end
 def loser1 (merged1 get 0)
-[ (loser1.attributes get "merged_into") "ent:Person:10" Assert.equal ]
-  "the merged entity records its canonical id (reversible)" Test.test end
+[(loser1.attributes get "merged_into") "ent:Person:10" Assert.equal]
+"the merged entity records its canonical id (reversible)" Test.test end
 def winner1 (KgEnt.find-by-id (r1 get "entities") "ent:Person:10")
-[ ((filter [eq "L. Nova"] winner1.aliases) size) 1 Assert.equal ]
-  "the loser's label survives as an alias" Test.test end
+[((filter [eq "L. Nova"] winner1.aliases) size) 1 Assert.equal]
+"the loser's label survives as an alias" Test.test end
 
 # -- rejected merge: name only --------------------------------------------
 
-def reyes1 (mk "ent:Person:20" "Sam Reyes" "sam reyes" {} {chapter: "north"})
-def reyes2 (mk "ent:Person:21" "Sam Reyes" "sam reyes" {} {chapter: "south"})
+def reyes1
+(mk "ent:Person:20" "Sam Reyes" "sam reyes" {} {chapter:"north"})
+def reyes2
+(mk "ent:Person:21" "Sam Reyes" "sam reyes" {} {chapter:"south"})
 def r2 (KgResolve.resolve-entities [reyes1 reyes2] [])
 def d2 ((r2 get "decisions") get 0)
-[ d2.decision "possible_match" Assert.equal ]
-  "a name-only pair is only a possible_match" Test.test end
-[ d2.review_required true Assert.equal ]
-  "possible_match requires human review" Test.test end
-[ ((filter [dot status eq "merged"] (r2 get "entities")) size) 0 Assert.equal ]
-  "a name-only pair NEVER merges" Test.test end
+[d2.decision "possible_match" Assert.equal]
+"a name-only pair is only a possible_match" Test.test end
+[d2.review_required true Assert.equal]
+"possible_match requires human review" Test.test end
+[((filter [dot status eq "merged"] (r2 get "entities")) size) 0
+      Assert.equal
+  ]
+"a name-only pair NEVER merges" Test.test end
 
 # -- corroborated merge: name + two matching attributes -------------------
 
-def kestrel1 (mk "ent:Person:30" "Ivy Kestrel" "ivy kestrel" {}
-  {chapter: "north" role: "pilot"})
-def kestrel2 (mk "ent:Person:31" "Ivy Kestrel" "ivy kestrel" {}
-  {chapter: "north" role: "pilot"})
+def kestrel1
+(mk "ent:Person:30" "Ivy Kestrel" "ivy kestrel" {}
+      {chapter:"north" role:"pilot"}
+  )
+def kestrel2
+(mk "ent:Person:31" "Ivy Kestrel" "ivy kestrel" {}
+      {chapter:"north" role:"pilot"}
+  )
 def r3 (KgResolve.resolve-entities [kestrel1 kestrel2] [])
 def d3 ((r3 get "decisions") get 0)
-[ d3.decision "same_entity" Assert.equal ]
-  "two corroborating attributes decide same_entity" Test.test end
-[ ((filter [dot status eq "merged"] (r3 get "entities")) size) 1 Assert.equal ]
-  "corroborated same_entity merges" Test.test end
+[d3.decision "same_entity" Assert.equal]
+"two corroborating attributes decide same_entity" Test.test end
+[((filter [dot status eq "merged"] (r3 get "entities")) size) 1
+      Assert.equal
+  ]
+"corroborated same_entity merges" Test.test end
 
 # -- conflicting identifiers ----------------------------------------------
 
-def kite1 (mk "ent:Person:40" "Jo Kite" "jo kite" {staffno: "K-100"} {})
-def kite2 (mk "ent:Person:41" "Jo Kite" "jo kite" {staffno: "K-200"} {})
+def kite1 (mk "ent:Person:40" "Jo Kite" "jo kite" {staffno:"K-100"} {})
+def kite2 (mk "ent:Person:41" "Jo Kite" "jo kite" {staffno:"K-200"} {})
 def r4 (KgResolve.resolve-entities [kite1 kite2] [])
 def d4 ((r4 get "decisions") get 0)
-[ d4.decision "different_entity" Assert.equal ]
-  "conflicting identifier values decide different_entity" Test.test end
-[ ((filter [dot status eq "merged"] (r4 get "entities")) size) 0 Assert.equal ]
-  "conflicting identifiers never merge" Test.test end
-[ d4.review_required true Assert.equal ]
-  "same-name different-id pair is flagged for review" Test.test end
+[d4.decision "different_entity" Assert.equal]
+"conflicting identifier values decide different_entity" Test.test end
+[((filter [dot status eq "merged"] (r4 get "entities")) size) 0
+      Assert.equal
+  ]
+"conflicting identifiers never merge" Test.test end
+[d4.review_required true Assert.equal]
+"same-name different-id pair is flagged for review" Test.test end
 
 # -- explicit same_as without corroboration -------------------------------
 
 def vale1 (mk "ent:Person:50" "Rio Vale" "rio vale" {} {})
 def vale2 (mk "ent:Person:51" "R. Vale" "r. vale" {} {})
-def same-as (KgSchema.mk-assertion {
-  id: "ast:sa" subject_id: "ent:Person:50" predicate: "same_as"
-  object: (KgSchema.mk-entity-ref "ent:Person:51")
-  evidence: [(KgSchema.mk-evidence {source_id: "src:x" locator: "l"
-    quote: "Rio Vale, also published as R. Vale" extraction_method: "manual" extractor: "t"})]
-  confidence: 0.99 status: "asserted" valid_from: none valid_to: none
-  recorded_at: "2026-01-01T00:00:00Z" rule: none
-})
+def same-as
+(KgSchema.mk-assertion
+      {id:"ast:sa"
+        subject_id:"ent:Person:50"
+        predicate:"same_as"
+        object:(KgSchema.mk-entity-ref "ent:Person:51")
+        evidence:[(KgSchema.mk-evidence
+                {source_id:"src:x"
+                  locator:"l"
+                  quote:"Rio Vale, also published as R. Vale"
+                  extraction_method:"manual"
+                  extractor:"t"
+                }
+            )
+        ]
+        confidence:0.99
+        status:"asserted"
+        valid_from:none
+        valid_to:none
+        recorded_at:"2026-01-01T00:00:00Z"
+        rule:none
+      }
+  )
 def r5 (KgResolve.resolve-entities [vale1 vale2] [same-as])
 def d5 ((r5 get "decisions") get 0)
-[ d5.decision "same_entity" Assert.equal ]
-  "explicit same_as decides same_entity" Test.test end
-[ d5.review_required true Assert.equal ]
-  "same_as without corroborating evidence goes to review" Test.test end
-[ ((filter [dot status eq "merged"] (r5 get "entities")) size) 0 Assert.equal ]
-  "same_as without an identifier or attributes does not auto-merge" Test.test end
+[d5.decision "same_entity" Assert.equal]
+"explicit same_as decides same_entity" Test.test end
+[d5.review_required true Assert.equal]
+"same_as without corroborating evidence goes to review" Test.test end
+[((filter [dot status eq "merged"] (r5 get "entities")) size) 0
+      Assert.equal
+  ]
+"same_as without an identifier or attributes does not auto-merge"
+Test.test end
 
 # -- canonical-id follows merge chains, bounded ---------------------------
 
-def chain-index (KgEnt.index-by-id [
-  (KgSchema.mk-entity {id: "ent:c" type: "Person" label: "C" normalized_label: "c"
-    aliases: [] external_ids: {} attributes: {merged_into: "ent:b"} status: "merged"})
-  (KgSchema.mk-entity {id: "ent:b" type: "Person" label: "B" normalized_label: "b"
-    aliases: [] external_ids: {} attributes: {merged_into: "ent:a"} status: "merged"})
-  (KgSchema.mk-entity {id: "ent:a" type: "Person" label: "A" normalized_label: "a"
-    aliases: [] external_ids: {} attributes: {} status: "accepted"})
-])
-[ (KgEnt.canonical-id chain-index "ent:c") "ent:a" Assert.equal ]
-  "canonical-id chases a two-step merge chain" Test.test end
-[ (KgEnt.canonical-id chain-index "ent:zz") "ent:zz" Assert.equal ]
-  "canonical-id is the identity for unknown ids" Test.test end
+def chain-index
+(KgEnt.index-by-id
+      [(KgSchema.mk-entity
+              {id:"ent:c"
+                type:"Person"
+                label:"C"
+                normalized_label:"c"
+                aliases:[]
+                external_ids:{}
+                attributes:{merged_into:"ent:b"}
+                status:"merged"
+              }
+          )
+          (KgSchema.mk-entity
+              {id:"ent:b"
+                type:"Person"
+                label:"B"
+                normalized_label:"b"
+                aliases:[]
+                external_ids:{}
+                attributes:{merged_into:"ent:a"}
+                status:"merged"
+              }
+          )
+          (KgSchema.mk-entity
+              {id:"ent:a"
+                type:"Person"
+                label:"A"
+                normalized_label:"a"
+                aliases:[]
+                external_ids:{}
+                attributes:{}
+                status:"accepted"
+              }
+          )
+      ]
+  )
+[(KgEnt.canonical-id chain-index "ent:c") "ent:a" Assert.equal]
+"canonical-id chases a two-step merge chain" Test.test end
+[(KgEnt.canonical-id chain-index "ent:zz") "ent:zz" Assert.equal]
+"canonical-id is the identity for unknown ids" Test.test end
 
 # -- blank external identifiers never drive a merge (PR #293 review) ------
 
-def blank1 (KgIngest.ingest-entity {key: "b1" type: "Person" label: "Kai Sable"
-  external_ids: {orcid: ""}})
-def blank2 (KgIngest.ingest-entity {key: "b2" type: "Person" label: "Ada Wren"
-  external_ids: {orcid: ""}})
-[ (blank1.external_ids has orcid) false Assert.equal ]
-  "a blank external-id value is pruned at ingest" Test.test end
+def blank1
+(KgIngest.ingest-entity
+      {key:"b1" type:"Person" label:"Kai Sable" external_ids:{orcid:""}}
+  )
+def blank2
+(KgIngest.ingest-entity
+      {key:"b2" type:"Person" label:"Ada Wren" external_ids:{orcid:""}}
+  )
+[(blank1.external_ids has orcid) false Assert.equal]
+"a blank external-id value is pruned at ingest" Test.test end
 def r6 (KgResolve.resolve-entities [blank1 blank2] [])
-[ ((filter [dot status eq "merged"] (r6 get "entities")) size) 0 Assert.equal ]
-  "two blank identifiers never auto-merge unrelated entities" Test.test end
+[((filter [dot status eq "merged"] (r6 get "entities")) size) 0
+      Assert.equal
+  ]
+"two blank identifiers never auto-merge unrelated entities" Test.test
+end
 
 # -- transitive merge chains (PR #293 review) -----------------------------
 
-def chain-a (mk "ent:Person:60" "Ann Chain" "ann chain" {s1: "x"} {})
-def chain-b (mk "ent:Person:61" "Bee Chain" "bee chain" {s1: "x" s2: "y"} {})
-def chain-c (mk "ent:Person:62" "Cee Chain" "cee chain" {s2: "y"} {})
+def chain-a (mk "ent:Person:60" "Ann Chain" "ann chain" {s1:"x"} {})
+def chain-b
+(mk "ent:Person:61" "Bee Chain" "bee chain" {s1:"x" s2:"y"} {})
+def chain-c (mk "ent:Person:62" "Cee Chain" "cee chain" {s2:"y"} {})
 def r7 (KgResolve.resolve-entities [chain-a chain-b chain-c] [])
 def chain-entities (r7 get "entities")
-[ ((filter [dot status eq "merged"] chain-entities) size) 2 Assert.equal ]
-  "an identifier chain merges every linked entity" Test.test end
+[((filter [dot status eq "merged"] chain-entities) size) 2 Assert.equal]
+"an identifier chain merges every linked entity" Test.test end
 def chain-idx (KgEnt.index-by-id chain-entities)
-[ (KgEnt.canonical-id chain-idx "ent:Person:62") "ent:Person:60" Assert.equal ]
-  "the chain's tail resolves to the head canonical entity" Test.test end
-[ (KgEnt.canonical-id chain-idx "ent:Person:61") "ent:Person:60" Assert.equal ]
-  "the chain's middle resolves to the head canonical entity" Test.test end
+[(KgEnt.canonical-id chain-idx "ent:Person:62") "ent:Person:60"
+      Assert.equal
+  ]
+"the chain's tail resolves to the head canonical entity" Test.test end
+[(KgEnt.canonical-id chain-idx "ent:Person:61") "ent:Person:60"
+      Assert.equal
+  ]
+"the chain's middle resolves to the head canonical entity" Test.test end
 
 # -- unresolved claims never drag accepted claims into dispute ------------
 
-def uev [(KgSchema.mk-evidence {source_id: "src:u" locator: "l" quote: none
-  extraction_method: "manual" extractor: "t"})]
-def u1 (KgSchema.mk-assertion {id: "ast:u1" subject_id: "ent:Person:60"
-  predicate: "works_for" object: (KgSchema.mk-entity-ref "ent:x")
-  evidence: uev confidence: 0.9 status: "asserted" valid_from: none
-  valid_to: none recorded_at: "t" rule: none})
-def u2 (KgSchema.mk-assertion {id: "ast:u2" subject_id: "ent:Person:60"
-  predicate: "works_for" object: (KgSchema.mk-entity-ref "ent:y")
-  evidence: uev confidence: 0.4 status: "unresolved" valid_from: none
-  valid_to: none recorded_at: "t" rule: none})
+def uev [
+  (KgSchema.mk-evidence
+        {source_id:"src:u"
+          locator:"l"
+          quote:none
+          extraction_method:"manual"
+          extractor:"t"
+        }
+    )
+]
+def u1
+(KgSchema.mk-assertion
+      {id:"ast:u1"
+        subject_id:"ent:Person:60"
+        predicate:"works_for"
+        object:(KgSchema.mk-entity-ref "ent:x")
+        evidence:uev
+        confidence:0.9
+        status:"asserted"
+        valid_from:none
+        valid_to:none
+        recorded_at:"t"
+        rule:none
+      }
+  )
+def u2
+(KgSchema.mk-assertion
+      {id:"ast:u2"
+        subject_id:"ent:Person:60"
+        predicate:"works_for"
+        object:(KgSchema.mk-entity-ref "ent:y")
+        evidence:uev
+        confidence:0.4
+        status:"unresolved"
+        valid_from:none
+        valid_to:none
+        recorded_at:"t"
+        rule:none
+      }
+  )
 def marked (KgAst.mark-conflicts [u1 u2])
-[ (((filter [dot id eq "ast:u1"] (marked get "assertions")) get 0) get "status")
-  "asserted" Assert.equal ]
-  "an unresolved candidate does not dispute an accepted claim" Test.test end
+[(((filter [dot id eq "ast:u1"] (marked get "assertions")) get
+              0
+          )
+          get "status"
+      )
+      "asserted" Assert.equal
+  ]
+"an unresolved candidate does not dispute an accepted claim" Test.test
+end
 
 print (Test.report)
-if ((Test.fail-count) gt 0) [raise test_failed "resolution_test failures"]
+if ((Test.fail-count) gt 0) [
+  raise test_failed "resolution_test failures"
+]
