@@ -2,11 +2,15 @@ package buildrt
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // langOpts returns a default (no-policy, allow-everything) options value for
@@ -178,5 +182,100 @@ func TestEvalColorErrorRendering(t *testing.T) {
 	err = EvalColor(&out, "99 uppr", langOpts(), CompileOff, false)
 	if err == nil || strings.Contains(err.Error(), "\x1b[") {
 		t.Fatalf("color=false must stay plain, got %v", err)
+	}
+}
+
+// A built binary must see its own command line. Both call sites already
+// passed os.Args[1:] into Main and it was dropped on the floor, so an
+// `aql build` tool on $PATH could not be given an argument — which is not a
+// tool. This is the whole point of the packaging story.
+func TestMainSurfacesArgsAsIOArgs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	cfg := Config{Source: "import \"aql:io\"\nIO.args\n"}
+	if code := Main(cfg, []string{"alpha", "--beta"}, nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"alpha", "--beta"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("IO.args lost %q; got %q", want, out)
+		}
+	}
+}
+
+// With no args installed IO.args is the empty list, never none or an error,
+// so a program can iterate unconditionally.
+func TestMainNoArgsIsEmptyList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	cfg := Config{Source: "import \"aql:io\"\nsize (IO.args)\n"}
+	if code := Main(cfg, nil, nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "0") {
+		t.Errorf("want an empty args list, got %q", stdout.String())
+	}
+}
+
+// A multi-file program's bundled sources must OVERLAY the host filesystem,
+// not replace it. Replacing sent every write into RAM, where it was
+// discarded at exit with a 0 status — a silent data-loss bug that only
+// appeared once a program grew past one file.
+func TestMainBundledFilesDoNotHideTheHostFilesystem(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "written.txt")
+
+	// A bundled file makes cfg.Files non-empty, taking the overlay branch.
+	cfg := Config{
+		Source:   "import \"aql:io\"\nIO.write (make Pathon \"" + target + "\") \"payload\"\n",
+		EntryDir: dir,
+		Files:    map[string][]byte{filepath.Join(dir, "bundled.aql"): []byte("export \"B\" {x:1}")},
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Main(cfg, nil, nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("the write never reached the real filesystem: %v", err)
+	}
+	if string(got) != "payload" {
+		t.Errorf("file contents = %q, want payload", got)
+	}
+}
+
+// A policy baked in at build time is compiled and enforced.
+func TestMainEnforcesBakedProfile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "denied.txt")
+	prof, err := policy.LoadAuto("read-only")
+	if err != nil {
+		t.Skipf("read-only profile unavailable: %v", err)
+	}
+	cfg := Config{
+		Source:  "import \"aql:io\"\nIO.write (make Pathon \"" + target + "\") \"x\"\n",
+		Profile: permsflags.ProfileFromPolicy(prof),
+	}
+	var stdout, stderr bytes.Buffer
+	code := Main(cfg, nil, nil, &stdout, &stderr)
+	if code == 0 {
+		t.Error("a read-only baked policy allowed a write")
+	}
+	if _, err := os.Stat(target); err == nil {
+		t.Error("the denied write still produced a file")
+	}
+}
+
+// A corrupt baked profile is reported, not ignored.
+func TestMainRejectsUnresolvableProfile(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	cfg := Config{
+		Source:  "1",
+		Profile: &policy.Profile{Name: "broken", Extends: "no-such-profile"},
+	}
+	if code := Main(cfg, nil, nil, &stdout, &stderr); code == 0 {
+		t.Error("an unresolvable baked profile was accepted")
+	}
+	if !strings.Contains(stderr.String(), "baked policy") {
+		t.Errorf("stderr does not name the baked policy: %q", stderr.String())
 	}
 }

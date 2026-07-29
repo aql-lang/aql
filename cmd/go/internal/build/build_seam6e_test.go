@@ -37,7 +37,7 @@ func testCfg(t *testing.T) buildrt.Config {
 	t.Helper()
 	dir := t.TempDir()
 	src := write(t, dir, "p.aql", "add 1 2")
-	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestBuildConfigAbsError(t *testing.T) {
 	if err := os.Remove(gone); err != nil {
 		t.Skipf("cannot remove cwd on this platform: %v", err)
 	}
-	if _, err := buildConfig("rel.aql", "", 0, buildrt.CompileOff, ""); err == nil {
+	if _, err := buildConfig("rel.aql", "", 0, buildrt.CompileOff, "", nil); err == nil {
 		t.Fatal("buildConfig with deleted cwd: want error, got nil")
 	}
 }
@@ -115,7 +115,7 @@ func TestCollectImportsCycleAndNestedError(t *testing.T) {
 	// a imports b, b imports a (cycle -> seen-skip arm).
 	a := write(t, dir, "a.aql", `import "./b.aql"`)
 	write(t, dir, "b.aql", `import "./a.aql"`)
-	cfg, err := buildConfig(a, "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(a, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatalf("cycle: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestCollectImportsCycleAndNestedError(t *testing.T) {
 	// c imports d, d imports a missing file (recursive-error arm).
 	c := write(t, dir, "c.aql", `import "./d.aql"`)
 	write(t, dir, "d.aql", `import "./missing.aql"`)
-	if _, err := buildConfig(c, "", 0, buildrt.CompileOff, ""); err == nil {
+	if _, err := buildConfig(c, "", 0, buildrt.CompileOff, "", nil); err == nil {
 		t.Fatal("nested missing import: want error, got nil")
 	}
 }

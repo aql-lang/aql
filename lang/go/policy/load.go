@@ -97,6 +97,17 @@ func LoadAuto(src string) (Policy, error) {
 	return Load(src)
 }
 
+// CompileProfile resolves and compiles an already-parsed Profile, using the
+// built-in profile set to satisfy any `extends`. It is the entry point for a
+// Profile that arrived as structured data rather than as source text — a
+// policy baked into a built binary's payload, for instance.
+func CompileProfile(p *Profile) (Policy, error) {
+	if p == nil {
+		return nil, fmt.Errorf("policy: nil profile")
+	}
+	return p.Compile(loadProfileByName)
+}
+
 // FromMap constructs a Policy from a map (as produced by jsonic
 // parsing or by handcrafting in Go). Used by the aql:vm module to
 // accept policies as runtime data.

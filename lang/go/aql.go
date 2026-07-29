@@ -95,6 +95,23 @@ func NewMemFileOps() *capabilities.MemFileOps {
 	return capabilities.NewMem()
 }
 
+// NewOverlayFileOps layers upper (writable) over lower (read-only): reads
+// consult upper first and fall through to lower, and every mutation lands in
+// upper. Use it wherever a set of in-memory files must SHADOW the host
+// filesystem rather than hide it — a built binary's bundled sources, for
+// instance, where replacing the host outright silently discarded the
+// program's real writes.
+func NewOverlayFileOps(upper, lower FileOps) FileOps {
+	return capabilities.NewOverlay(upper, lower)
+}
+
+// HostFileOps returns the file system currently installed on the instance —
+// the real OS-backed one unless a host or policy replaced it. Callers layering
+// an overlay need it as the lower layer.
+func (a *AQL) HostFileOps() FileOps {
+	return native.HostFileOps(a.registry)
+}
+
 // Options configures an AQL instance.
 type Options struct {
 	// Registry is a string identifier for the registry to use.

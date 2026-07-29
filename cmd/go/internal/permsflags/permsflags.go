@@ -199,6 +199,12 @@ func loadByName(base policy.Policy) func(string) (*policy.Profile, error) {
 	}
 }
 
+// ProfileFromPolicy flattens a compiled Policy back into a serialisable
+// Profile. Exported so `aql build` can BAKE the resolved policy into the
+// executable: Policy is an interface and cannot be marshalled, Profile is
+// fully json-tagged and can.
+func ProfileFromPolicy(p policy.Policy) *policy.Profile { return profileFromPolicy(p) }
+
 func profileFromPolicy(p policy.Policy) *policy.Profile {
 	prof := &policy.Profile{
 		Name:   p.Name(),

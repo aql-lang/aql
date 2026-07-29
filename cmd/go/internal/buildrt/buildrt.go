@@ -26,6 +26,7 @@ import (
 
 	lang "github.com/aql-lang/aql/lang/go"
 	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/aql-lang/aql/lang/go/policy"
 
 	"github.com/aql-lang/aql/cmd/go/internal/termback"
 )
@@ -219,15 +220,41 @@ type Config struct {
 	// OptionsBlob is the raw --options jsonic string baked in, parsed at run
 	// time exactly as the run subcommand parses --options.
 	OptionsBlob string `json:"optionsBlob,omitempty"`
+	// Profile is the permissions profile baked in at build time by
+	// `aql build -perms …`, compiled to a policy.Policy in Main.
+	//
+	// It is a *policy.Profile and NOT a policy.Policy because Policy is an
+	// interface and this struct is JSON-marshalled into the executable's
+	// trailer; Profile is the flattened, json-tagged form, produced by the
+	// same helper the CLI flags use (permsflags.ProfileFromPolicy).
+	//
+	// SECURITY NOTE, and it must stay in the docs: the trailer is plain
+	// JSON behind a magic+length marker with no integrity check, so a baked
+	// profile is a strippable DEFAULT, not a boundary against an attacker
+	// who holds the binary. It constrains the PROGRAM, which is what a tool
+	// author shipping an AQL script wants.
+	Profile *policy.Profile `json:"profile,omitempty"`
 }
 
 // Main is the entrypoint a standalone executable runs: build lang.Options from
-// the baked Config, seed an in-memory file system with any bundled files, run
-// the entry source, and map errors to a process exit code. args/stdin are
-// accepted (and currently unused by the runtime) so a future AQL program that
-// reads process args or stdin keeps working without changing this signature.
-func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
-	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed}
+// the baked Config, overlay any bundled files over the host filesystem, run the
+// entry source, and map errors to a process exit code.
+//
+// args reaches the program as IO.args. Both call sites already passed
+// os.Args[1:] here and it was discarded, so a built tool could not see its own
+// command line — which is not a tool. That was the single largest gap in the
+// packaging story: `aql build` produced a binary on $PATH that could not be
+// given an argument.
+func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int {
+	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed, ScriptArgs: args}
+	if cfg.Profile != nil {
+		pol, err := policy.CompileProfile(cfg.Profile)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: baked policy: %s\n", err)
+			return 1
+		}
+		o.Policy = pol
+	}
 	if cfg.OptionsBlob != "" {
 		m, err := lang.ParseOptions(cfg.OptionsBlob)
 		if err != nil {
@@ -255,7 +282,23 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		for path, data := range cfg.Files {
 			mem.Files[path] = data
 		}
-		a.SetFileOps(mem)
+		// OVERLAY the bundled sources onto the host filesystem — do not
+		// REPLACE it. Replacing meant a multi-file built program lost all
+		// real file access: reads of real paths failed, and writes went to
+		// RAM and were discarded at exit, silently, with exit 0. Single-file
+		// builds took a different branch (build.go attaches Files only when
+		// there is more than the entry), so the failure was invisible until
+		// a program grew a second file.
+		//
+		// Ordering is HOST over MEM, not the other way around. NewOverlay's
+		// upper layer is the writable one AND the one reads consult first,
+		// so mem-over-host would keep the program's writes in RAM — the
+		// very bug being fixed. With host upper: writes reach the real
+		// filesystem, and a bundled source still resolves because the read
+		// falls through to mem. The bundled keys are the BUILD machine's
+		// absolute paths, so a same-path real file on the user's machine is
+		// not a practical collision.
+		a.SetFileOps(lang.NewOverlayFileOps(a.HostFileOps(), mem))
 	}
 
 	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
