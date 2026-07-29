@@ -8,7 +8,7 @@ AQL ?= ../cmd/go/bin/aql
 
 .PHONY: all build check fmt test graph
 
-all: check test graph
+all: fmt check test graph
 
 # Ensure the aql binary exists.
 build:
@@ -23,15 +23,21 @@ check:
 
 # Canonical formatting, in place.
 #
-# DISABLED: `aql fmt` in the current build corrupts template-string
-# interpolations — it reformats `hello ${name}` into `hello $ {name:name}`
-# (the `${expr}` hole is re-parsed as a map literal), changing program
-# semantics. The kg sources use templates heavily, so they are
-# hand-formatted until the formatter is template-safe. Minimal repro:
-#   printf 'def name "w"\nprint `hi ${name}`\n' > /tmp/t.aql
-#   aql fmt /tmp/t.aql   # -> print `hi $ {name:name} `
+# Part of `all` so the sources cannot drift out of canonical form: the
+# formatter is idempotent, so once they are canonical this is a no-op on
+# the tree and `make all` leaves nothing to commit.
+#
+# This target was a guarded no-op until 2026-07-29. It was disabled because
+# `aql fmt` corrupted template interpolations (`hi ${name}` re-parsed the
+# `${expr}` hole as a map literal) and because formatting these sources took
+# ~10 minutes. Both are fixed: the formatter scans backtick literals
+# verbatim (lang/go/formatter/format.go scanBacktick / scanInterpHole), and
+# emitNode is memoised, which took kg/validate.aql from 53s to 40ms — the
+# whole kg tree now formats in well under a second.
 fmt:
-	@echo "kg: aql fmt is disabled here — it corrupts \$${...} template interpolations (see comment in kg/Makefile)"
+	@for f in *.aql tests/*.aql; do \
+	  $(AQL) fmt $$f || exit 1; \
+	done
 
 # Run the whole kg test suite (each file exits non-zero on failure).
 test:

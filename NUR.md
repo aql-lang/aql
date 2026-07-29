@@ -68,7 +68,6 @@ commit.
 | [NUR024](#nur024) | Ordering words are family-restricted; equality is total | 2026-07-22 uniformity review |
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
-| [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
 
 Pending records use a compact form (rule / divergence / evidence /
@@ -577,26 +576,6 @@ text in a template → 6 (the escape survives literally).
 **Documentation status:** REFERENCE documents the restricted template
 set but never states quoted strings accept a superset — the asymmetry
 is undocumented.
-
----
-
-## NUR028 — `aql fmt` re-parses template holes as map literals {#nur028}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** one parser (ADR-007's spirit) — the formatter must agree with
-the parser about what source means.
-**Divergence:** the formatter has no InterpString handling, so
-`` `hi ${name}` `` round-trips to `` `hi $ {name:name} ` `` — the
-`${expr}` hole re-parsed as a map literal, changing program semantics.
-The kg pipeline hand-formats its sources and guards `make fmt` into a
-no-op because of this.
-**Evidence:** `lang/go/formatter/` (no interp path);
-kg/README.md:238-245 (the only place it is tracked);
-design/go-modules/FMT.10.md is silent.
-**Documentation status:** tracked only in a component README.
-**Proposed verdict:** resolve by fix (formatter learns InterpString);
-until then the register entry is the tracker.
 
 ---
 

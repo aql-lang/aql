@@ -236,13 +236,14 @@ bundles subject to the full evidence checks.
 
 ## Known limitations
 
-- **`aql fmt` cannot be run on these sources.** The current formatter
-  corrupts template-string interpolations — `` `hi ${name}` `` becomes
-  `` `hi $ {name:name} ` `` (the `${expr}` hole is re-parsed as a map
-  literal), which changes program semantics. The kg sources use
-  templates heavily and are therefore hand-formatted; `make fmt` here
-  is a guarded no-op until the formatter is template-safe. Every file
-  passes `aql check` (`make check`).
+- ~~**`aql fmt` cannot be run on these sources.**~~ Fixed 2026-07-29.
+  These sources were hand-formatted for two reasons, both now resolved:
+  the formatter corrupted template interpolations (`` `hi ${name}` ``
+  re-parsed the `${expr}` hole as a map literal), and formatting the tree
+  took ~10 minutes. The formatter now scans backtick literals verbatim,
+  and `emitNode` is memoised — `validate.aql` went from 53s to 40ms, the
+  whole kg tree formats in under a second. `make fmt` is live and part of
+  `make all`. Every file still passes `aql check` (`make check`).
 - Native SQLite words are unavailable in the current build (see above) —
   `out/graph.sql` is the relational path; it loads cleanly into stock
   `sqlite3` with zero foreign-key violations.
