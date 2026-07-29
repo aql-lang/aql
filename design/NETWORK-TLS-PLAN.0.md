@@ -61,10 +61,12 @@ fetch {url: "https://api.internal/v1/orders"  tls: {identity: acme/q}}
 connect-raw {tcp: "billing.internal:443"  tls: {identity: acme/q}}
 ```
 
-Keep an explicit-bytes fallback (`tls: {cert: <Bytes> key: <Bytes>}`)
-where the bytes arrive through `aql:io`/`aql:pki` under *their own* gates
-— never a path the network layer dereferences. It requires the new
-`client-cert` op and is off in the default profile.
+This section originally proposed keeping an explicit-bytes fallback
+(`tls: {cert: <Bytes> key: <Bytes>}`) where the bytes arrive through
+`aql:io`/`aql:pki` under *their own* gates — never a path the network
+layer dereferences. **It was not built** (see §8b): nothing needed it,
+and it is the one shape this design otherwise rules out, so it waits for
+a caller rather than shipping on spec.
 
 Holding principle: **a certificate is data, a private key is a
 capability.**
@@ -162,16 +164,23 @@ network without touching the wire.
 ### 4.3 Option grammar (one parser, both call sites)
 
 ```
-tls: {
+tls: {                 # on a DIAL (fetch, connect-raw)
   identity: <Atom>     # host-registered client identity
   verify:   <Boolean>  # default true
-  ca:       <Bytes>    # additional roots, PEM
+  ca:       <Bytes>    # roots, PEM; REPLACES the system pool
   sni:      <String>   # server name override
   min:      <String>   # "1.2" | "1.3"
-  cert:     <Bytes>    # gated fallback (with key:)
-  key:      <Bytes>
+}
+
+tls: {                 # on a BIND (listen) — see §8b
+  identity:       <Atom>   # the credential to PRESENT (required)
+  require-client: <Bytes>  # client-CA roots, PEM; demands + verifies
+  min:            <String> # "1.2" | "1.3"
 }
 ```
+
+`cert:`/`key:` appear in neither: the explicit-bytes fallback sketched in
+§3 was not built. Both parsers reject an unlisted key by name.
 
 One `parseTLSOpts(r, v Value, word string) (TLSProfile, error)` shared by
 `fetch` and `parseNetAddr` (`net_socket.go:172` neighbourhood), so the two
@@ -414,6 +423,15 @@ guessed:
   the listener also cost `accept {within:}` its deadline —
   `tls.NewListener` does not forward `SetDeadline` — so `netListener`
   now keeps the bound listener alongside the wrapped one.
+- **The explicit-bytes `cert:`/`key:` fallback (§3, §4.3) was not built.**
+  No call site needed it, and it is the one shape this design otherwise
+  argues against: the bytes are a private key living as a guest value.
+  The confused-deputy objection does NOT apply to it — a guest reading
+  its own file under its own `fileops` gate already had that authority,
+  which is exactly why §3 kept it — so this is a "nobody asked" decision,
+  not a "we decided against it" one. It stays available to build. Until
+  someone does, `identity:` is the only way to present a credential, and
+  the parsers reject `cert:`/`key:` by name like any unknown key.
 - **`native` cannot import `modules`,** so `ParseTLSOpts` cannot know the
   handle type directly. `native.TLSIdentityHandles` is a slice of
   `func(Value) (string, bool)` probes that `modules` appends to in

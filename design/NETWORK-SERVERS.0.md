@@ -286,11 +286,14 @@ decrypted stream — TLS is a socket option, not a separate API). `unix:` select
 a Unix-domain socket instead of `tcp:`.
 
 > **AMENDED (as built).** This originally read `tls: {cert: … key: …}` with
-> file PATHS. The client half of that form was replaced by a host-registered
-> `identity:` — a guest-chosen path dereferenced under host authority is a
-> confused deputy, and a credential modelled as bytes cannot express an
-> HSM- or agent-backed key. See [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
-> §4.4 for the full rationale. The server side (phase 6 of
+> file PATHS. That form was replaced by a host-registered `identity:` — a
+> guest-chosen path dereferenced under host authority is a confused
+> deputy, and a credential modelled as bytes cannot express an HSM- or
+> agent-backed key. See [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
+> §4.4 for the full rationale. There is no `cert:`/`key:` option on
+> either side: the explicit-**`Bytes`** fallback the plan sketched was
+> not built, so `listen` accepts `identity:`, `require-client:` and
+> `min:` and rejects anything else by name. The server side (phase 6 of
 > [NETWORK-TLS-PLAN.0.md](NETWORK-TLS-PLAN.0.md)) has since landed, using
 > the same named identities plus `require-client:` for the client CA pool:
 >

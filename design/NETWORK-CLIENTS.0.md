@@ -200,9 +200,22 @@ set from the bottom up.
 > read lazily, inside the handshake, so a rotated secret is picked up
 > without re-running the program.
 >
-> Explicit `cert:`/`key:` **`Bytes`** (obtained through `aql:io` or
-> `aql:pki` under their own gates) remain available as a deliberate escape
-> hatch — but never as a path the network layer dereferences.
+> **`identity:` is the only way in — there is no `cert:`/`key:` option.**
+> An explicit-bytes fallback (`cert:`/`key:` as **`Bytes`** obtained
+> through `aql:io` or `aql:pki` under *their own* gates) was planned as a
+> deliberate escape hatch and is NOT implemented: `ParseTLSOpts` accepts
+> `identity`, `verify`, `ca`, `sni` and `min` only, and rejects every
+> other key by name. Writing `tls: {cert: …}` today raises
+> `tls: unknown option "cert"`.
+>
+> Nothing depends on it, so it is left unbuilt rather than built
+> speculatively. Note what adding it would cost: the bytes are a private
+> key held as a guest value, which is the one shape the rest of this
+> section exists to avoid. That is defensible — a guest reading its own
+> file under its own `fileops` gate is not the confused deputy a
+> host-dereferenced path would be — but it is a real widening, and it
+> wants a caller who actually needs it rather than a doc entry nobody
+> asked for.
 >
 > The holding principle: **a certificate is data, a private key is a
 > capability.** Rationale and phasing in
