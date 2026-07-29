@@ -377,7 +377,8 @@ func TestImportJSONFile(t *testing.T) {
 	if len(result) != 1 || !result[0].Parent.Equal(native.TMap) {
 		t.Fatalf("expected map on stack, got %v", result)
 	}
-	assertResult(t, result, "{diameter:12756 name:'Earth'}")
+	// Source key order (name before diameter) is preserved now, not sorted.
+	assertResult(t, result, "{name:'Earth' diameter:12756}")
 }
 
 func TestImportJSONFileAccess(t *testing.T) {
