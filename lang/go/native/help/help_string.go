@@ -101,7 +101,7 @@ func init() {
 			"title (first char of each word), sentence (first char after lowering all), fold.",
 		Notes: []string{
 			"fold is an approximation using toLower; for true Unicode case folding, use a locale-aware library.",
-			"Options: style, u, norm, loc.",
+			"Options: style, norm.",
 		},
 	})
 

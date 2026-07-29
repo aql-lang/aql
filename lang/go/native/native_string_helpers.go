@@ -2,6 +2,7 @@ package native
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -11,29 +12,24 @@ import (
 
 // strOpts holds common option fields parsed from an AQL options map.
 type strOpts struct {
-	u         bool   // Unicode-aware behavior
-	normForm  string // "", "NFC", "NFD", "NFKC", "NFKD"
-	cs        string // "sensitive" or "insensitive"
-	mode      string // "literal" or "shell"
-	side      string // "left", "right", "both"
-	sep       string // separator
-	hasSep    bool   // whether sep was explicitly set
-	fill      string // fill character for pad
-	style     string // case style
-	loc       string // locale hint
-	unit      string // "code-unit", "code-point", "grapheme"
-	tgt       string // escape target
-	quote     string // escape quote style
-	scope     string // "first" or "all"
-	from      int64  // start index
-	hasFrom   bool
-	count     int64 // max replacements
-	hasCount  bool
-	lim       int64 // max parts for split
-	hasLim    bool
-	occ       string // "first" or "last"
-	groups    string // "named", "numbered", "both", or "" for bool
-	groupBool bool   // if groups was just true/false
+	normForm string // "", "NFC", "NFD", "NFKC", "NFKD"
+	cs       string // "sensitive" or "insensitive"
+	mode     string // "literal" or "shell"
+	side     string // "left", "right", "both"
+	sep      string // separator
+	hasSep   bool   // whether sep was explicitly set
+	fill     string // fill character for pad
+	style    string // case style
+	tgt      string // escape target
+	quote    string // escape quote style
+	scope    string // "first" or "all"
+	from     int64  // start index
+	hasFrom  bool
+	count    int64 // max replacements
+	hasCount bool
+	lim      int64 // max parts for split
+	hasLim   bool
+	occ      string // "first" or "last"
 
 	// boolean flags
 	skipEmpty   bool
@@ -42,9 +38,7 @@ type strOpts struct {
 	trimParts   bool
 	wholeWord   bool
 	anchored    string // "", "start", "end", "both" or "true"
-	fromEnd     bool
 	trunc       bool
-	litRepl     bool
 
 	// normalize-specific
 	trim       bool
@@ -55,13 +49,114 @@ type strOpts struct {
 	form string
 }
 
+// strOptKeys lists the option keys each string word honours.
+//
+// One parser serves twelve words, each reading only its own subset, and it
+// was written as a flat sequence of probes with no else — so any key
+// outside a word's subset parsed successfully and was then dropped on the
+// floor. `replace "-" "+" "a-a-a" {all:true}` returned `a+a-a`: the real
+// key is `scope:"all"`, `all` is not a key at all, and nothing said so.
+// A misspelling behaved exactly like the default.
+//
+// Keys are per WORD, not global, because the union is not a contract: only
+// `replace` honours `count`, only `pad` honours `trunc`. Accepting the
+// union would still silently ignore `{trunc:true}` on `replace`.
+var strOptKeys = map[string]map[string]bool{
+	"concat":     keySet("sep", "skipEmpty", "skipNullish"),
+	"split":      keySet("cs", "keepEmpty", "lim", "mode", "norm", "trimParts"),
+	"trim":       keySet("cs", "fill", "chars", "norm", "side"),
+	"contains":   keySet("anchored", "cs", "mode", "norm", "wholeWord"),
+	"indexof":    keySet("cs", "from", "mode", "norm", "occ"),
+	"replace":    keySet("count", "cs", "from", "mode", "norm", "scope"),
+	"changecase": keySet("norm", "style"),
+	"normalize":  keySet("collapseWs", "eol", "form", "trim"),
+	"repeat":     keySet("sep"),
+	"pad":        keySet("fill", "chars", "side", "trunc"),
+	"match":      keySet("cs", "mode", "norm", "scope"),
+	"escape":     keySet("quote", "tgt"),
+}
+
+// strOptEnums lists the legal values for the enumerated option keys. An
+// out-of-domain value was as silent as an unknown key: `scope:"bogus"`
+// simply was not "all", so it behaved as "first".
+var strOptEnums = map[string][]string{
+	"cs":    {"sensitive", "insensitive"},
+	"mode":  {"literal", "shell"},
+	"side":  {"left", "right", "both"},
+	"scope": {"first", "all"},
+	"occ":   {"first", "last"},
+	"eol":   {"preserve", "lf", "crlf"},
+}
+
+func keySet(names ...string) map[string]bool {
+	s := make(map[string]bool, len(names))
+	for _, n := range names {
+		s[n] = true
+	}
+	return s
+}
+
+// validateStrOpts rejects keys the word does not honour and values outside
+// an enumerated key's domain. Returns nil when v is not a concrete map
+// (the no-options call); an unknown WORD is a programming error in the
+// caller, not user input, so it is reported as such.
+func validateStrOpts(r *Registry, v Value, word string) error {
+	if !v.Parent.Equal(TMap) || !IsConcrete(v) {
+		return nil
+	}
+	allowed, ok := strOptKeys[word]
+	if !ok {
+		return r.AqlErrorAt("string_option_error",
+			word+": no option key set is registered for this word", word, v.Pos())
+	}
+	m, _ := AsMap(v)
+	for _, k := range m.Keys() {
+		if !allowed[k] {
+			return r.AqlErrorHintAt("string_option_error",
+				word+": unknown option "+quoteKey(k), word,
+				"known options: "+strings.Join(sortedKeys(allowed), ", "), v.Pos())
+		}
+		legal, enum := strOptEnums[k]
+		if !enum {
+			continue
+		}
+		val, _ := m.Get(k)
+		got := ValToString(val)
+		if !contains(legal, got) {
+			return r.AqlErrorHintAt("string_option_error",
+				word+": option "+quoteKey(k)+" got "+quoteKey(got), word,
+				quoteKey(k)+" must be one of: "+strings.Join(legal, ", "), v.Pos())
+		}
+	}
+	return nil
+}
+
+func quoteKey(s string) string { return "\"" + s + "\"" }
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // parseStrOpts extracts common string options from an AQL map value.
 func parseStrOpts(v Value) strOpts {
 	var o strOpts
 	o.cs = "sensitive"
 	o.mode = "literal"
 	o.side = "both"
-	o.unit = "code-unit"
 	o.scope = "first"
 	o.occ = "first"
 	o.eol = "preserve"
@@ -73,9 +168,6 @@ func parseStrOpts(v Value) strOpts {
 	}
 	m, _ := AsMap(v)
 
-	if b, ok := MapFieldBoolean(m, "u"); ok {
-		o.u = b
-	}
 	if val, ok := m.Get("norm"); ok {
 		if val.Parent.ConformsTo(TBoolean) {
 			_as1, _ := AsBoolean(val)
@@ -104,12 +196,6 @@ func parseStrOpts(v Value) strOpts {
 	}
 	if val, ok := m.Get("style"); ok {
 		o.style = ValToString(val)
-	}
-	if val, ok := m.Get("loc"); ok {
-		o.loc = ValToString(val)
-	}
-	if val, ok := m.Get("unit"); ok {
-		o.unit = ValToString(val)
 	}
 	if val, ok := m.Get("tgt"); ok {
 		o.tgt = ValToString(val)
@@ -162,14 +248,8 @@ func parseStrOpts(v Value) strOpts {
 			o.anchored = ValToString(val)
 		}
 	}
-	if b, ok := MapFieldBoolean(m, "fromEnd"); ok {
-		o.fromEnd = b
-	}
 	if b, ok := MapFieldBoolean(m, "trunc"); ok {
 		o.trunc = b
-	}
-	if b, ok := MapFieldBoolean(m, "litRepl"); ok {
-		o.litRepl = b
 	}
 
 	// normalize-specific
@@ -184,16 +264,6 @@ func parseStrOpts(v Value) strOpts {
 	}
 	if val, ok := m.Get("form"); ok {
 		o.form = strings.ToUpper(ValToString(val))
-	}
-
-	// groups for match
-	if val, ok := m.Get("groups"); ok {
-		if val.Parent.ConformsTo(TBoolean) {
-			_as16, _ := AsBoolean(val)
-			o.groupBool = _as16
-		} else {
-			o.groups = ValToString(val)
-		}
 	}
 
 	// chars for trim

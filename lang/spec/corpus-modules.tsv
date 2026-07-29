@@ -110,37 +110,37 @@ import "aql:report" end Report.list 2	'2'	report:list
 import "aql:report" end Report.record 2	'2'	report:record
 import "aql:report" end Report.table 2	'2'	report:table
 import "aql:report" end Report.value 2	'2'	report:value
-import "aql:string-util" end StringUtil.changecase 'a' {a:1,b:2}	'a'	string-util:changecase
+import "aql:string-util" end StringUtil.changecase 'a' {style:'lower'}	'a'	string-util:changecase
 import "aql:string-util" end StringUtil.changecase 'b'	'b'	string-util:changecase
-import "aql:string-util" end StringUtil.changecase a/q {c:3,d:4}	'a'	string-util:changecase
+import "aql:string-util" end StringUtil.changecase a/q {style:'lower'}	'a'	string-util:changecase
 import "aql:string-util" end StringUtil.changecase b/q	'b'	string-util:changecase
 import "aql:string-util" end StringUtil.concat ['c','d']	'cd'	string-util:concat
-import "aql:string-util" end StringUtil.concat {a:1,b:2} ['a','b']	'ab'	string-util:concat
-import "aql:string-util" end StringUtil.contains 'a' 'b' {a:1,b:2}	false	string-util:contains
+import "aql:string-util" end StringUtil.concat {sep:''} ['a','b']	'ab'	string-util:concat
+import "aql:string-util" end StringUtil.contains 'a' 'b' {cs:'sensitive'}	false	string-util:contains
 import "aql:string-util" end StringUtil.contains 'c' 'd'	false	string-util:contains
-import "aql:string-util" end StringUtil.escape 'a' {a:1,b:2}	'a'	string-util:escape
+import "aql:string-util" end StringUtil.escape 'a' {quote:'none'}	'a'	string-util:escape
 import "aql:string-util" end StringUtil.escape 'b'	'b'	string-util:escape
-import "aql:string-util" end StringUtil.indexof 'a' 'b' {a:1,b:2}	-1	string-util:indexof
+import "aql:string-util" end StringUtil.indexof 'a' 'b' {cs:'sensitive'}	-1	string-util:indexof
 import "aql:string-util" end StringUtil.indexof 'c' 'd'	-1	string-util:indexof
 import "aql:string-util" end StringUtil.lower 'a'	'a'	string-util:lower
 import "aql:string-util" end StringUtil.lower a/q	'a'	string-util:lower
-import "aql:string-util" end StringUtil.match 'a' 'b' {a:1,b:2}	{ok:false ms:[] n:0}	string-util:match
+import "aql:string-util" end StringUtil.match 'a' 'b' {cs:'sensitive'}	{ok:false ms:[] n:0}	string-util:match
 import "aql:string-util" end StringUtil.match 'c' 'd'	{ok:false ms:[] n:0}	string-util:match
-import "aql:string-util" end StringUtil.normalize 'a' {a:1,b:2}	'a'	string-util:normalize
+import "aql:string-util" end StringUtil.normalize 'a' {trim:false}	'a'	string-util:normalize
 import "aql:string-util" end StringUtil.normalize 'b'	'b'	string-util:normalize
-import "aql:string-util" end StringUtil.pad 2 {a:1,b:2} 'a'	'a '	string-util:pad
+import "aql:string-util" end StringUtil.pad 2 {side:'right'} 'a'	'a '	string-util:pad
 import "aql:string-util" end StringUtil.pad 3	'3                                           '	string-util:pad
 import "aql:string-util" end StringUtil.pad 3 'b'	'b  '	string-util:pad
 import "aql:string-util" end StringUtil.pad 4 2	'2   '	string-util:pad
-import "aql:string-util" end StringUtil.repeat 2 'a' {a:1,b:2}	'aa'	string-util:repeat
+import "aql:string-util" end StringUtil.repeat 2 'a' {sep:''}	'aa'	string-util:repeat
 import "aql:string-util" end StringUtil.repeat 3 'b'	'bbb'	string-util:repeat
-import "aql:string-util" end StringUtil.replace 'a' 'b' 'c' {a:1,b:2}	'c'	string-util:replace
+import "aql:string-util" end StringUtil.replace 'a' 'b' 'c' {scope:'first'}	'c'	string-util:replace
 import "aql:string-util" end StringUtil.replace 'd' 'e' 'f'	'f'	string-util:replace
-import "aql:string-util" end StringUtil.split 'a' 'b' {a:1,b:2}	['b']	string-util:split
+import "aql:string-util" end StringUtil.split 'a' 'b' {keepEmpty:false}	['b']	string-util:split
 import "aql:string-util" end StringUtil.split 'c' 'd'	['d']	string-util:split
-import "aql:string-util" end StringUtil.trim 'a' {a:1,b:2}	'a'	string-util:trim
+import "aql:string-util" end StringUtil.trim 'a' {side:'both'}	'a'	string-util:trim
 import "aql:string-util" end StringUtil.trim 'b'	'b'	string-util:trim
-import "aql:string-util" end StringUtil.trim a/q {c:3,d:4}	'a'	string-util:trim
+import "aql:string-util" end StringUtil.trim a/q {side:'both'}	'a'	string-util:trim
 import "aql:string-util" end StringUtil.trim b/q	'b'	string-util:trim
 import "aql:string-util" end StringUtil.upper 'a'	'A'	string-util:upper
 import "aql:string-util" end StringUtil.upper a/q	'A'	string-util:upper

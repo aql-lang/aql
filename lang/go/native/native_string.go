@@ -281,7 +281,10 @@ func concatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	return doConcat(args[0], strOpts{})
 }
 
-func concatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func concatOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[0], "concat"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[0])
 	return doConcat(args[1], opts)
 }
@@ -319,7 +322,10 @@ func splitHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 	return doSplit(input, sep, strOpts{cs: "sensitive", mode: "literal"})
 }
 
-func splitOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func splitOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[2], "split"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[2])
 	sep, _ := args[0].AsConcreteString()
 	input, _ := args[1].AsConcreteString()
@@ -433,7 +439,10 @@ func trimHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 	return []Value{NewString(strings.TrimSpace(_as0))}, nil
 }
 
-func trimOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func trimOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[1], "trim"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[1])
 	_as1, _ := args[0].AsConcreteString()
 	return doTrim(_as1, opts)
@@ -482,7 +491,10 @@ func containsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 	return doContains(haystack, needle, strOpts{cs: "sensitive", mode: "literal"})
 }
 
-func containsOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func containsOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[2], "contains"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[2])
 	needle, _ := args[0].AsConcreteString()
 	haystack, _ := args[1].AsConcreteString()
@@ -589,7 +601,10 @@ func indexOfHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 	return doIndexOf(haystack, needle, strOpts{cs: "sensitive", mode: "literal", occ: "first"})
 }
 
-func indexOfOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func indexOfOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[2], "indexof"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[2])
 	needle, _ := args[0].AsConcreteString()
 	haystack, _ := args[1].AsConcreteString()
@@ -672,7 +687,10 @@ func replaceHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 }
 
-func replaceOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func replaceOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[3], "replace"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[3])
 	search, _ := args[0].AsConcreteString()
 	repl, _ := args[1].AsConcreteString()
@@ -833,7 +851,10 @@ func changeCaseHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return doChangeCase(_as0, strOpts{style: "lower"})
 }
 
-func changeCaseOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func changeCaseOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[1], "changecase"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[1])
 	if opts.style == "" {
 		opts.style = "lower"
@@ -902,7 +923,10 @@ func normalizeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	return doNormalize(_as0, strOpts{form: "NFC", eol: "preserve"})
 }
 
-func normalizeOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func normalizeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[1], "normalize"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[1])
 	_as1, _ := args[0].AsConcreteString()
 	return doNormalize(_as1, opts)
@@ -958,7 +982,10 @@ func repeatHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	return doRepeat(input, count, strOpts{})
 }
 
-func repeatOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func repeatOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[2], "repeat"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[2])
 	count, _ := args[0].AsConcreteInteger()
 	input, _ := args[1].AsConcreteString()
@@ -1016,6 +1043,9 @@ func padHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 func padOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
 		return nil, r.AqlError("pad_error", "pad: options must be a concrete map, got type literal", "pad")
+	}
+	if err := validateStrOpts(r, args[1], "pad"); err != nil {
+		return nil, err
 	}
 	opts := parseStrOpts(args[1])
 	if opts.fill == "" {
@@ -1098,7 +1128,10 @@ func matchHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]V
 		strOpts{cs: "sensitive", mode: "literal", scope: "first"})
 }
 
-func matchOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func matchOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[2], "match"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[2])
 	pattern, _ := args[0].AsConcreteString()
 	input, _ := args[1].AsConcreteString()
@@ -1265,7 +1298,10 @@ func escapeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	return doEscape(_as0, strOpts{tgt: "sh", quote: "none"})
 }
 
-func escapeOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func escapeOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	if err := validateStrOpts(r, args[1], "escape"); err != nil {
+		return nil, err
+	}
 	opts := parseStrOpts(args[1])
 	_as1, _ := args[0].AsConcreteString()
 	return doEscape(_as1, opts)

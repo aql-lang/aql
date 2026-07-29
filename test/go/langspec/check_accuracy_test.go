@@ -86,11 +86,16 @@ var unflaggedPins = map[string]int{
 	"edge-containers-2.tsv": 1,
 	"edge-containers-3.tsv": 5,
 	"edge-dispatch-2.tsv":   1,
-	"edge-dispatch-3.tsv":   3,
-	"edge-errors-1.tsv":     3,
-	"edge-errors-2.tsv":     1,
-	"edge-forward-1.tsv":    1,
-	"edge-forward-2.tsv":    1,
+	// 3 -> 6: the three string-option leniency rows became ERROR rows when
+	// unknown option keys and out-of-domain values started being rejected.
+	// They are RUNTIME rejections — the option map is a plain Map at a Map
+	// slot, so the checker cannot see the key set statically — hence
+	// unflagged rather than a checker regression.
+	"edge-dispatch-3.tsv": 6,
+	"edge-errors-1.tsv":   3,
+	"edge-errors-2.tsv":   1,
+	"edge-forward-1.tsv":  1,
+	"edge-forward-2.tsv":  1,
 	// edge-scalars-3.tsv: the pad byte-cap PROJECTION row (PR #306
 	// review — a multi-byte fill exceeding maxStringResultBytes) is a
 	// value-dependent resource bound, the runtime's job.
