@@ -149,6 +149,11 @@ func TestJsonicToValueWrapperAndErrorArms(t *testing.T) {
 		!strings.Contains(err.Error(), "unsupported jsonic type") {
 		t.Fatalf("expected nested map conversion error, got %v", err)
 	}
+	// Nested unsupported type inside an OrderedMap (the insertion-order path).
+	if _, err := jsonicToValue(&jsonic.OrderedMap{Keys: []string{"x"}, Vals: map[string]any{"x": make(chan int)}}); err == nil ||
+		!strings.Contains(err.Error(), "unsupported jsonic type") {
+		t.Fatalf("expected nested ordered-map conversion error, got %v", err)
+	}
 	// jsonic.Text wrapper.
 	v, err := jsonicToValue(jsonic.Text{Str: "hi", Quote: `"`})
 	if err != nil {

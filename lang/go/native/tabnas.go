@@ -307,9 +307,22 @@ func tabnasAnyToValue(v any) Value {
 			elems[i] = tabnasAnyToValue(item)
 		}
 		return NewList(elems)
+	case *tabnasjsonic.OrderedMap:
+		return tabnasOrderedMapToValue(val)
 	case map[string]any:
 		return tabnasMapToValue(val)
 	default:
 		return NewString(fmt.Sprintf("%v", val))
 	}
+}
+
+// tabnasOrderedMapToValue converts the parser's insertion-ordered OrderedMap
+// to an AQL Map, preserving the source key order (the whole point of the
+// ordered parser node) rather than sorting like the legacy plain-map path.
+func tabnasOrderedMapToValue(src *tabnasjsonic.OrderedMap) Value {
+	om := NewOrderedMap()
+	for _, k := range src.Keys {
+		om.Set(k, tabnasAnyToValue(src.Vals[k]))
+	}
+	return NewMap(om)
 }
