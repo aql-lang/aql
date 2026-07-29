@@ -136,6 +136,12 @@ type Options struct {
 	// everything after the script path; nil leaves the slot uninstalled,
 	// which IO.args renders as an empty list.
 	ScriptArgs []string
+	// Env is the environment view surfaced as IO.env. Nil installs none,
+	// and IO.env then reports every name as unset — the runtime never
+	// reads the real process environment unless a host hands it over.
+	// The CLI installs capabilities.OSEnvOps; tests and the spec runner
+	// install capabilities.MapEnvOps for determinism.
+	Env capabilities.EnvOps
 	// Steps caps evaluation: the interpreter's Run loop, a single
 	// paren-group evaluation, and the VM's step counter. Zero uses the
 	// engine defaults (eng.DefaultStepLimit / DefaultSubStepLimit). Set
@@ -182,6 +188,9 @@ func New(opts ...Options) (*AQL, error) {
 	}
 	reg.TapeConfig = o.Tape
 	reg.StepLimit = o.Steps
+	if o.Env != nil {
+		native.SetHostEnvOps(reg, o.Env)
+	}
 	if o.ScriptArgs != nil {
 		native.SetHostScriptArgs(reg, o.ScriptArgs)
 	}
@@ -1258,6 +1267,17 @@ type CheckDiagnostic = native.CheckDiagnostic
 // errors.As and re-render with color via Render(RenderOpts{Color:true});
 // Error() is always the plain (ANSI-free) rendering.
 type AqlError = native.AqlError
+
+// ExitCode reports the status an `IO.exit` request carries, and whether
+// err is one at all. It is the whole embedding contract for exit: the
+// runtime never calls os.Exit, so a host decides what a program's exit
+// request means to it. A CLI driver returns the code as its own process
+// status and prints nothing; a long-lived host may log it and carry on.
+//
+// It unwraps, so a caller that wrapped the error with %w on the way up is
+// still recognised. Anything that is not an exit request reports false —
+// an ordinary failure is not an exit.
+var ExitCode = native.ExitCode
 
 // RenderOpts controls diagnostic rendering (color on/off).
 type RenderOpts = native.RenderOpts

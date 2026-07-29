@@ -208,7 +208,17 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 	}
 	fmt.Fprintf(stdout, "# %s\n", path)
 	if runErr := runSource(a, string(data), mode); runErr != nil {
-		fmt.Fprintf(stderr, "error: %s: %s\n", path, runErr)
+		// An `IO.exit` inside a suite ends THAT FILE, not the test run: it
+		// stops the file's remaining cases exactly as any other raise does,
+		// and the cases already recorded are still salvaged and reported
+		// below. It is not this file's process status — a suite that exits
+		// 0 half-way has not passed the cases it never reached, and the
+		// runner's own exit code stays "did every case pass".
+		if code, isExit := lang.ExitCode(runErr); isExit {
+			fmt.Fprintf(stderr, "error: %s: exited with code %d before the suite finished\n", path, code)
+		} else {
+			fmt.Fprintf(stderr, "error: %s: %s\n", path, runErr)
+		}
 		// Salvage whatever the framework tallied before the error. A read
 		// failure here is the ordinary case for a suite that died before
 		// `import "aql:test"` — Test.summary is simply not a word yet — so

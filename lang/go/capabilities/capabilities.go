@@ -1569,3 +1569,59 @@ func (m *MemFileOps) ResolvePath(path string) (string, error) {
 	}
 	return filepath.Clean(filepath.Join(base, path)), nil
 }
+
+// EnvOps is the host's view of the process environment, read-only.
+//
+// It is a capability rather than a direct os.Getenv call for the same reason
+// FileOps is: the runtime must never reach for ambient process state on its
+// own. A hermetic spec runner installs nothing and sees an empty environment;
+// an embedded host can install a filtered view exposing an allowlist; the CLI
+// installs the real one. Nothing about `IO.env` changes between those cases
+// except what the host chose to hand it.
+//
+// Read-only by design: there is no SetEnv. Mutating one's own environment is
+// almost always a smell, and the real use case -- giving a child process a
+// different environment -- belongs to whatever spawns the child, which can
+// take it explicitly.
+type EnvOps interface {
+	// Get returns the value and whether the name is set. An empty string is
+	// a real value, distinct from unset, so the bool is load-bearing.
+	Get(name string) (string, bool)
+	// All returns every visible name, in no guaranteed order.
+	All() []string
+}
+
+// OSEnvOps is the production EnvOps: the real process environment.
+type OSEnvOps struct{}
+
+func (OSEnvOps) Get(name string) (string, bool) { return os.LookupEnv(name) }
+
+func (OSEnvOps) All() []string {
+	pairs := os.Environ()
+	names := make([]string, 0, len(pairs))
+	for _, kv := range pairs {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			names = append(names, kv[:i])
+		}
+	}
+	return names
+}
+
+// MapEnvOps is a fixed EnvOps over a map — the deterministic fake for tests
+// and specs, mirroring FixedClock's role for Clock. It is what makes the
+// host-dependent half of IO.env testable at all, which ADR-008 requires.
+type MapEnvOps struct{ Vars map[string]string }
+
+func (m MapEnvOps) Get(name string) (string, bool) {
+	v, ok := m.Vars[name]
+	return v, ok
+}
+
+func (m MapEnvOps) All() []string {
+	names := make([]string, 0, len(m.Vars))
+	for k := range m.Vars {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}

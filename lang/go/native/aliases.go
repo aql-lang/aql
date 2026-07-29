@@ -449,6 +449,8 @@ var (
 	JoinCarriers             = eng.JoinCarriers
 	FoldVariadicArms         = eng.FoldVariadicArms
 	MakeAqlError             = eng.MakeAqlError
+	ExitCode                 = eng.ExitCode
+	NewExitError             = eng.NewExitError
 	ResolveColor             = eng.ResolveColor
 	RenderCheckDiagnostic    = eng.RenderCheckDiagnostic
 	MapFieldBoolean          = eng.MapFieldBoolean

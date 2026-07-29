@@ -2456,7 +2456,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2707,6 +2707,8 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `unify_fail` | Two values cannot unify. |
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
 | `read_error`, `write_error`, `stat_error`, `list_error`, `remove_error`, `move_error`, `copy_error`, `link_error`, `touch_error` | File I/O failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
+| `exit` | **Not a failure.** The reserved control error `IO.exit` raises, carrying `{code}`. A driver that recognises it exits with that status printing nothing; a sub-engine converts it so a sandbox cannot exit its host. Hosts read it with `lang.ExitCode(err)`. |
+| `exit_error` | `IO.exit` was given a non-Integer code, or one outside `0..125` (126/127 and 128+n are the shell's own). |
 | `cap_denied` | Operation needed a capability that wasn't enabled. |
 | `cancelled` | Operation cancelled (timer, await branch). |
 

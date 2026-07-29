@@ -19,6 +19,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Version is the aql CLI version string, populated by the top-level
@@ -198,7 +199,9 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs}
+		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs,
+			// The CLI is a host that hands the program the real environment.
+			Env: capabilities.OSEnvOps{}}
 		if *optionsStr != "" {
 			m, perr := lang.ParseOptions(*optionsStr)
 			if perr != nil {
@@ -215,6 +218,12 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			report = stderr
 		}
 		if err := buildrt.EvalReport(stdout, report, stderr, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
+			// `IO.exit N` is a request, not a failure: exit with the code
+			// the program asked for and print nothing, including for a
+			// non-zero code (design/CLI-PROGRAMS.0.md §4).
+			if code, isExit := lang.ExitCode(err); isExit {
+				return code
+			}
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}

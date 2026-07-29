@@ -409,3 +409,24 @@ func TestExtractHelpers(t *testing.T) {
 
 // defaultMode is CompileTry, the mode a no-flag invocation resolves to.
 func defaultMode() run.CompileMode { return run.CompileTry }
+
+// An IO.exit inside a suite ends THAT FILE, not the test run. The runner's
+// own status stays "did every case pass" — a suite that exits 0 half-way
+// has not passed the cases it never reached, so the file is reported as
+// errored with the code it asked for, and the cases already recorded are
+// still salvaged (the same salvage path a mid-suite raise takes).
+func TestRunFileExitEndsTheFileNotTheRun(t *testing.T) {
+	src := "import \"aql:test\"\nimport \"aql:io\"\n" +
+		"Test.case \"one\" [Assert.equal 1 1]\n" +
+		"IO.exit 0\n" +
+		"Test.case \"two\" [Assert.equal 1 1]\n"
+	f := write(t, filepath.Join(t.TempDir(), "x_test.aql"), src)
+	var stdout, stderr bytes.Buffer
+	_, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil)
+	if !errored {
+		t.Error("a suite that exits mid-way must be reported as errored, not as a clean pass")
+	}
+	if !strings.Contains(stderr.String(), "exited with code 0") {
+		t.Errorf("stderr = %q, want the exit reported with its code", stderr.String())
+	}
+}

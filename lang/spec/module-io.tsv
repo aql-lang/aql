@@ -288,6 +288,44 @@ import "aql:io"  IO.args	[]	with no host-installed vector, args is an empty list
 import "aql:io"  typeof (IO.args)	List	the args surface is a List
 import "aql:io"  size (IO.args)	0	and the uninstalled default has no elements
 #
+# §26  env / env-all — the process environment, read-only, surfaced by
+#      the host through SetHostEnvOps / lang.Options.Env. `IO.env <name>`
+#      yields the value or none ("" is a real value, distinct from
+#      unset); `IO.env-all` yields a Map of everything visible. They are
+#      two WORDS, not two overloads of one — see the note on the `env`
+#      native in native/io_module.go and NUR035. The spec runner installs
+#      NO EnvOps, so the deterministic surface is "nothing is set": the
+#      runtime never reaches for the real process environment the host did
+#      not hand it, which is exactly what makes these rows reproducible on
+#      any machine. Installed vectors, the map-backed fake, and the policy
+#      allowlist are pinned in lang/go/test/io_env_test.go.
+import "aql:io"  IO.env "HOME"	None	with no host-installed environment, every name reads as unset
+import "aql:io"  IO.env "PATH"	None	including names the surrounding process certainly does have
+import "aql:io"  typeof (IO.env "HOME")	None	an unset name is none, never "" — "" is a real value a caller must distinguish
+import "aql:io"  size (IO.env-all)	0	and the whole-environment snapshot is empty
+import "aql:io"  typeof (IO.env-all)	Map	the snapshot is a Map, so a caller can iterate unconditionally
+import "aql:io"  IO.env 42	ERROR:signature	a non-String name is refused — the sole signature takes a String
+import "aql:io"  IO.env true	ERROR:signature	likewise a Boolean: there is no coercion into the name slot
+import "aql:io"  IO.env-all "HOME"	{} 'HOME'	env-all takes no argument, so a stray one is left on the stack rather than treated as a name
+IO.env "HOME"	ERROR:undefined_word	`IO` is unbound without `import`
+#
+# §27  exit — ask the DRIVER to stop with a status. IO.exit does not call
+#      os.Exit: it raises the reserved `aql/exit` control error carrying
+#      {code}, and whoever is driving decides what that means (the CLI and
+#      a built binary exit with the code printing nothing; a sub-engine
+#      converts it so a sandbox cannot exit its host; `aql test` ends that
+#      file). To the SPEC RUNNER, which is just another driver and has no
+#      process to exit, it is simply the error it is — which is what these
+#      rows pin. The per-driver decisions are in cmd/go/internal/*/
+#      *_exit_test.go and lang/go/test/io_exit_test.go.
+import "aql:io"  IO.exit 3	ERROR:exit	an exit request surfaces as the reserved aql/exit error
+import "aql:io"  IO.exit 0	ERROR:exit	including a SUCCESS exit — 0 is a status, not the absence of one
+import "aql:io"  do [IO.exit 2]	ERROR:exit	a handler-less `do` does NOT convert it to an Error value: an exit is a control transfer, and demoting it to data would silently turn `IO.exit 2` into exit 0
+import "aql:io"  do [raise {code:'boom' message:'bang'}]	error(bang)	while an ordinary raise inside the same `do` is still caught as data — the escape hatch is unchanged for failures
+import "aql:io"  IO.exit 126	ERROR:exit_error	126 is the shell's "found but not executable"; a program that returns it misreports how it died
+import "aql:io"  IO.exit 200	ERROR:exit_error	and 128+n means "killed by signal n" — the range is 0..125
+import "aql:io"  IO.exit "3"	ERROR:signature	the code is an Integer; a String is not coerced, and there is no implicit 0
+#
 # §16  overlay filesystem — `context dot __sys dot fs set overlay true`
 #      switches the FileOps capability to a UNION: a writable in-memory
 #      upper over the host filesystem as a read-only lower. Reads fall

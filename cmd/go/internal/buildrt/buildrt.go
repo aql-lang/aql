@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/modules"
 	"github.com/aql-lang/aql/lang/go/policy"
 
@@ -174,6 +175,15 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 		result, err = a.RunInterp(source)
 	}
 	if err != nil {
+		// An `IO.exit` request passes through UNFLATTENED. Every other
+		// error is rendered here into a display string, which is fine for
+		// something a driver only prints — but an exit request is something
+		// a driver must READ, and `%s` would erase the type errors.As needs.
+		// It is also NOT printed and does not print the residual stack:
+		// exiting is not failing, including for a non-zero code.
+		if _, isExit := lang.ExitCode(err); isExit {
+			return err
+		}
 		// A structured diagnostic re-renders with the ANSI palette when
 		// the caller resolved color for the output stream; anything else
 		// (and the color-off path) keeps the historical plain text.
@@ -246,7 +256,9 @@ type Config struct {
 // packaging story: `aql build` produced a binary on $PATH that could not be
 // given an argument.
 func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int {
-	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed, ScriptArgs: args}
+	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed, ScriptArgs: args,
+		// A built tool is a real program: it sees the real environment.
+		Env: capabilities.OSEnvOps{}}
 	if cfg.Profile != nil {
 		pol, err := policy.CompileProfile(cfg.Profile)
 		if err != nil {
@@ -302,6 +314,9 @@ func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int 
 	}
 
 	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
+		if code, isExit := lang.ExitCode(err); isExit {
+			return code
+		}
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

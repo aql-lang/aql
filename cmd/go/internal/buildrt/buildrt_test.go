@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -277,5 +278,43 @@ func TestMainRejectsUnresolvableProfile(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "baked policy") {
 		t.Errorf("stderr does not name the baked policy: %q", stderr.String())
+	}
+}
+
+// --- IO.exit in a built binary ---
+
+// A built tool chooses its own exit status. This is what makes an AQL
+// program usable in a shell pipeline at all: `if mytool …; then` reads the
+// status, and before C1 every built binary could only ever say 0 or 1.
+func TestMainExitCodeIsProcessStatus(t *testing.T) {
+	for _, want := range []int{0, 1, 3, 125} {
+		var stdout, stderr bytes.Buffer
+		src := `import "aql:io"  IO.exit ` + strconv.Itoa(want)
+		if code := Main(Config{Source: src}, nil, nil, &stdout, &stderr); code != want {
+			t.Errorf("IO.exit %d: exit status %d (stderr: %s)", want, code, stderr.String())
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("IO.exit %d printed to stderr: %q", want, stderr.String())
+		}
+	}
+}
+
+// The residual stack is not flushed on exit, and an out-of-range code is a
+// refusal (status 1) rather than a status.
+func TestMainExitSuppressesResidualAndRefusesRange(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Main(Config{Source: `import "aql:io"  42  IO.exit 0`}, nil, nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit status %d, want 0", code)
+	}
+	if strings.Contains(stdout.String(), "42") {
+		t.Errorf("residual stack printed on exit: %q", stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Main(Config{Source: `import "aql:io"  IO.exit 200`}, nil, nil, &stdout, &stderr); code != 1 {
+		t.Fatalf("out-of-range exit status %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "0..125") {
+		t.Errorf("stderr does not explain the range: %q", stderr.String())
 	}
 }

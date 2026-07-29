@@ -22,6 +22,7 @@ const (
 	CapLogSinks       = "engine.logsinks"        // *LogSinkRegistry (aql:log fan-out sinks)
 	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
 	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
+	CapEnv            = "engine.env"             // capabilities.EnvOps (IO.env)
 )
 
 // EffectiveDebugOps returns the installed DebugOps capability, or (nil,
@@ -323,4 +324,62 @@ func fsFlag(fsStore *StoreInstanceInfo, key string) bool {
 	}
 	asBool, _ := AsBoolean(v)
 	return v.Parent.ConformsTo(TBoolean) && asBool
+}
+
+// HostEnvOps returns the installed environment view, or nil when the host
+// installed none. Nil means "no environment visible", which is the hermetic
+// default: IO.env then reports every name as unset rather than reaching for
+// the real process environment behind the host's back.
+func HostEnvOps(r *Registry) capabilities.EnvOps {
+	ops, _, _ := eng.Cap[capabilities.EnvOps](r, CapEnv)
+	return ops
+}
+
+// SetHostEnvOps installs the environment view, honouring the policy the same
+// way SetHostFileOps does: a profile that uninstalls the `env` scope clears
+// the slot outright, so the capability is absent rather than merely refusing
+// — and a configured profile wraps it so per-name rules apply.
+func SetHostEnvOps(r *Registry, ops capabilities.EnvOps) {
+	if r == nil {
+		return
+	}
+	if ops == nil {
+		_, _ = r.Capabilities.Delete(CapEnv)
+		return
+	}
+	if pol := HostPolicy(r); pol != nil {
+		if !pol.Installed("env") {
+			_, _ = r.Capabilities.Delete(CapEnv)
+			return
+		}
+		ops = permissionedEnvOps{inner: ops, policy: pol}
+	}
+	_ = r.Capabilities.Set(CapEnv, ops)
+}
+
+// permissionedEnvOps gates each read through the policy's `env` scope, so a
+// profile can expose an allowlist (read-only.jsonic allows LANG, TZ, AQL_*)
+// rather than all-or-nothing. A denied name reads as UNSET rather than
+// raising: a program probing for an optional variable should take its default
+// path, not crash, and the alternative leaks which names exist.
+type permissionedEnvOps struct {
+	inner  capabilities.EnvOps
+	policy policy.Policy
+}
+
+func (p permissionedEnvOps) Get(name string) (string, bool) {
+	if err := p.policy.Check("env", "read", policy.Args{"name": name}); err != nil {
+		return "", false
+	}
+	return p.inner.Get(name)
+}
+
+func (p permissionedEnvOps) All() []string {
+	var out []string
+	for _, n := range p.inner.All() {
+		if err := p.policy.Check("env", "read", policy.Args{"name": n}); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }

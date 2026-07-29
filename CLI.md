@@ -202,6 +202,71 @@ aql -e '…' -- --fast          # a leading `--` is accepted and stripped
 (`aql -s 5 -e '…' --fast` seeds the run and passes `--fast` to the
 program).
 
+**Environment (`IO.env`).** `aql run` and a built binary both install the
+real process environment, readable with `IO.env <name>` — the value, or
+`none` when the name is unset. `""` is a real value, distinct from unset,
+so a program can tell `FOO=` from no `FOO` at all. `IO.env-all` returns
+the whole visible environment as a Map, sorted by name; it is a separate
+word rather than a no-argument form of `IO.env`.
+
+```bash
+NO_COLOR=1 aql script.aql      # IO.env "NO_COLOR" → '1'
+aql script.aql                 # IO.env "NO_COLOR" → none
+```
+
+The environment is a **capability**, not ambient state: an embedded host
+that installs none (the default for `lang.New`, and what the spec runner
+does) sees every name unset and an empty `IO.env-all` — the runtime never
+reaches for the real environment behind the host's back. A policy can
+narrow it further: the `env` scope's `read` op takes a `name` argument, so
+`read-only` exposes an allowlist (`LANG`, `TZ`, `AQL_*`) and everything
+else reads as unset, while `compute` uninstalls the capability outright.
+A denied name reads as unset rather than raising — a program probing for
+an optional variable takes its default path, and an error would leak which
+names exist.
+
+**Exit codes (`IO.exit`).** `IO.exit <code>` ends the program with a
+status of the caller's choosing (`0..125`). It is what makes an AQL program
+usable in a shell pipeline: `if mytool …; then` reads the status, and
+without it every program could only ever say 0 (clean) or 1 (any failure).
+Exiting is not failing — nothing is printed, for any code, and the residual
+stack is not flushed.
+
+```bash
+aql run check.aql; echo $?      # whatever the program asked for
+```
+
+126, 127 and 128+n are refused at the call: they are the shell's own
+(`not executable`, `not found`, `killed by signal n`), and a program that
+returns one misreports how it died. A refused code is an ordinary failure —
+status 1 with the range explained.
+
+The convention `aql:cli` will follow, and worth following by hand until
+then: `0` success, `1` runtime failure, `2` usage error.
+
+Under the hood `IO.exit` raises a **reserved control error** (`aql/exit`,
+carrying `{code}`); nothing in the runtime calls `os.Exit`. That is what
+lets each driver decide what a program's exit request means to it, and the
+decisions differ where they must:
+
+| Driver | What `IO.exit N` does |
+|---|---|
+| `aql run`, `aql do`, a built binary | exits with `N`, printing nothing |
+| the REPL | ends the session, reporting the code |
+| `aql test` | ends **that file** — its remaining cases do not run, and it is reported as errored, because a suite that exits half-way has not passed the cases it never reached |
+| `Vm.run-sandbox` and the other sub-engines | converted to an ordinary error: a sandboxed program must not be able to terminate its host |
+| a served `/v1/exec` request | reported as the request's outcome; the server keeps serving |
+| an embedded host | whatever it decides — read the code with `lang.ExitCode(err)` |
+
+A handler-less `do [...]` does **not** catch it. `do`'s escape hatch turns a
+body error into an Error value, which is right for a failure, but an exit is
+a control transfer, and demoting it to data would silently turn `IO.exit 4`
+into exit 0 for any program whose exit happens to sit inside a `do`. (This
+deviates from `design/CLI-PROGRAMS.0.md` §4, which sketched `do … error …`
+handlers observing the exit; `error` receives `do`'s *result*, so letting a
+handler see it means letting a plain `do` swallow it, and the trap is worse
+than the loss.)
+
 ### `aql do`
 
 Evaluate the remaining args as an AQL expression. Slightly more

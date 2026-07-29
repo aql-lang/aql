@@ -179,6 +179,16 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			disarm()
 		}
 		if err != nil {
+			// `IO.exit N` from a REPL line ENDS THE SESSION, the same way
+			// the bare `exit` word does — the interactive analogue of a
+			// program terminating. The code is reported rather than
+			// returned: a REPL's own exit status is the session's, not any
+			// one line's, and swallowing it silently would make an
+			// interactive `IO.exit 3` indistinguishable from `IO.exit 0`.
+			if code, isExit := lang.ExitCode(err); isExit {
+				fmt.Fprintf(out, "  exit %d\n", code)
+				return
+			}
 			fmt.Fprintf(out, "  error: %s\n", renderErr(err))
 			continue
 		}

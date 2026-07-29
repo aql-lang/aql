@@ -99,22 +99,29 @@ var unflaggedPins = map[string]int{
 	// edge-scalars-3.tsv: the pad byte-cap PROJECTION row (PR #306
 	// review — a multi-byte fill exceeding maxStringResultBytes) is a
 	// value-dependent resource bound, the runtime's job.
-	"edge-scalars-3.tsv":    1,
-	"edge-types-2.tsv":      3,
-	"edge-types-3.tsv":      3,
-	"error.tsv":             1,
-	"flex.tsv":              9,
-	"forward-barrier.tsv":   1,
-	"generics-class.tsv":    3,
-	"generics-fn.tsv":       1,
-	"generics.tsv":          3,
-	"higher-order.tsv":      4,
-	"macro.tsv":             1,
-	"micron.tsv":            3,
-	"module-debug.tsv":      3,
-	"module-emitlang.tsv":   8,
-	"module-fmt.tsv":        3,
-	"module-io.tsv":         29,
+	"edge-scalars-3.tsv":  1,
+	"edge-types-2.tsv":    3,
+	"edge-types-3.tsv":    3,
+	"error.tsv":           1,
+	"flex.tsv":            9,
+	"forward-barrier.tsv": 1,
+	"generics-class.tsv":  3,
+	"generics-fn.tsv":     1,
+	"generics.tsv":        3,
+	"higher-order.tsv":    4,
+	"macro.tsv":           1,
+	"micron.tsv":          3,
+	"module-debug.tsv":    3,
+	"module-emitlang.tsv": 8,
+	"module-fmt.tsv":      3,
+	// 29 → 34: C1 added five ERROR: rows the STATIC checker cannot see.
+	// aql/exit is raised by the exit handler at RUNTIME (IO.exit 3 / 0, and
+	// the one crossing a handler-less `do`), and the 0..125 range check is
+	// a runtime guard on a value the checker treats as an ordinary Integer
+	// (IO.exit 126 / 200). The two rows the checker DOES flag — the String
+	// code and the non-String env name — are signature errors, which is
+	// exactly the line between the two: shape is static, value is not.
+	"module-io.tsv":         34,
 	"module-log.tsv":        6,
 	"module-minilang.tsv":   20,
 	"module-net.tsv":        7,

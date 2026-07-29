@@ -1,6 +1,10 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import (
+	"sort"
+
+	"github.com/aql-lang/aql/eng/go"
+)
 
 // IOModuleNativeFuncs builds the input/output words that were moved out
 // of the core registry into the loadable `aql:io` module (namespace
@@ -215,6 +219,68 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 				Args:    []*Type{},
 				Impl:    Go(scriptArgsHandler),
 				Returns: []*Type{TList}, BarrierPos: -1,
+			}},
+		},
+		{
+			// env (exported as IO.env) reads ONE environment variable by
+			// name, yielding its value or none. "" is a real value distinct
+			// from unset, which is why a missing name is none rather than ""
+			// — a program testing `is None` can tell the difference.
+			//
+			// No host installation reads as "nothing is set", NOT as the
+			// real process environment: the runtime never reaches for
+			// ambient state the host did not hand it.
+			//
+			// The whole-environment snapshot is a SEPARATE word (env-all),
+			// not a 0-arg overload of this one. design/CLI-PROGRAMS.0.md §3
+			// sketched the overload; it does not survive contact with the
+			// dot-chain lowering. `Mod.word arg` lowers to
+			// `( Mod dot word ) arg`, and the close paren is a forward-scan
+			// boundary, so no arg-taking signature can match INSIDE the
+			// group. A single-signature word escapes it (nothing matches,
+			// the value stays data, the group closes, and it re-dispatches
+			// outside where the argument is visible) — but a 0-arg overload
+			// always matches inside, permanently shadowing its arg-taking
+			// siblings, so `IO.env "HOME"` would answer with the whole
+			// environment. Two words sidestep the engine wrinkle entirely;
+			// see NUR035.
+			Name: "env",
+			Signatures: []Signature{{
+				Args:    []*Type{TString},
+				Impl:    Go(envLookupHandler),
+				Returns: []*Type{TAny}, BarrierPos: -1,
+			}},
+		},
+		{
+			// exit (exported as IO.exit) asks the DRIVER to terminate with a
+			// status. It raises the reserved `aql/exit` control error rather
+			// than calling os.Exit: the runtime does not own the process, and
+			// an embedded host must be able to decide for itself (it reads the
+			// code back with lang.ExitCode). The CLI, a built binary, and
+			// `aql test` each recognise it; a sub-engine boundary converts it
+			// to an ordinary error so a sandbox cannot terminate its host.
+			//
+			// The range is 0..125, the shell convention: 126/127 mean
+			// "found but not executable" / "not found", and 128+n means
+			// "killed by signal n". A program that returns one of those is
+			// lying about how it died, so they are refused at the call.
+			Name: "exit",
+			Signatures: []Signature{{
+				Args:    []*Type{TInteger},
+				Impl:    Go(exitHandler),
+				Returns: []*Type{}, BarrierPos: -1,
+			}},
+		},
+		{
+			// env-all (exported as IO.env-all) snapshots every visible
+			// variable as a Map — the enumerating half of EnvOps, and the
+			// only witness for `printenv` with no arguments. 0-arg only,
+			// exactly like script-args.
+			Name: "env-all",
+			Signatures: []Signature{{
+				Args:    []*Type{},
+				Impl:    Go(envAllHandler),
+				Returns: []*Type{TMap}, BarrierPos: -1,
 			}},
 		},
 		{
@@ -459,4 +525,59 @@ func scriptArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		vals[i] = NewString(a)
 	}
 	return []Value{NewList(vals)}, nil
+}
+
+// envLookupHandler reads one environment variable. Unset (or denied by the
+// policy, or no host installation) is none — never "", which is a legal
+// value a caller must be able to distinguish.
+func envLookupHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name, err := args[0].AsConcreteString()
+	if err != nil {
+		return nil, r.AqlErrorAt("env_error", "env: name must be a String", "env", args[0].Pos())
+	}
+	ops := HostEnvOps(r)
+	if ops == nil {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	v, ok := ops.Get(name)
+	if !ok {
+		return []Value{NewTypeLiteral(TNone)}, nil
+	}
+	return []Value{NewString(v)}, nil
+}
+
+// envAllHandler snapshots every visible variable as a Map, sorted by name.
+// Uninstalled or fully denied reads as an empty Map, so a caller can iterate
+// unconditionally — the same contract IO.args offers with its empty list.
+func envAllHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	om := NewOrderedMap()
+	if ops := HostEnvOps(r); ops != nil {
+		names := ops.All()
+		sort.Strings(names)
+		for _, n := range names {
+			if v, ok := ops.Get(n); ok {
+				om.Set(n, NewString(v))
+			}
+		}
+	}
+	return []Value{NewMap(om)}, nil
+}
+
+// exitHandler raises the reserved exit control error. It never returns a
+// value: the whole point is that execution stops here and the driver
+// decides what the status means.
+func exitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	code, err := args[0].AsConcreteInteger()
+	if err != nil {
+		return nil, r.AqlErrorAt("exit_error", "exit: code must be an Integer",
+			"exit", args[0].Pos())
+	}
+	if code < 0 || code > 125 {
+		return nil, r.AqlErrorHintAt("exit_error",
+			"exit: code must be 0..125", "exit",
+			"126 and 127 are reserved for the shell (not executable / not found) "+
+				"and 128+n means killed by signal n — a program that returns one "+
+				"of those misreports how it died", args[0].Pos())
+	}
+	return nil, eng.NewExitError(code, r.Source, args[0].Pos())
 }
