@@ -21,6 +21,12 @@ import (
 // map); a non-map top level is an error, since options are always
 // keyed. Numbers come back as Go int or float64, strings as string,
 // booleans as bool — the caller coerces per option.
+// Plainify recursively converts the parser's insertion-ordered object nodes
+// (jsonic.OrderedMap) to plain map[string]any, dropping key order — for
+// order-agnostic consumers (config blobs, project manifests) that want the
+// simple map[string]any shape. Re-exported so callers need not import jsonic.
+func Plainify(v any) any { return jsonic.Plainify(v) }
+
 func ParseConfig(s string) (map[string]any, error) {
 	j := SafeMake(jsonic.Options{})
 	v, err := j.Parse(s)
@@ -30,7 +36,7 @@ func ParseConfig(s string) (map[string]any, error) {
 	// Options are order-agnostic config; flatten the parser's ordered node
 	// (and any nested ones) to plain maps so callers keep the simple
 	// map[string]any contract.
-	m, ok := jsonic.Plainify(v).(map[string]any)
+	m, ok := Plainify(v).(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("options must be a map of key:value pairs, got %T", v)
 	}
