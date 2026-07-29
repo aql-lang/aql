@@ -22,9 +22,23 @@ func (cs *ContextStack) Push(parent *StoreInstanceInfo) {
 	if cs == nil {
 		return
 	}
+	// Data is left NIL rather than an empty map, and that is load-bearing
+	// rather than a micro-optimisation. Every write to a context layer goes
+	// through CowSet, which builds a WHOLE NEW layer (`Data: {key: val}`,
+	// prototype = the old one) instead of mutating this map — so a pushed
+	// layer's map is never written to, only read, and a nil map reads exactly
+	// like an empty one in Go.
+	//
+	// It matters because the VM pushes one of these per nested body
+	// invocation (vmContext.enterBodyUnit): on every `each` / `fold` /
+	// `filter` element, whether or not the body mentions `context`. Allocating
+	// a map there doubled the per-invocation cost of the frame for no
+	// observable benefit — see design/verse-report-defects-investigation.0.md
+	// §B blocker 3, which named "or the map made lazy" as one of the two
+	// remedies. StoreInstanceInfo.Set allocates on demand, so the one path
+	// that DOES write in place stays safe.
 	child := &StoreInstanceInfo{
 		TypeName:  "Ideal/Store",
-		Data:      make(map[string]Value),
 		Prototype: parent,
 	}
 	cs.stack = append(cs.stack, child)

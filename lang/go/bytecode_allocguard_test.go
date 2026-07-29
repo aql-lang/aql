@@ -70,7 +70,22 @@ func TestCompiledAllocCeilings(t *testing.T) {
 		// allocation; a regression that re-allocates a sub-engine per
 		// island would sharply raise this (the pre-engine-pool level was
 		// ≈4800, and a per-island sub-engine would roughly double that).
-		{"do_body", `def body [add 1 2]`, `for 100 [do body]`, 500},
+		// Island reuse keeps this at interpreter-level allocation; the
+		// per-body CONTEXT FRAME the VM pushes (vmContext.enterBodyUnit) adds
+		// one alloc per invocation on top. Ceiling lowered 500 → 400 when the
+		// frame landed: at 500 the frame consumed two thirds of the headroom
+		// SILENTLY, which is precisely the objection
+		// design/verse-report-defects-investigation.0.md §B blocker 3 raised
+		// against an earlier attempt. A tighter ceiling is what makes the next
+		// increment visible.
+		{"do_body", `def body [add 1 2]`, `for 100 [do body]`, 400},
+		// The three rows blocker 3 asked for by name: "the guard table has NO
+		// each/fold/filter row, so the largest regression class is uncovered."
+		// These are the words whose bodies run ONCE PER ELEMENT, so a
+		// per-invocation cost multiplies here in a way `do` cannot show.
+		{"each_scalar", "", `each [add 1] [1 2 3 4 5 6 7 8 9 10]`, 110},
+		{"fold_scalar", "", `fold [add] [1 2 3 4 5 6 7 8 9 10] 0`, 110},
+		{"filter_scalar", "", `filter [gt 2] [1 2 3 4 5 6 7 8 9 10]`, 120},
 	}
 	for _, g := range guards {
 		a, err := New()

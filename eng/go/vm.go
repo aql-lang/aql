@@ -249,7 +249,7 @@ func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
 		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
 	}
 	return runVMEntry(ref.Prog, r, DefaultStepLimit, func(vc *vmContext) ([]Value, error) {
-		return vc.enterBodyUnit(ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
+		return vc.enterBodyUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
 	})
 }
 
@@ -285,7 +285,11 @@ func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
 // This function deliberately does NOT change behaviour: it is the place a
 // later per-body concern can be added once, not the addition itself.
 // TestVMBodyEntryIsFunnelled keeps the funnel from re-fragmenting.
-func (vc *vmContext) enterBodyUnit(unit int, locals []Value) ([]Value, error) {
+func (vc *vmContext) enterBodyUnit(reg *Registry, unit int, locals []Value) ([]Value, error) {
+	if reg != nil {
+		reg.Contexts.Push(reg.Contexts.Top())
+		defer reg.Contexts.Pop()
+	}
 	return vc.run(unit, locals, nil)
 }
 
@@ -401,7 +405,7 @@ func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, b
 	if ref.Prog != vc.p {
 		return nil, false, nil
 	}
-	res, err := vc.enterBodyUnit(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
+	res, err := vc.enterBodyUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
 	return res, true, err
 }
 
@@ -433,7 +437,7 @@ func (vc *vmContext) invokeClosureOn(reg *Registry, body Value, inputs []Value) 
 	// (StartFnCompile registers params before captures) — the same split
 	// RunUnit and runUnitNested bind, so it uses the same helper rather than
 	// a second copy of the loop.
-	return vc.enterBodyUnit(cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], inputs, cl.Captures))
+	return vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], inputs, cl.Captures))
 }
 
 // pushFrameArgs is the DynEnv args bracket's frame-entry half: push the

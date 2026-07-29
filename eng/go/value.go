@@ -1067,6 +1067,12 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 // Set stores a key-value pair directly (for internal/init use only).
 // AQL code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
+	// Allocate on demand: a layer pushed by ContextStack.Push carries a nil
+	// Data map (writes go through CowSet, which replaces the layer rather
+	// than mutating it), and this is the one path that writes in place.
+	if si.Data == nil {
+		si.Data = make(map[string]Value)
+	}
 	si.Data[key] = val
 	// Track parent relationship for nested Stores.
 	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {

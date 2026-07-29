@@ -886,18 +886,82 @@ has to cover module sub-registries, not just container payloads.
    the param/capture locals split and now shares `bindUnitLocals` with the
    other two seams, so there is one binding rule as well as one entry.
 
-   What remains for step 2 is unchanged and still the hard part: CALL_USER
-   needs its frame push/RET pop bracketed separately (it is not a
-   re-entry, so it cannot join the funnel), and the inlined forms need an
-   emitted opcode pair or a lowering rule.
+   — **NOW DONE for every seam that can be bracketed, with the residue
+   named.** `enterBodyUnit` pushes a child context layer and pops it on
+   every exit path. Measured across both engines, the whole closure-unit
+   class closed: `do`, nested `do`, `each`, `fold`, `filter`, `outer`,
+   `scan`, and those words nested inside a fn body all now agree, as does
+   the per-element accumulation repro (`[1 2]` → `[1 1]`).
+
+   **CALL_USER needs no bracketing at all, and the note's Blocker-2 table
+   was wrong about it.** Measured: a named fn body and a called lambda leak
+   the write in BOTH engines. They are not boundaries interpreted either,
+   so bracketing CALL_USER would not have completed the fix — it would have
+   introduced a NEW divergence, in the other direction. The differential
+   test keeps rows for both so a future "finish the job" pass has to
+   confront the measurement instead of the table.
+
+   What genuinely remains is the inlined set, and it is unchanged: the
+   `case` desugaring, `otherwise`'s list argument, and list
+   auto-evaluation emit the body's tokens into the caller's unit, so there
+   is no call to wrap and only an emitted opcode pair or a lowering rule
+   can reach them. Each is a `wantDiverge` row in the differential test
+   rather than an omission.
+
+   One residual sharpened while pinning it: the map-slot-lambda divergence
+   the note recorded is **source-shape-dependent**. `(m.f 1) drop`
+   diverges (compiled contains, interpreted leaks); the bare `m.f 1` and
+   `m.f 1 drop` agree. So the trigger is the paren group taking a
+   different compiled path, not method dispatch as such. Both spellings
+   are pinned, as a pair, because the pair is the finding.
 3. Gate the frame on a static "this body may touch context" flag so the
    allocation is paid only where it is observable, and add an
    each/fold/filter row to the alloc guard.
+   — **DONE via the second half of the disjunction, plus the rows.** The
+   note offered "a static per-`CompiledFn` flag set by the emitter, or the
+   map made lazy". The static flag was NOT taken: a sound one has to be
+   conservative about anything it cannot see through (a `CALL_USER`, a
+   dynamic dispatch, a nested closure), which makes it true in almost every
+   real body and buys nothing while adding a way to be silently wrong — a
+   flag that under-reports does not cost allocation, it loses the write.
+
+   The map was made lazy instead, and it turned out not to be a
+   micro-optimisation: **every** context write goes through `CowSet`, which
+   builds a whole new layer rather than mutating the pushed one, so a
+   pushed layer's `Data` map was never written to at all. It is now nil
+   (`StoreInstanceInfo.Set` allocates on demand for the one path that does
+   write in place). Measured on `for 100 [do body]`: 212 unpatched → 412
+   with an eager map → **312** with the lazy one. Half the frame's cost was
+   an allocation nothing could ever read.
+
+   The guard rows blocker 3 asked for by name are in
+   (`each_scalar` 79/110, `fold_scalar` 77/110, `filter_scalar` 89/120),
+   and `do_body`'s ceiling is LOWERED 500 → 400. That last part is the
+   point rather than housekeeping: at 500 the frame consumed two thirds of
+   the headroom silently, which was the actual objection. At 400 the next
+   increment has to declare itself.
 4. Land the differential regression test (written, and confirmed to fail
    on 10 subtests without the fix).
+   — **DONE**, as `lang/go/context_boundary_differential_test.go`, and it
+   does two things the reverted version did not. It asserts BOTH engines
+   per row (the original gap survived because the two tests that assert
+   these semantics by name run interpreter-only), and it pins the
+   still-broken forms as `wantDiverge` rows, each carrying its reason. A
+   suite that covered only the fixed half is how this got here; a row that
+   starts agreeing fails loudly and asks to be reclassified.
 5. Only then correct EXPLANATION.md's boundary list, which is
    independently wrong: it names `for` (not a boundary in either engine)
    and omits `for-each` (a boundary in both).
+   — **STILL BLOCKED, and now measurably so.** The blocker is stated at the
+   end of this section: the interpreter is itself inconsistent about which
+   call forms are boundaries, so there is no single true list to write
+   down. The full measurement is now in the differential test, and it
+   confirms the problem rather than dissolving it — `if` and `for` are not
+   boundaries in either engine, a named fn body and a called lambda are not
+   boundaries in either engine, closure bodies are boundaries in both, and
+   a paren-grouped map-slot method call is a boundary compiled but not
+   interpreted. Writing the list requires DECIDING which of those is
+   correct, which is a language-semantics call, not a documentation edit.
 
 ### Pre-existing defects found while validating the patch
 

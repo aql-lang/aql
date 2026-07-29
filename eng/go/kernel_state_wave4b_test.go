@@ -1,6 +1,7 @@
 package eng
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -28,8 +29,28 @@ func TestContextStackLifecycle(t *testing.T) {
 	if top == nil || top.Prototype != parent {
 		t.Error("pushed child does not chain to its parent")
 	}
-	if cs.TopData() == nil {
-		t.Error("TopData nil for a live layer")
+	// A freshly-pushed layer carries a NIL Data map, deliberately: every
+	// context write goes through CowSet, which replaces the layer rather than
+	// mutating it, so the map was never read from OR written to. The VM pushes
+	// one of these per nested body invocation, so allocating it was pure cost
+	// (see ContextStack.Push). What must hold is the OBSERVABLE contract — it
+	// reads as empty, and it is writable on demand.
+	if n := len(cs.TopData()); n != 0 {
+		t.Errorf("a fresh layer must read as empty, got %d keys", n)
+	}
+	if _, ok := top.Get("nope"); ok {
+		t.Error("a fresh layer must miss an unset key rather than resolve it")
+	}
+	// The parent's keys still resolve through the prototype chain: a nil own
+	// map must not break lookup, which is the whole point of the layer.
+	if v, ok := top.Get("k"); !ok || fmt.Sprint(v) != "1" {
+		t.Errorf("parent key must resolve through the prototype chain, got %v %v", v, ok)
+	}
+	// Set is the one path that writes a layer in place, so it must allocate on
+	// demand rather than panic on the nil map.
+	top.Set("own", NewInteger(2))
+	if v, ok := top.Get("own"); !ok || fmt.Sprint(v) != "2" {
+		t.Errorf("Set on a nil-map layer must allocate and store, got %v %v", v, ok)
 	}
 	cs.PushExisting(parent)
 	if cs.Depth() != 2 || cs.Top() != parent {
