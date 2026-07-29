@@ -244,6 +244,37 @@ status 1 with the range explained.
 The convention `aql:cli` will follow, and worth following by hand until
 then: `0` success, `1` runtime failure, `2` usage error.
 
+**Filters and terminals (`IO.read-line`, `IO.is-tty`).** `IO.read-line` yields
+the next line of a stream or `File` handle without its terminator, and
+`none` at end of input — which is what lets a filter loop terminate, since
+`""` is a legitimate blank line. LF and CRLF both strip; a final line with
+no trailing newline is still a line. Whole-input slurping stays
+`IO.read (IO.stdin)`, and the two share one reader, so a `read-line`
+followed by a `read` yields the rest of the stream rather than losing
+whatever the line read had buffered.
+
+`IO.is-tty` answers per stream, because the asymmetric case is the common one —
+stdout piped while stderr is still a terminal. With `IO.env "NO_COLOR"` it
+is the whole colour decision, without the runtime hard-coding it:
+
+```bash
+mytool | cat            # IO.is-tty (IO.stdout) → false
+mytool                  # IO.is-tty (IO.stdout) → true on a terminal
+```
+
+The word is `tty`, not the `tty?` of `design/CLI-PROGRAMS.0.md` §5: `?` is a
+fixed lexer token (the optional-param marker), so `tty?` cannot be
+dispatched at all — and in a dot chain the mis-parse is silent, so the RFC
+spelling would have shipped a word that quietly did nothing.
+
+Both are host capabilities, so an embedded host decides what they see. With
+no probe installed every stream answers `false`, and a permissions profile
+that uninstalls the `terminal` scope clears it too — five of the seven shipped
+profiles do. That is a deliberate design choice over gating the word per
+call: `Check` on an uninstalled scope *raises*, which would abort the colour
+idiom above under any sandbox instead of answering it. `false` is a usable
+answer; an error is not.
+
 Under the hood `IO.exit` raises a **reserved control error** (`aql/exit`,
 carrying `{code}`); nothing in the runtime calls `os.Exit`. That is what
 lets each driver decide what a program's exit request means to it, and the

@@ -441,6 +441,8 @@ WORD iota
   [Scalar/Number/Integer] barrier=1 +returnsfn
 WORD is
   [Any Any] barrier=1 returns=[Scalar/Boolean]
+WORD is-tty
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Scalar/Boolean]
 WORD istype
   [Any] barrier=1 returns=[Scalar/Boolean]
 WORD items
@@ -638,6 +640,9 @@ WORD read
   [Ideal/File] barrier=1 returns=[Any]
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+WORD read-line
+  [Ideal/File] barrier=1 returns=[Any]
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive

@@ -257,8 +257,9 @@ type Config struct {
 // given an argument.
 func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed, ScriptArgs: args,
-		// A built tool is a real program: it sees the real environment.
-		Env: capabilities.OSEnvOps{}}
+		// A built tool is a real program: it sees the real environment and
+		// gets the truth about its own streams.
+		Env: capabilities.OSEnvOps{}, Streams: capabilities.OSStreamProbe{}}
 	if cfg.Profile != nil {
 		pol, err := policy.CompileProfile(cfg.Profile)
 		if err != nil {

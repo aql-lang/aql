@@ -223,7 +223,13 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	}
 
 	if path == pathStdin {
-		data, err = io.ReadAll(r.Input)
+		// Through the SHARED buffered reader, not r.Input directly. IO.read-line
+		// reads ahead by necessity, so a whole-stream read that went straight to
+		// r.Input would skip whatever read-line had already buffered — silently.
+		// One reader means `IO.read-line` then `IO.read` yields the rest of the
+		// stream (io_lines.go). With no line read first the buffer is empty and
+		// this is byte-for-byte the old io.ReadAll(r.Input).
+		data, err = io.ReadAll(stdinReader(r))
 		if err != nil {
 			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
 		}

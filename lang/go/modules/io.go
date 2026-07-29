@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"slices"
+
 	"github.com/aql-lang/aql/lang/go/native"
 )
 
@@ -65,6 +67,15 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	})
 	for _, n := range ioNatives {
 		subReg.RegisterNativeFunc(n)
+	}
+
+	// The shared stdin reader rides into module bodies: without this a file
+	// or inline module that reads stdin would open a SECOND buffer over the
+	// importer's reader and the two would consume each other's bytes
+	// (native/io_lines.go). Appended once per process, like the tui/vault
+	// host seams.
+	if !slices.Contains(native.ModuleInheritedCaps, native.CapStdinLines) {
+		native.ModuleInheritedCaps = append(native.ModuleInheritedCaps, native.CapStdinLines)
 	}
 
 	exports := delegatingExports(ioNatives, subReg)

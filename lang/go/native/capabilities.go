@@ -23,6 +23,8 @@ const (
 	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
 	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
 	CapEnv            = "engine.env"             // capabilities.EnvOps (IO.env)
+	CapStreamProbe    = "engine.streamprobe"     // capabilities.StreamProbe (IO.is-tty)
+	CapStdinLines     = "engine.stdinlines"      // *stdinLines (the ONE buffered reader over r.Input)
 )
 
 // EffectiveDebugOps returns the installed DebugOps capability, or (nil,
@@ -382,4 +384,42 @@ func (p permissionedEnvOps) All() []string {
 		}
 	}
 	return out
+}
+
+// HostStreamProbe returns the installed terminal probe, or nil when the host
+// installed none. Nil means "nothing is a terminal", which is the hermetic
+// default: IO.is-tty answers false rather than the runtime asking the operating
+// system a question the host did not authorise.
+func HostStreamProbe(r *Registry) capabilities.StreamProbe {
+	probe, _, _ := eng.Cap[capabilities.StreamProbe](r, CapStreamProbe)
+	return probe
+}
+
+// SetHostStreamProbe installs the terminal probe, honouring the policy the
+// same way SetHostFileOps and SetHostEnvOps do: a profile that uninstalls the
+// `terminal` scope clears the slot, so IO.is-tty answers false.
+//
+// Note what is deliberately NOT here: a per-call policy Check. Every shipped
+// profile except `trusted` and `full` uninstalls the terminal scope
+// (profiles/sandbox.jsonic:60, and read-only / client extend sandbox;
+// compute.jsonic:42, gen.jsonic:58), and Check on an uninstalled scope
+// RAISES. Gating the word per call would therefore make the RFC's own colour
+// idiom — `IO.is-tty (IO.stdout)` next to `IO.env "NO_COLOR"`
+// (design/CLI-PROGRAMS.0.md §5) — abort under a sandbox instead of answering.
+// Clearing the slot honours the profile author's intent exactly, and gives
+// the program the usable answer "not a terminal" rather than a failure it
+// cannot do anything with.
+func SetHostStreamProbe(r *Registry, probe capabilities.StreamProbe) {
+	if r == nil {
+		return
+	}
+	if probe == nil {
+		_, _ = r.Capabilities.Delete(CapStreamProbe)
+		return
+	}
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("terminal") {
+		_, _ = r.Capabilities.Delete(CapStreamProbe)
+		return
+	}
+	_ = r.Capabilities.Set(CapStreamProbe, probe)
 }

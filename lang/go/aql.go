@@ -142,6 +142,13 @@ type Options struct {
 	// The CLI installs capabilities.OSEnvOps; tests and the spec runner
 	// install capabilities.MapEnvOps for determinism.
 	Env capabilities.EnvOps
+	// Streams is the terminal probe surfaced as IO.is-tty. Nil installs none,
+	// and every stream then answers false — the runtime never asks the
+	// operating system what it is attached to unless a host hands over a
+	// probe. The CLI installs capabilities.OSStreamProbe; tests install
+	// capabilities.FixedStreamProbe, which is the only way the "yes, a
+	// terminal" arm is reachable in a suite whose streams are redirected.
+	Streams capabilities.StreamProbe
 	// Steps caps evaluation: the interpreter's Run loop, a single
 	// paren-group evaluation, and the VM's step counter. Zero uses the
 	// engine defaults (eng.DefaultStepLimit / DefaultSubStepLimit). Set
@@ -190,6 +197,9 @@ func New(opts ...Options) (*AQL, error) {
 	reg.StepLimit = o.Steps
 	if o.Env != nil {
 		native.SetHostEnvOps(reg, o.Env)
+	}
+	if o.Streams != nil {
+		native.SetHostStreamProbe(reg, o.Streams)
 	}
 	if o.ScriptArgs != nil {
 		native.SetHostScriptArgs(reg, o.ScriptArgs)

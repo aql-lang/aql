@@ -70,6 +70,7 @@ commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
 | [NUR035](#nur035) | A 0-arg overload shadows every arg-taking sibling on a module export | 2026-07-29 C1 `IO.env` |
+| [NUR036](#nur036) | `NO_COLOR` is read straight from the process, bypassing the EnvOps capability | 2026-07-29 C2 `IO.is-tty` |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -780,3 +781,55 @@ but the "can still supply an argument" test has to read tape shapes
 dispatch path, and each iteration of it surfaced a fresh shape it got
 wrong. It should land as its own change, with the shapes enumerated as
 spec rows first — not folded into a feature PR.
+
+---
+
+## NUR036 — `NO_COLOR` is read straight from the process, bypassing the EnvOps capability {#nur036}
+
+**Status:** Pending · **Recorded:** 2026-07-29 · **Surfaced by:** C2
+`IO.is-tty` (design/CLI-PROGRAMS.0.md §5)
+
+**Rule:** the runtime reaches the outside world only through host
+capabilities. `lang/go/capabilities`' own package doc states it: "All
+dangerous I/O routes through these interfaces so it can be replaced for
+testing or sandboxing without touching the Go os/net/etc. packages
+directly." C1 made the environment one of those capabilities — `EnvOps`,
+installed by the host, absent by default, so a hermetic runner sees nothing
+(`lang/go/native/capabilities.go`, `IO.env`).
+
+**Divergence:** `eng.ResolveColor` reads the environment directly —
+`os.Getenv("NO_COLOR")` at `eng/go/diag_render.go:47` — and it is the only
+place in the tree that consults `NO_COLOR`. So the two halves of the colour
+decision disagree about what the environment IS. Under the spec runner,
+which installs no EnvOps deliberately, `IO.env "NO_COLOR"` reports the name
+unset while `ResolveColor` honours whatever the real process has set. A host
+that installs a filtered `EnvOps` to hide a name cannot hide it from the
+diagnostic renderer.
+
+**Evidence:** `eng/go/diag_render.go:35-59` (`ResolveColor`, the
+`os.Getenv` at :47 and the `os.ModeCharDevice` probe at :58);
+`lang/go/native/capabilities.go` (`HostEnvOps` / `SetHostEnvOps`, and the
+policy-aware allowlist wrapper); `lang/spec/module-io.tsv` §26 (the rows
+that pin "nothing installed means nothing is set").
+
+**Why it has not bitten yet:** the two consumers have been disjoint.
+`ResolveColor` decides how the Go-side *diagnostic renderer* prints, which
+no AQL program observes; `IO.env` answers AQL programs. C2 puts them next to
+each other for the first time: `IO.is-tty` and `ResolveColor` now deliberately
+share the character-device test so a word and the renderer cannot disagree
+about a stream, which makes it conspicuous that they still disagree about
+the environment.
+
+**Documentation status:** undocumented. `CLI.md`'s new colour section
+describes `IO.is-tty` + `IO.env "NO_COLOR"` as the composition, without saying
+that the renderer's own `NO_COLOR` handling does not go through the same
+seam.
+
+**Proposed verdict:** fix, by routing `ResolveColor`'s `NO_COLOR` read
+through the installed `EnvOps` when there is one and falling back to the
+process only when a host installed none. It is a small change with one
+wrinkle worth stating: `ResolveColor` lives in `eng`, which knows nothing
+about `EnvOps` (that type is in `lang/go/capabilities`), so it needs either
+a registry argument it currently does not take or a small indirection eng
+owns. Not folded into C2 — it changes shipped diagnostic behaviour and
+deserves its own change with the spec rows to match.

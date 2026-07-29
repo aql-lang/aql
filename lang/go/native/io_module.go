@@ -252,6 +252,56 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			}},
 		},
 		{
+			// read-line (exported as IO.read-line) yields the next line of a
+			// stream or File handle without its terminator, or none at EOF.
+			//
+			// none rather than "" at EOF is what makes the filter loop
+			// terminate: "" is a legitimate line (a blank one), so a caller
+			// must be able to tell an empty line from no more lines. A final
+			// line with no trailing newline IS a line — dropping it would lose
+			// data from every file an editor left unterminated.
+			//
+			// Two signatures, no 0-arg overload: a 0-arg convenience form
+			// meaning "stdin" would win unconditionally on a module export and
+			// make BOTH of these unreachable, silently (NUR035).
+			Name: "read-line",
+			Signatures: []Signature{
+				{
+					Args:    []*Type{streamKind},
+					Impl:    Go(readLineHandler),
+					Returns: []*Type{TAny}, BarrierPos: -1,
+				},
+				{
+					Args:    []*Type{handleType},
+					Impl:    Go(readLineHandler),
+					Returns: []*Type{TAny}, BarrierPos: -1,
+				},
+			},
+		},
+		{
+			// is-tty (exported as IO.is-tty) reports whether a stream is a
+			// terminal. Per-stream because the interesting cases are
+			// asymmetric: stdout piped while stderr is still a terminal is the
+			// normal shape of a program in a pipeline.
+			//
+			// NOT `tty?`, which design/CLI-PROGRAMS.0.md §5 specifies: `?` is
+			// rejected in a word name outright (eng/go/word_name.go), whose doc
+			// names the reason and the alternative — "the Lisp/Scheme/Ruby `?`
+			// predicate suffix is NOT allowed; predicates use the `is-` prefix
+			// convention instead". `is-finite` / `is-inf` / `is-nan` are the
+			// shipped precedents.
+			//
+			// No probe installed answers false, which is what makes this
+			// hermetic in the spec suite and honest under a profile that
+			// uninstalls the terminal scope.
+			Name: "is-tty",
+			Signatures: []Signature{{
+				Args:    []*Type{streamKind},
+				Impl:    Go(ttyHandler),
+				Returns: []*Type{TBoolean}, BarrierPos: -1,
+			}},
+		},
+		{
 			// exit (exported as IO.exit) asks the DRIVER to terminate with a
 			// status. It raises the reserved `aql/exit` control error rather
 			// than calling os.Exit: the runtime does not own the process, and

@@ -114,6 +114,14 @@ var unflaggedPins = map[string]int{
 	"module-debug.tsv":    3,
 	"module-emitlang.tsv": 8,
 	"module-fmt.tsv":      3,
+	// 34 → 35: C2's read-line refuses an OUTPUT stream at runtime — stdout is
+	// a perfectly good StreamKind, so the shape checks out statically and only
+	// the handler knows it is the wrong direction. Its two sibling negatives
+	// (a String where a stream is required, an Integer where a stream is
+	// required) ARE shape refusals, so the checker flags them and they do not
+	// move this count. That split is the rule: shape is static, value and
+	// direction are not.
+	//
 	// 29 → 34: C1 added five ERROR: rows the STATIC checker cannot see.
 	// aql/exit is raised by the exit handler at RUNTIME (IO.exit 3 / 0, and
 	// the one crossing a handler-less `do`), and the 0..125 range check is
@@ -121,7 +129,7 @@ var unflaggedPins = map[string]int{
 	// (IO.exit 126 / 200). The two rows the checker DOES flag — the String
 	// code and the non-String env name — are signature errors, which is
 	// exactly the line between the two: shape is static, value is not.
-	"module-io.tsv":         34,
+	"module-io.tsv":         35,
 	"module-log.tsv":        6,
 	"module-minilang.tsv":   20,
 	"module-net.tsv":        7,

@@ -309,6 +309,40 @@ import "aql:io"  IO.env true	ERROR:signature	likewise a Boolean: there is no coe
 import "aql:io"  IO.env-all "HOME"	{} 'HOME'	env-all takes no argument, so a stray one is left on the stack rather than treated as a name
 IO.env "HOME"	ERROR:undefined_word	`IO` is unbound without `import`
 #
+# §28  read-line / tty — the filter-program surface. `IO.read-line` yields
+#      the next line of a stream or File handle WITHOUT its terminator, or
+#      none at EOF; `IO.is-tty` reports whether a stream is a terminal.
+#
+#      The rows below use a FILE HANDLE over the in-memory filesystem,
+#      because stdin is not hermetic here: the spec runner never sets
+#      Registry.Input, so it defaults to the real process stdin
+#      (eng/go/registry.go:1167) and a stdin row would read whatever the
+#      harness was launched with. The stdin arms — and the interaction with
+#      `IO.read (IO.stdin)`, which shares one reader — are pinned in
+#      lang/go/test/io_lines_test.go.
+#
+#      `IO.is-tty` answers FALSE here because the spec runner installs no
+#      StreamProbe. That is the capability contract, not an accident: the
+#      runtime never asks the OS what it is attached to unless a host hands
+#      over a probe. The TRUE arm needs the fake, so it is a Go test too.
+#
+#      The word is `tty`, not the `tty?` of design/CLI-PROGRAMS.0.md §5:
+#      `?` is a fixed lexer token, so `tty?` cannot be dispatched at all.
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl.txt") "alpha\nbeta\n" drop  IO.read-line (IO.open (make Pathon "mem://rl.txt"))	'alpha'	read-line yields the first line without its newline
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl2.txt") "alpha\nbeta\n" drop  def f (IO.open (make Pathon "mem://rl2.txt"))  IO.read-line f drop  IO.read-line f	'beta'	successive reads advance: the handle buffers, so the second call yields the second line
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl3.txt") "only" drop  IO.read-line (IO.open (make Pathon "mem://rl3.txt"))	'only'	a final line with NO trailing newline is still a line — dropping it would lose data from every unterminated file
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl4.txt") "a\r\nb\r\n" drop  IO.read-line (IO.open (make Pathon "mem://rl4.txt"))	'a'	CRLF is stripped as well as LF, so a Windows-written file reads as lines rather than lines ending in a stray carriage return
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl5.txt") "" drop  typeof (IO.read-line (IO.open (make Pathon "mem://rl5.txt")))	None	EOF at a line boundary is none, never "" — "" is a legitimate BLANK line, so a filter loop must be able to tell them apart
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl6.txt") "\n\n" drop  IO.read-line (IO.open (make Pathon "mem://rl6.txt"))	''	and a blank line reads as the empty string, which is why none had to mean EOF
+import "aql:io"  IO.read-line (IO.stdout)	ERROR:read_error	reading a line from an OUTPUT stream is refused, not reported as EOF: it is a bug in the program, and EOF would hide it behind a loop that exits immediately
+import "aql:io"  IO.read-line "notastream"	ERROR:signature	a String is not a stream or File handle
+import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://rl7.txt") "alpha\nbeta\n" drop  def f (IO.open (make Pathon "mem://rl7.txt"))  IO.read-line f drop  IO.seek f 0 drop  IO.read-line f	'alpha'	IO.seek drops the line buffer: after repositioning, a line read starts from the new position rather than serving lines buffered before the seek
+import "aql:io"  IO.read-line stdin/q	None	a BARE `stdin` atom reads the same stream as IO.stdin — StreamKind membership is by NAME, not by which import minted the handle
+import "aql:io"  IO.is-tty (IO.stdout)	false	with no host-installed probe every stream answers false — the runtime never asks the OS what it is attached to unless a host hands over a probe
+import "aql:io"  IO.is-tty (IO.stdin)	false	including stdin, and including when the surrounding process really does have a terminal
+import "aql:io"  IO.is-tty (IO.stderr)	false	and stderr — the answer is per-stream, so all three are pinned
+import "aql:io"  IO.is-tty 42	ERROR:signature	the argument is a stream handle; an Integer is refused
+#
 # §27  exit — ask the DRIVER to stop with a status. IO.exit does not call
 #      os.Exit: it raises the reserved `aql/exit` control error carrying
 #      {code}, and whoever is driving decides what that means (the CLI and

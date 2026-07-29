@@ -200,8 +200,9 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs,
-			// The CLI is a host that hands the program the real environment.
-			Env: capabilities.OSEnvOps{}}
+			// The CLI is a host that hands the program the real environment
+			// and the real answer about its own streams.
+			Env: capabilities.OSEnvOps{}, Streams: capabilities.OSStreamProbe{}}
 		if *optionsStr != "" {
 			m, perr := lang.ParseOptions(*optionsStr)
 			if perr != nil {
@@ -248,7 +249,11 @@ func Eval(w io.Writer, source string, registry string, seed int64) error {
 // arguments map to. Exposed for sibling subcommands (do) so they
 // don't import lang directly.
 func OptionsFor(registry string, seed int64, pol lang.Policy) lang.Options {
-	return lang.Options{Registry: registry, Seed: seed, Policy: pol}
+	// The terminal probe rides along, so `aql do` and `aql test` answer
+	// IO.is-tty honestly rather than always false. Redirected streams answer
+	// false anyway — OSStreamProbe inspects the endpoint the runtime holds.
+	return lang.Options{Registry: registry, Seed: seed, Policy: pol,
+		Streams: capabilities.OSStreamProbe{}}
 }
 
 // EvalWithPolicy is Eval with an explicit Policy. Pass nil for pol
