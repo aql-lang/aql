@@ -400,6 +400,18 @@ func vaultNatives() []native.NativeFunc {
 			Signatures: []native.Signature{sig},
 		})
 	}
+	// `identity` is not a generic Do-dispatch word: it mints an opaque
+	// credential handle rather than projecting a vault result onto an
+	// AQL value, so it carries its own handler (vault_identity.go).
+	out = append(out, native.NativeFunc{
+		Name: vaultInnerName("identity"),
+		Signatures: []native.Signature{{
+			Args:       T(native.TString),
+			Impl:       native.Go(vaultIdentityHandler),
+			Returns:    T(TVaultIdentity),
+			BarrierPos: -1,
+		}},
+	})
 	return out
 }
 

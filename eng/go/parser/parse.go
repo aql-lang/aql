@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -1287,11 +1288,13 @@ func orderedKeys(union map[string]any, ko []string) []string {
 			rest = append(rest, k)
 		}
 	}
-	for i := 1; i < len(rest); i++ {
-		for j := i; j > 0 && rest[j] < rest[j-1]; j-- {
-			rest[j], rest[j-1] = rest[j-1], rest[j]
-		}
-	}
+	// sort.Strings, not a hand-rolled insertion sort: `rest` is filled
+	// from a Go map range, so whether an insertion sort's inner swap
+	// ever executed depended on the randomised iteration order — the
+	// statement was covered or not from run to run, making the 100%
+	// gate (ADR-008) nondeterministically red. One library call has no
+	// such conditional interior. Same ascending order as before.
+	sort.Strings(rest)
 	return append(out, rest...)
 }
 

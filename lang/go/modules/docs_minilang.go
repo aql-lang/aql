@@ -79,4 +79,54 @@ func init() {
 		"run-re": "Internal: the compiled-`re` consumer — matches a precompiled-pattern carrier " +
 			"(from the re compile hook) against the stack subject.",
 	})
+
+	// A mini-language is reached through `mini <kind> <src>`, not through
+	// the lang_* export the signature names — and the RESULT is a match
+	// map, not the matched text. Results are from verified
+	// lang/spec/module-minilang.tsv rows.
+	registerExamples("aql:minilang", map[string][]string{
+		"kinds": {`MiniLang.kinds                                   ;# [re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]`},
+		"lang_re": {
+			`def r ("AbcD" mini re '[a-z]+')`,
+			`r.fst.m                                          ;# 'bc' — .fst is the first match, .m its text`,
+			`("a1b2c3" mini re '\\d').n                       ;# 3 — how many matched`,
+			`("a1b2c3" mini re '\\d' {limit:2}).n             ;# 2`,
+			`("zz" mini re 'a+').ok                           ;# false`,
+			`(('abc-123' mini re '([a-z]+)-(\\d+)')).fst.g    ;# ['abc' '123'] — capture groups`,
+			`;# The SUBJECT comes first and the pattern second, so a`,
+			`;# pipeline reads left to right. +re/[a-z]+/ is the literal form.`,
+		},
+		"run-re": {
+			`MiniLang.run-re compiled {} subject             ;# the runner behind a COMPILED re`,
+			`;# Reached through MiniLang.register-compiled, not called directly:`,
+			`;# for a one-off match write "subject mini re pattern".`,
+		},
+		"lang_bf": {
+			`mini bf '++++++++[>++++++++<-]>+.'                ;# 'A'`,
+			`"hi" mini bf ',.,.'                              ;# 'hi' — the subject is stdin`,
+			`mini bf ',.+.' {in:'A'}                          ;# 'AB' — or pass it as an option`,
+		},
+		"lang_gex":    {`"path/to/x" mini gex 'path/*/x'                  ;# glob-style expressions`},
+		"lang_math":   {`mini math '1 + 2 * 3'                            ;# 7 — infix arithmetic`},
+		"lang_jp":     {`data mini jp '$.a.b[0]'                          ;# JSONPath`},
+		"lang_jq":     {`data mini jq '.a | length'                       ;# jq`},
+		"lang_xp":     {`doc mini xp '//item/@id'                         ;# XPath`},
+		"lang_sp":     {`data mini sp 'a.b.0'                             ;# struct paths`},
+		"lang_micron": {`mini micron '1kb'                               ;# the micron scalar syntax`},
+		"micron": {
+			`MiniLang.micron                                  ;# the builtin Micron leaf set`,
+			`;# The +m literal grammar is FIXED to these; a custom Micron`,
+			`;# type is built with "def Nameon refine Micron {…}" and make.`,
+		},
+		"register": {
+			`def poly (fn [[src:String opts:Map] [Integer] [`,
+			`  ((opts.x pow 2) add (3 mul opts.y))`,
+			`]])`,
+			`mini poly 'x^2 + 3*y' {x:10, y:2}                ;# 106 — any fn of that shape is a mini-language`,
+			`;# A 3-param fn [[src opts subject]] also receives the subject.`,
+		},
+		"register-compiled": {
+			`MiniLang.register-compiled mykind compile-fn     ;# compile once per source, then run per subject`,
+		},
+	})
 }

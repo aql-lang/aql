@@ -3,17 +3,19 @@ package modules
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	eng "github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
@@ -32,6 +34,7 @@ import (
 //	shutdown <Socket> <half>                               ("read"/"write"/"both")
 //	close <Socket|Listener|Endpoint>
 //	peer <Socket>                        -> {host port}
+//	peer-cert <Socket>                   -> the verified peer certificate, or None
 //
 // Passive (pull) reads only — active mode (`set-active`) is a deferred
 // follow-on (design/NETWORK-IMPLEMENTATION-PLAN.0.md §1). Every recv*
@@ -96,13 +99,24 @@ func (sc *socketConn) close() error {
 type netListener struct {
 	id string
 	ln net.Listener
+	// deadlineOn is what `accept {within: ms}` sets its deadline on. It
+	// is normally ln itself, but a tls.NewListener wrapper does NOT
+	// forward SetDeadline — without keeping the bound listener here,
+	// turning on TLS would silently take {within:} away from accept.
+	deadlineOn net.Listener
 	// closed latches so double-close is a no-op and the serve-raw accept
 	// loop can distinguish deliberate shutdown from accept errors.
 	closed atomic.Bool
 }
 
 func newListenerValue(ln net.Listener) native.Value {
-	nl := &netListener{id: native.GenerateID("LS_"), ln: ln}
+	return newListenerValueOn(ln, ln)
+}
+
+// newListenerValueOn is newListenerValue for a wrapped listener:
+// `accept` reads from ln and sets deadlines on deadlineOn.
+func newListenerValueOn(ln, deadlineOn net.Listener) native.Value {
+	nl := &netListener{id: native.GenerateID("LS_"), ln: ln, deadlineOn: deadlineOn}
 	return eng.NewExtension(TListener, nl)
 }
 
@@ -200,6 +214,42 @@ type netAddrOpts struct {
 	addr    string // dial/bind address
 	host    string // policy host (dial: remote host; listen: bind host)
 	port    int
+	// tlsProfile is the parsed `tls: {…}` sub-map on a DIAL; serverTLS
+	// is its listen-side counterpart (only one is ever populated, chosen
+	// by which side parseNetAddr was called for). hasTLS distinguishes
+	// "no tls: key" from "tls: {}" (the latter means TLS with defaults,
+	// which is the documented spelling in NETWORK-CLIENTS.0.md §5).
+	tlsProfile capabilities.TLSProfile
+	serverTLS  capabilities.ServerTLSProfile
+	hasTLS     bool
+}
+
+// parseTLSSubMap reads the optional `tls:` key shared by the dial and
+// bind paths, using the SAME parsers fetch uses so the surfaces cannot
+// disagree about what an option means. `listening` picks the side: a
+// listener presents a certificate and may demand one, a dial verifies
+// one and may present one, and each rejects the other's keys by name.
+func parseTLSSubMap(r *native.Registry, mp native.ReadMap, word string, listening bool, out *netAddrOpts) error {
+	tv, ok := mp.Get("tls")
+	if !ok {
+		return nil
+	}
+	if listening {
+		prof, err := native.ParseServerTLSOpts(r, tv, word)
+		if err != nil {
+			return err
+		}
+		out.serverTLS = prof
+		out.hasTLS = true
+		return nil
+	}
+	prof, err := native.ParseTLSOpts(r, tv, word)
+	if err != nil {
+		return err
+	}
+	out.tlsProfile = prof
+	out.hasTLS = true
+	return nil
 }
 
 func parseNetAddr(r *native.Registry, v native.Value, word string, listening bool) (netAddrOpts, error) {
@@ -212,7 +262,14 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 		if sErr != nil || path == "" {
 			return netAddrOpts{}, r.AqlError("net_error", word+": unix: must be a socket path", word)
 		}
-		return netAddrOpts{network: "unix", addr: path, host: "unix:" + path}, nil
+		out := netAddrOpts{network: "unix", addr: path, host: "unix:" + path}
+		// A unix socket can carry TLS too, and — more to the point —
+		// silently DROPPING a tls: option here would be the same
+		// mislead ParseTLSOpts rejects unknown keys to prevent.
+		if err := parseTLSSubMap(r, mp, word, listening, &out); err != nil {
+			return netAddrOpts{}, err
+		}
+		return out, nil
 	}
 	tv, ok := mp.Get("tcp")
 	if !ok {
@@ -227,12 +284,16 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 		if hv, ok := mp.Get("host"); ok {
 			host, _ = hv.AsConcreteString()
 		}
-		return netAddrOpts{
+		out := netAddrOpts{
 			network: "tcp",
 			addr:    net.JoinHostPort(host, strconv.FormatInt(port, 10)),
 			host:    host,
 			port:    int(port),
-		}, nil
+		}
+		if err := parseTLSSubMap(r, mp, word, listening, &out); err != nil {
+			return netAddrOpts{}, err
+		}
+		return out, nil
 	}
 	addr, sErr := tv.AsConcreteString()
 	if sErr != nil || addr == "" {
@@ -245,7 +306,11 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 	} else {
 		host = addr
 	}
-	return netAddrOpts{network: "tcp", addr: addr, host: host, port: port}, nil
+	out := netAddrOpts{network: "tcp", addr: addr, host: host, port: port}
+	if err := parseTLSSubMap(r, mp, word, listening, &out); err != nil {
+		return netAddrOpts{}, err
+	}
+	return out, nil
 }
 
 // recvDeadline reads an optional trailing `{within: <ms>}` options map.
@@ -270,34 +335,11 @@ func recvDeadline(args []native.Value, at int) (time.Duration, bool, error) {
 
 // mapNetErr converts a Go network error into the closed/timeout/transport
 // error vocabulary the RFCs specify.
+// mapNetErr delegates to the shared classifier in native so the socket
+// words and fetch raise the SAME code for the same wire condition —
+// see native.MapTransportErr and design/NETWORK-CLIENTS.0.md §8.2.
 func mapNetErr(r *native.Registry, word string, err error) error {
-	var nerr net.Error
-	switch {
-	case errors.Is(err, io.EOF), errors.Is(err, net.ErrClosed), errors.Is(err, io.ErrClosedPipe):
-		return r.AqlError("closed", word+": connection closed by peer", word)
-	case errors.As(err, &nerr) && nerr.Timeout():
-		return r.AqlError("timeout", word+": deadline exceeded", word)
-	default:
-		// Write-side peer resets surface as syscall errors; the closed
-		// code is what handler loops dispatch on.
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			return r.AqlError("timeout", word+": deadline exceeded", word)
-		}
-		msg := err.Error()
-		if containsAny(msg, "broken pipe", "connection reset", "use of closed network connection") {
-			return r.AqlError("closed", word+": "+msg, word)
-		}
-		return r.AqlError("transport", word+": "+msg, word)
-	}
-}
-
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if sub != "" && bytes.Contains([]byte(s), []byte(sub)) {
-			return true
-		}
-	}
-	return false
+	return native.MapTransportErr(r, word, err)
 }
 
 // ---- handlers ----
@@ -310,11 +352,45 @@ func listenHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if err := checkNetPolicy(r, "listen", opts.host, opts.port); err != nil {
 		return nil, err
 	}
+	// Resolve the credential BEFORE binding: a listener bound and then
+	// abandoned because the identity was misspelled leaves the port
+	// held until GC, and the program sees a confusing second failure.
+	var tlsCfg *tls.Config
+	if opts.hasTLS {
+		if pErr := native.CheckServerTLSPolicy(r, opts.serverTLS, opts.host, opts.port); pErr != nil {
+			return nil, pErr
+		}
+		cfg, cErr := native.TLSServerConfigForProfile(r, opts.serverTLS, "listen")
+		if cErr != nil {
+			return nil, listenTLSErr(r, cErr)
+		}
+		tlsCfg = cfg
+	}
 	ln, lErr := net.Listen(opts.network, opts.addr)
 	if lErr != nil {
 		return nil, r.AqlError("transport", "listen: "+lErr.Error(), "listen")
 	}
+	if tlsCfg != nil {
+		// TLS is a socket OPTION, not a separate API: the wrapped
+		// listener still yields plain Sockets and every socket word
+		// works on them unchanged (NETWORK-SERVERS.0.md §4.4). The bound
+		// listener stays reachable so `accept {within:}` keeps working —
+		// the TLS wrapper does not forward SetDeadline.
+		return []native.Value{newListenerValueOn(tls.NewListener(ln, tlsCfg), ln)}, nil
+	}
 	return []native.Value{newListenerValue(ln)}, nil
+}
+
+// listenTLSErr codes the server-config failures. A coded error from the
+// identity resolver passes through unchanged; the capabilities-package
+// sentinels describe a malformed option, so they read as net_error
+// rather than as a transport fault nobody wrote.
+func listenTLSErr(r *native.Registry, err error) error {
+	var coded *eng.AqlError
+	if errors.As(err, &coded) {
+		return err
+	}
+	return r.AqlError("net_error", "listen: "+err.Error(), "listen")
 }
 
 func acceptHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -327,7 +403,7 @@ func acceptHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 		return nil, r.AqlError("net_error", "accept: "+dErr.Error(), "accept")
 	}
 	if has {
-		dl, canDeadline := nl.ln.(interface{ SetDeadline(time.Time) error })
+		dl, canDeadline := nl.deadlineOn.(interface{ SetDeadline(time.Time) error })
 		if !canDeadline {
 			return nil, r.AqlError("net_error", "accept: this Listener does not support {within: ms}", "accept")
 		}
@@ -342,7 +418,40 @@ func acceptHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if err != nil {
 		return nil, mapNetErr(r, "accept", err)
 	}
+	// Finish the handshake before the Socket escapes, mirroring the dial
+	// side: a `recv` must never return plaintext from a peer that was
+	// never authenticated, and a `require-client:` rejection belongs at
+	// `accept` rather than surfacing later as an opaque read error.
+	if hErr := tlsServerHandshake(conn, within, has); hErr != nil {
+		_ = conn.Close()
+		return nil, mapNetErr(r, "accept", hErr)
+	}
 	return []native.Value{newSocketValue(conn)}, nil
+}
+
+// tlsServerHandshake completes the server side of the handshake on an
+// accepted connection, if it is a TLS one at all. `within` bounds it:
+// without a deadline a peer that opens a connection and then says
+// nothing would pin the acceptor indefinitely — the same denial the
+// recv words' {within:} exists to prevent.
+func tlsServerHandshake(conn net.Conn, within time.Duration, hasDeadline bool) error {
+	tconn, ok := conn.(*tls.Conn)
+	if !ok {
+		return nil
+	}
+	if hasDeadline {
+		// As on the dial side, SetDeadline's error is redundant: it
+		// fails only on an already-closed connection, which Handshake
+		// then reports properly and more specifically.
+		_ = tconn.SetDeadline(time.Now().Add(within))
+	}
+	if err := tconn.Handshake(); err != nil {
+		return err
+	}
+	if hasDeadline {
+		_ = tconn.SetDeadline(time.Time{})
+	}
+	return nil
 }
 
 func connectRawHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -361,11 +470,62 @@ func connectRawHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if has {
 		dialer.Timeout = within
 	}
+	if opts.hasTLS {
+		if pErr := native.CheckTLSPolicy(r, opts.tlsProfile, opts.host, opts.port); pErr != nil {
+			return nil, pErr
+		}
+	}
 	conn, cErr := dialer.Dial(opts.network, opts.addr)
 	if cErr != nil {
 		return nil, mapNetErr(r, "connect-raw", cErr)
 	}
+	if opts.hasTLS {
+		tconn, tErr := tlsClientConn(r, conn, opts, within, has)
+		if tErr != nil {
+			_ = conn.Close()
+			return nil, tErr
+		}
+		conn = tconn
+	}
 	return []native.Value{newSocketValue(conn)}, nil
+}
+
+// tlsClientConn wraps a dialled connection in a TLS client and completes
+// the handshake before the Socket escapes, so a `recv` never returns
+// plaintext from a connection whose peer was never verified. TLS is a
+// socket OPTION, not a separate API (NETWORK-SERVERS.0.md §4.4): the
+// returned Socket is the same type with the same words.
+func tlsClientConn(r *native.Registry, conn net.Conn, opts netAddrOpts, within time.Duration, hasDeadline bool) (net.Conn, error) {
+	cfg, err := native.TLSConfigForProfile(r, opts.tlsProfile, "connect-raw")
+	if err != nil {
+		return nil, err
+	}
+	if cfg.ServerName == "" && !cfg.InsecureSkipVerify {
+		// Unlike http.Transport, a raw dial has no URL to derive SNI
+		// and the verified name from — without this every TLS socket
+		// would fail verification.
+		cfg.ServerName = opts.host
+	}
+	tconn := tls.Client(conn, cfg)
+	if hasDeadline {
+		// SetDeadline's error is deliberately dropped: it fails only on
+		// an already-closed connection, and this one was just dialled.
+		// Were it somehow closed, Handshake below reports that properly
+		// — checking here would only produce a second, less specific
+		// error for the same condition.
+		_ = tconn.SetDeadline(time.Now().Add(within))
+	}
+	if hErr := tconn.Handshake(); hErr != nil {
+		return nil, mapNetErr(r, "connect-raw", hErr)
+	}
+	if hasDeadline {
+		// The connect deadline bounds the handshake only; recv/send
+		// carry their own {within:}. Same reasoning as above — a
+		// failure here means a dead conn, which the next recv reports
+		// as `closed`.
+		_ = tconn.SetDeadline(time.Time{})
+	}
+	return tconn, nil
 }
 
 // serveRawHandler — `serve-raw {tcp: port} [handler]`: bind, then run an
@@ -417,6 +577,15 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 						_ = sc.close()
 					}
 				}()
+				// Handshake HERE, on the per-connection goroutine, not in
+				// the accept loop above: a peer that connects and then
+				// stalls must cost one goroutine, not the whole
+				// acceptor. The handler therefore never sees a Socket
+				// whose peer is unauthenticated.
+				if hErr := tlsServerHandshake(conn, 0, false); hErr != nil {
+					fmt.Fprintf(connFork.ErrOutput, "[aql/net] TLS handshake failed: %v\n", hErr)
+					return
+				}
 				sig := native.MatchFnSig(handler, []native.Value{sock})
 				if sig == nil {
 					fmt.Fprintf(connFork.ErrOutput, "[aql/net] serve-raw handler does not accept a Socket argument\n")
@@ -649,6 +818,63 @@ func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 	return []native.Value{native.NewMap(m)}, nil
 }
 
+// peerCertHandler — `peer-cert <Socket>`: the verified peer certificate
+// as a Map, or None when the connection is not TLS or the peer
+// presented nothing.
+//
+// This is what makes `require-client:` useful rather than merely
+// restrictive: the TLS layer proves the peer holds a key chaining to a
+// trusted CA, and this word hands the resulting identity to AQL so the
+// AUTHORIZATION decision — which client may do what — can be written in
+// the language rather than baked into the host.
+//
+// Only the VERIFIED chain is surfaced. `tls.ConnectionState.PeerCertificates`
+// is populated even when verification was not required, so reading it
+// unconditionally would hand a program an unauthenticated name that
+// looks exactly like an authenticated one.
+func peerCertHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
+	sc, ok := asSocket(args[0])
+	if !ok {
+		return nil, r.AqlError("net_error", "peer-cert: expected a Socket, got "+args[0].Parent.String(), "peer-cert")
+	}
+	tconn, isTLS := sc.conn.(*tls.Conn)
+	if !isTLS {
+		return []native.Value{native.NewNone()}, nil
+	}
+	state := tconn.ConnectionState()
+	if len(state.VerifiedChains) == 0 || len(state.VerifiedChains[0]) == 0 {
+		return []native.Value{native.NewNone()}, nil
+	}
+	return []native.Value{certValue(state.VerifiedChains[0][0])}, nil
+}
+
+// certValue projects an X.509 leaf onto the fields an authorization
+// rule actually reads. Names stay Strings (a DN is text, and the
+// distinguished-name grammar is not something AQL should have to
+// parse); validity is Instants so `TimeUtil.now` comparisons work; the
+// serial is a String because it is a 20-octet integer that does not fit
+// an Integer.
+func certValue(cert *x509.Certificate) native.Value {
+	m := native.NewOrderedMap()
+	m.Set("subject", native.NewString(cert.Subject.String()))
+	m.Set("common-name", native.NewString(cert.Subject.CommonName))
+	m.Set("issuer", native.NewString(cert.Issuer.String()))
+	m.Set("serial", native.NewString(cert.SerialNumber.String()))
+	m.Set("not-before", native.NewInstant(cert.NotBefore))
+	m.Set("not-after", native.NewInstant(cert.NotAfter))
+	names := make([]native.Value, 0, len(cert.DNSNames))
+	for _, n := range cert.DNSNames {
+		names = append(names, native.NewString(n))
+	}
+	m.Set("dns-names", native.NewList(names))
+	emails := make([]native.Value, 0, len(cert.EmailAddresses))
+	for _, e := range cert.EmailAddresses {
+		emails = append(emails, native.NewString(e))
+	}
+	m.Set("emails", native.NewList(emails))
+	return native.NewMap(m)
+}
+
 // netNoReturns is the check-mode shape of the statement-form socket
 // words (send-bytes / shutdown / close): they produce no values.
 func netNoReturns(_ []native.Value, _ *native.Registry) []native.Value { return nil }
@@ -697,6 +923,11 @@ func socketNatives() []native.NativeFunc {
 		}},
 		{Name: "peer", Signatures: []native.Signature{
 			{Args: T(TSocket), Impl: native.Go(peerHandler), Returns: T(native.TMap), BarrierPos: -1},
+		}},
+		{Name: "peer-cert", Signatures: []native.Signature{
+			// The verified peer certificate, or None on a plain socket
+			// (hence Any, not Map, in the return position).
+			{Args: T(TSocket), Impl: native.Go(peerCertHandler), Returns: T(native.TAny), BarrierPos: -1},
 		}},
 		{Name: "addr", Signatures: []native.Signature{
 			// addr <Listener> — the bound {host port} (an ephemeral `tcp: 0`

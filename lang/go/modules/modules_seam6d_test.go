@@ -154,7 +154,7 @@ func TestSeam6DInstallExportsHappyPaths(t *testing.T) {
 }
 
 // TestSeam6DTransplantFailurePropagates drives the transplant-error arms of
-// InstallTimeExports / InstallMatrixExports through the transplantExtension
+// InstallTimeExports / InstallMatrixExports / InstallNetExports through the transplantExtension
 // seam — the real extensions always transplant cleanly onto a fresh
 // registry, so only the seam can observe the propagation.
 func TestSeam6DTransplantFailurePropagates(t *testing.T) {
@@ -173,6 +173,11 @@ func TestSeam6DTransplantFailurePropagates(t *testing.T) {
 	}
 	if merr := InstallMatrixExports(r); !errors.Is(merr, errSeam6D) {
 		t.Errorf("InstallMatrixExports transplant failure: got %v, want errSeam6D", merr)
+	}
+	// aql:net gained transplantable extensions with the Fetch accessor
+	// overloads, so its install helper has the same arm.
+	if nerr := InstallNetExports(r); !errors.Is(nerr, errSeam6D) {
+		t.Errorf("InstallNetExports transplant failure: got %v, want errSeam6D", nerr)
 	}
 }
 

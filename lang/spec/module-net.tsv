@@ -73,3 +73,36 @@ import "aql:net" def svc (service {}) add {} ([r:Map state:Any] => [ r.line ]) s
 # negative — a wire protocol is never implicit
 import "aql:net" def svc (service {}) Net.listen {tcp: 0} svc	ERROR:codec	listen over a service requires an explicit codec
 import "aql:net" Net.connect {tcp: "127.0.0.1:1"}	ERROR:codec	connect requires an explicit codec
+
+# --- Fetch accessor word extensions: import transplants these onto the
+# importer's bare dot/get/dotr/getr/has so a Response reads directly.
+# Behaviour rows use the bare spelling (what guests write); the
+# qualified rows pin the exports themselves (ADR-003) and that the
+# overloads stay anchored on Fetch rather than leaking to other types.
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.status) Net.close l; v	204	a Response answers .field directly — no convert Map step
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.nope) Net.close l; v	None	a missing Response field reads none (lenient, like a Map)
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (do [r!.nope] error [dot code]) Net.close l; v	key_error/q	the strict twin raises where the lenient read returns none
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r has "status") Net.close l; v	true	has reports a present Response field (String key: a /q operand refuses to compile — a pre-existing limit, not specific to this overload)
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (convert Map r) Net.close l; v.status	204	the convert Map route still works — it was the only one before the accessors
+import "aql:net" Net.dot	fn dot[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dot is exported as a Fetch-only accessor overload
+import "aql:net" Net.get	fn get[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.get likewise
+import "aql:net" Net.dotr	fn dotr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dotr likewise
+import "aql:net" Net.getr	fn getr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
+import "aql:net" Net.has	fn has[[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
+import "aql:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are anchored on the Fetch type: a Map is NOT a receiver for the qualified form
+
+# --- Server-side TLS (design/NETWORK-TLS-PLAN.0.md §5 phase 6). A
+# listener PRESENTS a credential and may DEMAND one back; a dial
+# verifies one and may present one. Each side rejects the other's keys
+# by name — a `verify: false` quietly accepted on a listener would read
+# as configured while configuring nothing. The positive round trip needs
+# a host-registered credential, which AQL source cannot create by
+# design, so it lives in net_socket_tlsserver_test.go.
+import "aql:net" Net.listen {tcp: 0  tls: {}}	ERROR:needs identity:	a TLS server with no certificate has nothing to present
+import "aql:net" Net.listen {tcp: 0  tls: {identity: nobody/q}}	ERROR:no client identity named "nobody"	guest source names a credential; only the host registers one
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  verify: false}}	ERROR:verify: is not available here	verify: is a dial option — a server verifies no server chain
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  ca: "x"}}	ERROR:ca: is not available here	a server names its client roots with require-client:
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  sni: "x"}}	ERROR:sni: is not available here	sni: is what a client sends, not what a server reads
+import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  nope: 1}}	ERROR:unknown option "nope"	an unknown listen tls: key is refused, never ignored
+import "aql:net" Net.connect-raw {tcp: "127.0.0.1:1"  tls: {require-client: "x"}}	ERROR:require-client: is not available here	require-client: is a listen option
+import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv c 1 {within: 5000} ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def v (Net.peer-cert s) Net.close s; Net.close l; v	none	peer-cert on a plain socket is None — no TLS means no proven peer

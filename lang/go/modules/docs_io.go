@@ -32,4 +32,46 @@ func init() {
 		"mount":    "Install a filesystem: a handler-fn map (the FileOps bridge), or a .zip archive Pathon (read-only, {writable:true} for copy-on-write).",
 		"unmount":  "Restore the filesystem that was active before mount.",
 	})
+
+	// Paths are Pathon values, not Strings, and that is the single thing
+	// a caller most needs shown — a signature of [Path Any] does not say
+	// how to build one. Results are from verified lang/spec/module-io.tsv
+	// rows, which use the in-memory filesystem so they touch no disk.
+	registerExamples("aql:io", map[string][]string{
+		"write": {
+			`IO.write (make Pathon "/tmp/a.txt") "hello"      ;# returns the Path, so it chains`,
+			`;# The path is a Pathon, not a String: ` + "`make Pathon \"…\"`" + ` or the`,
+			`;# literal form. "mem://…" writes to the in-memory filesystem.`,
+		},
+		"read": {
+			`IO.read (make Pathon "/tmp/a.txt")               ;# 'hello'`,
+			`IO.read (IO.write (make Pathon "/tmp/a.txt") "hello")   ;# write returns its Path`,
+		},
+		"stat": {
+			`(IO.stat (make Pathon "/tmp/a.txt")).size        ;# 5`,
+			`(IO.stat (make Pathon "/tmp/a.txt")).type        ;# file/q — or dir/q, link/q`,
+		},
+		"list":   {`IO.list (make Pathon "/tmp")                     ;# the entries, as Paths`},
+		"folder": {`IO.folder (make Pathon "/tmp/build")             ;# create it, parents included`},
+		"remove": {`IO.remove (make Pathon "/tmp/a.txt")`},
+		"move":   {`IO.move (make Pathon "/tmp/a.txt") (make Pathon "/tmp/b.txt")`},
+		"copy":   {`IO.copy (make Pathon "/tmp/a.txt") (make Pathon "/tmp/b.txt")`},
+		"open": {
+			`def h (IO.open (make Pathon "/tmp/big.log") {mode:"r"})`,
+			`IO.seek h 0 "end"  ;# … then IO.read / IO.close h`,
+			`;# For whole-file work IO.read/IO.write need no handle at all.`,
+		},
+		"printstr": {`IO.printstr "hi"                                 ;# writes to stdout with no newline`},
+		"trace": {
+			`IO.trace [1 add 2 mul 3]                         ;# 9, plus a step-by-step trace on stderr`,
+			`;# The value passes through, so a trace can be dropped into a`,
+			`;# pipeline without changing what it computes.`,
+		},
+		"stdout": {`IO.stdout                                        ;# stdout/q — a StreamKind, for the words that take one`},
+		"args":   {`IO.args                                          ;# the argv this program was started with`},
+		"temp":   {`def p (IO.temp)                                  ;# a fresh temporary Path`},
+		"watch": {
+			`IO.watch (make Pathon "/tmp") {match:"*.aql"}    ;# events until IO.unwatch`,
+		},
+	})
 }

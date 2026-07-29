@@ -705,6 +705,16 @@ type FnDefInfo struct {
 	Module string
 	Export string
 	Doc    string
+	// Examples are hand-authored `describe` lines for a module export,
+	// each a complete line shown verbatim. They exist because the
+	// auto-generated positional permutations are actively misleading for
+	// a capability word: `Net.fetch 'a' {a:1,b:2}` is well-formed and
+	// teaches nothing, since the interesting part of `fetch` is the
+	// shape of the options map, not the arity. Nil for core words (which
+	// carry their examples on their static help Entry) and for exports
+	// nobody has written examples for yet, both of which keep the
+	// generated permutations.
+	Examples []string
 	// MiniKind names the mini-language kind whose expansion produced
 	// this partially-applied Function ("" for everything else). The
 	// per-kind member types the aql:minilang module exports

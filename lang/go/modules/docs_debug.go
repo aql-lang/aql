@@ -34,4 +34,34 @@ func init() {
 		"trace":       "Run a body with step-by-step stack tracing printed to output.",
 		"profile":     "Per-word step-count profile of a body, costliest first.",
 	})
+
+	// Several of these PASS THEIR VALUE THROUGH, which is what makes them
+	// droppable into a pipeline and is invisible in a [Any] signature.
+	// Results are from verified lang/spec/module-debug.tsv rows.
+	registerExamples("aql:debug", map[string][]string{
+		"tap": {
+			`42 Debug.tap                                     ;# 42 — prints it AND returns it`,
+			`;# So ` + "`(f x) Debug.tap g`" + ` inspects the middle of a pipeline`,
+			`;# without changing what it computes.`,
+		},
+		"label": {`7 "answer" Debug.label                           ;# prints "answer: 7", returns 7`},
+		"dump":  {`5 Debug.dump                                     ;# prints the value's full structure, returns it`},
+		"assert": {
+			`99 Debug.assert true "ok"                        ;# 99 — passes through when the condition holds`,
+		},
+		"parse":   {`size (Debug.parse "1 add 2")                     ;# 3 — the token list, nothing evaluated`},
+		"disasm":  {`([1 add 2] Debug.disasm) is String               ;# the compiled bytecode, as text`},
+		"explain": {`(Debug.explain "add") is String                  ;# how dispatch would resolve that word`},
+		"sig":     {`("add" Debug.sig) typeof                        ;# List — the signatures, as data`},
+		"deps":    {`size ([1 add 2 mul 3] Debug.deps)                ;# 2 — the words a body depends on`},
+		"watch":   {`def k 5   ("k" Debug.watch)                      ;# 5 — report on every change to that binding`},
+		"time":    {`Debug.time [ expensive-thing ]                   ;# the body's result, plus its elapsed time`},
+		"bench":   {`Debug.bench 1000 [ 1 add 2 ]                     ;# run it N times, report the distribution`},
+		"profile": {`Debug.profile [ expensive-thing ]                ;# per-word time for the body`},
+		"steps":   {`Debug.steps [1 add 2]                            ;# every engine step, as data`},
+		"stack":   {`(Debug.stack) typeof                            ;# List — the live operand stack`},
+		"words":   {`Debug.words typeof                              ;# List — every registered word`},
+		"defs":    {`Debug.defs typeof                               ;# Map — the live bindings`},
+		"todo":    {`Debug.todo "handle the empty case"              ;# raises; a marker that cannot be forgotten`},
+	})
 }

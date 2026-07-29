@@ -112,4 +112,66 @@ func init() {
 		"cancel":   "Cancel a scheduled timer or interval.",
 		"await":    "Run bodies in parallel and collect results.",
 	})
+
+	// Two things trip callers here and neither shows in a signature: the
+	// INSTANT vs DATE split (a point on the timeline vs a calendar day —
+	// most calendar words take a Date, so an Instant needs `to-date`
+	// first), and the AQL swap convention on the comparison words. Every
+	// line below was run to get its result.
+	registerExamples("aql:time-util", map[string][]string{
+		"now":       {`TimeUtil.now                                    ;# an Instant — a point on the timeline, always UTC`},
+		"today-utc": {`TimeUtil.today-utc                              ;# a Date — a calendar day, no time of day`},
+		"unix":      {`TimeUtil.unix 1700000000                        ;# 2023-11-14T22:13:20Z — seconds to an Instant`},
+		"to-unix":   {`TimeUtil.to-unix (TimeUtil.unix 1700000000)     ;# 1700000000`},
+		"to-date": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))   ;# 2023-11-14 — Instant to Date`,
+			`;# Needed before the calendar words: most of them take a Date.`,
+		},
+		"to-iso": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))`,
+			`TimeUtil.to-iso d                                ;# '2023-11-14'`,
+		},
+		"format": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))`,
+			`TimeUtil.format "2006-01-02" d                   ;# '2023-11-14'`,
+			`;# The LAYOUT comes first, and it is Go's reference-time style`,
+			`;# ("2006-01-02 15:04:05"), not strftime's %Y-%m-%d.`,
+		},
+		"year":         {`TimeUtil.year (TimeUtil.to-date (TimeUtil.unix 1700000000))          ;# 2023`},
+		"weekday-name": {`TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1700000000))  ;# 'Tuesday'`},
+		"add-days": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))`,
+			`TimeUtil.add-days 10 d                           ;# 2023-11-24 — the COUNT comes first`,
+		},
+		"start-of": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))`,
+			`TimeUtil.start-of "month" d                      ;# 2023-11-01`,
+		},
+		"end-of": {
+			`def d (TimeUtil.to-date (TimeUtil.unix 1700000000))`,
+			`TimeUtil.end-of "month" d                        ;# 2023-11-30`,
+		},
+		"is-before": {
+			`def a (TimeUtil.to-date (TimeUtil.unix 1))`,
+			`def b (TimeUtil.to-date (TimeUtil.unix 90000))`,
+			`TimeUtil.is-before a b                           ;# false — reads "b is before a"`,
+			`a TimeUtil.is-before b                           ;# true — the swap form reads forwards`,
+		},
+		"earliest": {
+			`def a (TimeUtil.to-date (TimeUtil.unix 1))`,
+			`def b (TimeUtil.to-date (TimeUtil.unix 90000))`,
+			`TimeUtil.earliest a b                            ;# 1970-01-01`,
+		},
+		"add":           {`TimeUtil.add (TimeUtil.unix 1700000000) (TimeUtil.hours 2)   ;# 2023-11-15T00:13:20Z`},
+		"diff":          {`TimeUtil.diff (TimeUtil.unix 1700003600) (TimeUtil.unix 1700000000)   ;# 1h0m0s — a Duration`},
+		"total-minutes": {`TimeUtil.total-minutes (TimeUtil.hours 2)        ;# 120.0 — a Duration as a Float`},
+		"tz":            {`TimeUtil.tz "America/New_York"                   ;# an IANA zone; TimeUtil.tz-utc for UTC`},
+		"tz-offset":     {`TimeUtil.tz-offset (TimeUtil.tz "America/New_York") (TimeUtil.unix 1700000000)   ;# '-05:00'`},
+		"await": {
+			`TimeUtil.await [[1 add 2] [3 add 4]]             ;# [3 7] — run the bodies concurrently, collect in order`,
+		},
+		"sleep":    {`TimeUtil.sleep 250                               ;# block this actor for 250ms`},
+		"timeout":  {`def t (TimeUtil.timeout 1000 [print "late"])     ;# a Timer; TimeUtil.cancel t stops it`},
+		"interval": {`def i (TimeUtil.interval 1000 [print "tick"])     ;# repeats until TimeUtil.cancel i`},
+	})
 }

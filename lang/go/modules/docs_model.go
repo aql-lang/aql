@@ -21,4 +21,20 @@ func init() {
 		"model": "The unified model Map after a build: `Model.model <Model>`. Errors if the model " +
 			"has not been built yet (call Model.run or Model.start first).",
 	})
+
+	// The lifecycle is the API here: define, instantiate, run or
+	// start/stop. Which word to reach for is not visible in signatures
+	// that all take a Map.
+	registerExamples("aql:model", map[string][]string{
+		"model": {
+			`def m (Model.model {                             ;# define the shape`,
+			`  state: {count: 0}`,
+			`  update: ([s:Map e:Map] => [ … ])`,
+			`})`,
+		},
+		"new":   {`def inst (Model.new m {count: 5})                ;# an instance with initial state`},
+		"run":   {`Model.run inst events                            ;# drive it to completion, return the final state`},
+		"start": {`Model.start inst                                 ;# run it in the background instead`},
+		"stop":  {`Model.stop inst                                  ;# ends a started instance`},
+	})
 }

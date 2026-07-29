@@ -12,4 +12,34 @@ func init() {
 		"rules":           "The canonical layout rule table (width/indent/attach/templates/strategies) — defined in AQL (formatter/fmt-rules.aql), the stylesheet Fmt.format interprets.",
 		"format-with":     "Format AQL source under a (partial) rule table: override width, indent, attach classes, per-kind templates, statement strategies.",
 	})
+
+	// Fmt is the pretty-printer behind `aql fmt`. Its two halves look
+	// alike in the signatures and are not: format* REFORMATS AQL source,
+	// while render/tree/children work on a document tree of layout nodes.
+	// Results are from verified lang/spec/module-fmt.tsv rows.
+	registerExamples("aql:fmt", map[string][]string{
+		"format": {
+			`Fmt.format "[ a  b  c ]"                         ;# '[a b c]\n'`,
+			`Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"`,
+			`;# 'def double fn x:Integer Integer [x mul 2]\n' — canonical form`,
+		},
+		"format-markdown": {
+			"Fmt.format-markdown \"```aql\\ndef  x  1\\n```\"       ;# reformats only the aql fences",
+		},
+		"format-html": {
+			`Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"`,
+			`;# reformats only what is between the aqlfmt markers`,
+		},
+		"format-with": {`Fmt.format-with {width: 60} "def x 1"            ;# same, with explicit layout rules`},
+		"kind":        {`{a:1} Fmt.kind                                   ;# map/q — the layout kind of a value`},
+		"render": {
+			`Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}   ;# 'a b'`,
+			`Fmt.render 1  {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}   ;# 'a\nb'`,
+			`;# The first operand is the WIDTH: a group breaks only when it`,
+			`;# does not fit, which is what makes the output width-aware.`,
+		},
+		"tree":     {`Fmt.tree "def x 1"                               ;# the layout document, as data`},
+		"children": {`Fmt.children (Fmt.tree "def x 1")                ;# walk a layout node's children`},
+		"rules":    {`Fmt.rules                                        ;# the active layout rules`},
+	})
 }
