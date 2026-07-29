@@ -21,10 +21,11 @@ because in every case the mistake is more instructive than the fix.
 
 **Status of the repairs**, as of the latest revision:
 
-- **A is fixed for `await`.** Its branches now deep-clone mutable
-  payloads, so the two documentation claims are true as written. The
-  other five `ForkConcurrent` call sites are deliberately unchanged —
-  see §A.
+- **A is fixed for `await`.** A branch that can reach a stateful
+  container is REFUSED at the boundary, the answer `send` gives between
+  processes. Cloning was implemented and measured first, then replaced:
+  it made the same programs work silently. The other five
+  `ForkConcurrent` call sites are deliberately unchanged — see §A.
 - **C is fixed.** `errorReturnsFn` refuses instead of widening a known
   arity. §C now records exactly what its "user-visible by default"
   severity rests on: the effects fence, which blocks the rescuing
@@ -44,7 +45,9 @@ because in every case the mistake is more instructive than the fix.
 - **E and G** are still diagnosis only. E needs a registry-side error-code
   enumeration that does not exist; G is a pre-existing recorded issue.
 
-One defect found *by* this work, not by the report, is recorded in §A:
+Two defects found *by* this work rather than by the report are recorded
+in §A: **`send`'s refusal does not cover FlexMap** (a message gap, not a
+safety hole — the boundary clone makes it safe regardless), and
 **`make test-race` is red on main** — a leaked `interval` callback races a
 later test's check pass. 26 race reports at `ab0e1e0`, before any change
 here.
@@ -84,7 +87,7 @@ paragraph in B and "Blocker 2 is worse than the table says".
 
 | | Defect | Kind | Severity |
 |---|---|---|---|
-| **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs assert the opposite; **`await` FIXED**, other fork sites unchanged by design |
+| **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs asserted the opposite; **`await` FIXED by refusal**, other fork sites unchanged by design |
 | **B** | Compiled `do`/`each` leak `context set` to the parent | miscompile | high — silent wrong answer, default path |
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — user-visible by default once the block emits output; **FIXED** |
 | **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
@@ -169,61 +172,78 @@ containers between processes — and `await`/`spawn` do not apply it.
 
 Recommend (1), with (2) as the interim if a copy cost is unacceptable.
 
-### (1) is DONE — scoped to `await`
+### RESOLVED via (2) — REFUSE at the branch boundary
 
-`Registry.ForkConcurrentIsolated` is `ForkConcurrent` plus
-`DefTable.IsolateValues`, which maps `CloneValue` over every binding.
-`await`'s `makeBranchForks` uses it; **no other fork site does**.
+The decision went to **(2), refuse**, not (1). `await` now rejects a
+program whose branch can reach a stateful container — FlexMap, FlexList,
+Store, Table, a class instance — with `not_sendable`, naming both the
+binding and the kind. It is the answer `send` already gives at a process
+boundary.
 
-**Why scoped rather than applied at `ForkConcurrent`.** That primitive is
-shared by `await`, the timers, `spawn`, `service` and the two net
-listeners. The false claim is specifically about `await` branches —
-EXPLANATION.md's is in the `await` modes section and HOWTO.md's directly
-follows the `await` examples — and both statements are now **true as
-written**, so no prose had to be weakened. Cloning at the shared primitive
-would additionally break a `timeout` / `interval` callback that
-accumulates into a captured Store, which nothing documents as isolated and
-which is a reasonable idiom; and the process paths already have their own
-answer, since `send` refuses to pass mutable containers between processes.
-Fixing the documented claim is the job; changing concurrency semantics
-across five other call sites is not.
+Option (1) (deep-clone into each branch) was implemented first and
+measured: it worked, matched the immutable-Map oracle exactly, and cost
++16% allocs / +15% ns per `await` call. It was replaced because cloning
+makes the same programs work **silently** — it hides the sharing the
+author actually wrote, and pays a per-branch copy for every container in
+scope whether or not any branch touches it. Refusing states the rule once,
+at the point where it is violated.
 
-**Why `CloneValue` rather than a bespoke walk.** It already classifies
-every kernel payload as mutable (deep-copied, cycle-safely) or immutable
-(shared), so reusing it means the isolation cannot drift from that
-classification. It also SHARES `ExtensionPayload` unless the host opts into
-`DeepCloner` — so process handles and timer handles ride through intact
-rather than being severed from what they refer to.
+**Three things the rework needed that were not visible from the analysis.**
+Each is worth recording because each looked settled before it was tried.
 
-**The oracle made this cheap to verify.** An immutable `Map` always had the
-documented behaviour (`set` returns a copy), so the contract did not have
-to be invented: the tests assert that a `FlexMap` produces the *same*
-observable result as a `Map` on the same program. Pre-fix both spellings
-of the repro produce `[{b:2 a:1} {b:2 a:1}] {b:2 a:1}`; post-fix both
-produce the oracle's `[{a:1} {b:2}] {}`.
+1. **`sendableViolation` cannot be reused, despite being the same rule.**
+   The obvious move — `await` calls `send`'s predicate, same package, same
+   words — is wrong, and quietly so. `send` asks *can this be COPIED
+   across?* and deep-copies what it admits (`CloneValue` at the boundary),
+   so it refuses only containers a copy cannot preserve. `await` copies
+   nothing and must refuse anything mutated **in place** — a strictly
+   broader set.
 
-**Verified as a race gate, not just a semantics gate.** `make test-race`
-runs this whole package under the detector. Reverting the fix and
-re-running the new tests produces **three `WARNING: DATA RACE` reports and
-three failures**; with the fix they are clean. A test that cannot fail is
-not a gate, so this was checked rather than assumed.
+   Concretely, `sendableViolation` misses FlexMap. A FlexMap is
+   `MapPayload{*OrderedMap}` with a `TFlexMap` tag — *payload-identical*
+   to an immutable Map — so a payload-keyed switch reads it as a plain map
+   and recurses into it. That is harmless for `send` (the clone makes it
+   safe either way; this is a refusal-message gap, **not** a safety hole)
+   and fatal at a sharing boundary. The await predicate therefore
+   discriminates on the **type tag**, which is what actually separates
+   in-place mutation from copy-on-write.
 
-**Measured cost** (4 branches, a 10-element list in scope, 200 iterations):
+2. **The check first shipped INERT on the default path.** The first
+   version walked the branch element as a token list. Compiled, a branch
+   body is a synthetic fn-value carrier holding its tokens in an
+   `AQLImpl` body (the `CompileStoresBodyList` shape `runParallelBranch`
+   unwraps), so the walk found nothing — the boundary was unguarded on
+   the *only path most programs take*. It looked correct because the case
+   that did fire had been tested with `--no-compile`. Both shapes are
+   walked now, and every refusal case is asserted in **both** engine
+   modes, which is the assertion that would have caught it.
 
-| | allocs/op | B/op | ns/op |
-|---|---|---|---|
-| before | 7470 | 2246486 | 2826727 |
-| after | 8677 | 2622926 | 3252268 |
-| | **+16%** | **+17%** | **+15%** |
+3. **A lambda does not always CAPTURE what it reaches.**
+   `def w ([] => [m set a 1])` with a module-level `m` captures nothing —
+   per the capture rules a module-level def stays dynamic — so the
+   reference exists only in the lambda's body. Checking `FnDefInfo.Captured`
+   alone missed the shape a user is most likely to write. The walk follows
+   into referenced function bodies as well, bounded by a `seen` set so a
+   recursive fn terminates instead of looping.
 
-Paid per `await` CALL, not per loop element — the distinction that made
-defect B's equivalent cost unacceptable. No alloc guard is breached. The
-available optimisation, if it ever matters, is to walk for an
-in-place-mutable node first and clone only when one is present: most of
-that 16% is copying plain `List`/`Map` bindings, which are not aliasing
-hazards (their `set` returns a copy). It is deliberately NOT taken here,
-because it means maintaining a second traversal alongside `CloneValue`'s
-classification, and drift between the two would silently reopen the bug.
+**Scope.** `await` only. The other five `ForkConcurrent` call sites are
+untouched: nothing documents timers, `spawn`, `service` or the net
+listeners as isolated, an `interval` callback accumulating into a captured
+Store is a reasonable idiom, and the process paths already have `send`'s
+answer.
+
+**Docs.** EXPLANATION.md and HOWTO.md were *false* under sharing and would
+have been *misleading* under cloning — both imply you may share a mutable
+container and that writes are isolated. They now state the refusal, show
+the build-one-per-branch idiom, and say plainly that a container reached
+only through a longer chain of calls is not detected: this is a boundary
+rule, not a proof of non-aliasing.
+
+**Still shared, deliberately:** a mutable container stored in the
+CONTEXT rather than bound by `def`. The fork gives each branch a private
+COW context layer, but a pointer stored in it is reachable. The published
+repro binds through `def`, which is what this closes; the context path is
+unverified and should not be claimed as covered.
 
 ### `make test-race` is RED on main — an unrelated, pre-existing leak
 
