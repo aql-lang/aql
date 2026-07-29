@@ -843,6 +843,22 @@ has to cover module sub-registries, not just container payloads.
 ### What a correct fix requires, in order
 
 1. Make `UpdateChain` cycle-safe. Nothing else can land first.
+   — **DONE.** The walk now stops at `newRoot` rather than relinking it.
+   `newRoot.Prototype == origRoot` by construction, so a walk that reached
+   `newRoot` matched the relink condition and produced
+   `newRoot.Prototype = newRoot`. Stopping there is sufficient: the chain
+   past `newRoot` continues to `origRoot` and then to `origRoot`'s
+   ancestors, none of which have `origRoot` as their prototype.
+
+   `TestContextStackUpdateChainNoSelfCycle` pins it, structurally and by a
+   bounded chain walk, and was confirmed to fail without the guard. Getting
+   the repro right took a correction worth recording: **two sibling entries
+   are not enough.** With both pointing straight at `origRoot`, each walk
+   relinks in a single step and never advances far enough to meet
+   `newRoot`, so the first repro passed on the unguarded code and made the
+   guard look unnecessary. It needs two *nested* layers
+   (`inner → outer → origRoot`) — which is exactly the shape a second
+   context frame creates, and exactly why this is step 1.
 2. Bracket **all** body-entry seams, not one: `invokeClosureOn`,
    CALL_USER/RET, `RunUnit`, `runUnitNested` — or establish a narrower,
    honestly-stated invariant. Note that this step cannot be completed by
@@ -850,6 +866,30 @@ has to cover module sub-registries, not just container payloads.
    and list auto-evaluation are **inlined**, so they need either an
    emitted frame opcode pair or a rule that stops inlining a body whose
    tokens can reach a context-writing word.
+
+   — **Enabled, not done.** The three re-entrant seams now funnel through
+   one named function, `vmContext.enterBodyUnit`, which is where the
+   interpreter's single `Engine.Run` site finally has a counterpart. Its
+   doc comment carries the five-way map (the three funnelled paths,
+   CALL_USER's intra-loop frame push, and the inlined forms) so the count
+   lives in the source rather than only in this note — the absence of that
+   count is what let a one-of-four patch read as complete.
+   `TestVMBodyEntryIsFunnelled` is a source-shape gate: it AST-scans
+   `vm.go` and fails on any `vc.run` call outside the funnel and the
+   top-level program entry. A source gate rather than a behavioural one
+   because the property has no runtime symptom until something is added to
+   the seam — which is precisely how it was lost the first time.
+
+   The funnel deliberately changes **no behaviour**: it adds no frame, so
+   it cannot hit blocker 1, blocker 3, or advertise a false invariant. It
+   also removed a real duplicate — `invokeClosureOn` had its own copy of
+   the param/capture locals split and now shares `bindUnitLocals` with the
+   other two seams, so there is one binding rule as well as one entry.
+
+   What remains for step 2 is unchanged and still the hard part: CALL_USER
+   needs its frame push/RET pop bracketed separately (it is not a
+   re-entry, so it cannot join the funnel), and the inlined forms need an
+   emitted opcode pair or a lowering rule.
 3. Gate the frame on a static "this body may touch context" flag so the
    allocation is paid only where it is observable, and add an
    each/fold/filter row to the alloc guard.
