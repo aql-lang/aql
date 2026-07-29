@@ -137,27 +137,46 @@ TimeUtil.await [[fact 5] [fact 6]] end`, "[[120 720]]"},
 //
 // The check sees what is bound in the def table when `await` dispatches.
 // Compiled, some fn-body locals live in frame slots instead, so a lambda
-// defined inside a fn body is simply unbound at that point and the
-// indirection through it is not followed. Interpreted, it is.
+// defined inside a fn body can be unbound at that point and the
+// indirection through it is not followed. Interpreted, it always is.
 //
-// Both engines DO catch the same container named directly in a branch,
-// and both catch the identical lambda at module level — so the gap is
-// narrow. It is still an engine-mode divergence inside a check written to
-// stop engine-mode divergences, which is exactly the sort of thing that
-// should be visible in a test rather than in a comment nobody reads.
+// The gap is NOT uniform, and its shape is the alarming part. Measured
+// with `def m (make FlexMap {a:0})` inside a fn body and both branches
+// invoking the same fn-local lambda:
+//
+//	lambda body     compiled     interpreted
+//	[m]             refused      refused
+//	[m get a]       refused      refused
+//	[m size]        ALLOWED      refused
+//	[m set a 1]     ALLOWED      refused
+//
+// So the compiled path refuses the two harmless shapes and permits the
+// mutating one. `[m set a 1]` is not a theoretical hazard: run under
+// `-race` it reports a genuine DATA RACE on the OrderedMap, two branch
+// goroutines in OrderedMap.Set at once. On the DEFAULT execution path.
+//
+// This test therefore uses `[m size]` — the same divergence, no
+// mutation, no race. Using the mutating shape would make `make test-race`
+// permanently red, which is the exact failure mode this investigation
+// keeps running into: a gate whose signal is drowned by a known failure
+// stops reporting the unknown ones. The hazard is recorded in
+// design/verse-report-defects-investigation.0.md §A rather than
+// performed here.
 func TestAwaitRefusalMissesCompiledFnLocalLambda(t *testing.T) {
 	const src = awaitPrelude + `def outer fn [[] [Any] [
-  def m (make FlexMap {})
-  def w ([] => [m set a 1])
+  def m (make FlexMap {a:0})
+  def w ([] => [m size])
   TimeUtil.await [[w] [w]]
 ]]
 outer`
 	a, _ := New()
 	if _, err := a.Run(src); err != nil {
 		t.Fatalf("LIMIT CLOSED — the compiled path now refuses a fn-local "+
-			"lambda indirection (%v). Good: delete this test, and update the "+
-			"LIMITS comment in native_temporal_await.go and the note in "+
-			"EXPLANATION.md that both describe it as uncaught.", err)
+			"lambda indirection (%v). Good: check whether the MUTATING shape "+
+			"(`[m set a 1]`, the one that actually races) is refused too, then "+
+			"delete this test and update the LIMITS comment in "+
+			"native_temporal_await.go, the note in EXPLANATION.md, and §A of "+
+			"design/verse-report-defects-investigation.0.md.", err)
 	}
 	// Interpreted, the same program IS refused — which is what makes this a
 	// divergence rather than a uniform limitation.
@@ -165,6 +184,32 @@ outer`
 	if _, err := b.RunInterp(src); err == nil {
 		t.Error("interpreted, this shape must still be refused; if it is not, " +
 			"the walk into referenced function bodies has regressed")
+	}
+}
+
+// TestAwaitRefusalCatchesFnLocalLambdaReads is the other half of the table
+// above, and it is what makes the limit *narrow* rather than *total*: the
+// compiled path DOES follow a fn-local lambda for these two shapes. If
+// these ever start being allowed, the hole has widened from "the mutating
+// case" to "any case", and the pinned limit above would no longer bound
+// it.
+func TestAwaitRefusalCatchesFnLocalLambdaReads(t *testing.T) {
+	for _, body := range []string{"[m]", "[m get a]"} {
+		t.Run(body, func(t *testing.T) {
+			src := awaitPrelude + `def outer fn [[] [Any] [
+  def m (make FlexMap {a:0})
+  def w ([] => ` + body + `)
+  TimeUtil.await [[w] [w]]
+]]
+outer`
+			a, _ := New()
+			if _, err := a.Run(src); err == nil {
+				t.Errorf("compiled: %s must still be refused — the known limit "+
+					"is meant to cover the MUTATING shape only", body)
+			} else if !strings.Contains(fmt.Sprint(err), "not_sendable") {
+				t.Errorf("compiled: want not_sendable, got %v", err)
+			}
+		})
 	}
 }
 

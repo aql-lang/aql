@@ -70,11 +70,48 @@ var exampleResults = map[string]string{}
 // via the API). Checked after the static map.
 var dynamicExampleResults = map[string]string{}
 
+// producesLiveHandle reports whether a word returns a handle to something
+// still RUNNING after the call — a timer, a ticker, a process.
+//
+// Example generation EXECUTES the expressions it synthesises, to show a
+// real result. For a pure word that is exactly right. For a word that
+// returns a live handle it is a resource leak with no owner: the
+// generator has nowhere to keep the handle and never cancels it, so
+// registering `interval` started a real ticker that then fired for the
+// lifetime of the process.
+//
+// That is not a documentation problem. The leaked ticker runs its
+// callback on a forked registry against the same process state every
+// later execution touches, which is a DATA RACE — it is what kept
+// `make test-race` red (an interval created during `seedAQL`'s
+// RegisterNativeFunc racing a later test's check pass), and any embedder
+// registering the temporal module after MarkReady got the same leak.
+//
+// Keyed on the word NAME, which is unsatisfying — the return type would
+// generalise to any future timer-like word — but SigInfo.Returns is EMPTY
+// for exactly these words (verified: `interval`/`timeout` both report
+// `returns=[]` from BuildFuncInfo), so a return-keyed rule silently never
+// fires. A rule that cannot fire is worse than an explicit list, because
+// it reads as covering the case.
+//
+// Such words keep their signature, description and hand-authored
+// examples; only the synthesised run-it-for-real example is skipped.
+func producesLiveHandle(name string) bool {
+	switch name {
+	case "interval", "timeout", "spawn", "service", "watch":
+		return true
+	}
+	return false
+}
+
 // GenerateDynamicExamples computes and stores example results for a word
 // using the provided eval function. Called when new functions are
 // registered after initial startup.
 func GenerateDynamicExamples(info FuncInfo, eval func(string) (string, error)) {
 	if eval == nil {
+		return
+	}
+	if producesLiveHandle(info.Name) {
 		return
 	}
 	for _, expr := range ExampleExprs(info) {

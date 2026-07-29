@@ -21,11 +21,15 @@ because in every case the mistake is more instructive than the fix.
 
 **Status of the repairs**, as of the latest revision:
 
-- **A is fixed for `await`.** A branch that can reach a stateful
-  container is REFUSED at the boundary, the answer `send` gives between
-  processes. Cloning was implemented and measured first, then replaced:
-  it made the same programs work silently. The other five
-  `ForkConcurrent` call sites are deliberately unchanged — see §A.
+- **A is fixed for `await` — with one hole still open, and it is the
+  worst item in this note.** A branch that can reach a stateful container
+  is REFUSED at the boundary, the answer `send` gives between processes.
+  Cloning was implemented and measured first, then replaced: it made the
+  same programs work silently. The other five `ForkConcurrent` call sites
+  are deliberately unchanged. **But** the compiled path still fails to
+  refuse a fn-local lambda that WRITES a shared container, and that is a
+  real data race on the default path — see §A's correction, which
+  supersedes this note's earlier "narrow divergence" wording.
 - **C is fixed.** `errorReturnsFn` refuses instead of widening a known
   arity. §C now records exactly what its "user-visible by default"
   severity rests on: the effects fence, which blocks the rescuing
@@ -42,15 +46,24 @@ because in every case the mistake is more instructive than the fix.
 - **B's** fix was implemented, validated and reverted; read §B before
   attempting another. The fourth adversarial lens landed after the revert
   and widened the defect further — see §B.
-- **E and G** are still diagnosis only. E needs a registry-side error-code
-  enumeration that does not exist; G is a pre-existing recorded issue.
+- **E is fixed for everything it documents.** The code-less runtime
+  errors the table names now carry the code their own check-time mirror
+  emits; the table names only codes that exist; and a gate re-derives the
+  truth set from the source so it cannot drift again. Two things are
+  deliberately *not* done and are written up in §E: the registry-side
+  enumeration (still worth doing, still a bigger commitment than it
+  looks), and policy refusals, which stay code-less because the local fix
+  also changes compiled-mode fallback semantics.
+- **G** is still diagnosis only — a pre-existing recorded issue.
 
 Two defects found *by* this work rather than by the report are recorded
 in §A: **`send`'s refusal does not cover FlexMap** (a message gap, not a
 safety hole — the boundary clone makes it safe regardless), and
-**`make test-race` is red on main** — a leaked `interval` callback races a
-later test's check pass. 26 race reports at `ab0e1e0`, before any change
-here.
+**`make test-race` was red on main** — 26 race reports at `ab0e1e0`,
+before any change here. That one turned out to be a *product* defect, not
+test hygiene: dynamic help **executes** the examples it synthesises, so
+registering `interval` started a real ticker nobody owned. **Fixed; the
+race lane is clean.**
 
 Two findings grew materially during investigation. **F** was reported as a
 `case`-exhaustiveness precision gap and turned out to be a parameter-type
@@ -245,7 +258,54 @@ COW context layer, but a pointer stored in it is reachable. The published
 repro binds through `def`, which is what this closes; the context path is
 unverified and should not be claimed as covered.
 
-### `make test-race` is RED on main — an unrelated, pre-existing leak
+### CORRECTION: the compiled-path gap is a live data race, not a narrow divergence
+
+An earlier revision of this section described the known limit —
+`TestAwaitRefusalMissesCompiledFnLocalLambda` — as "narrow", on the
+grounds that both engines catch a container named directly in a branch
+and both catch the identical lambda at module level. **That
+understated it.** Running the pinned program under `-race` reports a
+genuine `WARNING: DATA RACE`: two branch goroutines inside
+`OrderedMap.Set` at once, via `runParallelBranch` → `vmContext.run`. On
+the DEFAULT execution path.
+
+Measured, with `def m (make FlexMap {a:0})` inside a fn body and both
+branches invoking the same fn-local lambda:
+
+| lambda body | compiled | interpreted |
+|---|---|---|
+| `[m]` | refused | refused |
+| `[m get a]` | refused | refused |
+| `[m size]` | **ALLOWED** | refused |
+| `[m set a 1]` | **ALLOWED** — races | refused |
+
+The compiled path refuses the two harmless shapes and permits the
+mutating one. That is the worst possible shape for a partial check: it
+fires where it does not matter and is silent where it does. The
+interpreter refuses all four, so the divergence is entirely on the side
+that ships by default.
+
+**How this was found is the point.** It was not found by reasoning about
+the check — I wrote the limit down as narrow and believed it. It was
+found because `make test-race`, once the interval leak stopped drowning
+it, reported the race in a test I had written myself to *document* the
+limit. The gate could only say this after the noise was removed; that is
+the argument for fixing red gates rather than working around them,
+restated by example.
+
+**What changed here, and what did not.** The test now pins the divergence
+with `[m size]` — same gap, no mutation, no race — plus a companion
+asserting the two refused shapes stay refused, so a future widening from
+"the mutating case" to "any case" fails loudly. The *hole itself is not
+fixed*: a user program with a fn-local lambda writing a shared FlexMap
+across `await` branches is still undefined behaviour under the default
+compiler. Closing it means the reachability walk seeing fn-body locals
+that live in frame slots rather than the def table, which is an engine
+change, not a check tweak.
+
+This is the highest-severity item left in this note.
+
+### `make test-race` was RED on main — and it was a product defect
 
 Running the race lane for A's verification surfaced a failure that has
 nothing to do with A: `lang/go/test`'s `TestListAPIWithQuery` reports a
@@ -255,9 +315,10 @@ It is a **leaked `interval` callback**. The two stacks are a test's
 `a.Run` → `CompileCheck` → `CheckState.Begin` *writing* check state
 (`check.go:98`), against `RunTimerCallback` → `Engine.Run` → `stepWord` →
 `CheckState.IsActive` *reading* it (`check.go:77`), on a goroutine created
-by `startInterval` (`natives.go:706`). An interval started by an earlier
-test in the package is still firing while a later test drives a check pass
-on the same registry.
+by `startInterval` (`natives.go:706`). Something is firing an interval
+while a later test drives a check pass on the same registry. The obvious
+suspect — an earlier test that started one and forgot to cancel it — is
+wrong; see the root cause below.
 
 Measured on a git worktree at the **untouched branch base** `ab0e1e0`:
 
@@ -265,21 +326,114 @@ Measured on a git worktree at the **untouched branch base** `ab0e1e0`:
 |---|---|
 | `ab0e1e0` (base, before any of this work) | **26**, test FAILS |
 | this branch before the A fix | 6, test FAILS |
-| this branch with the A fix | 1, test FAILS |
+| this branch with the A fix | 1–24, test FAILS |
+| this branch with the help fix below | **0**, test `ok` |
 
 So the gate was already red before any change here, and A moved the count
-down rather than up. (Counts are nondeterministic; the direction is what
-matters, and no run of any tree was clean.)
+down rather than up. The counts are **nondeterministic** — the A-fix row
+is a range because repeated runs of the same tree gave 1 and 24 — so only
+two things in that column are load-bearing: no run of any tree before the
+help fix was ever clean, and every run after it was.
 
-Recorded rather than fixed, because it is a distinct defect with a
-distinct owner: an interval that outlives the test that started it. The
-repair is lifecycle — `cancel` the interval, or have the test harness
-drain live timers between tests — not anything in the registry. It is
-worth someone's attention precisely because `make test-race` is *the*
-data-race gate: while it is red for this reason, a genuine new race is
-easy to miss in the noise. That is the same failure mode this note keeps
-finding — a gate whose signal is masked, so what it would have caught goes
-unnoticed.
+#### Root cause: dynamic help RUNS the examples it invents
+
+The obvious reading — "a test started an interval and forgot to cancel
+it" — is wrong, and following it wasted a pass. Rewriting every leaky
+`interval` row in `lang/spec/module-time.tsv` to cancel its timer moved
+the count **22 → 22**. Those rows do leak; they were not the source.
+
+The source is in the product. With `EnableDynamicHelp`, registering a
+word fires `OnRegisterHook` → `GenerateDynamicExamples`, which
+**evaluates** each expression it synthesises so `describe` can show a
+real result. For `interval` that expression starts a real ticker, on a
+registry the generator does not own and will not outlive, and nothing
+ever cancels it. The callback then runs `Engine.Run` on a forked registry
+for the rest of the process — racing whatever the next test does with
+check state.
+
+That makes it a defect with a user, not just a test: **any embedder that
+registers the temporal module after `MarkReady()` leaks a goroutine per
+registration.** Finding it needed the full goroutine-creation stack; the
+summary line names only the test that lost the race.
+
+**Fix** (`lang/go/native/help/help.go`): `GenerateDynamicExamples`
+returns early for a word whose result is a handle to something still
+*running* — `interval`, `timeout`, `spawn`, `service`, `watch`. Their
+`describe` entries keep the example text and lose only the executed
+result, which for a word returning an opaque live handle was never the
+informative part.
+
+The rule is keyed on the word **name**, which is unsatisfying: a
+return-type rule would generalise to any future timer-like word. It was
+written that way first and it silently never fired — `SigInfo.Returns` is
+**empty** for exactly these words (verified: `interval` and `timeout`
+both report `returns=[]` from `BuildFuncInfo`). A rule that cannot fire
+is worse than an explicit list, because it reads as covering the case.
+
+Pinned at the seam by `lang/go/native/help/live_handle_example_test.go`
+rather than by counting goroutines, which would be timing-dependent: eval
+must never run for a live-handle word, and must still run for ordinary
+ones (`add`, `sub`, `size`, `upper`) — a skip list that quietly grew to
+cover pure words would disable dynamic examples, which is the whole point
+of the feature.
+
+The `module-time.tsv` rows are still worth cancelling and are cancelled,
+just not because of the race. That is the lesson worth keeping: the first
+plausible cause matched the symptom exactly and was still the wrong one,
+and only a measurement — not the reasoning — separated them.
+
+#### The fix exposed a test that never existed
+
+`make cover-gate` then failed with exactly one uncovered statement:
+`intervalAtomHandler` (`natives.go:686`) — `interval`'s ATOM overload,
+where the callback is a bare word rather than a quoted body list.
+
+Nothing tested it. Its coverage came entirely from the side effect this
+fix removed: dynamic help synthesised an `interval` example and *ran* it,
+which happened to dispatch that handler. So the feature that caused the
+data race was also the only thing exercising the overload — and under
+ADR-008's 100% floor, that made the gate green for a reason no one had
+chosen. It would have broken the moment anyone changed how examples are
+generated, and the failure would have looked like a coverage regression
+rather than a missing test.
+
+Closed with `TestIntervalWithWordCallback`, the mirror of the `timeout`
+version that already existed, which cancels its ticker before asserting.
+Worth stating plainly: a coverage gate proves every statement RAN, not
+that anything checked what it did. Here it ran inside a help-text
+generator that discarded the result.
+
+#### A third defect fell out of writing those rows
+
+Cancelling the timers needed a spelling that keeps the row's expected
+value, and the natural one diverges between the engines:
+
+```
+import "aql:time-util"
+def h (TimeUtil.timeout 1000 [1 add 2])
+def t (typeof h)
+TimeUtil.cancel h t
+                              compiled → Timeout
+                              interpreted → [aql/signature_error]:
+                                cannot call `cancel` — no signature matches
+```
+
+`cancel` takes exactly one argument and `h` supplies it, so the trailing
+`t` should simply remain on the stack — which is what the compiled path
+does, and what the identical program does with **any other** trailing
+value (`TimeUtil.cancel h 7` → `7`, in both engines). The trigger is
+narrow: the trailing token must resolve to a **type literal**, and
+`cancel` must be a **zero-return** word. `not true t` returns from both
+engines fine, so it is not "a type literal in the token stream" on its
+own.
+
+Not chased — it is a dispatch divergence, not an error-code or a
+concurrency question, and it deserves its own investigation rather than
+a guess appended to this one. Recorded here because it is exactly the
+class this note keeps finding: the compiled path and the interpreter
+disagreeing on a shape no spec row covered. Worked around in the rows
+with an explicit `end` (`TimeUtil.cancel h end t`), which both engines
+accept.
 
 **Methodological note.** The first control I ran for this was wrong: I
 used `git stash push` on files that were already committed, so it stashed
@@ -1048,26 +1202,43 @@ oracle for such a row.
 
 ## E. REFERENCE.md documents error codes the engine cannot produce
 
+The table is not prose. Readers dispatch on it:
+
+```
+do [risky] error [dot code case [not_found/q "…" bad_input/q "…"]]
+```
+
+so a documented code nothing mints is a `case` arm that can never fire,
+and there is no way to find that out short of provoking the condition and
+printing the result.
+
 ### Method
 
-Extracted all 22 rows of REFERENCE.md's "Common codes" table, searched Go
+Extracted every row of REFERENCE.md's "Common codes" table, searched Go
 source, tests and `lang/spec/*.tsv` for each, then probed each documented
 condition through `do […] error [dot code]` to see what the engine
 actually attaches.
 
-### Result
+### Result — 7 phantoms and a duplicate, out of 23 rows
 
 | Documented | Reality |
 |---|---|
-| `cap_denied` | phantom — 0 occurrences anywhere; policy denial is `aql/permission_denied` (`lang/go/policy/error.go:10`) |
-| `type_mismatch` | phantom — a real mismatch raises `aql/signature_error` |
-| `unify_fail` | phantom, and wrong in kind: a failed `unify` does not raise, it returns the value `~unify-fail false` |
-| `extend_user_type` | phantom |
-| `out_of_range` | wrong name **and** an engine defect (below) |
-| `io_error` | never engine-minted; a user-raisable atom only (`lang/spec/edge-errors-1.tsv:16`), though EXPLANATION.md's worked example handles it as if the engine produced it |
+| `type_mismatch` | phantom — a real mismatch raises `signature_error` |
+| `out_of_range` | phantom — the name is `index_out_of_range`; and the runtime raised it **code-lessly** (below) |
+| `unify_fail` | phantom, and wrong in kind: a failed `unify` does not raise at all, it returns the value `~unify-fail false` |
+| `extend_user_type` | phantom — the gate exists and raises `extend_owner` (`eng/go/word_extend.go:250`) |
+| `io_error` | phantom — I/O failures were code-less; the word's own codes are `read_error` / `write_error` |
+| `cap_denied` | phantom — policy refusals are code-less too (below) |
+| `cancelled` | phantom — nothing in the temporal module mints it; found by this pass, not by the report |
+| `arity_mismatch` | listed **twice**, with two different descriptions |
 
-Correct as documented: `not_found`, `arith_error`, `signature_error`,
-`incomparable`, `user_error`, and the remaining rows.
+Correct as documented: `undefined_word`, `user_error`, `def_error`,
+`no_value_error`, `uncalled_function`, `reserved_word`,
+`locked_signature`, `extend_conflict`, `constraint_violation`,
+`arity_mismatch`, `unbound_param`, `gen_without_constructor`,
+`incomparable`, `arith_error`, `not_found`. (An earlier draft of this
+section also listed `signature_error` as "correct as documented" — it is
+a real code, but it was never a row in the table.)
 
 ### The engine defect inside it
 
@@ -1081,14 +1252,146 @@ It is one instance of a systemic gap: `lang/go/native` has 417 non-test
 `fmt.Errorf` sites and `lang/go/modules` 119, none attaching an `[aql/…]`
 code.
 
-### Fix
+### FIXED — the coded sites, the corrected table, and a gate
 
-Generate the table from the registry, the doctrine that makes `aql
-describe` unable to drift. That needs a registry-side enumeration of
-codes, which does not exist today — and adding one also supplies the data
-source for `aql explain <code>` (R4 in
-`rust-zig-roc-faber-in-aql-report.0.md`). Separately, give the
-out-of-bounds runtime error a code.
+**(1) The code-less conditions the table names now carry codes.** Each
+takes the code that site's own CHECK-MODE mirror already emits, so the
+static diagnostic and the runtime error finally agree:
+
+| Site | was | now |
+|---|---|---|
+| `native_accessor.go` getr/dotr index OOB | code-less | `index_out_of_range` |
+| `native_accessor.go` getr on a non-map | code-less | `getr_error` |
+| `fileio.go` read failures (missing path, stdin, decode, sqlite) | code-less | `read_error` |
+| `fileio.go` write failures (write, atomic, stdout/stderr) | code-less | `write_error` |
+| a file op refused by a policy RULE | code-less | `permission_denied` |
+| a file op with `fileops` uninstalled | code inside the message TEXT | `capability_not_installed` |
+
+The last two rows are where this nearly went wrong. Coding the read path
+alone made a *policy refusal* report `read_error` — dispatchable, and
+misleading: `read_error` says fix the file, when the answer is to change
+the policy. `fileOpError` therefore prefers a code the failure already
+identifies itself by. That is the fileops half of the adapter
+`lang/go/policy/error.go`'s header has claimed all along.
+
+The uninstalled case was worse and only surfaced because a test for it
+failed: `notInstalledFileOps` wrote its code **into the message** as an
+`[aql/capability_not_installed]:` prefix, where `errors.As` cannot find
+it. A code inside prose is a code no `case` arm can match, and it would
+have been quietly restamped `read_error` by the very fix meant to help.
+It is now a typed error (`notInstalledError`). The two refusals stay
+distinct on purpose: a rule said no (widen the rule) is not the same
+answer as the capability isn't there (install it).
+
+Two things this deliberately does NOT do. It does not touch the other
+gated capabilities (network, process, vault, tui), which still drop their
+code — see below. And it does not give `Denied` an `Unwrap`, which would
+fix all of them at once and also flip compiled-mode fallback semantics;
+choosing the CODE is orthogonal to that and carries none of its risk.
+
+A side effect worth stating: `runtimeShouldFallback` treats a foreign Go
+error as "re-run on the interpreter" and an `AqlError` as "surface". So a
+missing file in compiled mode used to silently re-run the whole program;
+now it fails at once. That is the direction the file's own comment on the
+exclusive-write path already argued for — a fallback re-run past an
+effect fence surfaces as a spurious `internal_error`.
+
+Pinned by `lang/go/error_codes_test.go`, whose negative half carries the
+weight: a missing file must NOT report `permission_denied` (a helper that
+stamped it on every I/O failure would pass the positive tests and be just
+as wrong), and a permitted write+read must still succeed.
+
+One test elsewhere had to move as a result, and it is a small argument
+that the work was worth doing. `test/go/specgen`'s two wave-4 tests pin
+the classifier arm for a runtime error carrying **no** code, and they
+used an out-of-bounds `getr` as their specimen — precisely because it had
+none. Coding it broke them. Their comment already recorded one earlier
+migration (top-level `1 0 div`, which stopped qualifying when the
+checker's arith mirror began flagging it statically), so the specimen has
+now moved twice for the same reason: the population of uncoded runtime
+errors keeps shrinking. It is `"x" convert Integer` today, and the
+failure messages say so, so the next person to close that one gets a
+sentence telling them what to do rather than a puzzle.
+
+**(2) The table now names codes that exist.** `type_mismatch` →
+`signature_error`; `out_of_range` → `index_out_of_range` (plus
+`range_error`, which is a distinct real code); `extend_user_type` →
+`extend_owner`; `io_error` → `read_error` / `write_error`; `unify_fail`,
+`cancelled`, `cap_denied` and the duplicate `arity_mismatch` removed;
+`type_error` added, since return-annotation violations are common and
+were undocumented. `unify`'s non-raising behaviour is stated explicitly,
+because a reader who came looking for `unify_fail` needs redirecting
+rather than silence.
+
+**(3) A gate, so it cannot drift again**
+(`test/go/docexamples/errorcodes_test.go`). It extracts every code any
+site ATTACHES to an error or diagnostic — 233 of them — and fails if the
+table names one that is not in the set, or names one twice.
+
+Two limits of the gate, stated because they bound what it proves:
+
+- It is **one-directional**. Every documented code must be mintable; the
+  ~210 mintable codes the table omits are not its business, because the
+  table is "common codes", not a census.
+- Mintable ≠ correctly described. `type_mismatch` would have failed here;
+  a row naming `signature_error` while describing the wrong condition
+  would not.
+
+It deliberately does **not** count constant DECLARATIONS as minting.
+`policy` declares four fully-qualified code constants and its header says
+"the engine adapter copies these onto the produced AqlError" — counting
+declarations would have let `cap_denied`'s successor pass the gate while
+still never reaching a user. A code is real when a site attaches it.
+
+### Partly open: the other capabilities' refusals are still code-less
+
+Before this pass, **every** policy refusal reached the user without a
+code — `fileops`, `network`, `process`, `vault`, `tui` alike:
+
+```
+aql -deny fileops.read    -e '… do [IO.read …]    error [dot code]'  → None
+aql -deny network.connect -e '… do [Net.fetch …]  error [dot code]'  → None
+```
+
+`policy.Denied` carries `Code` (`permission_denied`,
+`capability_not_installed`, `modules_disabled`, `policy_attenuation`) and
+`lang/go/policy/error.go:3-6` states an engine adapter copies it onto the
+produced `AqlError`. No such adapter existed.
+
+`fileops` now has one (`fileOpError`), and it is the capability the
+REFERENCE table is mostly about. The first line above returns
+`permission_denied`, an uninstalled `fileops` returns
+`capability_not_installed`; the second line still returns `None`.
+
+The remaining capabilities are one decision away, and it is not a
+plumbing decision. Giving `Denied` an `Unwrap() error` that returns an
+`AqlError` would fix all of them at a stroke — and would also flip
+`runtimeShouldFallback` (`lang/go/aql.go`) from "foreign error, re-run on
+the interpreter" to "AQL error, surface", for every denial, in compiled
+mode. That is probably the *right* answer — `eng.PolicyDenied` already
+gets exactly that treatment at the VM dispatch gate, with a comment
+explaining that a re-run would evaluate the program twice — but it is a
+semantic call about the fallback fence and belongs to whoever owns it.
+
+The alternative is to repeat `fileOpError`'s trick at each remaining wrap
+site (`fetch.go`, `native_process.go`, `net_socket.go`, `vault.go`,
+`tui.go`): no fallback risk, but it has to be redone for every future
+gated capability.
+
+The REFERENCE table documents `permission_denied` on the strength of the
+fileops half only, and the capability section says plainly that a refusal
+from the other scopes does not yet carry a stable code.
+
+### Not done: the enumeration itself
+
+The original plan was to generate the table FROM a registry-side
+enumeration of codes — the doctrine that makes `aql describe` unable to
+drift, and the data source `aql explain <code>` would need (R4 in
+`rust-zig-roc-faber-in-aql-report.0.md`). That is still worth doing, and
+it is a bigger commitment than it looks: 233 codes across ~700
+construction sites, needing a naming policy and a stability guarantee
+before the first entry is written. The gate above buys the anti-drift
+property for the documented subset without pre-committing to any of that.
 
 
 ## F. The shorthand `fn` form silently discards a `def`-bound union/enum type

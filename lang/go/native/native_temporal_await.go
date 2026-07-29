@@ -52,17 +52,31 @@ type parallelResult struct {
 //
 //   - a container reached only through a longer chain of calls;
 //   - a binding that is not in `r.Defs` at await time. Compiled, some
-//     fn-body locals live in frame slots rather than the def table, so
-//     `def outer fn [[] [Any] [ def m (make FlexMap {})
-//     def w ([] => [m set a 1]) await [[w] [w]] ]]` is refused
-//     INTERPRETED and not refused COMPILED — `w` is simply unbound here.
-//     Naming `m` directly in the branch is caught on both paths;
-//     the same lambda at MODULE level is caught on both paths.
+//     fn-body locals live in frame slots rather than the def table, so a
+//     lambda defined INSIDE a fn body can be unbound here.
 //
-// The second is an engine-mode divergence in the check itself and is
-// pinned by TestAwaitRefusalMissesCompiledFnLocalLambda, which fails when
-// someone closes it. Closing it means reaching compiled frame locals from
-// a native handler, which is a different layer's job.
+// The second is an engine-mode divergence in the check itself, and it is
+// worse than "some shapes are missed" — it misses exactly the dangerous
+// ones. With `def m (make FlexMap {a:0})` inside a fn body and both
+// branches invoking the same fn-local lambda:
+//
+//	lambda body     compiled     interpreted
+//	[m]             refused      refused
+//	[m get a]       refused      refused
+//	[m size]        ALLOWED      refused
+//	[m set a 1]     ALLOWED      refused   <-- real DATA RACE under -race
+//
+// So the compiled path refuses the harmless shapes and permits the
+// mutating one, which is undefined behaviour on the path that ships by
+// default. Naming `m` directly in the branch is caught on both paths, as
+// is the same lambda at MODULE level, so the hole is bounded — but it is
+// a live memory-safety hole, not a cosmetic divergence.
+//
+// Pinned by TestAwaitRefusalMissesCompiledFnLocalLambda (which uses the
+// non-racing `[m size]` shape, so `make test-race` stays usable) and by
+// TestAwaitRefusalCatchesFnLocalLambdaReads (the refused half). Closing
+// it means reaching compiled frame locals from a native handler, which is
+// a different layer's job. See design/verse-report-defects-investigation.0.md §A.
 func sharedMutableKind(v Value) string {
 	if v.Parent == nil {
 		return ""

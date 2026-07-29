@@ -712,9 +712,12 @@ await [
 The refusal covers what a branch body references, including one level
 into a function it names. It is a boundary rule, not a proof: a
 container reached only through a longer chain of calls is not detected,
-and neither is one held by a lambda defined *inside a fn body* when that
-program is compiled (naming the container directly is caught on both
-paths, as is the same lambda at module level).
+and neither is one *written* through a lambda defined **inside a fn
+body** when that program is compiled. That last case is a known hole,
+not a design choice — such a program is a real data race rather than a
+refusal, so do not rely on the check to catch it. Naming the container
+directly in the branch is caught, as is the same lambda at module level,
+and building the container inside each branch is always safe.
 
 
 ## Errors as values
@@ -851,9 +854,14 @@ Side-effecting words (`read`, `write`, `fetch`, `sqlite-*`,
 turns them all on by default; embeddings (Wasm playground, an
 LLM tool host) can disable any of them.
 
-When a disabled word runs, it raises `Error{code:'cap_denied}`.
-This is the same shape as any other error: the calling code can
-catch it with `do ... error [...]` and react appropriately.
+When a disabled word runs, it fails with a permission-denied
+error. This is the same shape as any other error: the calling code can
+catch it with `do ... error [...]` and react appropriately. A refused
+FILE operation carries a code a handler can dispatch on —
+`permission_denied` when a rule said no, `capability_not_installed`
+when the capability was never installed — while refusals from the
+other gated scopes do not yet carry a stable code, so match on the
+message for those.
 
 Capabilities are deliberately coarse — one flag per system —
 because the per-call enforcement happens *inside* the words. Finer
