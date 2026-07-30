@@ -353,10 +353,11 @@ Flags:
 table):
 
 * `no_signature` / `uncalled_function` — a call that matches no
-  signature. `uncalled_function` covers the silent case where a named
-  function value (e.g. an imported `Pkg.fn`) is called with the wrong
-  arguments and would be left on the stack as data at runtime instead
-  of erroring.
+  signature. `uncalled_function` is the function-VALUE form: a named
+  function reached as a call (e.g. an imported `Pkg.fn`) with arguments
+  that match none of its signatures. It errors at runtime too — the check
+  reports the same finding at the same place, without running the
+  program. Write `Pkg.fn/r` when you mean to pass the function itself.
 * `unreachable_signature` — an `fn` overload that an earlier, more
   general overload already subsumes, so first-match dispatch can never
   reach it.

@@ -2312,13 +2312,7 @@ func CheckMicronConstruction(r *Registry, target, src Value, pos SrcPos) {
 // entry never blocks a later REAL emission of the same finding at
 // another site, so the dedupe skips it.
 func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
-	for _, d := range r.Check.Diagnostics {
-		if d.Code == code && d.Detail == detail && d.Row == pos.Row && d.Col == pos.Col &&
-			!d.CaughtAtRuntime {
-			return
-		}
-	}
-	r.Check.AddDiagnostic(CheckDiagnostic{
+	CheckAddUnique(r, CheckDiagnostic{
 		Code:          code,
 		Detail:        detail,
 		Word:          word,
@@ -2326,6 +2320,23 @@ func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos
 		Col:           pos.Col,
 		RuntimeMirror: true,
 	})
+}
+
+// CheckAddUnique is CheckAddUniqueDiagnostic's dedupe over a diagnostic the
+// caller shapes itself — for a finding that must NOT be stamped
+// RuntimeMirror because the compile pipeline should refuse on it. That is
+// the MODEL-UNDERMINING class (eng/go/CLAUDE.md): a mirror promises the
+// program compiles and then raises the identical error, which is false when
+// dispatch itself did not resolve (`no_signature`, `undefined_word`,
+// `uncalled_function` — there is no call to compile).
+func CheckAddUnique(r *Registry, d CheckDiagnostic) {
+	for _, prev := range r.Check.Diagnostics {
+		if prev.Code == d.Code && prev.Detail == d.Detail &&
+			prev.Row == d.Row && prev.Col == d.Col && !prev.CaughtAtRuntime {
+			return
+		}
+	}
+	r.Check.AddDiagnostic(d)
 }
 
 // ---- the Micron Ideal (refine / make dispatch) ----

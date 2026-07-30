@@ -322,11 +322,12 @@ func TestUnresolvableFnValueIsData(t *testing.T) {
 	}
 }
 
-// --- failed dispatch marking --------------------------------------------------
+// --- failed dispatch ----------------------------------------------------------
 
 func TestNamedFnValueFailedDispatchRaises(t *testing.T) {
-	// A named fn value whose candidate args match no sig is marked
-	// FailedDispatch; the top-level drain raises uncalled_function.
+	// A named fn value whose candidate args match no sig raises
+	// uncalled_function at the dispatch site
+	// (design/FN-VALUE-DISPATCH.0.md).
 	r := covRegistry(t, nil)
 	fnv := namedFnVal("intonly",
 		[]FnParam{{Name: "x", Type: TInteger}},

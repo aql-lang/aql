@@ -155,9 +155,17 @@ func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — NARR
 	// The doc's M.dec ERROR rows: the region's paren call genuinely fails
 	// dispatch — a GUARANTEED-error program, so there is no clean idx-0
 	// event for the split to bind (SplitEventRegionBind declines) and the
-	// refusal stands; the interpreter raises uncalled_function. (The no-def
-	// form of the same region refuses "check diagnostics" — either refusal
-	// is the sound terminal state for a program that cannot run.)
+	// refusal stands. (The no-def form of the same region refuses "check
+	// diagnostics" — either refusal is the sound terminal state for a
+	// program that cannot run.)
+	//
+	// The interpreter's half changed with the loud dispatch contract
+	// (design/FN-VALUE-DISPATCH.0.md): the failure is raised AT THE
+	// DISPATCH SITE, which is inside this `do [...]`, so the region's own
+	// error handler catches it and the program yields the caught code.
+	// Under the old residue model the error surfaced from the end-of-run
+	// drain instead — outside every handler — so a program that explicitly
+	// asked to trap its failures was aborted by one anyway.
 	for _, src := range []string{
 		s9DocMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
 		s9DocMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`,
@@ -165,10 +173,10 @@ func TestS9FrontierDefOverCatchRegion(t *testing.T) { // §9.1 rows 1-2 — NARR
 		a, _ := New()
 		prog, _, _, _ := a.CompileCheck(src)
 		b, _ := New()
-		_, errI := b.RunInterp(src)
-		if prog != nil || codeOf(errI) != "uncalled_function" {
-			t.Errorf("%.50q: want refusal + interp uncalled_function, got prognil=%v interp [%s]",
-				src, prog == nil, codeOf(errI))
+		gotI, errI := b.RunInterp(src)
+		if prog != nil || errI != nil || fmt.Sprint(gotI) != "[uncalled_function]" {
+			t.Errorf("%.50q: want refusal + the do-catch yielding uncalled_function, got prognil=%v interp %v (%v)",
+				src, prog == nil, gotI, errI)
 		}
 	}
 

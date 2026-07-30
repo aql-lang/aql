@@ -1495,43 +1495,9 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		}
 	}
 
-	// Runtime uncalled-function residue (ERRORS.8.md §5, VOXGIG T1): a
-	// named Function value placed by a FAILED dispatch that nothing
-	// ever consumed. Higher-order uses consume the value, so they never
-	// reach here; only at the top level — where no consumer can exist
-	// anymore — does the residue become an error, with the original
-	// call-site span. The same bug check mode names uncalled_function.
-	if e.isTop {
-		for i := 0; i < e.tape.Len(); i++ {
-			v := e.tape.At(i)
-			if v.FailedDispatch && (v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction)) {
-				name := ""
-				if info, ok := v.Data.(FnDefInfo); ok {
-					name = info.Name
-				}
-				if e.registry.Check.IsActive() {
-					// Check-mode equivalent: a FailedDispatch fn value still on
-					// the stack at the top-level drain was never consumed (a
-					// following higher-order word would have taken it). Flag it
-					// now — the genuine wrong-order namespace-call footgun — as
-					// the diagnostic, not a hard error.
-					e.registry.Check.AddDiagnostic(CheckDiagnostic{
-						Code:   "uncalled_function",
-						Detail: "call to '" + name + "' matched no signature and was left on the stack as data",
-						Word:   name,
-						Row:    v.Pos().Row,
-						Col:    v.Pos().Col,
-					})
-					continue
-				}
-				return nil, makeAqlErrorAt("uncalled_function",
-					"call to '"+name+"' matched no signature and was left on the stack as data",
-					name, e.effectiveSource(),
-					"hint: check the call's argument types and arity — or use "+name+"/r to push the function as a value deliberately",
-					v.Pos())
-			}
-		}
-	}
+	// (There is no uncalled-function RESIDUE pass here any more: a failed
+	// fn-value dispatch is an error at the dispatch site, so nothing
+	// reaches the drain to judge — design/FN-VALUE-DISPATCH.0.md.)
 
 	// Drain any Undefined-Atom values left on the stack. Outside check
 	// mode `stepWord` errors on undefined words so this loop is a
@@ -5619,48 +5585,76 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 
 	// A NAMED function reached as a call — args on the stack
 	// (swap/prefix form) or upcoming forward tokens (`Pkg.fn a b`) — that
-	// matched no signature is the silent-dispatch footgun: the value is
-	// left on the stack as data with no error (DX-report T1/B1). Guards
-	// keep the detection precise: named (not an anonymous lambda value),
-	// not explicitly inert (`/r` / `quote` set Quoted), and at least one
-	// candidate arg available — so a bare function-as-value reference
-	// with no args is left alone.
+	// matched no signature is an ERROR HERE, at the dispatch site
+	// (design/FN-VALUE-DISPATCH.0.md). Guards keep the detection precise:
+	// named (not an anonymous lambda value), not explicitly inert (`/r` /
+	// `quote` set Quoted), and at least one candidate arg available — so a
+	// bare function-as-value reference with no args is left alone, which is
+	// how a function is passed as data.
 	//
-	// Check mode diagnoses it immediately (uncalled_function). At
-	// runtime the value MAY still be a legitimate higher-order operand
-	// (`filter f xs`), so it is only marked here; the top-level
-	// end-of-Run drain raises uncalled_function if nothing consumed it
-	// (ERRORS.8.md §5 option 2) — check and runtime name the same bug
-	// the same way.
+	// This supersedes ERRORS.8.md §5 option 2, which marked the value and
+	// let the top-level end-of-run drain raise only if NOTHING consumed it.
+	// "Unconsumed" turned out not to mean "not consumed by a higher-order
+	// word": any Any-typed slot cleared the residue, so `print (IO.read
+	// "/nonexistent")` printed the FUNCTION and exited 0, and `aql check`
+	// reported it clean. Composition that wants the value as data now says
+	// so — `f/r` — and the judgement no longer depends on what happens to
+	// the value afterwards.
+	//
+	// Check mode reports the same finding as a diagnostic instead, under the
+	// guaranteed-error-mirror discipline (eng/go/CLAUDE.md): only where the
+	// analysis position is unconditionally reached and untrapped, because a
+	// fn body analysed against generalised carrier args can fail to match
+	// for want of precision rather than because the program is wrong.
 	if e.registry != nil &&
 		fnDef.Name != "" && !fnDef.Anonymous &&
 		valIdx < e.tape.Len() && !e.tape.At(valIdx).Quoted {
 		candidates := append(append([]Value{}, resolved...), e.upcomingArgs(valIdx)...)
 		if len(candidates) > 0 {
-			// Mark the value FailedDispatch and DEFER the diagnostic to the
-			// end-of-run drain — in check mode too, not just at runtime. A
-			// FailedDispatch fn value that a FOLLOWING higher-order word
-			// consumes is NOT a bug: the documented `(Sort.by-number
-			// Sort.reverse)` comparator composition leaves by-number as data
-			// for reverse to take. Emitting eagerly here flagged that as a
-			// false uncalled_function; deferring lets the drain flag only a
-			// value that survives UNCONSUMED — exactly the runtime contract,
-			// preserving the wrong-order true-positive while clearing the
-			// composition FP.
-			fv := e.tape.At(valIdx)
-			fv.FailedDispatch = true
+			pos := e.tape.At(valIdx).Pos()
 			// Borrow a span from the nearest argument when the FnDef value
-			// itself carries none, so the end-of-run report can point
-			// somewhere real.
-			if fv.Pos().Row == 0 {
+			// itself carries none, so the report points somewhere real.
+			if pos.Row == 0 {
 				for _, c := range candidates {
 					if c.Pos().Row > 0 {
-						fv.pos = c.pos
+						pos = c.Pos()
 						break
 					}
 				}
 			}
-			e.tape.Set(valIdx, fv)
+			// The detail no longer says "was left on the stack as data" — that
+			// described what the OLD contract did with the value, and saying it
+			// while raising would tell the reader the opposite of what happened.
+			detail := "call to '" + fnDef.Name + "' matched no signature"
+			if e.registry.Check.IsActive() {
+				// Analysis continues past the finding, so the value stays on the
+				// tape and downstream check-mode consumers must be able to tell
+				// that it is dispatch WRECKAGE rather than a deliberate value —
+				// see defWordExtension, which would otherwise read the failed
+				// call's locked signatures as a word-extension attempt.
+				fv := e.tape.At(valIdx)
+				fv.FailedDispatch = true
+				e.tape.Set(valIdx, fv)
+				if CheckAtUncaughtTopLevel(e.registry) {
+					// NOT a RuntimeMirror: a mirror promises the program still
+					// compiles and raises the identical error, and there is no
+					// call here to compile — dispatch did not resolve, exactly
+					// like no_signature. So the compile pipeline must refuse on
+					// it (eng/go/CLAUDE.md, the model-undermining class).
+					CheckAddUnique(e.registry, CheckDiagnostic{
+						Code:   "uncalled_function",
+						Detail: detail,
+						Word:   fnDef.Name,
+						Row:    pos.Row,
+						Col:    pos.Col,
+					})
+				}
+			} else {
+				return makeAqlErrorAt("uncalled_function", detail,
+					fnDef.Name, e.effectiveSource(),
+					"hint: check the call's argument types and arity — or use "+fnDef.Name+"/r to push the function as a value deliberately",
+					pos)
+			}
 		}
 	}
 

@@ -21,11 +21,11 @@ import (
 // note. Before the fix, a sub-registry native with BarrierPos=0
 // (stack-only) silently broke swap-form callers of the wrapper
 // — the FnDef would just sit on the stack with the args around
-// it, never invoked. That residue is no longer silent: the
-// end-of-run drain raises [aql/uncalled_function] for a named
-// Function value a failed dispatch left unconsumed
-// (design/ERRORS.8.md §5), so the broken-wiring case now pins
-// the LOUD error rather than the quiet no-invoke.
+// it, never invoked. That residue is no longer silent: a failed
+// fn-value dispatch raises [aql/uncalled_function] at the
+// dispatch site (design/FN-VALUE-DISPATCH.0.md), so the
+// broken-wiring case pins the LOUD error rather than the quiet
+// no-invoke.
 func TestModuleWrapperInnerSigBarrierPos(t *testing.T) {
 	cases := []struct {
 		name       string

@@ -397,12 +397,12 @@ aql> inc 2.5                         # returns 3.5
 From here on, make **`aql check`** part of your loop: it type-checks
 a file (or a one-liner via `aql check -e '…'`) without running it,
 and it catches exactly the mistakes typed functions introduce —
-no-matching-signature calls, a function value left uncalled on the
-stack, a body that can't produce the declared return type. Some of
-its diagnostics are *more* informative than a run: where running
-leaves a named function value sitting on the stack, `aql check`
-reports `uncalled_function` and points at the call site. Check
-first, then run.
+no-matching-signature calls, a function value called with arguments
+that fit none of its signatures, a body that can't produce the
+declared return type. Both surfaces agree: a call on a named function
+value that matches no signature is `uncalled_function` at the call
+site whether you check it or run it — checking just tells you without
+running. Check first, then run.
 
 
 ## 10. Conditionals and loops

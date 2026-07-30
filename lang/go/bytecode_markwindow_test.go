@@ -97,9 +97,18 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	// store-prologue gate, one stage before the window's own "residual shape
 	// beyond Stage 1 (call result above a literal)" decline this row used to
 	// surface. Same sound refusal, earlier and truer diagnosis.
+	//
+	// Re-diagnosed again 2026-07-30 (design/FN-VALUE-DISPATCH.0.md): the
+	// region's `M.dec` call fails dispatch, and that is now an error-severity
+	// check diagnostic in the model-undermining class (dispatch did not
+	// resolve, so there is nothing to compile), so the pipeline refuses on the
+	// diagnostics before reaching the promotion gate. The gate is still what a
+	// widening would have to graduate — see the ledger note in
+	// frontier-do-catch.tsv — but this row can no longer reach it. Parity is
+	// what this test actually guards, and it holds either way.
 	mwRefusedWithParity(t,
 		mwDocMod+`def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`,
-		"do: variadic result promoted to frame slots (runtime count differs from the static seat)")
+		"check diagnostics")
 	// GRADUATED 2026-07-17 (§9.1): the module-export-in-region row compiles —
 	// the identity-less ExtensionPayload out mints an ID at the dyn-body
 	// record, restoring its event linkage, so the mark window owns the

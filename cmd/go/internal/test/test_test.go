@@ -416,17 +416,27 @@ func defaultMode() run.CompileMode { return run.CompileTry }
 // errored with the code it asked for, and the cases already recorded are
 // still salvaged (the same salvage path a mid-suite raise takes).
 func TestRunFileExitEndsTheFileNotTheRun(t *testing.T) {
+	// `Test.test`, not `Test.case`: case is a data constructor taking
+	// (expected, input, name), so the two-argument spelling this fixture
+	// used never dispatched — it left the function on the stack and
+	// recorded no case at all, which the loud dispatch contract now
+	// refuses outright (design/FN-VALUE-DISPATCH.0.md).
 	src := "import \"aql:test\"\nimport \"aql:io\"\n" +
-		"Test.case \"one\" [Assert.equal 1 1]\n" +
+		"Test.test \"one\" [Assert.equal 1 1]\n" +
 		"IO.exit 0\n" +
-		"Test.case \"two\" [Assert.equal 1 1]\n"
+		"Test.test \"two\" [Assert.equal 1 1]\n"
 	f := write(t, filepath.Join(t.TempDir(), "x_test.aql"), src)
 	var stdout, stderr bytes.Buffer
-	_, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil)
+	passed, failed, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil)
 	if !errored {
 		t.Error("a suite that exits mid-way must be reported as errored, not as a clean pass")
 	}
 	if !strings.Contains(stderr.String(), "exited with code 0") {
 		t.Errorf("stderr = %q, want the exit reported with its code", stderr.String())
+	}
+	// The salvage this test's contract names: the case BEFORE the exit is
+	// still counted, and the one after it is not reached.
+	if passed != 1 || failed != 0 {
+		t.Errorf("passed=%d failed=%d, want the pre-exit case salvaged (1, 0)", passed, failed)
 	}
 }

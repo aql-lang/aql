@@ -196,8 +196,15 @@ func TestRunCLIEmitParseErrorFails(t *testing.T) {
 func TestEmitIslandReport(t *testing.T) {
 	// A literal-list each islands (interpreter fallback span), so the
 	// compiled program carries a fallback and Emit prints the island list.
+	//
+	// The body is a lambda rather than the `[dup mul]` this used to use: that
+	// spelling does not type-check (dup gets a __FN), and a failed dispatch
+	// inside it is now an error diagnostic that refuses the compile outright
+	// (design/FN-VALUE-DISPATCH.0.md), which is a different report than the
+	// islanding this test is about. A check-clean program is the honest
+	// fixture for "the compiler islanded and Emit said so".
 	var stdout, stderr bytes.Buffer
-	if err := Emit(&stdout, &stderr, "each [1,2,3] [dup mul]"); err != nil {
+	if err := Emit(&stdout, &stderr, "each [1,2,3] [(x:Any => [x mul 2])]"); err != nil {
 		t.Fatalf("Emit: %v", err)
 	}
 	out := stdout.String()

@@ -2690,7 +2690,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `user_error` | Default code for `raise "message"`. |
 | `def_error` | `def`'s value expression produced no value to bind. |
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
-| `uncalled_function` | A call matched no signature and its function value was never consumed. |
+| `uncalled_function` | A call on a named function VALUE (a module export, a `def`ed fn, a `usurp`ed value) matched no signature. Raised at the call; pass the function as data with `name/r` if that was the intent. |
 | `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
 | `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
 | `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |

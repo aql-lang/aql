@@ -45,3 +45,32 @@ import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export 
 import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  "one" M.w	'one'	and so does the stack form — the open paren no longer hides the prefix operand
 import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  M.w	'zero'	with no argument the 0-arg signature still answers, one step later
 import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  size (M.w)	4	and a user paren around the bare form still dispatches inside it, so a consumer receives the RESULT
+#
+# §5  a failed dispatch is LOUD, wherever the value would have gone
+#     (design/FN-VALUE-DISPATCH.0.md). The old contract marked the value
+#     and let the end-of-run drain judge it, so any consumer at all — a
+#     `print`, a `def`, an Any slot — silenced a real dispatch failure.
+#     The judgement is now made where the call is, so what happens to the
+#     value afterwards cannot change the verdict. `/r` is how a caller
+#     says the function IS the value it wanted.
+#
+#     The §3 rows above stay as they are: those fn values are ANONYMOUS,
+#     and an anonymous value with no matched positions is data by
+#     construction. This section is about NAMED functions — a module
+#     export, a `def`ed fn, a `usurp`ed value — which is where a call was
+#     meant.
+#
+#     Raising at the SITE also makes the failure CATCHABLE — a `do […] error
+#     […]` around the call traps it like any other error, where the old
+#     end-of-run drain fired outside every handler. That is pinned as a Go
+#     test (lang/go/fnvalue_loud_dispatch_test.go) rather than a row here:
+#     check mode evaluates a code body's parens on its own straight line, so
+#     it reports the call as an error while the run traps it, and a row would
+#     read as a checker false positive. The divergence is pre-existing and
+#     unchanged by this contract (design/FN-VALUE-DISPATCH.0.md §6).
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w "x"	ERROR:uncalled_function	a named export called with a mismatched arg raises AT THE CALL
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  print (M.w "x")	ERROR:uncalled_function	and a consumer around it does not silence it — the old drain never fired here
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  def y (M.w "x")  y	ERROR:uncalled_function	nor does binding the result with def
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w	fn w[[x:Integer][Integer][word(x)]]	a bare reference with no argument is still a VALUE, not a call
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w/r	fn w[[x:Integer][Integer][word(x)]]	/r means "the function is what I want" — no dispatch, no error
+import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  def g M.w/r  g 5	5	and the parked value is still callable, which is what a caller wanted it for

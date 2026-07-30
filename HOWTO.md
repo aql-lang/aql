@@ -708,20 +708,20 @@ aql check -e '1 2 add 3 mul'
 Group the operands you mean to combine — `(1 2 add) 3 mul` returns `9`
 and the advisory clears. Advisories never fail the check (only errors do).
 
-The checker also catches the one silent failure mode the runtime still
-permits: a **namespace word whose arguments match no signature**. At
-runtime the function value is left on the stack as data (it might be a
-deliberate higher-order use); `aql check` flags it as an **error**:
+The checker also reports, without running anything, a **namespace word
+whose arguments match no signature**:
 
 ```bash
 aql check script.aql
-# check: [error] uncalled_function: call to 'my-get' matched no
-#   signature and was left on the stack as data (arguments: Map, String)
+# check: [error] uncalled_function: call to 'my-get' matched no signature
 ```
 
-This is almost always an argument-order or arity bug. Because it is
-silent at runtime, **run `aql check` as a matter of course** — in CI,
-and before committing — the same way you'd run a linter.
+This is almost always an argument-order or arity bug, and it is an error
+at runtime as well — raised at the call, so a `do […] error […]` around
+it traps it like any other failure. If you meant to pass the function
+itself rather than call it, say so with `my-get/r`. Running `aql check`
+as a matter of course — in CI, and before committing — still pays,
+because it finds the bug without executing anything up to it.
 
 To both type-check and then run:
 
