@@ -69,6 +69,14 @@ commit.
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
+| [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | 2026-07-30 C3 `aql:cli` scouting |
+| [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any module export misfire silently | 2026-07-30 C3 `aql:cli` scouting |
+| [NUR039](#nur039) | `slice` with a negative start silently ignores its end argument | 2026-07-30 C3 `aql:cli` scouting |
+| [NUR040](#nur040) | `set` quotes a bare computed key where `get` refuses it | 2026-07-30 C3 `aql:cli` scouting |
+| [NUR041](#nur041) | The `read-only` profile denies file READS | 2026-07-30 C3 perms scouting |
+| [NUR042](#nur042) | `-policy-dry-run` is documented and does nothing | 2026-07-30 C3 perms scouting |
+| [NUR043](#nur043) | Policy profiles name modules that do not exist, unvalidated | 2026-07-30 C3 perms scouting |
+| [NUR044](#nur044) | `aql build` skips the static check `aql run` performs | 2026-07-30 C3 perms scouting |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -605,6 +613,16 @@ status; registered here so each resolution or allowance is recorded.
 This umbrella entry splits into per-item records if any single item is
 allowed rather than fixed.
 
+**Re-verified 2026-07-30** (every item re-run against the binary, during
+C3 scouting): **G8, G11 and G13a no longer reproduce** — a recovered
+`raise` no longer tears down enclosing params, a returned bare list no
+longer evaluates lazily after teardown, and a single-token bare-map body
+compiles. They were fixed by unrelated work and this register did not
+notice, which is the cost of an umbrella entry. **G9, G10, G12 and G13b
+still reproduce exactly as described.** The design note must be corrected
+to match, and the umbrella should be split so a per-item fix can retire a
+per-item record.
+
 ---
 
 ## NUR030 — `group` co-groups deq-distinct keys that render identically {#nur030}
@@ -715,3 +733,325 @@ accepted:
   module handles.
 - `lang/spec/compare-restrict.tsv`, `lang/spec/edge-containers-1.tsv`
   §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
+
+
+---
+
+
+## NUR037 — A fn-local fn used as a higher-order body word breaks in compiled mode only {#nur037}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting (design/CLI-PROGRAMS.0.md §8)
+
+**Rule:** the two execution engines agree. A program's meaning does not
+depend on whether the bytecode compiler accepted it — `design/COMPILABLE-
+SUBSET.md` states the contract as "slow, not wrong", and the whole-corpus
+differential exists to hold the two engines to the same answers.
+
+**Divergence:** a fn declared INSIDE another fn's body and then named as a
+higher-order body word resolves under the interpreter and is UNDEFINED
+under the compiler:
+
+```
+def collect fn [[xs:List] [Any] [
+  def acc (flex {})
+  def step fn [[e:String] [Any] [ acc set (e) true ]]
+  for-each [step] xs
+  acc
+]]
+print (collect ["x" "y"])
+```
+
+- `aql check` → `0 error(s), 0 warning(s), 0 info`
+- `aql run -no-compile` → `{x:true y:true}`
+- `aql run` (the DEFAULT) → `error: for-each: element 0: [aql/undefined_word]:
+  undefined word: step`, caret on `[step]`
+
+Hoisting the same `def step fn` to module scope makes all three agree.
+
+**Evidence:** the three commands above, on the current binary. The shape is
+not exotic: a helper local to the function that uses it is the obvious way
+to write a callback, and `sift.aql`'s inline comment about "a fold body will
+not compile" is this defect seen from a different angle (its stated form —
+that `fold` bodies as such refuse — does NOT reproduce; module-level body
+fns compile fine).
+
+**Documentation status:** undocumented. `design/AQL-SHARP-EDGES.0.md` does
+not list it, and nothing warns that the default mode has a smaller name
+resolution scope than the interpreter.
+
+**Proposed verdict:** fix. A compiled fn unit must capture the enclosing
+frame's local fn bindings, or the compiler must refuse the shape (a refusal
+is merely slow; an `undefined_word` on a working program is wrong). The
+check pass reporting clean while the default runtime fails is the part that
+makes this a trap rather than a limitation.
+
+
+---
+
+
+## NUR038 — Two consecutive statements headed by a 1-arg Any module export misfire silently {#nur038}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** a statement boundary separates statements. Two statements in
+sequence run in order, each consuming its own arguments.
+
+**Divergence:** when the head of each statement is a module export whose
+single parameter is typed `Any`, the second statement's argument is
+collected by the FIRST statement's word, the order inverts, and one call is
+lost — with no diagnostic:
+
+```
+import "aql:io"
+IO.printstr "A\n"
+IO.printstr "B\n"
+```
+
+prints `B`, then `A`, then leaves ` fn printstr(Any)` on the stack (the
+residual the driver then prints). `aql check` reports `0 error(s)` and a
+residual of `ProperString __FN` — the `__FN` in the residual is the only
+trace, and no diagnostic names it. Terminating either statement with `end`
+or wrapping it in parens gives the expected `A`, `B`.
+
+**Evidence:** the file above, run with `aql run -no-compile` and `aql run`;
+`aql check` on the same source. An `Any` parameter is what makes it happen:
+the same shape with a `String`-typed export behaves.
+
+**Documentation status:** undocumented. `design/ERRORS.8.md` §6 covers
+chained forward calls and `mixed_form_call` advises on mixed splits, but
+neither covers a same-statement-boundary inversion that drops a call.
+
+**Proposed verdict:** fix, or diagnose. This is the silent-wrong-answer
+class: the program printed the wrong thing in the wrong order and exited 0.
+If the collection rule genuinely requires `end` here, `aql check` must say
+so — a `forward_strands_operand`-style advisory at minimum. Until then the
+house rule for AQL-authored modules and programs is to terminate every
+statement whose head is a module export with `end`.
+
+
+---
+
+
+## NUR039 — `slice` with a negative start silently ignores its end argument {#nur039}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** an argument is honoured or refused, never ignored. Out-of-domain
+indices elsewhere in the String family clamp predictably (`slice 5 6 "abc"`
+→ `''`, `slice 0 5 "-"` → `'-'`).
+
+**Divergence:** a NEGATIVE start silently collapses `slice start end s` to
+the two-argument "drop N from the end" form, discarding `end` entirely:
+
+```
+slice -3 -1 'abcde'   →  ab
+slice -3  2 'abcde'   →  ab
+slice -3  5 'abcde'   →  ab
+slice  1  3 'abcde'   →  bc     (the positive form honours end)
+```
+
+**Evidence:** the four calls above. A computed index that underflows —
+`slice (ep add 1) (size tok) tok` where `ep` came back `-1` from a failed
+`indexof` — therefore returns a plausible wrong substring instead of an
+error or an empty string.
+
+**Documentation status:** the negative-index convention is documented as
+"count from the end"; that an end argument is then dropped is not.
+
+**Proposed verdict:** fix — honour `end` for a negative start, or refuse the
+combination. Relatedly, NUR019 already records `slice` as the String
+family's core straggler; this is a second, independent defect in the same
+word.
+
+
+---
+
+
+## NUR040 — `set` quotes a bare computed key where `get` refuses it {#nur040}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** sibling accessors treat their key argument the same way, and a
+program that means a variable's VALUE does not silently get its NAME.
+lang/go/CLAUDE.md states the split it intends: `dot`/`dotr` quote a bare
+word as a literal field name, `get`/`getr` evaluate it.
+
+**Divergence:** `set` carries the quoting `Atom/q` slot that `get` does not,
+so the same bare-word spelling means opposite things and only one of them
+complains:
+
+```
+def k "aa"   {} set k 1     →  {k:1}      # the NAME was stored
+def k "aa"   {} set (k) 1   →  {aa:1}     # the VALUE
+def k "aa"   {aa:1} get k   →  1          # get EVALUATES k
+```
+
+`aql check` reports nothing for the first line.
+
+**Evidence:** the three calls above. The failure mode in real code is a map
+built entirely under one literal key: every iteration of a loop overwrites
+`{k:…}`, and nothing anywhere reports it.
+
+**Documentation status:** the `dot` vs `get` split is documented in
+lang/go/CLAUDE.md; `set`'s membership in the quoting half is not called out,
+and `get`-evaluates / `set`-quotes is exactly the asymmetry a reader would
+not predict.
+
+**Proposed verdict:** argue and document, or diagnose. The quoting slot has
+a real purpose (`set name value store` reads well), so the uniform fix is
+probably a check-mode advisory when a bare word passed to a quoting slot is
+ALSO a live binding — the one case where the two readings differ and the
+author almost certainly meant the value.
+
+
+---
+
+
+## NUR041 — The `read-only` profile denies file READS {#nur041}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting (design/CLI-PROGRAMS.1.md §1)
+
+**Rule:** a profile's name and its documented intent describe what it
+permits. `sandbox.jsonic`'s own comment says "importing the module is
+allowed so disk.read works, but the actual disk.read / disk.write capability
+is still gated by the global scope above".
+
+**Divergence:** `read-only` allows the `disk.read` GLOBAL but inherits
+`fileops.words { default: "deny" }` from `sandbox`, and the scope check
+denies first, so reading a file is refused under a profile whose name
+promises exactly that:
+
+```
+$ aql policy explain read-only fileops.read path=ro.txt
+decision: DENY   blame: fileops.words default=deny
+$ aql run -perms read-only -e 'import "aql:io" print (IO.read (make Pathon "ro.txt") {fmt:"text"})'
+error: [aql/read_error]: read: permission denied: fileops.read
+       (policy "read-only": fileops.words default=deny …)
+```
+
+`-allow fileops.read` is required to make a read-only profile read.
+
+**Evidence:** the two commands above. Symmetrically, the write half needs
+BOTH `-allow-global disk.write` and `-allow fileops.write`; the global cap
+and the scope rule are independent gates and either can deny alone.
+
+**Documentation status:** actively misleading — the profile name, and
+sandbox.jsonic's intent comment, both say the opposite of the behaviour.
+
+**Proposed verdict:** fix the profile (allow `fileops.read` in `read-only`,
+which is what the name means) or rename it, and correct the sandbox comment
+either way. A profile nobody can read a file under is not the read-only
+profile a tool author reaches for.
+
+
+---
+
+
+## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** a flag the CLI advertises does what it says, or does not exist.
+
+**Divergence:** `-policy-dry-run` is advertised on `aql run` and `aql build`
+as "observe-only: log what the policy would do but allow every call". It is
+parsed, read at exactly one site (to stop the resolver returning nil), and
+never wraps the policy in an observe-only decorator. Nothing is logged and
+nothing is allowed:
+
+```
+$ aql run -perms read-only -policy-dry-run -e 'import "aql:io"  IO.write (make Pathon "dry.txt") "x" {fmt:"text"}'
+error: [aql/write_error]: write: permission denied: fileops.write …
+```
+
+**Evidence:** the command above; `grep -rn DryRun --include=*.go cmd/go
+lang/go` outside tests returns only the flag's registration and that single
+read.
+
+**Documentation status:** documented in the flag's own help text, which is
+the whole problem.
+
+**Proposed verdict:** implement the decorator (a policy wrapper that logs
+the decision and returns nil) or remove the flag. A security-adjacent flag
+that silently does nothing is worse than no flag, because it invites exactly
+the "I checked with dry-run first" workflow it cannot support.
+
+
+---
+
+
+## NUR043 — Policy profiles name modules that do not exist, unvalidated {#nur043}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** an identifier in shipped configuration names something real, and
+validation catches it when it does not. `Profile.Validate` already checks
+scope names and global op names.
+
+**Divergence:** `sandbox.jsonic`'s import allowlist is
+`["aql:math", "aql:time", "aql:io"]`, and two of those three module ids do
+not exist — the real ids are `aql:math-util` and `aql:time-util` (the
+`-util` naming rule in lang/go/CLAUDE.md). So the sandbox profile permits
+importing two nonexistent modules and forbids the two real ones it meant to
+permit:
+
+```
+$ aql do -perms full 'import "aql:math" 1'
+error: import: unknown native module: aql:math
+$ aql do -perms sandbox 'import "aql:math-util" 1'
+error: import: permission denied: modules.import (policy "sandbox": modules.words default=deny …)
+```
+
+`Profile.Validate` never validates module ids, so `aql policy validate`
+passes the typos silently.
+
+**Evidence:** the two commands above, plus `sandbox.jsonic:32`.
+
+**Proposed verdict:** fix the two ids, and add the validation that would
+have caught them. The validation cannot live in `policy` (it must not import
+the module registry), so the natural home is a test in `lang/go/modules`
+asserting that every module id named in any shipped profile resolves — the
+same shape as the existing catalog-sync test.
+
+
+---
+
+
+## NUR044 — `aql build` skips the static check `aql run` performs {#nur044}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** the CLI's entry points agree about whether a program is valid.
+`aql run` performs a preflight check and refuses to execute a program with a
+check error.
+
+**Divergence:** `aql build` performs no check at all, so a program `aql run`
+refuses to run builds successfully and ships:
+
+```
+$ echo 'nosuchword 1 2' > bad.aql
+$ aql build bad.aql -o badbin
+wrote badbin              # exit 0
+$ ./badbin
+error: [aql/undefined_word]: undefined word: nosuchword    # exit 1
+$ aql run bad.aql
+check: [error] undefined_word: …  →  refuses to run
+```
+
+**Evidence:** the session above.
+
+**Documentation status:** `CLI.md` describes the preflight for `run` and
+does not say `build` omits it.
+
+**Proposed verdict:** fix — `aql build` should run the same preflight and
+refuse by default (with a `-no-check` escape hatch mirroring `run`'s). The
+asymmetry is worst exactly where it matters: the artefact that outlives the
+session is the one nothing validated.
