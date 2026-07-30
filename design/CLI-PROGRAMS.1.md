@@ -89,7 +89,31 @@ wants to decide for itself — a test, a REPL, a subcommand dispatcher, a
 program that logs before exiting — writes `Cli.dispatch` and acts on the
 map. Nothing is hidden behind the shell.
 
-## 3. What did not change
+## 3. `Cli.usage` takes its width and colour, it does not read them
+
+**Decided here**, resolving a contradiction inside the RFC. §8 asks for two
+things that cannot both hold: `Cli.usage (spec)` renders the help text
+"wrapped to `IO.env "COLUMNS"` when present, colored only when
+`IO.tty? (IO.stdout)` and no `NO_COLOR`" — and the module must run under the
+spec runner with nothing installed, because `Cli.parse` / `Cli.dispatch` /
+`Cli.usage` are the pure half.
+
+A function that reads the environment is not pure, is not spec-runnable, and
+its output depends on the terminal that happens to be attached — which is
+also what makes it untestable. So the world comes IN:
+
+```
+Cli.usage (spec)                          → the default rendering
+Cli.usage (spec) {width: 72 color: true}  → the caller's terminal, decided
+```
+
+`Cli.main` is where the reading happens: it consults `IO.env "COLUMNS"` and
+`IO.is-tty (IO.stdout)` plus `IO.env "NO_COLOR"`, builds that options map,
+and hands it over. The RFC's behaviour is preserved exactly; only the layer
+that learns about the terminal moves — the same split, and the same reason,
+as `Cli.dispatch` versus `Cli.main`.
+
+## 4. What did not change
 
 The RFC's parsing conventions, spec-map shape, `r.ok` / `r.err` result
 shape, and the "subcommands are in the spec shape from day one, implemented

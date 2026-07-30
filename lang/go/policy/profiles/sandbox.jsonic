@@ -29,7 +29,7 @@
       words: {
         default: "deny"
         rules: [
-          { allow: ["import"], where: { module: ["aql:math-util", "aql:time-util", "aql:io"] } }
+          { allow: ["import"], where: { module: ["aql:math-util", "aql:time-util", "aql:io", "aql:cli"] } }
         ]
       }
       scopes: {
@@ -44,6 +44,10 @@
         // disk.read works, but the actual disk.read / disk.write capability
         // is still gated by the global scope above (write stays denied).
         "aql:io": { words: { default: "allow" } }
+        // aql:cli is PURE — a spec map and an argument vector in, a decision
+        // map out — so a sandboxed program may parse its own command line.
+        // Without it a sandboxed tool can read IO.args and not interpret them.
+        "aql:cli": { words: { default: "allow" } }
       }
     }
 

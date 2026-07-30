@@ -52,6 +52,14 @@ var hermeticExempt = map[string]string{
 	"Model.start": "background watch goroutine; not deterministic in a spec row (model_test.go)",
 	"Model.stop":  "watch lifecycle; paired with start, no hermetic spec surface (model_test.go)",
 	"Model.model": "real-FS build tool; no hermetic spec surface (model_test.go)",
+	// Cli.main is the imperative shell over the pure Cli.dispatch
+	// (design/CLI-PROGRAMS.1.md §2): every one of its arms ends in IO.exit,
+	// which a spec row cannot survive — the runner would end mid-file, and the
+	// row after it would never run. The DECISION each arm acts on is pinned by
+	// the Cli.dispatch rows in lang/spec/module-cli.tsv §4; the shell itself is
+	// driven end-to-end (help / version / usage error / handler exit code, in
+	// both execution modes) by cmd/go/internal/build/utils_e2e_test.go.
+	"Cli.main": "every arm ends in IO.exit; a spec row cannot survive it (utils_e2e_test.go drives it end to end)",
 	// Test.cover / Test.coverage measure INTERPRETER line coverage of a module-
 	// under-test: the recorded rows (and thus the report) exist only on the
 	// tree-walk path (the compiled VM never fires the coverage hook), so a spec
