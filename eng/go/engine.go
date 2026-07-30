@@ -119,6 +119,12 @@ type Engine struct {
 	// lost with the discarded tape. exitWithFlowCtrl then returns NO values —
 	// the VM discards the signalled iteration's partials anyway (flowSignal) —
 	// with the registry FlowCtrl flag left set for the VM to translate.
+	//
+	// The field is the ISLAND marker itself, and it has a second consequence
+	// beyond flow — see isIsland, which Run consults for scoping. Anything
+	// that opens a new island MUST set it, which is why there is one field
+	// rather than one per consequence: a second island entry point that set
+	// only the flow half would silently regress the scoping half.
 	flowUnwind bool
 	// startAt is a one-shot start offset for the next Run: the leading
 	// startAt input values are RESOLVED arguments (a callback's inputs, a
@@ -1183,9 +1189,26 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}()
 
 	// Push a scoped context Store whose prototype is the parent context.
-	parent := e.registry.Contexts.Top()
-	e.registry.Contexts.Push(parent)
-	defer e.registry.Contexts.Pop()
+	// This is THE context boundary: a nested body runs in a sub-engine, so
+	// one push here is what makes `do` / `each` / a `case` clause / an
+	// auto-evaluated list contain their `context set` writes. The VM's
+	// enterBodyUnit is the compiled twin.
+	//
+	// An ISLAND is not a body, so it does not push (see isIsland). An island
+	// CONTINUES an in-progress compiled expression on the interpreter — a
+	// fn-value apply the emitter could not lower, a FALLBACK span — and the
+	// interpreter reaching the same tokens inline pushes nothing, so pushing
+	// here made the compiled path MORE isolated than the interpreter it is
+	// supposed to mirror. Measured: `(m.f 1) drop` with a `context set` in
+	// the map-slot lambda contained the write compiled (CALL_DYN_METHOD
+	// islands the apply) and leaked it interpreted. A body reached from
+	// INSIDE an island still gets its own frame, because that body opens its
+	// own sub-engine. See design/verse-report-defects-investigation.0.md §B.
+	if !e.isIsland() {
+		parent := e.registry.Contexts.Top()
+		e.registry.Contexts.Push(parent)
+		defer e.registry.Contexts.Pop()
+	}
 
 	// In static type-check mode, convert concrete literal values to
 	// carriers before execution. The same dispatch/matching machinery
@@ -6683,6 +6706,18 @@ func (e *Engine) handleFlowCtrl() bool {
 	}
 	return handled
 }
+
+// isIsland reports whether this engine runs a VM ISLAND — a token window that
+// CONTINUES an in-progress compiled expression on the interpreter (a fn-value
+// apply the emitter could not lower, a FALLBACK span), rather than entering a
+// nested body. The two island entry points (vmContext.islandRun and
+// runIslandResolved) are the only setters of the underlying marker.
+//
+// Two consumers, both reading the same fact: exitWithFlowCtrl needs the frame
+// teardown because the island's tape is separate from any enclosing loop's,
+// and Run needs to SKIP the per-body context frame because an island is not a
+// body. Named so each call site says which consequence it wants.
+func (e *Engine) isIsland() bool { return e.flowUnwind }
 
 // exitWithFlowCtrl returns from Run when a flow-control signal could
 // not be resolved on this tape. For a top-level engine this is the

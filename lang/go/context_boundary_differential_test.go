@@ -42,6 +42,15 @@ import (
 // PURPOSE. An honest inventory of a partial fix beats a suite that quietly
 // covers only the fixed half — that is how the original gap survived.
 //
+// The semantics call for the remaining rows has since been made: the
+// INTERPRETER is canonical, under the rule that a paren form is never a
+// boundary (the value is resolved and then made available to the signature
+// matcher). One of the two directions that implies is done — the
+// paren-grouped apply no longer over-contains, because an island run is no
+// longer treated as a body (Engine.isIsland). The other is not: the three
+// INLINED forms still need to BECOME boundaries when compiled, which takes an
+// emitted context-frame opcode pair, since there is no call to wrap.
+//
 // If a `wantDiverge` row starts AGREEING, that is good news and the row should
 // move to the agreeing set. If an agreeing row starts diverging, the frame has
 // regressed.
@@ -120,42 +129,40 @@ run [ context set y 1 5 ]
 context has y`,
 			wantDiverge: true,
 			why:         "same inline list auto-evaluation, reached as a call argument"},
-		// PAREN-GROUPED on purpose, and the mechanism is now measured rather
-		// than guessed. The disassembly is the whole finding:
+		// PAREN-GROUPED, and FIXED — this row used to diverge in the OPPOSITE
+		// direction (compiled CONTAINED the write, interpreted leaked it),
+		// which is why it is worth keeping the mechanism written down. The
+		// disassembly was the finding:
 		//
 		//	(m.f 1) drop → CALL_DYN_METHOD  ; (paren apply)/1 -> 1
 		//	m.f 1 drop   → uncompilable: member fn value auto-applies
 		//	               mid-expression (fn-value-call boundary, Stage 3)
 		//
 		// callDynMethod ISLANDS the apply — islandRun builds a sub-engine and
-		// calls eng.Run — and Engine.Run is exactly where the interpreter
-		// pushes its per-body context layer (engine.go, the Contexts Push/Pop
-		// pair). So the compiled path is MORE isolated than the interpreter
-		// here: it delegates the call to an interpreter island, and the
-		// island's Run pushes a frame that the interpreter's own inline
-		// dispatch of the same tokens never pushes.
+		// calls eng.Run — and Engine.Run is where the interpreter pushes its
+		// per-body context layer. So the compiled path was MORE isolated than
+		// the interpreter: it delegates the call to an interpreter island, and
+		// the island's Run pushed a frame the interpreter's own inline
+		// dispatch of the same tokens never pushes. Run now skips the frame
+		// for an island (Engine.isIsland) — an island CONTINUES an expression,
+		// it does not enter a body — which also matches the stated rule that a
+		// paren form is never a boundary: the value is resolved and then made
+		// available to the signature matcher.
 		//
-		// It is NOT the VM's enterBodyUnit frame. Verified by disabling that
-		// frame outright (Push and Pop both removed, counted) and re-running:
-		// this row still diverges. An earlier probe that removed only the Push
-		// suggested otherwise and was unsound — it left a Pop running against
-		// the parent's layer.
+		// It was NOT the VM's enterBodyUnit frame, though that was the obvious
+		// suspect. Verified by disabling that frame outright (Push and Pop both
+		// removed, counted): the row still diverged. An earlier probe that
+		// removed only the Push suggested otherwise and was unsound — it left a
+		// Pop running against the parent's layer.
 		{name: "paren-grouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 (m.f 1) drop
-context has y`,
-			wantDiverge: true,
-			why: "diverges in the OPPOSITE direction — compiled CONTAINS the write " +
-				"(false), interpreted leaks it (true). Pre-existing, and caused by " +
-				"the compiled apply islanding into a sub-engine whose Engine.Run " +
-				"pushes a body frame; the fix belongs at the island entry, not at " +
-				"the VM's body seam"},
-		// The ungrouped twin, kept as its own row — but read it carefully: it
-		// agrees TRIVIALLY, not by the same mechanism. The form does not
-		// compile at all, so the whole program falls back to the interpreter
-		// and both sides of the comparison ARE the interpreter. The pair is
-		// still the finding, but the difference between the two rows is that
-		// one form compiles and the other is refused; the refusal is what
-		// looks like agreement.
+context has y`},
+		// The ungrouped twin — and read it carefully, because it agrees
+		// TRIVIALLY rather than by the same mechanism. The form does not
+		// compile at all (the refusal above), so the program falls back to the
+		// interpreter and both sides of the comparison ARE the interpreter.
+		// Kept as its own row so that if the emitter ever learns to lower it,
+		// this row starts exercising two real engines instead of one.
 		{name: "ungrouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 m.f 1 drop
 context has y`},
