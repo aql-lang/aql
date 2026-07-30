@@ -344,6 +344,12 @@ COVER_DIR := coverage
 # covered (graduate it) or its pragma goes stale. Seam conventions for
 # reaching the hard edges are in design/TEST-SEAMS.10.md; the exclusion
 # policy is in design/COVERAGE-ALLOWLIST.10.md and ADR-008.
+#
+# The per-module runs carry an explicit -timeout because coverage
+# instrumentation slows the corpus suites well past go test's 10m default —
+# `make test` already passes 20m for the same reason, and without it here the
+# gate fails at the MODULE step (not the threshold check) on a loaded machine,
+# which reads as a coverage failure and is not one.
 GATE_FLOOR ?= 100
 GATE_PKGS := github.com/aql-lang/aql/...
 cover-gate:
@@ -351,7 +357,7 @@ cover-gate:
 	@set -e; for m in $(MODULES); do \
 	  echo "==> cover-gate $$m"; \
 	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
-	  ( cd $$m && go test -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
+	  ( cd $$m && go test -timeout 25m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
 	done
 	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
 
