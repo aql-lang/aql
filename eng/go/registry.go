@@ -292,6 +292,28 @@ type Registry struct {
 	// the parent's engines (a pooled engine pins its creating registry).
 	enginePool []*Engine
 
+	// debugTrace is the registry-level debug step hook (SetDebugTrace /
+	// SetDebugTraceFrom): every engine constructed on this registry —
+	// and every pooled sub-engine as it is re-taken — starts with a
+	// thin resolver closure over it as its trace, so a debugging host
+	// observes per-element body evaluation (each/fold/do bodies, paren
+	// groups, interp holes) and same-registry fn-body runs, not just
+	// its own top-level tape. Stored in the rich DebugTraceFrom form
+	// (the plain SetDebugTrace wraps), so the host also learns which
+	// registry the firing engine was constructed on. Nil (the default)
+	// costs one nil copy per engine take. Like enginePool,
+	// per-execution state.
+	debugTrace DebugTraceFrom
+
+	// debugParent links a module's captured sub-registry to its IMPORTING
+	// registry (SetDebugParent, set at export install): engines
+	// constructed on the sub-registry resolve the debug hook THROUGH the
+	// chain (effectiveDebugTrace), so module fn bodies fire the
+	// importer's LIVE hook — and a host's suppression or detach stays
+	// authoritative, where a copied callback could fire after the
+	// session disarmed itself.
+	debugParent *Registry
+
 	// dispatchCache memoizes Lookup's aggregated dispatch table per name.
 	// aggregateDispatch rebuilds a fresh []Signature + *FnDefInfo on every
 	// word dispatch even in a hot loop where the name's bindings never
@@ -401,11 +423,123 @@ func (r *Registry) takeSubEngine() *Engine {
 		e := r.enginePool[n-1]
 		r.enginePool[n-1] = nil
 		r.enginePool = r.enginePool[:n-1]
+		// Refresh the debug hook: it can change between takes (a session
+		// arming, disarming, or suppressing itself around an eval), and a
+		// pooled engine must never replay a stale one.
+		e.trace = r.effectiveDebugTrace()
 		return e
 	}
 	e := New(r)
 	e.reuseTape = true
 	return e
+}
+
+// DebugTraceFrom is the rich form of the registry-level debug hook: the
+// callback additionally receives the registry the FIRING engine was
+// constructed on ("from" — never nil), so a debug host can resolve
+// per-engine identity at a pause: the file a module fn's body belongs
+// to (the captured registry's BaseFile/Source) and the engines running
+// on that registry (RunningEngineChain).
+type DebugTraceFrom func(from *Registry, step, pointer int, stack []Value, note string)
+
+// SetDebugTrace installs (nil clears) the registry-level debug step
+// hook — see the debugTrace field. An engine that installs its own
+// trace afterwards (Engine.SetTrace) overrides it for that engine, so
+// dedicated tracers (IO.trace, Debug.step) keep their private hooks.
+// Hosts that need the firing registry use SetDebugTraceFrom instead.
+func (r *Registry) SetDebugTrace(cb TraceCallback) {
+	if cb == nil {
+		r.debugTrace = nil
+		return
+	}
+	r.debugTrace = func(_ *Registry, step, pointer int, stack []Value, note string) {
+		cb(step, pointer, stack, note)
+	}
+}
+
+// SetDebugTraceFrom installs (nil clears) the debug step hook in its
+// rich form — SetDebugTrace with the firing engine's constructing
+// registry as the leading argument.
+func (r *Registry) SetDebugTraceFrom(cb DebugTraceFrom) { r.debugTrace = cb }
+
+// SetDebugParent links r (a module's captured sub-registry) to the
+// registry that imported it — see the debugParent field. Pass the
+// IMPORTING registry only: the links must form the acyclic import
+// tree. A self-link is refused so resolution always terminates.
+func (r *Registry) SetDebugParent(p *Registry) {
+	if p != r {
+		r.debugParent = p
+	}
+}
+
+// effectiveDebugTrace resolves the debug hook for engines constructed
+// on r: r's own, else the nearest ancestor's through the debugParent
+// chain. The result is a thin closure that re-reads the owning
+// registry's hook AT FIRE TIME — so the host's arm/suppress/disarm
+// (SetDebugTrace(nil) around an eval, a detach) wins even for an
+// engine that resolved its trace earlier — and stamps the fire with
+// the constructing registry (the DebugTraceFrom contract).
+func (r *Registry) effectiveDebugTrace() TraceCallback {
+	for cur := r; cur != nil; cur = cur.debugParent {
+		if cur.debugTrace != nil {
+			root, from := cur, r
+			return func(step, pointer int, stack []Value, note string) {
+				if h := root.debugTrace; h != nil {
+					h(from, step, pointer, stack, note)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// EngineState is one running engine's snapshot — see RunningEngineStates.
+// Label carries the engine's debugLabel (the fn call a CallAQLNamed
+// sub-engine realises), empty otherwise.
+type EngineState struct {
+	Stack   []Value
+	Pointer int
+	Label   string
+}
+
+// RunningEngineStates returns a snapshot (tape + pointer) of each engine
+// currently running on this registry, outermost first — the raw material
+// for a debug host's cross-engine backtrace at a pause. Call only while
+// the engines are paused (a blocking trace callback): the snapshots are
+// copies, but the pointers are only meaningful while execution is held.
+func (r *Registry) RunningEngineStates() []EngineState {
+	out := make([]EngineState, 0, len(r.debugEngines))
+	for _, e := range r.debugEngines {
+		if e != nil && e.tape != nil {
+			out = append(out, EngineState{Stack: e.tape.Snapshot(), Pointer: e.pointer, Label: e.debugLabel})
+		}
+	}
+	return out
+}
+
+// RunningEngineChain returns engine snapshots outermost-first across
+// the debugParent chain: r's own engines, then — when `from` is a
+// registry linked (transitively) under r, i.e. a module's captured
+// sub-registry whose engine is firing the debug hook — each chain
+// registry's engines down to from's. That is the full cross-REGISTRY
+// call chain at a pause inside a module fn's body. A from that is r
+// itself, nil, or not linked under r degrades to RunningEngineStates.
+func (r *Registry) RunningEngineChain(from *Registry) []EngineState {
+	var path []*Registry
+	for cur := from; cur != nil; cur = cur.debugParent {
+		path = append(path, cur)
+		if cur == r {
+			break
+		}
+	}
+	if n := len(path); n == 0 || path[n-1] != r {
+		return r.RunningEngineStates()
+	}
+	var out []EngineState
+	for i := len(path) - 1; i >= 0; i-- {
+		out = append(out, path[i].RunningEngineStates()...)
+	}
+	return out
 }
 
 // putSubEngine returns an idle sub-engine to the pool. Engines whose tape
@@ -667,10 +801,13 @@ type CheckState struct {
 	// than deduplicate it.
 	//
 	// Two classes stay REAL and are known residuals, recorded in
-	// design/verse-report-defects-investigation.0.md §D: a network send
-	// (fetch builds its own http.Client — no backend to substitute, and no
-	// synthetic response is safe to invent for a body that reads one), and
-	// stdin (a read, so out of scope by the rule above). The effect ledger
+	// design/verse-report-defects-investigation.0.md §D: a network send and
+	// stdin (a read, so out of scope by the rule above). A substitutable
+	// transport DOES exist for the first (capabilities.HTTPOps), so the
+	// reason is not "no seam" — it is that no synthetic response is safe to
+	// invent: a fabricated status takes a wrong branch and a fabricated body
+	// fails a real parse, so modelling would break bodies that work. The
+	// effect ledger
 	// (effects.go) is therefore left counting modelled writes too: over-
 	// counting only forgoes a safe interpreter fallback, while under-
 	// counting a real network send would duplicate it.
@@ -1950,6 +2087,14 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 //	sig := MatchFnSig(fn, args)
 //	result, err := r.CallAQL(sig, args, fnDef.Captured)
 func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
+	return r.CallAQLNamed(sig, args, captures, "")
+}
+
+// CallAQLNamed is CallAQL carrying the fn's NAME, when the dispatch
+// knows it: the body sub-engine is labelled with it (Engine.debugLabel)
+// so a debug host's backtrace can name the call — a module fn's frame
+// is Defs-based and leaves no tape marks to reconstruct a name from.
+func (r *Registry) CallAQLNamed(sig *FnSig, args []Value, captures []CapturedBinding, label string) ([]Value, error) {
 	// Observability seam (interp_entry.go): the interpreter fn-call path.
 	r.noteInterp("CallAQL")
 	// Build token sequence (same as InstallFnDef handler).
@@ -2021,6 +2166,7 @@ func (r *Registry) CallAQL(sig *FnSig, args []Value, captures []CapturedBinding)
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
 	sub.startAt = unnamedCount
+	sub.debugLabel = label
 	result, err := sub.Run(tokens)
 
 	// Cleanup: pop args stack, undef named params + captures, then

@@ -212,10 +212,14 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	// mode models WRITES. Reads stay real so no body that loads today can
 	// start failing under check — an EOF stdin would make a body that reads
 	// input at load report a check error for a program that runs fine.
-	// Network sends stay real too (fetch owns its http.Client; there is no
-	// backend to swap and no synthetic response that is safe to invent).
-	// Both residuals are recorded in
-	// design/verse-report-defects-investigation.0.md §D.
+	// Network sends stay real too, and note WHY, because a substitutable
+	// transport does exist (capabilities.HTTPOps, which fetch resolves its
+	// http.Client transport from) — so the reason is not "no seam". It is
+	// that no synthetic response is safe to invent: a fabricated status
+	// takes a wrong branch and a fabricated body fails a real parse, so
+	// modelling a fetch would break bodies that work, which is the one test
+	// the write classes pass and this one does not. Both residuals are
+	// recorded in design/verse-report-defects-investigation.0.md §D.
 	//
 	// !Compiling IS THE WHOLE CORRECTNESS ARGUMENT, and it is not obvious:
 	// on the compiled path a module body runs ONLY in the compile pass. The
@@ -566,7 +570,29 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 // Module instance. Word-extension clones found in the export maps are
 // additionally transplanted into r (see transplantWordExtensions) —
 // the only error path.
+// linkModuleDebugParent links each export-captured module sub-registry
+// to the IMPORTING registry (eng SetDebugParent), so engines running
+// module fn bodies resolve the importer's LIVE debug hook — the
+// `aql debug` session's stepping descends into module fns, and its
+// suppression/detach stay authoritative (a copied hook could fire after
+// the session disarmed itself). Shared by every import form; a no-op
+// for exports that captured no registry.
+func linkModuleDebugParent(r *Registry, desc ModuleDesc) {
+	for _, exportMap := range desc.Exports {
+		if exportMap != nil {
+			for _, key := range exportMap.Keys() {
+				if v, ok := exportMap.Get(key); ok {
+					if fn, isFn := FnDefFromValue(v); isFn && fn.Registry != nil {
+						fn.Registry.SetDebugParent(r)
+					}
+				}
+			}
+		}
+	}
+}
+
 func installExports(r *Registry, desc ModuleDesc, names []string) error {
+	linkModuleDebugParent(r, desc)
 	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
@@ -681,6 +707,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 	if len(renameList) == 0 {
 		return fmt.Errorf("import: empty rename list")
 	}
+	linkModuleDebugParent(r, desc)
 	mod := NewModuleInstance(desc)
 
 	if renameList[0].Parent.Equal(TList) {
@@ -720,6 +747,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 // installSingleRename renames the single export in a module to newName.
 // If the module has zero or more than one export, an error is returned.
 func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
+	linkModuleDebugParent(r, desc)
 	mod := NewModuleInstance(desc)
 	if len(desc.Exports) == 0 {
 		return fmt.Errorf("import: module has no exports to rename")

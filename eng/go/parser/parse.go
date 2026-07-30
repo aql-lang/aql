@@ -1288,10 +1288,12 @@ func orderedKeys(union map[string]any, ko []string) []string {
 			rest = append(rest, k)
 		}
 	}
-	// sort.Strings, not a hand-rolled insertion sort: the swap body of the
-	// latter runs only when Go's map iteration happens to yield `rest` out
-	// of order, which made its coverage a coin flip and the 100% gate
-	// intermittently red for a reason no source change explained.
+	// sort.Strings, not a hand-rolled insertion sort: `rest` is filled
+	// from a Go map range, so whether an insertion sort's inner swap
+	// ever executed depended on the randomised iteration order — the
+	// statement was covered or not from run to run, making the 100%
+	// gate (ADR-008) nondeterministically red. One library call has no
+	// such conditional interior. Same ascending order as before.
 	sort.Strings(rest)
 	return append(out, rest...)
 }

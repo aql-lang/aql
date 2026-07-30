@@ -217,6 +217,18 @@ func jsonicToValue(v any) (Value, error) {
 			elems[i] = e
 		}
 		return NewList(elems), nil
+	case *jsonic.OrderedMap:
+		// The parser's insertion-ordered node: preserve source key order
+		// (the whole point) instead of sorting like the plain-map fallback.
+		om := NewOrderedMap()
+		for _, key := range val.Keys {
+			child, err := jsonicToValue(val.Vals[key])
+			if err != nil {
+				return Value{}, err
+			}
+			om.Set(key, child)
+		}
+		return NewMap(om), nil
 	case map[string]any:
 		om := NewOrderedMap()
 		for _, key := range sortedMapKeys(val) {

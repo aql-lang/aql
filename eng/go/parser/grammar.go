@@ -682,7 +682,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					// pair from the fold rule's node (the first pass
 					// already appended the real pair, which the fold's
 					// BO pops as the sig).
-					r.U["pair"] = false
+					r.EnsureU()["pair"] = false
 				}},
 		})
 	})
@@ -702,7 +702,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					if len(n.Val) == 0 {
 						return
 					}
-					r.U["af_sig"] = n.Val[len(n.Val)-1]
+					r.EnsureU()["af_sig"] = n.Val[len(n.Val)-1]
 					n.Val = n.Val[:len(n.Val)-1]
 					r.Parent.Node = n
 					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
@@ -712,7 +712,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 					if len(n) == 0 {
 						return
 					}
-					r.U["af_sig"] = n[len(n)-1]
+					r.EnsureU()["af_sig"] = n[len(n)-1]
 					rest := n[:len(n)-1]
 					r.Parent.Node = rest
 					if r.Parent.Parent != nil && r.Parent.Parent != jsonic.NoRule {
@@ -840,7 +840,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		} else {
 			key = keyToken.Src
 		}
-		r.U["key"] = key
+		r.EnsureU()["key"] = key
 	}
 
 	// --- Optional field syntax: key?:value in pair context ---
@@ -853,7 +853,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
 					// Propagate key to inner pair via K.
-					r.K["key"] = r.U["key"]
+					r.EnsureK()["key"] = r.U["key"]
 				}},
 			// Match : when aql_qm flag is set — copy key from K, proceed as pair value.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
@@ -863,7 +863,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				},
 				P: "val", U: map[string]any{"pair": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-					r.U["key"] = r.K["key"]
+					r.EnsureU()["key"] = r.K["key"]
 				}},
 			// Optional shorthand with NO value — `{foo?}`. The inner pair
 			// pushed by the `KEY ?` alt sees the closing brace; backtrack so
@@ -880,9 +880,9 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				B: 1,
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					if k, ok := r.K["key"]; ok {
-						r.U["key"] = k
+						r.EnsureU()["key"] = k
 						if ks, ok := k.(string); ok {
-							r.U["aql_sh"] = ks
+							r.EnsureU()["aql_sh"] = ks
 						}
 					}
 				}},
@@ -928,7 +928,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				P: "pair",
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
-					r.K["key"] = r.U["key"]
+					r.EnsureK()["key"] = r.U["key"]
 				}},
 			// Step 3: match : when aql_ck and key is set — proceed as pair value.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
@@ -939,7 +939,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				},
 				P: "val", U: map[string]any{"pair": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-					r.U["key"] = r.K["key"]
+					r.EnsureU()["key"] = r.K["key"]
 				}},
 		})
 	})
@@ -989,7 +989,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 			S: [][]jsonic.Tin{{jsonic.TinTX}},
 			A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if raw, ok := r.O0.Val.(string); ok {
-					r.U["aql_sh"] = raw
+					r.EnsureU()["aql_sh"] = raw
 				}
 			},
 		})
@@ -1094,7 +1094,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				U: map[string]any{"done": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
-					r.K["key"] = r.U["key"]
+					r.EnsureK()["key"] = r.U["key"]
 				}},
 			// Step 2: match : when aql_qm is set — proceed as list pair.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
@@ -1106,7 +1106,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 				N: map[string]int{"pk": 1, "dmap": 1},
 				U: map[string]any{"done": true, "pair": true, "list": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-					r.U["key"] = r.K["key"].(string) + "?"
+					r.EnsureU()["key"] = r.K["key"].(string) + "?"
 				}},
 		})
 	})
@@ -1178,14 +1178,14 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 			// implicit lists or maps inside paren groups.
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if v, ok := r.N["dlist"]; ok {
-					r.N["dlist"] = v + 1
+					r.EnsureN()["dlist"] = v + 1
 				} else {
-					r.N["dlist"] = 1
+					r.EnsureN()["dlist"] = 1
 				}
 				if v, ok := r.N["dmap"]; ok {
-					r.N["dmap"] = v + 1
+					r.EnsureN()["dmap"] = v + 1
 				} else {
-					r.N["dmap"] = 1
+					r.EnsureN()["dmap"] = 1
 				}
 			},
 		})
@@ -1266,7 +1266,7 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 				r.Node = interpGroup{}
 				// Set K so the custom matcher knows we're inside a template.
 				// K propagates to child rules.
-				r.K["aql_tpl"] = true
+				r.EnsureK()["aql_tpl"] = true
 			},
 		})
 		setOpen(rs, []*jsonic.AltSpec{
@@ -1340,14 +1340,14 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 				// Increment dlist and dmap so val.Close won't create
 				// implicit lists or maps inside interpolation expressions.
 				if v, ok := r.N["dlist"]; ok {
-					r.N["dlist"] = v + 1
+					r.EnsureN()["dlist"] = v + 1
 				} else {
-					r.N["dlist"] = 1
+					r.EnsureN()["dlist"] = 1
 				}
 				if v, ok := r.N["dmap"]; ok {
-					r.N["dmap"] = v + 1
+					r.EnsureN()["dmap"] = v + 1
 				} else {
-					r.N["dmap"] = 1
+					r.EnsureN()["dmap"] = 1
 				}
 			},
 		})
@@ -1449,14 +1449,14 @@ func setupAngleGrammar(j *jsonic.Jsonic, t parserTokens) {
 			// (same bump the paren rule applies).
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if v, ok := r.N["dlist"]; ok {
-					r.N["dlist"] = v + 1
+					r.EnsureN()["dlist"] = v + 1
 				} else {
-					r.N["dlist"] = 1
+					r.EnsureN()["dlist"] = 1
 				}
 				if v, ok := r.N["dmap"]; ok {
-					r.N["dmap"] = v + 1
+					r.EnsureN()["dmap"] = v + 1
 				} else {
-					r.N["dmap"] = 1
+					r.EnsureN()["dmap"] = 1
 				}
 			},
 		})

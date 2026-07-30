@@ -101,10 +101,12 @@ func Extract(file, src string) []Example {
 		// Fence boundary: a line whose first non-space content is ```.
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
-				// Opening fence. Only plain (untagged) or ```aql blocks
-				// carry AQL examples; ```bash / ```text etc. are skipped.
+				// Opening fence. Only plain (untagged), ```aql, or ```boru
+				// blocks carry AQL examples (both language tags are live
+				// during the aql→boru rename); ```bash / ```text etc. are
+				// skipped.
 				info := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
-				skipBlock = (info != "" && info != "aql") ||
+				skipBlock = (info != "" && info != "aql" && info != "boru") ||
 					strings.Contains(prevNonBlank, skipMarker)
 				inFence = true
 				setup = setup[:0]

@@ -56,6 +56,14 @@ type FuncInfo struct {
 	// fall back to their static help Entry.
 	Module string
 	Doc    string
+
+	// Examples are hand-authored `describe` lines carried on a module
+	// export's FnDefInfo. They take precedence over both the static
+	// Entry's examples and the generated permutations — a module export
+	// has no Entry, and for a capability word the permutations are
+	// well-formed nonsense. Empty for exports nobody has written
+	// examples for, which keep the generated lines.
+	Examples []string
 }
 
 // registry holds all help entries keyed by word name.
@@ -544,13 +552,15 @@ func ExampleExprs(info FuncInfo) []string {
 // non-commutative binary words). Identical expressions across
 // signatures are shown once.
 func writeExamples(b *strings.Builder, info FuncInfo) {
-	// Hand-authored examples win over the auto-generated permutations.
+	// Hand-authored examples win over the auto-generated permutations —
+	// a module export's own first (it describes THIS export), then the
+	// static help Entry's.
+	if authored := info.Examples; len(authored) > 0 {
+		writeExampleLines(b, authored)
+		return
+	}
 	if info.Entry != nil && len(info.Entry.Examples) > 0 {
-		for _, line := range info.Entry.Examples {
-			b.WriteString("  ")
-			b.WriteString(line)
-			b.WriteByte('\n')
-		}
+		writeExampleLines(b, info.Entry.Examples)
 		return
 	}
 	if len(info.Sigs) == 0 {
@@ -558,10 +568,6 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		return
 	}
 
-	type exLine struct {
-		expr   string
-		result string
-	}
 	var examples []exLine
 	seen := map[string]bool{}
 	maxExprLen := 0
@@ -592,6 +598,30 @@ func writeExamples(b *strings.Builder, info FuncInfo) {
 		return
 	}
 
+	writeGeneratedExamples(b, examples, maxExprLen)
+}
+
+// exLine is one generated example: the expression and its evaluated
+// result, rendered as `expr   ;# result` with the results column-aligned.
+type exLine struct {
+	expr   string
+	result string
+}
+
+// writeExampleLines renders hand-authored example lines verbatim, one
+// per line, indented to match the generated ones. The author owns the
+// whole line including any trailing `;# …`.
+func writeExampleLines(b *strings.Builder, lines []string) {
+	for _, line := range lines {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+}
+
+// writeGeneratedExamples renders the positional permutations, aligning
+// the `;#` result column across them.
+func writeGeneratedExamples(b *strings.Builder, examples []exLine, maxExprLen int) {
 	for _, ex := range examples {
 		b.WriteString("  ")
 		b.WriteString(ex.expr)

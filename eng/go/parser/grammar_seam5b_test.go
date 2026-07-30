@@ -63,16 +63,16 @@ func TestS5bETemplateMatcherGuards(t *testing.T) {
 	m := s5beMatcher(t, j, "template_literal")
 
 	// No rule context: the matcher must decline.
-	if tok := m(jsonic.NewLex("`x`", nil), nil); tok != nil {
+	if tok := m(jsonic.NewLex("`x`", &jsonic.LexConfig{}), nil); tok != nil {
 		t.Errorf("nil rule: expected decline, got %v", tok)
 	}
 	// Armed but at end of source: decline.
 	armed := &jsonic.Rule{K: map[string]any{"aql_tpl": true}}
-	if tok := m(jsonic.NewLex("", nil), armed); tok != nil {
+	if tok := m(jsonic.NewLex("", &jsonic.LexConfig{}), armed); tok != nil {
 		t.Errorf("empty source: expected decline, got %v", tok)
 	}
 	// Sanity: armed mid-text it produces a #TL token.
-	if tok := m(jsonic.NewLex("ab`", nil), armed); tok == nil {
+	if tok := m(jsonic.NewLex("ab`", &jsonic.LexConfig{}), armed); tok == nil {
 		t.Error("expected a template-literal token for plain text")
 	}
 }
@@ -82,17 +82,17 @@ func TestS5bEXmlMatcherGuards(t *testing.T) {
 	m := s5beMatcher(t, j, "xml_literal")
 
 	// No rule context: decline.
-	if tok := m(jsonic.NewLex("<a/>", nil), nil); tok != nil {
+	if tok := m(jsonic.NewLex("<a/>", &jsonic.LexConfig{}), nil); tok != nil {
 		t.Errorf("nil rule: expected decline, got %v", tok)
 	}
 	armed := &jsonic.Rule{K: map[string]any{"aql_xml": true}}
 	// `<` at end of source (nothing after the consumed `<`): no progress,
 	// decline so normal lexing reports the character.
-	if tok := m(jsonic.NewLex("", nil), armed); tok != nil {
+	if tok := m(jsonic.NewLex("", &jsonic.LexConfig{}), armed); tok != nil {
 		t.Errorf("no progress: expected decline, got %v", tok)
 	}
 	// Cursor at 0 (the `<` position clamp): la = afterLA-1 clamps to 0.
-	tok := m(jsonic.NewLex("a/>", nil), armed)
+	tok := m(jsonic.NewLex("a/>", &jsonic.LexConfig{}), armed)
 	if tok == nil {
 		t.Fatal("expected an #XML token")
 	}

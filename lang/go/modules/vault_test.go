@@ -545,7 +545,13 @@ func TestVaultDocsComplete(t *testing.T) {
 			t.Errorf("doc %q has no export", k)
 		}
 	}
-	if len(exports.Keys()) != len(vaultOps) {
-		t.Errorf("exports = %d, ops = %d", len(exports.Keys()), len(vaultOps))
+	// Every registered native becomes an export — the op table plus the
+	// words that carry their own handler instead of Do-dispatching
+	// (`identity`, vault_identity.go).
+	if len(exports.Keys()) != len(vaultNatives()) {
+		t.Errorf("exports = %d, natives = %d", len(exports.Keys()), len(vaultNatives()))
+	}
+	if len(vaultNatives()) <= len(vaultOps) {
+		t.Error("the non-Do-dispatch words are missing from vaultNatives")
 	}
 }

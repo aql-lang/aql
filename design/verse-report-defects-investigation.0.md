@@ -1625,10 +1625,17 @@ fail when the `!Compiling` gate is removed.
 
 ### What is deliberately NOT modelled
 
-- **A network send.** `fetch` builds its own `http.Client` — there is no
-  backend to substitute, and no synthetic response is safe to invent for a
-  body that reads one (a fake status takes a wrong branch; a fake body
-  fails a real parse). Left real, and named in the advisory text.
+- **A network send.** Left real, and named in the advisory text. Note the
+  reason, because it CHANGED: this originally read "there is no backend to
+  substitute", which was true when written and is no longer — `main` has
+  since added `capabilities.HTTPOps`, a `Transport(profile, identity)` seam
+  that `fetch` resolves its `http.Client` transport from, so a modelling
+  transport is now installable. The decision stands on the OTHER reason,
+  which the seam does not touch: no synthetic response is safe to invent. A
+  fabricated status takes a wrong branch and a fabricated body fails a real
+  parse, so modelling a fetch would break bodies that work today — the same
+  test the write classes pass and this one does not. A refusing transport is
+  no better: denial raises, and the raise aborts the import.
 - **A `stdin` read.** A read, so out of scope by the rule above. Modelling
   it as EOF would make a body that reads input at load report a *check
   error* for a program that runs fine — trading a silent effect for a

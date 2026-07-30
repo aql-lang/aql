@@ -19,6 +19,15 @@
 //	POST /debug/emit?id=<inv>    (serverless channel) append a debug event for an invocation
 //	GET  /debug/events?id=<inv>  (serverless channel) read an invocation's events
 //
+// The remote STEPPING surface (`aql debug serve --step`, AQL-DEBUGGER.0.md
+// §8.3 Phase 4) mounts three more routes over this same transport — the
+// handlers live with the debugger session (cmd/go/internal/debugger); this
+// package carries the wire shape (StepState) and the client verbs:
+//
+//	GET  /debug/pause            the current pause state (paused/running/exited)
+//	POST /debug/action           deliver a step action to a paused program
+//	POST /debug/break            set/delete a breakpoint ({"spec":..,"delete":bool})
+//
 // Auth: when Token is non-empty, every request must carry
 // `Authorization: Bearer <token>` (a static token, or a vault capability id
 // — the broker validates it the same way the vault proxy does today). The
@@ -86,6 +95,14 @@ func (s *Server) Handler() http.Handler {
 // A non-loopback bind requires allowPublic, mirroring the vault proxy's
 // guard against accidentally exposing introspection to the network.
 func (s *Server) ListenAndServe(ctx context.Context, bind string, allowPublic bool) error {
+	return s.ListenAndServeHandler(ctx, bind, allowPublic, s.Handler())
+}
+
+// ListenAndServeHandler is ListenAndServe with a caller-composed handler —
+// the seam `aql debug serve --step` uses to mount the remote stepping
+// routes alongside (and, for /debug/eval, in front of) the introspection
+// set. The bind hygiene is identical.
+func (s *Server) ListenAndServeHandler(ctx context.Context, bind string, allowPublic bool, h http.Handler) error {
 	if !allowPublic && !isLoopback(bind) {
 		return fmt.Errorf("debugserve: refusing non-loopback bind %q without allowPublic", bind)
 	}
@@ -93,7 +110,7 @@ func (s *Server) ListenAndServe(ctx context.Context, bind string, allowPublic bo
 	if err != nil {
 		return fmt.Errorf("debugserve: listen %s: %w", bind, err)
 	}
-	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		_ = srv.Close()
@@ -103,6 +120,11 @@ func (s *Server) ListenAndServe(ctx context.Context, bind string, allowPublic bo
 	}
 	return nil
 }
+
+// Auth wraps a handler with the server's optional Bearer-token check —
+// exported so externally-mounted routes (the stepping surface) share the
+// exact gate the introspection routes use.
+func (s *Server) Auth(h http.HandlerFunc) http.HandlerFunc { return s.auth(h) }
 
 // auth wraps a handler with the optional Bearer-token check.
 func (s *Server) auth(h http.HandlerFunc) http.HandlerFunc {

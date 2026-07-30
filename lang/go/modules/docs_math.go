@@ -39,4 +39,43 @@ func init() {
 		"tan":        "Tangent of an angle given in radians.",
 		"trunc":      "Truncate toward zero, dropping the fraction.",
 	})
+
+	// Almost all of this module reads correctly as generated permutations
+	// (`MathUtil.sqrt 16.0`), so only the words with a real trap are
+	// authored: the two rounding modes, the ones that need Floats, and the
+	// swap-order binaries. Results are from verified
+	// lang/spec/module-math.tsv rows.
+	registerExamples("aql:math-util", map[string][]string{
+		"round": {
+			`MathUtil.round 4.6                               ;# 5`,
+			`2.5 MathUtil.round                               ;# 3 — halves go away from zero`,
+		},
+		"round-even": {
+			`2.5 MathUtil.round-even                          ;# 2`,
+			`3.5 MathUtil.round-even                          ;# 4 — halves go to even; use this for statistics`,
+		},
+		"sqrt": {
+			`MathUtil.sqrt 16.0                               ;# 4.0 — a FLOAT operand; 16 is an Integer`,
+			`16.0 MathUtil.sqrt                               ;# 4.0`,
+		},
+		"is-nan": {
+			`nan MathUtil.is-nan                              ;# true`,
+			`5.0 MathUtil.is-nan                              ;# false — nan is never equal to itself, so ASK`,
+		},
+		"is-finite": {
+			`inf MathUtil.is-finite                           ;# false`,
+			`5 MathUtil.is-finite                             ;# true — Integers count as finite`,
+		},
+		"signbit": {
+			`-3.0 MathUtil.signbit                            ;# true — the SIGN BIT, so -0.0 is true too`,
+		},
+		"remainder": {
+			`7.0 MathUtil.remainder 3.0                       ;# 1.0`,
+			`5.0 MathUtil.remainder 3.0                       ;# -1.0 — IEEE remainder, so it can be negative`,
+		},
+		"copysign":  {`3.0 MathUtil.copysign -1.0                       ;# -3.0 — magnitude of the first, sign of the second`},
+		"scalb":     {`3.0 MathUtil.scalb 4                             ;# 48.0 — multiply by 2^n, exactly`},
+		"logb":      {`8.0 MathUtil.logb                                ;# 3.0 — the binary exponent`},
+		"nextafter": {`1.0 MathUtil.nextafter 2.0                       ;# 1.0000000000000002 — the very next Float`},
+	})
 }

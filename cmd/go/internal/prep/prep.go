@@ -57,7 +57,9 @@ func Do(dir string) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid jsonic: %w", err)
 	}
 
-	m, ok := parsed.(map[string]any)
+	// aql.jsonic is order-agnostic project config; flatten the parser's
+	// ordered object node to a plain map.
+	m, ok := parser.Plainify(parsed).(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("aql.jsonic must be a map")
 	}

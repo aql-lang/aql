@@ -72,7 +72,7 @@ var langErrorCodes = []string{
 	"unmount_error", "unpack_error", "unquote_error", "unreachable_branch",
 	"unreachable_signature", "unshift_error", "unwatch_error", "update_error",
 	"user_error", "value_error", "var_error", "vault",
-	"vault_usage", "walk_error", "watch_error", "window_error",
+	"vault_error", "vault_usage", "walk_error", "watch_error", "window_error",
 	"write_error", "xml_attr_error", "xml_elem_error", "xml_text_error",
 }
 
