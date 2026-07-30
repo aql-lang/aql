@@ -261,6 +261,10 @@ WORD emit
   [Any] barrier=1 runcheck returns=[Scalar/String]
 WORD enum
   [Node/List] barrier=1 noeval={0} returns=[Type/Disjunct/Enum] +returnsfn
+WORD env
+  [Scalar/String] barrier=1 returns=[Any]
+WORD env-all
+  [] barrier=0 returns=[Node/Map]
 WORD eq
   [Any Any] barrier=2 returns=[Scalar/Boolean]
 WORD error
@@ -268,6 +272,8 @@ WORD error
 WORD escape
   [Scalar/String Node/Map] barrier=2 returns=[Scalar/String]
   [Scalar/String] barrier=1 returns=[Scalar/String]
+WORD exit
+  [Scalar/Number/Integer] barrier=1
 WORD export
   [Scalar/String Node/Map] barrier=2 runcheck
   [Scalar/Atom Node/Map] barrier=2 runcheck
@@ -435,6 +441,8 @@ WORD iota
   [Scalar/Number/Integer] barrier=1 +returnsfn
 WORD is
   [Any Any] barrier=1 returns=[Scalar/Boolean]
+WORD is-tty
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Scalar/Boolean]
 WORD istype
   [Any] barrier=1 returns=[Scalar/Boolean]
 WORD items
@@ -632,6 +640,9 @@ WORD read
   [Ideal/File] barrier=1 returns=[Any]
   [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
   [Scalar/Micron/Pathon] barrier=1 returns=[Any]
+WORD read-line
+  [Ideal/File] barrier=1 returns=[Any]
+  [Scalar/Atom/StreamKind] barrier=1 returns=[Any]
 WORD rebind
   [Ideal/Reach Any] barrier=2 returns=[Ideal/Reach]
 WORD receive

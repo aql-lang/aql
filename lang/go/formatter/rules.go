@@ -110,6 +110,20 @@ type renderer struct {
 	stmtStart  map[string]bool
 	attachPrev map[NodeKind]bool
 	attachNext map[NodeKind]bool
+	// memo caches emitNode by (node, indent). Rendering is a pure function
+	// of that pair — the renderer is immutable once built and the node tree
+	// is not mutated after parsing — and caching it is what keeps
+	// formatting linear. See emitNode for why it is load-bearing rather
+	// than an optimisation.
+	memo map[emitKey]string
+}
+
+// emitKey identifies one memoised render: a node laid out at one indent.
+// The indent is part of the key because a container's broken form embeds
+// its own indentation.
+type emitKey struct {
+	n      *Node
+	indent int
 }
 
 // glyph returns the punctuation template's compiled literal for kind — the
@@ -125,6 +139,7 @@ func newRenderer(ru Rules) *renderer {
 		stmtStart:  map[string]bool{},
 		attachPrev: map[NodeKind]bool{},
 		attachNext: map[NodeKind]bool{},
+		memo:       map[emitKey]string{},
 	}
 	for _, w := range ru.StmtStartWords {
 		r.stmtStart[w] = true

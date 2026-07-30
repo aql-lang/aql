@@ -88,7 +88,6 @@ func covIntOut(t *testing.T, out []Value, err error) int64 {
 
 func TestParseStrOptsAllStringKeys(t *testing.T) {
 	o := parseStrOpts(covOpts(map[string]Value{
-		"u":           NewBoolean(true),
 		"norm":        NewString("nfd"),
 		"cs":          NewString("insensitive"),
 		"mode":        NewString("shell"),
@@ -96,8 +95,6 @@ func TestParseStrOptsAllStringKeys(t *testing.T) {
 		"sep":         NewString("-"),
 		"fill":        NewString("*"),
 		"style":       NewString("title"),
-		"loc":         NewString("en"),
-		"unit":        NewString("grapheme"),
 		"tgt":         NewString("sed"),
 		"quote":       NewString("single"),
 		"scope":       NewString("all"),
@@ -111,24 +108,21 @@ func TestParseStrOptsAllStringKeys(t *testing.T) {
 		"trimParts":   NewBoolean(true),
 		"wholeWord":   NewBoolean(true),
 		"anchored":    NewString("start"),
-		"fromEnd":     NewBoolean(true),
 		"trunc":       NewBoolean(true),
-		"litRepl":     NewBoolean(true),
 		"trim":        NewBoolean(true),
 		"collapseWs":  NewBoolean(true),
 		"eol":         NewString("lf"),
 		"form":        NewString("nfkc"),
-		"groups":      NewString("named"),
 		"chars":       NewString("xy"),
 	}))
-	if !o.u || o.normForm != "NFD" || o.cs != "insensitive" || o.mode != "shell" {
+	if o.normForm != "NFD" || o.cs != "insensitive" || o.mode != "shell" {
 		t.Errorf("core opts wrong: %+v", o)
 	}
 	if o.side != "left" || !o.hasSep || o.sep != "-" || o.style != "title" {
 		t.Errorf("side/sep/style wrong: %+v", o)
 	}
-	if o.loc != "en" || o.unit != "grapheme" || o.tgt != "sed" || o.quote != "single" {
-		t.Errorf("loc/unit/tgt/quote wrong: %+v", o)
+	if o.tgt != "sed" || o.quote != "single" {
+		t.Errorf("tgt/quote wrong: %+v", o)
 	}
 	if o.scope != "all" || o.occ != "last" {
 		t.Errorf("scope/occ wrong: %+v", o)
@@ -139,14 +133,11 @@ func TestParseStrOptsAllStringKeys(t *testing.T) {
 	if !o.skipEmpty || !o.skipNullish || !o.keepEmpty || !o.trimParts || !o.wholeWord {
 		t.Errorf("bool flags wrong: %+v", o)
 	}
-	if o.anchored != "start" || !o.fromEnd || !o.trunc || !o.litRepl {
-		t.Errorf("anchored/fromEnd/trunc/litRepl wrong: %+v", o)
+	if o.anchored != "start" || !o.trunc {
+		t.Errorf("anchored/trunc wrong: %+v", o)
 	}
 	if !o.trim || !o.collapseWs || o.eol != "lf" || o.form != "NFKC" {
 		t.Errorf("normalize opts wrong: %+v", o)
-	}
-	if o.groups != "named" {
-		t.Errorf("groups = %q, want named", o.groups)
 	}
 	// chars is read after fill and reuses the fill slot.
 	if o.fill != "xy" {
@@ -158,16 +149,12 @@ func TestParseStrOptsBooleanVariants(t *testing.T) {
 	o := parseStrOpts(covOpts(map[string]Value{
 		"norm":     NewBoolean(true),
 		"anchored": NewBoolean(true),
-		"groups":   NewBoolean(true),
 	}))
 	if o.normForm != "NFC" {
 		t.Errorf("norm:true → %q, want NFC", o.normForm)
 	}
 	if o.anchored != "both" {
 		t.Errorf("anchored:true → %q, want both", o.anchored)
-	}
-	if !o.groupBool || o.groups != "" {
-		t.Errorf("groups:true → groupBool=%v groups=%q", o.groupBool, o.groups)
 	}
 
 	// norm:false / anchored:false leave the fields unset.
@@ -841,5 +828,106 @@ func TestStringEdgeBranches(t *testing.T) {
 	// find-all stops cleanly on a match that ends at the input's end.
 	if got := findLiteralMatches("hell", "l", false, true); len(got) != 2 {
 		t.Errorf("findLiteralMatches(hell,l,all) = %d matches, want 2", len(got))
+	}
+}
+
+// An option key a word does not honour is an ERROR, not a silent no-op.
+//
+// One parser serves twelve words and each reads only its own subset, so a
+// key outside that subset used to parse fine and then be dropped:
+// `replace … {all:true}` returned the FIRST-occurrence result because the
+// real key is `scope:"all"`. A misspelling was indistinguishable from the
+// default, which is the worst possible failure mode for an option.
+func TestStrOptsRejectUnknownKeys(t *testing.T) {
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		word, key string
+	}{
+		{"replace", "all"},        // the original bug: real key is scope
+		{"replace", "trunc"},      // real, but pad's — not replace's
+		{"pad", "scope"},          // real, but replace's — not pad's
+		{"concat", "cs"},          // real, but concat does not read it
+		{"escape", "bogus_key_x"}, // outright unknown
+	}
+	for _, c := range cases {
+		v := covOpts(map[string]Value{c.key: NewBoolean(true)})
+		err := validateStrOpts(reg, v, c.word)
+		if err == nil {
+			t.Errorf("%s: option %q accepted, want rejection", c.word, c.key)
+			continue
+		}
+		ae, ok := err.(*AqlError)
+		if !ok || ae.Code != "string_option_error" {
+			t.Errorf("%s/%s: got %T %v, want string_option_error", c.word, c.key, err, err)
+		}
+	}
+}
+
+// The positive half: a key the word DOES honour is accepted, and so is the
+// no-options call. Without these the rejection above could be satisfied by
+// refusing everything.
+func TestStrOptsAcceptKnownKeys(t *testing.T) {
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ word, key string }{
+		{"replace", "scope"}, {"pad", "trunc"}, {"concat", "sep"},
+		{"trim", "chars"}, {"escape", "quote"},
+	} {
+		v := covOpts(map[string]Value{c.key: NewString("all")})
+		if err := validateStrOpts(reg, v, c.word); err != nil {
+			t.Errorf("%s: option %q rejected: %v", c.word, c.key, err)
+		}
+	}
+	// A non-map (the no-options call) validates trivially.
+	if err := validateStrOpts(reg, NewString("x"), "replace"); err != nil {
+		t.Errorf("non-map options rejected: %v", err)
+	}
+}
+
+// An enumerated key's value must be in its domain. `scope:"bogus"` was as
+// silent as an unknown key — it simply was not "all", so it behaved as
+// "first".
+func TestStrOptsRejectBadEnumValues(t *testing.T) {
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ word, key, val string }{
+		{"replace", "scope", "bogus"},
+		{"replace", "cs", "loose"},
+		{"split", "mode", "regex"},
+		{"pad", "side", "middle"},
+		{"indexof", "occ", "third"},
+		{"normalize", "eol", "cr"},
+	} {
+		v := covOpts(map[string]Value{c.key: NewString(c.val)})
+		if err := validateStrOpts(reg, v, c.word); err == nil {
+			t.Errorf("%s: %s=%q accepted, want rejection", c.word, c.key, c.val)
+		}
+	}
+	// Every legal value of an enum is accepted.
+	for _, val := range []string{"first", "all"} {
+		v := covOpts(map[string]Value{"scope": NewString(val)})
+		if err := validateStrOpts(reg, v, "replace"); err != nil {
+			t.Errorf("scope=%q rejected: %v", val, err)
+		}
+	}
+}
+
+// A word with no registered key set is a caller bug, not user input, and
+// is reported rather than silently accepting anything.
+func TestStrOptsUnregisteredWord(t *testing.T) {
+	reg, err := DefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := covOpts(map[string]Value{"sep": NewString("-")})
+	if err := validateStrOpts(reg, v, "not-a-string-word"); err == nil {
+		t.Error("an unregistered word accepted options; want an error")
 	}
 }

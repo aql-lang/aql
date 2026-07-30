@@ -1,0 +1,653 @@
+# ============================================================================
+# aql:cli — AQL unit-test suite (aql:test framework), mirroring the shape of
+# lang/go/modules/sift_test.aql.
+#
+# Goal: exercise EVERY executable row of cli.aql for 100% line coverage, with
+# the sole exception of `Cli.main` (cli-main-do + the two cli-w-main sig
+# bodies), whose every arm ends in IO.exit — which this runner reports as a
+# file-level failure that ends the suite, so the first arm exercised would kill
+# the run before the second. That is precisely why the decision logic lives in
+# the pure Cli.dispatch. Verify coverage with:
+#
+#   aql test -coverage cli_test.aql
+#
+# Every assertion cites the convention it pins (# conv:) from the module brief,
+# or the branch it covers (# branch: cli.aql fn-name).
+#
+# `Cli.parse` / `Cli.dispatch` / `Cli.usage` are PURE — argv is an explicit
+# parameter — so each test is a plain value comparison with no fixtures, no IO
+# and no shared state between cases.
+# ============================================================================
+
+import "aql:test"
+
+# Handlers for the Cli.main cases below. They MUST be at module scope: a
+# fn-local `def … fn` used as a higher-order value resolves under the
+# interpreter and is undefined under the bytecode compiler (NUR037).
+def t-ok fn [[ctx:Map] [Integer] [ 0 ]]
+def t-code fn [[ctx:Map] [Integer] [ 7 ]]
+def t-nonint fn [[ctx:Map] [Any] [ "not an integer" ]]
+
+Test.cover [
+  import "aql:cli"
+  import "aql:string-util"   # split, for addressing one line of a usage block
+
+  # --------------------------------------------------------------------------
+  # The reference spec from design/CLI-PROGRAMS.0.md §8, plus a short for
+  # `verbose` so the clustered/counted short forms are reachable.
+  # --------------------------------------------------------------------------
+  def spec {
+    name:    "av"
+    version: "0.2.0"
+    summary: "view structured files in the terminal"
+    flags: [
+      {name:"watch"   short:"w" kind:"bool"   default:true  help:"reload files when they change"}
+      {name:"kind"    short:"k" kind:"string" value:"KIND"   help:"force a parser kind"}
+      {name:"verbose" short:"v" kind:"count"                 help:"-v, -vv…"}
+    ]
+    args: {name:"files" min:0 help:"files to open"}
+  }
+
+  # a spec with no flags / no version / no summary / no args block: the "absent"
+  # arm of every spec reader.
+  def bare {name:"bare"}
+
+  # a spec exercising: a short-less string flag, a bool with default:false, a
+  # count with a declared default, a flag with no help text, and max-arity.
+  def alt {
+    name:"alt" version:"1.0"
+    flags: [
+      {name:"out"   kind:"string" value:"FILE" help:"where to write"}
+      {name:"all"   short:"a" kind:"bool"  default:false help:"include everything"}
+      {name:"quiet" short:"q"}
+      {name:"loud"  short:"l" kind:"bool"}
+      {name:"depth" short:"d" kind:"count" default:2 help:"nesting depth"}
+      {name:"nohelp" short:"n"}
+      {name:"weird" short:"z" kind:"strng" help:"a typo'd kind behaves as bool"}
+    ]
+    args: {name:"paths" min:1 max:2 help:"one or two paths"}
+  }
+
+  # a spec with subcommands (the name tier of §8's subcommand staging).
+  def multi {
+    name:"vc" version:"3.1" summary:"a multi-verb tool"
+    flags: [{name:"force" short:"f" kind:"bool" help:"do it anyway"}]
+    commands: [{name:"build" summary:"build the thing"} {name:"list"}]
+  }
+
+  # a spec whose one help string is long enough to wrap at a narrow width —
+  # the fixture the Cli.usage {width} cases below measure.
+  def wide {
+    name:"tool" version:"1" summary:"s"
+    flags: [{name:"kind" short:"k" kind:"string" value:"KIND"
+             help:"force a particular parser kind for the input files"}]
+    args: {name:"f" min:0}
+  }
+
+  # a spec that claims --help/-h and --version itself, so the implicit flags are
+  # NOT added (both arms of cli-claims).
+  def owns {
+    name:"owns"
+    flags: [ {name:"help" short:"h" kind:"count" help:"more help each time"}
+             {name:"version" short:"V" kind:"string" value:"V" help:"pin a version"} ]
+  }
+
+  # --------------------------------------------------------------------------
+  # Defaults and the empty argv.
+  # --------------------------------------------------------------------------
+  Test.describe "defaults" [
+    Test.test "an empty argv yields the spec defaults and no positionals" [
+      Assert.equal {ok:true flags:{watch:true kind:none verbose:0} args:[] command:none}
+                   (Cli.parse (spec) [])                                     # conv: defaults fill flags argv did not mention
+    ]
+    Test.test "bool default false, count default from the spec, string default none" [
+      Assert.equal {out:none all:false quiet:false loud:false depth:2 nohelp:false weird:false}
+                   ((Cli.parse (alt) ["p"]) dot flags)                       # branch: cli-default-step all three arms
+    ]
+    Test.test "a spec with no flags gets only the implicit ones (not in defaults)" [
+      Assert.equal {} ((Cli.parse (bare) []) dot flags)                      # branch: cli-spec-flags absent arm
+    ]
+    Test.test "the implicit --help is absent, not false" [
+      Assert.equal None (((Cli.parse (spec) []) dot flags) get "help")        # conv: implicit flags stay out of defaults
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Long options.
+  # --------------------------------------------------------------------------
+  Test.describe "long options" [
+    Test.test "--long value" [
+      Assert.equal "json" (((Cli.parse (spec) ["--kind" "json"]) dot flags) get "kind")   # conv: --long value
+    ]
+    Test.test "--long=value" [
+      Assert.equal "json" (((Cli.parse (spec) ["--kind=json"]) dot flags) get "kind")     # conv: --long=value
+    ]
+    Test.test "--long=  (an explicitly empty value)" [
+      Assert.equal "" (((Cli.parse (spec) ["--kind="]) dot flags) get "kind")             # branch: cli-long haseq with an empty tail
+    ]
+    Test.test "a bare --long sets a bool flag true" [
+      Assert.equal true (((Cli.parse (alt) ["--loud" "p"]) dot flags) get "loud")         # conv: --long (bool)
+    ]
+    Test.test "--no-X sets a bool flag false" [
+      Assert.equal false (((Cli.parse (spec) ["--no-watch"]) dot flags) get "watch")      # conv: --no-X
+    ]
+    Test.test "--no-X leaves the other flags at their defaults" [
+      Assert.equal {watch:false kind:none verbose:0} ((Cli.parse (spec) ["--no-watch"]) dot flags)
+    ]
+    Test.test "a bare --count flag increments" [
+      Assert.equal 1 (((Cli.parse (spec) ["--verbose"]) dot flags) get "verbose")         # branch: cli-long-flag count arm
+    ]
+    Test.test "--count twice increments twice" [
+      Assert.equal 2 (((Cli.parse (spec) ["--verbose" "--verbose"]) dot flags) get "verbose")
+    ]
+    Test.test "an unknown long flag is a one-line error" [
+      Assert.equal "unknown flag: --wach" ((Cli.parse (spec) ["--wach"]) dot err)          # conv: unknown flag
+    ]
+    Test.test "an unknown long flag is not ok" [
+      Assert.equal false ((Cli.parse (spec) ["--wach"]) dot ok)
+    ]
+    Test.test "an unknown --no-X is reported by the name as written" [
+      Assert.equal "unknown flag: --no-nope" ((Cli.parse (spec) ["--no-nope"]) dot err)    # branch: cli-long-neg unknown base
+    ]
+    Test.test "--no-X on a NON-bool flag is an unknown flag" [
+      Assert.equal "unknown flag: --no-kind" ((Cli.parse (spec) ["--no-kind"]) dot err)    # branch: cli-long-neg kind neq bool
+    ]
+    Test.test "--no-X=value is rejected" [
+      Assert.equal "flag --no-watch takes no value" ((Cli.parse (spec) ["--no-watch=1"]) dot err)  # branch: cli-long-neg haseq
+    ]
+    Test.test "a bool flag given a value is rejected" [
+      Assert.equal "flag --watch takes no value" ((Cli.parse (spec) ["--watch=1"]) dot err)        # branch: cli-long-flag bool haseq
+    ]
+    Test.test "a count flag given a value is rejected" [
+      Assert.equal "flag --verbose takes no value" ((Cli.parse (spec) ["--verbose=2"]) dot err)    # branch: cli-long-flag count haseq
+    ]
+    Test.test "a value-taking long flag at the end of argv needs a value" [
+      Assert.equal "flag --kind needs a value" ((Cli.parse (spec) ["--kind"]) dot err)             # conv: missing value
+    ]
+    Test.test "a long flag with an empty name is unknown" [
+      Assert.equal "unknown flag: --" ((Cli.parse (spec) ["--=x"]) dot err)                        # branch: cli-long empty name
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Short options.
+  # --------------------------------------------------------------------------
+  Test.describe "short options" [
+    Test.test "-s value" [
+      Assert.equal "json" (((Cli.parse (spec) ["-k" "json"]) dot flags) get "kind")        # conv: -s value
+    ]
+    Test.test "-sVALUE (the value glued to the cluster)" [
+      Assert.equal "json" (((Cli.parse (spec) ["-kjson"]) dot flags) get "kind")           # conv: -sVALUE
+    ]
+    Test.test "a clustered short before a string short takes the rest as the value" [
+      Assert.equal "json" (((Cli.parse (spec) ["-wkjson"]) dot flags) get "kind")          # branch: cli-short-walk mid-cluster string
+    ]
+    Test.test "the bool in that cluster is still set" [
+      Assert.equal true (((Cli.parse (spec) ["-wkjson"]) dot flags) get "watch")
+    ]
+    Test.test "clustered shorts -abc set each bool" [
+      Assert.equal {out:none all:true quiet:true loud:true depth:2 nohelp:false weird:false}
+                   ((Cli.parse (alt) ["-aql" "p"]) dot flags)                              # conv: clustered shorts
+    ]
+    Test.test "-vv counts twice" [
+      Assert.equal 2 (((Cli.parse (spec) ["-vv"]) dot flags) get "verbose")                # conv: -vv -> 2
+    ]
+    Test.test "-vvv counts three times" [
+      Assert.equal 3 (((Cli.parse (spec) ["-vvv"]) dot flags) get "verbose")
+    ]
+    Test.test "a counted short starts from the spec default" [
+      Assert.equal 4 (((Cli.parse (alt) ["-dd" "p"]) dot flags) get "depth")               # branch: cli-bump from a declared default
+    ]
+    Test.test "an unknown short flag is a one-line error" [
+      Assert.equal "unknown flag: -x" ((Cli.parse (spec) ["-x"]) dot err)                  # conv: unknown flag
+    ]
+    Test.test "an unknown short inside a cluster names that letter" [
+      Assert.equal "unknown flag: -x" ((Cli.parse (spec) ["-wxv"]) dot err)
+    ]
+    Test.test "a value-taking short at the end of argv needs a value" [
+      Assert.equal "flag -k needs a value" ((Cli.parse (spec) ["-k"]) dot err)             # conv: missing value (short spelling)
+    ]
+    Test.test "a value-taking short at the end of a cluster needs a value" [
+      Assert.equal "flag -k needs a value" ((Cli.parse (spec) ["-wk"]) dot err)            # branch: cli-short-walk pend at cluster end
+    ]
+    Test.test "…and takes the NEXT argv token when there is one" [
+      Assert.equal "json" (((Cli.parse (spec) ["-wk" "json"]) dot flags) get "kind")       # conv: -s value, from the tail of a cluster
+    ]
+    Test.test "a counted short mid-cluster still counts" [
+      Assert.equal {watch:true kind:none verbose:1} ((Cli.parse (spec) ["-vw"]) dot flags) # branch: cli-short-walk count then continue
+    ]
+    Test.test "a flag whose kind is neither string nor count behaves as a bool" [
+      Assert.equal true (((Cli.parse (alt) ["-z" "p"]) dot flags) get "weird")             # branch: cli-long-flag/-short-walk default bool arm
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Positionals, `--`, and the lone `-`.
+  # --------------------------------------------------------------------------
+  Test.describe "positionals" [
+    Test.test "positionals collect in order" [
+      Assert.equal ["a" "b"] ((Cli.parse (spec) ["a" "b"]) dot args)                       # conv: positionals
+    ]
+    Test.test "positionals may be interleaved with flags" [
+      Assert.equal ["a" "b"] ((Cli.parse (spec) ["a" "-w" "b"]) dot args)
+    ]
+    Test.test "a bare -- ends flag processing" [
+      Assert.equal ["-w" "--kind"] ((Cli.parse (spec) ["--" "-w" "--kind"]) dot args)      # conv: -- ends flags
+    ]
+    Test.test "flags before -- are still parsed" [
+      Assert.equal false (((Cli.parse (spec) ["--no-watch" "--" "-w"]) dot flags) get "watch")
+    ]
+    Test.test "a second -- is itself a positional" [
+      Assert.equal ["--"] ((Cli.parse (spec) ["--" "--"]) dot args)                        # branch: cli-step nomore arm
+    ]
+    Test.test "a lone - is a positional, not a flag" [
+      Assert.equal ["-"] ((Cli.parse (spec) ["-"]) dot args)                               # conv: - is a positional
+    ]
+    Test.test "a flag VALUE that looks like a flag is taken verbatim" [
+      Assert.equal "--help" (((Cli.parse (spec) ["-k" "--help"]) dot flags) get "kind")    # branch: cli-take consumes any token
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Repeated string flags collect into a List.
+  # --------------------------------------------------------------------------
+  Test.describe "repeated string flags" [
+    Test.test "one occurrence is the bare String" [
+      Assert.equal "a" (((Cli.parse (spec) ["-k" "a"]) dot flags) get "kind")              # conv: single -> String
+    ]
+    Test.test "two occurrences collect into a List, in argv order" [
+      Assert.equal ["a" "b"] (((Cli.parse (spec) ["-k" "a" "--kind=b"]) dot flags) get "kind")   # conv: repeated -> List
+    ]
+    Test.test "three occurrences keep collecting into the same List" [
+      Assert.equal ["a" "b" "c"] (((Cli.parse (spec) ["-ka" "-kb" "-kc"]) dot flags) get "kind") # branch: cli-add old is List
+    ]
+    Test.test "a declared string default is REPLACED, not collected onto" [
+      Assert.equal "z" (((Cli.parse (alt) ["--out" "z" "p"]) dot flags) get "out")         # branch: cli-add unseen arm
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Argument arity.
+  # --------------------------------------------------------------------------
+  Test.describe "argument arity" [
+    Test.test "below min is a one-line error" [
+      Assert.equal "expected at least 1 paths, got 0" ((Cli.parse (alt) []) dot err)        # conv: arity below min
+    ]
+    Test.test "at min is ok" [
+      Assert.equal true ((Cli.parse (alt) ["p"]) dot ok)
+    ]
+    Test.test "at max is ok" [
+      Assert.equal ["p" "q"] ((Cli.parse (alt) ["p" "q"]) dot args)
+    ]
+    Test.test "above max is a one-line error" [
+      Assert.equal "expected at most 2 paths, got 3" ((Cli.parse (alt) ["p" "q" "r"]) dot err)   # conv: arity above max
+    ]
+    Test.test "no max means unbounded" [
+      Assert.equal 5 (size ((Cli.parse (spec) ["a" "b" "c" "d" "e"]) dot args))            # branch: cli-check-arity max absent
+    ]
+    Test.test "a spec with no args block has min 0 and no max" [
+      Assert.equal true ((Cli.parse (bare) ["a" "b" "c"]) dot ok)                          # branch: cli-spec-args absent arm
+    ]
+    Test.test "the arity label falls back to 'argument' with no args.name" [
+      Assert.equal "expected at least 2 argument, got 0"
+                   ((Cli.parse ({name:"n" args:{min:2}}) []) dot err)                      # branch: cli-str default in cli-check-arity
+    ]
+    Test.test "an earlier flag error wins over an arity violation" [
+      Assert.equal "unknown flag: -x" ((Cli.parse (alt) ["-x"]) dot err)                   # branch: cli-check-arity short-circuit
+    ]
+    Test.test "a missing value wins over an arity violation" [
+      Assert.equal "flag --out needs a value" ((Cli.parse (alt) ["--out"]) dot err)         # branch: cli-close-pending then short-circuit
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Subcommands — the name tier: the first positional selects the command.
+  # --------------------------------------------------------------------------
+  Test.describe "commands" [
+    Test.test "command is none when the spec declares none" [
+      Assert.equal none ((Cli.parse (spec) ["a"]) dot command)                             # branch: cli-pick-command no commands
+    ]
+    Test.test "the first positional becomes the command" [
+      Assert.equal "build" ((Cli.parse (multi) ["build"]) dot command)
+    ]
+    Test.test "the command is removed from args" [
+      Assert.equal ["x" "y"] ((Cli.parse (multi) ["build" "x" "y"]) dot args)
+    ]
+    Test.test "global flags still parse alongside a command" [
+      Assert.equal true (((Cli.parse (multi) ["-f" "list"]) dot flags) get "force")
+    ]
+    Test.test "an unknown command is a one-line error" [
+      Assert.equal "unknown command: nope" ((Cli.parse (multi) ["nope"]) dot err)          # branch: cli-pick-command unknown
+    ]
+    Test.test "a missing command lists the choices" [
+      Assert.equal "a command is required (one of: build, list)" ((Cli.parse (multi) []) dot err)   # branch: cli-pick-command empty args
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # The failure result shape.
+  # --------------------------------------------------------------------------
+  Test.describe "failure result shape" [
+    Test.test "a failure carries ok / err / usage and nothing else" [
+      Assert.equal ["ok" "err" "usage"] (keys (Cli.parse (spec) ["--wach"]))               # conv: {ok:false err usage}
+    ]
+    Test.test "a failure's usage text is the rendered help" [
+      Assert.equal (Cli.usage (spec)) ((Cli.parse (spec) ["--wach"]) dot usage)
+    ]
+    Test.test "a success carries ok / flags / args / command" [
+      Assert.equal ["ok" "flags" "args" "command"] (keys (Cli.parse (spec) []))            # conv: {ok:true flags args command}
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Usage rendering. Each expectation is the WHOLE text: four sections joined by
+  # a blank line, with an absent section dropped.
+  #
+  # NB the expectations are built with (join "\n\n" [sections…]) rather than one
+  # flat list of lines, because `join` DROPS empty strings — a lines list with ""
+  # in it renders without the blank line.
+  # --------------------------------------------------------------------------
+  Test.describe "usage" [
+    Test.test "the reference spec renders the documented help text" [
+      Assert.equal (join "\n\n" [
+        "av 0.2.0 - view structured files in the terminal"
+        "usage: av [options] [<files>...]"
+        (join "\n" [
+          "options:"
+          "  -w, --watch      reload files when they change (default: true)"
+          "  -k, --kind KIND  force a parser kind"
+          "  -v, --verbose    -v, -vv…"
+          "  -h, --help       show this help and exit"
+          "      --version    print the version and exit"
+        ])
+      ]) (Cli.usage (spec))                                                    # conv: Cli.usage (spec)
+    ]
+    Test.test "no version and no summary render the bare name" [
+      Assert.equal (join "\n\n" [
+        "bare"
+        "usage: bare [options]"
+        (join "\n" [
+          "options:"
+          "  -h, --help     show this help and exit"
+          "      --version  print the version and exit"
+        ])
+      ]) (Cli.usage (bare))                                                    # branch: cli-head-line no version, no summary
+    ]
+    Test.test "a version with no summary, a short-less string flag, help-less flags, declared defaults, min>=1/max>1 args" [
+      Assert.equal (join "\n\n" [
+        "alt 1.0"
+        "usage: alt [options] <paths>..."
+        (join "\n" [
+          "options:"
+          "      --out FILE  where to write"
+          "  -a, --all       include everything (default: false)"
+          "  -q, --quiet"
+          "  -l, --loud"
+          "  -d, --depth     nesting depth (default: 2)"
+          "  -n, --nohelp"
+          "  -z, --weird     a typo'd kind behaves as bool"
+          "  -h, --help      show this help and exit"
+          "      --version   print the version and exit"
+        ])
+      ]) (Cli.usage (alt))     # branches: cli-head-line version-no-summary; cli-opt-label no-short + value arms;
+                               # cli-opt-row-step label-only arm; cli-def-note both arms; cli-arg-part min>=1 many
+    ]
+    Test.test "commands render their own section, and <command> in the usage line" [
+      Assert.equal (join "\n\n" [
+        "vc 3.1 - a multi-verb tool"
+        "usage: vc [options] <command>"
+        (join "\n" [
+          "commands:"
+          "  build   build the thing"
+          "  list"
+        ])
+        (join "\n" [
+          "options:"
+          "  -f, --force    do it anyway"
+          "  -h, --help     show this help and exit"
+          "      --version  print the version and exit"
+        ])
+      ]) (Cli.usage (multi))                          # branch: cli-cmd-block + cli-cmd-row-step both arms
+    ]
+    Test.test "max 1 with min 1 renders a single <name>" [
+      Assert.equal "usage: one [options] <f>"
+                   ((StringUtil.split "\n" (Cli.usage ({name:"one" args:{name:"f" min:1 max:1}})) {keepEmpty:true}) get 2)   # branch: cli-arg-part many false, min>=1
+    ]
+    Test.test "max 1 with min 0 brackets a single <name>" [
+      Assert.equal "usage: opt [options] [<f>]"
+                   ((StringUtil.split "\n" (Cli.usage ({name:"opt" args:{name:"f" max:1}})) {keepEmpty:true}) get 2)         # branch: cli-arg-part many false, min<1
+    ]
+    Test.test "an args block with no name adds nothing to the usage line" [
+      Assert.equal "usage: n [options]"
+                   ((StringUtil.split "\n" (Cli.usage ({name:"n" args:{min:2}})) {keepEmpty:true}) get 2)                    # branch: cli-arg-part unnamed
+    ]
+    Test.test "a spec that owns --help/-h and --version gets no implicit flags" [
+      Assert.equal (join "\n\n" [
+        "owns"
+        "usage: owns [options]"
+        (join "\n" [
+          "options:"
+          "  -h, --help       more help each time"
+          "  -V, --version V  pin a version"
+        ])
+      ]) (Cli.usage (owns))                                                    # branch: cli-claims long-name hit
+    ]
+    Test.test "a spec that owns only the -h LETTER loses --help but keeps --version" [
+      Assert.equal (join "\n\n" [
+        "h"
+        "usage: h [options]"
+        (join "\n" [
+          "options:"
+          "  -h, --hop      hop"
+          "      --version  print the version and exit"
+        ])
+      ]) (Cli.usage ({name:"h" flags:[{name:"hop" short:"h" help:"hop"}]}))     # branch: cli-claims short-letter hit
+    ]
+    Test.test "Cli.usage has no trailing newline" [
+      def u (Cli.usage (bare))
+      Assert.equal "t" (slice ((size u) sub 1) (size u) u)                      # conv: usage is a text block
+    ]
+    Test.test "a spec with no name at all is called 'program'" [
+      Assert.equal "program" (slice 0 7 (Cli.usage ({})))                       # branch: cli-index name fallback
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Cli.dispatch — the four actions.
+  # --------------------------------------------------------------------------
+  Test.describe "dispatch" [
+    Test.test "a clean parse is action run, code 0" [
+      Assert.equal {flags:{watch:true kind:none verbose:0} args:["a"] command:none
+                    action:"run" code:0 out:"" err:""}
+                   (Cli.dispatch (spec) ["a"])                                             # conv: action run
+    ]
+    Test.test "--help is an action, not an error" [
+      Assert.equal "help" ((Cli.dispatch (spec) ["--help"]) dot action)                    # conv: --help is an action
+    ]
+    Test.test "-h is an action too" [
+      Assert.equal "help" ((Cli.dispatch (spec) ["-h"]) dot action)
+    ]
+    Test.test "help exits 0 and prints the usage text plus a newline to out" [
+      Assert.equal (join "" [(Cli.usage (spec)) "\n"]) ((Cli.dispatch (spec) ["--help"]) dot out)
+    ]
+    Test.test "help writes nothing to err and codes 0" [
+      Assert.equal {err:"" code:0} ({} set (quote err) ((Cli.dispatch (spec) ["--help"]) dot err)
+                                       set (quote code) ((Cli.dispatch (spec) ["--help"]) dot code))
+    ]
+    Test.test "--version is an action" [
+      Assert.equal "version" ((Cli.dispatch (spec) ["--version"]) dot action)              # conv: --version is an action
+    ]
+    Test.test "version prints 'name version'" [
+      Assert.equal "av 0.2.0\n" ((Cli.dispatch (spec) ["--version"]) dot out)
+    ]
+    Test.test "a spec with no version prints just the name" [
+      Assert.equal "bare\n" ((Cli.dispatch (bare) ["--version"]) dot out)                  # branch: cli-version no-version arm
+    ]
+    Test.test "help wins over version when both are given" [
+      Assert.equal "help" ((Cli.dispatch (spec) ["--version" "--help"]) dot action)        # branch: cli-dispatch-ok help before version
+    ]
+    Test.test "a usage error is action error, code 2" [
+      Assert.equal "error" ((Cli.dispatch (spec) ["--wach"]) dot action)                   # conv: usage error -> 2
+    ]
+    Test.test "a usage error codes 2" [
+      Assert.equal 2 ((Cli.dispatch (spec) ["--wach"]) dot code)
+    ]
+    Test.test "a usage error writes name: err, a blank line, then the usage, to err" [
+      Assert.equal (join "" ["av: unknown flag: --wach\n\n" (Cli.usage (spec)) "\n"])
+                   ((Cli.dispatch (spec) ["--wach"]) dot err)
+    ]
+    Test.test "a usage error writes nothing to out" [
+      Assert.equal "" ((Cli.dispatch (spec) ["--wach"]) dot out)
+    ]
+    # An UNKNOWN FLAG is a different kind of failure: `prog --bogus --help`
+    # must not print help and exit 0, because that turns a typo in a script
+    # into a success. GNU's tools agree (`ls --bogus --help` exits 2).
+    Test.test "a typo is not rescued by a --help elsewhere in argv" [
+      Assert.equal "error" ((Cli.dispatch (spec) ["--bogus" "--help"]) dot action)         # branch: cli-dispatch-bad unknown short-circuit
+    ]
+    Test.test "…nor by a --version" [
+      Assert.equal "error" ((Cli.dispatch (spec) ["--bogus" "--version"]) dot action)
+    ]
+    Test.test "…and it exits 2, not 0" [
+      Assert.equal 2 ((Cli.dispatch (spec) ["--bogus" "--help"]) dot code)
+    ]
+    # A failure that is NOT a typo still yields to the help the user asked for:
+    # `alt` demands one positional, and `alt --version` supplies none.
+    Test.test "an arity failure still yields to a --version the user typed" [
+      Assert.equal "version" ((Cli.dispatch (alt) ["--version"]) dot action)               # branch: cli-dispatch-bad prescan version
+    ]
+    Test.test "…and a value-taking flag swallows the next token, --help included" [
+      Assert.equal "run" ((Cli.dispatch (spec) ["--kind" "--help"]) dot action)            # conv: --long value takes the FOLLOWING token
+    ]
+    Test.test "-h is honoured when a min-arity spec rejects the empty tail" [
+      Assert.equal "help" ((Cli.dispatch (alt) ["-h"]) dot action)                         # branch: prescan -h on an arity failure
+    ]
+    Test.test "the prescan stops at --, so -- --help is an error not help" [
+      Assert.equal "error" ((Cli.dispatch (multi) ["--" "--help"]) dot action)             # branch: cli-prescan-step stop arm
+    ]
+    Test.test "the prescan keeps the FIRST hit and ignores later tokens" [
+      Assert.equal "help" ((Cli.dispatch (alt) ["-h" "--version"]) dot action)             # branch: cli-prescan-step hit short-circuit
+    ]
+    Test.test "a token that is neither -- nor a help word is skipped by the prescan" [
+      Assert.equal "error" ((Cli.dispatch (alt) ["x" "y" "z"]) dot action)                 # branch: cli-prescan-step fallthrough
+    ]
+    Test.test "a spec that redefines --help does NOT get the help action" [
+      Assert.equal "run" ((Cli.dispatch (owns) ["--help"]) dot action)                     # branch: cli-flag-true non-Boolean value
+    ]
+    Test.test "…and that redefined --help counts instead" [
+      Assert.equal 2 (((Cli.dispatch (owns) ["-hh"]) dot flags) get "help")
+    ]
+    Test.test "a chosen command rides through dispatch" [
+      Assert.equal "build" ((Cli.dispatch (multi) ["build" "x"]) dot command)
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Cli.usage {width color} — the terminal comes IN (CLI-PROGRAMS.1.md §3).
+  # The module never reads COLUMNS or NO_COLOR; Cli.main does, and passes them.
+  # --------------------------------------------------------------------------
+  Test.describe "usage options" [
+    Test.test "the one-argument form is unwrapped and uncoloured" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {})                       # branch: cli-render with neither option
+    ]
+    Test.test "a width of 0 means no wrapping" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {width: 0})               # branch: cli-col-rows width lte 0
+    ]
+    Test.test "a generous width leaves every line alone" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {width: 200})             # branch: cli-col-rows first fits
+    ]
+    Test.test "a narrow width splits the long help line" [
+      Assert.equal 10 (size (StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}))
+    ]
+    Test.test "…and every continuation is indented to the help column" [
+      Assert.equal "                   kind for the input files"
+        ((StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}) get 6)
+    ]
+    Test.test "…while the first row keeps its label padding" [
+      Assert.equal "  -k, --kind KIND  force a particular parser"
+        ((StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}) get 5)
+    ]
+    Test.test "a width narrower than the label column still leaves 8 columns of text" [
+      Assert.equal true ((size (Cli.usage (wide) {width: 12})) gt 0)              # branch: cli-col-rows budget floor
+    ]
+    Test.test "a word longer than the budget is emitted whole rather than cut" [
+      Assert.equal true (StringUtil.contains "supercalifragilisticexpialidocious"
+        (Cli.usage {name:"t" flags:[{name:"x" short:"x" kind:"bool" help:"supercalifragilisticexpialidocious yes"}] args:{name:"f" min:0}} {width: 20}))
+    ]
+    Test.test "colour bolds the section header and nothing else" [
+      Assert.equal true (StringUtil.contains "\u001b[1moptions:\u001b[0m" (Cli.usage (wide) {color: true}))
+    ]
+    Test.test "a command block is bolded too" [
+      Assert.equal true (StringUtil.contains "\u001b[1mcommands:\u001b[0m" (Cli.usage (multi) {color: true}))
+    ]
+    Test.test "colour off is byte-identical to the plain rendering" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {color: false})
+    ]
+    Test.test "width and colour compose" [
+      Assert.equal true (StringUtil.contains "\u001b[1moptions:\u001b[0m" (Cli.usage (wide) {width: 44 color: true}))
+    ]
+    Test.test "term-opts turns a numeric COLUMNS into a width" [
+      Assert.equal 80 ((Cli.term-opts "80" none true) get "width")
+    ]
+    Test.test "term-opts ignores a COLUMNS that is not a number" [
+      Assert.equal 0 ((Cli.term-opts "eighty" none true) get "width")      # branch: cli-digits-step reject
+    ]
+    Test.test "term-opts treats an absent COLUMNS as unset" [
+      Assert.equal 0 ((Cli.term-opts none none true) get "width")          # branch: cols is None
+    ]
+    Test.test "term-opts treats an empty COLUMNS as unset" [
+      Assert.equal 0 ((Cli.term-opts "" none true) get "width")            # branch: cs eq ""
+    ]
+    Test.test "term-opts colours a terminal with NO_COLOR unset" [
+      Assert.equal true ((Cli.term-opts none none true) get "color")
+    ]
+    Test.test "term-opts does not colour when NO_COLOR is set" [
+      Assert.equal false ((Cli.term-opts none "1" true) get "color")
+    ]
+    Test.test "term-opts does not colour a stream that is not a terminal" [
+      Assert.equal false ((Cli.term-opts none none false) get "color")
+    ]
+    Test.test "a mixed COLUMNS is rejected as a whole, not partially read" [
+      Assert.equal 0 ((Cli.term-opts "80x" none true) get "width")
+    ]
+    Test.test "a command row wraps at the command column" [
+      Assert.equal true ((size (StringUtil.split "\n" (Cli.usage (multi) {width: 30}) {keepEmpty:true})) gt
+                         (size (StringUtil.split "\n" (Cli.usage (multi)) {keepEmpty:true})))
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Cli.main — the shell. Every arm ends in IO.exit, which is a RAISE of the
+  # reserved aql/exit, so `Assert.throws` observes it: the arms are reachable
+  # after all, and the module ships with no coverage allowlist. (A plain
+  # `do […] error […]` does NOT catch an exit — that is deliberate, so a
+  # program cannot swallow its own termination — which is why the first
+  # attempt at this suite concluded they were unreachable.)
+  #
+  # What these pin is that each arm EXITS, not what it exits with: the exit
+  # code and the printed text are the pure Cli.dispatch's business, pinned
+  # exhaustively above.
+  Test.describe "main" [
+    Test.test "the run arm exits when the handler returns 0" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-ok/r) ]
+    ]
+    Test.test "the run arm exits with the handler's own code" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-code/r) ]
+    ]
+    Test.test "a handler returning a non-Integer still exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-nonint/r) ]
+    ]
+    Test.test "the help arm exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--help"] (t-ok/r) ]
+    ]
+    Test.test "the version arm exits" [
+      Assert.throws [ Cli.main {name:"t" version:"1" args:{name:"f" min:0}} ["--version"] (t-ok/r) ]
+    ]
+    Test.test "the usage-error arm exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--nope"] (t-ok/r) ]
+    ]
+    Test.test "the argv-less signature reads IO.args (empty here) and exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} (t-ok/r) ]
+    ]
+  ]
+]

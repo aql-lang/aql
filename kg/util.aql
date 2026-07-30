@@ -23,11 +23,11 @@ def starts-with fn [[prefix:String s:String] [Boolean] [
 # fn/var bindings in its values, while a literal standing alone as a
 # body result may not — so result literals are written `KgUtil.as-map
 # {…}` throughout the kg modules to keep binding resolution uniform.
-def as-map fn [[m:Map] [Map] [m]]
+def as-map fn m:Map Map [m]
 
 export "KgUtil" {
-  get-or: get-or/r
-  list-at: list-at/r
-  starts-with: starts-with/r
-  as-map: as-map/r
+  get-or:get-or/r
+  list-at:list-at/r
+  starts-with:starts-with/r
+  as-map:as-map/r
 }

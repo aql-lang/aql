@@ -177,7 +177,15 @@ func discover(targets []string) ([]string, error) {
 // is coverage-armed and the suite's imported-module coverage is folded into it.
 // It returns the suite's passed and failed case counts, plus an errored flag set
 // when the file could not be read, initialised, run, or its results read — an
-// errored suite counts no cases but forces a non-zero final exit.
+// errored suite forces a non-zero final exit.
+//
+// A suite that errors PART WAY THROUGH still reports the cases it completed:
+// the framework's tally lives on the instance and survives the error, so it is
+// read back rather than discarded. Reporting 0/0 for a file whose first ten
+// cases passed made the summary actively misleading — worse, a file of purely
+// passing cases followed by one stray error was indistinguishable from an
+// empty file. Only a suite that errored before aql:test loaded counts nothing,
+// because there is then no tally to read.
 func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.CompileMode, accum *covAccum) (passed, failed int, errored bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -199,9 +207,28 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 		defer disarm()
 	}
 	fmt.Fprintf(stdout, "# %s\n", path)
-	if err := runSource(a, string(data), mode); err != nil {
-		fmt.Fprintf(stderr, "error: %s: %s\n", path, err)
-		return 0, 0, true
+	if runErr := runSource(a, string(data), mode); runErr != nil {
+		// An `IO.exit` inside a suite ends THAT FILE, not the test run: it
+		// stops the file's remaining cases exactly as any other raise does,
+		// and the cases already recorded are still salvaged and reported
+		// below. It is not this file's process status — a suite that exits
+		// 0 half-way has not passed the cases it never reached, and the
+		// runner's own exit code stays "did every case pass".
+		if code, isExit := lang.ExitCode(runErr); isExit {
+			fmt.Fprintf(stderr, "error: %s: exited with code %d before the suite finished\n", path, code)
+		} else {
+			fmt.Fprintf(stderr, "error: %s: %s\n", path, runErr)
+		}
+		// Salvage whatever the framework tallied before the error. A read
+		// failure here is the ordinary case for a suite that died before
+		// `import "aql:test"` — Test.summary is simply not a word yet — so
+		// it is not reported as a second error on top of the first.
+		_, passed, failed, report, readErr := readOutcome(a)
+		if readErr != nil {
+			return 0, 0, true
+		}
+		fmt.Fprintln(stdout, report)
+		return passed, failed, true
 	}
 	_, passed, failed, report, err := readOutcome(a)
 	if err != nil {

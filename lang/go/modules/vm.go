@@ -318,6 +318,17 @@ func runInSubEngine(parent *native.Registry, src string, pol policy.Policy) ([]n
 		stack, err = eng.Run(tokens)
 	}
 	if err != nil {
+		// An `IO.exit` raised INSIDE the sub-engine must not escape as an
+		// exit request: the driver at the top would honour it and terminate
+		// the HOST process, so `Vm.run-sandbox` would be a sandbox escape —
+		// the one thing it exists to prevent. Convert it to an ordinary
+		// error at the boundary. The code survives in the message so the
+		// caller can still see what the sub-program asked for; it just has
+		// no authority to make it happen.
+		if code, isExit := native.ExitCode(err); isExit {
+			return nil, fmt.Errorf("vm: sub-program requested exit with code %d "+
+				"(a sub-engine cannot exit its host)", code)
+		}
 		return nil, err
 	}
 	if len(stack) == 0 {

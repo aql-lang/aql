@@ -2,12 +2,7 @@ package modules
 
 import (
 	_ "embed"
-	"sort"
-	"strings"
 	"testing"
-
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
 )
 
 //go:embed sift_test.aql
@@ -35,86 +30,7 @@ var siftCoverAllow = map[int]string{
 // and asserts (1) every case passes and (2) every executable row of sift.aql is
 // covered, save the allowlisted unreachable guards.
 func TestSiftAQLCoverage(t *testing.T) {
-	r, err := native.DefaultRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.SetParseFunc(parser.Parse)
-	InstallResolver(r)
-
-	runOn := func(label, aql string) native.Value {
-		vals, perr := parser.Parse(aql)
-		if perr != nil {
-			t.Fatalf("parse %s: %v", label, perr)
-		}
-		out, rerr := native.NewTop(r).Run(vals)
-		if rerr != nil {
-			t.Fatalf("run %s: %v", label, rerr)
-		}
-		if len(out) == 0 {
-			return native.Value{}
-		}
-		return out[len(out)-1]
-	}
-	// Run the suite (Test.cover [...]), then read fail-count + the coverage
-	// report on the same registry so the cover collector persists.
-	runOn("suite", siftTestAQL)
-	fails, _ := runOn("fail-count", `Test.fail-count`).AsConcreteInteger()
-	report := runOn("report", `Test.report`).String()
-	rep, merr := native.AsMap(runOn("coverage", `Test.coverage "aql:sift"`))
-	if merr != nil {
-		t.Fatalf("coverage report is not a map")
-	}
-
-	if fails != 0 {
-		t.Fatalf("%d sift test case(s) failed:\n%s", fails, report)
-	}
-
-	get := func(k string) native.Value { v, _ := rep.Get(k); return v }
-	total, _ := get("total").AsConcreteInteger()
-	covered, _ := get("covered").AsConcreteInteger()
-	pct, _ := get("percent").AsConcreteFloat()
-	uncovList, _ := native.AsList(get("uncovered"))
-	var uncovered []int
-	for _, v := range uncovList.Slice() {
-		n, _ := v.AsConcreteInteger()
-		uncovered = append(uncovered, int(n))
-	}
-	t.Logf("sift.aql coverage: %d/%d rows (%.1f%%), %d uncovered", covered, total, pct, len(uncovered))
-
-	// Every uncovered row must be allowlisted; every allowlist entry must be
-	// genuinely uncovered (so the list can't rot).
-	srcLines := strings.Split(siftSource, "\n")
-	line := func(n int) string {
-		if n >= 1 && n <= len(srcLines) {
-			return strings.TrimSpace(srcLines[n-1])
-		}
-		return "?"
-	}
-	uncovSet := map[int]bool{}
-	var unexpected []string
-	for _, row := range uncovered {
-		uncovSet[row] = true
-		if _, ok := siftCoverAllow[row]; !ok {
-			unexpected = append(unexpected, "  "+itoa(row)+": "+line(row))
-		}
-	}
-	var stale []int
-	for row := range siftCoverAllow {
-		if !uncovSet[row] {
-			stale = append(stale, row)
-		}
-	}
-	sort.Ints(stale)
-
-	if len(unexpected) > 0 {
-		sort.Strings(unexpected)
-		t.Fatalf("%d sift.aql row(s) uncovered and not allowlisted — add a test (or allowlist a proven-unreachable guard):\n%s",
-			len(unexpected), strings.Join(unexpected, "\n"))
-	}
-	for _, row := range stale {
-		t.Errorf("siftCoverAllow[%d] is now covered — remove it (guard reached: %q)", row, line(row))
-	}
+	assertAQLCoverage(t, "aql:sift", siftSource, siftTestAQL, siftCoverAllow)
 }
 
 func itoa(n int) string {

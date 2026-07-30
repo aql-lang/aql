@@ -149,6 +149,40 @@ func TestRunReadResultsError(t *testing.T) {
 	}
 }
 
+// A suite that errors PART WAY THROUGH still reports the cases it completed.
+// Discarding them made a file of passing cases plus one stray error report
+// "0 passed, 0 failed" — indistinguishable from an empty file.
+func TestRunErroredFileKeepsCompletedCases(t *testing.T) {
+	f := write(t, filepath.Join(t.TempDir(), "partial_test.aql"),
+		"import \"aql:test\"\nTest.test \"ok\" [1 1 Assert.equal]\nraise boom \"after the case\"\n")
+	code, stdout, stderr := runCmd(f)
+	if code != 1 {
+		t.Errorf("code = %d, want 1 — the error still fails the run", code)
+	}
+	if !strings.Contains(stderr, "boom") {
+		t.Errorf("stderr = %q, want the run error", stderr)
+	}
+	if !strings.Contains(stdout, "1 passed") {
+		t.Errorf("stdout = %q, want the completed case counted", stdout)
+	}
+}
+
+// A suite that errors BEFORE aql:test loads has no tally to salvage, so it
+// counts nothing — and the failed read is not piled on as a second error.
+func TestRunErroredBeforeFrameworkCountsNothing(t *testing.T) {
+	f := write(t, filepath.Join(t.TempDir(), "early_test.aql"), "nosuchword 1 2\n")
+	code, stdout, stderr := runCmd(f)
+	if code != 1 {
+		t.Errorf("code = %d, want 1", code)
+	}
+	if !strings.Contains(stdout, "0 passed, 0 failed") {
+		t.Errorf("stdout = %q, want no cases counted", stdout)
+	}
+	if strings.Contains(stderr, "reading results") {
+		t.Errorf("stderr = %q, want no second results-read error", stderr)
+	}
+}
+
 // coverageFixture writes calc.aql (add2 is exercised, triple is not — its body
 // on row 5 stays uncovered → 71.4% coverage) plus a suite importing it, and
 // returns their paths.
@@ -375,3 +409,34 @@ func TestExtractHelpers(t *testing.T) {
 
 // defaultMode is CompileTry, the mode a no-flag invocation resolves to.
 func defaultMode() run.CompileMode { return run.CompileTry }
+
+// An IO.exit inside a suite ends THAT FILE, not the test run. The runner's
+// own status stays "did every case pass" — a suite that exits 0 half-way
+// has not passed the cases it never reached, so the file is reported as
+// errored with the code it asked for, and the cases already recorded are
+// still salvaged (the same salvage path a mid-suite raise takes).
+func TestRunFileExitEndsTheFileNotTheRun(t *testing.T) {
+	// `Test.test`, not `Test.case`: case is a data constructor taking
+	// (expected, input, name), so the two-argument spelling this fixture
+	// used never dispatched — it left the function on the stack and
+	// recorded no case at all, which the loud dispatch contract now
+	// refuses outright (design/FN-VALUE-DISPATCH.0.md).
+	src := "import \"aql:test\"\nimport \"aql:io\"\n" +
+		"Test.test \"one\" [Assert.equal 1 1]\n" +
+		"IO.exit 0\n" +
+		"Test.test \"two\" [Assert.equal 1 1]\n"
+	f := write(t, filepath.Join(t.TempDir(), "x_test.aql"), src)
+	var stdout, stderr bytes.Buffer
+	passed, failed, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil)
+	if !errored {
+		t.Error("a suite that exits mid-way must be reported as errored, not as a clean pass")
+	}
+	if !strings.Contains(stderr.String(), "exited with code 0") {
+		t.Errorf("stderr = %q, want the exit reported with its code", stderr.String())
+	}
+	// The salvage this test's contract names: the case BEFORE the exit is
+	// still counted, and the one after it is not reached.
+	if passed != 1 || failed != 0 {
+		t.Errorf("passed=%d failed=%d, want the pre-exit case salvaged (1, 0)", passed, failed)
+	}
+}

@@ -159,7 +159,8 @@ func LookupErrorCode(code string) (ErrorCode, bool) {
 var kernelErrorCodes = []string{
 	"analysis_truncated", "arity_mismatch", "branch_error", "concurrency_error",
 	"constraint_violation", "def_error", "dynamic_dispatch", "evaluation_limit",
-	"extend_conflict", "extend_owner", "float_overflow", "fn_body_error",
+	"exit", "extend_conflict", "extend_owner", "float_overflow",
+	"fn_body_error",
 	"for_error", "forward_strands_operand", "gen_without_constructor", "illegal_ref",
 	"incomparable", "index_out_of_range", "integer_overflow", "internal_error",
 	"invalid_word_name", "locked_signature", "macro_error", "macroexpand_error",

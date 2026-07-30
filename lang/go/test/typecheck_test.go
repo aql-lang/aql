@@ -195,13 +195,16 @@ func TestCheckUncalledFunction(t *testing.T) {
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) "hello"`, 1, "local fn value, wrong-typed arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  (usurp f) 5`, 0, "local fn value, correct arg"},
 		{`def f fn [[x:Integer] [Integer] [x mul x]]  f/r "hello"`, 0, "genuinely inert /r ref (no paren) is not a call"},
-		// A FailedDispatch fn value that a FOLLOWING higher-order word consumes
-		// is NOT a bug — the documented comparator composition `(Sort.by-number
-		// Sort.reverse)`, where by-number can't dispatch and reverse takes it as
-		// a value. The diagnostic is deferred to the end-of-run drain (matching
-		// runtime), so a consumed value never flags; a stranded one (the cases
-		// above) still does.
-		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, 0, "FailedDispatch fn value consumed by a higher-order word is not flagged"},
+		// A failed dispatch whose value a FOLLOWING word then consumes is
+		// flagged too, and that is the point of the loud contract
+		// (design/FN-VALUE-DISPATCH.0.md): what happens to the value
+		// afterwards is not evidence about whether the CALL was meant.
+		// Deferring to end-of-run made every Any-typed consumer — `print`,
+		// `def`, a Function param — silence a real dispatch failure.
+		// Composition that wants the function as data says so with `/r`,
+		// which is the row below.
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  ((usurp f) g)`, 1, "a consumed failed dispatch is still a failed dispatch"},
+		{`def f fn [[x:Integer] [Integer] [x]]  def g fn [[c:Function] [Integer] [5 c apply]]  (g f/r)`, 0, "the same composition spelled with /r is a value, not a call"},
 	}
 	for _, c := range cases {
 		if got := count(c.src); got != c.want {

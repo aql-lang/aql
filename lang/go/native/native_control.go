@@ -228,6 +228,19 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	// the body as a compiled closure.
 	result, err := InvokeBody(r, args[0], nil)
 	if err != nil {
+		// An `IO.exit` request crosses a HANDLER-LESS `do` unchanged. The
+		// escape-hatch semantics turn a body error into an Error value, and
+		// for a failure that is the point — but an exit request is a
+		// control transfer, not a failure, and converting it to data would
+		// silently demote `IO.exit 4` to exit 0 for any program whose exit
+		// happens to sit inside a `do`. The `do … error …` form still
+		// observes it (an exit IS an error value there, and a handler that
+		// does not recognise a foreign error must re-raise it —
+		// design/CLI-PROGRAMS.0.md §4); this arm has no handler to observe
+		// it with.
+		if _, isExit := ExitCode(err); isExit {
+			return nil, err
+		}
 		return []Value{NewError(err)}, nil
 	}
 	return result, nil

@@ -20,7 +20,25 @@ import (
 // module bodies resolve the same host backends as the top level; the
 // snapshot is taken at import time, so such seams must be registered
 // BEFORE the importing program runs (embedders register at startup).
-var ModuleInheritedCaps []string
+//
+// The four slots below are seeded here rather than appended by a module
+// builder, precisely because of that ordering rule: they belong to THIS
+// package, and a program whose first `import "aql:io"` happens inside a
+// module body would otherwise snapshot the list before the io module had
+// added them — the body would then read an empty environment, an empty
+// argument vector, a stream that is never a terminal, and its own second
+// buffer over stdin, while the importing program read the truth.
+//
+//   - CapStdinLines — the ONE buffered reader over r.Input; a second one
+//     would consume the importer's bytes.
+//   - CapEnv, CapScriptArgs — a module body is part of the same program
+//     and sees the same world (aql:cli renders help wrapped to COLUMNS).
+//   - CapStreamProbe — likewise for "is this stream a terminal", which is
+//     half of the colour decision.
+//
+// Each inherited value is the POLICY-WRAPPED view its SetHostX installer
+// put there, so inheritance never widens what a profile allows.
+var ModuleInheritedCaps = []string{CapStdinLines, CapEnv, CapScriptArgs, CapStreamProbe}
 
 // RunModuleBody creates an isolated module engine, runs the given values,
 // and returns a ModuleDesc with the collected exports.
@@ -463,7 +481,7 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
-	result, err := doRead(parent, resolved, "utf8", format, "lf", nil)
+	result, err := doRead(parent, resolved, "utf8", format, "lf", nil, SrcPos{})
 	if err != nil {
 		return nil, fmt.Errorf("import: %w", err)
 	}
@@ -551,7 +569,7 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 			return fmt.Errorf("resource %q: unsupported file format %q", key, filename)
 		}
 		filePath := filepath.Join(modDir, filename)
-		vals, err := doRead(r, filePath, "utf8", format, "lf", nil)
+		vals, err := doRead(r, filePath, "utf8", format, "lf", nil, SrcPos{})
 		if err != nil {
 			return fmt.Errorf("resource %q: %w", key, err)
 		}

@@ -204,6 +204,102 @@ aql -e '…' -- --fast          # a leading `--` is accepted and stripped
 (`aql -s 5 -e '…' --fast` seeds the run and passes `--fast` to the
 program).
 
+**Environment (`IO.env`).** `aql run` and a built binary both install the
+real process environment, readable with `IO.env <name>` — the value, or
+`none` when the name is unset. `""` is a real value, distinct from unset,
+so a program can tell `FOO=` from no `FOO` at all. `IO.env-all` returns
+the whole visible environment as a Map, sorted by name; it is a separate
+word rather than a no-argument form of `IO.env`.
+
+```bash
+NO_COLOR=1 aql script.aql      # IO.env "NO_COLOR" → '1'
+aql script.aql                 # IO.env "NO_COLOR" → none
+```
+
+The environment is a **capability**, not ambient state: an embedded host
+that installs none (the default for `lang.New`, and what the spec runner
+does) sees every name unset and an empty `IO.env-all` — the runtime never
+reaches for the real environment behind the host's back. A policy can
+narrow it further: the `env` scope's `read` op takes a `name` argument, so
+`read-only` exposes an allowlist (`LANG`, `TZ`, `AQL_*`) and everything
+else reads as unset, while `compute` uninstalls the capability outright.
+A denied name reads as unset rather than raising — a program probing for
+an optional variable takes its default path, and an error would leak which
+names exist.
+
+**Exit codes (`IO.exit`).** `IO.exit <code>` ends the program with a
+status of the caller's choosing (`0..125`). It is what makes an AQL program
+usable in a shell pipeline: `if mytool …; then` reads the status, and
+without it every program could only ever say 0 (clean) or 1 (any failure).
+Exiting is not failing — nothing is printed, for any code, and the residual
+stack is not flushed.
+
+```bash
+aql run check.aql; echo $?      # whatever the program asked for
+```
+
+126, 127 and 128+n are refused at the call: they are the shell's own
+(`not executable`, `not found`, `killed by signal n`), and a program that
+returns one misreports how it died. A refused code is an ordinary failure —
+status 1 with the range explained.
+
+The convention `aql:cli` will follow, and worth following by hand until
+then: `0` success, `1` runtime failure, `2` usage error.
+
+**Filters and terminals (`IO.read-line`, `IO.is-tty`).** `IO.read-line` yields
+the next line of a stream or `File` handle without its terminator, and
+`none` at end of input — which is what lets a filter loop terminate, since
+`""` is a legitimate blank line. LF and CRLF both strip; a final line with
+no trailing newline is still a line. Whole-input slurping stays
+`IO.read (IO.stdin)`, and the two share one reader, so a `read-line`
+followed by a `read` yields the rest of the stream rather than losing
+whatever the line read had buffered.
+
+`IO.is-tty` answers per stream, because the asymmetric case is the common one —
+stdout piped while stderr is still a terminal. With `IO.env "NO_COLOR"` it
+is the whole colour decision, without the runtime hard-coding it:
+
+```bash
+mytool | cat            # IO.is-tty (IO.stdout) → false
+mytool                  # IO.is-tty (IO.stdout) → true on a terminal
+```
+
+The word is `tty`, not the `tty?` of `design/CLI-PROGRAMS.0.md` §5: `?` is a
+fixed lexer token (the optional-param marker), so `tty?` cannot be
+dispatched at all — and in a dot chain the mis-parse is silent, so the RFC
+spelling would have shipped a word that quietly did nothing.
+
+Both are host capabilities, so an embedded host decides what they see. With
+no probe installed every stream answers `false`, and a permissions profile
+that uninstalls the `terminal` scope clears it too — five of the seven shipped
+profiles do. That is a deliberate design choice over gating the word per
+call: `Check` on an uninstalled scope *raises*, which would abort the colour
+idiom above under any sandbox instead of answering it. `false` is a usable
+answer; an error is not.
+
+Under the hood `IO.exit` raises a **reserved control error** (`aql/exit`,
+carrying `{code}`); nothing in the runtime calls `os.Exit`. That is what
+lets each driver decide what a program's exit request means to it, and the
+decisions differ where they must:
+
+| Driver | What `IO.exit N` does |
+|---|---|
+| `aql run`, `aql do`, a built binary | exits with `N`, printing nothing |
+| the REPL | ends the session, reporting the code |
+| `aql test` | ends **that file** — its remaining cases do not run, and it is reported as errored, because a suite that exits half-way has not passed the cases it never reached |
+| `Vm.run-sandbox` and the other sub-engines | converted to an ordinary error: a sandboxed program must not be able to terminate its host |
+| a served `/v1/exec` request | reported as the request's outcome; the server keeps serving |
+| an embedded host | whatever it decides — read the code with `lang.ExitCode(err)` |
+
+A handler-less `do [...]` does **not** catch it. `do`'s escape hatch turns a
+body error into an Error value, which is right for a failure, but an exit is
+a control transfer, and demoting it to data would silently turn `IO.exit 4`
+into exit 0 for any program whose exit happens to sit inside a `do`. (This
+deviates from `design/CLI-PROGRAMS.0.md` §4, which sketched `do … error …`
+handlers observing the exit; `error` receives `do`'s *result*, so letting a
+handler see it means letting a plain `do` swallow it, and the trap is worse
+than the loss.)
+
 ### `aql do`
 
 Evaluate the remaining args as an AQL expression. Slightly more
@@ -289,10 +385,11 @@ Flags:
 table):
 
 * `no_signature` / `uncalled_function` — a call that matches no
-  signature. `uncalled_function` covers the silent case where a named
-  function value (e.g. an imported `Pkg.fn`) is called with the wrong
-  arguments and would be left on the stack as data at runtime instead
-  of erroring.
+  signature. `uncalled_function` is the function-VALUE form: a named
+  function reached as a call (e.g. an imported `Pkg.fn`) with arguments
+  that match none of its signatures. It errors at runtime too — the check
+  reports the same finding at the same place, without running the
+  program. Write `Pkg.fn/r` when you mean to pass the function itself.
 * `unreachable_signature` — an `fn` overload that an earlier, more
   general overload already subsumes, so first-match dispatch can never
   reach it.
@@ -329,6 +426,12 @@ block below it is additive.
 **Color.** `run`, `do`, and `check` take `--color auto|always|never`
 (default `auto`: color only when the output is a real terminal, and
 never when `NO_COLOR` is set). The REPL auto-detects the same way.
+The CLI's own `auto` decision reads `NO_COLOR` through the *same*
+environment capability `IO.env` reads, and tests the destination with the
+same character-device probe `IO.is-tty` uses — so a program and the
+diagnostics printed around it can never disagree about either. A host
+that installs a filtered environment view filters what the CLI sees too;
+before any program instance exists, `auto` falls back to the process.
 Machine-read surfaces — `check --json`, the LSP, the wasm playground —
 are always plain.
 

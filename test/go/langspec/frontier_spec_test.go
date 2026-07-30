@@ -171,8 +171,18 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// never delivers — one stage before the "residual shape beyond Stage 1"
 	// decline these rows used to surface. Same sound refusal, earlier and
 	// truer diagnosis.
-	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:  {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding", failsWith: "variadic result promoted to frame slots"},
-	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`: {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input", failsWith: "variadic result promoted to frame slots"},
+	// Re-diagnosed 2026-07-30 (design/FN-VALUE-DISPATCH.0.md): the region's
+	// `M.dec` call fails dispatch, which is now an error-severity check
+	// diagnostic in the model-undermining class (dispatch did not resolve, so
+	// there is no call to compile) — the pipeline therefore refuses on the
+	// diagnostics one stage before the promotion gate these rows used to
+	// reach. The INTERPRETER runs them: the failure raises at the call, inside
+	// the `do`, so the region's own handler catches it (see the note in
+	// frontier-do-catch.tsv, and the check-vs-run divergence recorded in the
+	// design note's §6). The L-DO promotion work below is still what would
+	// graduate the SHAPE; these two rows can no longer witness it.
+	docMod + `def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg`:  {why: "plan Phase 5 (L-DO part 2): variadic region under a def binding — now check-rejected first (failed fn-value dispatch)", failsWith: "check diagnostics"},
+	docMod + `def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg`: {why: "plan Phase 5 (L-DO part 2): same shape, no raise at this input — likewise check-rejected first", failsWith: "check diagnostics"},
 	// PR #280 review's promotion-gate representative (the variation
 	// differential's prefix-stack find): a BRANCH-VARIANT multi-out do body
 	// (0-or-2 values per arm) is variadic without any raise in sight, and a

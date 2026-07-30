@@ -16,6 +16,7 @@ import (
 	"github.com/aql-lang/aql/lang/go/modules"
 
 	"github.com/aql-lang/aql/cmd/go/internal/termback"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/native"
 
 	udk "github.com/voxgig/udk/go"
@@ -42,6 +43,11 @@ var newRegistry = func() (*native.Registry, error) {
 	// from the prompt too (a duplicate registration is the only failure
 	// and means the backend is already there).
 	_ = modules.RegisterHostTui(reg, termback.Spec())
+	// The terminal probe behind IO.is-tty. The REPL is the one place a real
+	// terminal genuinely exists, so shipping a probe that always answered
+	// false AT THE PROMPT would be the worst possible gap — and
+	// NewFromRegistry installs no capabilities of its own, unlike lang.New.
+	native.SetHostStreamProbe(reg, capabilities.OSStreamProbe{})
 	return reg, nil
 }
 
@@ -115,7 +121,7 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 	// Diagnostics render with the ANSI palette when out is a real
 	// terminal (NO_COLOR honored); the plain rendering is byte-identical
 	// to the historical output.
-	color := native.ResolveColor(out, "auto")
+	color := native.ResolveColor(aqlInst.NativeRegistry(), out, "auto")
 	renderErr := func(err error) string {
 		return renderREPLError(err, color)
 	}
@@ -179,6 +185,16 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			disarm()
 		}
 		if err != nil {
+			// `IO.exit N` from a REPL line ENDS THE SESSION, the same way
+			// the bare `exit` word does — the interactive analogue of a
+			// program terminating. The code is reported rather than
+			// returned: a REPL's own exit status is the session's, not any
+			// one line's, and swallowing it silently would make an
+			// interactive `IO.exit 3` indistinguishable from `IO.exit 0`.
+			if code, isExit := lang.ExitCode(err); isExit {
+				fmt.Fprintf(out, "  exit %d\n", code)
+				return
+			}
 			fmt.Fprintf(out, "  error: %s\n", renderErr(err))
 			continue
 		}

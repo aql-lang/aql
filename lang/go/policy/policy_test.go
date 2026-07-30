@@ -386,3 +386,25 @@ func TestRequireSubsetNilParent(t *testing.T) {
 		t.Errorf("nil parent allows anything: %v", err)
 	}
 }
+
+// BuiltinProfile returns the RAW shape of a shipped profile — the guard in
+// lang/go/modules that cross-checks module ids against the registry needs what
+// a profile SAYS, not what it decides. Both arms: a real name parses, and an
+// unknown name is refused rather than returning a nil profile a caller would
+// dereference.
+func TestBuiltinProfileRawShape(t *testing.T) {
+	p, err := BuiltinProfile("sandbox")
+	if err != nil {
+		t.Fatalf("sandbox: %v", err)
+	}
+	mods := p.Scopes["modules"]
+	if mods == nil {
+		t.Fatal("sandbox has no modules scope — the raw shape was resolved away")
+	}
+	if len(mods.Words.Rules) == 0 {
+		t.Error("sandbox's modules scope has no rules; the import allowlist is what this accessor exists to expose")
+	}
+	if _, err := BuiltinProfile("no-such-profile"); err == nil {
+		t.Error("an unknown profile name must be refused, not returned as a nil profile")
+	}
+}

@@ -2456,7 +2456,7 @@ modules keep plain names.
 | `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), `read-line` (the next line of a stream or File handle, none at EOF), `is-tty` (is this stream a terminal?), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
@@ -2690,7 +2690,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `user_error` | Default code for `raise "message"`. |
 | `def_error` | `def`'s value expression produced no value to bind. |
 | `no_value_error` | A parenthesised argument expression produced no value for a call. |
-| `uncalled_function` | A call matched no signature and its function value was never consumed. |
+| `uncalled_function` | A call on a named function VALUE (a module export, a `def`ed fn, a `usurp`ed value) matched no signature. Raised at the call; pass the function as data with `name/r` if that was the intent. |
 | `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
 | `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
 | `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |
@@ -2708,6 +2708,15 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
 | `read_error` | A read failed — a missing path, an unreadable stream, undecodable content. |
 | `write_error` | A write failed — an unwritable path, a refused exclusive create, a failed atomic rename. |
+| `stat_error` | `IO.stat` failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
+| `list_error` | `IO.list` failed. |
+| `remove_error` | `IO.remove` failed. |
+| `move_error` | `IO.move` failed. |
+| `copy_error` | `IO.copy` failed. |
+| `link_error` | `IO.link` failed. |
+| `touch_error` | `IO.touch` failed. |
+| `exit` | **Not a failure.** The reserved control error `IO.exit` raises, carrying `{code}`. A driver that recognises it exits with that status printing nothing; a sub-engine converts it so a sandbox cannot exit its host. Hosts read it with `lang.ExitCode(err)`. |
+| `exit_error` | `IO.exit` was given a non-Integer code, or one outside `0..125` (126/127 and 128+n are the shell's own). |
 | `permission_denied` | The policy refused the operation by RULE — widen the rule. Carried by every gated capability: fileops, network, process, vault, terminal. |
 | `capability_not_installed` | The operation ran with its capability uninstalled (`install: false`) — install it; no rule change will help. Carried by every gated capability. |
 

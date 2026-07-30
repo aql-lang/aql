@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,50 @@ type FileHandleInfo struct {
 	h        capabilities.FileHandle
 	once     sync.Once
 	closeErr error
+
+	// lines is the handle's line-read buffer, created on first IO.read-line.
+	// It lives HERE rather than registry-side because a handle already has a
+	// stable per-resource home: the payload is a pointer, so every AQL copy of
+	// the File value shares this struct, and two handles on the same path each
+	// get their own cursor — which is what a caller reading two files line by
+	// line expects.
+	//
+	// Buffering means a line read consumes ahead of the handle's cursor, so
+	// mixing IO.read-line with a cursor-relative IO.read on the SAME handle
+	// reads from where the buffer left off, not where the last line ended.
+	// Positioned reads ({offset}) are unaffected — they use ReadAt and leave
+	// the cursor alone.
+	linesMu sync.Mutex
+	lines   *bufio.Reader
+}
+
+// dropLineBuffer discards the handle's line-read buffer so the next line read
+// starts from the handle's current position. Called by IO.seek.
+func (fh *FileHandleInfo) dropLineBuffer() {
+	fh.linesMu.Lock()
+	defer fh.linesMu.Unlock()
+	fh.lines = nil
+}
+
+// lineReader returns the handle's line-read buffer, creating it on first use.
+// The caller MUST hold linesMu; use ReadLine instead unless you are it.
+func (fh *FileHandleInfo) lineReaderLocked() *bufio.Reader {
+	if fh.lines == nil {
+		fh.lines = bufio.NewReader(fh.h)
+	}
+	return fh.lines
+}
+
+// ReadLine consumes one line from the handle's buffer WHILE HOLDING the
+// mutex. Returning the *bufio.Reader and reading outside the lock — which is
+// what this did — synchronised only the buffer's CREATION, so two forks
+// sharing a handle raced inside bufio.Reader itself and could duplicate,
+// interleave or lose input. A bufio.Reader is not safe for concurrent use;
+// the lock has to cover the read, not the pointer fetch.
+func (fh *FileHandleInfo) ReadLine() (string, bool, error) {
+	fh.linesMu.Lock()
+	defer fh.linesMu.Unlock()
+	return readLineFrom(fh.lineReaderLocked())
 }
 
 // Close releases the handle exactly once and reports the close error.
@@ -160,6 +205,11 @@ func doSeekWord(args []Value, r *Registry) ([]Value, error) {
 	if serr != nil {
 		return nil, r.AqlError("seek_error", fmt.Sprintf("seek: %v", serr), "seek")
 	}
+	// A seek repositions the handle, so the line buffer's read-ahead is now
+	// bytes from somewhere else. Dropping it is the only defensible answer: a
+	// read-line after `IO.seek f 0` must re-read from the start, not continue
+	// serving lines buffered from before the seek.
+	fh.dropLineBuffer()
 	return []Value{NewInteger(off)}, nil
 }
 

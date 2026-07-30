@@ -38,7 +38,11 @@ import (
 // SANCTIONED check-vs-run divergence, not a checker false positive.
 // Triaged: 178 of the 182 contain a case (the exhaustiveness class), the
 // other 4 are the pre-existing if dead-branch residue.
-const pinnedCheckRunDivergent = 182
+// -38 July 2026 (design/FN-VALUE-DISPATCH.0.md): a failed fn-value dispatch
+// raises at the dispatch site instead of being judged as end-of-run residue,
+// so 38 generated programs the checker flagged and the runtime then ran
+// clean now fail at runtime too — check and run agree where they diverged.
+const pinnedCheckRunDivergent = 144
 
 // TestCheckRunFalsePositive generates the property fuzzer's program corpus
 // and ratchets the count of check-rejected-but-running programs.

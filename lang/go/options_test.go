@@ -62,6 +62,9 @@ func TestApplyOptionsRejectsBadInput(t *testing.T) {
 		"bogus:1",          // unknown top-level section
 		"tape:initial:1.5", // non-integer where an int is required
 		"tape:factor:fast", // non-number factor (parses to nested map)
+		"steps:0",          // a budget of 0 aborts before the first step
+		"steps:-5",         // negative is meaningless
+		"steps:1.5",        // non-integer where an int is required
 	}
 	for _, src := range cases {
 		var o Options
@@ -72,6 +75,26 @@ func TestApplyOptionsRejectsBadInput(t *testing.T) {
 		if err := ApplyOptions(&o, m); err == nil {
 			t.Errorf("ApplyOptions(%q) = nil error, want a rejection", src)
 		}
+	}
+}
+
+// `steps:N` sets the evaluation budget; unset leaves the engine default.
+func TestApplyOptionsSteps(t *testing.T) {
+	var o Options
+	m, err := ParseOptions("steps:50000000")
+	if err != nil {
+		t.Fatalf("ParseOptions: %v", err)
+	}
+	if err := ApplyOptions(&o, m); err != nil {
+		t.Fatalf("ApplyOptions: %v", err)
+	}
+	if o.Steps != 50000000 {
+		t.Errorf("Steps = %d, want 50000000", o.Steps)
+	}
+
+	var unset Options
+	if unset.Steps != 0 {
+		t.Errorf("zero Options.Steps = %d, want 0 (engine default)", unset.Steps)
 	}
 }
 

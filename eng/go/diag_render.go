@@ -1,8 +1,6 @@
 package eng
 
 import (
-	"io"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -14,12 +12,15 @@ import (
 // with secondary labeled spans (--- underlines), `= note:` lines, and
 // `= help:` suggestions. AqlError.Error() is Render(RenderOpts{}) —
 // the plain rendering — so string-matching consumers never see ANSI;
-// color is caller-resolved (ResolveColor) and opt-in per call.
+// color is caller-resolved and opt-in per call. Resolving it needs the
+// process environment and a stat() on the destination, which is ambient
+// I/O this kernel does not do — native.ResolveColor owns that decision
+// and hands the verdict in through RenderOpts.
 
 // RenderOpts controls diagnostic rendering. The zero value is the
 // plain rendering Error() uses.
 type RenderOpts struct {
-	// Color enables the ANSI palette. Callers resolve it (ResolveColor
+	// Color enables the ANSI palette. Callers resolve it (native.ResolveColor
 	// or a --color flag); the renderer itself never sniffs a terminal.
 	Color bool
 }
@@ -30,32 +31,6 @@ func (o RenderOpts) paint(style, s string) string {
 		return s
 	}
 	return style + s + cReset
-}
-
-// ResolveColor decides whether to color output written to w, per the
-// conventional cascade: mode "always"/"never" is explicit; anything
-// else (the "auto" default) colors only when NO_COLOR is unset and w
-// is a character device (a real terminal). Non-file writers (buffers,
-// pipes wrapped in custom types) never auto-color.
-func ResolveColor(w io.Writer, mode string) bool {
-	switch mode {
-	case "always":
-		return true
-	case "never":
-		return false
-	}
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	st, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return st.Mode()&os.ModeCharDevice != 0
 }
 
 // Render produces the full diagnostic report for e. With the zero

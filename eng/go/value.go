@@ -1323,15 +1323,23 @@ type Value struct {
 	Quoted     bool       // produced by the quote word; prevents auto-evaluation
 	Eval       bool       // parser-created list that should auto-evaluate at end of Run
 	Undefined  bool       // atom created from an undefined word (error if left on result stack)
-	// FailedDispatch marks a named Function value that a dispatch
-	// attempt left on the stack as data because no signature matched
-	// (the silent-failure shape of design/ERRORS.8.md §5, VOXGIG T1).
-	// Harmless while anything consumes the value (higher-order use,
-	// def); if it survives unconsumed to the top-level end-of-Run
-	// drain, the engine raises uncalled_function at the original call
-	// site — the same bug check mode diagnoses under that name.
+	// FailedDispatch marks a named Function value that a dispatch attempt
+	// left on the tape because no signature matched. CHECK MODE ONLY: at
+	// runtime the failure raises at the dispatch site
+	// (design/FN-VALUE-DISPATCH.0.md), so no such value survives. Analysis
+	// continues past the finding, so the marker is how a later check-mode
+	// consumer tells dispatch wreckage from a value the program meant to
+	// produce (defWordExtension reads it).
 	FailedDispatch bool
-	Carrier        bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
+	// ReachGroup marks an OPEN-PAREN marker that the REACH LOWERING emitted
+	// rather than the user writing — the synthetic group `a.b` expands to
+	// (expandReach → lowerReach). A function value alone inside such a group
+	// must not dispatch there; see execFnDefLiteral. Only the open marker
+	// carries it, since that is the side the dispatch test looks at, and
+	// IsOpenParen keys on Parent alone so every other marker consumer is
+	// unaffected.
+	ReachGroup bool
+	Carrier    bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
 	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
 	// dynamic(T) — design/dynamic-modality-report.10.md). Implies Carrier.
 	// Its Parent/Data is a BOUND, not a proven type: at a signature

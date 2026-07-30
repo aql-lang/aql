@@ -41,7 +41,7 @@ func init() {
 			"matching as the delimiter.",
 		Notes: []string{
 			"Empty parts are dropped by default; set keepEmpty: true to keep them.",
-			"Options: cs, mode, lim, keepEmpty, trimParts, u, norm.",
+			"Options: cs, mode, lim, keepEmpty, trimParts, norm.",
 		},
 	})
 
@@ -53,7 +53,7 @@ func init() {
 			"side (side: \"left\" or \"right\").",
 		Notes: []string{
 			"Default side is \"both\". When chars is set with cs: \"insensitive\", both cases are trimmed.",
-			"Options: side (left/right/both), chars, cs, u, norm.",
+			"Options: side (left/right/both), chars, fill, cs, norm.",
 		},
 	})
 
@@ -66,7 +66,7 @@ func init() {
 		Notes: []string{
 			"anchored: true is equivalent to anchored: \"both\" (exact match).",
 			"wholeWord requires matches to be at word boundaries.",
-			"Options: cs, mode, anchored, wholeWord, u, norm.",
+			"Options: cs, mode, anchored, wholeWord, norm.",
 		},
 	})
 
@@ -77,7 +77,7 @@ func init() {
 			"term in the input string. Returns -1 if not found.",
 		Notes: []string{
 			"Indices count characters (runes), the one unit every string word uses; {from} is a character index too.",
-			"Options: cs, mode, from, occ (\"first\"/\"last\"), u, norm.",
+			"Options: cs, mode, from, occ (\"first\"/\"last\"), norm.",
 		},
 	})
 
@@ -89,7 +89,7 @@ func init() {
 		Notes: []string{
 			"scope defaults to \"first\"; set to \"all\" for global replace.",
 			"count limits the maximum number of replacements when scope is \"all\".",
-			"Options: cs, mode, scope, from, count, u, norm.",
+			"Options: cs, mode, scope, from, count, norm.",
 		},
 	})
 
@@ -101,7 +101,7 @@ func init() {
 			"title (first char of each word), sentence (first char after lowering all), fold.",
 		Notes: []string{
 			"fold is an approximation using toLower; for true Unicode case folding, use a locale-aware library.",
-			"Options: style, u, norm, loc.",
+			"Options: style, norm.",
 		},
 	})
 
@@ -136,7 +136,7 @@ func init() {
 			"custom fill string.",
 		Notes: []string{
 			"If the input already meets or exceeds the target length, it is returned unchanged unless trunc is true.",
-			"Options: side (left/right/both), fill, trunc.",
+			"Options: side (left/right/both), fill, chars, trunc.",
 		},
 	})
 
@@ -149,7 +149,7 @@ func init() {
 		Notes: []string{
 			"Returns a map, not a boolean. Use .ok to get the boolean result.",
 			"In shell mode, uses glob matching (* ? [...]).",
-			"Options: cs, mode, scope (first/all), u, norm.",
+			"Options: cs, mode, scope (first/all), norm.",
 		},
 	})
 

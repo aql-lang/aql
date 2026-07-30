@@ -1087,7 +1087,32 @@ func (r *renderer) attach(nodes []*Node, i int) bool {
 	return false
 }
 
+// emitNode renders one node at one indent, memoised.
+//
+// The memo is load-bearing, not an optimisation. Layout here is
+// try-then-fall-back: emitStatement renders the whole statement inline
+// (`inline`, :912) before any strategy can reject it, and when the width
+// strategy does reject it wrapStatement re-renders every child at the
+// continuation indent (:1206); emitList and emitParen do the same
+// single-line-then-broken dance for their children. So without a cache a
+// subtree nested D deep is rendered on the order of 2^D times — measured at
+// 53 s for kg/validate.aql (749 lines, nesting ~10), against 48 ms to PARSE
+// the same file. Memoising collapses that to one render per (node, indent).
+//
+// Soundness: the renderer is immutable after newRenderer, and the node tree
+// is only mutated during parsing/normalisation (format.go :624-:793), never
+// during rendering — so (n, indent) fully determines the result.
 func (r *renderer) emitNode(n *Node, indent int) string {
+	key := emitKey{n: n, indent: indent}
+	if s, ok := r.memo[key]; ok {
+		return s
+	}
+	s := r.emitNodeUncached(n, indent)
+	r.memo[key] = s
+	return s
+}
+
+func (r *renderer) emitNodeUncached(n *Node, indent int) string {
 	switch n.Kind {
 	case NdRoot:
 		return r.emitRoot(n, indent)

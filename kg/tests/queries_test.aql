@@ -11,14 +11,18 @@ import "./identifiers.aql"
 import "./util.aql"
 
 def stamp "2026-01-01T00:00:00Z"
-def bundle (KgReport.build-graph [
-  (IO.read (make Pathon "fixtures/valid.jsonic"))
-  (IO.read (make Pathon "fixtures/conflicts.jsonic"))
-  (IO.read (make Pathon "fixtures/ambiguous-identities.jsonic"))
-] {recorded_at: stamp})
+def bundle
+(KgReport.build-graph
+      [(IO.read (make Pathon "fixtures/valid.jsonic"))
+          (IO.read (make Pathon "fixtures/conflicts.jsonic"))
+          (IO.read (make Pathon "fixtures/ambiguous-identities.jsonic"))
+      ]
+      {recorded_at:stamp}
+  )
 
 def meridian (KgId.entity-id "Person" "ada meridian" "meridian")
-def orbital (KgId.entity-id "Organization" "orbital dynamics ltd" "orbital")
+def orbital
+(KgId.entity-id "Organization" "orbital dynamics ltd" "orbital")
 def dublin (KgId.entity-id "Place" "dublin" "dublin")
 def vega (KgId.entity-id "Person" "miro vega" "vega")
 def nova-a (KgId.entity-id "Person" "lin nova" "nova-a")
@@ -26,79 +30,105 @@ def nova-b (KgId.entity-id "Person" "l. nova" "nova-b")
 
 # -- lookups --------------------------------------------------------------
 
-[ ((KgQuery.entity-by-id bundle meridian) get "label") "Ada Meridian" Assert.equal ]
-  "entity-by-id finds an entity" Test.test end
-[ ((KgQuery.entity-by-id bundle "ent:nope") is None) true Assert.equal ]
-  "entity-by-id answers none for an unknown id" Test.test end
-[ ((KgQuery.entities-by-type bundle "Place") size) 1 Assert.equal ]
-  "entities-by-type filters by type" Test.test end
-[ ((KgQuery.entities-by-type bundle "Event") size) 0 Assert.equal ]
-  "entities-by-type is empty for an unused type" Test.test end
-[ (((KgQuery.entities-by-label bundle "  ADA   Meridian ") get 0) get "id") meridian Assert.equal ]
-  "entities-by-label normalizes the probe label" Test.test end
-[ ((KgQuery.entities-by-label bundle "A. Meridian") size) 1 Assert.equal ]
-  "entities-by-label matches aliases" Test.test end
+[((KgQuery.entity-by-id bundle meridian) get "label") "Ada Meridian"
+      Assert.equal
+  ]
+"entity-by-id finds an entity" Test.test end
+[((KgQuery.entity-by-id bundle "ent:nope") is None) true Assert.equal]
+"entity-by-id answers none for an unknown id" Test.test end
+[((KgQuery.entities-by-type bundle "Place") size) 1 Assert.equal]
+"entities-by-type filters by type" Test.test end
+[((KgQuery.entities-by-type bundle "Event") size) 0 Assert.equal]
+"entities-by-type is empty for an unused type" Test.test end
+[(((KgQuery.entities-by-label bundle "  ADA   Meridian ") get 0)
+          get "id"
+      )
+      meridian Assert.equal
+  ]
+"entities-by-label normalizes the probe label" Test.test end
+[((KgQuery.entities-by-label bundle "A. Meridian") size) 1 Assert.equal]
+"entities-by-label matches aliases" Test.test end
 
 # -- assertion queries ----------------------------------------------------
 
-[ ((KgQuery.assertions-for-subject bundle meridian) size) 2 Assert.equal ]
-  "assertions-for-subject finds both meridian claims" Test.test end
-[ ((KgQuery.assertions-for-object bundle orbital) size) 2 Assert.equal ]
-  "assertions-for-object finds both works_for edges (meridian and vega)" Test.test end
-[ ((KgQuery.assertions-by-predicate bundle "works_for") size) 3 Assert.equal ]
-  "assertions-by-predicate spans all bundles" Test.test end
-[ ((KgQuery.assertions-by-source bundle "src:news-2026") size) 2 Assert.equal ]
-  "assertions-by-source follows evidence source ids" Test.test end
-[ ((KgQuery.assertions-in-range bundle "2025-12-31T00:00:00Z" "2026-12-31T00:00:00Z") size)
-  ((bundle get "assertions") size) Assert.equal ]
-  "assertions-in-range brackets the recorded_at stamp" Test.test end
-[ ((KgQuery.assertions-in-range bundle "1990-01-01T00:00:00Z" "1991-01-01T00:00:00Z") size)
-  0 Assert.equal ]
-  "assertions-in-range is empty outside the stamp" Test.test end
+[((KgQuery.assertions-for-subject bundle meridian) size) 2 Assert.equal]
+"assertions-for-subject finds both meridian claims" Test.test end
+[((KgQuery.assertions-for-object bundle orbital) size) 2 Assert.equal]
+"assertions-for-object finds both works_for edges (meridian and vega)"
+Test.test end
+[((KgQuery.assertions-by-predicate bundle "works_for") size) 3
+      Assert.equal
+  ]
+"assertions-by-predicate spans all bundles" Test.test end
+[((KgQuery.assertions-by-source bundle "src:news-2026") size) 2
+      Assert.equal
+  ]
+"assertions-by-source follows evidence source ids" Test.test end
+[((KgQuery.assertions-in-range bundle "2025-12-31T00:00:00Z"
+              "2026-12-31T00:00:00Z"
+          )
+          size
+      )
+      ((bundle get "assertions") size) Assert.equal
+  ]
+"assertions-in-range brackets the recorded_at stamp" Test.test end
+[((KgQuery.assertions-in-range bundle "1990-01-01T00:00:00Z"
+              "1991-01-01T00:00:00Z"
+          )
+          size
+      )
+      0 Assert.equal
+  ]
+"assertions-in-range is empty outside the stamp" Test.test end
 
 def first-ast ((bundle get "assertions") get 0)
-[ ((KgQuery.evidence-for-assertion bundle (first-ast get "id")) size)
-  ((KgUtil.list-at first-ast "evidence") size) Assert.equal ]
-  "evidence-for-assertion returns the evidence list" Test.test end
-[ (KgQuery.evidence-for-assertion bundle "ast:nope") [] Assert.equal ]
-  "evidence-for-assertion is empty for an unknown id" Test.test end
+[((KgQuery.evidence-for-assertion bundle (first-ast get "id"))
+          size
+      )
+      ((KgUtil.list-at first-ast "evidence") size) Assert.equal
+  ]
+"evidence-for-assertion returns the evidence list" Test.test end
+[(KgQuery.evidence-for-assertion bundle "ast:nope") [] Assert.equal]
+"evidence-for-assertion is empty for an unknown id" Test.test end
 
 # -- traversal ------------------------------------------------------------
 
 def orb-neighbors (KgQuery.neighbors bundle orbital)
-[ ((filter [eq meridian] orb-neighbors) size) 1 Assert.equal ]
-  "neighbors sees the incoming works_for edge" Test.test end
-[ ((filter [eq dublin] orb-neighbors) size) 1 Assert.equal ]
-  "neighbors sees the outgoing located_in edge" Test.test end
+[((filter [eq meridian] orb-neighbors) size) 1 Assert.equal]
+"neighbors sees the incoming works_for edge" Test.test end
+[((filter [eq dublin] orb-neighbors) size) 1 Assert.equal]
+"neighbors sees the outgoing located_in edge" Test.test end
 
-[ ((KgQuery.one-hop-paths bundle meridian orbital) size) 1 Assert.equal ]
-  "one-hop-paths finds the direct edge" Test.test end
-[ ((KgQuery.one-hop-paths bundle meridian dublin) size) 0 Assert.equal ]
-  "one-hop-paths is empty without a direct edge" Test.test end
+[((KgQuery.one-hop-paths bundle meridian orbital) size) 1 Assert.equal]
+"one-hop-paths finds the direct edge" Test.test end
+[((KgQuery.one-hop-paths bundle meridian dublin) size) 0 Assert.equal]
+"one-hop-paths is empty without a direct edge" Test.test end
 
 def hops (KgQuery.two-hop-paths bundle meridian dublin)
-[ (hops size) 1 Assert.equal ]
-  "two-hop-paths finds meridian -> orbital -> dublin" Test.test end
-[ ((hops get 0) get "via") orbital Assert.equal ]
-  "the two-hop path passes through orbital" Test.test end
+[(hops size) 1 Assert.equal]
+"two-hop-paths finds meridian -> orbital -> dublin" Test.test end
+[((hops get 0) get "via") orbital Assert.equal]
+"the two-hop path passes through orbital" Test.test end
 
 # Merged duplicates answer as their canonical entity.
-[ (KgQuery.neighbors bundle nova-b) (KgQuery.neighbors bundle nova-a) Assert.equal ]
-  "a merged duplicate answers as its canonical entity" Test.test end
+[(KgQuery.neighbors bundle nova-b) (KgQuery.neighbors bundle nova-a)
+      Assert.equal
+  ]
+"a merged duplicate answers as its canonical entity" Test.test end
 
 # -- review views ---------------------------------------------------------
 
-[ (((KgQuery.unresolved-identities bundle) size) gt 0) true Assert.equal ]
-  "unresolved-identities surfaces the ambiguous pairs" Test.test end
+[(((KgQuery.unresolved-identities bundle) size) gt 0) true Assert.equal]
+"unresolved-identities surfaces the ambiguous pairs" Test.test end
 def disputed (KgQuery.conflicting-assertions bundle)
-[ (disputed size) 2 Assert.equal ]
-  "both conflicting works_for claims are disputed" Test.test end
-[ ((filter [dot subject_id eq vega] disputed) size) 2 Assert.equal ]
-  "the disputed claims are vega's" Test.test end
-[ (((KgQuery.human-review-items bundle) size) gt 0) true Assert.equal ]
-  "the human-review queue is populated" Test.test end
-[ ((KgQuery.validation-errors bundle) size) 0 Assert.equal ]
-  "well-formed fixtures produce no validation errors" Test.test end
+[(disputed size) 2 Assert.equal]
+"both conflicting works_for claims are disputed" Test.test end
+[((filter [dot subject_id eq vega] disputed) size) 2 Assert.equal]
+"the disputed claims are vega's" Test.test end
+[(((KgQuery.human-review-items bundle) size) gt 0) true Assert.equal]
+"the human-review queue is populated" Test.test end
+[((KgQuery.validation-errors bundle) size) 0 Assert.equal]
+"well-formed fixtures produce no validation errors" Test.test end
 
 print (Test.report)
 if ((Test.fail-count) gt 0) [raise test_failed "queries_test failures"]

@@ -7,8 +7,14 @@
 # OpStackMark via OpCallDynMixedFromMark. The def-msg rows and the bare
 # module-export row below keep their sound refusals (a promoted def read /
 # a non-event region entry decline the window).
-import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg	ERROR:uncalled_function
-import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg	ERROR:uncalled_function
+# RE-PINNED 2026-07-30 (design/FN-VALUE-DISPATCH.0.md): the def-msg rows'
+# region call fails dispatch, which now raises AT THE CALL — inside this very
+# `do` — so the region's own `error […]` handler catches it and the program
+# yields the code as a value. It used to surface from the end-of-run residue
+# drain, outside every handler. The COMPILE status is unchanged: still a sound
+# refusal, which is what this ledger tracks.
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(true 5 M.dec) "no-raise"] error [dot code])  msg	uncalled_function/q
+import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end def msg (do [(false 5 M.dec) "no-raise"] error [dot code])  msg	uncalled_function/q
 # DISCOVERY (2026-07-13): the next row COMPILES natively today — parse has a
 # pure ReturnsFn dry-pass, so with a CONSTANT argument the checker proves the
 # call cannot raise at this input and soundly seats the exact arity. It stays

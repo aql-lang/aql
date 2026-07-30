@@ -628,3 +628,73 @@ func TestW4FormatDynamicNoKeywordStaysBare(t *testing.T) {
 		t.Errorf("plain atom slot must stay bare:\n%s", out)
 	}
 }
+
+// WriteCategory must render module-provided words under the import that
+// binds them — in BOTH shapes a category can take.
+//
+// `math` has core words AND module words, so the module block is preceded
+// by a blank separator; `string` has ONLY module words, so the "Words:"
+// header is skipped entirely and no leading blank line is emitted. Both
+// arms matter: a reader who is told `upper` is a built-in and then gets
+// undefined_word has been actively misled, which is what the pre-split
+// table did for 80 words.
+func TestWriteCategoryRendersModuleWords(t *testing.T) {
+	mixed, ok := LookupCategory("math")
+	if !ok {
+		t.Fatal("math category missing")
+	}
+	var b strings.Builder
+	WriteCategory(&b, mixed)
+	out := b.String()
+	if !strings.Contains(out, "Words:") {
+		t.Errorf("mixed category lost its core-word header:\n%s", out)
+	}
+	if !strings.Contains(out, "import \"aql:math-util\"") {
+		t.Errorf("mixed category does not name the import:\n%s", out)
+	}
+	if !strings.Contains(out, "add") || !strings.Contains(out, "sqrt") {
+		t.Errorf("mixed category lost words:\n%s", out)
+	}
+
+	moduleOnly, ok := LookupCategory("string")
+	if !ok {
+		t.Fatal("string category missing")
+	}
+	var b2 strings.Builder
+	WriteCategory(&b2, moduleOnly)
+	out2 := b2.String()
+	if strings.Contains(out2, "Words:") {
+		t.Errorf("module-only category should not print a core-word header:\n%s", out2)
+	}
+	if !strings.Contains(out2, "import \"aql:string-util\"") {
+		t.Errorf("module-only category does not name the import:\n%s", out2)
+	}
+	if !strings.Contains(out2, "upper") {
+		t.Errorf("module-only category lost its words:\n%s", out2)
+	}
+	// No leading blank line when there is no core-word block above it.
+	if strings.HasPrefix(out2[strings.Index(out2, "\n")+1:], "\n\n") {
+		t.Errorf("module-only category emitted a doubled blank line:\n%q", out2)
+	}
+}
+
+// The index listing shows the same import annotation, so `aql describe`
+// with no argument is self-sufficient.
+func TestWriteWordsByCategoryAnnotatesModules(t *testing.T) {
+	var b strings.Builder
+	WriteWordsByCategory(&b)
+	out := b.String()
+	for _, want := range []string{
+		"(import \"aql:math-util\")",
+		"(import \"aql:string-util\")",
+		"(import \"aql:bin-util\")",
+		"(import \"aql:logic-util\")",
+		"(import \"aql:type-util\")",
+		"(import \"aql:query\")",
+		"(import \"aql:io\")",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("index listing missing %s:\n%s", want, out)
+		}
+	}
+}

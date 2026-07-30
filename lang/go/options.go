@@ -24,7 +24,8 @@ func ParseOptions(s string) (map[string]any, error) {
 // section — is an error rather than silently ignored, so a misspelled
 // key fails loudly instead of being dropped. Known schema:
 //
-//	tape : { initial : <int>, grows : <int>, factor : <number> }
+//	tape  : { initial : <int>, grows : <int>, factor : <number> }
+//	steps : <int>   evaluation step budget (>= 1); unset = engine default
 //
 // New option sections are added here as they are introduced.
 func ApplyOptions(o *Options, m map[string]any) error {
@@ -38,8 +39,20 @@ func ApplyOptions(o *Options, m map[string]any) error {
 			if err := applyTapeOptions(o, sub); err != nil {
 				return err
 			}
+		case "steps":
+			n, err := optInt(key, val)
+			if err != nil {
+				return err
+			}
+			// A budget of 0 would abort before the first step, so it is
+			// rejected rather than silently meaning "unset" — that is what
+			// keeps Registry.StepLimit's zero unambiguous.
+			if n < 1 {
+				return fmt.Errorf("option %q must be at least 1, got %d", key, n)
+			}
+			o.Steps = n
 		default:
-			return fmt.Errorf("unknown option %q (known: tape)", key)
+			return fmt.Errorf("unknown option %q (known: tape, steps)", key)
 		}
 	}
 	return nil

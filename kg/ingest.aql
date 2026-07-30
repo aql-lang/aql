@@ -47,24 +47,28 @@ def starts-with KgUtil.starts-with
 # ---- sources ------------------------------------------------------------
 
 # Complete a raw source map: derive content_hash and id when absent.
-def ingest-source fn [[raw:Map] [Map] [
+def ingest-source fn raw:Map Map [
   def locator (get-or raw "locator" "")
   def title (get-or raw "title" locator)
   def kind (get-or raw "kind" "json")
-  def hash (get-or raw "content_hash"
-    (KgId.fingerprint (KgId.canon-of {kind: kind locator: locator title: title})))
+  def hash
+    (get-or raw "content_hash"
+        (KgId.fingerprint
+            (KgId.canon-of {kind:kind locator:locator title:title})
+        )
+    )
   def id (get-or raw "id" (KgId.source-id locator hash))
-  KgSchema.mk-source {
-    id: id
-    kind: kind
-    locator: locator
-    title: title
-    retrieved_at: (get-or raw "retrieved_at" none)
-    content_hash: hash
-    authority: (get-or raw "authority" "unknown")
-    metadata: (get-or raw "metadata" {})
-  }
-]]
+    KgSchema.mk-source
+    {id:id
+      kind:kind
+      locator:locator
+      title:title
+      retrieved_at:(get-or raw "retrieved_at" none)
+      content_hash:hash
+      authority:(get-or raw "authority" "unknown")
+      metadata:(get-or raw "metadata" {})
+    }
+]
 
 # ---- entities -----------------------------------------------------------
 
@@ -72,29 +76,34 @@ def ingest-source fn [[raw:Map] [Map] [
 # never identify anything, and two blanks must never count as a
 # "matching identifier" during resolution (that would auto-merge
 # unrelated entities at 0.98 confidence).
-def prune-external-ids fn [[eids:Map] [Map] [
+def prune-external-ids fn eids:Map Map [
   filter [var [[v] not ((convert String v) eq "")]] eids
-]]
+]
 
 # One candidate entity -> KgEntity with a deterministic id. A key that
 # is already an ent: id (an existing bundle re-ingesting) is kept
 # verbatim, so re-processing a graph preserves its identifiers.
-def ingest-entity fn [[raw:Map] [Map] [
+def ingest-entity fn raw:Map Map [
   def etype (get-or raw "type" "Other")
   def label (KgNorm.norm-display (get-or raw "label" ""))
   def nlabel (KgNorm.norm-label label)
-  def key (convert String (get-or raw "key" nlabel))
-  KgSchema.mk-entity {
-    id: (if (starts-with "ent:" key) [key] [KgId.entity-id etype nlabel key])
-    type: etype
-    label: label
-    normalized_label: nlabel
-    aliases: (KgEnt.distinct-sorted (each [var [[a] KgNorm.norm-display a]] (get-or raw "aliases" [])))
-    external_ids: (prune-external-ids (get-or raw "external_ids" {}))
-    attributes: (get-or raw "attributes" {})
-    status: (get-or raw "status" "accepted")
-  }
-]]
+  def key (convert String (get-or raw "key" nlabel)) KgSchema.mk-entity
+    {id:(if (starts-with "ent:" key) [key]
+          [KgId.entity-id etype nlabel key]
+      )
+      type:etype
+      label:label
+      normalized_label:nlabel
+      aliases:(KgEnt.distinct-sorted
+          (each [var [[a] KgNorm.norm-display a]]
+              (get-or raw "aliases" [])
+          )
+      )
+      external_ids:(prune-external-ids (get-or raw "external_ids" {}))
+      attributes:(get-or raw "attributes" {})
+      status:(get-or raw "status" "accepted")
+    }
+]
 
 # ---- objects and evidence ----------------------------------------------
 
@@ -105,30 +114,28 @@ def ingest-entity fn [[raw:Map] [Map] [
 def ingest-object fn [[raw:Map keymap:Map] [Map] [
   def kind (get-or raw "kind" "")
   if (kind eq "entity")
-    [
-      def target (get-or raw "entity" "")
-      def hit (keymap get target)
-      KgSchema.mk-entity-ref (if (hit is None) [target] [hit])
+    [def target (get-or raw "entity" "")
+      def hit (keymap get target) KgSchema.mk-entity-ref
+        (if (hit is None) [target] [hit])
     ]
-    [
-      KgSchema.mk-literal {
-        value: (get-or raw "value" "")
-        datatype: (get-or raw "datatype" "String")
-        unit: (get-or raw "unit" none)
-        language: (get-or raw "language" none)
-      }
+    [KgSchema.mk-literal
+        {value:(get-or raw "value" "")
+          datatype:(get-or raw "datatype" "String")
+          unit:(get-or raw "unit" none)
+          language:(get-or raw "language" none)
+        }
     ]
 ]]
 
-def ingest-evidence fn [[raw:Map] [Map] [
-  KgSchema.mk-evidence {
-    source_id: (get-or raw "source" (get-or raw "source_id" ""))
-    locator: (get-or raw "locator" "")
-    quote: (get-or raw "quote" none)
-    extraction_method: (get-or raw "extraction_method" "direct_record")
-    extractor: (get-or raw "extractor" "kg-ingest")
-  }
-]]
+def ingest-evidence fn raw:Map Map [
+  KgSchema.mk-evidence
+    {source_id:(get-or raw "source" (get-or raw "source_id" ""))
+      locator:(get-or raw "locator" "")
+      quote:(get-or raw "quote" none)
+      extraction_method:(get-or raw "extraction_method" "direct_record")
+      extractor:(get-or raw "extractor" "kg-ingest")
+    }
+]
 
 # ---- the candidate-bundle ingester --------------------------------------
 
@@ -141,114 +148,155 @@ def ingest-evidence fn [[raw:Map] [Map] [
 # carry no evidence, are rejected with an error issue; they are never
 # emitted as dangling or unsupported claims.
 def ingest-bundle fn [[raw:Map recorded_at:String] [Map] [
-  def sources (each [var [[s] ingest-source s]] (get-or raw "sources" []))
-
+  def sources
+    (each [var [[s] ingest-source s]] (get-or raw "sources" []))
   def raw-entities (get-or raw "entities" [])
-  def folded (fold [var [[cand acc]
-    def e (ingest-entity cand)
-    def key (get-or cand "key" e.id)
-    def keymap (get-or acc "keymap" {})
-    def ents (list-at acc "entities")
-    def issues (list-at acc "issues")
-    def prev-id (keymap get key)
-    if (not (prev-id is None))
-      [
-        def issue (KgSchema.mk-issue {
-          id: (KgId.issue-id "kg_duplicate_key" key `duplicate candidate key ${key}`)
-          severity: "warning"
-          rule: "kg_duplicate_key"
-          target_kind: "entity"
-          target_id: key
-          message: `candidate entity key ${key} appears more than once; later entry folded into the first`
-          suggested_correction: none
-          automatic_correction_safe: false
-        })
-        KgUtil.as-map { keymap: keymap entities: ents issues: (push issue issues) }
-      ]
-      [
-        def existing (filter [dot id eq e.id] ents)
-        if ((existing size) gt 0)
-          [
-            def first (existing get 0)
-            def unified (KgEnt.merge-pair first e)
-            def kept (each [var [[x]
-              if (x.id eq e.id) [unified get "winner"] [x]
-            ]] ents)
-            KgUtil.as-map { keymap: (keymap set (key) e.id)
-              entities: kept
-              issues: issues }
-          ]
-          [
-            KgUtil.as-map { keymap: (keymap set (key) e.id)
-              entities: (push e ents)
-              issues: issues }
-          ]
-      ]
-  ]] raw-entities {keymap: {} entities: [] issues: []})
+  def folded
+    (fold
+        [var
+            [[cand acc]
+              def e (ingest-entity cand)
+              def key (get-or cand "key" e.id)
+              def keymap (get-or acc "keymap" {})
+              def ents (list-at acc "entities")
+              def issues (list-at acc "issues")
+              def prev-id (keymap get key)
+              if (not (prev-id is None))
+                [def issue
+                    (KgSchema.mk-issue
+                        {id:(KgId.issue-id "kg_duplicate_key" key
+                              `duplicate candidate key ${key}`
+                          )
+                          severity:"warning"
+                          rule:"kg_duplicate_key"
+                          target_kind:"entity"
+                          target_id:key
+                          message:`candidate entity key ${key} appears more than once; later entry folded into the first`
+                          suggested_correction:none
+                          automatic_correction_safe:false
+                        }
+                    )
+                    KgUtil.as-map
+                    {keymap:keymap
+                      entities:ents
+                      issues:(push issue issues)
+                    }
+                ]
+                [def existing (filter [dot id eq e.id] ents)
+                  if ((existing size) gt 0)
+                    [def first (existing get 0)
+                      def unified (KgEnt.merge-pair first e)
+                      def kept
+                        (each
+                            [var
+                                [[x]
+                                  if (x.id eq e.id)
+                                    [unified get "winner"] [x]
+                                ]
+                            ]
+                            ents
+                        )
+                        KgUtil.as-map
+                        {keymap:(keymap set (key) e.id)
+                          entities:kept
+                          issues:issues
+                        }
+                    ]
+                    [KgUtil.as-map
+                        {keymap:(keymap set (key) e.id)
+                          entities:(push e ents)
+                          issues:issues
+                        }
+                    ]
+                ]
+            ]
+        ]
+        raw-entities {keymap:{} entities:[] issues:[]}
+    )
   def keymap (folded get "keymap")
-
-  def ast-folded (fold [var [[cand acc]
-    def asts (list-at acc "assertions")
-    def issues (list-at acc "issues")
-    def subj-key (get-or cand "subject" "")
-    def subj-hit (keymap get subj-key)
-    def subj (if (subj-hit is None) [subj-key] [subj-hit])
-    if ((subj-hit is None) and (not (starts-with "ent:" subj-key)))
-      [
-        def issue (KgSchema.mk-issue {
-          id: (KgId.issue-id "kg_unknown_subject" subj-key
-            `assertion subject ${subj-key} is not a known entity key`)
-          severity: "error"
-          rule: "kg_unknown_subject"
-          target_kind: "assertion"
-          target_id: subj-key
-          message: `assertion rejected: subject ${subj-key} matches no candidate entity key and is not an ent: id`
-          suggested_correction: none
-          automatic_correction_safe: false
-        })
-        KgUtil.as-map { assertions: asts issues: (push issue issues) }
-      ]
-      [
-        def object (ingest-object (get-or cand "object" {}) keymap)
-        def evidence (each [var [[ev] ingest-evidence ev]] (get-or cand "evidence" []))
-        if ((evidence size) eq 0)
-          [
-            def issue (KgSchema.mk-issue {
-              id: (KgId.issue-id "kg_no_provenance" subj
-                `assertion ${subj} ${get-or cand "predicate" ""} has no evidence`)
-              severity: "error"
-              rule: "kg_no_provenance"
-              target_kind: "assertion"
-              target_id: subj
-              message: `assertion rejected: ${subj} ${get-or cand "predicate" ""} carries no evidence record`
-              suggested_correction: "attach at least one evidence entry pointing at a listed source"
-              automatic_correction_safe: false
-            })
-            KgUtil.as-map { assertions: asts issues: (push issue issues) }
-          ]
-          [
-            def built (KgAst.build-assertion {
-              subject_id: subj
-              predicate: (get-or cand "predicate" "")
-              object: object
-              evidence: evidence
-              confidence: (get-or cand "confidence" 1.0)
-              status: (get-or cand "status" "asserted")
-              valid_from: (get-or cand "valid_from" none)
-              valid_to: (get-or cand "valid_to" none)
-              recorded_at: (get-or cand "recorded_at" recorded_at)
-              rule: (get-or cand "rule" none)
-            })
-            KgUtil.as-map { assertions: (push built asts) issues: issues }
-          ]
-      ]
-  ]] (get-or raw "assertions" []) {assertions: [] issues: []})
-
-  KgUtil.as-map { sources: sources
-    entities: (folded get "entities")
-    assertions: (ast-folded get "assertions")
-    issues: (flatten [(folded get "issues") (ast-folded get "issues")])
-    keymap: keymap }
+  def ast-folded
+    (fold
+        [var
+            [[cand acc]
+              def asts (list-at acc "assertions")
+              def issues (list-at acc "issues")
+              def subj-key (get-or cand "subject" "")
+              def subj-hit (keymap get subj-key)
+              def subj (if (subj-hit is None) [subj-key] [subj-hit])
+              if
+                ((subj-hit is None) and
+                    (not (starts-with "ent:" subj-key))
+                )
+                [def issue
+                    (KgSchema.mk-issue
+                        {id:(KgId.issue-id "kg_unknown_subject" subj-key
+                              `assertion subject ${subj-key} is not a known entity key`
+                          )
+                          severity:"error"
+                          rule:"kg_unknown_subject"
+                          target_kind:"assertion"
+                          target_id:subj-key
+                          message:`assertion rejected: subject ${subj-key} matches no candidate entity key and is not an ent: id`
+                          suggested_correction:none
+                          automatic_correction_safe:false
+                        }
+                    )
+                    KgUtil.as-map
+                    {assertions:asts issues:(push issue issues)}
+                ]
+                [def object
+                    (ingest-object (get-or cand "object" {}) keymap)
+                  def evidence
+                    (each [var [[ev] ingest-evidence ev]]
+                        (get-or cand "evidence" [])
+                    )
+                  if ((evidence size) eq 0)
+                    [def issue
+                        (KgSchema.mk-issue
+                            {id:(KgId.issue-id "kg_no_provenance" subj
+                                  `assertion ${subj} ${get-or cand "predicate" ""} has no evidence`
+                              )
+                              severity:"error"
+                              rule:"kg_no_provenance"
+                              target_kind:"assertion"
+                              target_id:subj
+                              message:`assertion rejected: ${subj} ${get-or cand "predicate" ""} carries no evidence record`
+                              suggested_correction:"attach at least one evidence entry pointing at a listed source"
+                              automatic_correction_safe:false
+                            }
+                        )
+                        KgUtil.as-map
+                        {assertions:asts issues:(push issue issues)}
+                    ]
+                    [def built
+                        (KgAst.build-assertion
+                            {subject_id:subj
+                              predicate:(get-or cand "predicate" "")
+                              object:object
+                              evidence:evidence
+                              confidence:(get-or cand "confidence" 1.0)
+                              status:(get-or cand "status" "asserted")
+                              valid_from:(get-or cand "valid_from" none)
+                              valid_to:(get-or cand "valid_to" none)
+                              recorded_at:(get-or cand "recorded_at" recorded_at)
+                              rule:(get-or cand "rule" none)
+                            }
+                        )
+                        KgUtil.as-map
+                        {assertions:(push built asts) issues:issues}
+                    ]
+                ]
+            ]
+        ]
+        (get-or raw "assertions" []) {assertions:[] issues:[]}
+    )
+    KgUtil.as-map
+    {sources:sources
+      entities:(folded get "entities")
+      assertions:(ast-folded get "assertions")
+      issues:(flatten [(folded get "issues") (ast-folded get "issues")])
+      keymap:keymap
+    }
 ]]
 
 # ---- adapters -----------------------------------------------------------
@@ -274,118 +322,214 @@ def rows-to-candidates fn [[rows:List spec:Map] [Map] [
   def aspecs (get-or spec "assertions" [])
   def etype (get-or espec "type" "Other")
   def label-col (get-or espec "label_col" "")
-  def per-row (each [var [[i]
-    def row (rows get i)
-    def label (convert String (get-or row label-col ""))
-    def key `${src-id}:row-${convert String i}`
-    def evidence [(KgUtil.as-map {
-      source: src-id
-      locator: `row ${convert String i}`
-      quote: (KgId.canon-of row)
-      extraction_method: "direct_record"
-      extractor: "kg-ingest/rows"
-    })]
-    def main {
-      key: key
-      type: etype
-      label: label
-      aliases: (each [var [[c] convert String (get-or row c "")]] (get-or espec "alias_cols" []))
-      external_ids: (fold [var [[kv acc]
-        acc set (kv get 0) (convert String (get-or row (kv get 1) ""))
-      ]] (StructUtil.items (get-or espec "external_id_cols" {})) {})
-      attributes: (fold [var [[c acc]
-        acc set (c) (get-or row c none)
-      ]] (get-or espec "attribute_cols" []) {})
+  def per-row
+    (each
+        [var
+            [[i]
+              def row (rows get i)
+              def label (convert String (get-or row label-col ""))
+              def key `${src-id}:row-${convert String i}`
+              def evidence
+                [(KgUtil.as-map
+                        {source:src-id
+                          locator:`row ${convert String i}`
+                          quote:(KgId.canon-of row)
+                          extraction_method:"direct_record"
+                          extractor:"kg-ingest/rows"
+                        }
+                    )
+                ]
+              def main
+                {key:key
+                  type:etype
+                  label:label
+                  aliases:(each [var [[c] convert String (get-or row c "")]]
+                      (get-or espec "alias_cols" [])
+                  )
+                  external_ids:(fold
+                      [var
+                          [[kv acc] acc set (kv get 0)
+                              (convert String
+                                  (get-or row (kv get 1) "")
+                              )
+                          ]
+                      ]
+                      (StructUtil.items
+                          (get-or espec "external_id_cols" {})
+                      )
+                      {}
+                  )
+                  attributes:(fold
+                      [var [[c acc] acc set (c) (get-or row c none)]]
+                      (get-or espec "attribute_cols" []) {}
+                  )
+                }
+              def extra
+                (fold
+                    [var
+                        [[aspec acc]
+                          if
+                            ((get-or aspec "object_kind" "") eq
+                                "entity"
+                            )
+                            [def target
+                                (convert String
+                                    (get-or row
+                                        (get-or aspec "entity_col" "")
+                                        ""
+                                    )
+                                )
+                              if (target eq "") [acc]
+                                [push
+                                    {key:`${key}-${get-or aspec "entity_col" ""}`
+                                      type:(get-or aspec "entity_type"
+                                          "Other"
+                                      )
+                                      label:target
+                                    }
+                                    acc
+                                ]
+                            ]
+                            [acc]
+                        ]
+                    ]
+                    aspecs []
+                )
+              def asts
+                (fold
+                    [var
+                        [[aspec acc]
+                          if
+                            ((get-or aspec "object_kind" "") eq
+                                "entity"
+                            )
+                            [def target
+                                (convert String
+                                    (get-or row
+                                        (get-or aspec "entity_col" "")
+                                        ""
+                                    )
+                                )
+                              if (target eq "") [acc]
+                                [push
+                                    {subject:key
+                                      predicate:(get-or aspec "predicate"
+                                          "related_to"
+                                      )
+                                      object:{kind:"entity"
+                                        entity:`${key}-${get-or aspec "entity_col" ""}`
+                                      }
+                                      evidence:evidence
+                                    }
+                                    acc
+                                ]
+                            ]
+                            [def v
+                                (get-or row
+                                    (get-or aspec "value_col" "") none
+                                )
+                              if (v is None) [acc]
+                                [push
+                                    {subject:key
+                                      predicate:(get-or aspec "predicate"
+                                          "has_attribute"
+                                      )
+                                      object:{kind:"literal"
+                                        value:v
+                                        datatype:(get-or aspec "datatype"
+                                            "String"
+                                        )
+                                      }
+                                      evidence:evidence
+                                    }
+                                    acc
+                                ]
+                            ]
+                        ]
+                    ]
+                    aspecs []
+                )
+                KgUtil.as-map
+                {entities:(push main extra) assertions:asts}
+            ]
+        ]
+        (iota (rows size))
+    )
+    KgUtil.as-map
+    {sources:[src]
+      entities:(flatten (each [dot entities] per-row))
+      assertions:(flatten (each [dot assertions] per-row))
     }
-    def extra (fold [var [[aspec acc]
-      if ((get-or aspec "object_kind" "") eq "entity")
-        [
-          def target (convert String (get-or row (get-or aspec "entity_col" "") ""))
-          if (target eq "") [acc] [
-            push {
-              key: `${key}-${get-or aspec "entity_col" ""}`
-              type: (get-or aspec "entity_type" "Other")
-              label: target
-            } acc
-          ]
-        ]
-        [acc]
-    ]] aspecs [])
-    def asts (fold [var [[aspec acc]
-      if ((get-or aspec "object_kind" "") eq "entity")
-        [
-          def target (convert String (get-or row (get-or aspec "entity_col" "") ""))
-          if (target eq "") [acc] [
-            push {
-              subject: key
-              predicate: (get-or aspec "predicate" "related_to")
-              object: {kind: "entity" entity: `${key}-${get-or aspec "entity_col" ""}`}
-              evidence: evidence
-            } acc
-          ]
-        ]
-        [
-          def v (get-or row (get-or aspec "value_col" "") none)
-          if (v is None) [acc] [
-            push {
-              subject: key
-              predicate: (get-or aspec "predicate" "has_attribute")
-              object: {kind: "literal" value: v
-                       datatype: (get-or aspec "datatype" "String")}
-              evidence: evidence
-            } acc
-          ]
-        ]
-    ]] aspecs [])
-    KgUtil.as-map { entities: (push main extra) assertions: asts }
-  ]] (iota (rows size)))
-  KgUtil.as-map { sources: [src]
-    entities: (flatten (each [dot entities] per-row))
-    assertions: (flatten (each [dot assertions] per-row)) }
 ]]
 
 # Re-ingest an existing aql-kg/1 bundle (output contract) as candidates:
 # ids are kept verbatim (they are already deterministic and canonical).
-def bundle-to-candidates fn [[bundle:Map] [Map] [
-  KgUtil.as-map { sources: (get-or bundle "sources" [])
-    entities: (each [var [[e]
-      KgUtil.as-map { key: e.id
-        type: e.type
-        label: e.label
-        aliases: e.aliases
-        external_ids: e.external_ids
-        attributes: e.attributes
-        status: e.status }
-    ]] (get-or bundle "entities" []))
-    assertions: (each [var [[a]
-      KgUtil.as-map { subject: a.subject_id
-        predicate: a.predicate
-        object: (if (KgSchema.is-entity-ref a.object)
-          [(KgUtil.as-map {kind: "entity" entity: a.object.entity_id})]
-          [a.object])
-        evidence: (each [var [[ev]
-          KgUtil.as-map { source: ev.source_id
-            locator: ev.locator
-            quote: ev.quote
-            extraction_method: ev.extraction_method
-            extractor: ev.extractor }
-        ]] a.evidence)
-        confidence: a.confidence
-        status: a.status
-        valid_from: a.valid_from
-        valid_to: a.valid_to
-        rule: a.rule
-        recorded_at: a.recorded_at }
-    ]] (get-or bundle "assertions" [])) }
-]]
+def bundle-to-candidates fn bundle:Map Map [
+  KgUtil.as-map
+    {sources:(get-or bundle "sources" [])
+      entities:(each
+          [var
+              [[e] KgUtil.as-map
+                  {key:e.id
+                    type:e.type
+                    label:e.label
+                    aliases:e.aliases
+                    external_ids:e.external_ids
+                    attributes:e.attributes
+                    status:e.status
+                  }
+              ]
+          ]
+          (get-or bundle "entities" [])
+      )
+      assertions:(each
+          [var
+              [[a] KgUtil.as-map
+                  {subject:a.subject_id
+                    predicate:a.predicate
+                    object:(if (KgSchema.is-entity-ref a.object)
+                        [(KgUtil.as-map
+                                {kind:"entity"
+                                  entity:a.object.entity_id
+                                }
+                            )
+                        ]
+                        [a.object]
+                    )
+                    evidence:(each
+                        [var
+                            [[ev] KgUtil.as-map
+                                {source:ev.source_id
+                                  locator:ev.locator
+                                  quote:ev.quote
+                                  extraction_method:ev.extraction_method
+                                  extractor:ev.extractor
+                                }
+                            ]
+                        ]
+                        a.evidence
+                    )
+                    confidence:a.confidence
+                    status:a.status
+                    valid_from:a.valid_from
+                    valid_to:a.valid_to
+                    rule:a.rule
+                    recorded_at:a.recorded_at
+                  }
+              ]
+          ]
+          (get-or bundle "assertions" [])
+      )
+    }
+]
 
 export "KgIngest" {
-  prune-external-ids: prune-external-ids/r
-  ingest-source: ingest-source/r
-  ingest-entity: ingest-entity/r
-  ingest-object: ingest-object/r
-  ingest-evidence: ingest-evidence/r
-  ingest-bundle: ingest-bundle/r
-  rows-to-candidates: rows-to-candidates/r
-  bundle-to-candidates: bundle-to-candidates/r
+  prune-external-ids:prune-external-ids/r
+  ingest-source:ingest-source/r
+  ingest-entity:ingest-entity/r
+  ingest-object:ingest-object/r
+  ingest-evidence:ingest-evidence/r
+  ingest-bundle:ingest-bundle/r
+  rows-to-candidates:rows-to-candidates/r
+  bundle-to-candidates:bundle-to-candidates/r
 }

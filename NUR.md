@@ -68,7 +68,6 @@ commit.
 | [NUR024](#nur024) | Ordering words are family-restricted; equality is total | 2026-07-22 uniformity review |
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
-| [NUR028](#nur028) | `aql fmt` re-parses template holes as map literals | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
 
 Pending records use a compact form (rule / divergence / evidence /
@@ -580,26 +579,6 @@ is undocumented.
 
 ---
 
-## NUR028 — `aql fmt` re-parses template holes as map literals {#nur028}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** one parser (ADR-007's spirit) — the formatter must agree with
-the parser about what source means.
-**Divergence:** the formatter has no InterpString handling, so
-`` `hi ${name}` `` round-trips to `` `hi $ {name:name} ` `` — the
-`${expr}` hole re-parsed as a map literal, changing program semantics.
-The kg pipeline hand-formats its sources and guards `make fmt` into a
-no-op because of this.
-**Evidence:** `lang/go/formatter/` (no interp path);
-kg/README.md:238-245 (the only place it is tracked);
-design/go-modules/FMT.10.md is silent.
-**Documentation status:** tracked only in a component README.
-**Proposed verdict:** resolve by fix (formatter learns InterpString);
-until then the register entry is the tracker.
-
----
-
 ## NUR029 — Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) {#nur029}
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
@@ -625,6 +604,16 @@ sharp edges).
 status; registered here so each resolution or allowance is recorded.
 This umbrella entry splits into per-item records if any single item is
 allowed rather than fixed.
+
+**Re-verified 2026-07-30** (every item re-run against the binary, during
+C3 scouting): **G8, G11 and G13a no longer reproduce** — a recovered
+`raise` no longer tears down enclosing params, a returned bare list no
+longer evaluates lazily after teardown, and a single-token bare-map body
+compiles. They were fixed by unrelated work and this register did not
+notice, which is the cost of an umbrella entry. **G9, G10, G12 and G13b
+still reproduce exactly as described.** The design note must be corrected
+to match, and the umbrella should be split so a per-item fix can retire a
+per-item record.
 
 ---
 
@@ -737,3 +726,598 @@ accepted:
 - `lang/spec/compare-restrict.tsv`, `lang/spec/edge-containers-1.tsv`
   §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
 
+
+---
+
+
+## NUR037 — A fn-local fn used as a higher-order body word breaks in compiled mode only {#nur037}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting (design/CLI-PROGRAMS.0.md §8)
+
+**Rule:** the two execution engines agree. A program's meaning does not
+depend on whether the bytecode compiler accepted it — `design/COMPILABLE-
+SUBSET.md` states the contract as "slow, not wrong", and the whole-corpus
+differential exists to hold the two engines to the same answers.
+
+**Divergence:** a fn declared INSIDE another fn's body and then named as a
+higher-order body word resolves under the interpreter and is UNDEFINED
+under the compiler:
+
+```
+def collect fn [[xs:List] [Any] [
+  def acc (flex {})
+  def step fn [[e:String] [Any] [ acc set (e) true ]]
+  for-each [step] xs
+  acc
+]]
+print (collect ["x" "y"])
+```
+
+- `aql check` → `0 error(s), 0 warning(s), 0 info`
+- `aql run -no-compile` → `{x:true y:true}`
+- `aql run` (the DEFAULT) → `error: for-each: element 0: [aql/undefined_word]:
+  undefined word: step`, caret on `[step]`
+
+Hoisting the same `def step fn` to module scope makes all three agree.
+
+**Evidence:** the three commands above, on the current binary. The shape is
+not exotic: a helper local to the function that uses it is the obvious way
+to write a callback, and `sift.aql`'s inline comment about "a fold body will
+not compile" is this defect seen from a different angle (its stated form —
+that `fold` bodies as such refuse — does NOT reproduce; module-level body
+fns compile fine).
+
+**Documentation status:** undocumented. `design/AQL-SHARP-EDGES.0.md` does
+not list it, and nothing warns that the default mode has a smaller name
+resolution scope than the interpreter.
+
+**Proposed verdict:** fix. A compiled fn unit must capture the enclosing
+frame's local fn bindings, or the compiler must refuse the shape (a refusal
+is merely slow; an `undefined_word` on a working program is wrong). The
+check pass reporting clean while the default runtime fails is the part that
+makes this a trap rather than a limitation.
+
+
+
+### Why allowed
+
+The divergence is real and the risk is honest: a program that works under the
+interpreter can fail under the compiler, which is the failure mode
+`design/COMPILABLE-SUBSET.md`'s "slow, not wrong" contract exists to forbid.
+What makes it acceptable rather than blocking is that the trigger is narrow,
+the workaround is mechanical, and both are now written down where an author
+will meet them: declare callbacks at module scope, never inside another fn.
+
+**Evidence that pins it:** `utils/README.md`'s house rules name this record
+and state the rule; all eleven programs in `utils/` follow it, and the
+end-to-end Go test builds and runs them through the COMPILED path, so a
+regression that re-broke the compiled resolution would fail the ordinary Go
+suite rather than waiting for a user to find it.
+---
+
+
+## NUR038 — Two consecutive statements headed by a 1-arg Any module export misfire silently {#nur038}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** a statement boundary separates statements. Two statements in
+sequence run in order, each consuming its own arguments.
+
+**Divergence:** when the head of each statement is a module export whose
+single parameter is typed `Any`, the second statement's argument is
+collected by the FIRST statement's word, the order inverts, and one call is
+lost — with no diagnostic:
+
+```
+import "aql:io"
+IO.printstr "A\n"
+IO.printstr "B\n"
+```
+
+prints `B`, then `A`, then leaves ` fn printstr(Any)` on the stack (the
+residual the driver then prints). `aql check` reports `0 error(s)` and a
+residual of `ProperString __FN` — the `__FN` in the residual is the only
+trace, and no diagnostic names it. Terminating either statement with `end`
+or wrapping it in parens gives the expected `A`, `B`.
+
+**Evidence:** the file above, run with `aql run -no-compile` and `aql run`;
+`aql check` on the same source. An `Any` parameter is what makes it happen:
+the same shape with a `String`-typed export behaves.
+
+**Documentation status:** undocumented. `design/ERRORS.8.md` §6 covers
+chained forward calls and `mixed_form_call` advises on mixed splits, but
+neither covers a same-statement-boundary inversion that drops a call.
+
+**Proposed verdict:** fix, or diagnose. This is the silent-wrong-answer
+class: the program printed the wrong thing in the wrong order and exited 0.
+If the collection rule genuinely requires `end` here, `aql check` must say
+so — a `forward_strands_operand`-style advisory at minimum. Until then the
+house rule for AQL-authored modules and programs is to terminate every
+statement whose head is a module export with `end`.
+
+
+
+### Why allowed
+
+This is the most dangerous record in the set — the failure is SILENT
+misexecution, not an error — and the acceptance should be read with that in
+mind. It is allowed on the strength of the workaround being unconditional and
+cheap: terminate a statement whose head is a module export, and the misfire
+cannot occur.
+
+**Evidence that pins it:** `utils/README.md`'s house rules state the
+termination rule and cite this record; the eleven programs in `utils/` and
+their 995 cases exercise the shape heavily, so a change that widened the
+trigger would surface as a suite failure rather than as wrong output.
+---
+
+
+## NUR039 — `slice` with a negative start silently ignores its end argument {#nur039}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** an argument is honoured or refused, never ignored. Out-of-domain
+indices elsewhere in the String family clamp predictably (`slice 5 6 "abc"`
+→ `''`, `slice 0 5 "-"` → `'-'`).
+
+**Divergence:** a NEGATIVE start silently collapses `slice start end s` to
+the two-argument "drop N from the end" form, discarding `end` entirely:
+
+```
+slice -3 -1 'abcde'   →  ab
+slice -3  2 'abcde'   →  ab
+slice -3  5 'abcde'   →  ab
+slice  1  3 'abcde'   →  bc     (the positive form honours end)
+```
+
+**Evidence:** the four calls above. A computed index that underflows —
+`slice (ep add 1) (size tok) tok` where `ep` came back `-1` from a failed
+`indexof` — therefore returns a plausible wrong substring instead of an
+error or an empty string.
+
+**Documentation status:** the negative-index convention is documented as
+"count from the end"; that an end argument is then dropped is not.
+
+**Proposed verdict:** fix — honour `end` for a negative start, or refuse the
+combination. Relatedly, NUR019 already records `slice` as the String
+family's core straggler; this is a second, independent defect in the same
+word.
+
+
+
+### Why allowed
+
+The affected spelling is a negative start, which every caller in this
+repository can avoid by clamping — and clamping is what a caller wants
+anyway, since a negative index is a bug at the call site more often than an
+intent to count from the end.
+
+**Evidence that pins it:** `utils/cut.aql`'s `cut-chars-rng` clamps the start
+explicitly and says it does so BECAUSE of this record, rather than relying on
+`slice` to do the right thing; `utils/tests/cut_test.aql` pins the clamped
+behaviour at both ends.
+---
+
+
+## NUR040 — `set` quotes a bare computed key where `get` refuses it {#nur040}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+scouting
+
+**Rule:** sibling accessors treat their key argument the same way, and a
+program that means a variable's VALUE does not silently get its NAME.
+lang/go/CLAUDE.md states the split it intends: `dot`/`dotr` quote a bare
+word as a literal field name, `get`/`getr` evaluate it.
+
+**Divergence:** `set` carries the quoting `Atom/q` slot that `get` does not,
+so the same bare-word spelling means opposite things and only one of them
+complains:
+
+```
+def k "aa"   {} set k 1     →  {k:1}      # the NAME was stored
+def k "aa"   {} set (k) 1   →  {aa:1}     # the VALUE
+def k "aa"   {aa:1} get k   →  1          # get EVALUATES k
+```
+
+`aql check` reports nothing for the first line.
+
+**Evidence:** the three calls above. The failure mode in real code is a map
+built entirely under one literal key: every iteration of a loop overwrites
+`{k:…}`, and nothing anywhere reports it.
+
+**Documentation status:** the `dot` vs `get` split is documented in
+lang/go/CLAUDE.md; `set`'s membership in the quoting half is not called out,
+and `get`-evaluates / `set`-quotes is exactly the asymmetry a reader would
+not predict.
+
+**Proposed verdict:** argue and document, or diagnose. The quoting slot has
+a real purpose (`set name value store` reads well), so the uniform fix is
+probably a check-mode advisory when a bare word passed to a quoting slot is
+ALSO a live binding — the one case where the two readings differ and the
+author almost certainly meant the value.
+
+
+
+### Why allowed
+
+The asymmetry leaks from a distinction that is deliberate and load-bearing
+elsewhere — `dot`/`dotr` quote a bare key, `get`/`getr` evaluate one
+(lang/go/CLAUDE.md, "dot / dotr vs get / getr"). Making `set` match `get` is a
+behavioural change to a core word, which is a larger and riskier edit than the
+confusion it removes.
+
+**Evidence that pins it:** every `set` call in `utils/` and in
+`lang/go/modules/cli.aql` spells the key explicitly as `(quote k)` rather than
+relying on either behaviour, so nothing in the repo depends on which way the
+ambiguity resolves.
+---
+
+
+## NUR041 — The `read-only` profile denies file READS {#nur041}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting (design/CLI-PROGRAMS.1.md §1)
+
+**Rule:** a profile's name and its documented intent describe what it
+permits. `sandbox.jsonic`'s own comment says "importing the module is
+allowed so disk.read works, but the actual disk.read / disk.write capability
+is still gated by the global scope above".
+
+**Divergence:** `read-only` allows the `disk.read` GLOBAL but inherits
+`fileops.words { default: "deny" }` from `sandbox`, and the scope check
+denies first, so reading a file is refused under a profile whose name
+promises exactly that:
+
+```
+$ aql policy explain read-only fileops.read path=ro.txt
+decision: DENY   blame: fileops.words default=deny
+$ aql run -perms read-only -e 'import "aql:io" print (IO.read (make Pathon "ro.txt") {fmt:"text"})'
+error: [aql/read_error]: read: permission denied: fileops.read
+       (policy "read-only": fileops.words default=deny …)
+```
+
+`-allow fileops.read` is required to make a read-only profile read.
+
+**Evidence:** the two commands above. Symmetrically, the write half needs
+BOTH `-allow-global disk.write` and `-allow fileops.write`; the global cap
+and the scope rule are independent gates and either can deny alone.
+
+**Documentation status:** actively misleading — the profile name, and
+sandbox.jsonic's intent comment, both say the opposite of the behaviour.
+
+**Proposed verdict:** fix the profile (allow `fileops.read` in `read-only`,
+which is what the name means) or rename it, and correct the sandbox comment
+either way. A profile nobody can read a file under is not the read-only
+profile a tool author reaches for.
+
+
+
+### Why allowed
+
+Accepted with a caveat that belongs in the record rather than only in a commit
+message: the profile's NAME is what misleads. "read-only" reads as "reads are
+fine, writes are not", and it denies both. Nothing about the enforcement is
+wrong — the profile simply does not grant what its name implies.
+
+**Evidence that pins it:** `cmd/go/internal/build/utils_e2e_test.go` builds the
+baked-permissions pair against `-perms read-only` and records the behaviour at
+the call site, and `utils/tee.aql`'s header states it too, so the next author
+to reach for the profile meets the caveat before the surprise.
+---
+
+
+## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** a flag the CLI advertises does what it says, or does not exist.
+
+**Divergence:** `-policy-dry-run` is advertised on `aql run` and `aql build`
+as "observe-only: log what the policy would do but allow every call". It is
+parsed, read at exactly one site (to stop the resolver returning nil), and
+never wraps the policy in an observe-only decorator. Nothing is logged and
+nothing is allowed:
+
+```
+$ aql run -perms read-only -policy-dry-run -e 'import "aql:io"  IO.write (make Pathon "dry.txt") "x" {fmt:"text"}'
+error: [aql/write_error]: write: permission denied: fileops.write …
+```
+
+**Evidence:** the command above; `grep -rn DryRun --include=*.go cmd/go
+lang/go` outside tests returns only the flag's registration and that single
+read.
+
+**Documentation status:** documented in the flag's own help text, which is
+the whole problem.
+
+**Proposed verdict:** implement the decorator (a policy wrapper that logs
+the decision and returns nil) or remove the flag. A security-adjacent flag
+that silently does nothing is worse than no flag, because it invites exactly
+the "I checked with dry-run first" workflow it cannot support.
+
+
+
+### Why allowed
+
+A flag that is documented and inert is a small defect with a specific hazard: a
+user may believe they have PREVIEWED a policy when they have previewed nothing.
+That hazard is what this record keeps visible until the flag is either
+implemented or withdrawn.
+
+**Evidence that pins it:** the record carries the measurement showing the flag
+changes nothing, so a future implementation has its acceptance test already
+written.
+---
+
+
+## NUR044 — `aql build` skips the static check `aql run` performs {#nur044}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** the CLI's entry points agree about whether a program is valid.
+`aql run` performs a preflight check and refuses to execute a program with a
+check error.
+
+**Divergence:** `aql build` performs no check at all, so a program `aql run`
+refuses to run builds successfully and ships:
+
+```
+$ echo 'nosuchword 1 2' > bad.aql
+$ aql build bad.aql -o badbin
+wrote badbin              # exit 0
+$ ./badbin
+error: [aql/undefined_word]: undefined word: nosuchword    # exit 1
+$ aql run bad.aql
+check: [error] undefined_word: …  →  refuses to run
+```
+
+**Evidence:** the session above.
+
+**Documentation status:** `CLI.md` describes the preflight for `run` and
+does not say `build` omits it.
+
+**Proposed verdict:** fix — `aql build` should run the same preflight and
+refuse by default (with a `-no-check` escape hatch mirroring `run`'s). The
+asymmetry is worst exactly where it matters: the artefact that outlives the
+session is the one nothing validated.
+
+
+
+### Why allowed
+
+`aql build` producing an unchecked binary is a gap in the tool, not in the
+language, and it is covered by a build-time convention: check first, then
+build.
+
+**Evidence that pins it:** `utils/Makefile`'s `check` target exists precisely
+for this and its comment names this record — "the only thing standing between a
+typo and a shipped binary". `make -C utils all` runs `check` before anything
+else, and the end-to-end Go test builds only sources that suite has checked.
+---
+
+
+## NUR045 — Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny {#nur045}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** a policy rule a shipped profile declares is enforced. The policy
+engine has one evaluation path and every scope reaches it through
+`Policy.Check`.
+
+**Divergence:** the `modules` scope has a second, per-export half —
+`modules.scopes."aql:x".words`, keyed by export name — with a full
+implementation (`checkModuleCall`, `evaluate.go`) and unit tests. **Nothing
+in production ever calls it.** `Check("modules", "call", …)` appears only in
+`lang/go/policy/*_test.go`; the sole production `modules` checks are the
+import gate and the per-module `Installed()` flag
+(`lang/go/modules/modules.go`). So every per-export rule in every shipped
+profile is inert:
+
+```
+$ time aql do -perms sandbox 'import "aql:time-util"  TimeUtil.sleep 1500'
+real 0m1.531s          # it slept; sandbox.jsonic declares deny: ["sleep"]
+$ time aql do -perms full 'import "aql:time-util"  TimeUtil.sleep 1500'
+real 0m1.532s          # identical
+```
+
+**Evidence:** the timing above; `grep -rn 'Check("modules"' --include=*.go`
+outside tests returns exactly one line, and its op is `"import"`. The
+`deny: ["sleep"]` rule in `sandbox.jsonic` is the only per-export rule any
+shipped profile carries, which is why nobody noticed.
+
+**Why it matters:** `sleep` is the DoS vector a hosted evaluator reaches for
+`sandbox` to close. A profile that says it denies a word and does not is a
+false guarantee, and the false guarantee is in the security layer.
+
+**Documentation status:** `evaluate.go`'s own doc comment describes the
+per-export gate as working ("per-export rules live in the per-module
+subscope"), and `sandbox.jsonic` reads as though it works.
+
+**Proposed verdict:** fix — call `Check("modules", "call", {module, export})`
+at module-export dispatch — or delete the schema and the rule, and say in
+`lang/go/policy` that module gating is import-granularity only. The choice
+is a real one: the check would run on every module-word call, so its cost
+belongs to the maintainer's judgement, not to a bug fix. What must not
+survive is a profile declaring a denial it does not perform.
+
+
+### Why allowed
+
+**This is a false guarantee in the security layer, and the acceptance does not
+make it a safe one.** `sandbox.jsonic` declares `deny: ["sleep"]`, the
+per-export gate that would enforce it is never called in production, and the
+measured behaviour is that a sandboxed program sleeps exactly as long as an
+unsandboxed one. A profile that states a denial it does not perform is worse
+than one that states nothing, because a reader budgets for it.
+
+What is allowed is the SCHEMA remaining in place while unenforced. Closing it
+means either calling the gate on every module-export dispatch — a cost on the
+hot path, which is a maintainer's judgement rather than a bug fix — or deleting
+the rule and saying that module gating is import-granularity only.
+
+**Evidence that pins it:** the record carries the timing measurement showing
+the two profiles behave identically, so whichever direction is chosen has its
+acceptance test already written. Until then, no shipped profile should be
+described to a user as denying a word.
+---
+
+## NUR046 — `aql fmt` is not idempotent: one pass is not a fixed point {#nur046}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
+suite (`utils/`)
+
+**Rule:** a formatter is idempotent. `fmt(fmt(x)) == fmt(x)`, so "formatted"
+is a property a file either has or does not, a `make fmt` target converges,
+and a formatting check can be a single-pass diff. `make fmt-docs` and
+`kg/Makefile`'s restored `fmt` target both rely on this.
+
+**Divergence:** on a `def name fn [[params] [Returns] [body]]` whose header
+does not fit the width, the FIRST pass and the SECOND pass produce different
+layouts. It converges at pass 2 — passes 2..n are identical — so the fixed
+point exists; one application simply does not reach it.
+
+```aql
+# m.aql, as hand-written:
+def cat-format fn [[line:String k:Integer numbered:Boolean ends:Boolean] [String] [
+  def body (if ends [(join "" [line "$"])] [line])
+  join "" [body "\n"]
+]]
+```
+
+```
+$ aql fmt m.aql && cat m.aql          # pass 1
+def cat-format fn
+  [[line:String k:Integer numbered:Boolean ends:Boolean] [String] [
+  def body (if ends [(join "" [line "$"])] [line]) join "" [body "\n"]
+]]
+
+$ aql fmt m.aql && cat m.aql          # pass 2 — different, and stable
+def cat-format fn
+[[line:String k:Integer numbered:Boolean ends:Boolean] [String]
+      [def body (if ends [(join "" [line "$"])] [line]) join ""
+          [body "\n"]
+      ]
+  ]
+```
+
+**Evidence:** the repro above. Across `utils/*.aql` the same thing happens to
+all six programs (the five `tests/*.aql` suites are already at their fixed
+point after one pass, which is why the divergence is easy to miss); program
+output is unchanged in every case, and every one still passes `aql check`.
+
+**Why it matters:** three ways.
+
+1. A `fmt` target inside an `all:` target never converges in one run, so
+   `make all` always leaves a dirty tree — which is why `utils/Makefile`
+   deliberately keeps `fmt` OUT of `all` and says so, the same posture
+   `kg/Makefile` held while NUR028 was open.
+2. Pass 1 joins two statements onto one line (`… [line]) join "" [body …`)
+   and pass 2 re-indents a statement as though it continued the previous
+   one. Both are legal — AQL is whitespace-insensitive — but a reader
+   cannot tell statement boundaries by eye any more, which is most of what
+   a formatter is for.
+3. It is a fixed-point bug in the same component as the resolved
+   superlinear blow-up, in a shape that blow-up's gate would not have
+   caught: that gate compared old-binary and new-binary output on the
+   *repo's already-canonical* corpus, where pass 1 is already the fixed
+   point. Non-canonical input is the untested axis.
+
+**Documentation status:** nothing claims idempotence in so many words, but
+`design/…` notes on 0.9 and `kg/README.md` both treat a single `fmt` run as
+producing canonical form, and `make fmt-docs` rewrites doc blocks in one
+pass.
+
+**Proposed verdict:** fix. The convergence at pass 2 suggests the first pass
+measures widths against a pre-wrap layout decision it then invalidates — the
+same family as the memoisation 0.9 landed, one layer up. A regression guard
+belongs with the fix: format every `.aql` in the repo TWICE and require the
+second pass to be a no-op, with at least one deliberately non-canonical
+fixture, since the existing corpus cannot detect this.
+
+
+### Why allowed
+
+Formatting does not change behaviour — all 995 cases in `utils/` pass either
+way, verified — so what the non-idempotence costs is a clean tree and readable
+sources, not correctness. It converges at the second pass, so a `fmt` target
+that ran twice would be stable; the reason not to paper over it that way is
+that the intermediate layout runs statements together on one line, which is
+most of what a formatter is for.
+
+**Evidence that pins it:** `utils/Makefile` keeps `fmt` OUT of its `all` target
+and its comment names this record and explains why — the same posture
+`kg/Makefile` held while its own formatter blocker was open — so the tree
+cannot silently start churning on every build.
+---
+
+## NUR047 — Regex match offsets are BYTE indices; every string word around them is RUNE-indexed {#nur047}
+
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
+suite (`grep --color`)
+
+**Rule:** AQL counts strings in RUNES, uniformly. `size "日本語"` is 3,
+`slice 1 2 "日本語"` is `本`, `StringUtil.split ""` yields runes, and
+`REFERENCE.md` states the rune convention for the string family as a whole.
+It is one of the language's cleaner uniformities — a user never has to ask
+which unit a string word means.
+
+**Divergence:** the match records `MiniLang.lang_re` returns carry `i` and `e`
+in BYTES.
+
+```
+$ aql do 'import "aql:minilang"  print (MiniLang.lang_re "c" {} "日本語c")'
+{"ok": true, "ms": [{"m": "c", "i": 9, "e": 10, …}], …}
+
+$ aql do 'print (size "日本語c")'
+4
+```
+
+The match is at rune index 3 of a 4-rune string; the record says 9..10. Every
+consumer that does the obvious thing — `slice (m.i) (m.e) line`, the whole
+point of returning offsets — is therefore wrong on any line containing a
+non-ASCII rune, and RIGHT on every ASCII line, which is the worst possible
+failure distribution: it passes every casual test and corrupts real data.
+
+**Evidence:** the two commands above. `utils/grep.aql`'s `--color` highlighter
+is the in-repo consumer; it works around this by converting the line to Bytes,
+slicing in bytes, and converting back (`convert String (slice i e (convert
+Bytes line))`), which is correct but is exactly the kind of thing a uniform
+convention exists to make unnecessary.
+
+**Why it matters:** offsets are only useful for indexing back into the
+subject, and the one indexing word available (`slice`) uses the other unit.
+The two halves of the feature do not compose. A highlighter, a linter, a
+syntax-colourer, and an LSP `Diagnostic` range all want exactly this and all
+hit it — Phase 5's server would meet it in `textDocument/publishDiagnostics`,
+where LSP itself specifies UTF-16 code units, making three units in play.
+
+**Documentation status:** the unit is not stated at all. `aql describe` for
+the regex words does not say, and nothing in `REFERENCE.md` marks the match
+record as an exception to the rune convention.
+
+**Proposed verdict:** fix by returning rune offsets, since that is what the
+rest of the language means by an index — and it is the half users can act on.
+If byte offsets must be kept (they are what Go's regexp returns, and
+converting costs a scan), then the record should carry BOTH, named so the
+unit is impossible to mistake, and the rune convention's exception must be
+documented everywhere the match record is.
+
+### Why allowed
+
+The unit mismatch is real and its failure distribution is the worst kind —
+correct on every ASCII input, silently corrupting on the first multi-byte one —
+but it is confined to consumers that index back into the subject with the
+returned offsets, and those consumers can be exact today by slicing in Bytes.
+
+**Evidence that pins it:** `utils/grep.aql`'s `--color` highlighter is the
+in-repo consumer; it converts to Bytes, slices, and converts back, and
+`utils/tests/grep_test.aql` carries three cases (a match after multi-byte
+runes, a multi-byte match, an astral rune) that exist ONLY to fail if that
+workaround is removed. All three would pass on ASCII input, which is why they
+are written explicitly.

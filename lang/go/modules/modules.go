@@ -41,6 +41,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 	"minilang":    BuildMiniLangModule,
 	"parselang":   BuildParseLangModule,
 	"sift":        BuildSiftModule,
+	"cli":         BuildCliModule,
 	"emitlang":    BuildEmitLangModule,
 	"parse":       BuildParseModule,
 	"model":       BuildModelModule,

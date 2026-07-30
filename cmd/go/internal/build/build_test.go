@@ -59,7 +59,7 @@ func TestBuildConfigSingleFile(t *testing.T) {
 	if err := os.WriteFile(src, []byte("add 1 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestBuildConfigBundlesTransitiveImports(t *testing.T) {
 	write(t, dir, "lib.aql", `import "./dep.aql"`+"\n"+`export "Lib" {x:1}`)
 	write(t, dir, "dep.aql", `export "Dep" {y:2}`)
 
-	cfg, err := buildConfig(filepath.Join(dir, "main.aql"), "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(filepath.Join(dir, "main.aql"), "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestBuildConfigBundlesTransitiveImports(t *testing.T) {
 func TestBuildConfigSkipsBuiltinImports(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "p.aql", `import "aql:math-util"`+"\n"+`MathUtil.sqrt 16.0`)
-	cfg, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestBuildConfigSkipsBuiltinImports(t *testing.T) {
 func TestBuildConfigRejectsBareImport(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "p.aql", `import "somepkg"`+"\n"+`1`)
-	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "")
+	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error for an unbundlable bare-module import")
 	}
@@ -119,14 +119,14 @@ func TestBuildConfigRejectsBareImport(t *testing.T) {
 func TestBuildConfigMissingImportFails(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "p.aql", `import "./missing.aql"`+"\n"+`1`)
-	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "")
+	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error when a bundled import does not exist")
 	}
 }
 
 func TestBuildConfigMissingEntryFails(t *testing.T) {
-	_, err := buildConfig(filepath.Join(t.TempDir(), "nope.aql"), "", 0, buildrt.CompileOff, "")
+	_, err := buildConfig(filepath.Join(t.TempDir(), "nope.aql"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error for a missing entry file")
 	}
@@ -184,7 +184,7 @@ func TestBuildSelfEmbedEndToEnd(t *testing.T) {
 	src := write(t, dir, "p.aql", "add 1 2")
 	out := filepath.Join(dir, "p")
 
-	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestBuildNativeEndToEnd(t *testing.T) {
 	src := write(t, dir, "p.aql", "add 1 2")
 	out := filepath.Join(dir, "p")
 
-	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "")
+	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

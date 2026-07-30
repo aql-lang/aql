@@ -29,10 +29,10 @@ import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {}	'baa'	empty options
 import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q}	'bbb'	an Atom option value selects all-occurrences
 import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:"all"}	'bbb'	a String option value is accepted for the same key
 import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q count:2}	'bba'	two options combine: all-scope capped at 2
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:nope/q}	'baa'	an unrecognised option VALUE falls back to the default — no error today
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scop:all/q}	'baa'	a typo'd option KEY is silently ignored at a plain-Map slot — no schema check today
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:nope/q}	ERROR:string_option_error	an unrecognised option VALUE is rejected — it used to fall back to the default, indistinguishable from a correct call
+import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scop:all/q}	ERROR:string_option_error	a typo'd option KEY is rejected — matching emit's schema behaviour below, where it was already loud
 import "aql:string-util" StringUtil.changecase 'hello' {style:"upper"}	'HELLO'	changecase drives its style through the options map
-import "aql:string-util" StringUtil.changecase 'hello' {styl:"upper"}	'hello'	typo'd key → default style — silently lowercased
+import "aql:string-util" StringUtil.changecase 'hello' {styl:"upper"}	ERROR:string_option_error	typo'd key is rejected — it used to lowercase silently, so the typo looked like it worked
 import "aql:emitlang" emit json {prety:true} {a:1}	ERROR:uncalled_function	emit: an unknown option key (typo'd 'prety') no longer matches the schema — a loud rejection, not silent compact output
 import "aql:emitlang" emit json {pretty:1} {a:1}	ERROR:uncalled_function	emit: a non-Boolean 'pretty' value fails the schema's typed slot — rejected rather than ignored
 #

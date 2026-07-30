@@ -86,6 +86,14 @@ type Registry struct {
 	// grows, growth factor). The zero value uses the defaults; hosts set
 	// it via lang.Options. See eng/go/tape.go.
 	TapeConfig TapeConfig
+	// StepLimit caps the interpreter's Run loop, a single paren-group
+	// evaluation, and the VM's step counter. Zero means unset — the
+	// DefaultStepLimit / DefaultSubStepLimit constants apply. It is not a
+	// zero-value overload: a limit of 0 would abort before the first step,
+	// so the option parser rejects an explicit 0 (lang/go/options.go) and
+	// the two meanings cannot collide. Hosts set it via lang.Options.Steps
+	// or the CLI's `--options steps:N`.
+	StepLimit int
 	// Modules owns module-loading state: the load set, the
 	// module-ID counter, the host's init callback, and the native-
 	// module resolver. See modules.go.
@@ -2267,6 +2275,34 @@ func (r *Registry) AqlErrorHint(code, detail, word, hint string) error {
 		src = r.Source
 	}
 	return makeAqlError(code, detail, word, src, hint)
+}
+
+// AqlErrorAt is AqlError carrying an explicit source position — the
+// positioned twin every handler should prefer when it has a Value in hand.
+//
+// AqlError reports Row 0, which renders as "source position unknown", and
+// there is deliberately no text-search fallback (a guessed location is
+// wrong whenever the word appears more than once). A handler almost always
+// CAN do better: its arguments carry their own positions, so
+// `r.AqlErrorAt(code, detail, word, args[i].Pos())` blames the argument
+// that actually failed. Prefer that over AqlError wherever an argument
+// identifies the fault; reserve AqlError for errors with no argument to
+// blame.
+func (r *Registry) AqlErrorAt(code, detail, word string, pos SrcPos) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlErrorAt(code, detail, word, src, "", pos)
+}
+
+// AqlErrorHintAt is AqlErrorAt with an explicit hint string.
+func (r *Registry) AqlErrorHintAt(code, detail, word, hint string, pos SrcPos) error {
+	src := ""
+	if r != nil {
+		src = r.Source
+	}
+	return makeAqlErrorAt(code, detail, word, src, hint, pos)
 }
 
 // ResolveTypedName resolves a name to its bound value. Post the

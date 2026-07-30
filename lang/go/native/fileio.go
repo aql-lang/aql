@@ -45,19 +45,25 @@ const (
 //
 // The two answers are kept apart on purpose: a rule said no (widen the
 // rule) versus the capability isn't there at all (install it).
-func fileOpError(r *Registry, def, word, detail string, err error) error {
+func fileOpError(r *Registry, def, word, detail string, err error, pos SrcPos) error {
 	var missing *notInstalledError
 	if errors.As(err, &missing) {
-		return r.AqlError("capability_not_installed", detail, word)
+		return r.AqlErrorAt("capability_not_installed", detail, word, pos)
 	}
 	// The shared adapter (policy_error.go), so fileops and every other gated
 	// capability answer a refusal with the same code. This site passes its OWN
 	// detail: a file op has already built a "read: …" / "write: …" message
 	// naming the path, which is more use to the reader than the blame trail.
+	//
+	// A policy refusal keeps the adapter's UNPOSITIONED error: the adapter is
+	// shared by every gated capability, and threading a position through it is
+	// the rest of the positionless-error work (design note: the aql:io pilot
+	// covers this word's OWN failures, not the policy layer's). The two arms
+	// either side of it do carry the call's position.
 	if coded, ok := policyRefusalCoded(r, word, detail, err); ok {
 		return coded
 	}
-	return r.AqlError(def, detail, word)
+	return r.AqlErrorAt(def, detail, word, pos)
 }
 
 // DefaultExtensions returns the built-in file-extension→format-name map
@@ -267,12 +273,12 @@ func valueToJsonic(v Value) string {
 	return s
 }
 
-func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]Value, error) {
+func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos SrcPos) ([]Value, error) {
 	var data []byte
 	var err error
 
 	if path == pathStdout || path == pathStderr {
-		return nil, r.AqlError("read_error", "read: cannot read from an output stream", "read")
+		return nil, r.AqlErrorAt("read_error", "read: cannot read from an output stream", "read", pos)
 	}
 
 	// read_error, not a bare fmt.Errorf. These were the only UNCODED
@@ -285,14 +291,24 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 	// treats a FOREIGN error as "retry", an AqlError as "surface" — the
 	// same reasoning the {exclusive} write path documents below.
 	if path == pathStdin {
-		data, err = io.ReadAll(r.Input)
+		// Through the SHARED buffered reader, not r.Input directly. IO.read-line
+		// reads ahead by necessity, so a whole-stream read that went straight to
+		// r.Input would skip whatever read-line had already buffered — silently.
+		// One reader means `IO.read-line` then `IO.read` yields the rest of the
+		// stream (io_lines.go). With no line read first the buffer is empty and
+		// this is byte-for-byte the old io.ReadAll(r.Input).
+		// Through the holder's LOCKED drain, not io.ReadAll over the reader
+		// it hands back: the buffer is shared with IO.read-line and with
+		// every concurrency fork, so a read outside the lock races the same
+		// way the line read did.
+		data, err = stdinReadAll(r)
 		if err != nil {
-			return nil, r.AqlError("read_error", fmt.Sprintf("read: stdin: %v", err), "read")
+			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
 		}
 	} else {
 		data, err = EffectiveFileOps(r).ReadFile(path)
 		if err != nil {
-			return nil, fileOpError(r, "read_error", "read", fmt.Sprintf("read: %v", err), err)
+			return nil, fileOpError(r, "read_error", "read", fmt.Sprintf("read: %v", err), err, pos)
 		}
 	}
 
@@ -316,7 +332,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 		result, err = f.Decode(content)
 	}
 	if err != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+		return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
 	}
 
 	// Store table data in SQLite for formats that produce tables.
@@ -335,8 +351,8 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 			}
 
 			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
-				return nil, r.AqlError("read_error",
-					fmt.Sprintf("read: sqlite store: %v", err), "read")
+				return nil, r.AqlErrorAt("read_error",
+					fmt.Sprintf("read: sqlite store: %v", err), "read", pos)
 			}
 			td.SQLite = true
 			td.TableName = baseName
@@ -347,11 +363,11 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any) ([]V
 	return result, nil
 }
 
-func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool) ([]Value, error) {
+func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, exclusive bool, pos SrcPos) ([]Value, error) {
 	content = applyNL(content, nl)
 
 	if exclusive && (atomic || mode == "append") {
-		return nil, r.AqlError("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write")
+		return nil, r.AqlErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
 	}
 
 	// Handle stdout/stderr special paths.
@@ -363,7 +379,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			w = r.ErrOutput
 		}
 		if _, err := fmt.Fprint(w, content); err != nil {
-			return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
@@ -376,7 +392,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 		if existing, rerr := EffectiveFileOps(r).ReadFile(path); rerr == nil {
 			prev, derr := decodeEnc(existing, enc)
 			if derr != nil {
-				return nil, r.AqlError("write_error", fmt.Sprintf("write: append: %v", derr), "write")
+				return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: append: %v", derr), "write", pos)
 			}
 			content = prev + content
 		}
@@ -384,7 +400,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 
 	data, encErr := encodeEnc(content, enc)
 	if encErr != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", encErr), "write")
+		return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", encErr), "write", pos)
 	}
 
 	// C1 effect fence (eng effects.go): a filesystem write is an observable
@@ -402,7 +418,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			// treats the refusal as intentional and does not attempt a
 			// fallback — which a prior statement's effect would block,
 			// surfacing as a spurious internal_error (compiled_fullcorpus).
-			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err)
+			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
@@ -414,12 +430,12 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 	// internal_error. It also gives the failure a code to dispatch on.
 	if atomic {
 		if err := writeAtomic(r, path, data); err != nil {
-			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err)
+			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
 	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
-		return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err)
+		return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 	}
 
 	return []Value{NewString(path)}, nil

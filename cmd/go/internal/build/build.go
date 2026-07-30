@@ -30,7 +30,9 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
 	"github.com/aql-lang/aql/cmd/go/internal/command"
 	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 type cmd struct{}
@@ -54,6 +56,10 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	noCompileFlag := fs.Bool("no-compile", false, "bake interpreter-only execution into the binary; wins over --compile/--force-compile")
 	forceCompileFlag := fs.Bool("force-compile", false, "bake REQUIRED bytecode compilation into the binary")
 	optionsStr := fs.String("options", "", "engine options as jsonic, baked in (e.g. tape:initial:65536)")
+	// -perms/-allow/-deny bake the resolved policy into the binary, so a
+	// shipped tool carries its author's declared permissions.
+	var pf permsflags.Flags
+	permsflags.Register(fs, &pf)
 
 	// flag.Parse stops at the first non-flag token, so flags placed after the
 	// script (the natural `aql build prog.aql -o prog` form) would be missed.
@@ -92,7 +98,17 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	cfg, err := buildConfig(srcPath, *registry, seed, resolveCompile(*compileFlag, *forceCompileFlag, *noCompileFlag), *optionsStr)
+	pol, err := pf.Resolve()
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %s\n", err)
+		return 1
+	}
+	var prof *policy.Profile
+	if pol != nil {
+		prof = permsflags.ProfileFromPolicy(pol)
+	}
+
+	cfg, err := buildConfig(srcPath, *registry, seed, resolveCompile(*compileFlag, *forceCompileFlag, *noCompileFlag), *optionsStr, prof)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -151,7 +167,7 @@ func defaultOutput(srcPath string) string {
 // assembles the buildrt.Config baked into the binary. Built-in aql: imports
 // are skipped (they are in the runtime); every reachable .aql file is embedded
 // under its absolute path so the in-memory file system resolves it at run time.
-func buildConfig(srcPath, registry string, seed int64, mode buildrt.CompileMode, optionsBlob string) (buildrt.Config, error) {
+func buildConfig(srcPath, registry string, seed int64, mode buildrt.CompileMode, optionsBlob string, prof *policy.Profile) (buildrt.Config, error) {
 	entryAbs, err := filepath.Abs(srcPath)
 	if err != nil {
 		return buildrt.Config{}, err
@@ -173,6 +189,11 @@ func buildConfig(srcPath, registry string, seed int64, mode buildrt.CompileMode,
 		Seed:        seed,
 		Compile:     mode,
 		OptionsBlob: optionsBlob,
+		// A policy given at build time is baked in, so the shipped tool
+		// carries the author's declared permissions rather than running
+		// wide open. See buildrt.Config.Profile for why this is a default
+		// and not a boundary.
+		Profile: prof,
 	}
 	// Only attach Files when there is more than the entry itself — a
 	// single-file program needs no in-memory file system.

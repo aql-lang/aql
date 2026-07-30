@@ -64,6 +64,20 @@ func DefaultRegistryWithPolicy(p policy.Policy, providers ...func(*Registry)) (*
 	SetHostFormats(r, formats)
 	SetHostExtensions(r, DefaultExtensions())
 
+	// The shared stdin reader is installed EAGERLY, and both reasons matter.
+	//
+	// It cannot be created lazily on first IO.read-line: the capability store
+	// is an unsynchronised Go map (eng/go/capability.go:54-71) whose pointer
+	// ForkConcurrent shares across goroutines, so a lazy Set would race a
+	// concurrent Get — a fatal "concurrent map writes", not a recoverable one.
+	//
+	// And it must exist before any `import`: RunModuleBody snapshots the
+	// ModuleInheritedCaps slots at IMPORT time (native_module_module.go), so a
+	// holder created later is not inherited, and a module body that read stdin
+	// first would open a SECOND buffer over the importer's reader and eat its
+	// bytes. Existing at construction makes the snapshot copy the pointer.
+	installStdinLines(r)
+
 	// Default SQLite store.
 	sqlStore, err := newSQLiteStoreFn()
 	if err != nil {

@@ -31,6 +31,9 @@ const (
 	CapHTTPOps         = "engine.httpops"        // capabilities.HTTPOps (aql:net fetch transport)
 	CapClientIdents    = "engine.clientidents"   // map[string]capabilities.ClientIdentity (mTLS)
 	CapHTTPTransports  = "engine.httptransports" // map[TLSProfile]http.RoundTripper (per-registry cache)
+	CapEnv             = "engine.env"            // capabilities.EnvOps (IO.env)
+	CapStreamProbe     = "engine.streamprobe"    // capabilities.StreamProbe (IO.is-tty)
+	CapStdinLines      = "engine.stdinlines"     // *stdinLines (the ONE buffered reader over r.Input)
 )
 
 // EffectiveHTTPOps returns the HTTP transport capability for the current
@@ -416,4 +419,100 @@ func fsFlag(fsStore *StoreInstanceInfo, key string) bool {
 	}
 	asBool, _ := AsBoolean(v)
 	return v.Parent.ConformsTo(TBoolean) && asBool
+}
+
+// HostEnvOps returns the installed environment view, or nil when the host
+// installed none. Nil means "no environment visible", which is the hermetic
+// default: IO.env then reports every name as unset rather than reaching for
+// the real process environment behind the host's back.
+func HostEnvOps(r *Registry) capabilities.EnvOps {
+	ops, _, _ := eng.Cap[capabilities.EnvOps](r, CapEnv)
+	return ops
+}
+
+// SetHostEnvOps installs the environment view, honouring the policy the same
+// way SetHostFileOps does: a profile that uninstalls the `env` scope clears
+// the slot outright, so the capability is absent rather than merely refusing
+// — and a configured profile wraps it so per-name rules apply.
+func SetHostEnvOps(r *Registry, ops capabilities.EnvOps) {
+	if r == nil {
+		return
+	}
+	if ops == nil {
+		_, _ = r.Capabilities.Delete(CapEnv)
+		return
+	}
+	if pol := HostPolicy(r); pol != nil {
+		if !pol.Installed("env") {
+			_, _ = r.Capabilities.Delete(CapEnv)
+			return
+		}
+		ops = permissionedEnvOps{inner: ops, policy: pol}
+	}
+	_ = r.Capabilities.Set(CapEnv, ops)
+}
+
+// permissionedEnvOps gates each read through the policy's `env` scope, so a
+// profile can expose an allowlist (read-only.jsonic allows LANG, TZ, AQL_*)
+// rather than all-or-nothing. A denied name reads as UNSET rather than
+// raising: a program probing for an optional variable should take its default
+// path, not crash, and the alternative leaks which names exist.
+type permissionedEnvOps struct {
+	inner  capabilities.EnvOps
+	policy policy.Policy
+}
+
+func (p permissionedEnvOps) Get(name string) (string, bool) {
+	if err := p.policy.Check("env", "read", policy.Args{"name": name}); err != nil {
+		return "", false
+	}
+	return p.inner.Get(name)
+}
+
+func (p permissionedEnvOps) All() []string {
+	var out []string
+	for _, n := range p.inner.All() {
+		if err := p.policy.Check("env", "read", policy.Args{"name": n}); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// HostStreamProbe returns the installed terminal probe, or nil when the host
+// installed none. Nil means "nothing is a terminal", which is the hermetic
+// default: IO.is-tty answers false rather than the runtime asking the operating
+// system a question the host did not authorise.
+func HostStreamProbe(r *Registry) capabilities.StreamProbe {
+	probe, _, _ := eng.Cap[capabilities.StreamProbe](r, CapStreamProbe)
+	return probe
+}
+
+// SetHostStreamProbe installs the terminal probe, honouring the policy the
+// same way SetHostFileOps and SetHostEnvOps do: a profile that uninstalls the
+// `terminal` scope clears the slot, so IO.is-tty answers false.
+//
+// Note what is deliberately NOT here: a per-call policy Check. Every shipped
+// profile except `trusted` and `full` uninstalls the terminal scope
+// (profiles/sandbox.jsonic:60, and read-only / client extend sandbox;
+// compute.jsonic:42, gen.jsonic:58), and Check on an uninstalled scope
+// RAISES. Gating the word per call would therefore make the RFC's own colour
+// idiom — `IO.is-tty (IO.stdout)` next to `IO.env "NO_COLOR"`
+// (design/CLI-PROGRAMS.0.md §5) — abort under a sandbox instead of answering.
+// Clearing the slot honours the profile author's intent exactly, and gives
+// the program the usable answer "not a terminal" rather than a failure it
+// cannot do anything with.
+func SetHostStreamProbe(r *Registry, probe capabilities.StreamProbe) {
+	if r == nil {
+		return
+	}
+	if probe == nil {
+		_, _ = r.Capabilities.Delete(CapStreamProbe)
+		return
+	}
+	if pol := HostPolicy(r); pol != nil && !pol.Installed("terminal") {
+		_, _ = r.Capabilities.Delete(CapStreamProbe)
+		return
+	}
+	_ = r.Capabilities.Set(CapStreamProbe, probe)
 }

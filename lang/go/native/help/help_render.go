@@ -38,6 +38,7 @@ var moduleCatalog = []ModuleInfo{
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
+	{"cli", "Command-line argument parsing, written in AQL: a spec map drives parse / dispatch / usage / main, with argv always an explicit parameter."},
 	{"sift", "Semi-structured text parsing (the awk tier): kv, blocks, columns, dsv, fixed, and pattern families via the Sift namespace (Sift.parse / define / …), plus spec-map extensions."},
 	{"emitlang", "Emit data structures to strings behind the `emit` word: json, jsonic, csv, tsv, yaml, xml, toml, ini."},
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
@@ -78,6 +79,13 @@ func WriteWordsByCategory(w io.Writer) {
 	for _, cat := range categories {
 		writeLine(w, "  "+pad(cat.Name, 9)+" "+cat.Summary)
 		writeWordGrid(w, cat.Words)
+		// Module-provided words are listed under the import that binds
+		// them. Without this they read as builtins and every one of them
+		// fails as undefined_word in a bare program.
+		for _, id := range cat.ModuleIDs() {
+			writeLine(w, "    (import \"aql:"+id+"\")")
+			writeWordGrid(w, cat.Module[id])
+		}
 	}
 }
 
@@ -94,14 +102,32 @@ func WriteModuleCatalog(w io.Writer) {
 func WriteCategory(w io.Writer, cat Category) {
 	writeLine(w, cat.Name+" — "+cat.Summary)
 	writeLine(w, "")
-	writeLine(w, "Words:")
-	for _, word := range cat.Words {
-		summary := ""
-		if e := Lookup(word); e != nil {
-			summary = e.Summary
+	wrote := false
+	if len(cat.Words) > 0 {
+		writeLine(w, "Words:")
+		for _, word := range cat.Words {
+			writeLine(w, "  "+pad(word, 12)+" "+wordSummary(word))
 		}
-		writeLine(w, "  "+pad(word, 12)+" "+summary)
+		wrote = true
 	}
+	for _, id := range cat.ModuleIDs() {
+		if wrote {
+			writeLine(w, "")
+		}
+		wrote = true
+		writeLine(w, "Words from import \"aql:"+id+"\" (call as <Export>.<word>):")
+		for _, word := range cat.Module[id] {
+			writeLine(w, "  "+pad(word, 12)+" "+wordSummary(word))
+		}
+	}
+}
+
+// wordSummary is a word's one-line summary, or "" when it has no Entry.
+func wordSummary(word string) string {
+	if e := Lookup(word); e != nil {
+		return e.Summary
+	}
+	return ""
 }
 
 // writeWordGrid prints words wrapped under a 4-space indent at ~72 columns.

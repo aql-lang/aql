@@ -33,9 +33,9 @@ func runEmit(t *testing.T, src string) (string, error) {
 const emitImp = `import "aql:emitlang"  `
 
 // runEmitTop is runEmit through a TOP-LEVEL engine (native.NewTop — the CLI /
-// spec-runner shape), where an unfired FnDef left on the stack raises
-// uncalled_function in the end-of-run drain. The dispatch-rejection pins need
-// this surface; a plain sub-engine leaves the unmatched fn as data.
+// spec-runner shape), the surface the dispatch-rejection pins below are
+// written against: a call whose args match no signature raises
+// uncalled_function at the dispatch site (design/FN-VALUE-DISPATCH.0.md).
 func runEmitTop(t *testing.T, src string) (string, error) {
 	t.Helper()
 	reg, err := native.DefaultRegistry()

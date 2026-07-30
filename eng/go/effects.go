@@ -85,6 +85,15 @@ func (nw noteEffectWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// Unwrap returns the writer this fence wraps, so a caller that must ask the
+// OPERATING SYSTEM about the destination — `IO.is-tty`, and the CLI's own
+// auto-colour decision, both of which stat the endpoint — reaches the real
+// *os.File instead of this instrument. Without it the fence silently changed an
+// observable answer: compiled mode arms the fence, so `IO.is-tty (IO.stdout)`
+// reported false on a real terminal while the interpreter reported true. Same
+// contract, and same reason, as SyncWriter.Unwrap (fork.go).
+func (nw noteEffectWriter) Unwrap() io.Writer { return nw.w }
+
 // ArmEffectFence wraps the registry's Output/ErrOutput writers so every write
 // marks the effect ledger, and returns a restore func reinstating the
 // original writers. Compiled-mode entry points arm the fence BEFORE the check

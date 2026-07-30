@@ -10,6 +10,7 @@ package capabilities
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/term"
 	"io"
 	"os"
 	"path/filepath"
@@ -1579,4 +1580,119 @@ func (m *MemFileOps) ResolvePath(path string) (string, error) {
 		base = "."
 	}
 	return filepath.Clean(filepath.Join(base, path)), nil
+}
+
+// EnvOps is the host's view of the process environment, read-only.
+//
+// It is a capability rather than a direct os.Getenv call for the same reason
+// FileOps is: the runtime must never reach for ambient process state on its
+// own. A hermetic spec runner installs nothing and sees an empty environment;
+// an embedded host can install a filtered view exposing an allowlist; the CLI
+// installs the real one. Nothing about `IO.env` changes between those cases
+// except what the host chose to hand it.
+//
+// Read-only by design: there is no SetEnv. Mutating one's own environment is
+// almost always a smell, and the real use case -- giving a child process a
+// different environment -- belongs to whatever spawns the child, which can
+// take it explicitly.
+type EnvOps interface {
+	// Get returns the value and whether the name is set. An empty string is
+	// a real value, distinct from unset, so the bool is load-bearing.
+	Get(name string) (string, bool)
+	// All returns every visible name, in no guaranteed order.
+	All() []string
+}
+
+// OSEnvOps is the production EnvOps: the real process environment.
+type OSEnvOps struct{}
+
+func (OSEnvOps) Get(name string) (string, bool) { return os.LookupEnv(name) }
+
+func (OSEnvOps) All() []string {
+	pairs := os.Environ()
+	names := make([]string, 0, len(pairs))
+	for _, kv := range pairs {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			names = append(names, kv[:i])
+		}
+	}
+	return names
+}
+
+// MapEnvOps is a fixed EnvOps over a map — the deterministic fake for tests
+// and specs, mirroring FixedClock's role for Clock. It is what makes the
+// host-dependent half of IO.env testable at all, which ADR-008 requires.
+type MapEnvOps struct{ Vars map[string]string }
+
+func (m MapEnvOps) Get(name string) (string, bool) {
+	v, ok := m.Vars[name]
+	return v, ok
+}
+
+func (m MapEnvOps) All() []string {
+	names := make([]string, 0, len(m.Vars))
+	for k := range m.Vars {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// StreamProbe is the host capability that answers "is this stream a
+// terminal?" for the aql:io `tty` word.
+//
+// It is a capability rather than a direct isatty call for the reason every
+// other one here is: the runtime must not decide by itself what the outside
+// world looks like. A hermetic spec runner installs nothing and every stream
+// answers false; the CLI installs the real probe; a host that redirected a
+// stream somewhere unusual can answer for itself.
+//
+// Absence means FALSE, not an error. A program asking whether it is talking
+// to a terminal is choosing between two valid behaviours (colour or not,
+// prompt or not), so "no" is a usable answer and an error would force every
+// caller to handle a failure that is not one.
+type StreamProbe interface {
+	// IsTerminal reports whether the named stream — "stdin", "stdout" or
+	// "stderr" — is a terminal.
+	//
+	// endpoint is the io.Reader or io.Writer the runtime currently holds for
+	// that stream. Both arguments are supplied because the two kinds of
+	// implementation want different ones: an OS-backed probe inspects the
+	// endpoint (and so tells the truth about a redirection the host applied,
+	// for free), while a scripted fake answers from the name without caring
+	// what the endpoint is.
+	IsTerminal(stream string, endpoint any) bool
+}
+
+// OSStreamProbe is the production StreamProbe: it asks the operating system
+// about the endpoint the runtime actually holds. The test is the same one
+// native.ResolveColor uses for its auto-colour decision — a character device —
+// so `tty` and automatic colouring can never disagree about a stream.
+//
+// A non-*os.File endpoint (a buffer, a pipe wrapped in a custom type) is not
+// a terminal, which is the honest answer: the host redirected it.
+type OSStreamProbe struct{}
+
+func (OSStreamProbe) IsTerminal(_ string, endpoint any) bool {
+	f, ok := endpoint.(*os.File)
+	if !ok {
+		return false
+	}
+	// term.IsTerminal, not os.ModeCharDevice. A character device is not the
+	// same question: /dev/null, /dev/zero and /dev/urandom are all character
+	// devices, so the mode test answered "terminal" for the single most common
+	// redirection there is. `prog > /dev/null` would then take the colour
+	// branch, which is precisely the case --color=auto exists to avoid.
+	// IsTerminal asks the kernel (a termios ioctl) instead of guessing from
+	// the file type.
+	return term.IsTerminal(int(f.Fd()))
+}
+
+// FixedStreamProbe is a scripted StreamProbe — the deterministic fake, and
+// the only way the "yes, a terminal" arm is reachable in a test suite that
+// runs with its streams redirected. Names absent from the map answer false.
+type FixedStreamProbe struct{ Terminal map[string]bool }
+
+func (p FixedStreamProbe) IsTerminal(stream string, _ any) bool {
+	return p.Terminal[stream]
 }

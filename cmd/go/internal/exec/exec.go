@@ -199,6 +199,16 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 	}
 	resp := execResponse{Output: outBuf.String()}
 	if runErr != nil {
+		// An `IO.exit` in a SERVED request is reported, never honoured:
+		// this process is not that program's, it is every request's, and a
+		// posted expression must not be able to take the server down. The
+		// request's outcome is the exit report; the server keeps serving.
+		if code, isExit := lang.ExitCode(runErr); isExit {
+			resp.Error = fmt.Sprintf("program requested exit with code %d "+
+				"(a served request cannot exit the server)", code)
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
 		resp.Error = runErr.Error()
 		writeJSON(w, http.StatusOK, resp)
 		return

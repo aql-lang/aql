@@ -1,0 +1,207 @@
+# ============================================================================
+# printenv — unit suite (aql:test), shaped like tests/cat_test.aql.
+#
+#   aql test tests/printenv_test.aql          (run from utils/)
+#
+# printenv is the one program here whose whole job is to read the environment,
+# and that is exactly what a test cannot control from inside a process. So
+# printenv.aql takes the environment as a PARAMETER (Printenv.main argv env),
+# and every case below hands it a SYNTHETIC environment — a plain Map. The
+# real one is never consulted, so these assertions hold on any machine, in any
+# CI, under any shell.
+#
+# The real environment is covered elsewhere, where it belongs: the end-to-end
+# Go test (cmd/go/internal/build/utils_e2e_test.go) runs the BUILT binary with
+# a known variable set and asserts on its stdout, which is the only place the
+# host EnvOps.All() seam is actually exercised.
+# ============================================================================
+
+import "aql:test"
+import "aql:cli"
+import "aql:io"
+import "aql:string-util"
+import "./printenv.aql"
+
+# The synthetic environments. `b` is deliberately not in sorted position in
+# the literal, so a case that passes only because the Map happened to iterate
+# in insertion order will fail.
+def env3 {ZULU:"z" alpha:"a" Mike:"m"}
+def env1 {ONE:"1"}
+def env0 {}
+
+# ----------------------------------------------------------------------------
+# 1. Pure fns.
+# ----------------------------------------------------------------------------
+Test.describe "pe-bool" [
+  Test.test "a true flag reads true" [ Assert.equal true (Printenv.bool {null:true} "null") ]
+  Test.test "an absent flag reads false" [ Assert.equal false (Printenv.bool {} "null") ]
+  Test.test "a non-Boolean flag value reads false" [
+    Assert.equal false (Printenv.bool {null:"yes"} "null")
+  ]
+]
+
+Test.describe "pe-sep" [
+  Test.test "the default record separator is a newline" [
+    Assert.equal "\n" (Printenv.sep false)
+  ]
+  Test.test "-0 makes it NUL" [ Assert.equal "\u0000" (Printenv.sep true) ]
+  Test.test "and NUL is one rune, not the two characters backslash-zero" [
+    Assert.equal 1 (size (Printenv.sep true))
+  ]
+]
+
+Test.describe "pe-line" [
+  Test.test "a record is NAME=value plus the separator" [
+    Assert.equal "K=v\n" (Printenv.line "K" "v" "\n")
+  ]
+  Test.test "an empty value still gets its =" [
+    Assert.equal "K=\n" (Printenv.line "K" "" "\n")
+  ]
+  Test.test "a value containing = is not re-split — only the first = is ours" [
+    Assert.equal "K=a=b\n" (Printenv.line "K" "a=b" "\n")
+  ]
+  Test.test "a value containing a newline is emitted verbatim" [
+    Assert.equal "K=a\nb\n" (Printenv.line "K" "a\nb" "\n")
+  ]
+]
+
+Test.describe "pe-lookup" [
+  Test.test "a set variable is found, with its value" [
+    Assert.equal [true "1"] [((Printenv.lookup env1 "ONE") dot found)
+                             ((Printenv.lookup env1 "ONE") dot value)]
+  ]
+  Test.test "an unset variable is NOT found — and does not raise" [
+    Assert.equal false ((Printenv.lookup env1 "NOPE") dot found)
+  ]
+  Test.test "a not-found lookup yields the empty value, never None" [
+    Assert.equal "" ((Printenv.lookup env1 "NOPE") dot value)
+  ]
+  Test.test "lookup in an empty environment finds nothing" [
+    Assert.equal false ((Printenv.lookup env0 "ONE") dot found)
+  ]
+  Test.test "names are case-sensitive, as the environment is" [
+    Assert.equal false ((Printenv.lookup env1 "one") dot found)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# The listing — the All() witness, and the one place the sort is pinned.
+# ----------------------------------------------------------------------------
+Test.describe "pe-listing" [
+  Test.test "one variable is one NAME=value record" [
+    Assert.equal "ONE=1\n" (Printenv.listing env1 "\n")
+  ]
+  Test.test "an EMPTY environment lists nothing — not a blank line" [
+    Assert.equal "" (Printenv.listing env0 "\n")
+  ]
+  Test.test "several variables come out SORTED BY NAME, not in map order" [
+    Assert.equal "Mike=m\nZULU=z\nalpha=a\n" (Printenv.listing env3 "\n")
+  ]
+  Test.test "the sort is by byte order, so uppercase sorts before lowercase" [
+    Assert.equal "Mike=m\nZULU=z\nalpha=a\n" (Printenv.listing {alpha:"a" ZULU:"z" Mike:"m"} "\n")
+  ]
+  Test.test "-0 changes the separator and nothing else" [
+    Assert.equal "ONE=1\u0000" (Printenv.listing env1 "\u0000")
+  ]
+  Test.test "a value that is not a String is stringified rather than dropped" [
+    Assert.equal "N=7\n" (Printenv.listing {N:7} "\n")
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# The named form — the exit-code contract, which is the whole subtlety.
+# ----------------------------------------------------------------------------
+Test.describe "pe-named" [
+  Test.test "one set name prints its value and succeeds" [
+    Assert.equal ["1\n" 0] [((Printenv.named ["ONE"] env1 "\n") dot text)
+                            ((Printenv.named ["ONE"] env1 "\n") dot code)]
+  ]
+  Test.test "names print in the ORDER NAMED, not sorted" [
+    Assert.equal "z\na\n" ((Printenv.named ["ZULU" "alpha"] env3 "\n") dot text)
+  ]
+  Test.test "a repeated name prints twice" [
+    Assert.equal "1\n1\n" ((Printenv.named ["ONE" "ONE"] env1 "\n") dot text)
+  ]
+  Test.test "an unset name prints NOTHING for itself" [
+    Assert.equal "" ((Printenv.named ["NOPE"] env1 "\n") dot text)
+  ]
+  Test.test "and yields code 1" [
+    Assert.equal 1 ((Printenv.named ["NOPE"] env1 "\n") dot code)
+  ]
+  Test.test "an unset name does not stop the walk: later names still print" [
+    Assert.equal "1\n" ((Printenv.named ["NOPE" "ONE"] env1 "\n") dot text)
+  ]
+  Test.test "one missing name among set ones still yields 1" [
+    Assert.equal 1 ((Printenv.named ["ONE" "NOPE"] env1 "\n") dot code)
+  ]
+  Test.test "the failure is sticky — a later hit does not clear it" [
+    Assert.equal 1 ((Printenv.named ["NOPE" "ONE"] env1 "\n") dot code)
+  ]
+  Test.test "no names at all is vacuously a success" [
+    Assert.equal 0 ((Printenv.named [] env1 "\n") dot code)
+  ]
+  Test.test "-0 separates the values with NUL" [
+    Assert.equal "z\u0000a\u0000" ((Printenv.named ["ZULU" "alpha"] env3 "\u0000") dot text)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The argv contract.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "no argv means no names and the flag off" [
+    Assert.equal {ok:true flags:{null:false} args:[] command:none}
+                 (Cli.parse (Printenv.spec) [])
+  ]
+  Test.test "-0 sets the flag" [
+    Assert.equal true ((Cli.parse (Printenv.spec) ["-0"]) dot flags dot null)
+  ]
+  Test.test "the long spelling works too" [
+    Assert.equal true ((Cli.parse (Printenv.spec) ["--null"]) dot flags dot null)
+  ]
+  Test.test "names are operands, in order" [
+    Assert.equal ["A" "B"] ((Cli.parse (Printenv.spec) ["A" "B"]) dot args)
+  ]
+  Test.test "-- lets a variable named like a flag through" [
+    Assert.equal ["-0"] ((Cli.parse (Printenv.spec) ["--" "-0"]) dot args)
+  ]
+  Test.test "an unknown flag is data, and names the offender" [
+    Assert.equal "unknown flag: -q" ((Cli.parse (Printenv.spec) ["-q"]) dot err)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "printenv 0.1.0\n" ((Cli.dispatch (Printenv.spec) ["--version"]) dot out)
+  ]
+  Test.test "--help mentions the operand" [
+    Assert.equal true ((StringUtil.indexof "<name>" ((Cli.dispatch (Printenv.spec) ["--help"]) dot out)) gte 0)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The program. Every case supplies its own environment, so nothing here
+# depends on the machine the suite runs on.
+# ----------------------------------------------------------------------------
+Test.describe "exit codes" [
+  Test.test "listing the whole environment exits 0" [
+    Assert.equal 0 (Printenv.main [] env3)
+  ]
+  Test.test "listing an EMPTY environment still exits 0" [
+    Assert.equal 0 (Printenv.main [] env0)
+  ]
+  Test.test "a set name exits 0" [ Assert.equal 0 (Printenv.main ["ONE"] env1) ]
+  Test.test "an unset name exits 1" [ Assert.equal 1 (Printenv.main ["NOPE"] env1) ]
+  Test.test "one unset name among set ones exits 1" [
+    Assert.equal 1 (Printenv.main ["ONE" "NOPE"] env1)
+  ]
+  Test.test "-0 does not change the exit code" [
+    Assert.equal 0 (Printenv.main ["-0" "ONE"] env1)
+  ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Printenv.main ["--help"] env1) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Printenv.main ["--version"] env1) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Printenv.main ["-q"] env1) ]
+  Test.test "a usage error outranks a missing variable" [
+    Assert.equal 2 (Printenv.main ["-q" "NOPE"] env1)
+  ]
+  Test.test "-- makes a flag-looking name an ordinary (unset) name, so 1 not 2" [
+    Assert.equal 1 (Printenv.main ["--" "-q"] env1)
+  ]
+]

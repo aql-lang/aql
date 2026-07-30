@@ -19,6 +19,7 @@ import (
 	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
 	"github.com/aql-lang/aql/cmd/go/internal/repl"
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 )
 
 // Version is the aql CLI version string, populated by the top-level
@@ -50,8 +51,20 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 // separator seen BEFORE any `-e` means the `-e` is a positional, not the
 // eval flag, so parsing stays normal. No `-e` (script mode, or REPL) →
 // tail is nil and flagArgs is the whole slice.
-func splitEvalTail(args []string) (flagArgs, tail []string) {
-	for i, a := range args {
+//
+// The scan stops at the first non-flag token — the script path. Every `-e`
+// after it is the program's own argument, not this CLI's eval flag, so
+// `aql run prog.aql a -e b c` must reach the program whole. Scanning past
+// the script path split there instead and silently dropped everything after
+// the false match (`c` in that example).
+//
+// Recognising the script path requires knowing which flags consume a
+// following token: in `aql -s 5 -e …` the `5` is -s's value, not a
+// positional. fs supplies that — a registered bool flag stands alone,
+// anything else in the separated form (no `=`) takes the next token.
+func splitEvalTail(fs *flag.FlagSet, args []string) (flagArgs, tail []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "--":
 			return args, nil
@@ -63,9 +76,28 @@ func splitEvalTail(args []string) (flagArgs, tail []string) {
 			return args[:end], args[end:]
 		case strings.HasPrefix(a, "-e=") || strings.HasPrefix(a, "--e="):
 			return args[:i+1], args[i+1:]
+		case len(a) > 1 && a[0] == '-':
+			if !strings.Contains(a, "=") && !isBoolFlag(fs, a) {
+				i++ // skip this flag's value token
+			}
+		default:
+			return args, nil // the script path: no eval split
 		}
 	}
 	return args, nil
+}
+
+// isBoolFlag reports whether the `-x` / `--x` token names a flag the flag
+// package parses without a following value. An unrecognised name is treated
+// as value-taking; fs.Parse rejects it either way, so the split's guess
+// cannot change the outcome.
+func isBoolFlag(fs *flag.FlagSet, tok string) bool {
+	f := fs.Lookup(strings.TrimLeft(tok, "-"))
+	if f == nil {
+		return false
+	}
+	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && bf.IsBoolFlag()
 }
 
 // Execute is the legacy CLI body. It owns the flag set for the
@@ -104,7 +136,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// dash arg errors out. Split the eval tail off before parsing; a
 	// trailing script file already stops parsing naturally, so only -e
 	// needs this.
-	flagArgs, evalTail := splitEvalTail(args)
+	flagArgs, evalTail := splitEvalTail(fs, args)
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
 	}
@@ -155,7 +187,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// keeps the verbose behavior (all diagnostics, every severity).
 		// Sequenced after the guard-narrowing legalization per the plan's
 		// FP-honesty rule; `aql check --soft` remains the advisory surface.
-		color := lang.ResolveColor(stderr, *colorMode)
+		color := lang.ResolveColor(nil, stderr, *colorMode)
 		if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
 			if err := check.PreflightColor(stderr, source, reg, *seed, *checkFirst, color); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
@@ -167,7 +199,10 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
-		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs}
+		o := lang.Options{Registry: reg, Seed: *seed, Policy: pol, ScriptArgs: scriptArgs,
+			// The CLI is a host that hands the program the real environment
+			// and the real answer about its own streams.
+			Env: capabilities.OSEnvOps{}, Streams: capabilities.OSStreamProbe{}}
 		if *optionsStr != "" {
 			m, perr := lang.ParseOptions(*optionsStr)
 			if perr != nil {
@@ -184,6 +219,12 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			report = stderr
 		}
 		if err := buildrt.EvalReport(stdout, report, stderr, source, o, ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), color); err != nil {
+			// `IO.exit N` is a request, not a failure: exit with the code
+			// the program asked for and print nothing, including for a
+			// non-zero code (design/CLI-PROGRAMS.0.md §4).
+			if code, isExit := lang.ExitCode(err); isExit {
+				return code
+			}
 			fmt.Fprintf(stderr, "%s\n", err)
 			return 1
 		}
@@ -208,7 +249,11 @@ func Eval(w io.Writer, source string, registry string, seed int64) error {
 // arguments map to. Exposed for sibling subcommands (do) so they
 // don't import lang directly.
 func OptionsFor(registry string, seed int64, pol lang.Policy) lang.Options {
-	return lang.Options{Registry: registry, Seed: seed, Policy: pol}
+	// The terminal probe rides along, so `aql do` and `aql test` answer
+	// IO.is-tty honestly rather than always false. Redirected streams answer
+	// false anyway — OSStreamProbe inspects the endpoint the runtime holds.
+	return lang.Options{Registry: registry, Seed: seed, Policy: pol,
+		Streams: capabilities.OSStreamProbe{}}
 }
 
 // EvalWithPolicy is Eval with an explicit Policy. Pass nil for pol

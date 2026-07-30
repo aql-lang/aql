@@ -1,6 +1,9 @@
 package policy
 
-import _ "embed"
+import (
+	_ "embed"
+	"fmt"
+)
 
 //go:embed profiles/full.jsonic
 var builtinFull []byte
@@ -67,4 +70,21 @@ func BuiltinNames() []string {
 func builtinProfileData(name string) (data []byte, ok bool) {
 	data, ok = builtinProfiles[name]
 	return data, ok
+}
+
+// BuiltinProfile parses a built-in profile and returns its RAW pre-resolution
+// shape — the extends chain unresolved, the rules exactly as written. Load()
+// is what callers normally want; this exists for guards that must inspect what
+// a shipped profile SAYS rather than what it decides, and there is one such
+// guard: the module ids a profile names in its import allowlist and its
+// per-module subscopes are strings nothing else validates, so
+// lang/go/modules cross-checks them against the real module registry
+// (a typo there silently allows a module that does not exist and forbids the
+// one that was meant — see the NUR that closed on two of them).
+func BuiltinProfile(name string) (*Profile, error) {
+	data, ok := builtinProfileData(name)
+	if !ok {
+		return nil, fmt.Errorf("policy: %q is not a built-in profile", name)
+	}
+	return parseProfile(data, "builtin:"+name)
 }

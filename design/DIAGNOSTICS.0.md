@@ -40,8 +40,12 @@ ONE renderer: `(e *AqlError) Render(RenderOpts{Color}) string`.
 identical to the historical output when no structured payload is
 present, so the 872 spec ERROR rows, logs, `%w` chains, JSON, and the
 wasm playground never see ANSI. Interactive surfaces opt in:
-`ResolveColor(w, mode)` implements `--color auto|always|never`
-(auto = real terminal only, NO_COLOR honored). Check diagnostics
+`native.ResolveColor(r, w, mode)` implements `--color auto|always|never`
+(auto = real terminal only, NO_COLOR honored) — it lives in the
+language layer, not here, because resolving it needs the process
+environment and a stat() on the destination; the kernel renderer takes
+the verdict as a `RenderOpts` field and never sniffs a terminal itself.
+Check diagnostics
 render their rich block via `RenderCheckDiagnostic` UNDER the stable
 `check: r:c: [sev] code: detail` one-liner (a parsing contract).
 

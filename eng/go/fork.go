@@ -107,3 +107,11 @@ func (s *SyncWriter) Write(p []byte) (int, error) {
 	defer s.mu.Unlock()
 	return s.w.Write(p)
 }
+
+// Unwrap returns the writer this SyncWriter serializes. A caller that must
+// ASK something about the destination rather than write to it — is it a
+// terminal? — needs the thing underneath, because the wrapper is an
+// engine-side concurrency detail the program never chose. Without this a
+// terminal probe answers "not a terminal" for a real terminal as soon as the
+// program runs inside a fork, silently.
+func (s *SyncWriter) Unwrap() io.Writer { return s.w }

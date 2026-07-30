@@ -2312,13 +2312,7 @@ func CheckMicronConstruction(r *Registry, target, src Value, pos SrcPos) {
 // entry never blocks a later REAL emission of the same finding at
 // another site, so the dedupe skips it.
 func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
-	for _, d := range r.Check.Diagnostics {
-		if d.Code == code && d.Detail == detail && d.Row == pos.Row && d.Col == pos.Col &&
-			!d.CaughtAtRuntime {
-			return
-		}
-	}
-	r.Check.AddDiagnostic(CheckDiagnostic{
+	CheckAddUnique(r, CheckDiagnostic{
 		Code:          code,
 		Detail:        detail,
 		Word:          word,
@@ -2326,6 +2320,23 @@ func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos
 		Col:           pos.Col,
 		RuntimeMirror: true,
 	})
+}
+
+// CheckAddUnique is CheckAddUniqueDiagnostic's dedupe over a diagnostic the
+// caller shapes itself — for a finding that must NOT be stamped
+// RuntimeMirror because the compile pipeline should refuse on it. That is
+// the MODEL-UNDERMINING class (eng/go/CLAUDE.md): a mirror promises the
+// program compiles and then raises the identical error, which is false when
+// dispatch itself did not resolve (`no_signature`, `undefined_word`,
+// `uncalled_function` — there is no call to compile).
+func CheckAddUnique(r *Registry, d CheckDiagnostic) {
+	for _, prev := range r.Check.Diagnostics {
+		if prev.Code == d.Code && prev.Detail == d.Detail &&
+			prev.Row == d.Row && prev.Col == d.Col && !prev.CaughtAtRuntime {
+			return
+		}
+	}
+	r.Check.AddDiagnostic(d)
 }
 
 // ---- the Micron Ideal (refine / make dispatch) ----
@@ -2375,7 +2386,25 @@ func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 }
 
 // micronInstantiate is `make ‹kind› data` for the family.
+//
+// The instance carries the CONSTRUCTOR ARGUMENT's source position. `make
+// Pathon "/etc/hosts"` builds a fresh Value, and a fresh Value has no
+// position of its own — so without this every later failure that blames
+// the micron could only report "source position unknown", however
+// carefully the reporting site was threaded. That is not hypothetical:
+// it is why `IO.read (make Pathon "/nope")` had no location to point at.
+// WithPos is the documented seam for a handler constructing a value from
+// an input (lang/go/CLAUDE.md, "Pos threading"); doing it here covers
+// every Micron kind at one choke point rather than per-constructor.
 func micronInstantiate(typ, data Value, r *Registry) ([]Value, error) {
+	out, err := micronInstantiateAt(typ, data, r)
+	for i := range out {
+		out[i] = WithPos(out[i], data)
+	}
+	return out, err
+}
+
+func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 	if IsMicronType(typ) {
 		info, _ := AsMicronType(typ)
 		return makeMicronUser(info, data, r)

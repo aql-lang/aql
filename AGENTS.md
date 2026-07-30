@@ -158,4 +158,5 @@ A few rules from those guides that bite hardest when missed:
 | `wpg/` | The wasm web playground. |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP fixtures. |
 | `kg/` | The project knowledge graph: an evidence-backed AQL pipeline and its generated bundle. |
+| `utils/` | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions). |
 | `design/` | Internal design notes and proposals (historical record). |

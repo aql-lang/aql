@@ -123,7 +123,11 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	// Check-by-default, mirroring `aql run` (run.Execute): quiet gate,
 	// --no-check / AQL_NO_CHECK to skip.
-	color := lang.ResolveColor(stderr, *colorMode)
+	// nil registry: the same call `aql run` makes at this point (run.go), and
+	// for the same reason — the session's registry is not built until
+	// newRegistry below, so there is no installed EnvOps to read NO_COLOR
+	// from yet, and ResolveColor falls back to the process environment.
+	color := lang.ResolveColor(nil, stderr, *colorMode)
 	if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
 		if cerr := check.PreflightColor(stderr, source, "", 0, false, color); cerr != nil {
 			fmt.Fprintf(stderr, "%s\n", cerr)

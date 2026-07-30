@@ -25,7 +25,9 @@ import (
 	"strings"
 
 	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/aql-lang/aql/lang/go/policy"
 
 	"github.com/aql-lang/aql/cmd/go/internal/termback"
 )
@@ -173,6 +175,15 @@ func runAndPrint(w, warn io.Writer, a *lang.AQL, source string, mode CompileMode
 		result, err = a.RunInterp(source)
 	}
 	if err != nil {
+		// An `IO.exit` request passes through UNFLATTENED. Every other
+		// error is rendered here into a display string, which is fine for
+		// something a driver only prints — but an exit request is something
+		// a driver must READ, and `%s` would erase the type errors.As needs.
+		// It is also NOT printed and does not print the residual stack:
+		// exiting is not failing, including for a non-zero code.
+		if _, isExit := lang.ExitCode(err); isExit {
+			return err
+		}
 		// A structured diagnostic re-renders with the ANSI palette when
 		// the caller resolved color for the output stream; anything else
 		// (and the color-off path) keeps the historical plain text.
@@ -219,15 +230,87 @@ type Config struct {
 	// OptionsBlob is the raw --options jsonic string baked in, parsed at run
 	// time exactly as the run subcommand parses --options.
 	OptionsBlob string `json:"optionsBlob,omitempty"`
+	// Profile is the permissions profile baked in at build time by
+	// `aql build -perms …`, compiled to a policy.Policy in Main.
+	//
+	// It is a *policy.Profile and NOT a policy.Policy because Policy is an
+	// interface and this struct is JSON-marshalled into the executable's
+	// trailer; Profile is the flattened, json-tagged form, produced by the
+	// same helper the CLI flags use (permsflags.ProfileFromPolicy).
+	//
+	// SECURITY NOTE, and it must stay in the docs: the trailer is plain
+	// JSON behind a magic+length marker with no integrity check, so a baked
+	// profile is a strippable DEFAULT, not a boundary against an attacker
+	// who holds the binary. It constrains the PROGRAM, which is what a tool
+	// author shipping an AQL script wants.
+	Profile *policy.Profile `json:"profile,omitempty"`
+}
+
+// bundledFirst resolves READS from the bundled sources before the host
+// filesystem, and passes everything else — writes, mutations, temp files,
+// locks, watches, directory ops — straight through to the host by embedding
+// it. That split is the point: a built program must not re-read a live file
+// in place of the copy it was built from, and must still be able to write to
+// the real filesystem (buildrt_test.go's
+// TestMainBundledFilesDoNotHideTheHostFilesystem pins the second half).
+//
+// Only the three read entry points are overridden. Anything the bundle does
+// not have falls through unchanged, so a program reading real data files
+// behaves exactly as before.
+type bundledFirst struct {
+	capabilities.FileOps                      // the host
+	mem                  capabilities.FileOps // the bundled sources
+}
+
+func (b bundledFirst) ReadFile(path string) ([]byte, error) {
+	if data, err := b.mem.ReadFile(path); err == nil {
+		return data, nil
+	}
+	return b.FileOps.ReadFile(path)
+}
+
+func (b bundledFirst) Stat(path string, follow bool) (capabilities.FileInfo, error) {
+	if fi, err := b.mem.Stat(path, follow); err == nil {
+		return fi, nil
+	}
+	return b.FileOps.Stat(path, follow)
+}
+
+// Open consults the bundle only for a READ-ONLY open. Any write intent is the
+// host's, since the bundle is an immutable snapshot and a write that landed
+// there would be discarded at exit — the silent data loss that made the
+// original replace-the-filesystem approach untenable.
+func (b bundledFirst) Open(path string, opts capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	if !opts.Write && !opts.Append && !opts.Create && !opts.Truncate {
+		if h, err := b.mem.Open(path, opts); err == nil {
+			return h, nil
+		}
+	}
+	return b.FileOps.Open(path, opts)
 }
 
 // Main is the entrypoint a standalone executable runs: build lang.Options from
-// the baked Config, seed an in-memory file system with any bundled files, run
-// the entry source, and map errors to a process exit code. args/stdin are
-// accepted (and currently unused by the runtime) so a future AQL program that
-// reads process args or stdin keeps working without changing this signature.
-func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
-	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed}
+// the baked Config, overlay any bundled files over the host filesystem, run the
+// entry source, and map errors to a process exit code.
+//
+// args reaches the program as IO.args. Both call sites already passed
+// os.Args[1:] here and it was discarded, so a built tool could not see its own
+// command line — which is not a tool. That was the single largest gap in the
+// packaging story: `aql build` produced a binary on $PATH that could not be
+// given an argument.
+func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int {
+	o := lang.Options{Registry: cfg.Registry, Seed: cfg.Seed, ScriptArgs: args,
+		// A built tool is a real program: it sees the real environment and
+		// gets the truth about its own streams.
+		Env: capabilities.OSEnvOps{}, Streams: capabilities.OSStreamProbe{}}
+	if cfg.Profile != nil {
+		pol, err := policy.CompileProfile(cfg.Profile)
+		if err != nil {
+			fmt.Fprintf(stderr, "error: baked policy: %s\n", err)
+			return 1
+		}
+		o.Policy = pol
+	}
 	if cfg.OptionsBlob != "" {
 		m, err := lang.ParseOptions(cfg.OptionsBlob)
 		if err != nil {
@@ -255,10 +338,55 @@ func Main(cfg Config, _ []string, _ io.Reader, stdout, stderr io.Writer) int {
 		for path, data := range cfg.Files {
 			mem.Files[path] = data
 		}
-		a.SetFileOps(mem)
+		// OVERLAY the bundled sources onto the host filesystem — do not
+		// REPLACE it. Replacing meant a multi-file built program lost all
+		// real file access: reads of real paths failed, and writes went to
+		// RAM and were discarded at exit, silently, with exit 0. Single-file
+		// builds took a different branch (build.go attaches Files only when
+		// there is more than the entry), so the failure was invisible until
+		// a program grew a second file.
+		//
+		// Reads resolve from the BUNDLE first; everything else goes to the
+		// host. An overlay cannot express that — its upper layer is both the
+		// write target and the first read consulted — so host-upper (writes
+		// work, bundle only wins where the host has nothing) and mem-upper
+		// (bundle wins, writes trapped in RAM) are both wrong, in opposite
+		// directions. bundledFirst splits the two.
+		//
+		// Host-upper was not merely "not self-contained". Because a relative
+		// `import "./lib.aql"` resolves through the file layer against the
+		// RUN-TIME process cwd, a built tool started in any directory holding
+		// a file of that name loaded and executed THAT file instead of its
+		// bundled module. A baked -perms profile constrains what such code
+		// may do; it does not stop it running. Both cases are pinned below.
+		a.SetFileOps(bundledFirst{FileOps: a.HostFileOps(), mem: mem})
+		// Anchor relative imports to the BUILD-TIME entry directory. Without
+		// this, resolveImportPath leaves `./lib.aql` relative (it only joins
+		// when BaseDir is set), the file layer resolves it against the RUN-TIME
+		// process cwd, and the bundle — keyed by build-machine absolute paths —
+		// is never consulted at all. bundledFirst alone does not fix that: it
+		// decides which layer answers a path, not which path is asked for.
+		//
+		// With BaseDir set, `./lib.aql` becomes exactly the key the bundle was
+		// written under, so the bundled module answers and a same-named file in
+		// whatever directory the tool was started from never gets a look in.
+		if cfg.EntryDir != "" {
+			a.NativeRegistry().BaseDir = cfg.EntryDir
+		}
 	}
 
-	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
+	// warn is nil DELIBERATELY: a built binary must not editorialise about its
+	// own execution engine. `aql run` warns when the whole program refused to
+	// compile and fell back to the interpreter — that is developer-facing
+	// performance advice, and its test pins it — but a shipped tool writing
+	// "warning: bytecode compilation refused…" to stderr on every invocation is
+	// noise in someone else's pipeline, and the refusals are easy to hit (two
+	// statement-form `if (cond) [body]` statements are enough). The user of a
+	// tool cannot act on it; the author, running `aql run`, can.
+	if err := runAndPrint(stdout, nil, a, cfg.Source, cfg.Compile, lang.ResolveColor(a.NativeRegistry(), stderr, "auto")); err != nil {
+		if code, isExit := lang.ExitCode(err); isExit {
+			return code
+		}
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}

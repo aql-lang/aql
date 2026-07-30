@@ -147,6 +147,13 @@ IO.env <name>   → String | none      one variable ("" is a real value; none = 
 IO.env          → Map                snapshot of everything visible
 ```
 
+**Shipped as two words:** `IO.env <name>` and `IO.env-all`. The 0-arg
+overload above was unreachable when C1 landed (a 0-arg signature won
+unconditionally on a module export — NUR035, since fixed in the engine),
+and the split was kept on its own merits once it was no longer forced:
+each arity is a separately describable word, and enumerating the whole
+environment is visible at the call site.
+
 - Read-only. There is no `IO.set-env`: mutating one's own environment is
   almost always a smell (child processes get their env explicitly in §7,
   which is the actual use case).

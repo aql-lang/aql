@@ -95,6 +95,13 @@ func NewMemFileOps() *capabilities.MemFileOps {
 	return capabilities.NewMem()
 }
 
+// HostFileOps returns the file system currently installed on the instance —
+// the real OS-backed one unless a host or policy replaced it. Callers layering
+// an overlay need it as the lower layer.
+func (a *AQL) HostFileOps() FileOps {
+	return native.HostFileOps(a.registry)
+}
+
 // Options configures an AQL instance.
 type Options struct {
 	// Registry is a string identifier for the registry to use.
@@ -119,6 +126,26 @@ type Options struct {
 	// everything after the script path; nil leaves the slot uninstalled,
 	// which IO.args renders as an empty list.
 	ScriptArgs []string
+	// Env is the environment view surfaced as IO.env. Nil installs none,
+	// and IO.env then reports every name as unset — the runtime never
+	// reads the real process environment unless a host hands it over.
+	// The CLI installs capabilities.OSEnvOps; tests and the spec runner
+	// install capabilities.MapEnvOps for determinism.
+	Env capabilities.EnvOps
+	// Streams is the terminal probe surfaced as IO.is-tty. Nil installs none,
+	// and every stream then answers false — the runtime never asks the
+	// operating system what it is attached to unless a host hands over a
+	// probe. The CLI installs capabilities.OSStreamProbe; tests install
+	// capabilities.FixedStreamProbe, which is the only way the "yes, a
+	// terminal" arm is reachable in a suite whose streams are redirected.
+	Streams capabilities.StreamProbe
+	// Steps caps evaluation: the interpreter's Run loop, a single
+	// paren-group evaluation, and the VM's step counter. Zero uses the
+	// engine defaults (eng.DefaultStepLimit / DefaultSubStepLimit). Set
+	// via the CLI's --options flag (e.g. `--options steps:50000000`) when
+	// a legitimately long computation trips the default ceiling, or
+	// downward to bound an untrusted program.
+	Steps int
 }
 
 // TapeOptions configures the execution tape's bounded growth — see
@@ -157,6 +184,13 @@ func New(opts ...Options) (*AQL, error) {
 		return nil, err
 	}
 	reg.TapeConfig = o.Tape
+	reg.StepLimit = o.Steps
+	if o.Env != nil {
+		native.SetHostEnvOps(reg, o.Env)
+	}
+	if o.Streams != nil {
+		native.SetHostStreamProbe(reg, o.Streams)
+	}
 	if o.ScriptArgs != nil {
 		native.SetHostScriptArgs(reg, o.ScriptArgs)
 	}
@@ -1279,6 +1313,17 @@ type CheckDiagnostic = native.CheckDiagnostic
 // Error() is always the plain (ANSI-free) rendering.
 type AqlError = native.AqlError
 
+// ExitCode reports the status an `IO.exit` request carries, and whether
+// err is one at all. It is the whole embedding contract for exit: the
+// runtime never calls os.Exit, so a host decides what a program's exit
+// request means to it. A CLI driver returns the code as its own process
+// status and prints nothing; a long-lived host may log it and carry on.
+//
+// It unwraps, so a caller that wrapped the error with %w on the way up is
+// still recognised. Anything that is not an exit request reports false —
+// an ordinary failure is not an exit.
+var ExitCode = native.ExitCode
+
 // RenderOpts controls diagnostic rendering (color on/off).
 type RenderOpts = native.RenderOpts
 
@@ -1292,7 +1337,10 @@ type (
 
 // ResolveColor decides whether to color output written to w for a
 // --color mode of "always", "never", or "auto" (the default: color
-// only a real terminal, honoring NO_COLOR).
+// only a real terminal, honoring NO_COLOR). NO_COLOR is read through
+// the registry's installed environment view when there is one, so pass
+// the instance's registry where one exists and nil before that (the CLI
+// styling its own output).
 var ResolveColor = native.ResolveColor
 
 // RenderCheckDiagnostic renders the rich block (source excerpt, notes,
