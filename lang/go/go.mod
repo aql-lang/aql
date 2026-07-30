@@ -36,6 +36,7 @@ require (
 	github.com/tabnas/directive/go v0.4.0 // indirect
 	github.com/tabnas/hoover/go v0.2.1 // indirect
 	github.com/tabnas/path/go v0.2.1 // indirect
+	golang.org/x/term v0.36.0 // indirect
 )
 
 require (

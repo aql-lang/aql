@@ -55,13 +55,24 @@ func (fh *FileHandleInfo) dropLineBuffer() {
 }
 
 // lineReader returns the handle's line-read buffer, creating it on first use.
-func (fh *FileHandleInfo) lineReader() *bufio.Reader {
-	fh.linesMu.Lock()
-	defer fh.linesMu.Unlock()
+// The caller MUST hold linesMu; use ReadLine instead unless you are it.
+func (fh *FileHandleInfo) lineReaderLocked() *bufio.Reader {
 	if fh.lines == nil {
 		fh.lines = bufio.NewReader(fh.h)
 	}
 	return fh.lines
+}
+
+// ReadLine consumes one line from the handle's buffer WHILE HOLDING the
+// mutex. Returning the *bufio.Reader and reading outside the lock — which is
+// what this did — synchronised only the buffer's CREATION, so two forks
+// sharing a handle raced inside bufio.Reader itself and could duplicate,
+// interleave or lose input. A bufio.Reader is not safe for concurrent use;
+// the lock has to cover the read, not the pointer fetch.
+func (fh *FileHandleInfo) ReadLine() (string, bool, error) {
+	fh.linesMu.Lock()
+	defer fh.linesMu.Unlock()
+	return readLineFrom(fh.lineReaderLocked())
 }
 
 // Close releases the handle exactly once and reports the close error.

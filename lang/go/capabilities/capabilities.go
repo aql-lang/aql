@@ -10,6 +10,7 @@ package capabilities
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/term"
 	"io"
 	"os"
 	"path/filepath"
@@ -1677,11 +1678,14 @@ func (OSStreamProbe) IsTerminal(_ string, endpoint any) bool {
 	if !ok {
 		return false
 	}
-	st, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return st.Mode()&os.ModeCharDevice != 0
+	// term.IsTerminal, not os.ModeCharDevice. A character device is not the
+	// same question: /dev/null, /dev/zero and /dev/urandom are all character
+	// devices, so the mode test answered "terminal" for the single most common
+	// redirection there is. `prog > /dev/null` would then take the colour
+	// branch, which is precisely the case --color=auto exists to avoid.
+	// IsTerminal asks the kernel (a termios ioctl) instead of guessing from
+	// the file type.
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // FixedStreamProbe is a scripted StreamProbe — the deterministic fake, and

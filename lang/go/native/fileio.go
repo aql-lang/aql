@@ -297,7 +297,11 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 		// One reader means `IO.read-line` then `IO.read` yields the rest of the
 		// stream (io_lines.go). With no line read first the buffer is empty and
 		// this is byte-for-byte the old io.ReadAll(r.Input).
-		data, err = io.ReadAll(stdinReader(r))
+		// Through the holder's LOCKED drain, not io.ReadAll over the reader
+		// it hands back: the buffer is shared with IO.read-line and with
+		// every concurrency fork, so a read outside the lock races the same
+		// way the line read did.
+		data, err = stdinReadAll(r)
 		if err != nil {
 			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
 		}

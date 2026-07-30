@@ -1,6 +1,7 @@
 package native
 
 import (
+	"golang.org/x/term"
 	"io"
 	"os"
 )
@@ -65,9 +66,9 @@ func isCharDevice(w io.Writer) bool {
 	if !ok {
 		return false
 	}
-	st, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return st.Mode()&os.ModeCharDevice != 0
+	// term.IsTerminal for the reason capabilities.OSStreamProbe gives: a
+	// character-device test calls /dev/null a terminal, so `prog > /dev/null`
+	// took the colour branch. The two probes must keep agreeing, so they ask
+	// the same question the same way.
+	return term.IsTerminal(int(f.Fd()))
 }

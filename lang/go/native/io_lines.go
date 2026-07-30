@@ -116,6 +116,17 @@ func stdinReader(r *Registry) io.Reader {
 	return holder.reader(r.Input)
 }
 
+// stdinReadAll drains the rest of standard input through the shared holder's
+// LOCK, so a whole-stream read cannot race a concurrent line read over the
+// same buffer. Falls back to an unlocked drain only when no holder is
+// installed, which no production path produces.
+func stdinReadAll(r *Registry) ([]byte, error) {
+	if holder, _, _ := eng.Cap[*stdinLines](r, CapStdinLines); holder != nil {
+		return holder.readAll(r.Input)
+	}
+	return io.ReadAll(stdinReader(r))
+}
+
 // lineReaderForStdin is stdinReader narrowed to what a line read needs: a
 // *bufio.Reader. A registry with no holder gets a throwaway buffer, so a line
 // read still works (it just cannot share with a later whole-stream read).
@@ -126,17 +137,64 @@ func lineReaderForStdin(r *Registry) *bufio.Reader {
 	return bufio.NewReader(r.Input)
 }
 
+// lineSource is a thing one line can be read FROM, rather than a buffer a
+// caller reads. The indirection is what lets the lock cover the read: a
+// caller handed a *bufio.Reader can only ever read it unlocked.
+type lineSource interface {
+	ReadLine() (string, bool, error)
+}
+
+// stdinLineSource reads through the registry's shared holder when there is
+// one, and falls back to an unshared buffer when there is not (a registry
+// assembled outside the standard setup) — the same fallback lineReaderForStdin
+// has always made, now with the read inside the holder's lock.
+type stdinLineSource struct{ r *Registry }
+
+func (s stdinLineSource) ReadLine() (string, bool, error) {
+	if holder, _, _ := eng.Cap[*stdinLines](s.r, CapStdinLines); holder != nil {
+		return holder.readLine(s.r.Input)
+	}
+	return readLineFrom(lineReaderForStdin(s.r))
+}
+
 // reader returns the buffer over src, rebuilding when src is not the reader
 // this holder was built over. The mutex is load-bearing: lang/go runs under
 // -race and a bufio.Reader is not safe for concurrent use.
 func (h *stdinLines) reader(src io.Reader) *bufio.Reader {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.bufLocked(src)
+}
+
+// bufLocked is reader's body without the locking; the caller holds h.mu.
+func (h *stdinLines) bufLocked(src io.Reader) *bufio.Reader {
 	if h.buf == nil || !sameReader(h.src, src) {
 		h.src = src
 		h.buf = bufio.NewReader(src)
 	}
 	return h.buf
+}
+
+// readLine consumes one line WHILE HOLDING the mutex, and readAll drains the
+// rest of the stream the same way.
+//
+// The mutex used to guard only the buffer's CREATION: `reader` returned the
+// *bufio.Reader and the caller read from it after unlocking. Since
+// eng.ForkConcurrent leaves Capabilities and Input alone, every await/spawn
+// fork shares this one holder, so those reads were unsynchronised against a
+// type the standard library documents as unsafe for concurrent use — the
+// failure being duplicated, interleaved or lost input rather than a crash,
+// which is the kind that reaches a user as corrupt data.
+func (h *stdinLines) readLine(src io.Reader) (string, bool, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return readLineFrom(h.bufLocked(src))
+}
+
+func (h *stdinLines) readAll(src io.Reader) ([]byte, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return io.ReadAll(h.bufLocked(src))
 }
 
 // sameReader reports whether two readers are the same source, WITHOUT ever
@@ -196,7 +254,15 @@ func readLineFrom(br *bufio.Reader) (string, bool, error) {
 	if line == "" {
 		return "", false, nil // EOF at a line boundary: no line left
 	}
-	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), true, nil
+	// The \r is stripped ONLY as half of a CRLF terminator. Nesting the two
+	// TrimSuffix calls unconditionally also ate a bare trailing \r on a final
+	// UNTERMINATED line, which is data, not a terminator — the contract three
+	// lines above says so, and CLI.md and HOWTO.md repeat it. A file whose
+	// last line is "abc\r" with no newline round-tripped as "abc".
+	if trimmed, hadLF := strings.CutSuffix(line, "\n"); hadLF {
+		return strings.TrimSuffix(trimmed, "\r"), true, nil
+	}
+	return line, true, nil
 }
 
 // readLineHandler implements IO.read-line over a stream handle or a File
@@ -206,11 +272,11 @@ func readLineFrom(br *bufio.Reader) (string, bool, error) {
 // terminate: "" is a legitimate line (a blank one), so a caller must be able
 // to tell "an empty line" from "no more lines".
 func readLineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	br, err := lineReaderFor(args[0], r)
+	src, err := lineReaderFor(args[0], r)
 	if err != nil {
 		return nil, err
 	}
-	line, ok, rerr := readLineFrom(br)
+	line, ok, rerr := src.ReadLine()
 	if rerr != nil {
 		return nil, r.AqlErrorAt("read_error",
 			"read-line: "+rerr.Error(), "read-line", args[0].Pos())
@@ -229,9 +295,9 @@ func readLineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // (IO.stdout)` is a mistake in the program, not a stream that happens to be
 // finished, and reporting it as EOF would hide the bug behind a loop that
 // exits immediately — the same reasoning as doRead's output-stream refusal.
-func lineReaderFor(v Value, r *Registry) (*bufio.Reader, error) {
+func lineReaderFor(v Value, r *Registry) (lineSource, error) {
 	if fh, ok := asFileHandle(v); ok {
-		return fh.lineReader(), nil
+		return fh, nil
 	}
 	name, aerr := v.AsConcreteAtom()
 	if aerr != nil {
@@ -240,7 +306,7 @@ func lineReaderFor(v Value, r *Registry) (*bufio.Reader, error) {
 	}
 	switch streamSentinels[name] {
 	case pathStdin:
-		return lineReaderForStdin(r), nil
+		return stdinLineSource{r}, nil
 	case pathStdout, pathStderr:
 		return nil, r.AqlErrorAt("read_error",
 			"read-line: cannot read from an output stream", "read-line", v.Pos())
