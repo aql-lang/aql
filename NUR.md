@@ -78,6 +78,7 @@ commit.
 | [NUR044](#nur044) | `aql build` skips the static check `aql run` performs | 2026-07-30 C3 perms scouting |
 | [NUR045](#nur045) | Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny | 2026-07-30 C3 perms scouting |
 | [NUR046](#nur046) | `aql fmt` is not idempotent: one pass is not a fixed point | 2026-07-30 C3 utils suite |
+| [NUR047](#nur047) | Regex match offsets are BYTE indices; every string word around them is RUNE-indexed | 2026-07-30 C3 utils suite |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -1142,3 +1143,57 @@ same family as the memoisation 0.9 landed, one layer up. A regression guard
 belongs with the fix: format every `.aql` in the repo TWICE and require the
 second pass to be a no-op, with at least one deliberately non-canonical
 fixture, since the existing corpus cannot detect this.
+
+---
+
+## NUR047 — Regex match offsets are BYTE indices; every string word around them is RUNE-indexed {#nur047}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** the C3 utils
+suite (`grep --color`)
+
+**Rule:** AQL counts strings in RUNES, uniformly. `size "日本語"` is 3,
+`slice 1 2 "日本語"` is `本`, `StringUtil.split ""` yields runes, and
+`REFERENCE.md` states the rune convention for the string family as a whole.
+It is one of the language's cleaner uniformities — a user never has to ask
+which unit a string word means.
+
+**Divergence:** the match records `MiniLang.lang_re` returns carry `i` and `e`
+in BYTES.
+
+```
+$ aql do 'import "aql:minilang"  print (MiniLang.lang_re "c" {} "日本語c")'
+{"ok": true, "ms": [{"m": "c", "i": 9, "e": 10, …}], …}
+
+$ aql do 'print (size "日本語c")'
+4
+```
+
+The match is at rune index 3 of a 4-rune string; the record says 9..10. Every
+consumer that does the obvious thing — `slice (m.i) (m.e) line`, the whole
+point of returning offsets — is therefore wrong on any line containing a
+non-ASCII rune, and RIGHT on every ASCII line, which is the worst possible
+failure distribution: it passes every casual test and corrupts real data.
+
+**Evidence:** the two commands above. `utils/grep.aql`'s `--color` highlighter
+is the in-repo consumer; it works around this by converting the line to Bytes,
+slicing in bytes, and converting back (`convert String (slice i e (convert
+Bytes line))`), which is correct but is exactly the kind of thing a uniform
+convention exists to make unnecessary.
+
+**Why it matters:** offsets are only useful for indexing back into the
+subject, and the one indexing word available (`slice`) uses the other unit.
+The two halves of the feature do not compose. A highlighter, a linter, a
+syntax-colourer, and an LSP `Diagnostic` range all want exactly this and all
+hit it — Phase 5's server would meet it in `textDocument/publishDiagnostics`,
+where LSP itself specifies UTF-16 code units, making three units in play.
+
+**Documentation status:** the unit is not stated at all. `aql describe` for
+the regex words does not say, and nothing in `REFERENCE.md` marks the match
+record as an exception to the rune convention.
+
+**Proposed verdict:** fix by returning rune offsets, since that is what the
+rest of the language means by an index — and it is the half users can act on.
+If byte offsets must be kept (they are what Go's regexp returns, and
+converting costs a scan), then the record should carry BOTH, named so the
+unit is impossible to mistake, and the rune convention's exception must be
+documented everywhere the match record is.

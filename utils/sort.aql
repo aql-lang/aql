@@ -1,0 +1,295 @@
+# ============================================================================
+# sort — write the sorted concatenation of all input.
+#
+#   sort [-r|--reverse] [-n|--numeric-sort] [-u|--unique] [-f|--ignore-case]
+#        [FILE…]
+#
+# With no FILE, or when FILE is "-", the input is standard input.
+#
+# Exit codes:
+#   0  every named input was read and the sorted result written
+#   1  at least one input could not be opened or read; the diagnostic goes to
+#      stderr and nothing is written to stdout — unlike cat, a partial sort is
+#      not a useful answer, so a failed input aborts the OUTPUT rather than
+#      producing a sorted subset that looks complete
+#   2  usage error — unknown flag (from Cli.dispatch)
+#
+# WHY THIS PROGRAM SLURPS, and why that is not a cop-out. sort cannot stream:
+# the first line of the output is not known until the last line of the input
+# has been read. That is a property of the problem, not of AQL, and it is
+# precisely what makes sort worth having next to head — the two programs are
+# the opposite ends of the same axis, and having both means the suite covers
+# "reads everything" as deliberately as it covers "reads as little as
+# possible".
+#
+# THE STDIN/FILE DUALITY is the other thing it proves: the same fn reads a
+# named file and standard input, because both arrive as a handle. Nothing
+# downstream of sort-slurp knows which it got.
+#
+# COMPARISON. The default is AQL's own total order over strings, via `sort`.
+# -n switches to a numeric key computed per line (sort-key), so the sort stays
+# one call rather than a hand-rolled comparator — which matters, because a
+# comparator passed as a Function value is the sharpest edge in the language
+# (design/AQL-SHARP-EDGES.0.md G12) and is not worth walking into for a
+# program whose whole job is the ordering.
+#
+# Structure: every decision is a pure fn taking its input as parameters, and
+# sort-main takes ARGV as a parameter and returns the exit code rather than
+# exiting.
+# ============================================================================
+
+import "aql:cli"
+import "aql:io"
+import "aql:string-util"
+
+# ----------------------------------------------------------------------------
+# Pure helpers.
+# ----------------------------------------------------------------------------
+
+def sort-bool fn [[fl:Map k:String] [Boolean] [
+  def v (fl get k)
+  if (v is Boolean) [v] [false]
+]]
+
+def sort-worse fn [[a:Integer b:Integer] [Integer] [ if (a gt b) [a] [b] ]]
+
+def sort-inputs fn [[ops:List] [List] [
+  if ((size ops) eq 0) [(push "-" [])] [ops]
+]]
+
+# The lines of a slurped blob. A trailing newline produces a trailing empty
+# field, which is NOT a line — GNU sort does not invent one either — so it is
+# dropped, but an interior empty line is kept.
+def sort-lines fn [[blob:String] [List] [
+  if (blob eq "") [[]] [
+    def parts (StringUtil.split "\n" blob {keepEmpty:true})
+    def n (size parts)
+    def last (convert String (parts get (n sub 1)))
+    if (last eq "") [ (slice 0 (n sub 1) parts) ] [parts]
+  ]
+]]
+
+# The numeric value of a line's leading number, for -n. A line that does not
+# start with a number sorts as 0, which is what GNU sort does; the ORIGINAL
+# line is what gets printed, so this is only ever a key.
+def sort-digit-at fn [[s:String i:Integer] [Boolean] [
+  def c (slice i (i add 1) s)
+  ((c gte "0") and (c lte "9"))
+]]
+
+def sort-num-len fn [[s:String i:Integer] [Integer] [
+  if (i gte (size s)) [i] [
+    if (sort-digit-at s i) [ def r (sort-num-len s (i add 1))  r ] [i]
+  ]
+]]
+
+def sort-key fn [[line:String] [Float] [
+  def neg ((slice 0 1 line) eq "-")
+  def st (if neg [1] [0])
+  def en (sort-num-len line st)
+  if (en eq st) [0.0] [
+    def mag (convert Float (convert Integer (slice st en line)))
+    if neg [(0.0 sub mag)] [mag]
+  ]
+]]
+
+# -f folds case for COMPARISON only, so the printed line keeps its own case.
+def sort-fold fn [[line:String icase:Boolean] [String] [
+  if icase [(StringUtil.lower line)] [line]
+]]
+
+# A sortable pair: [key line]. List compare is length-then-elementwise, so
+# sorting these orders by key first and by the original line as a tie-break —
+# which makes the sort STABLE in the only sense that matters here, and is why
+# no comparator is needed.
+# The key stays a NUMBER under -n. Stringifying it would sort "10.0" before
+# "9.0" — lexically correct and numerically wrong, which is the exact bug -n
+# exists to avoid, and it passes a casual eyeball on single-digit input.
+def sort-pair fn [[line:String numeric:Boolean icase:Boolean] [List] [
+  def k (if numeric [(sort-key line)] [(sort-fold line icase)])
+  push line (push k [])
+]]
+
+def sort-pairs-at fn [[ls:List i:Integer numeric:Boolean icase:Boolean out:List] [List] [
+  if (i gte (size ls)) [out] [
+    def _p (push (sort-pair (convert String (ls get i)) numeric icase) out)
+    def r (sort-pairs-at ls (i add 1) numeric icase out)
+    r
+  ]
+]]
+
+# Back to lines, dropping adjacent duplicates when -u asked for it. The
+# duplicate test is on the KEY, not the line, so `-uf` treats "A" and "a" as
+# one — which is what GNU sort does.
+def sort-unpair-at fn [[ps:List i:Integer uniq:Boolean prev:Any out:List] [List] [
+  if (i gte (size ps)) [out] [
+    def p (ps get i)
+    def k (p get 0)
+    def line (convert String (p get 1))
+    # `dup` is a built-in word and cannot be a local name.
+    def same (uniq and ((i gt 0) and (k eq prev)))
+    def _p (if same [none] [(push line out)])
+    def r (sort-unpair-at ps (i add 1) uniq k out)
+    r
+  ]
+]]
+
+# The whole transform: lines in, sorted lines out. Pure, so every flag
+# combination below is a case in the suite rather than a file on disk.
+def sort-apply fn [[ls:List numeric:Boolean icase:Boolean rev:Boolean uniq:Boolean] [List] [
+  def acc (flex [])
+  def ps (sort-pairs-at ls 0 numeric icase acc)
+  def ordered (sort ps)
+  def out (flex [])
+  def lines (sort-unpair-at ordered 0 uniq none out)
+  # -r reverses AFTER de-duplication, so -ru and -ur agree.
+  if rev [(reverse lines)] [lines]
+]]
+
+def sort-render fn [[ls:List] [String] [
+  def out (flex [])
+  for [0 (size ls)] [
+    def _p (push (join "" [(convert String (ls get i)) "\n"]) out)
+  ]
+  def r (join "" out)
+  r
+]]
+
+def sort-fail fn [[name:String msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["sort: " name ": " msg "\n"])) drop
+  1
+]]
+
+# ----------------------------------------------------------------------------
+# Reading. THE STDIN/FILE DUALITY: both arms produce a blob, and nothing after
+# this point can tell which one it came from.
+# ----------------------------------------------------------------------------
+def sort-slurp fn [[name:String] [Map] [
+  if (name eq "-") [
+    def a (do [
+      def h (IO.stdin)
+      def blob (sort-drain h "")
+      {ok:true} set (quote text) blob
+    ] error [
+      def e end
+      def c (sort-fail "-" (e.message))
+      {ok:false text:"" code:1}
+    ])
+    a
+  ] [
+    def b (do [
+      def raw (IO.read (make Pathon name))
+      {ok:true} set (quote text) (convert String raw)
+    ] error [
+      def e end
+      def c (sort-fail name (e.message))
+      {ok:false text:"" code:1}
+    ])
+    b
+  ]
+]]
+
+# Standard input has no path to IO.read, so it is drained a line at a time.
+# The loop has no `break` for the reason cat.aql documents at length.
+def sort-drain-chunk fn [[h:Any st:Map m:Integer] [Integer] [
+  def before (size (st get "xs"))
+  for [0 m] [
+    def line (IO.read-line h)
+    if ((line is None) not) [
+      def _p (push (convert String line) (st get "xs"))
+    ] []
+  ]
+  def got ((size (st get "xs")) sub before)
+  got
+]]
+
+def sort-next-chunk fn [[m:Integer] [Integer] [ if (m gte 8192) [8192] [(m mul 2)] ]]
+
+def sort-drain-at fn [[h:Any st:Map m:Integer] [List] [
+  def got (sort-drain-chunk h st m)
+  if (got eq 0) [(st get "xs")] [
+    def r (sort-drain-at h st (sort-next-chunk m))
+    r
+  ]
+]]
+
+def sort-drain fn [[h:Any _seed:String] [String] [
+  def st (flex {xs:(flex [])})
+  def xs (sort-drain-at h st 64)
+  def r (sort-render xs)
+  r
+]]
+
+# Every input, concatenated. A failure anywhere is recorded and the walk
+# continues — the caller decides whether to print.
+def sort-read-at fn [[names:List i:Integer out:List acc:Integer] [Integer] [
+  if (i gte (size names)) [acc] [
+    def got (sort-slurp (convert String (names get i)))
+    def _p (if (got.ok) [(push (got.text) out)] [none])
+    def code (if (got.ok) [acc] [1])
+    def r (sort-read-at names (i add 1) out code)
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The spec and the handler.
+# ----------------------------------------------------------------------------
+def spec {
+  name:    "sort"
+  version: "0.1.0"
+  summary: "write the sorted concatenation of all input"
+  flags: [
+    {name:"reverse"      short:"r" kind:"bool" help:"reverse the result of the comparison"}
+    {name:"numeric-sort" short:"n" kind:"bool" help:"compare by the leading numeric value"}
+    {name:"unique"       short:"u" kind:"bool" help:"output only the first of an equal run"}
+    {name:"ignore-case"  short:"f" kind:"bool" help:"fold case when comparing"}
+  ]
+  args: {name:"file" min:0 help:"files to read; - or nothing means standard input"}
+}
+
+def sort-run fn [[ctx:Map] [Integer] [
+  def fl ctx.flags
+  def parts (flex [])
+  def rc (sort-read-at (sort-inputs (ctx.args)) 0 parts 0)
+  if (rc neq 0) [rc] [
+    def ls (sort-lines (join "" parts))
+    def outl (sort-apply ls (sort-bool fl "numeric-sort") (sort-bool fl "ignore-case")
+                            (sort-bool fl "reverse") (sort-bool fl "unique"))
+    (IO.write (IO.stdout) (sort-render outl)) drop
+    0
+  ]
+]]
+
+def sort-main fn [[argv:List] [Integer] [
+  def d (Cli.dispatch (spec) argv)
+  def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  def code (if ((d.action) neq "run") [(d.code)] [(sort-run d)])
+  code
+]]
+
+export "Sort" {
+  bool:    sort-bool/r
+  worse:   sort-worse/r
+  inputs:  sort-inputs/r
+  lines:   sort-lines/r
+  key:     sort-key/r
+  fold:    sort-fold/r
+  pair:    sort-pair/r
+  apply:   sort-apply/r
+  render:  sort-render/r
+  nextChunk: sort-next-chunk/r
+  fail:    sort-fail/r
+  slurp:   sort-slurp/r
+  main:    sort-main/r
+  spec:    spec
+}
+
+# The standalone guard — see cat.aql.
+def sort-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if sort-standalone [
+  def sort-rc (sort-main (IO.args))
+  IO.exit sort-rc;
+] []

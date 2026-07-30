@@ -98,6 +98,96 @@ def grep-label fn [[name:String] [String] [
   if (name eq "-") ["(standard input)"] [name]
 ]]
 
+# ----------------------------------------------------------------------------
+# Colour. --color takes auto | always | never, and `auto` is the interesting
+# one: it means "colour if the output is a terminal", which is the only reason
+# `grep --color=auto` in a .bashrc does not fill a pipe with escape codes.
+#
+# The DECISION is pure and takes the world as three parameters — the mode, is
+# standard output a terminal, and is NO_COLOR set. That is the same split
+# design/CLI-PROGRAMS.1.md §3 records for Cli.usage: a fn that reads the
+# terminal cannot be tested against a terminal other than the one it is
+# running in. grep-run does the reading (IO.is-tty, IO.env) and hands the
+# answers here.
+#
+# NO_COLOR (https://no-color.org) wins over `auto` but NOT over an explicit
+# `--color=always`, which is what every implementation that honours it does:
+# the variable is a default, the flag is an instruction.
+def grep-color-on fn [[mode:String tty:Boolean nocolor:Boolean] [Boolean] [
+  if (mode eq "never") [false] [
+    if (mode eq "always") [true] [ (tty and (nocolor not)) ]
+  ]
+]]
+
+# The --color value, defensively. The spec declares default:"never", so an
+# absent flag already arrives as "never"; a REPEATED --color arrives as a List
+# (aql:cli's contract for a repeated string flag) and the last one wins, which
+# is what every long-option parser does.
+#
+# DIVERGENCE FROM GNU, deliberate: a bare `--color` with no value is not
+# accepted here, because kind:"string" makes the next token the value —
+# `grep --color pattern file` would take "pattern" as the colour mode. GNU
+# resolves this with an optional-argument option, which aql:cli does not have.
+# Spell it `--color=auto`, which is also the spelling every .bashrc uses.
+def grep-when fn [[fl:Map] [String] [
+  def v (fl get "color")
+  if (v is None) ["never"] [
+    if (v is List) [
+      def n (size v)
+      if (n eq 0) ["never"] [ (convert String (v get (n sub 1))) ]
+    ] [ (convert String v) ]
+  ]
+]]
+
+# An unknown --color value is a usage error, not a silent fallback.
+def grep-color-ok fn [[mode:String] [Boolean] [
+  ((mode eq "auto") or ((mode eq "always") or (mode eq "never")))
+]]
+
+# The matched text is wrapped in bold red, GNU grep's default. The escapes are
+# written as \u001b so the source stays plain ASCII text.
+def grep-paint-one fn [[s:String] [String] [ join "" ["\u001b[01;31m" s "\u001b[0m"] ]]
+
+# BYTE offsets, not rune offsets. MiniLang.lang_re reports `i`/`e` in BYTES
+# while `slice` and `size` count RUNES — recorded as NUR047, because doing the
+# obvious thing here is correct on ASCII and silently corrupts any line with a
+# multi-byte rune in it. So the slicing is done on Bytes and converted back,
+# which is exact for every input.
+def grep-cut fn [[b:Any lo:Integer hi:Integer] [String] [
+  if (lo gte hi) [""] [ (convert String (slice lo hi b)) ]
+]]
+
+def grep-paint-at fn [[b:Any ms:List i:Integer at:Integer out:List] [List] [
+  if (i gte (size ms)) [
+    def _t (push (grep-cut b at (size b)) out)
+    out
+  ] [
+    def m (ms get i)
+    def lo m.i
+    def hi m.e
+    def _g (push (grep-cut b at lo) out)
+    def _m (push (grep-paint-one (grep-cut b lo hi)) out)
+    def r (grep-paint-at b ms (i add 1) hi out)
+    r
+  ]
+]]
+
+# The line with every match highlighted. An unmatched line comes back
+# unchanged, which is what -v needs: an inverted selection has no match to
+# paint, and painting the whole line would be wrong.
+def grep-paint fn [[line:String pat:String on:Boolean] [String] [
+  if (on not) [line] [
+    def r (MiniLang.lang_re pat {} line)
+    if ((r.ok) not) [line] [
+      def b (convert Bytes line)
+      def out (flex [])
+      def parts (grep-paint-at b (r.ms) 0 0 out)
+      def j (join "" parts)
+      j
+    ]
+  ]
+]]
+
 # One output line, terminator included: "[NAME:][LINENO:]TEXT\n".
 def grep-format fn [[line:String k:Integer name:String numbered:Boolean pfx:Boolean] [String] [
   def np (if pfx [(join "" [name ":"])] [""])
@@ -126,12 +216,13 @@ def grep-files fn [[ag:List] [List] [
 ]]
 
 # The options bundle carried through the streaming loop, as plain data.
-def grep-opts fn [[pat:String fl:Map pfx:Boolean] [Map] [
+def grep-opts fn [[pat:String fl:Map pfx:Boolean col:Boolean] [Map] [
   {} set (quote pat) pat
      set (quote inv) (grep-bool fl "invert-match")
      set (quote cnt) (grep-bool fl "count")
      set (quote num) (grep-bool fl "line-number")
      set (quote pfx) pfx
+     set (quote col) col
 ]]
 
 # The tri-state. An error outranks everything; otherwise a match is 0 and a
@@ -170,7 +261,9 @@ def grep-chunk fn [[h:Any st:Map name:String opt:Map m:Integer] [Integer] [
       if (grep-select s (opt.pat) (opt.inv)) [
         def _c (st set (quote c) ((grep-num st "c") add 1))
         def _w (if (opt.cnt) [none]
-                 [(IO.write (IO.stdout) (grep-format s k name (opt.num) (opt.pfx)))])
+                 [(IO.write (IO.stdout)
+                    (grep-format (grep-paint s (opt.pat) (opt.col))
+                                 k name (opt.num) (opt.pfx)))])
       ] []
     ] []
   ]
@@ -270,6 +363,8 @@ def spec {
     {name:"invert-match" short:"v" kind:"bool" help:"select the lines that do NOT match"}
     {name:"count"        short:"c" kind:"bool" help:"print only a count of selected lines per input"}
     {name:"line-number"  short:"n" kind:"bool" help:"prefix each output line with its line number"}
+    {name:"color"        kind:"string" value:"WHEN" default:"never"
+     help:"highlight matches: auto (a terminal only), always, or never"}
   ]
   args: {name:"operand" min:1 help:"PATTERN, then the files to search; - or nothing means standard input"}
 }
@@ -281,13 +376,21 @@ def grep-run fn [[ctx:Map] [Integer] [
   def pat (grep-pattern raw (grep-bool fl "ignore-case"))
   def bad (grep-check pat)
   if (bad neq "") [ def z (grep-bad bad)  z ] [
+    # The three facts about the world, read HERE and nowhere else, so every
+    # decision below is a pure fn of them.
+    def when (grep-when fl)
+    if ((grep-color-ok when) not) [
+      def y (grep-bad (join "" ["invalid argument '" when "' for '--color'"]))
+      y
+    ] [
+    def col (grep-color-on when (IO.is-tty (IO.stdout)) (((IO.env "NO_COLOR") is None) not))
     def files (grep-files ag)
     def pfx ((size files) gt 1)
-    def opt (grep-opts pat fl pfx)
+    def opt (grep-opts pat fl pfx col)
     def acc (grep-walk files 0 opt {matched:false errored:false})
     def code (grep-code (acc.matched) (acc.errored))
     code
-  ]
+  ]]
 ]]
 
 # ----------------------------------------------------------------------------
@@ -333,6 +436,10 @@ export "Grep" {
   files:     grep-files/r
   opts:      grep-opts/r
   code:      grep-code/r
+  when:      grep-when/r
+  colorOn:   grep-color-on/r
+  colorOk:   grep-color-ok/r
+  paint:     grep-paint/r
   nextChunk: grep-next-chunk/r
   fail:      grep-fail/r
   bad:       grep-bad/r

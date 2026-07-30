@@ -218,16 +218,16 @@ Test.describe "grep-files" [
 
 Test.describe "grep-opts" [
   Test.test "the bundle carries the pattern and all four flags" [
-    Assert.equal {pat:"p" inv:false cnt:true num:false pfx:true}
-                 (Grep.opts "p" {count:true} true)
+    Assert.equal {pat:"p" inv:false cnt:true num:false pfx:true col:false}
+                 (Grep.opts "p" {count:true} true false)
   ]
   Test.test "absent flags default to off, and the prefix bit is the caller's" [
-    Assert.equal {pat:"p" inv:false cnt:false num:false pfx:false}
-                 (Grep.opts "p" {} false)
+    Assert.equal {pat:"p" inv:false cnt:false num:false pfx:false col:false}
+                 (Grep.opts "p" {} false false)
   ]
   Test.test "every flag on at once" [
-    Assert.equal {pat:"(?i)p" inv:true cnt:true num:true pfx:true}
-                 (Grep.opts "(?i)p" {invert-match:true count:true line-number:true} true)
+    Assert.equal {pat:"(?i)p" inv:true cnt:true num:true pfx:true col:false}
+                 (Grep.opts "(?i)p" {invert-match:true count:true line-number:true} true false)
   ]
 ]
 
@@ -270,27 +270,27 @@ Test.describe "the diagnostic writers" [
 Test.describe "argv" [
   Test.test "a lone PATTERN leaves every flag off" [
     Assert.equal {ok:true
-                  flags:{ignore-case:false invert-match:false count:false line-number:false}
+                  flags:{ignore-case:false invert-match:false count:false line-number:false color:"never"}
                   args:["p"] command:none}
                  (Cli.parse (Grep.spec) ["p"])
   ]
   Test.test "-i sets ignore-case and keeps pattern and file in order" [
     Assert.equal {ok:true
-                  flags:{ignore-case:true invert-match:false count:false line-number:false}
+                  flags:{ignore-case:true invert-match:false count:false line-number:false color:"never"}
                   args:["p" "f"] command:none}
                  (Cli.parse (Grep.spec) ["-i" "p" "f"])
   ]
   Test.test "the long spellings work too" [
-    Assert.equal {ignore-case:true invert-match:true count:true line-number:true}
+    Assert.equal {ignore-case:true invert-match:true count:true line-number:true color:"never"}
                  ((Cli.parse (Grep.spec) ["--ignore-case" "--invert-match" "--count" "--line-number" "p"]) dot flags)
   ]
   Test.test "-ivcn clusters" [
-    Assert.equal {ignore-case:true invert-match:true count:true line-number:true}
+    Assert.equal {ignore-case:true invert-match:true count:true line-number:true color:"never"}
                  ((Cli.parse (Grep.spec) ["-ivcn" "p"]) dot flags)
   ]
   Test.test "a flag after the pattern is still a flag" [
     Assert.equal {ok:true
-                  flags:{ignore-case:false invert-match:false count:true line-number:false}
+                  flags:{ignore-case:false invert-match:false count:true line-number:false color:"never"}
                   args:["p" "f"] command:none}
                  (Cli.parse (Grep.spec) ["p" "-c" "f"])
   ]
@@ -343,51 +343,51 @@ Test.describe "argv" [
 Test.describe "streaming" [
   Test.test "one operand is drained to EOF and its matches counted" [
     (IO.write (make Pathon fixture) fixture-text) drop
-    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {} false))
+    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {} false false))
   ]
   Test.test "-i widens the same file from one match to two" [
-    Assert.equal 2 (Grep.one fixture (Grep.opts (Grep.pattern "needle" true) {} false))
+    Assert.equal 2 (Grep.one fixture (Grep.opts (Grep.pattern "needle" true) {} false false))
   ]
   Test.test "-v selects the complement — 4 lines, 1 match, 3 selected" [
-    Assert.equal 3 (Grep.one fixture (Grep.opts "needle" {invert-match:true} false))
+    Assert.equal 3 (Grep.one fixture (Grep.opts "needle" {invert-match:true} false false))
   ]
   Test.test "a pattern that matches nothing selects nothing" [
-    Assert.equal 0 (Grep.one fixture (Grep.opts "zzz" {} false))
+    Assert.equal 0 (Grep.one fixture (Grep.opts "zzz" {} false false))
   ]
   Test.test "-c changes what is PRINTED, never what is counted" [
-    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {count:true} false))
+    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {count:true} false false))
   ]
   Test.test "an empty input selects nothing and does not fail" [
     def empty "/tmp/aql-utils-grep-test-empty.txt"
     (IO.write (make Pathon empty) "") drop
-    def c (Grep.one empty (Grep.opts "" {} false))
+    def c (Grep.one empty (Grep.opts "" {} false false))
     (IO.remove (make Pathon empty)) drop
     Assert.equal 0 c
   ]
   Test.test "a file longer than the first chunk (64) crosses the ramp intact" [
     def big "/tmp/aql-utils-grep-test-ramp.txt"
     (IO.write (make Pathon big) (StringUtil.repeat 65 "x\n")) drop
-    def c (Grep.one big (Grep.opts "x" {} false))
+    def c (Grep.one big (Grep.opts "x" {} false false))
     (IO.remove (make Pathon big)) drop
     Assert.equal 65 c
   ]
   Test.test "a line with no trailing newline is still examined" [
     def nonl "/tmp/aql-utils-grep-test-nonl.txt"
     (IO.write (make Pathon nonl) "one\ntwo") drop
-    def c (Grep.one nonl (Grep.opts "o" {} false))
+    def c (Grep.one nonl (Grep.opts "o" {} false false))
     (IO.remove (make Pathon nonl)) drop
     Assert.equal 2 c
   ]
   Test.test "a missing input reports the -1 sentinel rather than raising" [
-    Assert.equal -1 (Grep.one missing (Grep.opts "needle" {} false))
+    Assert.equal -1 (Grep.one missing (Grep.opts "needle" {} false false))
   ]
   Test.test "a directory reports the sentinel too" [
-    Assert.equal -1 (Grep.one "/tmp" (Grep.opts "needle" {} false))
+    Assert.equal -1 (Grep.one "/tmp" (Grep.opts "needle" {} false false))
   ]
   Test.test "line numbering restarts at 1 for each input, so the count does too" [
     (IO.write (make Pathon other) "needle three\n") drop
-    Assert.equal [1 1] [(Grep.one fixture (Grep.opts "needle" {line-number:true} true))
-                        (Grep.one other (Grep.opts "needle" {line-number:true} true))]
+    Assert.equal [1 1] [(Grep.one fixture (Grep.opts "needle" {line-number:true} true false))
+                        (Grep.one other (Grep.opts "needle" {line-number:true} true false))]
   ]
 ]
 
@@ -450,5 +450,138 @@ Test.describe "exit codes" [
   ]
   Test.test "and an anchored miss is still a clean 1" [
     Assert.equal 1 (Grep.main ["^haystack$xyz" fixture])
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# --color. The suite's witness for IO.is-tty and NO_COLOR — and the reason the
+# decision is a PURE fn of three booleans rather than something that reads the
+# terminal: a test cannot attach a terminal to itself, and the answer must be
+# assertable in CI, where standard output is never a tty.
+#
+# The end-to-end Go test covers the half that IS portable: it runs the built
+# binary with stdout on a PIPE and asserts --color=auto emits no escapes, and
+# that --color=always does. IO.is-tty's TRUE arm needs a real terminal, which
+# neither a Go test nor `aql test` can portably allocate — it was verified by
+# hand under a pty (grep --color=auto colours; NO_COLOR=1 suppresses it;
+# --color=always beats NO_COLOR) and is otherwise pinned by grep-color-on
+# below, which takes the answer as a parameter for exactly this reason.
+# ----------------------------------------------------------------------------
+Test.describe "grep-when" [
+  Test.test "an absent flag reads the spec default, never" [
+    Assert.equal "never" (Grep.when {})
+  ]
+  Test.test "an explicit value is itself" [ Assert.equal "auto" (Grep.when {color:"auto"}) ]
+  Test.test "a repeated --color takes the LAST one" [
+    Assert.equal "never" (Grep.when {color:["always" "never"]})
+  ]
+  Test.test "an empty repeat falls back to the default" [
+    Assert.equal "never" (Grep.when {color:[]})
+  ]
+]
+
+Test.describe "grep-color-ok" [
+  Test.test "auto is a mode" [ Assert.equal true (Grep.colorOk "auto") ]
+  Test.test "always is a mode" [ Assert.equal true (Grep.colorOk "always") ]
+  Test.test "never is a mode" [ Assert.equal true (Grep.colorOk "never") ]
+  Test.test "anything else is refused rather than silently defaulted" [
+    Assert.equal false (Grep.colorOk "purple")
+  ]
+  Test.test "the empty string is refused too" [ Assert.equal false (Grep.colorOk "") ]
+  Test.test "the check is case-sensitive, like every other flag value" [
+    Assert.equal false (Grep.colorOk "Auto")
+  ]
+]
+
+Test.describe "grep-color-on" [
+  # never: the flag is an instruction and nothing overrides it.
+  Test.test "never is never, even on a terminal" [
+    Assert.equal false (Grep.colorOn "never" true false)
+  ]
+  # always: likewise, in the other direction — INCLUDING over NO_COLOR.
+  Test.test "always is always, even into a pipe" [
+    Assert.equal true (Grep.colorOn "always" false false)
+  ]
+  Test.test "always beats NO_COLOR — the variable is a default, the flag is not" [
+    Assert.equal true (Grep.colorOn "always" false true)
+  ]
+  # auto: the whole point of the feature.
+  Test.test "auto colours when standard output IS a terminal" [
+    Assert.equal true (Grep.colorOn "auto" true false)
+  ]
+  Test.test "auto does NOT colour into a pipe — this is why --color=auto is safe" [
+    Assert.equal false (Grep.colorOn "auto" false false)
+  ]
+  Test.test "auto honours NO_COLOR even on a terminal" [
+    Assert.equal false (Grep.colorOn "auto" true true)
+  ]
+  Test.test "NO_COLOR into a pipe is still no colour, for both reasons" [
+    Assert.equal false (Grep.colorOn "auto" false true)
+  ]
+]
+
+Test.describe "grep-paint" [
+  Test.test "with colour off the line is returned UNCHANGED, byte for byte" [
+    Assert.equal "abbba" (Grep.paint "abbba" "b+" false)
+  ]
+  Test.test "a match is wrapped in the escape pair" [
+    Assert.equal "a\u001b[01;31mbbb\u001b[0ma" (Grep.paint "abbba" "b+" true)
+  ]
+  Test.test "a match at the start of the line" [
+    Assert.equal "\u001b[01;31mb\u001b[0mravo" (Grep.paint "bravo" "b+" true)
+  ]
+  Test.test "a match at the end of the line" [
+    Assert.equal "brav\u001b[01;31mo\u001b[0m" (Grep.paint "bravo" "o" true)
+  ]
+  Test.test "EVERY match is painted, not just the first" [
+    Assert.equal "\u001b[01;31ma\u001b[0mx\u001b[01;31ma\u001b[0m" (Grep.paint "axa" "a" true)
+  ]
+  Test.test "a line the pattern does not match comes back unchanged" [
+    Assert.equal "zzz" (Grep.paint "zzz" "b+" true)
+  ]
+  Test.test "an empty line comes back empty, not escaped" [
+    Assert.equal "" (Grep.paint "" "b+" true)
+  ]
+  Test.test "the whole line matching is still just one wrap" [
+    Assert.equal "\u001b[01;31mabc\u001b[0m" (Grep.paint "abc" ".+" true)
+  ]
+  # NUR047: the regex reports BYTE offsets while `slice` counts RUNES. These
+  # three cases are what would fail if the painter sliced by rune index — and
+  # they would pass on every ASCII input, which is exactly why they are here.
+  Test.test "a match AFTER multi-byte runes lands in the right place" [
+    Assert.equal "日本語\u001b[01;31mc\u001b[0m" (Grep.paint "日本語c" "c" true)
+  ]
+  Test.test "a multi-byte match is wrapped whole, never split mid-rune" [
+    Assert.equal "a\u001b[01;31m日本\u001b[0mb" (Grep.paint "a日本b" "日本" true)
+  ]
+  Test.test "an astral rune survives the round trip" [
+    Assert.equal "x\u001b[01;31m🎉\u001b[0my" (Grep.paint "x🎉y" "🎉" true)
+  ]
+]
+
+Test.describe "colour and the program" [
+  Test.test "--color=never is accepted and matches as usual" [
+    Assert.equal 0 (Grep.main ["--color=never" "needle" fixture])
+  ]
+  Test.test "--color=always is accepted" [
+    Assert.equal 0 (Grep.main ["--color=always" "needle" fixture])
+  ]
+  Test.test "--color=auto is accepted — under the runner stdout is not a tty" [
+    Assert.equal 0 (Grep.main ["--color=auto" "needle" fixture])
+  ]
+  Test.test "an INVALID --color value is a usage error: 2" [
+    Assert.equal 2 (Grep.main ["--color=purple" "needle" fixture])
+  ]
+  Test.test "and it is fatal before any input is opened" [
+    Assert.equal 2 (Grep.main ["--color=purple" "needle" missing])
+  ]
+  Test.test "colour does not change the exit code on a miss" [
+    Assert.equal 1 (Grep.main ["--color=always" "zzzz" fixture])
+  ]
+  Test.test "the colour flag is carried into the options bundle" [
+    Assert.equal true ((Grep.opts "p" {} false true) dot col)
+  ]
+  Test.test "and off when it is off" [
+    Assert.equal false ((Grep.opts "p" {} false false) dot col)
   ]
 ]

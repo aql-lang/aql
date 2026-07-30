@@ -54,6 +54,10 @@
       attributes: { path: "kg" } }
     { key: "lang-spec", type: "Product", label: "lang/spec directory"
       attributes: { path: "lang/spec" } }
+    { key: "utils", type: "Product", label: "utils coreutils subset"
+      attributes: { path: "utils" } }
+    { key: "aql-cli", type: "Product", label: "aql:cli module"
+      attributes: { path: "lang/go/modules/cli.aql", language: "AQL" } }
     { key: "readme", type: "Document", label: "README.md" }
     { key: "agents-md", type: "Document", label: "AGENTS.md" }
     { key: "tutorial", type: "Document", label: "TUTORIAL.md" }
@@ -111,6 +115,26 @@
       evidence: [{ source: "src:agents", locator: "Repository layout",
         quote: "kg/ | The project knowledge graph: an evidence-backed AQL pipeline and its generated bundle." }]
       confidence: 0.98 }
+    { subject: "utils", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:agents", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+      confidence: 0.98 }
+    { subject: "utils", predicate: "related_to"
+      object: { kind: "entity", entity: "aql-cli" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in AQL (cat, wc, head, grep, ...) — real programs, built with aql build." }]
+      confidence: 0.95 }
+    { subject: "aql-cli", predicate: "part_of"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:agents", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+      confidence: 0.9 }
+    { subject: "utils", predicate: "related_to"
+      object: { kind: "entity", entity: "binary" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "real programs, built with aql build" }]
+      confidence: 0.9 }
     { subject: "aql", predicate: "has_attribute"
       object: { kind: "literal", value: "typed, word-based query language", datatype: "String" }
       evidence: [{ source: "src:readme", locator: "intro",

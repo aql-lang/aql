@@ -44,6 +44,9 @@ INSERT INTO entities VALUES ('ent:Product:1628071779061296422', 'Product', 'calc
 INSERT INTO entity_attributes VALUES ('ent:Product:1628071779061296422', 'path', 'calc/go');
 INSERT INTO entities VALUES ('ent:Product:2046405728378673079', 'Product', 'kg knowledge-graph pipeline', 'kg knowledge-graph pipeline', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:2046405728378673079', 'path', 'kg');
+INSERT INTO entities VALUES ('ent:Product:3515219182955540947', 'Product', 'aql:cli module', 'aql:cli module', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Product:3515219182955540947', 'language', 'AQL');
+INSERT INTO entity_attributes VALUES ('ent:Product:3515219182955540947', 'path', 'lang/go/modules/cli.aql');
 INSERT INTO entities VALUES ('ent:Product:5397757900009317848', 'Product', 'lang/go module', 'lang/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:5397757900009317848', 'path', 'lang/go');
 INSERT INTO entities VALUES ('ent:Product:5770789618934008141', 'Product', 'lang/spec directory', 'lang/spec directory', 'accepted');
@@ -52,6 +55,8 @@ INSERT INTO entities VALUES ('ent:Product:6289010343240002096', 'Product', 'aql-
 INSERT INTO entity_external_ids VALUES ('ent:Product:6289010343240002096', 'github', 'aql-lang/aql');
 INSERT INTO entities VALUES ('ent:Product:6926990046092332766', 'Product', 'cmd/go module', 'cmd/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:6926990046092332766', 'path', 'cmd/go');
+INSERT INTO entities VALUES ('ent:Product:8635404738244704660', 'Product', 'utils coreutils subset', 'utils coreutils subset', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Product:8635404738244704660', 'path', 'utils');
 INSERT INTO entities VALUES ('ent:Product:9152211458201666591', 'Product', 'wpg playground module', 'wpg playground module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:9152211458201666591', 'path', 'wpg');
 INSERT INTO assertions VALUES ('ast:1051514145981152920', 'ent:Document:4163489813681141089', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -80,6 +85,8 @@ INSERT INTO assertions VALUES ('ast:3068916487690115997', 'ent:Document:52920604
 INSERT INTO assertion_evidence VALUES ('ast:3068916487690115997', 'src:readme', 'Documentation', 'Non-Uniformity Register | You want the recorded deviations from the language''s uniform rules, each pending, resolved, or explicitly allowed.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3771181527847705674', 'ent:Document:1344160336771235777', 'supports', 'entity', 'ent:Concept:8101927001878214763', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3771181527847705674', 'src:readme', 'Documentation', 'Explanation | You want to understand why AQL is the way it is.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:426160728788970211', 'ent:Product:3515219182955540947', 'part_of', 'entity', 'ent:Product:5397757900009317848', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:426160728788970211', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4324334117755500109', 'ent:Product:1628071779061296422', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4324334117755500109', 'src:readme', 'Repository layout', 'calc/go/ | A small calculator built directly on eng (learning example).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4471816819522755262', 'ent:Document:3080274854606714513', 'mentions', 'entity', 'ent:Concept:8101927001878214763', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -90,6 +97,10 @@ INSERT INTO assertions VALUES ('ast:5406505729946615323', 'ent:Document:63696736
 INSERT INTO assertion_evidence VALUES ('ast:5406505729946615323', 'src:agents', 'Working in the code', 'Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | eng/go/CLAUDE.md', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5635609475312982017', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:8101927001878214763', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5635609475312982017', 'src:readme', 'Documentation', 'Tutorial | You are new to AQL and want to learn it step by step.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:5654774896833246723', 'ent:Product:8635404738244704660', 'related_to', 'entity', 'ent:Product:1225291689777530860', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:5654774896833246723', 'src:readme', 'Repository layout', 'real programs, built with aql build', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:6158382806169937646', 'ent:Product:8635404738244704660', 'part_of', 'entity', 'ent:Product:6289010343240002096', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:6158382806169937646', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6238259023438491688', 'ent:Document:3955423872539901697', 'supports', 'entity', 'ent:Concept:8101927001878214763', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:6238259023438491688', 'src:readme', 'Documentation', 'How-To Guides | You have a specific task and want a recipe.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6774669354954439029', 'ent:Concept:8101927001878214763', 'has_attribute', 'literal', NULL, '"typed, word-based query language"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -104,6 +115,8 @@ INSERT INTO assertions VALUES ('ast:7834498903675958327', 'ent:Product:539775790
 INSERT INTO assertion_evidence VALUES ('ast:7834498903675958327', 'src:readme', 'Repository layout', 'lang/go/ | The language layer: public lang API and the consolidated native word library.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7961542002030072644', 'ent:Document:3904106568037504161', 'mentions', 'entity', 'ent:Concept:6434995827834555649', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7961542002030072644', 'src:agents', 'First: let the tool document itself', 'Before grepping source or guessing a word''s signature, ask the binary.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:8318307539480741368', 'ent:Product:8635404738244704660', 'related_to', 'entity', 'ent:Product:3515219182955540947', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:8318307539480741368', 'src:readme', 'Repository layout', 'utils/ | A coreutils subset written in AQL (cat, wc, head, grep, ...) — real programs, built with aql build.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8361181589655620459', 'ent:Concept:2039420555596601682', 'part_of', 'entity', 'ent:Product:1225291689777530860', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8361181589655620459', 'src:readme', 'Overview', 'a secrets vault', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:8953029635026218565', 'ent:Concept:8101927001878214763', 'has_attribute', 'literal', NULL, '"concatenative"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
