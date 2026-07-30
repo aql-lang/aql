@@ -147,10 +147,19 @@ func TestReadLineFromPropagatesError(t *testing.T) {
 
 // --- OSStreamProbe against real files ---
 
-// The production probe's own arms. A test suite's streams are redirected, so
-// the only way to reach the character-device branch is to hand it a device:
-// /dev/null is one on every platform this builds for, and a regular file is
-// the negative. A closed handle covers the Stat-failure arm.
+// The production probe's own arms.
+//
+// This test used to hand the probe /dev/null to reach its TRUE arm, on the
+// reasoning that /dev/null is a character device on every platform. It is —
+// and that was the bug. The probe tested os.ModeCharDevice, which is true for
+// /dev/null, /dev/zero and /dev/urandom alike, so `prog > /dev/null` answered
+// "yes, a terminal" and took the colour branch: the single most common
+// redirection there is, and exactly the case --color=auto exists to avoid.
+// The test passed because it asserted the defect.
+//
+// The probe now asks the kernel (term.IsTerminal). /dev/null is the NEGATIVE
+// case, and the true arm is reached with a real pty via /dev/ptmx — skipped
+// where the platform has none rather than quietly dropped.
 func TestOSStreamProbeAgainstRealFiles(t *testing.T) {
 	probe := capabilities.OSStreamProbe{}
 
@@ -159,8 +168,19 @@ func TestOSStreamProbeAgainstRealFiles(t *testing.T) {
 		t.Skipf("no %s on this platform: %v", os.DevNull, err)
 	}
 	defer func() { _ = dev.Close() }()
-	if !probe.IsTerminal("stdout", dev) {
-		t.Errorf("%s should read as a character device", os.DevNull)
+	if probe.IsTerminal("stdout", dev) {
+		t.Errorf("%s is a character device but NOT a terminal — answering true "+
+			"here is what made `prog > /dev/null` emit colour", os.DevNull)
+	}
+
+	// The true arm, on a real terminal.
+	if pty, perr := os.OpenFile("/dev/ptmx", os.O_RDWR, 0); perr == nil {
+		defer func() { _ = pty.Close() }()
+		if !probe.IsTerminal("stdout", pty) {
+			t.Error("a pty master should read as a terminal")
+		}
+	} else {
+		t.Logf("no /dev/ptmx, skipping the terminal arm: %v", perr)
 	}
 
 	reg, err := os.CreateTemp(t.TempDir(), "plain")

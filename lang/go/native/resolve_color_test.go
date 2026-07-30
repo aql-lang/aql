@@ -45,11 +45,21 @@ func TestResolveColorProcessFallback(t *testing.T) {
 	if ResolveColor(nil, f, "auto") {
 		t.Fatal("a regular file is not a terminal")
 	}
-	// auto: a character device (e.g. /dev/null) satisfies the TTY probe.
+	// auto: /dev/null is a character device and NOT a terminal, so it must
+	// not colour. This block used to assert the opposite and t.Skip on
+	// failure, which meant the fix to the probe turned the whole rest of this
+	// test into a silent skip rather than a failure.
 	if dev, derr := os.Open(os.DevNull); derr == nil {
 		defer dev.Close()
-		if !ResolveColor(nil, dev, "auto") {
-			t.Skip("os.DevNull is not a character device on this platform")
+		if ResolveColor(nil, dev, "auto") {
+			t.Fatal("os.DevNull is not a terminal — auto must not colour it")
+		}
+	}
+	// auto: a real terminal DOES colour, which is the arm that matters.
+	if pty, perr := os.OpenFile("/dev/ptmx", os.O_RDWR, 0); perr == nil {
+		defer pty.Close()
+		if !ResolveColor(nil, pty, "auto") {
+			t.Fatal("auto must colour a real terminal")
 		}
 	}
 	// A closed file makes Stat fail — the defensive arm declines color.
@@ -82,16 +92,22 @@ func TestResolveColorRegistryWithoutEnvOps(t *testing.T) {
 // from the renderer, and a host that sets it in a hermetic environment
 // disables colour even though the real process never had it.
 func TestResolveColorUsesInstalledEnvOps(t *testing.T) {
-	dev, err := os.Open(os.DevNull)
+	// A real pty, not os.DevNull. This used to open /dev/null and require
+	// isCharDevice(dev) — which held only because the probe called every
+	// character device a terminal. Once the probe started asking the kernel,
+	// /dev/null answered false and this test SKIPPED: no failure, just the
+	// NO_COLOR arms silently no longer covered. A pty makes the precondition
+	// true for the right reason.
+	dev, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
 	if err != nil {
-		t.Fatal(err)
+		t.Skipf("no /dev/ptmx on this platform: %v", err)
 	}
 	defer dev.Close()
 
-	// Sanity: the destination is a character device, so colour hinges on
-	// NO_COLOR alone. Skip rather than mis-attribute a platform difference.
+	// Sanity: the destination really is a terminal, so colour hinges on
+	// NO_COLOR alone.
 	if !ResolveColor(nil, dev, "always") || !isCharDevice(dev) {
-		t.Skip("os.DevNull is not a character device on this platform")
+		t.Fatal("a pty master must read as a terminal")
 	}
 
 	// The host's view SETS NO_COLOR while the process does not: no colour.
