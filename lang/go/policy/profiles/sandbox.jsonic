@@ -29,12 +29,12 @@
       words: {
         default: "deny"
         rules: [
-          { allow: ["import"], where: { module: ["aql:math", "aql:time", "aql:io"] } }
+          { allow: ["import"], where: { module: ["aql:math-util", "aql:time-util", "aql:io"] } }
         ]
       }
       scopes: {
-        "aql:math": { words: { default: "allow" } }
-        "aql:time": {
+        "aql:math-util": { words: { default: "allow" } }
+        "aql:time-util": {
           words: {
             default: "allow"
             rules: [{ deny: ["sleep"] }]

@@ -38,12 +38,12 @@
         default: "deny"
         rules: [
           { allow: ["import"], where: {
-              module: ["aql:math", "aql:rand", "aql:decision", "aql:test"]
+              module: ["aql:math-util", "aql:rand", "aql:decision", "aql:test"]
           } }
         ]
       }
       scopes: {
-        "aql:math":     { words: { default: "allow" } }
+        "aql:math-util": { words: { default: "allow" } }
         "aql:rand":     { words: { default: "allow" } }
         "aql:decision": { words: { default: "allow" } }
         "aql:test":     { words: { default: "allow" } }

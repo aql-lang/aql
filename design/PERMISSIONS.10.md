@@ -286,7 +286,7 @@ declaration is more readable.
     "modules": {
       "words": {
         "default": "deny",
-        "rules": [{ "allow": ["aql:math-util", "aql:time"] }]
+        "rules": [{ "allow": ["aql:math-util", "aql:time-util"] }]
       },
       "scopes": {
         "aql:math-util": {
@@ -295,7 +295,7 @@ declaration is more readable.
             "rules": [{ "deny": ["pow"] }]
           }
         },
-        "aql:time": {
+        "aql:time-util": {
           "words": {
             "default": "allow",
             "rules": [{ "deny": ["sleep"] }]

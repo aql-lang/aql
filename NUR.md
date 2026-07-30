@@ -75,8 +75,8 @@ commit.
 | [NUR040](#nur040) | `set` quotes a bare computed key where `get` refuses it | 2026-07-30 C3 `aql:cli` scouting |
 | [NUR041](#nur041) | The `read-only` profile denies file READS | 2026-07-30 C3 perms scouting |
 | [NUR042](#nur042) | `-policy-dry-run` is documented and does nothing | 2026-07-30 C3 perms scouting |
-| [NUR043](#nur043) | Policy profiles name modules that do not exist, unvalidated | 2026-07-30 C3 perms scouting |
 | [NUR044](#nur044) | `aql build` skips the static check `aql run` performs | 2026-07-30 C3 perms scouting |
+| [NUR045](#nur045) | Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny | 2026-07-30 C3 perms scouting |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -986,44 +986,6 @@ the "I checked with dry-run first" workflow it cannot support.
 ---
 
 
-## NUR043 — Policy profiles name modules that do not exist, unvalidated {#nur043}
-
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** an identifier in shipped configuration names something real, and
-validation catches it when it does not. `Profile.Validate` already checks
-scope names and global op names.
-
-**Divergence:** `sandbox.jsonic`'s import allowlist is
-`["aql:math", "aql:time", "aql:io"]`, and two of those three module ids do
-not exist — the real ids are `aql:math-util` and `aql:time-util` (the
-`-util` naming rule in lang/go/CLAUDE.md). So the sandbox profile permits
-importing two nonexistent modules and forbids the two real ones it meant to
-permit:
-
-```
-$ aql do -perms full 'import "aql:math" 1'
-error: import: unknown native module: aql:math
-$ aql do -perms sandbox 'import "aql:math-util" 1'
-error: import: permission denied: modules.import (policy "sandbox": modules.words default=deny …)
-```
-
-`Profile.Validate` never validates module ids, so `aql policy validate`
-passes the typos silently.
-
-**Evidence:** the two commands above, plus `sandbox.jsonic:32`.
-
-**Proposed verdict:** fix the two ids, and add the validation that would
-have caught them. The validation cannot live in `policy` (it must not import
-the module registry), so the natural home is a test in `lang/go/modules`
-asserting that every module id named in any shipped profile resolves — the
-same shape as the existing catalog-sync test.
-
-
----
-
-
 ## NUR044 — `aql build` skips the static check `aql run` performs {#nur044}
 
 **Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
@@ -1055,3 +1017,52 @@ does not say `build` omits it.
 refuse by default (with a `-no-check` escape hatch mirroring `run`'s). The
 asymmetry is worst exactly where it matters: the artefact that outlives the
 session is the one nothing validated.
+
+
+---
+
+
+## NUR045 — Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny {#nur045}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+scouting
+
+**Rule:** a policy rule a shipped profile declares is enforced. The policy
+engine has one evaluation path and every scope reaches it through
+`Policy.Check`.
+
+**Divergence:** the `modules` scope has a second, per-export half —
+`modules.scopes."aql:x".words`, keyed by export name — with a full
+implementation (`checkModuleCall`, `evaluate.go`) and unit tests. **Nothing
+in production ever calls it.** `Check("modules", "call", …)` appears only in
+`lang/go/policy/*_test.go`; the sole production `modules` checks are the
+import gate and the per-module `Installed()` flag
+(`lang/go/modules/modules.go`). So every per-export rule in every shipped
+profile is inert:
+
+```
+$ time aql do -perms sandbox 'import "aql:time-util"  TimeUtil.sleep 1500'
+real 0m1.531s          # it slept; sandbox.jsonic declares deny: ["sleep"]
+$ time aql do -perms full 'import "aql:time-util"  TimeUtil.sleep 1500'
+real 0m1.532s          # identical
+```
+
+**Evidence:** the timing above; `grep -rn 'Check("modules"' --include=*.go`
+outside tests returns exactly one line, and its op is `"import"`. The
+`deny: ["sleep"]` rule in `sandbox.jsonic` is the only per-export rule any
+shipped profile carries, which is why nobody noticed.
+
+**Why it matters:** `sleep` is the DoS vector a hosted evaluator reaches for
+`sandbox` to close. A profile that says it denies a word and does not is a
+false guarantee, and the false guarantee is in the security layer.
+
+**Documentation status:** `evaluate.go`'s own doc comment describes the
+per-export gate as working ("per-export rules live in the per-module
+subscope"), and `sandbox.jsonic` reads as though it works.
+
+**Proposed verdict:** fix — call `Check("modules", "call", {module, export})`
+at module-export dispatch — or delete the schema and the rule, and say in
+`lang/go/policy` that module gating is import-granularity only. The choice
+is a real one: the check would run on every module-word call, so its cost
+belongs to the maintainer's judgement, not to a bug fix. What must not
+survive is a profile declaring a denial it does not perform.
