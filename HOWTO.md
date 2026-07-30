@@ -47,6 +47,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Sandbox untrusted code](#sandbox-untrusted-code)
 * [Run AQL as a service](#run-aql-as-a-service)
 * [Inspect permission profiles](#inspect-permission-profiles)
+* [Write a command-line tool](#write-a-command-line-tool)
 
 
 ## Define and use custom words
@@ -1332,3 +1333,121 @@ aql policy validate ./my-policy.jsonic
 aql policy test sandbox fileops.write path=/etc/passwd   # exit 0 = allowed, 1 = denied
 aql policy explain sandbox fileops.write path=/etc/passwd  # the blame chain
 ```
+
+
+## Write a command-line tool
+
+An AQL program becomes a Unix tool through four pieces: it reads its
+arguments, it reads its input, it writes its output, and it chooses an exit
+code. `aql:cli` supplies the first, `aql:io` the rest, and `aql build` turns
+the result into an executable that needs no `aql` on the target machine.
+
+The whole shape of a tool:
+
+```aql
+import "aql:cli"
+import "aql:io"
+
+def spec {
+  name:"greet"
+  version:"0.1.0"
+  summary:"say hello"
+  flags:[{name:"loud" short:"l" kind:"bool" help:"shout it"}
+      {name:"times"
+        short:"n"
+        kind:"string"
+        value:"N"
+        help:"repeat N times"
+      }
+  ]
+  args:{name:"names" min:1 help:"who to greet"}
+}
+
+def run fn ctx:Map Integer [print (ctx.args) 0]
+
+Cli.main (spec) (run/r)
+```
+
+`Cli.main` gives you the conventions for free: `--help` and `--version` print
+and exit 0, a usage error prints to stderr and exits **2**, and your handler's
+returned Integer becomes the process's exit code. Run it with arguments the
+same way you will ship it:
+
+```bash
+aql run greet.aql --loud ada grace     # ["ada", "grace"]
+aql run greet.aql --help               # generated help, exit 0
+aql run greet.aql                      # "expected at least 1 names, got 0", exit 2
+```
+
+### Parse without dispatching
+
+`Cli.main` reads `IO.args` and exits, which is what a program wants and what a
+*test* cannot survive — `aql test` cannot inject an argument vector, and an
+exit ends the file. So the decision is available separately, as data:
+
+```aql
+Cli.parse (spec) ["--loud" "ada"] # {ok:true flags:{…} args:['ada']}
+Cli.dispatch (spec) ["--help"] # {action:'help' code:0 out:'…' err:''}
+```
+
+Both are pure — spec and vector in, map out, no IO — so they are testable, and
+so is anything you build on them. Structure a tool the same way: the logic in
+fns that take their input as parameters, and a thin `run` handler that feeds
+them. Every program in [`utils/`](utils/) is written this way.
+
+### Read input a line at a time
+
+```aql
+import "aql:io"
+for [0 1000000000] [
+  def line (IO.read-line (IO.stdin))
+  if (line is None) [break] [print line]
+]
+IO.exit 0 ;
+```
+
+`IO.read-line` returns the line without its terminator (LF and CRLF both), and
+`none` at end of input — which is why `""` can still be a blank line. There is
+no `while`; the huge `for` bound costs nothing. Whole-input slurping is
+`IO.read (IO.stdin)`, and the two share one reader, so you can mix them.
+
+**End a program with `IO.exit 0;`.** The driver prints whatever the program
+left on the stack, so a stray value becomes stray output — and words that
+return something you did not want (`IO.write` returns its handle) need a
+postfix `drop`.
+
+### Choose an exit code
+
+`IO.exit n` takes 0..125 — 126 and 127 are the shell's, and 128+n means a
+signal, so a program claiming one of those would be lying about how it died.
+The conventional codes are worth following: 0 success, 1 "ran fine, found
+nothing" (what `grep` returns for no match), 2 a usage error.
+
+### Colour, only when it is wanted
+
+```aql
+def colour ((IO.is-tty (IO.stdout)) and ((IO.env "NO_COLOR") is None))
+```
+
+`IO.is-tty` answers per stream, because the asymmetric case is the common one:
+stdout piped while stderr is still a terminal.
+
+### Build it
+
+```bash
+aql check greet.aql            # aql build does NOT check — do it yourself
+aql build greet.aql -o greet
+./greet --loud ada
+```
+
+The binary carries the program, the runtime, and any files it imported, so it
+runs where `aql` does not. It can also carry a **permissions profile**:
+
+```bash
+aql build greet.aql -o greet-ro -perms read-only
+```
+
+The build always succeeds; the profile constrains the program when it *runs*.
+It is a strippable default rather than a boundary against someone holding the
+binary — what it buys you is that a tool which should never write files
+provably never writes files.
