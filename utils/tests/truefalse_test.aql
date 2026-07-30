@@ -1,0 +1,142 @@
+# ============================================================================
+# true / false — unit suite (aql:test).
+#
+#   aql test tests/truefalse_test.aql          (run from utils/)
+#
+# One suite for both programs, because the point of the pair is the DIFFERENCE
+# between them: the two files share their three fns' shapes exactly, and the
+# only thing that differs is the status handed to main. Testing them apart
+# would lose the one property worth pinning.
+#
+# These two are the suite's direct witness for the exit-code contract. Every
+# other program's exit code is entangled with something else — a file that
+# could not be opened, a pattern that did not match, a malformed list. Here
+# nothing else happens at all, so a wrong code has exactly one possible cause.
+#
+# The most valuable case in the file is "false --help exits 1". It is the one
+# place where doing the obvious thing (help succeeded, so return 0) would be
+# wrong, and it is what coreutils actually does.
+# ============================================================================
+
+import "aql:test"
+import "aql:cli"
+import "aql:io"
+import "aql:string-util"
+import "./true.aql"
+import "./false.aql"
+
+# ----------------------------------------------------------------------------
+# The sole-argument rule (coreutils' `if (argc == 2)`).
+# ----------------------------------------------------------------------------
+Test.describe "sole-argument recognition" [
+  Test.test "--help alone is recognised" [
+    Assert.equal true (True.sole ["--help"] "--help")
+  ]
+  Test.test "--version alone is recognised" [
+    Assert.equal true (True.sole ["--version"] "--version")
+  ]
+  Test.test "a different sole argument is not" [
+    Assert.equal false (True.sole ["--version"] "--help")
+  ]
+  Test.test "--help with a SECOND argument is not recognised — it is ignored text" [
+    Assert.equal false (True.sole ["--help" "x"] "--help")
+  ]
+  Test.test "--help as the second argument is not recognised either" [
+    Assert.equal false (True.sole ["x" "--help"] "--help")
+  ]
+  Test.test "no arguments recognises nothing" [
+    Assert.equal false (True.sole [] "--help")
+  ]
+  Test.test "false applies the identical rule" [
+    Assert.equal [true false] [(False.sole ["--help"] "--help")
+                               (False.sole ["--help" "x"] "--help")]
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# What gets printed. Pure — the caller does the writing.
+# ----------------------------------------------------------------------------
+Test.describe "output" [
+  Test.test "no arguments prints NOTHING at all" [
+    Assert.equal "" (True.out [])
+  ]
+  Test.test "an ignored argument prints nothing" [
+    Assert.equal "" (True.out ["-x"])
+  ]
+  Test.test "several ignored arguments print nothing" [
+    Assert.equal "" (True.out ["a" "b" "c"])
+  ]
+  Test.test "--version prints the program name and version" [
+    Assert.equal "true 0.1.0\n" (True.out ["--version"])
+  ]
+  Test.test "and false prints ITS name — the spec is not shared" [
+    Assert.equal "false 0.1.0\n" (False.out ["--version"])
+  ]
+  Test.test "--help renders the usage block" [
+    Assert.equal true ((StringUtil.indexof "usage: true" (True.out ["--help"])) gte 0)
+  ]
+  Test.test "--help says what the program is for" [
+    Assert.equal true ((StringUtil.indexof "do nothing, successfully" (True.out ["--help"])) gte 0)
+  ]
+  Test.test "false's help says the opposite" [
+    Assert.equal true ((StringUtil.indexof "do nothing, unsuccessfully" (False.out ["--help"])) gte 0)
+  ]
+  Test.test "--help with a trailing argument prints nothing (the sole rule)" [
+    Assert.equal "" (True.out ["--help" "x"])
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# The exit codes — the whole reason these two programs are in the suite.
+# ----------------------------------------------------------------------------
+Test.describe "true exits 0, unconditionally" [
+  Test.test "with no arguments" [ Assert.equal 0 (True.main [] 0) ]
+  Test.test "with an operand" [ Assert.equal 0 (True.main ["x"] 0) ]
+  Test.test "with an UNKNOWN FLAG — there is no usage error here" [
+    Assert.equal 0 (True.main ["-x"] 0)
+  ]
+  Test.test "with a flag that looks like a real one elsewhere" [
+    Assert.equal 0 (True.main ["-n" "5"] 0)
+  ]
+  Test.test "with --help" [ Assert.equal 0 (True.main ["--help"] 0) ]
+  Test.test "with --version" [ Assert.equal 0 (True.main ["--version"] 0) ]
+  Test.test "with --" [ Assert.equal 0 (True.main ["--"] 0) ]
+]
+
+Test.describe "false exits 1, unconditionally" [
+  Test.test "with no arguments" [ Assert.equal 1 (False.main [] 1) ]
+  Test.test "with an operand" [ Assert.equal 1 (False.main ["x"] 1) ]
+  Test.test "with an unknown flag" [ Assert.equal 1 (False.main ["-x"] 1) ]
+  Test.test "with --version" [ Assert.equal 1 (False.main ["--version"] 1) ]
+  Test.test "with --HELP: the help prints and the status is STILL 1" [
+    Assert.equal 1 (False.main ["--help"] 1)
+  ]
+  Test.test "and the help really was produced — this is not a silent 1" [
+    Assert.equal true ((size (False.out ["--help"])) gt 0)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# The pair. These are the cases that would still pass if the two programs were
+# copies — and the ones that would fail if either had hard-coded its status.
+# ----------------------------------------------------------------------------
+Test.describe "the pair" [
+  Test.test "the status is a PARAMETER: true's main returns whatever it is given" [
+    Assert.equal 1 (True.main [] 1)
+  ]
+  Test.test "and so does false's" [
+    Assert.equal 0 (False.main [] 0)
+  ]
+  Test.test "so the only difference between the programs is the literal at the exit" [
+    Assert.equal [0 1] [(True.main ["--help"] 0) (False.main ["--help"] 1)]
+  ]
+  Test.test "an arbitrary status rides through untouched" [
+    Assert.equal 42 (True.main ["ignored"] 42)
+  ]
+  Test.test "both specs declare no flags — the help lists only the built-ins" [
+    Assert.equal [[] []] [(True.spec dot flags) (False.spec dot flags)]
+  ]
+  Test.test "both accept any number of operands" [
+    Assert.equal [0 0] [(True.spec dot args dot min) (False.spec dot args dot min)]
+  ]
+]

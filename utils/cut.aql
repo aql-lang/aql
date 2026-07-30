@@ -74,7 +74,13 @@ def cut-next-chunk fn [[m:Integer] [Integer] [ if (m gte 8192) [8192] [(m mul 2)
 # `-f1 -f3` arrives as ["1" "3"]. Comma-joining it gives the union, which is
 # what coreutils does with a repeated -f.
 def cut-spec-str fn [[v:Any] [String] [
-  if (v is List) [ def r (cut-cat v ",")  r ] [ (convert String v) ]
+  if (v is List) [ def r (cut-cat v ",")  r ] [
+    # An absent flag is None, and `convert String none` does not dispatch. The
+    # callers below guard with hasf/hasc so None cannot reach here in the
+    # program — but this is one of the small defensive readers, and a reader
+    # that raises on the shape it is meant to defend against is not one.
+    if (v is None) [""] [(convert String v)]
+  ]
 ]]
 
 # ----------------------------------------------------------------------------
