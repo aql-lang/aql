@@ -1302,7 +1302,10 @@ type (
 
 // ResolveColor decides whether to color output written to w for a
 // --color mode of "always", "never", or "auto" (the default: color
-// only a real terminal, honoring NO_COLOR).
+// only a real terminal, honoring NO_COLOR). NO_COLOR is read through
+// the registry's installed environment view when there is one, so pass
+// the instance's registry where one exists and nil before that (the CLI
+// styling its own output).
 var ResolveColor = native.ResolveColor
 
 // RenderCheckDiagnostic renders the rich block (source excerpt, notes,

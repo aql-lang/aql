@@ -314,7 +314,7 @@ func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int 
 		a.SetFileOps(lang.NewOverlayFileOps(a.HostFileOps(), mem))
 	}
 
-	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(stderr, "auto")); err != nil {
+	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(a.NativeRegistry(), stderr, "auto")); err != nil {
 		if code, isExit := lang.ExitCode(err); isExit {
 			return code
 		}

@@ -1654,7 +1654,7 @@ type StreamProbe interface {
 
 // OSStreamProbe is the production StreamProbe: it asks the operating system
 // about the endpoint the runtime actually holds. The test is the same one
-// eng.ResolveColor uses for its auto-colour decision — a character device —
+// native.ResolveColor uses for its auto-colour decision — a character device —
 // so `tty` and automatic colouring can never disagree about a stream.
 //
 // A non-*os.File endpoint (a buffer, a pipe wrapped in a custom type) is not

@@ -51,7 +51,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if err := run.EvalOptionsModeColor(stdout, source, run.OptionsFor("", 0, pol), run.ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), lang.ResolveColor(stderr, *colorMode)); err != nil {
+	if err := run.EvalOptionsModeColor(stdout, source, run.OptionsFor("", 0, pol), run.ResolveCompileMode(*compileFlag, *forceCompileFlag, *noCompileFlag), lang.ResolveColor(nil, stderr, *colorMode)); err != nil {
 		// `IO.exit N` sets this process's status directly — `aql do` is as
 		// much a program driver as `aql run`, and an expression that asks
 		// to exit must not be reported as a failure instead.

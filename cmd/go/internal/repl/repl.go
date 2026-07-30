@@ -121,7 +121,7 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 	// Diagnostics render with the ANSI palette when out is a real
 	// terminal (NO_COLOR honored); the plain rendering is byte-identical
 	// to the historical output.
-	color := native.ResolveColor(out, "auto")
+	color := native.ResolveColor(aqlInst.NativeRegistry(), out, "auto")
 	renderErr := func(err error) string {
 		return renderREPLError(err, color)
 	}

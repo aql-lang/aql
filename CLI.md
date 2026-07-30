@@ -393,6 +393,12 @@ block below it is additive.
 **Color.** `run`, `do`, and `check` take `--color auto|always|never`
 (default `auto`: color only when the output is a real terminal, and
 never when `NO_COLOR` is set). The REPL auto-detects the same way.
+The CLI's own `auto` decision reads `NO_COLOR` through the *same*
+environment capability `IO.env` reads, and tests the destination with the
+same character-device probe `IO.is-tty` uses — so a program and the
+diagnostics printed around it can never disagree about either. A host
+that installs a filtered environment view filters what the CLI sees too;
+before any program instance exists, `auto` falls back to the process.
 Machine-read surfaces — `check --json`, the LSP, the wasm playground —
 are always plain.
 

@@ -103,7 +103,7 @@ done:
 		}
 		return 0
 	}
-	if err := RunColor(stdout, stderr, source, "", 0, jsonOut, soft, strict, lang.ResolveColor(stderr, colorMode)); err != nil {
+	if err := RunColor(stdout, stderr, source, "", 0, jsonOut, soft, strict, lang.ResolveColor(nil, stderr, colorMode)); err != nil {
 		fmt.Fprintf(stderr, "%s\n", err)
 		return 1
 	}
@@ -254,7 +254,7 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic, source string, 
 // caller aborts before executing. Unlike Run it prints no summary or
 // result-stack line — stdout is left entirely for the program.
 func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bool) error {
-	return PreflightColor(stderr, source, registry, seed, verbose, lang.ResolveColor(stderr, "auto"))
+	return PreflightColor(stderr, source, registry, seed, verbose, lang.ResolveColor(nil, stderr, "auto"))
 }
 
 // PreflightColor is Preflight with the color decision resolved by the

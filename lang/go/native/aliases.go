@@ -451,7 +451,6 @@ var (
 	MakeAqlError             = eng.MakeAqlError
 	ExitCode                 = eng.ExitCode
 	NewExitError             = eng.NewExitError
-	ResolveColor             = eng.ResolveColor
 	RenderCheckDiagnostic    = eng.RenderCheckDiagnostic
 	MapFieldBoolean          = eng.MapFieldBoolean
 	MapFieldFloat            = eng.MapFieldFloat

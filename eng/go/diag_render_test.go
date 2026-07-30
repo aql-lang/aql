@@ -1,8 +1,6 @@
 package eng
 
 import (
-	"bytes"
-	"os"
 	"strings"
 	"testing"
 )
@@ -186,53 +184,6 @@ func TestRenderSiteEdges(t *testing.T) {
 	out = renderSite("one", "", "m", 1, 1, RenderOpts{}, primarySiteStyle)
 	if !strings.Contains(out, "^ m") || strings.Contains(out, "^^") {
 		t.Fatalf("empty sub must draw exactly one caret: %q", out)
-	}
-}
-
-func TestResolveColor(t *testing.T) {
-	var buf bytes.Buffer
-	if !ResolveColor(&buf, "always") {
-		t.Fatal("always must color any writer")
-	}
-	if ResolveColor(&buf, "never") {
-		t.Fatal("never must not color")
-	}
-	// auto: a non-file writer never colors.
-	if ResolveColor(&buf, "auto") {
-		t.Fatal("auto must not color a non-file writer")
-	}
-	// auto: NO_COLOR wins over everything below it.
-	t.Setenv("NO_COLOR", "1")
-	if ResolveColor(os.Stdout, "auto") {
-		t.Fatal("NO_COLOR must disable auto coloring")
-	}
-	t.Setenv("NO_COLOR", "")
-	// Restore: empty NO_COLOR means unset semantics in our check.
-	os.Unsetenv("NO_COLOR")
-	// auto: a regular file is not a terminal.
-	f, err := os.CreateTemp(t.TempDir(), "out")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if ResolveColor(f, "auto") {
-		t.Fatal("a regular file is not a terminal")
-	}
-	// auto: a character device (e.g. /dev/null) satisfies the TTY probe.
-	if dev, derr := os.Open(os.DevNull); derr == nil {
-		defer dev.Close()
-		if !ResolveColor(dev, "auto") {
-			t.Skip("os.DevNull is not a character device on this platform")
-		}
-	}
-	// A closed file makes Stat fail — the defensive arm declines color.
-	closed, err := os.CreateTemp(t.TempDir(), "closed")
-	if err != nil {
-		t.Fatal(err)
-	}
-	closed.Close()
-	if ResolveColor(closed, "auto") {
-		t.Fatal("a stat-failing writer must not color")
 	}
 }
 

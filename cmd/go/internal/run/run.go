@@ -187,7 +187,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// keeps the verbose behavior (all diagnostics, every severity).
 		// Sequenced after the guard-narrowing legalization per the plan's
 		// FP-honesty rule; `aql check --soft` remains the advisory surface.
-		color := lang.ResolveColor(stderr, *colorMode)
+		color := lang.ResolveColor(nil, stderr, *colorMode)
 		if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
 			if err := check.PreflightColor(stderr, source, reg, *seed, *checkFirst, color); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
