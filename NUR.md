@@ -69,16 +69,6 @@ commit.
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
-| [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | 2026-07-30 C3 `aql:cli` scouting |
-| [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any module export misfire silently | 2026-07-30 C3 `aql:cli` scouting |
-| [NUR039](#nur039) | `slice` with a negative start silently ignores its end argument | 2026-07-30 C3 `aql:cli` scouting |
-| [NUR040](#nur040) | `set` quotes a bare computed key where `get` refuses it | 2026-07-30 C3 `aql:cli` scouting |
-| [NUR041](#nur041) | The `read-only` profile denies file READS | 2026-07-30 C3 perms scouting |
-| [NUR042](#nur042) | `-policy-dry-run` is documented and does nothing | 2026-07-30 C3 perms scouting |
-| [NUR044](#nur044) | `aql build` skips the static check `aql run` performs | 2026-07-30 C3 perms scouting |
-| [NUR045](#nur045) | Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny | 2026-07-30 C3 perms scouting |
-| [NUR046](#nur046) | `aql fmt` is not idempotent: one pass is not a fixed point | 2026-07-30 C3 utils suite |
-| [NUR047](#nur047) | Regex match offsets are BYTE indices; every string word around them is RUNE-indexed | 2026-07-30 C3 utils suite |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -742,7 +732,7 @@ accepted:
 
 ## NUR037 — A fn-local fn used as a higher-order body word breaks in compiled mode only {#nur037}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
 scouting (design/CLI-PROGRAMS.0.md §8)
 
 **Rule:** the two execution engines agree. A program's meaning does not
@@ -789,12 +779,27 @@ check pass reporting clean while the default runtime fails is the part that
 makes this a trap rather than a limitation.
 
 
+
+### Why allowed
+
+The divergence is real and the risk is honest: a program that works under the
+interpreter can fail under the compiler, which is the failure mode
+`design/COMPILABLE-SUBSET.md`'s "slow, not wrong" contract exists to forbid.
+What makes it acceptable rather than blocking is that the trigger is narrow,
+the workaround is mechanical, and both are now written down where an author
+will meet them: declare callbacks at module scope, never inside another fn.
+
+**Evidence that pins it:** `utils/README.md`'s house rules name this record
+and state the rule; all eleven programs in `utils/` follow it, and the
+end-to-end Go test builds and runs them through the COMPILED path, so a
+regression that re-broke the compiled resolution would fail the ordinary Go
+suite rather than waiting for a user to find it.
 ---
 
 
 ## NUR038 — Two consecutive statements headed by a 1-arg Any module export misfire silently {#nur038}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
 scouting
 
 **Rule:** a statement boundary separates statements. Two statements in
@@ -833,12 +838,25 @@ house rule for AQL-authored modules and programs is to terminate every
 statement whose head is a module export with `end`.
 
 
+
+### Why allowed
+
+This is the most dangerous record in the set — the failure is SILENT
+misexecution, not an error — and the acceptance should be read with that in
+mind. It is allowed on the strength of the workaround being unconditional and
+cheap: terminate a statement whose head is a module export, and the misfire
+cannot occur.
+
+**Evidence that pins it:** `utils/README.md`'s house rules state the
+termination rule and cite this record; the eleven programs in `utils/` and
+their 995 cases exercise the shape heavily, so a change that widened the
+trigger would surface as a suite failure rather than as wrong output.
 ---
 
 
 ## NUR039 — `slice` with a negative start silently ignores its end argument {#nur039}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
 scouting
 
 **Rule:** an argument is honoured or refused, never ignored. Out-of-domain
@@ -869,12 +887,24 @@ family's core straggler; this is a second, independent defect in the same
 word.
 
 
+
+### Why allowed
+
+The affected spelling is a negative start, which every caller in this
+repository can avoid by clamping — and clamping is what a caller wants
+anyway, since a negative index is a bug at the call site more often than an
+intent to count from the end.
+
+**Evidence that pins it:** `utils/cut.aql`'s `cut-chars-rng` clamps the start
+explicitly and says it does so BECAUSE of this record, rather than relying on
+`slice` to do the right thing; `utils/tests/cut_test.aql` pins the clamped
+behaviour at both ends.
 ---
 
 
 ## NUR040 — `set` quotes a bare computed key where `get` refuses it {#nur040}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 `aql:cli`
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 `aql:cli`
 scouting
 
 **Rule:** sibling accessors treat their key argument the same way, and a
@@ -910,12 +940,25 @@ ALSO a live binding — the one case where the two readings differ and the
 author almost certainly meant the value.
 
 
+
+### Why allowed
+
+The asymmetry leaks from a distinction that is deliberate and load-bearing
+elsewhere — `dot`/`dotr` quote a bare key, `get`/`getr` evaluate one
+(lang/go/CLAUDE.md, "dot / dotr vs get / getr"). Making `set` match `get` is a
+behavioural change to a core word, which is a larger and riskier edit than the
+confusion it removes.
+
+**Evidence that pins it:** every `set` call in `utils/` and in
+`lang/go/modules/cli.aql` spells the key explicitly as `(quote k)` rather than
+relying on either behaviour, so nothing in the repo depends on which way the
+ambiguity resolves.
 ---
 
 
 ## NUR041 — The `read-only` profile denies file READS {#nur041}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
 scouting (design/CLI-PROGRAMS.1.md §1)
 
 **Rule:** a profile's name and its documented intent describe what it
@@ -951,12 +994,24 @@ either way. A profile nobody can read a file under is not the read-only
 profile a tool author reaches for.
 
 
+
+### Why allowed
+
+Accepted with a caveat that belongs in the record rather than only in a commit
+message: the profile's NAME is what misleads. "read-only" reads as "reads are
+fine, writes are not", and it denies both. Nothing about the enforcement is
+wrong — the profile simply does not grant what its name implies.
+
+**Evidence that pins it:** `cmd/go/internal/build/utils_e2e_test.go` builds the
+baked-permissions pair against `-perms read-only` and records the behaviour at
+the call site, and `utils/tee.aql`'s header states it too, so the next author
+to reach for the profile meets the caveat before the surprise.
 ---
 
 
 ## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
 scouting
 
 **Rule:** a flag the CLI advertises does what it says, or does not exist.
@@ -985,12 +1040,23 @@ that silently does nothing is worse than no flag, because it invites exactly
 the "I checked with dry-run first" workflow it cannot support.
 
 
+
+### Why allowed
+
+A flag that is documented and inert is a small defect with a specific hazard: a
+user may believe they have PREVIEWED a policy when they have previewed nothing.
+That hazard is what this record keeps visible until the flag is either
+implemented or withdrawn.
+
+**Evidence that pins it:** the record carries the measurement showing the flag
+changes nothing, so a future implementation has its acceptance test already
+written.
 ---
 
 
 ## NUR044 — `aql build` skips the static check `aql run` performs {#nur044}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
 scouting
 
 **Rule:** the CLI's entry points agree about whether a program is valid.
@@ -1021,12 +1087,23 @@ asymmetry is worst exactly where it matters: the artefact that outlives the
 session is the one nothing validated.
 
 
+
+### Why allowed
+
+`aql build` producing an unchecked binary is a gap in the tool, not in the
+language, and it is covered by a build-time convention: check first, then
+build.
+
+**Evidence that pins it:** `utils/Makefile`'s `check` target exists precisely
+for this and its comment names this record — "the only thing standing between a
+typo and a shipped binary". `make -C utils all` runs `check` before anything
+else, and the end-to-end Go test builds only sources that suite has checked.
 ---
 
 
 ## NUR045 — Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny {#nur045}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** C3 baked-perms
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
 scouting
 
 **Rule:** a policy rule a shipped profile declares is enforced. The policy
@@ -1069,11 +1146,30 @@ is a real one: the check would run on every module-word call, so its cost
 belongs to the maintainer's judgement, not to a bug fix. What must not
 survive is a profile declaring a denial it does not perform.
 
+
+### Why allowed
+
+**This is a false guarantee in the security layer, and the acceptance does not
+make it a safe one.** `sandbox.jsonic` declares `deny: ["sleep"]`, the
+per-export gate that would enforce it is never called in production, and the
+measured behaviour is that a sandboxed program sleeps exactly as long as an
+unsandboxed one. A profile that states a denial it does not perform is worse
+than one that states nothing, because a reader budgets for it.
+
+What is allowed is the SCHEMA remaining in place while unenforced. Closing it
+means either calling the gate on every module-export dispatch — a cost on the
+hot path, which is a maintainer's judgement rather than a bug fix — or deleting
+the rule and saying that module gating is import-granularity only.
+
+**Evidence that pins it:** the record carries the timing measurement showing
+the two profiles behave identically, so whichever direction is chosen has its
+acceptance test already written. Until then, no shipped profile should be
+described to a user as denying a word.
 ---
 
 ## NUR046 — `aql fmt` is not idempotent: one pass is not a fixed point {#nur046}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** the C3 utils
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
 suite (`utils/`)
 
 **Rule:** a formatter is idempotent. `fmt(fmt(x)) == fmt(x)`, so "formatted"
@@ -1144,11 +1240,25 @@ belongs with the fix: format every `.aql` in the repo TWICE and require the
 second pass to be a no-op, with at least one deliberately non-canonical
 fixture, since the existing corpus cannot detect this.
 
+
+### Why allowed
+
+Formatting does not change behaviour — all 995 cases in `utils/` pass either
+way, verified — so what the non-idempotence costs is a clean tree and readable
+sources, not correctness. It converges at the second pass, so a `fmt` target
+that ran twice would be stable; the reason not to paper over it that way is
+that the intermediate layout runs statements together on one line, which is
+most of what a formatter is for.
+
+**Evidence that pins it:** `utils/Makefile` keeps `fmt` OUT of its `all` target
+and its comment names this record and explains why — the same posture
+`kg/Makefile` held while its own formatter blocker was open — so the tree
+cannot silently start churning on every build.
 ---
 
 ## NUR047 — Regex match offsets are BYTE indices; every string word around them is RUNE-indexed {#nur047}
 
-**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** the C3 utils
+**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
 suite (`grep --color`)
 
 **Rule:** AQL counts strings in RUNES, uniformly. `size "日本語"` is 3,
@@ -1197,3 +1307,17 @@ If byte offsets must be kept (they are what Go's regexp returns, and
 converting costs a scan), then the record should carry BOTH, named so the
 unit is impossible to mistake, and the rune convention's exception must be
 documented everywhere the match record is.
+
+### Why allowed
+
+The unit mismatch is real and its failure distribution is the worst kind —
+correct on every ASCII input, silently corrupting on the first multi-byte one —
+but it is confined to consumers that index back into the subject with the
+returned offsets, and those consumers can be exact today by slicing in Bytes.
+
+**Evidence that pins it:** `utils/grep.aql`'s `--color` highlighter is the
+in-repo consumer; it converts to Bytes, slices, and converts back, and
+`utils/tests/grep_test.aql` carries three cases (a match after multi-byte
+runes, a multi-byte match, an astral rune) that exist ONLY to fail if that
+workaround is removed. All three would pass on ASCII input, which is why they
+are written explicitly.
