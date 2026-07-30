@@ -33,4 +33,37 @@ func init() {
 			"Bind it (`def calc (Parse.parser g)`) or pass it directly, then run it via the " +
 			"`parse` value form: `parse calc '<source>'` / `parse (Parse.parser g) '<source>'`.",
 	})
+
+	// Building a parser is a SEQUENCE — make a grammar, attach actions and
+	// rules, then realise it — and no single word's signature can show
+	// that order. Results are from verified lang/spec/module-parse.tsv
+	// rows. (This is the grammar builder; to parse a KNOWN format reach
+	// for aql:parselang instead.)
+	registerExamples("aql:parse", map[string][]string{
+		"grammar": {
+			`import "aql:parselang"`,
+			`def g Parse.grammar                              ;# a fresh grammar to build up`,
+			`Parse.action g '@op:o:INC' ([nd:Any] => [7])     ;# what a matched rule produces`,
+			`Parse.abnf g 'op = "inc" / "dec"' {start:'op'}   ;# the syntax, as ABNF`,
+			`def op (Parse.parser g)                          ;# realise it`,
+			`parse op 'inc'                                   ;# 7`,
+		},
+		"abnf":   {`Parse.abnf g 'op = "inc" / "dec"' {start:'op'}   ;# start: names the entry rule`},
+		"action": {`Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])   ;# a fn, or a list of fns applied in order`},
+		"parser": {`def op (Parse.parser g)                          ;# grammar to callable parser; then "parse op src"`},
+		"token":  {`Parse.token g '#PL' '+'                          ;# a fixed token, so '+' lexes on its own`},
+		"rule":   {`Parse.rule g extra {open:[{s:'#PL'}]}            ;# a hand-written rule alternate`},
+		"matcher": {
+			`Parse.matcher g skip 1000000 ([s:String] => [None])   ;# a custom lexer matcher, by priority`,
+		},
+		"spec": {
+			`Parse.spec g {`,
+			`  ref:  {'@op:o:INC': ([nd:Any] => [7])}`,
+			`  abnf: {src:'op = "inc" / "dec"'  start:'op'}`,
+			`}`,
+			`parse (Parse.parser g) 'inc'                     ;# 7`,
+			`;# One DATA map instead of the call sequence above — the whole`,
+			`;# grammar becomes something you can store and ship.`,
+		},
+	})
 }

@@ -121,6 +121,11 @@ func stampExportProvenance(desc native.ModuleDesc) {
 					fn.Doc, changed = d, true
 				}
 			}
+			if len(fn.Examples) == 0 {
+				if ex := moduleExamples[desc.Ref][key]; len(ex) > 0 {
+					fn.Examples, changed = ex, true
+				}
+			}
 			if !changed {
 				continue
 			}
@@ -285,6 +290,20 @@ func InstallNetExports(r *native.Registry) error {
 	}
 	for name, exportMap := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exportMap))
+	}
+	// Transplant the module's word extensions (the Fetch accessor
+	// overloads) like the real import path does. Without this the shim
+	// and `import "aql:net"` would DISAGREE about whether a Response
+	// answers `.status` — the same reason InstallTimeExports transplants.
+	for _, exportMap := range desc.Exports {
+		for _, key := range exportMap.Keys() {
+			v, _ := exportMap.Get(key)
+			if ext, ok := native.IsWordExtension(v); ok {
+				if err := transplantExtension(r, ext, "aql:net", "aql:net"); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	return nil
 }

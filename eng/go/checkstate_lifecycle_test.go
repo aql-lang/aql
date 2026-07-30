@@ -39,6 +39,11 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 		"FnSummaries": "caller-managed memo: CompileCheck nils it per emit pass and SetStrictCheck nils it on a mode change; a plain Check / bare Begin reuses them intentionally",
 		"FnInflight":  "caller-managed alongside FnSummaries",
 		"Strict":      "strict-mode configuration set by the caller before Begin",
+		"ModelEffects": "a property of the registry's ROLE, not of a pass: a module " +
+			"sub-registry created while its parent ran a pure check pass models its " +
+			"effects for its whole life, and the registry never runs a check pass of " +
+			"its own (runModuleBodyCover deliberately withholds Mode). Resetting it " +
+			"in Begin would be inert here and wrong if a body ever did check",
 	}
 
 	st := reflect.TypeOf(CheckState{})

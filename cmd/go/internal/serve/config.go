@@ -34,6 +34,8 @@ func loadConfig(path string) ([][]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: invalid jsonic: %w", err)
 	}
+	// Order-agnostic config; flatten ordered object nodes (incl. list entries).
+	parsed = parser.Plainify(parsed)
 	list, ok := parsed.([]any)
 	if !ok {
 		return nil, fmt.Errorf("config: top-level must be a list of service specs")

@@ -29,7 +29,7 @@ func setupXmlGrammar(j *jsonic.Jsonic, t parserTokens) {
 		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Arm the matcher for the next token (the element body).
-				r.K["aql_xml"] = true
+				r.EnsureK()["aql_xml"] = true
 			},
 		})
 		setOpen(rs, []*jsonic.AltSpec{

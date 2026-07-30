@@ -151,12 +151,62 @@ connect-raw {tcp: <"host:port">  …opts} -> Socket      # network.connect gated
 ```
 
 Options mirror `listen`'s where they make sense: `tls: {…}` (TLS client; with
-`verify:`/`ca:`/`sni:` and optional `cert:`/`key:` for mutual TLS),
-`within: <Duration>` (connect deadline → `transport` on failure),
+`verify:`/`ca:`/`sni:`/`min:` and `identity:` for mutual TLS — see the box
+below), `within: <Duration>` (connect deadline → `transport` on failure),
 `bind: <addr>` (source address), `unix:` (Unix-domain). It raises `transport`
 on connection refused / DNS / TLS failure — the same `transport` code a high-
 level `call` surfaces (`SERVICES.0.md` §8.2), so the failure vocabulary is one
 set from the bottom up.
+
+> **AMENDED (as built) — a client certificate is NAMED, not pathed.** This
+> section originally specified `cert:`/`key:` as **file paths**, and the §8
+> gateway example below still shows that form for `listen`. That was not
+> implemented and should not be: the path would be chosen by the guest but
+> dereferenced by the network capability under host authority, so a program
+> holding `network` but not `fileops` would obtain a file read it is not
+> entitled to — and, even blind to the bytes, an oracle for path existence
+> and key well-formedness. It also puts key locations in source, logs and
+> error text, and forecloses rotation and hardware-backed keys.
+>
+> What shipped instead is `identity:`, naming a credential the HOST
+> registered:
+>
+> ```
+> connect-raw {tcp: "billing.internal:443"  tls: {identity: acme/q}}
+> fetch {url: "https://api.internal/v1"     tls: {identity: acme/q}}
+> ```
+>
+> The host registers with `(*AQL).RegisterClientIdentity(name, id)`, where
+> `id` is a `ClientIdentity` — an interface returning a `*tls.Certificate`
+> **per handshake**, so the private key may live in a file, a vault slot, an
+> HSM or a SPIFFE agent that rotates hourly, and never becomes an AQL value.
+> Guest source can SELECT an identity; it can never read or construct one.
+> Which identity a program may present, and against which host, is a policy
+> decision (`network`/`client-cert`), not the program's.
+>
+> A program that must choose its own credential without the host naming it
+> in advance gets one from the vault:
+>
+> ```
+> import "aql:vault"
+> fetch {url: "https://api.internal/v1"  tls: {identity: (Vault.identity "acme-mtls")}}
+> ```
+>
+> `Vault.identity` returns an **opaque handle**, not a String. `Vault.reveal`
+> returns a String, which is right for an API token a program pastes into a
+> header and wrong for a private key: the moment a key is a guest value it
+> can be printed, logged, stored, or sent somewhere. The handle formats as
+> `<vault identity>` — it does not even print its alias — and the vault is
+> read lazily, inside the handshake, so a rotated secret is picked up
+> without re-running the program.
+>
+> Explicit `cert:`/`key:` **`Bytes`** (obtained through `aql:io` or
+> `aql:pki` under their own gates) remain available as a deliberate escape
+> hatch — but never as a path the network layer dereferences.
+>
+> The holding principle: **a certificate is data, a private key is a
+> capability.** Rationale and phasing in
+> [NETWORK-TLS-PLAN.0.md](NETWORK-TLS-PLAN.0.md) §3.
 
 There is deliberately **no `dial-loop` sugar**: a server accepts *many*
 connections (hence `serve-raw`'s loop), a client dials *one*. Dialing many — a
@@ -563,7 +613,7 @@ add {method: "GET"  path: "/v1/*rest"} [ [req state] => [
         [get code eq transport/q] [ {status: 502  body: {error: "upstream unreachable"}} ]
         [ raise ] ] ] ] ] gw
 
-serve ( server [ ( listen {tcp: 8443  tls: {cert:"./gw.pem" key:"./gw.key"}  codec: http} gw ) ]
+serve ( server [ ( listen {tcp: 8443  tls: {identity: gw/q}  codec: http} gw ) ]
           {restart: "isolated"  mailbox: 1024  overflow: "block"} )
 ```
 

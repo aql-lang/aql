@@ -55,10 +55,21 @@ const (
 // It carries only stdlib types so this package stays engine-agnostic — the
 // stack is pre-rendered to strings by the caller.
 type StepFrame struct {
-	Step    int      // 0-based step index
+	Step    int      // 0-based step index (-1 for a one-shot Debug.break pause)
 	Pointer int      // index of the value about to execute
 	Stack   []string // the tape, rendered, one entry per slot
 	AtBreak bool     // true when paused on a Debug.break marker
+	// Row / Col locate the value about to execute in its source (1-based;
+	// 0 = unknown — synthetic tokens and one-shot break pauses carry no
+	// position), and File is the executing registry's resolved source
+	// file ("" if none). Additive widening (design/AQL-DEBUGGER.0.md §10
+	// Phase 1): source-aware hosts — the `aql debug` CLI, a future DAP
+	// adapter — need each pause located in source, and file identity must
+	// come from the registry, not the value (a SrcPos carries no file).
+	// Plain ints/string keep this package engine-agnostic.
+	Row  int
+	Col  int
+	File string
 }
 
 // StepController is the host capability that drives interactive stepping

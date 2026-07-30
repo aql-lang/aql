@@ -108,12 +108,25 @@ func (notInstalledFileOps) ResolvePath(path string) (string, error) {
 	return path, nil
 }
 
+// notInstalledError is the stub's refusal, as a TYPE.
+//
+// It used to be a bare fmt.Errorf with the code written into the message
+// as an `[aql/capability_not_installed]:` prefix — which errors.As cannot
+// find, so a handler wrapping this error had nothing structured to read
+// and the refusal reached the user carrying the WORD's code (or none at
+// all). A code inside prose is a code no `case` arm can match.
+type notInstalledError struct{ scope, op, path string }
+
+func (e *notInstalledError) Error() string {
+	return fmt.Sprintf("%s.%s denied: %s capability not installed (policy uninstalled it; path=%q)",
+		e.scope, e.op, e.scope, e.path)
+}
+
 // capabilityNotInstalled builds the standard error returned by every
-// stub method. The shape matches policy.Denied so consumer code that
-// expects to see a permission_denied chain reads consistently.
+// stub method. Consumers reach the code with errors.As — see
+// fileio.go's fileOpError.
 func capabilityNotInstalled(scope, op, path string) error {
-	return fmt.Errorf("[aql/capability_not_installed]: %s.%s denied: %s capability not installed (policy uninstalled it; path=%q)",
-		scope, op, scope, path)
+	return &notInstalledError{scope: scope, op: op, path: path}
 }
 
 // compile-time interface check.

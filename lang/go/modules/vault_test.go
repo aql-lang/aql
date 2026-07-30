@@ -357,7 +357,7 @@ func TestVaultFirstLineSingle(t *testing.T) {
 // (vault.install=false) yields capability_not_installed; trusted
 // consults Check and proceeds (to no_backend here).
 func TestVaultPolicyArms(t *testing.T) {
-	if err := checkVaultPolicy(nil, "read"); err != nil {
+	if err := checkVaultPolicy(nil, "status", "read"); err != nil {
 		t.Fatalf("nil registry: %v", err)
 	}
 	statusOp := vaultOps[0]
@@ -372,8 +372,9 @@ func TestVaultPolicyArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, dErr := h(nil, nil, nil, reg)
-	var denied *policy.Denied
-	if !errors.As(dErr, &denied) || denied.Code != policy.CodeCapabilityNotInstalled {
+	// Coded by the gate (native/policy_error.go) so `dot code` can read it.
+	var dAe *native.AqlError
+	if !errors.As(dErr, &dAe) || dAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox status = %v", dErr)
 	}
 
@@ -544,7 +545,13 @@ func TestVaultDocsComplete(t *testing.T) {
 			t.Errorf("doc %q has no export", k)
 		}
 	}
-	if len(exports.Keys()) != len(vaultOps) {
-		t.Errorf("exports = %d, ops = %d", len(exports.Keys()), len(vaultOps))
+	// Every registered native becomes an export — the op table plus the
+	// words that carry their own handler instead of Do-dispatching
+	// (`identity`, vault_identity.go).
+	if len(exports.Keys()) != len(vaultNatives()) {
+		t.Errorf("exports = %d, natives = %d", len(exports.Keys()), len(vaultNatives()))
+	}
+	if len(vaultNatives()) <= len(vaultOps) {
+		t.Error("the non-Do-dispatch words are missing from vaultNatives")
 	}
 }

@@ -414,27 +414,42 @@ func keywordParam(name, kw string) FnParam {
 
 // ParseFnReturns extracts return types from an output signature.
 // The output may be a list of types/values or a single type/value.
-func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, error) {
+// The second result is the positional return PATTERNS — nil when no
+// declared return carries one. ResolveSigType already computes them; they
+// used to be discarded here, which is what let a declared union return go
+// unenforced (its *Type degrades to Any, so the pattern IS the contract).
+func ParseFnReturns(r *Registry, outputSig Value) ([]*Type, []*Value, error) {
 	if !outputSig.Parent.Equal(TList) || !IsConcrete(outputSig) {
-		t, _, err := ResolveSigType(r, outputSig)
+		t, pat, err := ResolveSigType(r, outputSig)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return []*Type{t}, nil
+		if pat == nil {
+			return []*Type{t}, nil, nil
+		}
+		return []*Type{t}, []*Value{pat}, nil
 	}
 	elems, _ := AsList(outputSig)
 	if elems.Len() == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	types := make([]*Type, elems.Len())
+	var pats []*Value
 	for i, e := range elems.Slice() {
 		var err error
-		types[i], _, err = ResolveSigType(r, e)
+		var pat *Value
+		types[i], pat, err = ResolveSigType(r, e)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if pat != nil {
+			if pats == nil {
+				pats = make([]*Value, elems.Len())
+			}
+			pats[i] = pat
 		}
 	}
-	return types, nil
+	return types, pats, nil
 }
 
 // ResolveSigType converts a Value (from a pair's value side) to a *Type

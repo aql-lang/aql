@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/aql-lang/aql/cmd/go/internal/auth"
@@ -38,7 +39,14 @@ const (
 	// exportEnvelopeFormat versions the crypto envelope (KDF/cipher/layout).
 	exportEnvelopeFormat = 1
 	// exportVersion versions the inner JSON schema.
-	exportVersion = 1
+	//
+	//	v1 — aliases + values.
+	//	v2 — bundles also carry the custom provider presets the exported
+	//	     aliases reference, so a custom-backed alias still brokers after
+	//	     import instead of falling back to the URL-less generic preset.
+	//	     An older aql refuses a v2 bundle (Version > exportVersion) rather
+	//	     than importing aliases whose provider tag it cannot satisfy.
+	exportVersion = 2
 )
 
 // exportBundle is the decrypted payload of an export.
@@ -46,6 +54,10 @@ type exportBundle struct {
 	Version    int           `json:"version"`
 	ExportedAt string        `json:"exported_at"`
 	Aliases    []exportAlias `json:"aliases"`
+	// CustomProviders are the operator-defined presets referenced by
+	// Aliases (built-in presets are compiled into the target, so only
+	// store-defined ones travel). Empty on a v1 bundle.
+	CustomProviders []Provider `json:"custom_providers,omitempty"`
 }
 
 // exportAlias is one secret plus the metadata worth carrying with it.
@@ -136,6 +148,22 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 			IPWhitelist: a.IPWhitelist, Value: v,
 		})
 	}
+	// Carry the custom provider presets the exported aliases reference so
+	// they resolve on the target; built-ins are compiled in there, so only
+	// store-defined presets travel. Sorted for a stable payload.
+	seenProv := map[string]bool{}
+	for _, a := range selected {
+		if a.Provider == "" || builtinProvider(a.Provider) || seenProv[a.Provider] {
+			continue
+		}
+		if p, _ := s.FindCustomProvider(a.Provider); p != nil {
+			bundle.CustomProviders = append(bundle.CustomProviders, *p)
+			seenProv[a.Provider] = true
+		}
+	}
+	sort.Slice(bundle.CustomProviders, func(i, j int) bool {
+		return bundle.CustomProviders[i].Name < bundle.CustomProviders[j].Name
+	})
 
 	pass, err := exportSealPassphrase(stdin, stderr)
 	if err != nil {
@@ -353,14 +381,34 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		fmt.Fprintf(stdout, "imported %s\n", name)
 		imported++
 	}
+	// Restore the custom presets the bundle carried alongside the aliases,
+	// in the same store mutation. A name already present is kept unless
+	// --overwrite; an entry with an un-mintable name (a tampered bundle)
+	// is skipped so it can never be smuggled in.
+	restoredProv := 0
 	if err := mutateStore(homeDir, func(s *Store) error {
 		for _, d := range done {
 			s.UpsertAlias(Alias{Name: d.name, Provider: d.provider, Namespace: d.metaNS, Source: "import:bundle", IPWhitelist: d.ipwl})
+		}
+		for _, p := range bundle.CustomProviders {
+			if !validCustomProviderName(p.Name) {
+				fmt.Fprintf(stderr, "warning: skipping invalid custom provider %q in bundle\n", p.Name)
+				continue
+			}
+			if _, idx := s.FindCustomProvider(p.Name); idx >= 0 && !overwrite {
+				fmt.Fprintf(stderr, "skipping existing custom provider %q (use --overwrite to replace)\n", p.Name)
+				continue
+			}
+			s.UpsertCustomProvider(p)
+			restoredProv++
 		}
 		return nil
 	}); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+	if restoredProv > 0 {
+		fmt.Fprintf(stdout, "restored %d custom provider(s)\n", restoredProv)
 	}
 	sealIntegrity(homeDir, sess)
 	fmt.Fprintf(stdout, "imported %d secret(s)", imported)

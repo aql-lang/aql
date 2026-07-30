@@ -46,8 +46,21 @@ import (
 var (
 	aqlOnce sync.Once
 	aqlPath string
+	aqlDir  string
 	aqlErr  error
 )
+
+// TestMain removes the shared aql build directory once every test in the
+// package has finished. Without it each run leaks ~42MB under the system temp
+// dir — the binary is ~42MB and the sync.Once means one per test binary, so a
+// repeated gauntlet quietly accumulates hundreds of megabytes.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if aqlDir != "" {
+		_ = os.RemoveAll(aqlDir)
+	}
+	os.Exit(code)
+}
 
 // buildAqlBinary compiles the aql CLI into a temp dir shared by all subtests
 // and returns its path. The Go toolchain is required, so callers skip without.
@@ -59,11 +72,17 @@ func buildAqlBinary(t *testing.T) string {
 			aqlErr = err
 			return
 		}
+		// NOT t.TempDir(): the binary is shared by every test in the file
+		// via sync.Once, and t.TempDir() is removed when the FIRST test that
+		// happened to trigger the build finishes — leaving later tests
+		// pointing at a deleted path. So it is an explicit MkdirTemp with an
+		// explicit removal registered below.
 		dir, err := os.MkdirTemp("", "aql-utils-e2e-")
 		if err != nil {
 			aqlErr = err
 			return
 		}
+		aqlDir = dir
 		out := filepath.Join(dir, "aql")
 		// The main package is ./aql inside the cmd/go module — building "."
 		// yields a library archive, which fails much later and much less

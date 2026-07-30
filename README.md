@@ -1,22 +1,22 @@
-# AQL
+# boru
 
-**AQL** is a typed, word-based query language. A program is a sequence
+**boru** is a typed, word-based query language. A program is a sequence
 of *words*, and a word takes its arguments where you write them —
 `add 1 2` reads left to right, like a conventional call — while binary
 operations also read naturally in infix position (`10 sub 3`). Every
 value carries a hierarchical type, and every word declares typed
-signatures that drive dispatch. Underneath, AQL is concatenative: words
+signatures that drive dispatch. Underneath, boru is concatenative: words
 can equally take their arguments from a value stack, which is what
-makes point-free pipelines compose — but you can write a lot of AQL
+makes point-free pipelines compose — but you can write a lot of boru
 before thinking about the stack, so start with the forward forms below
 and meet the stack later. The reference implementation is in Go and
-ships as a single `aql` binary that includes a REPL, a type checker, a
+ships as a single `boru` binary that includes a REPL, a type checker, a
 formatter, an LSP server, a registry client, a secrets vault, and a
 multi-service supervisor.
 
 > **The repo as data.** A machine-readable, evidence-backed knowledge
 > graph of this repository — its modules, docs, tools, and concepts —
-> lives at [`kg/out/graph.json`](kg/out/graph.json), built in AQL by the
+> lives at [`kg/out/graph.json`](kg/out/graph.json), built in boru by the
 > pipeline in [`kg/`](kg/README.md). Refresh it whenever a PR changes
 > the repository's structure or documentation (`make -C kg graph`).
 
@@ -24,10 +24,10 @@ multi-service supervisor.
 > expression evaluates to (`square 4  # returns 16`); in prose we say
 > "`square 4` returns `16`". The comment is ordinary documentation — `#`
 > just begins a line comment — not special syntax. (We deliberately
-> avoid an `=>` arrow for results: `=>` is real syntax in AQL, the
+> avoid an `=>` arrow for results: `=>` is real syntax in boru, the
 > anonymous-function arrow, sugar for the word `afn`.)
 
-```aql
+```boru
 # words take their arguments where you write them
 add 1 2 # returns 3
 10 sub 3 # returns 7
@@ -42,9 +42,9 @@ square 4 # returns 16
 def Point refine Record [x:Number y:Number]
 make Point [3 4] # returns {x:3 y:4}
 
-import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]] # returns [3 7]
+import "boru:time-util" TimeUtil.await [[add 1 2] [add 3 4]] # returns [3 7]
 
-# macros: add new syntax in AQL itself (hygienic; this one expands to an `if`)
+# macros: add new syntax in boru itself (hygienic; this one expands to an `if`)
 def unless (macro [[c body] [quote [if unquote c [] unquote body]]])
 unless false [42] # returns 42
 ```
@@ -58,23 +58,23 @@ the stack model when you need it, and the
 the feel of stack code.
 
 
-## Forward arguments — the primary way to write AQL
+## Forward arguments — the primary way to write boru
 
-AQL is concatenative, but you rarely have to think in stack terms,
+boru is concatenative, but you rarely have to think in stack terms,
 because the defining feature of the surface syntax is **forward
 arguments**: a word takes its operands from the tokens written *after*
 it, in declared order, exactly like a conventional function call.
 
-```aql
+```boru
 add 1 2 # returns 3 — the word comes first
 def square fn x:Number Number [mul x x]
 square 4 # returns 16 — your own words read the same way
-import "aql:math-util" # imports read forward, too
+import "boru:math-util" # imports read forward, too
 3 7 MathUtil.min # returns 3 — module words are then in scope
 ```
 
 This is the canonical, recommended form for **all new code, examples,
-and documentation** — including imports: write `import "aql:math-util"`,
+and documentation** — including imports: write `import "boru:math-util"`,
 not the stack spelling. Forward form reads top-to-bottom and
 left-to-right, the written argument order matches the declared parameter
 order, and you never have to track what is sitting on the stack:
@@ -99,23 +99,23 @@ carries local `replace` directives, so `go install …@latest` is
 not yet supported):
 
 ```bash
-git clone https://github.com/aql-lang/aql
-cd aql/cmd/go
-go install ./aql
-aql -version
+git clone https://github.com/boru-lang/boru
+cd boru/cmd/go
+go install ./boru
+boru -version
 ```
 
 Then:
 
 ```bash
-aql                                  # start the REPL
-aql do 'add 1 2'                     # one-shot expression
-aql script.aql                       # run a file
-aql check script.aql                 # type-check, don't run
-aql fmt script.aql                   # format in place (always rewrites)
-aql build script.aql -o tool         # compile to a standalone executable
-aql help                             # introduction + the subcommand list
-aql describe                         # a categorised guide to every built-in word
+boru                                  # start the REPL
+boru do 'add 1 2'                     # one-shot expression
+boru script.boru                       # run a file
+boru check script.boru                 # type-check, don't run
+boru fmt script.boru                   # format in place (always rewrites)
+boru build script.boru -o tool         # compile to a standalone executable
+boru help                             # introduction + the subcommand list
+boru describe                         # a categorised guide to every built-in word
 ```
 
 A wasm-powered browser playground is bundled in
@@ -133,19 +133,19 @@ learning need, plus a CLI reference and the architecture record:
 
 | Document | When to read it |
 |----------|-----------------|
-| **[Tutorial](TUTORIAL.md)** | You are new to AQL and want to learn it step by step. |
+| **[Tutorial](TUTORIAL.md)** | You are new to boru and want to learn it step by step. |
 | **[How-To Guides](HOWTO.md)** | You have a specific task and want a recipe. |
 | **[Reference](REFERENCE.md)** | You need the precise behaviour of a syntax form, type, or word. |
-| **[Explanation](EXPLANATION.md)** | You want to understand *why* AQL is the way it is. |
-| **[CLI Reference](CLI.md)** | You want to drive the `aql` binary from the shell. |
+| **[Explanation](EXPLANATION.md)** | You want to understand *why* boru is the way it is. |
+| **[CLI Reference](CLI.md)** | You want to drive the `boru` binary from the shell. |
 | **[Architecture Design Record](ADR.md)** | You want the key architectural decisions and the reasoning behind them. |
 | **[Non-Uniformity Register](NUR.md)** | You want the recorded deviations from the language's uniform rules, each pending, resolved, or explicitly allowed. |
-| **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `aql describe`/`aql help`. |
-| **[Project knowledge graph](kg/README.md)** | You want the repository as data: modules, docs, tools, and concepts with evidence-backed relations, in [`kg/out/graph.json`](kg/out/graph.json) — built (and dog-fooded) in AQL. Keep it updated with each PR. |
+| **[Agent Guide](AGENTS.md)** | You are an AI agent (or new contributor) and want a map of the docs, the tooling, and how to discover the language with `boru describe`/`boru help`. |
+| **[Project knowledge graph](kg/README.md)** | You want the repository as data: modules, docs, tools, and concepts with evidence-backed relations, in [`kg/out/graph.json`](kg/out/graph.json) — built (and dog-fooded) in boru. Keep it updated with each PR. |
 
 Suggested reading orders:
 
-- **Brand new to AQL?** Start with the **[Tutorial](TUTORIAL.md)**.
+- **Brand new to boru?** Start with the **[Tutorial](TUTORIAL.md)**.
   After you've written a few programs, read the
   **[Explanation](EXPLANATION.md)** to understand the model.
 - **Coming from Forth / Factor / APL?** Skim the
@@ -162,13 +162,13 @@ Suggested reading orders:
 
 | Path | What it is |
 |------|------------|
-| `cmd/go/` | The `aql` CLI / REPL (`github.com/aql-lang/aql/cmd/go`). |
+| `cmd/go/` | The `boru` CLI / REPL (`github.com/boru-lang/boru/cmd/go`). |
 | `lang/go/` | The language layer: public `lang` API and the consolidated `native` word library. |
 | `eng/go/` | Engine kernel, parser, and kernel spec runner. |
 | `calc/go/` | A small calculator built directly on `eng` (learning example). |
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP test fixtures. |
-| `kg/` | The project knowledge graph: an AQL-built, evidence-backed map of the repo (pipeline + committed bundle). |
+| `kg/` | The project knowledge graph: an boru-built, evidence-backed map of the repo (pipeline + committed bundle). |
 | `utils/` | A coreutils subset written in AQL (`cat`, `wc`, `head`, `grep`, …) — real programs, built with `aql build`. |
 | `docs/` | The bundled wasm playground (`index.html`). |
 | `lang/spec/` | Engine spec TSV files (the language's executable spec). |
@@ -183,7 +183,7 @@ make vet                             # all modules
 make fmt                             # all modules
 make lint                            # all modules (golangci-lint)
 
-cd cmd/go && make build              # builds bin/aql
+cd cmd/go && make build              # builds bin/boru
 cd wpg     && make wasm              # builds docs/index.html
 cd wpg     && make serve             # runs the playground on :8080
 ```
@@ -197,24 +197,24 @@ make fmt && make vet && make lint && make test
 
 ## Upgrade notes (pre-1.0 breaking changes)
 
-AQL is pre-1.0 and the surface still moves. Libraries written against
+boru is pre-1.0 and the surface still moves. Libraries written against
 mid-2026 snapshots most commonly need these renames:
 
 - **Namespaces are capital-initial.** `test.test` → `Test.test`,
   `assert.equal` → `Assert.equal`, `math.sqrt` → `MathUtil.sqrt`.
   Lowercase export names are rejected.
 - **Utility modules took a `-util` suffix** (avoiding builtin type-name
-  clashes): `aql:array` → `aql:array-util` (binds `ArrayUtil`), and
-  likewise `aql:math-util`, `aql:time-util`, `aql:type-util`,
-  `aql:matrix-util`, `aql:bin-util`, `aql:struct-util`,
-  `aql:logic-util`, `aql:string-util`.
+  clashes): `boru:array` → `boru:array-util` (binds `ArrayUtil`), and
+  likewise `boru:math-util`, `boru:time-util`, `boru:type-util`,
+  `boru:matrix-util`, `boru:bin-util`, `boru:struct-util`,
+  `boru:logic-util`, `boru:string-util`.
 - **Words moved out of core into modules:** string words →
-  `aql:string-util` (with `indexof` now **haystack-last**, and the list
+  `boru:string-util` (with `indexof` now **haystack-last**, and the list
   form split out as `ArrayUtil.indices`); voxgig-struct words
-  (`merge`, `setpath`, `jsonify`, …) → `aql:struct-util`; bitwise →
-  `aql:bin-util`; I/O except `print` → `aql:io`; HTTP → `aql:net`;
-  clock/async → `aql:time-util`; derived boolean connectives →
-  `aql:logic-util`. Moved words are no longer available unqualified.
+  (`merge`, `setpath`, `jsonify`, …) → `boru:struct-util`; bitwise →
+  `boru:bin-util`; I/O except `print` → `boru:io`; HTTP → `boru:net`;
+  clock/async → `boru:time-util`; derived boolean connectives →
+  `boru:logic-util`. Moved words are no longer available unqualified.
 - **Module fn exports use the referent form:**
   `export "Mod" {double: double/r}` (a bare fn name in an export map
   would be invoked, not referenced).
@@ -237,7 +237,7 @@ mid-2026 snapshots most commonly need these renames:
 ## Contributing
 
 Bug reports, proposals, and pull requests are welcome on
-[GitHub](https://github.com/aql-lang/aql). For non-trivial
+[GitHub](https://github.com/boru-lang/boru). For non-trivial
 language changes, open an issue first — the design notes under
 `design/` are the historical record of how previous
 proposals played out.
@@ -245,4 +245,4 @@ proposals played out.
 
 ## License
 
-AQL is released under the terms of the [MIT License](LICENSE.md).
+boru is released under the terms of the [MIT License](LICENSE.md).

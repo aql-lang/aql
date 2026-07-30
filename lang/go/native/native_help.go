@@ -193,6 +193,7 @@ func FnDefFuncInfo(display string, fn *FnDefInfo) *help.FuncInfo {
 		ForwardArgs: fnDefForwardEligible(fn),
 		Module:      fn.Module,
 		Doc:         fn.Doc,
+		Examples:    fn.Examples,
 	}
 	// A module export has no static help Entry; a bare core word might.
 	if fn.Module == "" {

@@ -342,6 +342,7 @@ func (c *scriptedController) Controller() capabilities.StepController { return c
 
 func TestDebugStepDrivesController(t *testing.T) {
 	r, _ := debugRegistry(t)
+	r.BaseFile = "test.aql"
 	// StepInto on every step → the controller is consulted at each engine step.
 	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepInto}}
 	native.SetHostDebugOps(r, ctl)
@@ -355,6 +356,29 @@ func TestDebugStepDrivesController(t *testing.T) {
 	// The body `1 add 2` takes several engine steps; single-step visits each.
 	if ctl.calls < 3 {
 		t.Errorf("single-step should consult the controller per step; got %d calls", ctl.calls)
+	}
+	// Source awareness (StepFrame widening): every frame carries the
+	// registry's file, and every positioned token of this single-line
+	// source pins Row == 1 with a real column — so a Row/Col transposition
+	// cannot survive (Col varies per token, Row must not).
+	sawRow := false
+	for i, f := range ctl.frames {
+		if f.File != "test.aql" {
+			t.Errorf("frame %d File = %q, want the registry's BaseFile", i, f.File)
+		}
+		if f.Row == 0 {
+			continue // synthetic token — carries no position
+		}
+		sawRow = true
+		if f.Row != 1 {
+			t.Errorf("frame %d Row = %d, want 1 (single-line source)", i, f.Row)
+		}
+		if f.Col < 1 {
+			t.Errorf("frame %d Col = %d, want >= 1 for a positioned token", i, f.Col)
+		}
+	}
+	if !sawRow {
+		t.Error("at least one stepped frame must carry a 1-based source Row")
 	}
 }
 
@@ -386,6 +410,7 @@ func TestDebugStepNoControllerPrintsTrace(t *testing.T) {
 
 func TestDebugBreakPausesWithController(t *testing.T) {
 	r, _ := debugRegistry(t)
+	r.BaseFile = "brk.aql"
 	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
 	native.SetHostDebugOps(r, ctl)
 	// A bare Debug.break in ordinary execution pauses once (the controller
@@ -399,6 +424,21 @@ func TestDebugBreakPausesWithController(t *testing.T) {
 	}
 	if len(ctl.frames) == 1 && !ctl.frames[0].AtBreak {
 		t.Error("the break frame must be flagged AtBreak")
+	}
+	// Negative (StepFrame widening): a one-shot break pause fires inside the
+	// handler with no tape pointer in hand — it must carry NO source Row (0),
+	// while still naming the registry's file.
+	if len(ctl.frames) == 1 {
+		if ctl.frames[0].Row != 0 || ctl.frames[0].Col != 0 {
+			t.Errorf("a one-shot break pause must carry no position; got %d:%d",
+				ctl.frames[0].Row, ctl.frames[0].Col)
+		}
+		if ctl.frames[0].File != "brk.aql" {
+			t.Errorf("break frame File = %q, want brk.aql", ctl.frames[0].File)
+		}
+		if ctl.frames[0].Step != -1 {
+			t.Errorf("a one-shot break pause is Step -1, got %d", ctl.frames[0].Step)
+		}
 	}
 }
 

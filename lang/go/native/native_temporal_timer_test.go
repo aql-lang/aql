@@ -234,6 +234,58 @@ func TestIntervalCallbackRepeats(t *testing.T) {
 	}
 }
 
+// TestIntervalWithWordCallback is the interval mirror of
+// TestTimeoutWithWordCallback: the ATOM overload, where the callback is a
+// bare word rather than a quoted body list.
+//
+// It exists because that overload had NO test. Its only coverage came
+// from a side effect — dynamic help synthesised an `interval` example and
+// EXECUTED it, which happened to run this handler (and leaked a ticker
+// doing so, the data race in
+// design/verse-report-defects-investigation.0.md). Stopping that
+// execution dropped the statement to uncovered and revealed the gap:
+// coverage was being supplied by a feature that was never meant to be a
+// test, and would have vanished the moment anyone changed how examples
+// are generated.
+func TestIntervalWithWordCallback(t *testing.T) {
+	reg, _ := DefaultRegistry()
+	registerIOWords(reg)
+
+	var counter atomic.Int32
+	reg.Register("testtick", Signature{
+		Args: []*Type{},
+		Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			counter.Add(1)
+			return nil, nil
+		}), BarrierPos: 0,
+	})
+
+	e := NewTop(reg)
+	// interval 20 testtick — word callback (quoted to atom)
+	result, err := e.Run([]Value{
+		NewWord("interval"), NewInteger(20), NewAtom("testtick"),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 || result[0].Parent.Name() != "Interval" {
+		t.Fatalf("expected Interval result, got %v", result)
+	}
+
+	time.Sleep(120 * time.Millisecond)
+
+	// Cancel BEFORE asserting: an uncancelled ticker outlives the test and
+	// races every later one — which is exactly how this handler's previous
+	// "coverage" was obtained.
+	ii, _ := result[0].Data.(*IntervalInfo), true
+	ii.Ticker.Stop()
+	close(ii.Done)
+
+	if count := counter.Load(); count < 2 {
+		t.Errorf("expected the word callback to tick at least twice, got %d", count)
+	}
+}
+
 func TestIntervalZeroErrors(t *testing.T) {
 	reg, _ := DefaultRegistry()
 	registerIOWords(reg)

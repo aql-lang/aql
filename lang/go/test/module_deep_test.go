@@ -334,7 +334,8 @@ func TestDeepResourceTextkitConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "{mode:'standard' version:'3.2.0'}")
+	// Source key order (version before mode) is preserved now, not sorted.
+	assertResult(t, result, "{version:'3.2.0' mode:'standard'}")
 }
 
 func TestDeepResourceTextkitConfigKey(t *testing.T) {

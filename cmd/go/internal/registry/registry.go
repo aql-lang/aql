@@ -369,7 +369,8 @@ func parseJsonic(data []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, ok := result.(map[string]any)
+	// Order-agnostic config; flatten the parser's ordered object node.
+	m, ok := parser.Plainify(result).(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("expected map, got %T", result)
 	}

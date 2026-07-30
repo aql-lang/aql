@@ -74,8 +74,11 @@ func TestTuiRunPolicyLazyAndBackendFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, rErr := tuiRunHandler([]native.Value{native.NewMap(native.NewOrderedMap())}, nil, nil, preg)
-	var denied *policy.Denied
-	if !errors.As(rErr, &denied) || denied.Scope != "terminal" {
+	// The gate now codes the refusal, so the scope is no longer a struct
+	// field to read — it rides in the detail, which is the form the user sees.
+	var rAe *native.AqlError
+	if !errors.As(rErr, &rAe) || rAe.Code != "capability_not_installed" ||
+		!strings.Contains(rErr.Error(), "terminal") {
 		t.Fatalf("sandbox run = %v", rErr)
 	}
 

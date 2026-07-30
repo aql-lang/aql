@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	jsonic "github.com/tabnas/jsonic/go"
+
 	"github.com/aql-lang/aql/eng/go"
 )
 
@@ -51,9 +53,11 @@ func TestSafeParseWave3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SafeParse(a:1): %v", err)
 	}
-	m, ok := v.(map[string]any)
+	// Objects parse into the insertion-ordered OrderedMap now; flatten to a
+	// plain map to check the value.
+	m, ok := jsonic.Plainify(v).(map[string]any)
 	if !ok || m["a"] != float64(1) {
-		t.Errorf("SafeParse(a:1) = %#v, want map[a:1]", v)
+		t.Errorf("SafeParse(a:1) = %#v, want {a:1}", v)
 	}
 }
 

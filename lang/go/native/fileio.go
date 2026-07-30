@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -18,6 +19,52 @@ const (
 	pathStdout = "<stdout>"
 	pathStderr = "<stderr>"
 )
+
+// fileOpError codes a FileOps failure, preferring the code the failure
+// ALREADY identifies itself by.
+//
+// A policy refusal is not a read failure: the remedy is to change the
+// policy, not the path, and the code is the only part of an Error a
+// `case` arm can dispatch on. policy.Denied has carried that code
+// (`permission_denied`, `capability_not_installed`, …) all along, and
+// `lang/go/policy/error.go` says an engine adapter copies it onto the
+// produced AqlError — this was the fileops half of that adapter, written
+// first because REFERENCE.md's codes table is mostly about fileops. The
+// general form now lives in policy_error.go and covers network, process,
+// vault and terminal too; this function is the one site that wants a
+// different DETAIL, so it keeps its own shape and shares the classifier.
+//
+// def is the word's own code (`read_error` / `write_error`), used when the
+// failure is an ordinary I/O error with nothing more specific to say.
+//
+// The uninstalled-capability arm stays local rather than moving to the
+// shared classifier because it is a different error TYPE: fileops signals
+// an uninstalled capability with `notInstalledError`, not with a
+// `*policy.Denied`, since the FileOps wrapper is swapped out wholesale
+// rather than consulted and refused.
+//
+// The two answers are kept apart on purpose: a rule said no (widen the
+// rule) versus the capability isn't there at all (install it).
+func fileOpError(r *Registry, def, word, detail string, err error, pos SrcPos) error {
+	var missing *notInstalledError
+	if errors.As(err, &missing) {
+		return r.AqlErrorAt("capability_not_installed", detail, word, pos)
+	}
+	// The shared adapter (policy_error.go), so fileops and every other gated
+	// capability answer a refusal with the same code. This site passes its OWN
+	// detail: a file op has already built a "read: …" / "write: …" message
+	// naming the path, which is more use to the reader than the blame trail.
+	//
+	// A policy refusal keeps the adapter's UNPOSITIONED error: the adapter is
+	// shared by every gated capability, and threading a position through it is
+	// the rest of the positionless-error work (design note: the aql:io pilot
+	// covers this word's OWN failures, not the policy layer's). The two arms
+	// either side of it do carry the call's position.
+	if coded, ok := policyRefusalCoded(r, word, detail, err); ok {
+		return coded
+	}
+	return r.AqlErrorAt(def, detail, word, pos)
+}
 
 // DefaultExtensions returns the built-in file-extension→format-name map
 // (lowercase keys, no leading dot). The mapping is many-to-one — several
@@ -176,6 +223,18 @@ func jsonicToValue(v any) (Value, error) {
 			elems[i] = e
 		}
 		return NewList(elems), nil
+	case *jsonic.OrderedMap:
+		// The parser's insertion-ordered node: preserve source key order
+		// (the whole point) instead of sorting like the plain-map fallback.
+		om := NewOrderedMap()
+		for _, key := range val.Keys {
+			child, err := jsonicToValue(val.Vals[key])
+			if err != nil {
+				return Value{}, err
+			}
+			om.Set(key, child)
+		}
+		return NewMap(om), nil
 	case map[string]any:
 		om := NewOrderedMap()
 		for _, key := range sortedMapKeys(val) {
@@ -222,6 +281,15 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 		return nil, r.AqlErrorAt("read_error", "read: cannot read from an output stream", "read", pos)
 	}
 
+	// read_error, not a bare fmt.Errorf. These were the only UNCODED
+	// failures left in the word, and they are the two most ordinary ones —
+	// a missing path and an unreadable stream — so `do [IO.read p] error
+	// [dot code]` answered `None` for exactly the cases a handler wants to
+	// branch on, while the word's own decode/format failures below were
+	// already `read_error`. It also stops a compiled-mode read failure
+	// re-running the whole program on the interpreter: runtimeShouldFallback
+	// treats a FOREIGN error as "retry", an AqlError as "surface" — the
+	// same reasoning the {exclusive} write path documents below.
 	if path == pathStdin {
 		// Through the SHARED buffered reader, not r.Input directly. IO.read-line
 		// reads ahead by necessity, so a whole-stream read that went straight to
@@ -236,7 +304,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	} else {
 		data, err = EffectiveFileOps(r).ReadFile(path)
 		if err != nil {
-			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
+			return nil, fileOpError(r, "read_error", "read", fmt.Sprintf("read: %v", err), err, pos)
 		}
 	}
 
@@ -279,7 +347,8 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 			}
 
 			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
-				return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: sqlite store: %v", err), "read", pos)
+				return nil, r.AqlErrorAt("read_error",
+					fmt.Sprintf("read: sqlite store: %v", err), "read", pos)
 			}
 			td.SQLite = true
 			td.TableName = baseName
@@ -345,19 +414,24 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			// treats the refusal as intentional and does not attempt a
 			// fallback — which a prior statement's effect would block,
 			// surfacing as a spurious internal_error (compiled_fullcorpus).
-			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
+			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
 	r.NoteEffect()
+	// write_error for the same reason the {exclusive} branch above already
+	// gives: a coded AqlError is a deliberate refusal the compiled runtime
+	// surfaces, where a foreign error triggers an interpreter re-run that
+	// the effect just noted would block — reappearing as a spurious
+	// internal_error. It also gives the failure a code to dispatch on.
 	if atomic {
 		if err := writeAtomic(r, path, data); err != nil {
-			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
+			return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
 	if err := EffectiveFileOps(r).WriteFile(path, data, 0644); err != nil {
-		return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
+		return nil, fileOpError(r, "write_error", "write", fmt.Sprintf("write: %v", err), err, pos)
 	}
 
 	return []Value{NewString(path)}, nil

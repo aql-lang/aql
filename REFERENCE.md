@@ -1257,7 +1257,7 @@ restricted words refuse. See
 > Built-in types don't qualify, whether kernel (`Integer`, `Map`, …)
 > or registered by `aql:` modules (`Date`, `Matrix`, …): a
 > builtin-only tuple like `[Integer Map]` raises
-> `[aql/extend_user_type]`, so `add 1 {}` can never start working
+> `[aql/extend_owner]`, so `add 1 {}` can never start working
 > because of an import (top-level programs are unrestricted). See
 > `lang/spec/open-words.tsv` and `design/OPEN-WORDS.0.md`.
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
@@ -2694,23 +2694,34 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `reserved_word` | `def`/`undef` targeted a built-in word's value binding, a sealed word (`def`/`make`/`word`), or the literal `true`/`false`/`none`. |
 | `locked_signature` | A word extension's signature tuple exactly matches a locked (built-in) signature — locked signatures can never be replaced. |
 | `extend_conflict` | Two different modules transplanted the same signature tuple onto one word at import. |
-| `extend_user_type` | A module extended a core word with a builtin-only argument tuple — at least one user-minted type (`refine` / `class`) is required per signature; kernel and `aql:`-module types don't qualify. |
+| `extend_owner` | A word extension's signature carries no nominal argument type the extending scope owns — anchor it with a type this scope mints (`refine` / `class`), or pick a name that isn't already a core word. |
 | `constraint_violation` | A generic type argument does not satisfy its `extends` bound. |
 | `arity_mismatch` | `of` received the wrong number of type arguments (defaults fill only the tail). |
 | `unbound_param` | A generic parameter could not be inferred and has no default. |
 | `gen_without_constructor` | A `gen [...]` was never consumed by a type constructor. |
 | `incomparable` | `cmp`/`lt`/`lte`/`gt`/`gte` got cross-family operands — use `tcmp`. |
-| `type_mismatch` | A value didn't match an expected signature slot. |
-| `arity_mismatch` | Wrong number of arguments. |
+| `signature_error` | No signature matched the call — the wrong argument type, the wrong number of arguments, or arguments the call never collected. |
+| `type_error` | A declared return type or annotation was violated (`f: return value 1: expected String, got Integer`). |
 | `arith_error` | Arithmetic failure — division/modulo by zero on an exact numeric leaf, an arbitrary-precision fault. |
-| `out_of_range` | Index or numeric value outside the legal range. |
-| `unify_fail` | Two values cannot unify. |
+| `index_out_of_range` | An index outside `[0, length)` — `getr` / `!.`, `at`, `insert-at`, `remove-at`. |
+| `range_error` | A numeric argument outside a word's legal range (a value too wide for its bit width, a zero `range` step). |
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
-| `read_error`, `write_error`, `stat_error`, `list_error`, `remove_error`, `move_error`, `copy_error`, `link_error`, `touch_error` | File I/O failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
+| `read_error` | A read failed — a missing path, an unreadable stream, undecodable content. |
+| `write_error` | A write failed — an unwritable path, a refused exclusive create, a failed atomic rename. |
+| `stat_error`, `list_error`, `remove_error`, `move_error`, `copy_error`, `link_error`, `touch_error` | The corresponding `aql:io` operation failed. The module reports per-word codes, one per operation — there is no single `io_error`. |
 | `exit` | **Not a failure.** The reserved control error `IO.exit` raises, carrying `{code}`. A driver that recognises it exits with that status printing nothing; a sub-engine converts it so a sandbox cannot exit its host. Hosts read it with `lang.ExitCode(err)`. |
 | `exit_error` | `IO.exit` was given a non-Integer code, or one outside `0..125` (126/127 and 128+n are the shell's own). |
-| `cap_denied` | Operation needed a capability that wasn't enabled. |
-| `cancelled` | Operation cancelled (timer, await branch). |
+| `permission_denied` | The policy refused the operation by RULE — widen the rule. Carried by every gated capability: fileops, network, process, vault, terminal. |
+| `capability_not_installed` | The operation ran with its capability uninstalled (`install: false`) — install it; no rule change will help. Carried by every gated capability. |
+
+`unify` is deliberately absent: it does **not** raise when two values
+cannot unify, it returns the value `~unify-fail false`, so test its
+result rather than catching it.
+
+Every code above is minted by the engine, and
+`test/go/docexamples/errorcodes_test.go` re-derives that set from the
+source on every run, so this table cannot drift back into naming codes
+nothing produces.
 
 Use `do [...] error [...]` to catch them — a successful body skips
 the handler and its value passes through. The error branch is
@@ -2755,8 +2766,25 @@ disable any of them.
 | `subprocess` | (reserved) |
 | `vault` | secret lookup via vault |
 
-Words attempting to use a disabled capability raise an
-`Error{code:'cap_denied}`.
+A word attempting to use a disabled capability fails with a
+permission-denied error, and **every** gated capability carries a code,
+so `do [...] error [dot code]` can dispatch on the refusal. The two
+answers are distinct on purpose, because they have different remedies:
+`permission_denied` means a rule said no (widen the rule), while
+`capability_not_installed` means the capability isn't there at all
+(install it — no rule change will help).
+
+The refusal's message keeps the blame trail — which profile, which rule,
+and the arguments that were refused — so the code is what you branch on
+and the message is what you read:
+
+```
+do [ Net.fetch {url:"http://example.com"} ]
+error [ dot code case [
+  permission_denied/q       "blocked by policy"
+  capability_not_installed/q "network capability is off"
+] ]
+```
 
 
 ## CLI reference

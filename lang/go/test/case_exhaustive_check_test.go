@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -229,7 +230,7 @@ func TestCaseExhaustiveDynamic(t *testing.T) {
 	// against, so it REQUIRES a trailing default…
 	wantCase(t,
 		`def f fn [[x:Any][][case x [1 "one" 2 "two"]]] f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 	wantCase(t,
 		`def f fn [[x:Any][String][case x [1 "one" "other"]]] f 9`,
 		"case_not_exhaustive", false)
@@ -238,7 +239,7 @@ func TestCaseExhaustiveDynamic(t *testing.T) {
 		`def f fn [[x:Any][String][case x [1 "one" Any "other"]]] f 9`,
 		"case_not_exhaustive", false)
 	// A code-body scrutinee computes its value — dynamic, same rule.
-	wantCase(t, `case [1 add 1] [5 "five"]`, "case_not_exhaustive", true, "dynamic")
+	wantCase(t, `case [1 add 1] [5 "five"]`, "case_not_exhaustive", true, "gradual")
 	wantCase(t, `case [1 add 1] [2 "two" "other"]`, "case_not_exhaustive", false)
 	wantCase(t, `case [1 add 1] [1 "one" Any "other"]`, "case_not_exhaustive", false)
 }
@@ -313,6 +314,362 @@ func TestCaseRedundantDefaultAdvisory(t *testing.T) {
 	// advisory, even when provably covered: only the author-declared
 	// union domain is stable across call shapes.
 	wantCase(t, `case 2 [2 "two" "d"]`, "case_redundant_default", false)
+}
+
+// errorCodes returns the codes of the error-severity diagnostics only.
+func errorCodes(res lang.CheckResult) []string {
+	var out []string
+	for _, d := range res.Diagnostics {
+		if d.Severity == lang.SeverityError {
+			out = append(out, d.Code)
+		}
+	}
+	return out
+}
+
+// TestCaseExhaustiveShorthandFnForm pins the SHORTHAND spelling
+// (`fn x:IS Out [body]`) against the bracket spelling every other test in
+// this file uses. The two forms parse to the same annotation — the map
+// `{x: word(IS)}` either way — so any divergence is post-parse, and there
+// was one: `fn`'s triple sig carried NoEvalArgs (list-only) but not
+// NoEvalMapArgs, so the shorthand's map slot was auto-evaluated and the
+// type NAME was replaced by its BODY. A union/enum body is a payload-
+// carrying Disjunct value rather than a lattice node, so the declared
+// type was erased before ParseFnParams ran and the scrutinee arrived
+// here as dynamic(Any) — the case checker was being fed a lie.
+//
+// The bracket form was immune only because its slot is a List, which
+// NoEvalArgs does suppress. Every row below is asserted in BOTH forms:
+// the point is equivalence, so a future change that fixes one spelling
+// and not the other fails here.
+func TestCaseExhaustiveShorthandFnForm(t *testing.T) {
+	both := func(shorthand, bracket, code string, want bool, fragments ...string) {
+		t.Helper()
+		wantCase(t, shorthand, code, want, fragments...)
+		wantCase(t, bracket, code, want, fragments...)
+	}
+
+	// A declared union proves exhaustive in both forms…
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s"]]] f 5`,
+		"case_not_exhaustive", false)
+	// …and a MISSING alternative errors with the same precise message in
+	// both. Naming the uncovered alternative is the load-bearing half: the
+	// erased-type bug still produced an error here, but the WRONG one
+	// ("the scrutinee is dynamic"), which denies the annotation the user
+	// wrote and sends them to add a default they do not need.
+	both(`def IS (Integer tor String) def f fn x:IS Integer [case x [Integer 1]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][Integer][case x [Integer 1]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// An ENUM-shaped union behaves identically.
+	both(`def Color (red/q tor green/q tor blue/q) def f fn c:Color String [case c [red/q "r" green/q "g" blue/q "b"]] f red/q`,
+		`def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][String][case c [red/q "r" green/q "g" blue/q "b"]]] f red/q`,
+		"case_not_exhaustive", false)
+	both(`def Color (red/q tor green/q tor blue/q) def f fn c:Color Integer [case c [red/q 1 green/q 2]] f red/q`,
+		`def Color (red/q tor green/q tor blue/q) def f fn [[c:Color][Integer][case c [red/q 1 green/q 2]]] f red/q`,
+		"case_not_exhaustive", true, "uncovered", "blue")
+	// The redundant-default advisory survives the shorthand: it is emitted
+	// only for an author-DECLARED union domain, so erasing the declaration
+	// silently dropped it (0 emitted, no error anywhere — the quietest of
+	// the consequences).
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s" "d"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" String "s" "d"]]] f 5`,
+		"case_redundant_default", true)
+	// Partial coverage keeps the default live in both forms — the negative
+	// that makes the row above mean something.
+	both(`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" "d"]] f 5`,
+		`def IS (Integer tor String) def f fn [[x:IS][String][case x [Integer "i" "d"]]] f 5`,
+		"case_redundant_default", false)
+	// A genuinely dynamic shorthand param is still dynamic: the fix must
+	// not manufacture a static type where none was declared.
+	wantCase(t, `def f fn x:Any String [case x [1 "one" 2 "two"]] f 9`,
+		"case_not_exhaustive", true, "gradual")
+}
+
+// TestShorthandFnLambdaFormUnionParam is the `=>` twin of the test above.
+// `afn`'s input sig sits at slot 1 (its canonical call is the swap
+// `input afn body`), so it needed the same map-eval suppression `fn`'s
+// slot 0 does.
+func TestShorthandFnLambdaFormUnionParam(t *testing.T) {
+	wantCase(t,
+		`def IS (Integer tor String) def f (x:IS => [case x [Integer "i" String "s"]]) f 5`,
+		"case_not_exhaustive", false)
+	wantCase(t,
+		`def IS (Integer tor String) def f (x:IS => [case x [Integer 1]]) f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// An unannotated lambda param stays dynamic.
+	wantCase(t, `def f (x:Any => [case x [1 "one"]]) f 9`,
+		"case_not_exhaustive", true, "gradual")
+}
+
+// TestShorthandFnPreservesArity is the sharpest consequence of the erased
+// annotation and the reason this defect outranks the case-coverage
+// symptom it was reported as. When the union body reached ParseFnParams
+// as a VALUE it hit the None-stripping branch meant for INLINE disjuncts,
+// which synthesised a 0-arg overload: a declared one-parameter function
+// became callable with no arguments, silently, returning its body.
+func TestShorthandFnPreservesArity(t *testing.T) {
+	src := `def IN (Integer tor None) def f fn x:IN Integer [0] f`
+	res := checkDiag(t, src)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Fatalf("calling a 1-param shorthand fn with no argument must not "+
+			"dispatch — want no_signature, got: %v", diagCodes(res))
+	}
+	// The bracket form has always rejected it; equivalence is the contract.
+	res = checkDiag(t, `def IN (Integer tor None) def f fn [[x:IN][Integer][0]] f`)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Fatalf("bracket form: want no_signature, got: %v", diagCodes(res))
+	}
+	// Passing the argument still works in both forms.
+	for _, ok := range []string{
+		`def IN (Integer tor None) def f fn x:IN Integer [0] f 5`,
+		`def IN (Integer tor None) def f fn [[x:IN][Integer][0]] f 5`,
+	} {
+		if res := checkDiag(t, ok); len(errorCodes(res)) != 0 {
+			t.Errorf("%q: want clean, got %v", ok, diagCodes(res))
+		}
+	}
+}
+
+// TestShorthandFnUnionReturnType pins the OUTPUT slot. A Disjunct in the
+// return position was read as a concrete return-by-value, which spliced
+// the type onto the body stack and produced a bogus arity complaint —
+// `IsSigTypeValue` recognised a type NAME (the Word) but not the
+// evaluated union VALUE, so suppressing the map eval alone was not
+// enough.
+func TestShorthandFnUnionReturnType(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	out, err := a.Run(`def IS (Integer tor String) def f fn x:Integer IS [x] 1 f`)
+	if err != nil {
+		t.Fatalf("union return type in shorthand fn: %v", err)
+	}
+	if len(out) != 1 || fmt.Sprint(out[0]) != "1" {
+		t.Fatalf("want [1], got %v", out)
+	}
+	// BOTH forms must now REJECT a Boolean body under a declared union
+	// return. The shorthand used to accept it silently: the output slot's
+	// bare Word is resolved by forward collection (no NoEval flag gates
+	// that), so ResolveSigType saw a Disjunct VALUE and answered
+	// `(TAny, &pattern)` — and `Any` accepts everything. The pattern had
+	// nowhere to live, because FnSig.Returns is []*Type.
+	//
+	// FnSig.ReturnPatterns is that missing channel, and the enforcement
+	// runs BEFORE the `exp == TAny` skip, because a declared union
+	// degrades its type to Any precisely when the pattern is the only
+	// contract left.
+	//
+	// Asserted on ALL THREE engines, and that is the point rather than
+	// thoroughness for its own sake. This test was written check-only, and
+	// check-only is exactly what let the fix ship half-done: the pattern was
+	// threaded onto ReturnCheckInfo (interpreter) and into
+	// checkBodyReturnConformance (check pass) but NOT onto CompiledFn, so
+	// `aql check` and `RunInterp` rejected the Boolean body while the
+	// DEFAULT compiled run accepted it and returned `true`. A declared union
+	// return was a comment on the one path most programs take. Whenever a
+	// contract is enforced in more than one engine, assert it in every one —
+	// a green check-mode test is not evidence about the VM.
+	for _, form := range []struct{ name, src string }{
+		{"bracket", `def IS (Integer tor String) def f fn [[x:Integer][IS][true]] 1 f`},
+		{"shorthand", `def IS (Integer tor String) def f fn x:Integer IS [true] 1 f`},
+	} {
+		got := checkDiag(t, form.src)
+		if len(errorCodes(got)) == 0 {
+			t.Errorf("%s form must reject a Boolean body under a declared union "+
+				"return, got clean: %v", form.name, diagCodes(got))
+		}
+		for _, mode := range []string{"compiled", "interpreted"} {
+			e, _ := lang.New()
+			var err error
+			if mode == "compiled" {
+				_, err = e.Run(form.src)
+			} else {
+				_, err = e.RunInterp(form.src)
+			}
+			if err == nil {
+				t.Errorf("%s form, %s: a Boolean body under a declared union return "+
+					"must raise; it was ACCEPTED", form.name, mode)
+			} else if !strings.Contains(err.Error(), "return value 1") {
+				t.Errorf("%s form, %s: want a return-value type_error, got %v",
+					form.name, mode, err)
+			}
+		}
+	}
+	// The negative half, and the one that keeps the rule honest: a body
+	// returning EITHER alternative of the union must still be accepted. A
+	// pattern check that rejected everything would pass the two assertions
+	// above and be useless.
+	for _, ok := range []struct{ name, src string }{
+		{"Integer alternative", `def IS (Integer tor String) def f fn x:Integer IS [x] 1 f`},
+		{"String alternative", `def IS (Integer tor String) def f fn x:Integer IS ["s"] 1 f`},
+	} {
+		got := checkDiag(t, ok.src)
+		if codes := errorCodes(got); len(codes) != 0 {
+			t.Errorf("%s: a body returning a valid member of the declared union "+
+				"must be accepted, got %v", ok.name, codes)
+		}
+		for _, mode := range []string{"compiled", "interpreted"} {
+			e, _ := lang.New()
+			var err error
+			if mode == "compiled" {
+				_, err = e.Run(ok.src)
+			} else {
+				_, err = e.RunInterp(ok.src)
+			}
+			if err != nil {
+				t.Errorf("%s, %s: a valid member of the declared union must run: %v",
+					ok.name, mode, err)
+			}
+		}
+	}
+}
+
+// TestListOutputSigStructuralReturn covers the OTHER route into
+// FnSig.ReturnPatterns: a LIST output signature (`fn [[…] [[:Integer]] […]]`)
+// whose element resolves to a structural pattern. The union cases above all
+// take ParseFnReturns' single-value branch; this one takes its per-element
+// loop, and the two allocate the pattern slice differently.
+//
+// It is also the direction that makes the feature coherent. A typed container
+// is already enforced on the PARAM side — `f ["a"]` against `x:[:Integer]` is
+// `signature_error` — and before ReturnPatterns the same declaration in the
+// RETURN slot admitted anything list-shaped, because ParseFnReturns kept only
+// the `*Type` (TList) and dropped the element constraint. Params and returns
+// are the same contract read in two directions; they must refuse the same
+// values.
+func TestListOutputSigStructuralReturn(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		src  string
+		bad  bool
+	}{
+		{"typed list, wrong element", `def f fn [[x:Integer] [[:Integer]] [["a"]]] 1 f`, true},
+		{"typed list, right element", `def f fn [[x:Integer] [[:Integer]] [[1 2]]] 1 f`, false},
+		{"typed map, wrong value", `def f fn [[x:Integer] [{:String}] [{a:1}]] 1 f`, true},
+		{"typed map, right value", `def f fn [[x:Integer] [{:String}] [{a:"z"}]] 1 f`, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, mode := range []string{"compiled", "interpreted"} {
+				e, _ := lang.New()
+				var err error
+				if mode == "compiled" {
+					_, err = e.Run(c.src)
+				} else {
+					_, err = e.RunInterp(c.src)
+				}
+				switch {
+				case c.bad && err == nil:
+					t.Errorf("%s: a declared structural return must refuse a "+
+						"non-conforming body; it was ACCEPTED", mode)
+				case c.bad && !strings.Contains(err.Error(), "return value 1"):
+					t.Errorf("%s: want a return-value type_error, got %v", mode, err)
+				case !c.bad && err != nil:
+					t.Errorf("%s: a conforming body must run: %v", mode, err)
+				}
+			}
+		})
+	}
+}
+
+// TestCaseExhaustiveInlineUnionParam covers the OTHER route into the
+// erased-union defect, which the NoEvalMapArgs fix does not touch: an
+// INLINE union annotation `x:(Integer tor String)`. ParseFnParams evaluates
+// a paren annotation itself, so ResolveSigType gets a Disjunct value with no
+// minted lattice node to name and answers (TAny, &pattern) — and
+// paramBodyCarrier read only p.Type, binding the body a dynamic(Any).
+//
+// Both spellings denote the same domain, so both must analyse the same. This
+// failed in the BRACKET form too, which is what marks it a separate route
+// rather than another symptom of the shorthand bug.
+func TestCaseExhaustiveInlineUnionParam(t *testing.T) {
+	for _, form := range []struct{ name, src string }{
+		{"shorthand", `def f fn x:(Integer tor String) String [case x [Integer "i" String "s"]] f 5`},
+		{"bracket", `def f fn [[x:(Integer tor String)][String][case x [Integer "i" String "s"]]] f 5`},
+	} {
+		wantCase(t, form.src, "case_not_exhaustive", false)
+	}
+	// A missing alternative names it, exactly as the NAMED union does — the
+	// inline form is not merely accepted, it is analysed.
+	wantCase(t,
+		`def f fn x:(Integer tor String) String [case x [Integer "i"]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	wantCase(t,
+		`def f fn [[x:(Integer tor String)][String][case x [Integer "i"]]] f 5`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// The redundant-default advisory follows the domain, so it fires for the
+	// inline union too.
+	wantCase(t,
+		`def f fn x:(Integer tor String) String [case x [Integer "i" String "s" "d"]] f 5`,
+		"case_redundant_default", true)
+	// NEGATIVE: widening the annotation must NOT manufacture a domain.
+	wantCase(t, `def f fn x:Any String [case x [Integer "i" String "s"]] f 5`,
+		"case_not_exhaustive", true, "gradual")
+	// NEGATIVE: dispatch still enforces the inline union at the call.
+	res := checkDiag(t, `def f fn x:(Integer tor String) Integer [0] f true`)
+	if _, ok := diagWithCode(res, "no_signature"); !ok {
+		t.Errorf("an inline union param must still reject a Boolean argument, "+
+			"got: %v", diagCodes(res))
+	}
+}
+
+// TestCaseDynamicDiagnosticDoesNotDenyTheAnnotation pins the wording fix.
+// `paramBodyCarrier` marks a typed-CONTAINER param (`{:Integer}` / `[:Integer]`)
+// dynamic — correctly, the element type does not fix the container value's
+// type here — so the diagnostic is reachable for a parameter the author DID
+// annotate. Saying "the scrutinee is dynamic" reads as "you did not type
+// this" and sends them to re-annotate something already annotated; the text
+// now describes the POSITION ("gradual here") instead of denying the
+// declaration.
+func TestCaseDynamicDiagnosticDoesNotDenyTheAnnotation(t *testing.T) {
+	for _, src := range []string{
+		`def f fn m:{:Integer} String [case m [Map "m"]] f {a:1}`,
+		`def f fn l:[:Integer] String [case l [List "l"]] f [1]`,
+		`def f fn x:Any String [case x [1 "one"]] f 9`,
+	} {
+		res := checkDiag(t, src)
+		d, ok := diagWithCode(res, "case_not_exhaustive")
+		if !ok {
+			t.Fatalf("%q: want case_not_exhaustive, got %v", src, diagCodes(res))
+		}
+		if strings.Contains(d.Detail, "the scrutinee is dynamic") {
+			t.Errorf("%q: the diagnostic must not assert the scrutinee is "+
+				"untyped — an annotation may be present and still be gradual "+
+				"at this position: %q", src, d.Detail)
+		}
+		if !strings.Contains(d.Detail, "gradual") {
+			t.Errorf("%q: detail %q should say the position is gradual", src, d.Detail)
+		}
+	}
+}
+
+// TestDescribeCaseShorthandExamplesAreTrue executes the two hand-authored
+// `describe case` examples that shipped FALSE claims. TestHelpExamplesCorrect
+// skips hand-authored examples by construction (they are prose, not the
+// `;# <exact-stack>` shape its matcher validates), which is exactly why these
+// two could be wrong for as long as they were. Nothing here generalises that
+// gap away — it pins these two, because these two are documented promises
+// about the feature this file tests.
+func TestDescribeCaseShorthandExamplesAreTrue(t *testing.T) {
+	// "exhaustive over IS — no default needed"
+	wantCase(t,
+		`def IS (Integer tor String) def f fn x:IS String [case x [Integer "i" String "s"]]`,
+		"case_not_exhaustive", false)
+	// "check ERROR case_not_exhaustive — uncovered: String"
+	wantCase(t,
+		`def IS (Integer tor String) def f fn x:IS Integer [case x [Integer 1]]`,
+		"case_not_exhaustive", true, "uncovered", "String")
+	// The four neighbours in the same block, so a future edit to any of them
+	// is checked rather than merely plausible.
+	wantCase(t, `def f fn b:Boolean Integer [case b [true 1 false 0]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def f fn x:Integer Integer [case x [[gt 3] 1 [lte 3] 2]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def Pos refine Integer def f fn x:Pos String [case x [Pos "p"]]`,
+		"case_not_exhaustive", false)
+	wantCase(t, `def f fn x:Any String [case x [1 "one" "other"]]`,
+		"case_not_exhaustive", false)
 }
 
 func TestCaseExhaustiveSeverities(t *testing.T) {
@@ -482,11 +839,11 @@ func TestCaseExhaustivePredicateShapes(t *testing.T) {
 	wantCase(t, `case [1 add 1] Integer`, "case_not_exhaustive", false)
 	// An empty even-length clause list over a computed scrutinee still
 	// demands the catch-all…
-	wantCase(t, `case [1 add 1] []`, "case_not_exhaustive", true, "dynamic")
+	wantCase(t, `case [1 add 1] []`, "case_not_exhaustive", true, "gradual")
 	// …and predicate clauses alone cannot satisfy a dynamic scrutinee.
 	wantCase(t,
 		`def f fn [[x:Any][String][case x [[gt 3] "hi" 1 "one"]]] f 9`,
-		"case_not_exhaustive", true, "dynamic")
+		"case_not_exhaustive", true, "gradual")
 }
 
 func TestCaseUnreachableIntervalAdvisories(t *testing.T) {

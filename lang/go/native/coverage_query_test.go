@@ -1239,7 +1239,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 
 func TestParseFnReturnsSingleError(t *testing.T) {
 	// A single non-list return type that is an invalid type name.
-	_, err := parseFnReturns(nil, NewString("nonexistent_type"))
+	_, _, err := parseFnReturns(nil, NewString("nonexistent_type"))
 	if err == nil {
 		t.Error("expected error for invalid return type name")
 	}
@@ -1247,7 +1247,7 @@ func TestParseFnReturnsSingleError(t *testing.T) {
 
 func TestParseFnReturnsListError(t *testing.T) {
 	// A list with an invalid return type element.
-	_, err := parseFnReturns(nil, NewList([]Value{NewString("nonexistent_type")}))
+	_, _, err := parseFnReturns(nil, NewList([]Value{NewString("nonexistent_type")}))
 	if err == nil {
 		t.Error("expected error for invalid return type in list")
 	}

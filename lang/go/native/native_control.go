@@ -1299,6 +1299,41 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 	if len(stk) >= 2 && stk[0].ID == seeded[0].ID {
 		stk = stk[1:]
 	}
+	if len(stk) == 0 {
+		// We RAN the handler, so this arity is KNOWN — not unknown, which is
+		// what `wide` means everywhere else in this function. Widening a
+		// known-ZERO arity to a one-value bound is the whole of defect C:
+		// `error`'s dispatch is then recorded as a single-output fallback
+		// island (RecordFallback takes outs[0]), FallbackSpan has no
+		// out-count field to say otherwise, lowerFallback pushes exactly one
+		// simulated slot, and at run time runFallback appends the island's
+		// real zero results — leaving the stack one short and surfacing as
+		// `CALL_DYNAMIC underflow` / `BIND_GLOBAL underflow`, an
+		// internal_error leaked to the user from `do [risky] error [drop]`
+		// followed by any expression.
+		//
+		// Refusing is the sanctioned response: the island model cannot
+		// express this program, and under the refusal architecture the
+		// interpreter fallback is always sound. It is also what the adjacent
+		// no-error path already does for its own unrepresentable shape (a
+		// baked arg beyond BarrierPos — carrier.go's island decline).
+		//
+		// ZERO specifically, not "!= 1". A residual of two or more is NOT
+		// broken: its bottom is the unconsumed seeded error, and the paired
+		// CLOSURE path nets one from it with a runtime strip
+		// (TestErrorStripInputClosure pins `error [dup drop "k"]`, which
+		// measures 2 here because the compile-time strip's identity probe
+		// does not match after a dup/drop). Refusing those regressed a shape
+		// that compiles correctly today. A residual >1 that the strip cannot
+		// reduce is already declined further down the pipeline, so it needs
+		// nothing from here either.
+		if es := r.Check.Recorder(); es.Active() {
+			es.MarkUncompilable(
+				"error: handler nets no value — the single-output island model " +
+					"would leave the stack one short")
+		}
+		return wide
+	}
 	if len(stk) != 1 || stk[0].Parent == nil {
 		return wide
 	}

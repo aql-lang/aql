@@ -306,6 +306,8 @@ var (
 	IsEnd                     = eng.IsEnd
 	IsError                   = eng.IsError
 	IsForward                 = eng.IsForward
+	IsFrameOpen               = eng.IsFrameOpen
+	AsFrameOpen               = eng.AsFrameOpen
 	IsImplicitMap             = eng.IsImplicitMap
 	IsInterpString            = eng.IsInterpString
 	IsMark                    = eng.IsMark
@@ -437,6 +439,7 @@ var (
 	// Owner sentinels for the ownership-anchored signature rules
 	// (design/OPEN-WORDS.1.md §4).
 	OwnerKernel              = eng.OwnerKernel
+	OwnerLang                = eng.OwnerLang
 	OwnerProgram             = eng.OwnerProgram
 	NewPathonFromString      = eng.NewPathonFromString
 	IsBareTypeNode           = eng.IsBareTypeNode

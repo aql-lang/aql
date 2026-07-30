@@ -518,10 +518,11 @@ func expiryCountdown(rfc3339 string) string {
 }
 
 // providerOptions builds the Provider select: "(none)" plus every service
-// aql knows about — the HTTP provider presets (openai, anthropic, …) AND the
-// publish-recipe tools (npm, cargo, pypi, …) — deduped and sorted, so a secret
-// can be tagged with the tool/service it belongs to without free text.
-func providerOptions() []huh.Option[string] {
+// aql knows about — the HTTP provider presets (openai, anthropic, …), the
+// vault's own operator-defined presets (custom), AND the publish-recipe
+// tools (npm, cargo, pypi, …) — deduped and sorted, so a secret can be
+// tagged with the tool/service it belongs to without free text.
+func providerOptions(custom []Provider) []huh.Option[string] {
 	seen := map[string]bool{}
 	var names []string
 	add := func(n string) {
@@ -531,6 +532,9 @@ func providerOptions() []huh.Option[string] {
 		}
 	}
 	for _, p := range ListProviders() {
+		add(p.Name)
+	}
+	for _, p := range custom {
 		add(p.Name)
 	}
 	for _, n := range publishRecipeNames() {
@@ -555,7 +559,7 @@ func (m *rootModel) buildAddForm() screen {
 		huh.NewInput().Title("Secret value").Description("the secret itself (entry is hidden)").
 			EchoMode(huh.EchoModePassword).Value(&value).Validate(nonEmpty("value")),
 		huh.NewSelect[string]().Title("Provider").Description("optional: tag with a known provider").
-			Options(providerOptions()...).Value(&provider),
+			Options(providerOptions(m.ctl.customProviders())...).Value(&provider),
 		huh.NewInput().Title("Namespace").Description("optional; overrides any ns: prefix").
 			Value(&namespace).Validate(validateNamespaceField),
 		huh.NewInput().Title("Expiry").Description("optional: YYYY-MM-DD, RFC3339, or a duration like 90d").

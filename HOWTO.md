@@ -351,8 +351,29 @@ await {mode: 'any}   [[1 div 0] [sleep 10 42]]
   # returns 42
 ```
 
-Each branch runs in a sub-engine, so writes to mutable objects
-inside one branch do not bleed into the others.
+Each branch runs in a sub-engine, so its `def` and `context set`
+writes do not bleed into the others.
+
+Sharing a **stateful container** (`FlexMap`, `FlexList`, `Store`,
+`Table`, a class instance) across branches is refused — branches run on
+separate goroutines, so an in-place write to one would be a data race:
+
+<!-- aql-test: skip -->
+```aql
+def m (make FlexMap {})
+await [[m set a 1] [m set b 2]]
+# error: not_sendable — branch reaches `m`, a mutable FlexMap
+
+# Build one per branch instead, and combine the results:
+await [
+  [def a (make FlexMap {}) a set k 1]
+    [def b (make FlexMap {}) b set k 2]
+]
+# [{k:1} {k:2}]
+```
+
+Immutable values are fine to share: a plain `Map` or `List` returns a
+copy from `set`, so no branch can observe another's write.
 
 
 ## Use timers and delays

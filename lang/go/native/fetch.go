@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/aql-lang/aql/eng/go"
+	"github.com/aql-lang/aql/lang/go/capabilities"
 	"github.com/aql-lang/aql/lang/go/policy"
 )
 
@@ -46,16 +48,16 @@ func checkFetchPolicy(r *Registry, urlStr string) error {
 	// via Check; install:false on the network scope produces
 	// capability_not_installed.
 	if !pol.Installed("network") {
-		return &policy.Denied{
+		return PolicyRefusal(r, "fetch", &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "network",
 			Op:      "connect",
 			Profile: pol.Name(),
 			Blame:   "network.install=false",
 			Args:    args,
-		}
+		})
 	}
-	return pol.Check("network", "connect", args)
+	return PolicyRefusal(r, "fetch", pol.Check("network", "connect", args))
 }
 
 // hostPortFromURL extracts (host, port) from a URL. port is
@@ -183,11 +185,11 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
-		return nil, fmt.Errorf("fetch: missing required \"url\" field")
+		return nil, r.AqlError("fetch_error", "fetch: missing required \"url\" field", "fetch")
 	}
 	urlStr, err := AsString(urlVal)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: url: %w", err)
+		return nil, r.AqlError("fetch_error", "fetch: url: "+err.Error(), "fetch")
 	}
 
 	// Policy gate: consult host policy before opening any socket.
@@ -200,7 +202,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if mv, ok := reqOM.Get("method"); ok {
 		mvStr, err := AsString(mv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: method: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: method: "+err.Error(), "fetch")
 		}
 		method = strings.ToUpper(mvStr)
 	}
@@ -210,7 +212,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if bv, ok := reqOM.Get("body"); ok {
 		bvStr, err := AsString(bv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: body: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: body: "+err.Error(), "fetch")
 		}
 		bodyReader = strings.NewReader(bvStr)
 	}
@@ -218,7 +220,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Build http.Request.
 	req, err := http.NewRequest(method, urlStr, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		return nil, r.AqlError("fetch_error", "fetch: "+err.Error(), "fetch")
 	}
 
 	// Set headers.
@@ -228,7 +230,8 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 			val, _ := hm.Get(key)
 			valStr, err := AsString(val)
 			if err != nil {
-				return nil, fmt.Errorf("fetch: header %q: %w", key, err)
+				return nil, r.AqlError("fetch_error",
+					fmt.Sprintf("fetch: header %q: %v", key, err), "fetch")
 			}
 			req.Header.Set(key, valStr)
 		}
@@ -239,9 +242,41 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if tv, ok := reqOM.Get("timeout"); ok {
 		tvInt, err := AsInteger(tv)
 		if err != nil {
-			return nil, fmt.Errorf("fetch: timeout: %w", err)
+			return nil, r.AqlError("fetch_error", "fetch: timeout: "+err.Error(), "fetch")
 		}
 		timeout = time.Duration(tvInt) * time.Millisecond
+	}
+
+	// TLS options (§4.3 of the TLS plan). Parsed and policy-gated
+	// before the effect fence — a denied `verify: false` must not send.
+	var tlsProfile capabilities.TLSProfile
+	if tv, ok := reqOM.Get("tls"); ok {
+		tlsProfile, err = ParseTLSOpts(r, tv, "fetch")
+		if err != nil {
+			return nil, err
+		}
+		host, port := hostPortFromURL(urlStr)
+		if err := CheckTLSPolicy(r, tlsProfile, host, port); err != nil {
+			return nil, err
+		}
+	}
+
+	// The code is `transport` per NETWORK-CLIENTS.0.md §8.2 so a guest
+	// can discriminate it in `do […] error [case …]`. The surrounding
+	// legacy paths still return bare fmt.Errorf (and so surface as
+	// internal_error); new paths do not inherit that.
+	transport, err := ResolveTransport(r, tlsProfile, "fetch")
+	if err != nil {
+		// An already-coded error (an unknown identity, a bad CA) passes
+		// through with ITS code — re-wrapping would both bury the
+		// specific code under `transport` and print the rendered inner
+		// error inside the outer one.
+		var coded *AqlError
+		if errors.As(err, &coded) {
+			return nil, err
+		}
+		return nil, r.AqlError("transport",
+			"fetch: tls: "+err.Error(), "fetch")
 	}
 
 	// Execute request. C1 effect fence (eng effects.go): once Do runs, the
@@ -250,17 +285,19 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// before this point (policy denial, a malformed request) provably sent
 	// nothing and stays uncounted.
 	r.NoteEffect()
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{Timeout: timeout, Transport: transport}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
+		// The wire failed: classify into closed/timeout/transport so a
+		// guest can retry a timeout and fail fast on the rest.
+		return nil, MapTransportErr(r, "fetch", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body.
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("fetch: reading body: %w", err)
+		return nil, MapTransportErrAs(r, "fetch", "fetch: reading body", err)
 	}
 
 	// Build response headers map with lowercase keys in sorted order.
@@ -311,4 +348,110 @@ func (fetchConvertBehavior) ToList(v Value) (Value, error) {
 		}
 	}
 	return NewList(vals), nil
+}
+
+// fetchFieldAt reads a field from a map-backed Fetch value (Request or
+// Response). Returns the value and whether the key was present.
+func fetchFieldAt(recv Value, key string) (Value, bool) {
+	m, err := AsMap(recv)
+	if err != nil || m == nil {
+		return NewTypeLiteral(TNone), false
+	}
+	v, ok := m.Get(key)
+	if !ok {
+		return NewTypeLiteral(TNone), false
+	}
+	return v, true
+}
+
+// fetchFieldKey extracts the key from an accessor's first argument,
+// which is an Atom for the `.field` sugar and a String for `get "k"`.
+//
+// It cannot fail: the signatures admit only TAtom and TString in this
+// position, so there is no third shape to reject. An unusable value
+// (a DepScalar constraint in the String slot) yields "", which reads
+// as a miss — the same answer a genuinely absent field gives.
+func fetchFieldKey(v Value) string {
+	if a, err := v.AsConcreteAtom(); err == nil && a != "" {
+		return a
+	}
+	s, _ := v.AsConcreteString()
+	return s
+}
+
+// fetchGetHandler is the lenient read (`dot` / `get`): a missing field
+// reads none, matching how the accessor family treats Maps.
+func fetchGetHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	v, _ := fetchFieldAt(args[1], fetchFieldKey(args[0]))
+	return []Value{v}, nil
+}
+
+// fetchGetrHandler is the strict twin (`dotr` / `getr`): a missing field
+// is an error rather than none.
+func fetchGetrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	key := fetchFieldKey(args[0])
+	v, found := fetchFieldAt(args[1], key)
+	if !found {
+		return nil, r.AqlError("key_error",
+			"getr: no field \""+key+"\" on this Fetch value", "getr")
+	}
+	return []Value{v}, nil
+}
+
+// fetchHasHandler answers whether the field is present.
+func fetchHasHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+	_, found := fetchFieldAt(args[1], fetchFieldKey(args[0]))
+	return []Value{NewBoolean(found)}, nil
+}
+
+// FetchAccessorExtensions builds the accessor WORD EXTENSIONS that make
+// a Response answer `.status` directly, instead of requiring the
+// undiscoverable `convert Map` step first.
+//
+// This is the aql:time-util / aql:matrix-util pattern
+// (design/OPEN-WORDS.0.md): a module extends a CORE word with overloads
+// anchored on its own minted type, and `import` transplants them onto
+// the importer's bare word. It is the only mechanism available here —
+// the Fetch family is minted per import, so no static signature in
+// native_storage.go could name it, and a catch-all sig on TIdeal would
+// hand dot access to Error, Table, Record and every other Ideal.
+//
+// The sigs are anchored on ft.Fetch, the family root, so Request and
+// Response both match via ConformsTo.
+func FetchAccessorExtensions(ft FetchModuleTypes) []FnDefInfo {
+	lenient := func(quote bool) []Signature {
+		atom := Signature{Args: []*Type{TAtom, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchGetHandler), Returns: []*Type{TAny}}
+		if quote {
+			atom.QuoteArgs = map[int]bool{0: true}
+		}
+		return []Signature{atom,
+			{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+				Impl: Go(fetchGetHandler), Returns: []*Type{TAny}}}
+	}
+	strict := func(quote bool) []Signature {
+		atom := Signature{Args: []*Type{TAtom, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchGetrHandler), Returns: []*Type{TAny}}
+		if quote {
+			atom.QuoteArgs = map[int]bool{0: true}
+		}
+		return []Signature{atom,
+			{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+				Impl: Go(fetchGetrHandler), Returns: []*Type{TAny}}}
+	}
+	hasSigs := []Signature{
+		{Args: []*Type{TAtom, ft.Fetch}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1,
+			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},
+		{Args: []*Type{TString, ft.Fetch}, BarrierPos: 1,
+			Impl: Go(fetchHasHandler), Returns: []*Type{TBoolean}},
+	}
+	return []FnDefInfo{
+		// dot quotes a bare-word key (the `.field` sugar); get evaluates
+		// it — the split documented in lang/go/CLAUDE.md.
+		NewWordExtension("aql:net", "dot", lenient(true)),
+		NewWordExtension("aql:net", "get", lenient(false)),
+		NewWordExtension("aql:net", "dotr", strict(true)),
+		NewWordExtension("aql:net", "getr", strict(false)),
+		NewWordExtension("aql:net", "has", hasSigs),
+	}
 }

@@ -1,6 +1,7 @@
 package native
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -27,13 +28,17 @@ func TestFetchPolicyDeniedBySandbox(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected sandbox to deny fetch")
 	}
-	d, ok := err.(*policy.Denied)
-	if !ok {
-		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	// The gate CODES the refusal (policy_error.go): it returns an AqlError
+	// carrying the code, not the raw *policy.Denied, so a program can reach it
+	// through `do [...] error [dot code]`. Asserting the code is asserting what
+	// a user can actually observe; the *Denied is an internal shape.
+	var ae *AqlError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
 	}
 	// sandbox uninstalls network → capability_not_installed code.
-	if d.Code != policy.CodeCapabilityNotInstalled {
-		t.Errorf("Code = %q, want %q", d.Code, policy.CodeCapabilityNotInstalled)
+	if ae.Code != "capability_not_installed" {
+		t.Errorf("Code = %q, want capability_not_installed", ae.Code)
 	}
 }
 

@@ -26,4 +26,33 @@ func init() {
 			"build one with NewEmitLangFn.",
 		"kinds": "List the (fixed) emitter-kind atoms (emit_ stripped; emit_auto excluded).",
 	})
+
+	// The exported words are the per-kind entry points, but almost nobody
+	// calls them directly: `emit` dispatches on the kind atom, and that
+	// spelling is what the signatures cannot show. Results are from
+	// verified lang/spec/module-emitlang.tsv rows.
+	registerExamples("aql:emitlang", map[string][]string{
+		"kinds": {`EmitLang.kinds                                   ;# the kinds emit accepts`},
+		"emit_json": {
+			`emit {a:1 b:[2 3]}                               ;# '{"a":1,"b":[2,3]}' — json is the default`,
+			`emit json {pretty:true} {a:1}                    ;# '{\n  "a": 1\n}'`,
+			`emit json {indent:4} {a:1}`,
+			`EmitLang.emit_json {a:1} {} end                  ;# '{"a":1}' — the direct form, options then end`,
+		},
+		"emit_jsonic": {`emit jsonic {a:1 b:"hi"}                         ;# '{a:1,b:"hi"}' — bare keys where legal`},
+		"emit_yaml": {
+			`emit yaml {a:1}                                  ;# 'a: 1'`,
+			`emit yaml [1 2]                                  ;# '- 1\n- 2'`,
+		},
+		"emit_toml": {`emit toml {a:1}`},
+		"emit_ini":  {`emit ini {sec:{a:1}}`},
+		"emit_csv":  {`emit csv [{a:1 b:2} {a:3 b:4}]                   ;# header row from the first record`},
+		"emit_tsv":  {`emit tsv [{a:1 b:2}]`},
+		"emit_xml":  {`emit xml <r><a>1</a></r>                        ;# an Xml ELEMENT, not a Map`},
+		"emit_auto": {`emit auto value                                  ;# pick the kind from the value's shape`},
+		"register": {
+			`EmitLang.register mykind ([v:Any opts:Map] => [ … ])`,
+			`;# then "emit mykind value" reaches it`,
+		},
+	})
 }

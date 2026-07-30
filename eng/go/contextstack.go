@@ -22,9 +22,23 @@ func (cs *ContextStack) Push(parent *StoreInstanceInfo) {
 	if cs == nil {
 		return
 	}
+	// Data is left NIL rather than an empty map, and that is load-bearing
+	// rather than a micro-optimisation. Every write to a context layer goes
+	// through CowSet, which builds a WHOLE NEW layer (`Data: {key: val}`,
+	// prototype = the old one) instead of mutating this map — so a pushed
+	// layer's map is never written to, only read, and a nil map reads exactly
+	// like an empty one in Go.
+	//
+	// It matters because the VM pushes one of these per nested body
+	// invocation (vmContext.enterBodyUnit): on every `each` / `fold` /
+	// `filter` element, whether or not the body mentions `context`. Allocating
+	// a map there doubled the per-invocation cost of the frame for no
+	// observable benefit — see design/verse-report-defects-investigation.0.md
+	// §B blocker 3, which named "or the map made lazy" as one of the two
+	// remedies. StoreInstanceInfo.Set allocates on demand, so the one path
+	// that DOES write in place stays safe.
 	child := &StoreInstanceInfo{
 		TypeName:  "Ideal/Store",
-		Data:      make(map[string]Value),
 		Prototype: parent,
 	}
 	cs.stack = append(cs.stack, child)
@@ -85,6 +99,27 @@ func (cs *ContextStack) TopData() map[string]Value {
 // new root). newRoot is the COW'd replacement. Scans from the top of
 // the stack (most likely match) and uses direct pointer comparison as
 // a fast path before walking prototype chains.
+//
+// The walk relinks prototypes AS IT GOES, so it must never relink newRoot
+// itself. `newRoot.Prototype == origRoot` by construction — newRoot is the
+// COW of origRoot — so a walk that reached newRoot would match the relink
+// condition and set `newRoot.Prototype = newRoot`: a self-cycle that makes
+// every later missing-key lookup spin forever, as a `fatal error: stack
+// overflow` the engine's recover() cannot catch.
+//
+// That is reachable as soon as TWO stack entries reach origRoot only through
+// their prototypes: the first entry's relink points its chain at newRoot, and
+// the second entry's walk then arrives there. Today the compiled path pushes
+// only one such entry, so the cycle is latent rather than live — but it is
+// the reason design/verse-report-defects-investigation.0.md §B lists "make
+// UpdateChain cycle-safe" as the step nothing else can land before: giving
+// the VM a per-body context frame creates the second entry, and a three-line
+// patch that did so turned this into a default-path crash from a documented
+// idiom (`do [ context.__sys.fs set mem true 1 ]`).
+//
+// Stopping at newRoot is both necessary and sufficient. Nothing beyond it
+// needs relinking: the chain past newRoot continues to origRoot and then to
+// origRoot's own ancestors, none of which have origRoot as their prototype.
 func (cs *ContextStack) UpdateChain(origRoot, newRoot *StoreInstanceInfo) {
 	if cs == nil {
 		return
@@ -96,6 +131,11 @@ func (cs *ContextStack) UpdateChain(origRoot, newRoot *StoreInstanceInfo) {
 			continue
 		}
 		for p := entry; p != nil; p = p.Prototype {
+			if p == newRoot {
+				// Already relinked by an earlier entry's walk (or the
+				// replacement itself). Relinking here would self-cycle.
+				break
+			}
 			if p.Prototype == origRoot {
 				p.Prototype = newRoot
 				break

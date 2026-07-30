@@ -57,6 +57,12 @@ type Engine struct {
 	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	// debugLabel names the CALL this engine's run realises, when the
+	// dispatch knows it (CallAQLNamed: a module fn body run in its own
+	// sub-engine, whose Defs-based frame leaves no tape marks). A debug
+	// host reads it back through EngineState.Label so a backtrace can
+	// name the module fn. Empty for every other engine.
+	debugLabel string
 	// rrValues / rrReordered are reusable scratch buffers for
 	// rearrangeForForward's two per-call []Value allocations (forward
 	// collection is on the interpreter's hot path — see
@@ -119,6 +125,12 @@ type Engine struct {
 	// lost with the discarded tape. exitWithFlowCtrl then returns NO values —
 	// the VM discards the signalled iteration's partials anyway (flowSignal) —
 	// with the registry FlowCtrl flag left set for the VM to translate.
+	//
+	// The field is the ISLAND marker itself, and it has a second consequence
+	// beyond flow — see isIsland, which Run consults for scoping. Anything
+	// that opens a new island MUST set it, which is why there is one field
+	// rather than one per consequence: a second island entry point that set
+	// only the flow half would silently regress the scoping half.
 	flowUnwind bool
 	// startAt is a one-shot start offset for the next Run: the leading
 	// startAt input values are RESOLVED arguments (a callback's inputs, a
@@ -255,20 +267,41 @@ func stepLimitFor(r *Registry, def int) int {
 // The returned engine uses the sub-engine step limit.
 // Use NewTop for the top-level engine with a higher limit.
 func New(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultSubStepLimit)}
+	e := &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultSubStepLimit)}
+	if registry != nil {
+		e.trace = registry.effectiveDebugTrace()
+	}
+	return e
 }
 
 // NewTop creates a top-level Engine with the maximum step limit.
 // isTop is set so an unhandled FlowCtrl signal at end-of-Run is reported
 // as an error rather than propagating outward.
 func NewTop(registry *Registry) *Engine {
-	return &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultStepLimit), isTop: true}
+	e := &Engine{registry: registry, stepLimit: stepLimitFor(registry, DefaultStepLimit), isTop: true}
+	if registry != nil {
+		e.trace = registry.effectiveDebugTrace()
+	}
+	return e
 }
 
 // SetSource sets the original source text for error reporting.
 // When set, AqlErrors include source extracts showing the error location.
 func (e *Engine) SetSource(src string) {
 	e.source = src
+}
+
+// faultReturn fires the trace one final time — with a "fault: <err>"
+// note and step -1 — before Run surfaces err, so a debug host can pause
+// AT the raise with the tape and pointer still live (pause-before-
+// unwind, design/AQL-DEBUGGER.0.md §6.1). Every Run-loop error return
+// routes through it; a nil trace makes it a pass-through, so the
+// non-debug error path is unchanged.
+func (e *Engine) faultReturn(err error) error {
+	if e.trace != nil {
+		e.trace(-1, e.pointer, e.tape.Snapshot(), "fault: "+err.Error())
+	}
+	return err
 }
 
 // effectiveSource returns the source text for error reporting.
@@ -1005,6 +1038,19 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 		if !got.Is(exp) {
 			return e.returnTypeError(rc, k+1, exp, got)
 		}
+		// A declared return whose *Type degraded to Any carries its real
+		// domain in the pattern — a union output (`def IS (Integer tor
+		// String)`) has no lattice node to name, so `exp` is Any and admits
+		// everything. Checking the pattern is what makes such a return a
+		// contract rather than a comment.
+		// `Type` is an alias of `Value`, so the pattern pointer IS a *Type
+		// and renders as the declared union rather than as the useless
+		// "expected Any" the degraded type would produce.
+		if pat := rc.ReturnPattern(k); pat != nil {
+			if _, ok := Unify(*pat, got); !ok {
+				return e.returnTypeError(rc, k+1, pat, got)
+			}
+		}
 	}
 	return nil
 }
@@ -1177,9 +1223,26 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}()
 
 	// Push a scoped context Store whose prototype is the parent context.
-	parent := e.registry.Contexts.Top()
-	e.registry.Contexts.Push(parent)
-	defer e.registry.Contexts.Pop()
+	// This is THE context boundary: a nested body runs in a sub-engine, so
+	// one push here is what makes `do` / `each` / a `case` clause / an
+	// auto-evaluated list contain their `context set` writes. The VM's
+	// enterBodyUnit is the compiled twin.
+	//
+	// An ISLAND is not a body, so it does not push (see isIsland). An island
+	// CONTINUES an in-progress compiled expression on the interpreter — a
+	// fn-value apply the emitter could not lower, a FALLBACK span — and the
+	// interpreter reaching the same tokens inline pushes nothing, so pushing
+	// here made the compiled path MORE isolated than the interpreter it is
+	// supposed to mirror. Measured: `(m.f 1) drop` with a `context set` in
+	// the map-slot lambda contained the write compiled (CALL_DYN_METHOD
+	// islands the apply) and leaked it interpreted. A body reached from
+	// INSIDE an island still gets its own frame, because that body opens its
+	// own sub-engine. See design/verse-report-defects-investigation.0.md §B.
+	if !e.isIsland() {
+		parent := e.registry.Contexts.Top()
+		e.registry.Contexts.Push(parent)
+		defer e.registry.Contexts.Pop()
+	}
 
 	// In static type-check mode, convert concrete literal values to
 	// carriers before execution. The same dispatch/matching machinery
@@ -1299,7 +1362,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		switch {
 		case IsWord(val):
 			if err := e.stepWord(val); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsForward(val):
@@ -1310,12 +1373,12 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsCloseParen(val):
 			if err := e.stepCloseParen(); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsEnd(val):
 			if err := e.stepEnd(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsParenExpr(val):
@@ -1336,7 +1399,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// (push data / collect the forward arg) rather than expanding.
 			if val.Quoted || e.pendingForwardWantsRawParen() {
 				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-					return nil, err
+					return nil, e.faultReturn(err)
 				}
 			} else {
 				items, _ := AsParenExpr(val)
@@ -1362,14 +1425,14 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				e.tape.Splice(e.pointer, 1, expandReach(info)...)
 			} else {
 				if err := e.stepLiteral(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-					return nil, err
+					return nil, e.faultReturn(err)
 				}
 			}
 
 		case IsInterpString(val):
 			result, err := e.evalInterpString(val)
 			if err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			// Replace with the evaluated string but do NOT advance the
 			// pointer. The resulting string value needs to go through
@@ -1383,7 +1446,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// IsInterpString case above.
 			result, err := e.evalXmlInterp(val)
 			if err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			e.tape.Set(e.pointer, result)
 
@@ -1392,7 +1455,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsMove(val):
 			if err := e.stepMove(val); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 
 		case IsReturnCheck(val):
@@ -1400,16 +1463,16 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 		case IsDefCleanup(val):
 			if err := e.stepDefCleanup(val, e.pointer); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 			e.pointer++
 
 		default:
 			if val.Parent == nil && val.Behavior() == nil {
-				return nil, e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", "")
+				return nil, e.faultReturn(e.runtimeError("halt", fmt.Sprintf("undefined stack entry at position %d", e.pointer), "", ""))
 			}
 			if err := e.stepLiteral(); err != nil {
-				return nil, err
+				return nil, e.faultReturn(err)
 			}
 		}
 
@@ -1438,17 +1501,17 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// the run never reached) and blame a phantom "unmatched opening
 	// parenthesis". This is the honest diagnosis instead.
 	if !completed {
-		return nil, e.evalLimitError(limit)
+		return nil, e.faultReturn(e.evalLimitError(limit))
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
 	if err := e.resolveOrphanedForwards(); err != nil {
-		return nil, err
+		return nil, e.faultReturn(err)
 	}
 
 	for i := 0; i < e.tape.Len(); i++ {
 		if IsOpenParen(e.tape.At(i)) {
-			return nil, e.syntaxError("unmatched opening parenthesis", "(")
+			return nil, e.faultReturn(e.syntaxError("unmatched opening parenthesis", "("))
 		}
 	}
 
@@ -1460,7 +1523,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// Maps have their values evaluated recursively.
 	// Values marked Quoted (by the quote word) are left as-is.
 	if err := e.autoEvalStack(); err != nil {
-		return nil, err
+		return nil, e.faultReturn(err)
 	}
 
 	// Orphan GenSpec residue (generics plan D1/D2): a `gen [...]`
@@ -5928,9 +5991,11 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// eng-only embedder, the kernel test harnesses) keeps the CallAQL
 		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
+		var fnLabel string
 		if valIdx < e.tape.Len() {
 			if fd, ok := e.tape.At(valIdx).Data.(FnDefInfo); ok {
 				captures = fd.Captured
+				fnLabel = fd.Name
 			}
 		}
 		restoreCheck := e.shareCheckState(capturedReg)
@@ -5940,7 +6005,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			// Check mode ANALYSES the body — always the interpreter path
 			// (running a stamped unit here would execute real side effects
 			// during static analysis).
-			result, err = capturedReg.CallAQL(sig, args, captures)
+			result, err = capturedReg.CallAQLNamed(sig, args, captures, fnLabel)
 		} else {
 			// Runtime: a module fn stamped at load (StampFnValueInPlace,
 			// RunModuleBody) runs its unit on the VM — the module
@@ -6057,15 +6122,16 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	tokens = append(tokens, sig.body()...)
 
 	tokens = AppendFrameTail(tokens, FrameTailSpec{
-		Registry:     e.registry,
-		Snapshot:     defSnapshot,
-		Names:        names,
-		Returns:      sig.Returns,
-		Decl:         sig.Decl,
-		UnnamedCount: unnamedCount,
-		FuncName:     "<fn>",
-		Pos:          callPos,
-		EvalResidual: !anonymous || BodyEvalsResidual(sig.body()),
+		Registry:       e.registry,
+		Snapshot:       defSnapshot,
+		Names:          names,
+		Returns:        sig.Returns,
+		ReturnPatterns: sig.ReturnPatterns,
+		Decl:           sig.Decl,
+		UnnamedCount:   unnamedCount,
+		FuncName:       "<fn>",
+		Pos:            callPos,
+		EvalResidual:   !anonymous || BodyEvalsResidual(sig.body()),
 	})
 	tokens = append(tokens, NewCloseParen())
 
@@ -6715,6 +6781,18 @@ func (e *Engine) handleFlowCtrl() bool {
 	}
 	return handled
 }
+
+// isIsland reports whether this engine runs a VM ISLAND — a token window that
+// CONTINUES an in-progress compiled expression on the interpreter (a fn-value
+// apply the emitter could not lower, a FALLBACK span), rather than entering a
+// nested body. The two island entry points (vmContext.islandRun and
+// runIslandResolved) are the only setters of the underlying marker.
+//
+// Two consumers, both reading the same fact: exitWithFlowCtrl needs the frame
+// teardown because the island's tape is separate from any enclosing loop's,
+// and Run needs to SKIP the per-body context frame because an island is not a
+// body. Named so each call site says which consequence it wants.
+func (e *Engine) isIsland() bool { return e.flowUnwind }
 
 // exitWithFlowCtrl returns from Run when a flow-control signal could
 // not be resolved on this tape. For a top-level engine this is the
