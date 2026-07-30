@@ -185,14 +185,23 @@ func doAction(apiURL, token, name, action string, stdout, stderr io.Writer) int 
 }
 
 // isConnectionTorn reports whether err looks like the server cut the
-// connection mid-response (EOF, connection reset). Used to handle
-// the "stop the api itself" case gracefully.
+// connection mid-response (EOF, connection reset, or a pooled connection
+// the peer had already closed). Used to handle the "stop the api itself"
+// case gracefully.
+//
+// The third form is net/http's errServerClosedIdle. Which of the three the
+// transport reports for the SAME server-side teardown is a race — whether
+// its read loop notices the close before or after the request is written —
+// so recognising only the first two makes `ctl stop api` exit 1
+// intermittently on a stop that in fact reached the handler.
 func isConnectionTorn(err error) bool {
 	if err == nil {
 		return false
 	}
 	s := err.Error()
-	return strings.Contains(s, "EOF") || strings.Contains(s, "connection reset")
+	return strings.Contains(s, "EOF") ||
+		strings.Contains(s, "connection reset") ||
+		strings.Contains(s, "server closed idle connection")
 }
 
 // serviceEntity matches the Service schema from openapi.yaml.

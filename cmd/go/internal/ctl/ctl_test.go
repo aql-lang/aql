@@ -328,6 +328,9 @@ func TestIsConnectionTorn(t *testing.T) {
 		{nil, false},
 		{errors.New("unexpected EOF"), true},
 		{errors.New("read tcp: connection reset by peer"), true},
+		// net/http's errServerClosedIdle — the same teardown, reported
+		// differently when the transport's read loop wins the race.
+		{errors.New("http: server closed idle connection"), true},
 		{errors.New("dial tcp: connection refused"), false},
 	}
 	for _, c := range cases {
