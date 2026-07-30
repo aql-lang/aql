@@ -69,13 +69,24 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 		subReg.RegisterNativeFunc(n)
 	}
 
-	// The shared stdin reader rides into module bodies: without this a file
-	// or inline module that reads stdin would open a SECOND buffer over the
-	// importer's reader and the two would consume each other's bytes
-	// (native/io_lines.go). Appended once per process, like the tui/vault
-	// host seams.
-	if !slices.Contains(native.ModuleInheritedCaps, native.CapStdinLines) {
-		native.ModuleInheritedCaps = append(native.ModuleInheritedCaps, native.CapStdinLines)
+	// Three host views ride into module bodies, appended once per process like
+	// the tui/vault host seams:
+	//
+	//   - the shared stdin reader — without it a file or inline module that
+	//     reads stdin opens a SECOND buffer over the importer's reader and the
+	//     two consume each other's bytes (native/io_lines.go);
+	//   - the environment and the script arguments — a module body is part of
+	//     the same program and must see the same world the top level sees. A
+	//     library that renders help wrapped to `IO.env "COLUMNS"`, or logs the
+	//     argv it was given, otherwise reads an EMPTY environment and an empty
+	//     vector while its importer reads the real ones, which is a silently
+	//     wrong answer rather than a refusal. The inherited value is the
+	//     POLICY-WRAPPED view SetHostEnvOps installed, so a profile that denies
+	//     or filters names denies and filters them here too.
+	for _, capKey := range []string{native.CapStdinLines, native.CapEnv, native.CapScriptArgs} {
+		if !slices.Contains(native.ModuleInheritedCaps, capKey) {
+			native.ModuleInheritedCaps = append(native.ModuleInheritedCaps, capKey)
+		}
 	}
 
 	exports := delegatingExports(ioNatives, subReg)

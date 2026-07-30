@@ -1,6 +1,7 @@
 package test
 
 import (
+	"strings"
 	"testing"
 
 	lang "github.com/aql-lang/aql/lang/go"
@@ -245,5 +246,77 @@ func TestOSEnvOpsMatchesProcess(t *testing.T) {
 	a := newEnvAQL(t, lang.Options{Env: ops})
 	if got := runEnv(t, a, `IO.env "AQL_ENV_PROBE"`); got != "probe-value" {
 		t.Errorf(`IO.env through OSEnvOps = %#v, want probe-value`, got)
+	}
+}
+
+// A MODULE BODY sees the same environment and the same argument vector the
+// top level sees. Both ride in through ModuleInheritedCaps (modules/io.go),
+// alongside the shared stdin reader.
+//
+// Without the inheritance the failure was silent and asymmetric: a library
+// that renders help wrapped to `IO.env "COLUMNS"`, or that logs the argv it
+// was handed, read an EMPTY environment and an empty vector while its
+// importer read the real ones. A capability the host DID install must not
+// disappear one import deep — that is a wrong answer, not a refusal, and it
+// is exactly the shape aql:cli depends on.
+func TestEnvAndArgsReachModuleBodies(t *testing.T) {
+	a := newEnvAQL(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	res, err := a.Run(`import "aql:io"
+import module [
+  import "aql:io"
+  def m-home fn [[] [Any] [ IO.env "HOME" ]]
+  def m-argv fn [[] [List] [ IO.args ]]
+  export "M" {home: m-home/r, argv: m-argv/r}
+] end
+print (M.home)
+print (M.argv)
+IO.env "HOME"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res[len(res)-1]; got != "/home/ada" {
+		t.Errorf("top-level IO.env = %#v, want /home/ada", got)
+	}
+	var out strings.Builder
+	a2 := newEnvAQL(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	a2.SetOutput(&out)
+	if _, err := a2.Run(`import module [
+  import "aql:io"
+  def m-home fn [[] [Any] [ IO.env "HOME" ]]
+  def m-argv fn [[] [List] [ IO.args ]]
+  export "M" {home: m-home/r, argv: m-argv/r}
+] end
+print (M.home)
+print (M.argv)`); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "/home/ada") {
+		t.Errorf("module body IO.env printed %q, want the host's HOME", out.String())
+	}
+	if !strings.Contains(out.String(), `["alpha", "beta"]`) {
+		t.Errorf("module body IO.args printed %q, want the host's argument vector", out.String())
+	}
+}
+
+// The inheritance carries the POLICY-WRAPPED view, not a bypass: a profile
+// that denies an environment name denies it inside a module body too.
+func TestModuleBodyEnvStaysPolicyWrapped(t *testing.T) {
+	pol, err := policy.Load("sandbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	a := newEnvAQL(t, lang.Options{Env: envFake(), Policy: pol})
+	a.SetOutput(&out)
+	if _, err := a.Run(`import module [
+  import "aql:io"
+  def m-home fn [[] [Any] [ IO.env "HOME" ]]
+  export "M" {home: m-home/r}
+] end
+print (M.home)`); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "None" {
+		t.Errorf("module body under sandbox printed %q, want None (the profile denies env.read)", out.String())
 	}
 }
