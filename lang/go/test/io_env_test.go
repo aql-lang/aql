@@ -88,8 +88,10 @@ func TestIOEnvAll(t *testing.T) {
 // export's argument is NOT visible from where the fn value resolves:
 // `Mod.word arg` lowers to `( Mod dot word ) arg`, and the close paren is
 // a forward-scan boundary. A single-signature word escapes the group and
-// re-dispatches outside, which is exactly why env is one word per form
-// rather than one word with a 0-arg overload (see NUR035).
+// re-dispatches outside — the reason `env` shipped as one word per form
+// rather than one word with a 0-arg overload. The engine no longer forces
+// that choice (a paren expression resolving to a function word does not
+// induce a call), but every call form still has to work, so this stays.
 func TestIOEnvCallForms(t *testing.T) {
 	a := newEnvAQL(t, lang.Options{Env: envFake()})
 	for _, src := range []string{

@@ -69,7 +69,6 @@ commit.
 | [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR029](#nur029) | Design-note-tracked sibling-form divergences (SHARP-EDGES G8–G13b) | 2026-07-22 uniformity review |
-| [NUR035](#nur035) | A 0-arg overload shadows every arg-taking sibling on a module export | 2026-07-29 C1 `IO.env` |
 | [NUR036](#nur036) | `NO_COLOR` is read straight from the process, bypassing the EnvOps capability | 2026-07-29 C2 `IO.is-tty` |
 
 Pending records use a compact form (rule / divergence / evidence /
@@ -721,68 +720,6 @@ accepted:
 
 ---
 
-## NUR035 — A 0-arg overload shadows every arg-taking sibling on a module export {#nur035}
-
-**Status:** Pending · **Recorded:** 2026-07-29 · **Surfaced by:** C1
-`IO.env` (design/CLI-PROGRAMS.0.md §3)
-
-**Rule:** one dispatch rule for every call site. A word's signatures are
-ranked by specificity (longest arity first — `eng/go/signature.go`
-`CompareSignatures`), and the same set of overloads resolves the same way
-whether the word is reached as a bare word or as a module export. The
-`Mod.word` spelling is documented as ordinary dispatch, not a different
-calling convention (`lang/go/CLAUDE.md`, "Module FnDef Wrappers").
-
-**Divergence:** a native carrying **both** a 0-arg signature and
-arg-taking ones dispatches correctly as a bare word, but as a **module
-export** the 0-arg signature wins unconditionally and the arg-taking ones
-become unreachable. `Mod.word arg` lowers to `( Mod dot word ) arg`
-(`lowerReach`, `eng/go/engine.go`), so the resolved fn value is stepped
-*inside* a paren group whose close paren is a forward-scan boundary
-(`matchSignature`'s "end, ) — boundary, stop") and whose open paren is a
-stack barrier. Neither the trailing argument nor a preceding stack operand
-is visible from in there. A single-signature word survives this: nothing
-matches, `execFnDefLiteral` leaves the value as data, the group closes, and
-the value re-dispatches outside where its argument IS visible. A 0-arg
-overload always matches inside the group, so that escape never happens.
-
-**Minimal repro** (with the two forms as overloads of one native):
-
-```
-import "aql:io"
-IO.env "HOME"      # → the WHOLE environment Map, plus "HOME" left on the stack
-"HOME" IO.env      # → the same
-```
-
-Both silently answer with the 0-arg form. No error is raised, so the
-failure is a wrong *value*, not a diagnostic.
-
-**Evidence / current avoidance:** `aql:io` ships the two forms as **two
-words** — `IO.env <name>` and `IO.env-all` — precisely to sidestep this;
-the reasoning is on the `env` native in
-`lang/go/native/io_module.go`, and the call-form guard is
-`TestIOEnvCallForms` (`lang/go/test/io_env_test.go`). A registry scan
-finds exactly one other mixed-arity word, core `describe`, which is
-reached only as a bare word and is therefore unaffected — `describe 42`
-does fall to the 0-arg form and print the index, but that is the
-documented lenient behaviour of a *bare word* whose argument matched no
-signature, not this divergence.
-
-**Documentation status:** undocumented — `design/CLI-PROGRAMS.0.md` §3
-still specifies the overload surface this cannot deliver, and
-`lang/go/CLAUDE.md`'s "Module FnDef Wrappers" section documents the
-inner-sig `BarrierPos` trap but not this one.
-
-**Proposed verdict:** fix in the engine rather than allow. A prototype
-that declines a 0-arg match when the fn value sits alone in a paren group
-whose surroundings can still supply an argument restores every call form,
-but the "can still supply an argument" test has to read tape shapes
-(close-paren run, prefix skip, bound-word vs function-word) in the hot
-dispatch path, and each iteration of it surfaced a fresh shape it got
-wrong. It should land as its own change, with the shapes enumerated as
-spec rows first — not folded into a feature PR.
-
----
 
 ## NUR036 — `NO_COLOR` is read straight from the process, bypassing the EnvOps capability {#nur036}
 

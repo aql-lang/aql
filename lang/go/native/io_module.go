@@ -231,19 +231,19 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// real process environment: the runtime never reaches for
 			// ambient state the host did not hand it.
 			//
-			// The whole-environment snapshot is a SEPARATE word (env-all),
-			// not a 0-arg overload of this one. design/CLI-PROGRAMS.0.md §3
-			// sketched the overload; it does not survive contact with the
-			// dot-chain lowering. `Mod.word arg` lowers to
-			// `( Mod dot word ) arg`, and the close paren is a forward-scan
-			// boundary, so no arg-taking signature can match INSIDE the
-			// group. A single-signature word escapes it (nothing matches,
-			// the value stays data, the group closes, and it re-dispatches
-			// outside where the argument is visible) — but a 0-arg overload
-			// always matches inside, permanently shadowing its arg-taking
-			// siblings, so `IO.env "HOME"` would answer with the whole
-			// environment. Two words sidestep the engine wrinkle entirely;
-			// see NUR035.
+			// The whole-environment snapshot is a SEPARATE word (env-all)
+			// rather than the 0-arg overload design/CLI-PROGRAMS.0.md §3
+			// sketched. The overload was originally impossible — a 0-arg
+			// signature won unconditionally on a module export and made the
+			// arg-taking ones unreachable (NUR035, since fixed in the engine:
+			// a paren expression resolving to a function word no longer
+			// induces a call, so a mixed-arity export is dispatchable —
+			// lang/spec/fn-value.tsv §4 pins it). The two words stay because
+			// the split is better in its own right: each arity is a named,
+			// separately describable word rather than one name whose meaning
+			// flips with the argument count, and `env-all`'s cost — enumerating
+			// the whole environment — is visible at the call site. §3's shape
+			// is available again if that judgement is ever revisited.
 			Name: "env",
 			Signatures: []Signature{{
 				Args:    []*Type{TString},
@@ -261,9 +261,12 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 			// line with no trailing newline IS a line — dropping it would lose
 			// data from every file an editor left unterminated.
 			//
-			// Two signatures, no 0-arg overload: a 0-arg convenience form
-			// meaning "stdin" would win unconditionally on a module export and
-			// make BOTH of these unreachable, silently (NUR035).
+			// Two signatures, no 0-arg convenience form meaning "stdin": the
+			// stream is always named, so a filter loop reads the same whether
+			// its input is stdin or a file, and switching between them is one
+			// token. (Such a form was also unreachable when this shipped —
+			// a 0-arg signature won unconditionally on a module export,
+			// NUR035, since fixed in the engine.)
 			Name: "read-line",
 			Signatures: []Signature{
 				{

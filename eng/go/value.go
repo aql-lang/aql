@@ -1289,7 +1289,15 @@ type Value struct {
 	// drain, the engine raises uncalled_function at the original call
 	// site — the same bug check mode diagnoses under that name.
 	FailedDispatch bool
-	Carrier        bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
+	// ReachGroup marks an OPEN-PAREN marker that the REACH LOWERING emitted
+	// rather than the user writing — the synthetic group `a.b` expands to
+	// (expandReach → lowerReach). A function value alone inside such a group
+	// must not dispatch there; see execFnDefLiteral. Only the open marker
+	// carries it, since that is the side the dispatch test looks at, and
+	// IsOpenParen keys on Parent alone so every other marker consumer is
+	// unaffected.
+	ReachGroup bool
+	Carrier    bool // static-typecheck carrier (type-only, Data stripped of concrete payload)
 	// Dynamic marks a carrier as a bounded gradual value (Elixir-style
 	// dynamic(T) — design/dynamic-modality-report.10.md). Implies Carrier.
 	// Its Parent/Data is a BOUND, not a proven type: at a signature

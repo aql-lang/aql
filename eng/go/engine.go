@@ -4601,7 +4601,14 @@ func isEvalReach(v Value) bool {
 // lowered get-chain wrapped in paren markers, run in place exactly like a
 // ParenExpr (Stage-1 lowering).
 func expandReach(info ReachInfo) []Value {
-	return expandParenExpr(lowerReach(info))
+	span := expandParenExpr(lowerReach(info))
+	// Tag the group as reach-lowered so a function value it resolves to does
+	// not dispatch inside it (execFnDefLiteral). The group exists to scope
+	// the get-chain and to let a `/` modifier apply to the whole path; it is
+	// not a call site, and treating it as one is what made `Mod.word arg`
+	// match against an empty argument window (NUR035).
+	span[0].ReachGroup = true
+	return span
 }
 
 // ApplyReach evaluates a Reach against a concrete receiver value — the lens
@@ -5053,6 +5060,44 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	val := e.tape.At(valIdx)
 	fnDef, ok := val.Data.(FnDefInfo)
 	if !ok {
+		e.pointer++
+		return nil
+	}
+
+	// A PAREN EXPRESSION RESOLVING TO A FUNCTION WORD NEVER INDUCES A CALL.
+	//
+	// The group's job is to produce the value; the call belongs to whatever
+	// encloses the group. This matters because `Mod.word arg` lowers to
+	// `( Mod dot word ) arg` (lowerReach → expandReach), so a module word's
+	// resolved fn value always lands alone inside a synthetic group with its
+	// argument on the far side of the close paren — a forward-scan boundary —
+	// and the open paren is a stack barrier hiding a prefix operand the other
+	// way. Dispatching here matched against an argument window that is empty
+	// by construction: a single-signature word came out unscathed (nothing
+	// matched, so it stayed data and escaped), but a word with a 0-arg
+	// overload matched THAT, silently, and its arg-taking signatures became
+	// unreachable — `IO.env "HOME"` answering with the whole environment
+	// (NUR035).
+	//
+	// Deferring costs nothing and needs no lookahead: stepCloseParen removes
+	// both markers and sets the pointer back to the group's position, so the
+	// value is re-stepped by the main loop in the enclosing context, where
+	// its arguments ARE visible, and dispatches there under the ordinary
+	// rules. Nested groups simply peel one layer per step.
+	//
+	// The test is "alone inside a REACH-LOWERED group", and it is O(1) — the
+	// tokens either side are the group's own markers, and the marker itself
+	// says who wrote it. Both halves are load-bearing. A group the USER wrote
+	// is their call and dispatches here as it always has (`(g)` means "call
+	// g"); only the synthetic group a dot-chain expands to is a pure
+	// resolution step with nothing to call yet, which is what the tag
+	// (expandReach) distinguishes with no lookahead. And a group with other
+	// content (`(Mod.f a b)`) is a real call whatever emitted it. Peeling
+	// happens exactly once, because collapsing the group discards the marker
+	// along with it.
+	if valIdx > 0 && valIdx+1 < e.tape.Len() &&
+		e.tape.At(valIdx-1).ReachGroup && IsOpenParen(e.tape.At(valIdx-1)) &&
+		IsCloseParen(e.tape.At(valIdx+1)) {
 		e.pointer++
 		return nil
 	}

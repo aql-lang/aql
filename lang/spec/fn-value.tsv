@@ -27,3 +27,21 @@ import module [import "aql:string-util" export "X" {up: (fn [[s:String][String][
 def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f	fn [[a:Integer][Integer][word(a) word(add) 1]]	bare value, no args: stays data
 def m {f: (fn [[a:Integer][Integer][a add 1]])}  m.f 'x'	fn [[a:Integer][Integer][word(a) word(add) 1]] 'x'	type mismatch: no dispatch — the fn stays data, 'x' strands on top
 import "aql:string-util"  import module [export "X" {up: (fn [[s:String][String][StringUtil.upper s]])}]  X.up 'ab'	ERROR:undefined_word	an OUTER import does not leak into the module body's scope
+#
+# §4  a paren expression resolving to a FUNCTION WORD never induces a call
+#     (NUR035). `Mod.word arg` lowers to `( Mod dot word ) arg`, so the
+#     resolved fn value lands alone inside a synthetic group with its
+#     argument on the far side of the close paren — a forward-scan boundary
+#     — and the open paren barring a prefix operand the other way. The group
+#     RESOLVES the word; the call belongs to whatever encloses it. Before
+#     this, dispatch happened inside the group against an argument window
+#     that is empty by construction, so a word with a 0-arg overload matched
+#     THAT and its arg-taking signatures were unreachable — silently, as a
+#     wrong value rather than an error.
+#
+#     A group the USER wrote is unaffected: `(g)` still means "call g".
+#     Only the reach lowering's own group is tagged (expandReach).
+import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  M.w "one"	'one'	forward form reaches the ARG-TAKING signature of a mixed-arity module export
+import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  "one" M.w	'one'	and so does the stack form — the open paren no longer hides the prefix operand
+import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  M.w	'zero'	with no argument the 0-arg signature still answers, one step later
+import module [ def w fn [[] [String] ["zero"]  [x:String] [String] [x]] export "M" {w: w/r} ] end  size (M.w)	4	and a user paren around the bare form still dispatches inside it, so a consumer receives the RESULT
