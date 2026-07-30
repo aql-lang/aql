@@ -1043,8 +1043,65 @@ has to cover module sub-registries, not just container payloads.
    - The paren-grouped map-slot method call must STOP being one, at the
      island entry per the root cause above.
 
-   Only after both does EXPLANATION.md's list become writable, and it will
-   then also need `for` removed and `for-each` added.
+   The second of those is **DONE**: `Engine.Run` no longer pushes the frame
+   for an ISLAND (`Engine.isIsland`, reading the existing `flowUnwind`
+   marker — the two island entry points are its only setters, so one field
+   cannot drift out of step with a second consequence the way two would).
+   The paren-grouped row is out of `wantDiverge`.
+
+   Only after the FIRST does EXPLANATION.md's list become writable, and it
+   will then also need `for` removed and `for-each` added.
+
+#### The inlined-body frame: design, and the hazard that shapes it
+
+The three inlined forms need an emitted pair — call it `OpCtxPush` /
+`OpCtxPop` — because there is no call to wrap. The naive version is a
+one-line VM case each, and it is **wrong in a way that is worse than the
+defect it fixes**: a raw pair leaks a layer whenever control leaves the
+region non-linearly, and a leaked layer sits on the REGISTRY and outlives
+the run, silently rescoping everything after it. The escapes that matter
+are real shapes: a `break`/`continue` out of a `case` arm inside a loop, a
+`RET` from inside an arm, and a trap.
+
+Do NOT hand-roll the balance. The VM already has the exact precedent, for
+exactly this problem — dynamic-scope bindings, which a discarded frame must
+tear down or an `OpBindDynScope` install stays readable in `Defs`:
+
+- `vc.dynBinds` is a slice on the vmContext, not a local;
+- each `vmFrame` records a `dynBase` into it;
+- `vc.unwindDynBinds(base)` truncates;
+- `flowSignal` calls it per discarded frame, alongside `stack =
+  stack[:lp.iterBase]`.
+
+Mirror it: `vc.ctxFrames` (recording the *Registry* each layer was pushed
+on, since `curReg` changes for a module unit), a `ctxBase` on both
+`vmLoop` and `vmFrame`, an `unwindCtxFrames(base)`, and calls at the same
+three points `dynBinds` already unwinds at — plus a truncate-to-entry-depth
+net at `vc.run`'s exit and in `runVMEntry`, so any remaining imbalance is
+bounded to one request instead of corrupting the registry.
+
+Two options were considered and rejected:
+
+- **Emit each arm as a closure UNIT** so the existing `enterBodyUnit`
+  covers it, balanced, with no new opcodes. Rejected: a unit boundary
+  breaks `break`/`continue` out to an enclosing loop — the very thing the
+  island flow-escape translation exists to paper over — so it trades a
+  scoping bug for a flow bug.
+- **Refuse to compile the shape when the region touches `context`.** The
+  interpreter is canonical, so a refusal is *correct* by construction, and
+  refusal is already a shipped strategy (the ungrouped method call above).
+  Rejected on SOUNDNESS: a called fn can touch context, so a syntactic scan
+  misses cases, and the sound version — refuse on any call in the region —
+  fires on nearly every `case` arm. This is the same argument that killed
+  blocker 3's static per-`CompiledFn` frame flag: a flag that under-reports
+  does not cost allocation, it loses the write.
+
+The emission spans still have to be located: the `case` desugar's arm
+fragments, and the inline list auto-evaluation that serves both `def name
+[list]` and `otherwise`'s / a fn's list argument (the `OpMakeList` operand
+region). Cost control matters there — bracketing every list literal would
+pay a frame on a hot path — but the region is narrower than it looks, since
+a fully-constant list bakes to `PUSH_CONST` and never emits operands.
 
 ### Pre-existing defects found while validating the patch
 
