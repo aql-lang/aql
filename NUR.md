@@ -77,6 +77,7 @@ commit.
 | [NUR042](#nur042) | `-policy-dry-run` is documented and does nothing | 2026-07-30 C3 perms scouting |
 | [NUR044](#nur044) | `aql build` skips the static check `aql run` performs | 2026-07-30 C3 perms scouting |
 | [NUR045](#nur045) | Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny | 2026-07-30 C3 perms scouting |
+| [NUR046](#nur046) | `aql fmt` is not idempotent: one pass is not a fixed point | 2026-07-30 C3 utils suite |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -1066,3 +1067,78 @@ at module-export dispatch — or delete the schema and the rule, and say in
 is a real one: the check would run on every module-word call, so its cost
 belongs to the maintainer's judgement, not to a bug fix. What must not
 survive is a profile declaring a denial it does not perform.
+
+---
+
+## NUR046 — `aql fmt` is not idempotent: one pass is not a fixed point {#nur046}
+
+**Status:** Pending · **Recorded:** 2026-07-30 · **Surfaced by:** the C3 utils
+suite (`utils/`)
+
+**Rule:** a formatter is idempotent. `fmt(fmt(x)) == fmt(x)`, so "formatted"
+is a property a file either has or does not, a `make fmt` target converges,
+and a formatting check can be a single-pass diff. `make fmt-docs` and
+`kg/Makefile`'s restored `fmt` target both rely on this.
+
+**Divergence:** on a `def name fn [[params] [Returns] [body]]` whose header
+does not fit the width, the FIRST pass and the SECOND pass produce different
+layouts. It converges at pass 2 — passes 2..n are identical — so the fixed
+point exists; one application simply does not reach it.
+
+```aql
+# m.aql, as hand-written:
+def cat-format fn [[line:String k:Integer numbered:Boolean ends:Boolean] [String] [
+  def body (if ends [(join "" [line "$"])] [line])
+  join "" [body "\n"]
+]]
+```
+
+```
+$ aql fmt m.aql && cat m.aql          # pass 1
+def cat-format fn
+  [[line:String k:Integer numbered:Boolean ends:Boolean] [String] [
+  def body (if ends [(join "" [line "$"])] [line]) join "" [body "\n"]
+]]
+
+$ aql fmt m.aql && cat m.aql          # pass 2 — different, and stable
+def cat-format fn
+[[line:String k:Integer numbered:Boolean ends:Boolean] [String]
+      [def body (if ends [(join "" [line "$"])] [line]) join ""
+          [body "\n"]
+      ]
+  ]
+```
+
+**Evidence:** the repro above. Across `utils/*.aql` the same thing happens to
+all six programs (the five `tests/*.aql` suites are already at their fixed
+point after one pass, which is why the divergence is easy to miss); program
+output is unchanged in every case, and every one still passes `aql check`.
+
+**Why it matters:** three ways.
+
+1. A `fmt` target inside an `all:` target never converges in one run, so
+   `make all` always leaves a dirty tree — which is why `utils/Makefile`
+   deliberately keeps `fmt` OUT of `all` and says so, the same posture
+   `kg/Makefile` held while NUR028 was open.
+2. Pass 1 joins two statements onto one line (`… [line]) join "" [body …`)
+   and pass 2 re-indents a statement as though it continued the previous
+   one. Both are legal — AQL is whitespace-insensitive — but a reader
+   cannot tell statement boundaries by eye any more, which is most of what
+   a formatter is for.
+3. It is a fixed-point bug in the same component as the resolved
+   superlinear blow-up, in a shape that blow-up's gate would not have
+   caught: that gate compared old-binary and new-binary output on the
+   *repo's already-canonical* corpus, where pass 1 is already the fixed
+   point. Non-canonical input is the untested axis.
+
+**Documentation status:** nothing claims idempotence in so many words, but
+`design/…` notes on 0.9 and `kg/README.md` both treat a single `fmt` run as
+producing canonical form, and `make fmt-docs` rewrites doc blocks in one
+pass.
+
+**Proposed verdict:** fix. The convergence at pass 2 suggests the first pass
+measures widths against a pre-wrap layout decision it then invalidates — the
+same family as the memoisation 0.9 landed, one layer up. A regression guard
+belongs with the fix: format every `.aql` in the repo TWICE and require the
+second pass to be a no-op, with at least one deliberately non-canonical
+fixture, since the existing corpus cannot detect this.

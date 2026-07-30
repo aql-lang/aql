@@ -1,0 +1,454 @@
+# ============================================================================
+# grep — unit suite (aql:test), shaped like lang/go/modules/cli_test.aql and
+# tests/cat_test.aql.
+#
+#   aql test tests/grep_test.aql          (run from utils/)
+#
+# `aql test` cannot inject an argument vector and an IO.exit ends the suite
+# file, so grep.aql keeps every decision in pure fns and exports them, and its
+# one IO.exit sits behind the standalone guard at the bottom of that file.
+# This suite therefore covers three tiers:
+#
+#   1. the pure fns       — flag reading, the (?i) rewrite, the regex decision
+#                           (grep-check / grep-select are pure: MiniLang.lang_re
+#                           reads no IO), the two output formats, the operand
+#                           split, the options bundle, the exit-code tri-state
+#   2. the argv contract  — Cli.parse / Cli.dispatch against grep's own spec
+#   3. the program        — Grep.main takes argv as a PARAMETER and returns the
+#                           exit code instead of exiting, and Grep.one is driven
+#                           over real files, so the streaming loop and the
+#                           0/1/2 exit-code contract are both pinned end to end
+#
+# Tier 3 writes grep's normal output to stdout (a stream cannot be redirected
+# in-process), so the fixtures' matching lines appear in the run. That is the
+# program working; the assertions are on the returned values.
+# ============================================================================
+
+import "aql:test"
+import "aql:cli"
+import "aql:io"
+import "aql:string-util"
+import "./grep.aql"
+
+# Scratch files under the OS temp dir — never inside the repository.
+def fixture "/tmp/aql-utils-grep-test-fixture.txt"
+def other   "/tmp/aql-utils-grep-test-other.txt"
+def missing "/tmp/aql-utils-grep-test-no-such-file.txt"
+
+# The fixture is four lines: one lowercase match, one uppercase match, two
+# misses. That makes -i, -v and -c all observable on the same file.
+def fixture-text "needle one\nhaystack\nNEEDLE two\nhaystack\n"
+
+# ----------------------------------------------------------------------------
+# 1. Pure fns.
+# ----------------------------------------------------------------------------
+Test.describe "grep-bool" [
+  Test.test "a true flag reads true" [
+    Assert.equal true (Grep.bool {count:true} "count")
+  ]
+  Test.test "a false flag reads false" [
+    Assert.equal false (Grep.bool {count:false} "count")
+  ]
+  Test.test "an absent flag reads false — it does not raise" [
+    Assert.equal false (Grep.bool {} "count")
+  ]
+  Test.test "a non-Boolean flag value reads false" [
+    Assert.equal false (Grep.bool {count:"yes"} "count")
+  ]
+]
+
+Test.describe "grep-num" [
+  Test.test "a counter is read back" [ Assert.equal 3 (Grep.num {n:3} "n") ]
+  Test.test "a missing counter reads 0" [ Assert.equal 0 (Grep.num {} "n") ]
+  Test.test "a non-Integer counter reads 0" [ Assert.equal 0 (Grep.num {n:"x"} "n") ]
+  Test.test "a flex state map satisfies the same reader" [
+    Assert.equal 0 (Grep.num (flex {n:0 c:0}) "c")
+  ]
+]
+
+Test.describe "grep-pattern" [
+  Test.test "without -i the pattern is passed through untouched" [
+    Assert.equal "ne+dle" (Grep.pattern "ne+dle" false)
+  ]
+  Test.test "-i is expressed as RE2's inline (?i) flag" [
+    Assert.equal "(?i)ne+dle" (Grep.pattern "ne+dle" true)
+  ]
+  Test.test "the rewrite is a prefix, so an anchor still anchors" [
+    Assert.equal "(?i)^a" (Grep.pattern "^a" true)
+  ]
+  Test.test "an empty pattern survives the rewrite" [
+    Assert.equal "(?i)" (Grep.pattern "" true)
+  ]
+]
+
+Test.describe "grep-check" [
+  Test.test "a good pattern compiles to the empty message" [
+    Assert.equal "" (Grep.check "[a-z]+")
+  ]
+  Test.test "the empty pattern is legal (it matches everything)" [
+    Assert.equal "" (Grep.check "")
+  ]
+  Test.test "the (?i) rewrite is itself a legal pattern" [
+    Assert.equal "" (Grep.check (Grep.pattern "a" true))
+  ]
+  Test.test "a malformed pattern yields a non-empty message, not a raise" [
+    Assert.equal true ((size (Grep.check "[")) gt 0)
+  ]
+  Test.test "and the message names the offending regexp" [
+    Assert.equal true ((StringUtil.indexof "missing closing ]" (Grep.check "[")) gte 0)
+  ]
+  Test.test "an unmatched ( is caught too" [
+    Assert.equal true ((size (Grep.check "(abc")) gt 0)
+  ]
+  Test.test "a bad repeat operator is caught too" [
+    Assert.equal true ((size (Grep.check "a{2,1}")) gt 0)
+  ]
+]
+
+Test.describe "grep-select" [
+  Test.test "a substring match selects the line" [
+    Assert.equal true (Grep.select "haystack needle" "needle" false)
+  ]
+  Test.test "a miss does not" [
+    Assert.equal false (Grep.select "haystack" "needle" false)
+  ]
+  Test.test "the pattern is a regex, not a literal" [
+    Assert.equal true (Grep.select "aaab" "a+b" false)
+  ]
+  Test.test "anchors work" [ Assert.equal true (Grep.select "abc" "^a" false) ]
+  Test.test "and anchor a miss" [ Assert.equal false (Grep.select "xabc" "^a" false) ]
+  Test.test "matching is case-sensitive by default" [
+    Assert.equal false (Grep.select "NEEDLE" "needle" false)
+  ]
+  Test.test "and case-insensitive through grep-pattern's (?i)" [
+    Assert.equal true (Grep.select "NEEDLE" (Grep.pattern "needle" true) false)
+  ]
+  Test.test "-i folds inside a character class too" [
+    Assert.equal true (Grep.select "ABC" (Grep.pattern "[a-c]+" true) false)
+  ]
+  Test.test "-v inverts a match into a rejection" [
+    Assert.equal false (Grep.select "haystack needle" "needle" true)
+  ]
+  Test.test "-v inverts a miss into a selection" [
+    Assert.equal true (Grep.select "haystack" "needle" true)
+  ]
+  Test.test "the empty pattern selects every line" [
+    Assert.equal true (Grep.select "anything" "" false)
+  ]
+  Test.test "the empty pattern selects the empty line too" [
+    Assert.equal true (Grep.select "" "" false)
+  ]
+  Test.test "so -v with the empty pattern selects nothing" [
+    Assert.equal false (Grep.select "anything" "" true)
+  ]
+  Test.test "multi-byte runes match" [
+    Assert.equal true (Grep.select "日本語 🎉" "本語" false)
+  ]
+  Test.test "and a unicode class matches" [
+    Assert.equal true (Grep.select "日本語" "\\p{Han}+" false)
+  ]
+]
+
+Test.describe "grep-label" [
+  Test.test "- is spelled the way GNU grep spells it" [
+    Assert.equal "(standard input)" (Grep.label "-")
+  ]
+  Test.test "a file name is its own label" [ Assert.equal "f.txt" (Grep.label "f.txt") ]
+  Test.test "a name that merely starts with - is left alone" [
+    Assert.equal "-n" (Grep.label "-n")
+  ]
+]
+
+Test.describe "grep-format" [
+  Test.test "a plain selected line is copied and terminated" [
+    Assert.equal "hello\n" (Grep.format "hello" 1 "f" false false)
+  ]
+  Test.test "-n prefixes the 1-based line number and a colon" [
+    Assert.equal "1:hello\n" (Grep.format "hello" 1 "f" true false)
+  ]
+  Test.test "the name prefix appears when more than one input is named" [
+    Assert.equal "f:hello\n" (Grep.format "hello" 1 "f" false true)
+  ]
+  Test.test "both prefixes compose, name outermost" [
+    Assert.equal "f:42:hello\n" (Grep.format "hello" 42 "f" true true)
+  ]
+  Test.test "an empty selected line is still a line" [
+    Assert.equal "\n" (Grep.format "" 7 "f" false false)
+  ]
+  Test.test "an empty line under -n still gets its number" [
+    Assert.equal "7:\n" (Grep.format "" 7 "f" true false)
+  ]
+  Test.test "the line is copied verbatim, multi-byte runes included" [
+    Assert.equal "日本語 🎉\n" (Grep.format "日本語 🎉" 1 "f" false false)
+  ]
+  Test.test "the stdin label rides in the name column" [
+    Assert.equal "(standard input):2:x\n" (Grep.format "x" 2 (Grep.label "-") true true)
+  ]
+]
+
+Test.describe "grep-count-line" [
+  Test.test "-c alone prints the bare count" [
+    Assert.equal "3\n" (Grep.countLine "f" 3 false)
+  ]
+  Test.test "-c over several inputs prefixes the name" [
+    Assert.equal "f:3\n" (Grep.countLine "f" 3 true)
+  ]
+  Test.test "a zero count is still reported — silence would be ambiguous" [
+    Assert.equal "f:0\n" (Grep.countLine "f" 0 true)
+  ]
+]
+
+Test.describe "grep-files" [
+  Test.test "args[0] is the PATTERN, so a lone operand means standard input" [
+    Assert.equal ["-"] (Grep.files ["pat"])
+  ]
+  Test.test "the operands after the pattern are the inputs, in order" [
+    Assert.equal ["a" "b"] (Grep.files ["pat" "a" "b"])
+  ]
+  Test.test "an explicit - is left alone" [
+    Assert.equal ["a" "-" "b"] (Grep.files ["pat" "a" "-" "b"])
+  ]
+  Test.test "an empty argv degrades to standard input rather than raising" [
+    Assert.equal ["-"] (Grep.files [])
+  ]
+  Test.test "a repeated file name is kept twice — grep searches it twice" [
+    Assert.equal ["a" "a"] (Grep.files ["pat" "a" "a"])
+  ]
+]
+
+Test.describe "grep-opts" [
+  Test.test "the bundle carries the pattern and all four flags" [
+    Assert.equal {pat:"p" inv:false cnt:true num:false pfx:true}
+                 (Grep.opts "p" {count:true} true)
+  ]
+  Test.test "absent flags default to off, and the prefix bit is the caller's" [
+    Assert.equal {pat:"p" inv:false cnt:false num:false pfx:false}
+                 (Grep.opts "p" {} false)
+  ]
+  Test.test "every flag on at once" [
+    Assert.equal {pat:"(?i)p" inv:true cnt:true num:true pfx:true}
+                 (Grep.opts "(?i)p" {invert-match:true count:true line-number:true} true)
+  ]
+]
+
+Test.describe "grep-code" [
+  Test.test "a match with no error is 0" [ Assert.equal 0 (Grep.code true false) ]
+  Test.test "no match and no error is 1" [ Assert.equal 1 (Grep.code false false) ]
+  Test.test "an error with no match is 2" [ Assert.equal 2 (Grep.code false true) ]
+  Test.test "an error OUTRANKS a match — this is the GNU rule" [
+    Assert.equal 2 (Grep.code true true)
+  ]
+]
+
+Test.describe "grep-next-chunk" [
+  Test.test "the chunk doubles while it is under the ceiling" [
+    Assert.equal 128 (Grep.nextChunk 64)
+  ]
+  Test.test "the last doubling lands exactly on the ceiling" [
+    Assert.equal 8192 (Grep.nextChunk 4096)
+  ]
+  Test.test "the ceiling is a fixed point, so the recursion stays shallow" [
+    Assert.equal 8192 (Grep.nextChunk 8192)
+  ]
+  Test.test "an over-ceiling chunk is clamped, never grown" [
+    Assert.equal 8192 (Grep.nextChunk 100000)
+  ]
+]
+
+Test.describe "the diagnostic writers" [
+  Test.test "an input failure yields the -1 sentinel, never a count" [
+    Assert.equal -1 (Grep.fail "f" "boom")      # the text itself goes to stderr
+  ]
+  Test.test "a bad pattern is fatal: code 2" [
+    Assert.equal 2 (Grep.bad "re: bad")         # ditto
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The argv contract — grep's own spec, read by the pure half of aql:cli.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "a lone PATTERN leaves every flag off" [
+    Assert.equal {ok:true
+                  flags:{ignore-case:false invert-match:false count:false line-number:false}
+                  args:["p"] command:none}
+                 (Cli.parse (Grep.spec) ["p"])
+  ]
+  Test.test "-i sets ignore-case and keeps pattern and file in order" [
+    Assert.equal {ok:true
+                  flags:{ignore-case:true invert-match:false count:false line-number:false}
+                  args:["p" "f"] command:none}
+                 (Cli.parse (Grep.spec) ["-i" "p" "f"])
+  ]
+  Test.test "the long spellings work too" [
+    Assert.equal {ignore-case:true invert-match:true count:true line-number:true}
+                 ((Cli.parse (Grep.spec) ["--ignore-case" "--invert-match" "--count" "--line-number" "p"]) dot flags)
+  ]
+  Test.test "-ivcn clusters" [
+    Assert.equal {ignore-case:true invert-match:true count:true line-number:true}
+                 ((Cli.parse (Grep.spec) ["-ivcn" "p"]) dot flags)
+  ]
+  Test.test "a flag after the pattern is still a flag" [
+    Assert.equal {ok:true
+                  flags:{ignore-case:false invert-match:false count:true line-number:false}
+                  args:["p" "f"] command:none}
+                 (Cli.parse (Grep.spec) ["p" "-c" "f"])
+  ]
+  Test.test "--no-count clears the bool flag" [
+    Assert.equal false ((Cli.parse (Grep.spec) ["-c" "--no-count" "p"]) dot flags dot count)
+  ]
+  Test.test "- stays a POSITIONAL (the stdin convention)" [
+    Assert.equal ["p" "-"] ((Cli.parse (Grep.spec) ["p" "-"]) dot args)
+  ]
+  Test.test "-- ends flag processing, so a later -v is the PATTERN" [
+    Assert.equal ["-v" "f"] ((Cli.parse (Grep.spec) ["--" "-v" "f"]) dot args)
+  ]
+  Test.test "an unknown flag is data, not a raise" [
+    Assert.equal false ((Cli.parse (Grep.spec) ["-x" "p"]) dot ok)
+  ]
+  Test.test "and it names the offender" [
+    Assert.equal "unknown flag: -x" ((Cli.parse (Grep.spec) ["-x" "p"]) dot err)
+  ]
+  Test.test "min is 1, so a missing PATTERN is an arity error" [
+    Assert.equal false ((Cli.parse (Grep.spec) []) dot ok)
+  ]
+  Test.test "and the arity error says so" [
+    Assert.equal "expected at least 1 operand, got 0" ((Cli.parse (Grep.spec) []) dot err)
+  ]
+  Test.test "--help dispatches to the help action" [
+    Assert.equal "help" ((Cli.dispatch (Grep.spec) ["--help"]) dot action)
+  ]
+  Test.test "--help wins over the missing-PATTERN arity error" [
+    Assert.equal 0 ((Cli.dispatch (Grep.spec) ["--help"]) dot code)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "grep 0.1.0\n" ((Cli.dispatch (Grep.spec) ["--version"]) dot out)
+  ]
+  Test.test "a usage error dispatches to code 2" [
+    Assert.equal 2 ((Cli.dispatch (Grep.spec) ["-x" "p"]) dot code)
+  ]
+  Test.test "a usage error writes nothing to stdout" [
+    Assert.equal "" ((Cli.dispatch (Grep.spec) ["-x" "p"]) dot out)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The program itself.
+# ----------------------------------------------------------------------------
+# A File handle cannot cross the module boundary — a handle opened HERE and
+# handed to one of grep's fns fails "call to 'read-line' matched no signature",
+# because the module's sub-registry mints its own File type. So the streaming
+# loop is driven through Grep.one, which opens the file on the module's own
+# side and returns the number of SELECTED lines (or -1 for a failed input).
+Test.describe "streaming" [
+  Test.test "one operand is drained to EOF and its matches counted" [
+    (IO.write (make Pathon fixture) fixture-text) drop
+    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {} false))
+  ]
+  Test.test "-i widens the same file from one match to two" [
+    Assert.equal 2 (Grep.one fixture (Grep.opts (Grep.pattern "needle" true) {} false))
+  ]
+  Test.test "-v selects the complement — 4 lines, 1 match, 3 selected" [
+    Assert.equal 3 (Grep.one fixture (Grep.opts "needle" {invert-match:true} false))
+  ]
+  Test.test "a pattern that matches nothing selects nothing" [
+    Assert.equal 0 (Grep.one fixture (Grep.opts "zzz" {} false))
+  ]
+  Test.test "-c changes what is PRINTED, never what is counted" [
+    Assert.equal 1 (Grep.one fixture (Grep.opts "needle" {count:true} false))
+  ]
+  Test.test "an empty input selects nothing and does not fail" [
+    def empty "/tmp/aql-utils-grep-test-empty.txt"
+    (IO.write (make Pathon empty) "") drop
+    def c (Grep.one empty (Grep.opts "" {} false))
+    (IO.remove (make Pathon empty)) drop
+    Assert.equal 0 c
+  ]
+  Test.test "a file longer than the first chunk (64) crosses the ramp intact" [
+    def big "/tmp/aql-utils-grep-test-ramp.txt"
+    (IO.write (make Pathon big) (StringUtil.repeat 65 "x\n")) drop
+    def c (Grep.one big (Grep.opts "x" {} false))
+    (IO.remove (make Pathon big)) drop
+    Assert.equal 65 c
+  ]
+  Test.test "a line with no trailing newline is still examined" [
+    def nonl "/tmp/aql-utils-grep-test-nonl.txt"
+    (IO.write (make Pathon nonl) "one\ntwo") drop
+    def c (Grep.one nonl (Grep.opts "o" {} false))
+    (IO.remove (make Pathon nonl)) drop
+    Assert.equal 2 c
+  ]
+  Test.test "a missing input reports the -1 sentinel rather than raising" [
+    Assert.equal -1 (Grep.one missing (Grep.opts "needle" {} false))
+  ]
+  Test.test "a directory reports the sentinel too" [
+    Assert.equal -1 (Grep.one "/tmp" (Grep.opts "needle" {} false))
+  ]
+  Test.test "line numbering restarts at 1 for each input, so the count does too" [
+    (IO.write (make Pathon other) "needle three\n") drop
+    Assert.equal [1 1] [(Grep.one fixture (Grep.opts "needle" {line-number:true} true))
+                        (Grep.one other (Grep.opts "needle" {line-number:true} true))]
+  ]
+]
+
+Test.describe "exit codes" [
+  Test.test "a match exits 0" [
+    (IO.write (make Pathon fixture) fixture-text) drop
+    Assert.equal 0 (Grep.main ["needle" fixture])
+  ]
+  Test.test "no match exits 1" [ Assert.equal 1 (Grep.main ["zzz" fixture]) ]
+  Test.test "-i can turn a 1 into a 0" [
+    Assert.equal 0 (Grep.main ["-i" "NEEDLE" fixture])
+  ]
+  Test.test "-v can turn a 1 into a 0" [
+    Assert.equal 0 (Grep.main ["-v" "zzz" fixture])
+  ]
+  Test.test "-v over a pattern that matches every line exits 1" [
+    Assert.equal 1 (Grep.main ["-v" "" fixture])
+  ]
+  Test.test "-c exits on whether anything was selected, not on the printing" [
+    Assert.equal 0 (Grep.main ["-c" "needle" fixture])
+  ]
+  Test.test "-c with no match still exits 1" [
+    Assert.equal 1 (Grep.main ["-c" "zzz" fixture])
+  ]
+  Test.test "-n does not change the exit code" [
+    Assert.equal 0 (Grep.main ["-n" "needle" fixture])
+  ]
+  Test.test "a match in the SECOND of two files still exits 0" [
+    (IO.write (make Pathon other) "needle three\n") drop
+    Assert.equal 0 (Grep.main ["three" fixture other])
+  ]
+  Test.test "no match in either of two files exits 1" [
+    Assert.equal 1 (Grep.main ["zzz" fixture other])
+  ]
+  Test.test "a missing file exits 2" [ Assert.equal 2 (Grep.main ["needle" missing]) ]
+  Test.test "a directory exits 2 rather than raising" [
+    Assert.equal 2 (Grep.main ["needle" "/tmp"])
+  ]
+  Test.test "an error OUTRANKS a match: good file + missing file is 2, not 0" [
+    Assert.equal 2 (Grep.main ["needle" fixture missing])
+  ]
+  Test.test "the bad operand first: the good one is still searched, code is 2" [
+    Assert.equal 2 (Grep.main ["needle" missing fixture])
+  ]
+  Test.test "a malformed pattern exits 2 before any input is opened" [
+    Assert.equal 2 (Grep.main ["[" fixture])
+  ]
+  Test.test "a malformed pattern is fatal even with no file operand" [
+    Assert.equal 2 (Grep.main ["(abc"])
+  ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Grep.main ["--help"]) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Grep.main ["--version"]) ]
+  Test.test "no PATTERN at all is a usage error: 2" [ Assert.equal 2 (Grep.main []) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Grep.main ["-x" "p"]) ]
+  Test.test "-- makes a flag-looking token the PATTERN, so 1 not 2" [
+    Assert.equal 1 (Grep.main ["--" "-x" fixture])
+  ]
+  Test.test "a regex metacharacter really is a metacharacter" [
+    Assert.equal 0 (Grep.main ["^need.e" fixture])
+  ]
+  Test.test "and an anchored miss is still a clean 1" [
+    Assert.equal 1 (Grep.main ["^haystack$xyz" fixture])
+  ]
+]

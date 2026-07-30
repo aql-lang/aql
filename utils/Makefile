@@ -17,7 +17,7 @@ PROGS := $(patsubst %.aql,%,$(wildcard *.aql))
 
 .PHONY: all build check fmt test clean
 
-all: fmt check test
+all: check test
 
 # Ensure the aql binary exists.
 build-aql:
@@ -33,8 +33,20 @@ check:
 	  $(AQL) check $$f || exit 1; \
 	done
 
-# Canonical formatting, in place. Part of `all` so the sources cannot drift:
-# the formatter is idempotent, so once canonical this leaves the tree clean.
+# Canonical formatting, in place — available, but deliberately NOT part of
+# `all`, and the sources here are hand-formatted.
+#
+# NUR046: `aql fmt` is not idempotent. On a `def name fn [[params] [Returns]
+# [body]]` whose header does not fit the width — which is most of this
+# directory — pass 1 and pass 2 produce different layouts (it converges at
+# pass 2). A `fmt` inside `all` would therefore leave a dirty tree on every
+# single run, and the intermediate layout runs statements together on one
+# line. This is the same posture kg/Makefile held while its own formatter
+# blocker was open: keep the target, keep it out of `all`, say why.
+#
+# Formatting these files does NOT change what they do — all 539 cases pass
+# either way, verified — so this is about the tree staying clean and the
+# sources staying readable, not about correctness.
 fmt:
 	@for f in *.aql tests/*.aql; do \
 	  $(AQL) fmt $$f || exit 1; \
