@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bufio"
 	"strings"
 	"testing"
 )
@@ -110,5 +111,27 @@ func TestStdinHolderPathSharesItsBuffer(t *testing.T) {
 	if string(rest) != "second\nthird\n" {
 		t.Errorf("the drain returned %q, want the REST of the stream — the line "+
 			"read and the drain must share one buffer", rest)
+	}
+}
+
+// Registry.Input is a public io.Reader field, so a host may assign a reader
+// that is ALREADY buffered. The fallback recognises that and reuses it rather
+// than wrapping a second bufio.Reader around it — double buffering would put
+// bytes in an intermediate layer that the next read never looks at, which is
+// the same class of bug as the un-shared buffer this whole path exists to
+// avoid.
+func TestStdinFallbackReusesAnAlreadyBufferedInput(t *testing.T) {
+	r := withoutHolder(t, "")
+	inner := bufio.NewReader(strings.NewReader("buffered\nsecond\n"))
+	r.Input = inner
+
+	if got := lineReaderForStdin(r); got != inner {
+		t.Fatalf("lineReaderForStdin wrapped an already-buffered reader (%p, want %p) "+
+			"— the second layer would hold bytes the first never sees", got, inner)
+	}
+
+	line, ok, err := stdinLineSource{r}.ReadLine()
+	if err != nil || !ok || line != "buffered" {
+		t.Errorf("ReadLine over a pre-buffered Input = %q ok=%v err=%v", line, ok, err)
 	}
 }
