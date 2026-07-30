@@ -1,9 +1,8 @@
 package native
 
 import (
+	"errors"
 	"testing"
-
-	"github.com/aql-lang/aql/lang/go/policy"
 )
 
 // `spawn` is gated by the `process` capability scope (PROCESSES.0.md §7):
@@ -29,12 +28,14 @@ func TestSpawnPolicyDeniedBySandbox(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected sandbox to deny spawn")
 	}
-	d, ok := err.(*policy.Denied)
-	if !ok {
-		t.Fatalf("expected *policy.Denied, got %T (%v)", err, err)
+	// Coded by the gate, so `do [spawn ...] error [dot code]` can dispatch —
+	// see policy_error.go. The raw *policy.Denied no longer escapes.
+	var ae *AqlError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
 	}
-	if d.Code != policy.CodeCapabilityNotInstalled {
-		t.Errorf("Code = %q, want %q", d.Code, policy.CodeCapabilityNotInstalled)
+	if ae.Code != "capability_not_installed" {
+		t.Errorf("Code = %q, want capability_not_installed", ae.Code)
 	}
 }
 

@@ -14,17 +14,23 @@ const (
 	CapFileOps        = "engine.fileops"         // active capabilities.FileOps
 	CapMemFileOps     = "engine.fileops.mem"     // lazily created in-memory FileOps
 	CapOverlayFileOps = "engine.fileops.overlay" // lazily created mem-over-host overlay
-	CapFormats        = "engine.formats"         // map[string]Format read/write registry
-	CapExtensions     = "engine.extensions"      // map[string]string file-ext→format-name
-	CapSQLite         = "engine.sqlite"          // *SQLiteStore
-	CapPolicy         = "engine.policy"          // policy.Policy enforcing permissions
-	CapClock          = "engine.clock"           // capabilities.Clock (the time source)
-	CapLogSinks       = "engine.logsinks"        // *LogSinkRegistry (aql:log fan-out sinks)
-	CapDebugOps       = "engine.debugops"        // capabilities.DebugOps (interactive stepping)
-	CapScriptArgs     = "engine.scriptargs"      // []string script positional arguments (IO.args)
-	CapHTTPOps        = "engine.httpops"         // capabilities.HTTPOps (aql:net fetch transport)
-	CapClientIdents   = "engine.clientidents"    // map[string]capabilities.ClientIdentity (mTLS)
-	CapHTTPTransports = "engine.httptransports"  // map[TLSProfile]http.RoundTripper (per-registry cache)
+	// CapModelledFileOps holds the overlay that MODELS filesystem effects for
+	// a registry running with eng.CheckState.ModelEffects — a module body
+	// executed during `aql check`. Distinct from CapOverlayFileOps so a body
+	// that also opts into `__sys.fs overlay` gets its own layer rather than
+	// silently sharing the modelling one.
+	CapModelledFileOps = "engine.fileops.modelled"
+	CapFormats         = "engine.formats"        // map[string]Format read/write registry
+	CapExtensions      = "engine.extensions"     // map[string]string file-ext→format-name
+	CapSQLite          = "engine.sqlite"         // *SQLiteStore
+	CapPolicy          = "engine.policy"         // policy.Policy enforcing permissions
+	CapClock           = "engine.clock"          // capabilities.Clock (the time source)
+	CapLogSinks        = "engine.logsinks"       // *LogSinkRegistry (aql:log fan-out sinks)
+	CapDebugOps        = "engine.debugops"       // capabilities.DebugOps (interactive stepping)
+	CapScriptArgs      = "engine.scriptargs"     // []string script positional arguments (IO.args)
+	CapHTTPOps         = "engine.httpops"        // capabilities.HTTPOps (aql:net fetch transport)
+	CapClientIdents    = "engine.clientidents"   // map[string]capabilities.ClientIdentity (mTLS)
+	CapHTTPTransports  = "engine.httptransports" // map[TLSProfile]http.RoundTripper (per-registry cache)
 )
 
 // EffectiveHTTPOps returns the HTTP transport capability for the current
@@ -311,7 +317,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 	}
 	fsStore := sysFsStore(r)
 	if fsStore == nil {
-		return HostFileOps(r)
+		return hostOrModelled(r)
 	}
 	if fsFlag(fsStore, "mem") {
 		if mem, _, _ := eng.Cap[capabilities.FileOps](r, CapMemFileOps); mem != nil {
@@ -329,7 +335,51 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 		_ = r.Capabilities.Set(CapOverlayFileOps, ov)
 		return ov
 	}
-	return HostFileOps(r)
+	return hostOrModelled(r)
+}
+
+// hostOrModelled returns the host FileOps — or, when this registry MODELS
+// effects (eng.CheckState.ModelEffects: a module body running under
+// `aql check`), a mem-over-host overlay so the body's filesystem mutations
+// are contained and discarded while its reads still resolve against the real
+// filesystem.
+//
+// The overlay is what makes the substitution safe rather than merely
+// suppressive. A write-then-read-back body still sees its own bytes, a
+// remove still hides the file from the rest of the body, and a read of a
+// file the body never touched falls through to the real one — so a module
+// that loads today cannot start failing under check. A blanket refusal
+// cannot promise any of that, which is why "deny-all around the check-pass
+// body" was rejected: denial raises, and the raise aborts the import and
+// loses the exports check needs.
+//
+// The upper's Cwd is seeded from the host's own resolution of ".", because
+// the overlay uses Upper.ResolvePath as its path authority and a fresh
+// MemFileOps resolves relative paths against "" — which collapses the
+// upward directory walk in resolveBareModule (filepath.Dir(".") == ".") and
+// would break a bare `import "foo"` inside a modelled body.
+//
+// Cached per registry so writes persist across calls within one body. The
+// lower is captured at first use, matching the shipped `__sys.fs overlay`
+// mode; a body that re-points fs mode mid-run gets the flag branches above,
+// which take precedence.
+func hostOrModelled(r *Registry) capabilities.FileOps {
+	host := HostFileOps(r)
+	if !r.Check.ModelsEffects() {
+		return host
+	}
+	if ov, _, _ := eng.Cap[capabilities.FileOps](r, CapModelledFileOps); ov != nil {
+		return ov
+	}
+	mem := capabilities.NewMem()
+	// A resolution failure is not worth a branch: the zero Cwd is exactly the
+	// state a fresh MemFileOps ships with, and a FileOps that cannot resolve
+	// "." could not have supported a bare import anyway.
+	cwd, _ := host.ResolvePath(".")
+	mem.Cwd = cwd
+	ov := capabilities.NewOverlay(mem, host)
+	_ = r.Capabilities.Set(CapModelledFileOps, ov)
+	return ov
 }
 
 // sysFsStore walks the active context store to __sys.fs, or nil when any

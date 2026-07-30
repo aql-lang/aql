@@ -357,11 +357,21 @@ func (dt *DefTable) Restore(snap map[string]int) {
 
 // Clone returns a deep copy of the def table: every name's binding
 // stack is copied into a fresh slice so the clone and the original can
-// be pushed to and popped from independently. DefEntry values are
-// copied shallowly — a bound Body Value and its *Type identity are
-// immutable snapshots, so sharing them across the clone boundary is
-// safe. Used by Registry.ForkConcurrent to give a concurrently-running
-// fork its own binding scope seeded from the parent's current bindings.
+// be pushed to and popped from independently.
+//
+// DefEntry values are copied SHALLOWLY. That is correct for the *Type
+// identity (a lattice node is a shared immutable), and correct for a
+// bound Body only insofar as the binding itself is a snapshot: a `def`
+// on the clone cannot disturb the original. It does NOT make the bound
+// VALUE independent — a FlexMap / FlexList / Store / class-instance
+// Value holds a pointer to shared state, so an in-place mutation
+// through the clone's binding is visible through the original's.
+//
+// For sequential shadowing scopes that is exactly right (the whole
+// point of a mutable container is that everyone holding it sees the
+// writes). For CONCURRENT forks it is not — `await` therefore REFUSES a
+// reachable mutable container at the branch boundary rather than relying
+// on this copy (lang/go/native/native_temporal_await.go).
 func (dt *DefTable) Clone() *DefTable {
 	if dt == nil {
 		return NewDefTable()

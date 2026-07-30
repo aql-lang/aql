@@ -244,7 +244,7 @@ func TestNSCListenerBehaviorEqualFormat(t *testing.T) {
 // ---- policy ----
 
 func TestNSCCheckNetPolicyNilRegistry(t *testing.T) {
-	if err := checkNetPolicy(nil, "listen", "", 1); err != nil {
+	if err := checkNetPolicy(nil, "listen", "listen", "", 1); err != nil {
 		t.Fatalf("nil registry must skip the policy check, got %v", err)
 	}
 }

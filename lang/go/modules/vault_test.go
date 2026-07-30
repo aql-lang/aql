@@ -357,7 +357,7 @@ func TestVaultFirstLineSingle(t *testing.T) {
 // (vault.install=false) yields capability_not_installed; trusted
 // consults Check and proceeds (to no_backend here).
 func TestVaultPolicyArms(t *testing.T) {
-	if err := checkVaultPolicy(nil, "read"); err != nil {
+	if err := checkVaultPolicy(nil, "status", "read"); err != nil {
 		t.Fatalf("nil registry: %v", err)
 	}
 	statusOp := vaultOps[0]
@@ -372,8 +372,9 @@ func TestVaultPolicyArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, dErr := h(nil, nil, nil, reg)
-	var denied *policy.Denied
-	if !errors.As(dErr, &denied) || denied.Code != policy.CodeCapabilityNotInstalled {
+	// Coded by the gate (native/policy_error.go) so `dot code` can read it.
+	var dAe *native.AqlError
+	if !errors.As(dErr, &dAe) || dAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox status = %v", dErr)
 	}
 

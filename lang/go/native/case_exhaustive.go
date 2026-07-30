@@ -729,7 +729,7 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 			return
 		}
 		addCaseDiagnostic(r, "case_not_exhaustive",
-			"case: the scrutinee is dynamic — no static type can prove the clauses cover it; add a trailing default (or an Any clause)",
+			"case: this scrutinee is gradual here — no static type is available to prove the clauses cover it; add a trailing default (or an Any clause)",
 			caseFindingPos(v.Pos(), clauses))
 		return
 	}
@@ -846,7 +846,7 @@ func checkCaseCodeBodyScrutinee(r *Registry, v Value, clauses Value) {
 		return
 	}
 	addCaseDiagnostic(r, "case_not_exhaustive",
-		"case: the scrutinee is dynamic — no static type can prove the clauses cover it; add a trailing default (or an Any clause)",
+		"case: this scrutinee is gradual here — no static type is available to prove the clauses cover it; add a trailing default (or an Any clause)",
 		caseFindingPos(v.Pos(), clauses))
 }
 

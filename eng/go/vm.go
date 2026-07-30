@@ -249,15 +249,54 @@ func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
 		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
 	}
 	return runVMEntry(ref.Prog, r, DefaultStepLimit, func(vc *vmContext) ([]Value, error) {
-		return vc.run(ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures), nil)
+		return vc.enterBodyUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
 	})
+}
+
+// enterBodyUnit is the VM's SINGLE re-entrant body-entry point: every path
+// that begins executing a compiled unit as a nested BODY goes through here.
+//
+// It exists to give the VM the one seam the interpreter has for free. The
+// interpreter runs a nested body exactly one way — spawn a sub-engine — so
+// `Engine.Run` is a single site where per-body state can be established, and
+// its context frame lives there (engine.go, the Contexts Push/Pop pair). The
+// VM has no such natural chokepoint: it reaches a body four different ways,
+// and design/verse-report-defects-investigation.0.md §B records what that
+// cost — a `context set` inside a compiled `do`/`each` body escapes into the
+// parent scope, because a patch that bracketed one of the four paths looked
+// complete and was not.
+//
+// The four paths, and where each stands:
+//
+//  1. RunUnit          — a durable callback after RunProgram returned  → HERE
+//  2. runUnitNested    — a mid-run nested unit invoke                  → HERE
+//  3. invokeClosureOn  — the InvokeBody closure seam                   → HERE
+//  4. OpCallUser / OpCallUserPoly / OpTailCallUser                     → not here
+//  5. inlining into the caller's unit                                  → unreachable
+//
+// (4) is a frame push INSIDE the run loop rather than a re-entry, so it has no
+// call to funnel; its entry is the `frames = append(...)` / `frameDepth++`
+// pair and its exit is the matching RET. (5) — the `case` desugaring to a
+// nested-`if` chain, `otherwise`'s list argument, and list auto-evaluation —
+// emits the body's tokens straight into the caller's unit, so there is no
+// call at all and no seam function can ever cover it. Anything claiming to
+// bracket "every body" has to say something about both.
+//
+// This function deliberately does NOT change behaviour: it is the place a
+// later per-body concern can be added once, not the addition itself.
+// TestVMBodyEntryIsFunnelled keeps the funnel from re-fragmenting.
+func (vc *vmContext) enterBodyUnit(reg *Registry, unit int, locals []Value) ([]Value, error) {
+	if reg != nil {
+		reg.Contexts.Push(reg.Contexts.Top())
+		defer reg.Contexts.Pop()
+	}
+	return vc.run(unit, locals, nil)
 }
 
 // bindUnitLocals builds a compiled unit's frame locals: per-call args fill the
 // leading param slots (0..NParams-NCaptures-1) and captures the trailing ones —
-// the top-first sig-order split shared by RunUnit and runUnitNested (and
-// mirroring invokeClosureOn's closure binding). Args past the param count are
-// ignored, matching the interpreter's CallAQL binding.
+// the top-first sig-order split every enterBodyUnit caller shares. Args past
+// the param count are ignored, matching the interpreter's CallAQL binding.
 func bindUnitLocals(fn *CompiledFn, args, captures []Value) []Value {
 	locals := make([]Value, fn.NLocals)
 	nInputs := fn.NParams - len(captures)
@@ -366,7 +405,7 @@ func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, b
 	if ref.Prog != vc.p {
 		return nil, false, nil
 	}
-	res, err := vc.run(ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures), nil)
+	res, err := vc.enterBodyUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
 	return res, true, err
 }
 
@@ -394,20 +433,11 @@ func (vc *vmContext) invokeClosureOn(reg *Registry, body Value, inputs []Value) 
 		// non-reentrancy contract).
 		return RunResolved(reg, inputs, bodyTokens(body))
 	}
-	fn := &vc.p.Fns[cl.Unit]
-	locals := make([]Value, fn.NLocals)
 	// Inputs fill the leading param slots, captures the trailing ones
-	// (StartFnCompile registers params before captures).
-	nInputs := fn.NParams - len(cl.Captures)
-	for i := 0; i < len(inputs) && i < nInputs; i++ {
-		locals[i] = inputs[i]
-	}
-	for i, cv := range cl.Captures {
-		if slot := nInputs + i; slot < len(locals) {
-			locals[slot] = cv
-		}
-	}
-	return vc.run(cl.Unit, locals, nil)
+	// (StartFnCompile registers params before captures) — the same split
+	// RunUnit and runUnitNested bind, so it uses the same helper rather than
+	// a second copy of the loop.
+	return vc.enterBodyUnit(reg, cl.Unit, bindUnitLocals(&vc.p.Fns[cl.Unit], inputs, cl.Captures))
 }
 
 // pushFrameArgs is the DynEnv args bracket's frame-entry half: push the
@@ -2295,8 +2325,36 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 		if !stack[base+k].Is(CanonicalType(r, exp)) {
 			return stack, vmReturnTypeErr(r, fn, k+1, exp, stack[base+k])
 		}
+		// A declared return whose *Type degraded to Any carries its real
+		// domain in the pattern — the RET-side twin of the ParamPatterns
+		// guard at CALL_USER, and the same Unify the interpreter's
+		// ReturnCheck runs (engine.go validateReturnTypes). Without it the
+		// COMPILED path accepted `def IS (Integer tor String)` /
+		// `def f fn x:Integer IS [true]` that the interpreter and the check
+		// pass both reject: `Is(Any)` passes everything, so the union read
+		// as a comment on the only path most programs take.
+		//
+		// `Type` aliases `Value`, so the pattern pointer doubles as the
+		// "expected" the error builder renders — `expected Integer tor
+		// String` rather than the useless `expected Any`.
+		if pat := fn.ReturnPattern(k); pat != nil {
+			if _, ok := Unify(*pat, stack[base+k]); !ok {
+				return stack, vmReturnTypeErr(r, fn, k+1, pat, stack[base+k])
+			}
+		}
 	}
 	return stack, nil
+}
+
+// ReturnPattern returns the declared pattern for return position k, or nil
+// when that position has none (or the unit carries no patterns at all).
+// Mirrors ReturnCheckInfo.ReturnPattern so the compiled and interpreted RET
+// contracts read the same.
+func (f *CompiledFn) ReturnPattern(k int) *Value {
+	if k < 0 || k >= len(f.ReturnPatterns) {
+		return nil
+	}
+	return f.ReturnPatterns[k]
 }
 
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and

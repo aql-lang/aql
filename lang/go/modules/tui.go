@@ -187,7 +187,7 @@ func hostTuiSpec(r *native.Registry) *TuiSpec {
 
 // ---- policy ----
 
-func checkTuiPolicy(r *native.Registry, op string) error {
+func checkTuiPolicy(r *native.Registry, word, op string) error {
 	if r == nil {
 		return nil
 	}
@@ -197,16 +197,16 @@ func checkTuiPolicy(r *native.Registry, op string) error {
 	}
 	args := policy.Args{}
 	if !pol.Installed("terminal") {
-		return &policy.Denied{
+		return native.PolicyRefusal(r, word, &policy.Denied{
 			Code:    policy.CodeCapabilityNotInstalled,
 			Scope:   "terminal",
 			Op:      op,
 			Profile: pol.Name(),
 			Blame:   "terminal.install=false",
 			Args:    args,
-		}
+		})
 	}
-	return pol.Check("terminal", op, args)
+	return native.PolicyRefusal(r, word, pol.Check("terminal", op, args))
 }
 
 // tuiAltScreenReserved enforces the §11.7 reservation: `alt-screen:`
@@ -345,7 +345,7 @@ func eventToMap(ev tuikit.Event) native.Value {
 // ---- word handlers ----
 
 func tuiOpenHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	if err := checkTuiPolicy(r, "open"); err != nil {
+	if err := checkTuiPolicy(r, "open", "open"); err != nil {
 		return nil, err
 	}
 	opts := tuikit.OpenOpts{}

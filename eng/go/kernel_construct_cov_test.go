@@ -688,16 +688,21 @@ func TestParseFnParamsRejectsMultiKeyMap(t *testing.T) {
 
 func TestParseFnReturns(t *testing.T) {
 	r := newTestRegistry(t)
-	rets, err := ParseFnReturns(r, NewList([]Value{NewTypeLiteral(TInteger)}))
+	rets, pats, err := ParseFnReturns(r, NewList([]Value{NewTypeLiteral(TInteger)}))
 	if err != nil {
 		t.Fatalf("ParseFnReturns: %v", err)
 	}
 	if len(rets) != 1 || !rets[0].Equal(TInteger) {
 		t.Errorf("returns = %v", rets)
 	}
+	// A plain type literal carries no structural constraint, so no
+	// pattern slice is allocated — the common case stays allocation-free.
+	if pats != nil {
+		t.Errorf("a bare type-literal return needs no pattern, got %v", pats)
+	}
 	// A non-list return spec routes through ResolveSigType; an unknown
 	// type word must be refused rather than silently degrading.
-	if _, err := ParseFnReturns(r, NewList([]Value{NewWord("noSuchTypeZz")})); err == nil {
+	if _, _, err := ParseFnReturns(r, NewList([]Value{NewWord("noSuchTypeZz")})); err == nil {
 		t.Error("unknown return type word accepted")
 	}
 }

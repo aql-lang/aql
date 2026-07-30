@@ -155,6 +155,24 @@ var definitionNatives = []NativeFunc{
 				Args:       []*Type{TAny, TAny, TList},
 				Patterns:   map[int]Value{0: NewNegation(NewTypeLiteral(TList))},
 				NoEvalArgs: map[int]bool{0: true, 1: true, 2: true},
+				// NoEvalMapArgs as well, because NoEvalArgs is LIST-only
+				// and the shorthand input `x:IS` IS the map: without this
+				// autoEvalMap dispatches the type name and pushes its
+				// BODY (a Disjunct value, not a lattice node), erasing the
+				// declared type before ParseFnParams ever sees it. `def`'s
+				// typed-name sig carries the same suppression for the same
+				// reason — see its comment above.
+				NoEvalMapArgs: map[int]bool{0: true},
+				// Slot 1 (the OUTPUT sig) has the mirror-image problem and
+				// is deliberately NOT fixed here: a bare Word there is
+				// resolved by forward collection itself, which no NoEval
+				// flag gates, so a declared union return still arrives as a
+				// Disjunct VALUE, resolves to TAny + a pattern that
+				// ParseFnReturns has nowhere to put, and goes unenforced.
+				// QuoteArgs is NOT the answer — it changes fn's dispatch
+				// barrier and breaks every synthesized `def … fn …` form
+				// (measured). Closing it needs return patterns on FnSig;
+				// see design/verse-report-defects-investigation.0.md §F.
 				Impl:       Go(fnTripleHandler, RunInCheck()),
 				Returns:    []*Type{TFunction},
 				BarrierPos: -1,
@@ -187,10 +205,15 @@ var definitionNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
 			NoEvalArgs: map[int]bool{0: true, 1: true},
-			RawParens:  map[int]bool{0: true},
-			Impl:       Go(afnHandler, RunInCheck()),
-			Returns:    []*Type{TFunction},
-			BarrierPos: -1,
+			// Slot 1 is the INPUT sig (afn's canonical call is the swap
+			// `input afn body`), so it needs the same map-eval suppression
+			// `fn`'s triple slot 0 carries: `x:IS => …` would otherwise
+			// lose IS to autoEvalMap. See fn above.
+			NoEvalMapArgs: map[int]bool{1: true},
+			RawParens:     map[int]bool{0: true},
+			Impl:          Go(afnHandler, RunInCheck()),
+			Returns:       []*Type{TFunction},
+			BarrierPos:    -1,
 		}},
 	},
 	{

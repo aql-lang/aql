@@ -411,8 +411,14 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		if list, _ := AsList(container); !list.IsNil() && container.Parent.ConformsTo(TList) {
 			_as3, _ := AsInteger(key)
 			idx := int(_as3)
+			// index_out_of_range is the code this very condition's
+			// CHECK-MODE mirror emits (eng/go/indexcheck.go emitIndexOOB).
+			// It was a bare fmt.Errorf, so `[1,2] dotr 9` produced an error
+			// with NO code — nothing for `do […] error [dot code case …]` to
+			// dispatch on, for the most ordinary indexing mistake there is.
 			if idx < 0 || idx >= list.Len() {
-				return nil, fmt.Errorf("getr: index %d out of bounds (length %d)", idx, list.Len())
+				return nil, r.AqlError("index_out_of_range",
+					fmt.Sprintf("getr: index %d out of bounds (length %d)", idx, list.Len()), "getr")
 			}
 			return []Value{list.Get(idx)}, nil
 		}
@@ -420,7 +426,11 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	k := getKey(key)
 	m, _ := AsMap(container)
 	if m == nil {
-		return nil, fmt.Errorf("getr: expected a map, got %s", container.Parent.String())
+		// Same code, same message, as this handler's own check-mode mirror
+		// forty lines up (getrNodeReturns) — which was already coded while
+		// the runtime path was not.
+		return nil, r.AqlError("getr_error",
+			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr")
 	}
 	val, ok := m.Get(k)
 	if !ok {

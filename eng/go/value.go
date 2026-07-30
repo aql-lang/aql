@@ -247,6 +247,18 @@ const BarrierAllForward = -1
 type FnSig struct {
 	Params  []FnParam
 	Returns []*Type // declared return types (nil = unchecked)
+	// ReturnPatterns is the symmetric twin of FnParam.Pattern, positional
+	// against Returns (nil, or shorter, means "no extra constraint here").
+	//
+	// It exists because a declared return can carry a constraint that no
+	// *Type can express. `def IS (Integer tor String)` used as an output
+	// resolves through ResolveSigType to (TAny, &pattern): the union has no
+	// minted lattice node to name, so the TYPE degrades to Any and the
+	// domain lives entirely in the pattern. Without somewhere to keep it,
+	// ParseFnReturns dropped the pattern and `Any` accepted everything —
+	// the shorthand form silently accepted a Boolean body under a declared
+	// union return while the bracket form rejected it.
+	ReturnPatterns []*Value
 	// Decl is where the return contract was declared — the output-sig
 	// token of this triple, plus the declaring program's source/file —
 	// threaded onto ReturnCheck markers so a return error can label the
@@ -867,14 +879,28 @@ type FnUndefInfo struct {
 
 // ReturnCheckInfo carries expected return types for fn-defined function validation.
 type ReturnCheckInfo struct {
-	FuncName     string
-	Returns      []*Type
-	UnnamedCount int    // number of unnamed params pushed onto the stack before the body
-	Pos          SrcPos // source position of the fn call site, for return errors
+	FuncName string
+	Returns  []*Type
+	// ReturnPatterns mirrors FnSig.ReturnPatterns positionally against
+	// Returns — the structural constraint for declared returns whose *Type
+	// degraded to Any (a union output has no lattice node to name).
+	ReturnPatterns []*Value
+	UnnamedCount   int    // number of unnamed params pushed onto the stack before the body
+	Pos            SrcPos // source position of the fn call site, for return errors
 	// Decl is where the return contract was declared (the fn's output
 	// signature), rendered as a secondary span on return errors. Zero
 	// when unknown (Go-registered sigs).
 	Decl DeclSite
+}
+
+// ReturnPattern returns the structural constraint declared for return
+// position k, or nil. Tolerates a short or absent slice so a sig that
+// declares patterns for only some positions needs no padding.
+func (rc ReturnCheckInfo) ReturnPattern(k int) *Value {
+	if k < 0 || k >= len(rc.ReturnPatterns) {
+		return nil
+	}
+	return rc.ReturnPatterns[k]
 }
 
 // DisjunctInfo holds the alternatives for a disjunction (union) type.
@@ -1051,6 +1077,12 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 // Set stores a key-value pair directly (for internal/init use only).
 // AQL code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
+	// Allocate on demand: a layer pushed by ContextStack.Push carries a nil
+	// Data map (writes go through CowSet, which replaces the layer rather
+	// than mutating it), and this is the one path that writes in place.
+	if si.Data == nil {
+		si.Data = make(map[string]Value)
+	}
 	si.Data[key] = val
 	// Track parent relationship for nested Stores.
 	if childStore, ok := val.Data.(*StoreInstanceInfo); ok {

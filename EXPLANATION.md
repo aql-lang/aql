@@ -679,8 +679,42 @@ familiar semantics:
 * **`'any`** — the first non-error result wins.
 
 Each branch runs under `do` semantics: the list is evaluated as a
-sub-program, and the final stack value becomes the result. Mutable
-side effects within a branch are local to that branch's sub-engine.
+sub-program, and the final stack value becomes the result. A branch's
+`def` and `context set` writes are local to that branch's sub-engine.
+
+Sharing a **stateful container** — `FlexMap`, `FlexList`, `Store`,
+`Table`, a class instance — across branches is **refused**, not
+isolated. Branches run on separate goroutines, so an in-place write to
+one is a data race; `await` rejects the program at the boundary rather
+than letting it corrupt state, the same answer `send` gives at a
+process boundary:
+
+<!-- aql-test: skip -->
+```aql
+def m (make FlexMap {})
+await [[m set a 1] [m set b 2]]
+# error: not_sendable — branch reaches `m`, a mutable FlexMap
+```
+
+Immutable values are unaffected: a plain `Map` or `List` returns a copy
+from `set`, so branches never share one. Build the container inside
+each branch and combine the results:
+
+<!-- aql-test: skip -->
+```aql
+await [
+  [def a (make FlexMap {}) a set k 1]
+    [def b (make FlexMap {}) b set k 2]
+]
+# [{k:1} {k:2}]
+```
+
+The refusal covers what a branch body references, including one level
+into a function it names — and when a reference cannot be resolved at
+all, it falls back to refusing if any mutable container is in scope. It
+is a boundary rule, not a proof: a container reached only through a
+longer chain of calls, with nothing mutable visible at the boundary, is
+not detected. Building the container inside each branch is always safe.
 
 
 ## Errors as values
@@ -724,8 +758,8 @@ boundary where it makes sense.
 
 The execution context is a `Store` — a mutable key-value map with
 prototype-chain lookup. `set` writes to the current store, `get`
-walks the prototype chain (parent first), and sub-engines (created
-by `do`, `for`, `each`, `await`) inherit from the parent's store.
+walks the prototype chain (parent first), and a nested body that runs
+in its own sub-engine inherits from the parent's store.
 
 ```
 context set x 42
@@ -736,6 +770,31 @@ This is functionally JavaScript-style prototype inheritance: child
 contexts can read parent bindings, but writes are local. It gives
 you lexical scoping with copy-on-write semantics, without any
 explicit closure construct.
+
+**Which bodies are write boundaries.** The rule is "runs in its own
+sub-engine", and that is narrower than it reads. Boundaries: `do`, `each`,
+`fold`, `filter`, `outer`, `scan`, `for-each`, `await`, a `case` clause
+body, and an auto-evaluated list. **Not** boundaries: a `for` body, an
+`if` branch, a named `fn` body, a called lambda, and a paren group — a
+paren resolves its value and hands it to the signature matcher, so it
+never opens a scope.
+
+`for` and `if` are the two worth stating explicitly, because a reader
+reasonably expects them to scope and they do not:
+
+```
+for 1 [ context set y 5 ]
+context has y                     # true — the write escaped the body
+```
+
+Two caveats. `set` on a context layer is copy-on-write, so "writes are
+local" means the write does not reach the parent LAYER — a nested body
+still sees, and can shadow, everything above it. And the bytecode compiler
+does not yet honour every boundary above: a `case` clause body and an
+auto-evaluated list are boundaries when interpreted but not when compiled
+(the compiler inlines them into the caller's code, so there is no body to
+bracket). The interpreter's answer is the intended one; see
+`design/verse-report-defects-investigation.0.md` §B.
 
 
 ## Module system
@@ -817,9 +876,14 @@ Side-effecting words (`read`, `write`, `fetch`, `sqlite-*`,
 turns them all on by default; embeddings (Wasm playground, an
 LLM tool host) can disable any of them.
 
-When a disabled word runs, it raises `Error{code:'cap_denied}`.
-This is the same shape as any other error: the calling code can
-catch it with `do ... error [...]` and react appropriately.
+When a disabled word runs, it fails with a permission-denied
+error. This is the same shape as any other error: the calling code can
+catch it with `do ... error [...]` and react appropriately. A refused
+FILE operation carries a code a handler can dispatch on —
+`permission_denied` when a rule said no, `capability_not_installed`
+when the capability was never installed — while refusals from the
+other gated scopes do not yet carry a stable code, so match on the
+message for those.
 
 Capabilities are deliberately coarse — one flag per system —
 because the per-call enforcement happens *inside* the words. Finer

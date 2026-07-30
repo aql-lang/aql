@@ -85,6 +85,14 @@ func (c *CheckState) SkipsSideEffect() bool {
 	return c.IsActive()
 }
 
+// ModelsEffects reports whether this registry runs with CONCRETE values but
+// SUBSTITUTED effect backends — the third mode a module body executed during
+// `aql check` runs in. See CheckState.ModelEffects for the contract and for
+// the two classes that stay real.
+func (c *CheckState) ModelsEffects() bool {
+	return c != nil && c.ModelEffects
+}
+
 // Begin enables check mode and resets the per-pass state (diagnostics,
 // step count, budget flag, defs-installed/used, context-type tracking).
 // Returns a function that switches mode off when called — typically via

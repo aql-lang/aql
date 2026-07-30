@@ -113,7 +113,7 @@ func TestTuiRegisterHostValidation(t *testing.T) {
 // --- policy ---
 
 func TestTuiPolicyArms(t *testing.T) {
-	if err := checkTuiPolicy(nil, "open"); err != nil {
+	if err := checkTuiPolicy(nil, "open", "open"); err != nil {
 		t.Fatalf("nil registry: %v", err)
 	}
 	pol, err := policy.Load("sandbox")
@@ -126,8 +126,10 @@ func TestTuiPolicyArms(t *testing.T) {
 	}
 	_, oErr := tuiOpenHandler(nil, nil, nil, reg)
 	tcErrContains(t, oErr, "terminal")
-	var denied *policy.Denied
-	if !errors.As(oErr, &denied) || denied.Code != policy.CodeCapabilityNotInstalled {
+	// Coded by the gate (native/policy_error.go), so the refusal is
+	// dispatchable from AQL rather than an opaque foreign error.
+	var oAe *native.AqlError
+	if !errors.As(oErr, &oAe) || oAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox open = %v", oErr)
 	}
 	// an installed scope consults Check and proceeds (to no_backend here)

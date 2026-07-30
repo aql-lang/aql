@@ -61,8 +61,9 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		concreteReturns := OutputSigIsConcreteReturns(r, outputSig)
 
 		var returns []*Type
+		var returnPatterns []*Value
 		if !concreteReturns {
-			returns, err = ParseFnReturns(r, outputSig)
+			returns, returnPatterns, err = ParseFnReturns(r, outputSig)
 			if err != nil {
 				return FnDefInfo{}, err
 			}
@@ -95,12 +96,13 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 		}
 
 		sigs = append(sigs, FnSig{
-			Params:     params,
-			Returns:    returns,
-			Decl:       decl,
-			Impl:       AQL(bodyElems),
-			BarrierPos: barrierPos,
-			QuoteArgs:  QuoteArgsFromParams(params),
+			Params:         params,
+			Returns:        returns,
+			ReturnPatterns: returnPatterns,
+			Decl:           decl,
+			Impl:           AQL(bodyElems),
+			BarrierPos:     barrierPos,
+			QuoteArgs:      QuoteArgsFromParams(params),
 		})
 	}
 	return FnDefInfo{Signatures: sigs}, nil
@@ -133,7 +135,7 @@ func ParseFnUndefSpec(r *Registry, list []Value) (FnUndefInfo, error) {
 			return FnUndefInfo{}, err
 		}
 
-		returns, err := ParseFnReturns(r, outputSig)
+		returns, _, err := ParseFnReturns(r, outputSig)
 		if err != nil {
 			return FnUndefInfo{}, err
 		}
@@ -184,6 +186,16 @@ func IsSigTypeValue(r *Registry, v Value) bool {
 	}
 	if IsOptionsType(v) || IsRecordType(v) || IsTypedList(v) ||
 		IsTypedMap(v) || IsTableType(v) || IsClassType(v) {
+		return true
+	}
+	// A Disjunct is a TYPE too — `def IS (Integer tor String)` then
+	// `fn [[…] [IS] […]]`. When the name has already been evaluated to
+	// its body (a Disjunct VALUE rather than the Word), reading it as a
+	// concrete return-by-value forces the static return type to Any and
+	// splices the value onto the body stack — the same spurious
+	// "expected N return value(s)" the registry lookup above was added
+	// to stop, one value-shape further along.
+	if IsDisjunct(v) {
 		return true
 	}
 	if IsWord(v) {

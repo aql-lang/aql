@@ -223,10 +223,10 @@ func TestNetListenPolicyDeniedBySandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkNetPolicy(reg, "listen", "", 8080); err == nil {
+	if err := checkNetPolicy(reg, "listen", "listen", "", 8080); err == nil {
 		t.Error("sandbox must deny network.listen")
 	}
-	if err := checkNetPolicy(reg, "connect", "example.com", 443); err == nil {
+	if err := checkNetPolicy(reg, "connect-raw", "connect", "example.com", 443); err == nil {
 		t.Error("sandbox must deny network.connect")
 	}
 }
@@ -240,7 +240,7 @@ func TestNetListenPolicyAllowedByFull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkNetPolicy(reg, "listen", "", 8080); err != nil {
+	if err := checkNetPolicy(reg, "listen", "listen", "", 8080); err != nil {
 		t.Errorf("full must allow network.listen: %v", err)
 	}
 }

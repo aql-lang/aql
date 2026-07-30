@@ -1084,6 +1084,15 @@ type CompiledFn struct {
 	// bare refine stays nominal, and builtins are unchanged. Empty for a
 	// fn with no declared return (no check runs).
 	Returns []*Type
+	// ReturnPatterns are the per-return structural/value patterns
+	// (FnSig.ReturnPatterns), positional against Returns — the RET-side twin
+	// of ParamPatterns. A declared UNION return (`def IS (Integer tor
+	// String)` used as an output sig) has no lattice node to name, so its
+	// Returns entry degrades to Any and admits everything; the pattern is
+	// then the whole contract. Enforced at RET via the same Unify the
+	// interpreter's ReturnCheck runs, so the compiled and interpreted
+	// engines agree. Nil where the return has no pattern.
+	ReturnPatterns []*Value
 	// Params are the declared PARAM types (param slots 0..len(Params)-1, which
 	// align with the leading param locals; captures, if any, follow and are NOT
 	// listed). Enforced at CALL_USER entry against the incoming arg the same way

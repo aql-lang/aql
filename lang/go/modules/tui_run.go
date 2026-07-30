@@ -144,7 +144,7 @@ func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, e
 }
 
 func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	if err := checkTuiPolicy(r, "open"); err != nil {
+	if err := checkTuiPolicy(r, "run", "open"); err != nil {
 		return nil, err
 	}
 	app, err := parseTuiApp(args[0], "run", r)

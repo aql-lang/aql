@@ -70,6 +70,12 @@ const (
 	// OwnerKernel marks kernel builtins (builtinDecls) and
 	// kernel-shipped globally-registered types.
 	OwnerKernel = "aql:kernel"
+	// OwnerLang marks the language layer — the built-in words, the
+	// bundled modules, and the gated capabilities. Used as the owner id
+	// for lang's error-code registration (errorcodes.go); tooling reads it
+	// to tell a kernel failure from a built-in-word failure, which is not
+	// derivable from the code name.
+	OwnerLang = "aql:lang"
 	// OwnerProgram marks types minted by the top-level program
 	// (refine / class outside any module body).
 	OwnerProgram = "program"

@@ -272,8 +272,10 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	sopts.Set("tcp", native.NewInteger(0))
 	sopts.Set("token", native.NewString("x"))
 	_, nErr := tuiServeHandler([]native.Value{native.NewMap(sopts), native.NewMap(native.NewOrderedMap())}, nil, nil, preg)
-	var denied *policy.Denied
-	if !errors.As(nErr, &denied) || denied.Scope != "network" {
+	// Coded by the gate; the scope rides in the detail rather than a field.
+	var nAe *native.AqlError
+	if !errors.As(nErr, &nAe) || nAe.Code != "capability_not_installed" ||
+		!strings.Contains(nErr.Error(), "network") {
 		t.Fatalf("sandbox serve = %v", nErr)
 	}
 
@@ -292,7 +294,9 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	InstallResolver(sreg)
 	_, tErr := runTuiStepsOn(t, sreg, []string{`import "aql:tui"`,
 		`Tui.serve {tcp: 0  token: "x"} ` + okApp})
-	if !errors.As(tErr, &denied) || denied.Scope != "terminal" {
+	var tAe *native.AqlError
+	if !errors.As(tErr, &tAe) || tAe.Code != "capability_not_installed" ||
+		!strings.Contains(tErr.Error(), "terminal") {
 		t.Fatalf("split-profile serve = %v", tErr)
 	}
 

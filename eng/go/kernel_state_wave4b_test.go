@@ -1,6 +1,7 @@
 package eng
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -28,8 +29,28 @@ func TestContextStackLifecycle(t *testing.T) {
 	if top == nil || top.Prototype != parent {
 		t.Error("pushed child does not chain to its parent")
 	}
-	if cs.TopData() == nil {
-		t.Error("TopData nil for a live layer")
+	// A freshly-pushed layer carries a NIL Data map, deliberately: every
+	// context write goes through CowSet, which replaces the layer rather than
+	// mutating it, so the map was never read from OR written to. The VM pushes
+	// one of these per nested body invocation, so allocating it was pure cost
+	// (see ContextStack.Push). What must hold is the OBSERVABLE contract — it
+	// reads as empty, and it is writable on demand.
+	if n := len(cs.TopData()); n != 0 {
+		t.Errorf("a fresh layer must read as empty, got %d keys", n)
+	}
+	if _, ok := top.Get("nope"); ok {
+		t.Error("a fresh layer must miss an unset key rather than resolve it")
+	}
+	// The parent's keys still resolve through the prototype chain: a nil own
+	// map must not break lookup, which is the whole point of the layer.
+	if v, ok := top.Get("k"); !ok || fmt.Sprint(v) != "1" {
+		t.Errorf("parent key must resolve through the prototype chain, got %v %v", v, ok)
+	}
+	// Set is the one path that writes a layer in place, so it must allocate on
+	// demand rather than panic on the nil map.
+	top.Set("own", NewInteger(2))
+	if v, ok := top.Get("own"); !ok || fmt.Sprint(v) != "2" {
+		t.Errorf("Set on a nil-map layer must allocate and store, got %v %v", v, ok)
 	}
 	cs.PushExisting(parent)
 	if cs.Depth() != 2 || cs.Top() != parent {
@@ -83,6 +104,82 @@ func TestContextStackUpdateChain(t *testing.T) {
 	}
 	if snap[1].Prototype != newRoot {
 		t.Error("child prototype not rewritten")
+	}
+}
+
+// TestContextStackUpdateChainNoSelfCycle pins the guard that keeps a second
+// context frame from being a crash rather than a fix.
+//
+// The shape is two NESTED stack entries: a child layer pushed over a parent
+// that is itself a child of origRoot (`inner → outer → origRoot`), which is
+// exactly what a second context frame produces. Sibling entries are not
+// enough and were the first repro attempt — with both pointing straight at
+// origRoot each walk relinks in one step and never advances far enough to
+// meet newRoot, so the guard looked unnecessary. It is the nesting that
+// exposes it:
+//
+//	scan from the top — inner's walk relinks outer.Prototype to newRoot;
+//	then outer's own walk runs, steps through the freshly-relinked pointer
+//	into newRoot, finds newRoot.Prototype == origRoot (true by construction,
+//	newRoot being the COW of origRoot) and sets newRoot.Prototype = newRoot.
+//
+// Every later missing-key lookup then walks that self-loop forever,
+// surfacing as `fatal error: stack overflow` — which recover() cannot catch
+// and no interpreter fallback can rescue.
+//
+// Asserted structurally (the prototype pointer) AND behaviourally (a real
+// missing-key walk terminates), because the pointer assertion alone would
+// still pass if some future relink produced a longer cycle.
+//
+// This is a unit test rather than an AQL program because the compiled path
+// currently pushes only one such entry, so the cycle is latent — see
+// design/verse-report-defects-investigation.0.md §B, where a patch that added
+// the second entry turned it into a default-path crash from a documented
+// idiom. The guard has to be in place BEFORE that patch is attempted again,
+// which means its test cannot depend on that patch existing.
+func TestContextStackUpdateChainNoSelfCycle(t *testing.T) {
+	origRoot := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{"seed": NewInteger(1)}}
+
+	// Nested layers: inner → outer → origRoot, both on the stack. One entry
+	// alone cannot trigger this, and neither can two siblings.
+	outer := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{}, Prototype: origRoot}
+	inner := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{}, Prototype: outer}
+
+	cs := NewContextStack()
+	cs.PushExisting(outer)
+	cs.PushExisting(inner)
+
+	newRoot := &StoreInstanceInfo{TypeName: "Ideal/Store", Data: map[string]Value{"cow": NewInteger(2)}, Prototype: origRoot}
+	cs.UpdateChain(origRoot, newRoot)
+
+	if newRoot.Prototype == newRoot {
+		t.Fatal("newRoot.Prototype was relinked to itself — the self-cycle is " +
+			"back, and any later missing-key lookup is now an uncatchable " +
+			"fatal error: stack overflow")
+	}
+	if newRoot.Prototype != origRoot {
+		t.Errorf("newRoot must keep its COW parent as prototype, got %p", newRoot.Prototype)
+	}
+	// The layer that actually pointed at origRoot must be relinked onto the
+	// new root; the one above it keeps pointing at its own parent.
+	if outer.Prototype != newRoot {
+		t.Errorf("outer not relinked: got %p want %p", outer.Prototype, newRoot)
+	}
+	if inner.Prototype != outer {
+		t.Errorf("inner's own parent link must be untouched: got %p want %p",
+			inner.Prototype, outer)
+	}
+
+	// Behavioural half: walking every chain for an absent key terminates.
+	// A bounded walk is the assertion — an unguarded self-cycle never exits,
+	// so exceeding the bound IS the failure.
+	for _, entry := range cs.Snapshot() {
+		steps := 0
+		for p := entry; p != nil; p = p.Prototype {
+			if steps++; steps > 16 {
+				t.Fatalf("prototype chain does not terminate — cycle at %p", p)
+			}
+		}
 	}
 }
 

@@ -765,6 +765,54 @@ type CheckState struct {
 	Mode        bool
 	Diagnostics []CheckDiagnostic
 
+	// ModelEffects is the THIRD MODE, and it is deliberately NOT `Mode`.
+	//
+	// Check mode does two separable things: it strips concrete values down
+	// to type carriers, AND it substitutes a signature's ReturnsFn for its
+	// handler. A module body needs the second and cannot survive the first —
+	// its export names and map keys are concrete string literals that
+	// carrier-stripping destroys — which is why `Mode` is deliberately not
+	// propagated into a module sub-registry (see the note in
+	// native_module_module.go::runModuleBodyCover). The consequence was
+	// that `aql check`, documented as "type-check without running", ran
+	// every imported module body's effects with full ambient authority.
+	//
+	// ModelEffects splits the two: values stay CONCRETE (Mode is false, so
+	// dispatch, matching and every handler run exactly as at runtime) while
+	// the effect BACKENDS are substituted, so a body still produces real
+	// export names while its writes go nowhere.
+	//
+	// The line it draws is WRITES, and that is what makes it safe: reads are
+	// untouched, so no module body that loads today can start failing under
+	// check. Concretely — a filesystem mutation lands in a mem-over-host
+	// OVERLAY (native.EffectiveFileOps), so a body that writes a file and
+	// then reads it back still sees its own bytes; output writes go to
+	// io.Discard, which returns the same byte count the real writer would.
+	// A modelled effect is invisible to the program, not merely suppressed.
+	//
+	// Not per-pass state: this is a property of the registry's ROLE (a
+	// module sub-registry created while its parent was running a PURE check
+	// pass), not of a check pass, so Begin() does not reset it. It propagates
+	// transitively — a module imported from a module body inherits it.
+	//
+	// A COMPILE pass (Compiling) is deliberately excluded at the propagation
+	// site: on the compiled path the compile pass's module-body execution is
+	// the run's only one, so modelling there would delete the effect rather
+	// than deduplicate it.
+	//
+	// Two classes stay REAL and are known residuals, recorded in
+	// design/verse-report-defects-investigation.0.md §D: a network send and
+	// stdin (a read, so out of scope by the rule above). A substitutable
+	// transport DOES exist for the first (capabilities.HTTPOps), so the
+	// reason is not "no seam" — it is that no synthetic response is safe to
+	// invent: a fabricated status takes a wrong branch and a fabricated body
+	// fails a real parse, so modelling would break bodies that work. The
+	// effect ledger
+	// (effects.go) is therefore left counting modelled writes too: over-
+	// counting only forgoes a safe interpreter fallback, while under-
+	// counting a real network send would duplicate it.
+	ModelEffects bool
+
 	// FnSummaries caches carrier return-stacks for user-defined fn
 	// bodies keyed by (name + "#" + argTypesJoined). Populated by
 	// analyseFnBody; re-entrant calls (recursion) consult this
@@ -1211,6 +1259,21 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	// hard dispatch rejection at check AND run time. Classified here so a
 	// future precise emitter inherits the intended severity.
 	"options_key_unchecked": SeverityInfo,
+	// `aql check` RUNS module bodies for real: `import`'s signatures are
+	// registered RunInCheck (the checker cannot type `Mod.v` without the
+	// module's actual exports) and check mode is deliberately NOT
+	// propagated into the body (carrier-stripping would destroy the
+	// concrete string literals used as export names and map keys). So a
+	// module body's effects execute with full ambient authority during a
+	// command documented as "type-check without running", and because file
+	// modules are never cached, a default run — which pre-flight checks
+	// first — executes each body TWICE per importer.
+	//
+	// Info, not a warning: nothing is wrong with the program, and the
+	// behaviour is the composition of two deliberate decisions. What was
+	// missing is that it was invisible. One entry per body execution, not
+	// deduped — the count IS the finding.
+	"module_body_executed_in_check": SeverityInfo,
 }
 
 // SeverityFor returns the default severity classification for a
@@ -1278,6 +1341,13 @@ func NewRegistry() (*Registry, error) {
 	// well-known path). These are init-time programmer errors that used
 	// to panic; per ADR-005 they are reported here instead.
 	if err := builtinInitError(); err != nil {
+		return nil, err
+	}
+	// Same treatment for the error-code enumeration: a code that breaks the
+	// naming rule, or one two layers both claim to own, is an init-time
+	// programmer error and is reported here rather than silently accepted
+	// into a dispatch contract users write `case` arms against.
+	if err := errorCodeInitError(); err != nil {
 		return nil, err
 	}
 	r := &Registry{
