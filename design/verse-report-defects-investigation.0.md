@@ -50,9 +50,18 @@ because in every case the mistake is more instructive than the fix.
   checking" DELETES a module body's effect from a default run, because on
   the compiled path the compile pass is the body's only execution.
   `!Check.Compiling` is what separates a preview from the run.
-- **B's** fix was implemented, validated and reverted; read §B before
-  attempting another. The fourth adversarial lens landed after the revert
-  and widened the defect further — see §B.
+- **B is partially fixed, and the remainder is pinned rather than
+  forgotten.** The first fix was implemented, validated and REVERTED; read
+  §B before attempting another, because the fourth adversarial lens landed
+  after the revert and widened the defect further. What has since landed:
+  a cycle-safe `UpdateChain`, one named VM body-entry funnel with an AST
+  gate keeping it from re-fragmenting, and a per-body context frame at that
+  funnel — which covers every closure-unit body. Separately, an island
+  apply no longer OVER-contains (an island continues an expression; it is
+  not a body). Still open: the three INLINED forms (`case` arms,
+  `otherwise`'s list argument, list auto-evaluation), which need an emitted
+  opcode pair. Their design, and the non-linear-exit hazard that shapes it,
+  are written up in §B — as are two rejected alternatives.
 - **E is fixed for everything it documents.** The code-less runtime
   errors the table names now carry the code their own check-time mirror
   emits; the table names only codes that exist; and a gate re-derives the

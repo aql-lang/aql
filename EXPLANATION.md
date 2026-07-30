@@ -758,8 +758,8 @@ boundary where it makes sense.
 
 The execution context is a `Store` — a mutable key-value map with
 prototype-chain lookup. `set` writes to the current store, `get`
-walks the prototype chain (parent first), and sub-engines (created
-by `do`, `for`, `each`, `await`) inherit from the parent's store.
+walks the prototype chain (parent first), and a nested body that runs
+in its own sub-engine inherits from the parent's store.
 
 ```
 context set x 42
@@ -770,6 +770,31 @@ This is functionally JavaScript-style prototype inheritance: child
 contexts can read parent bindings, but writes are local. It gives
 you lexical scoping with copy-on-write semantics, without any
 explicit closure construct.
+
+**Which bodies are write boundaries.** The rule is "runs in its own
+sub-engine", and that is narrower than it reads. Boundaries: `do`, `each`,
+`fold`, `filter`, `outer`, `scan`, `for-each`, `await`, a `case` clause
+body, and an auto-evaluated list. **Not** boundaries: a `for` body, an
+`if` branch, a named `fn` body, a called lambda, and a paren group — a
+paren resolves its value and hands it to the signature matcher, so it
+never opens a scope.
+
+`for` and `if` are the two worth stating explicitly, because a reader
+reasonably expects them to scope and they do not:
+
+```
+for 1 [ context set y 5 ]
+context has y                     # true — the write escaped the body
+```
+
+Two caveats. `set` on a context layer is copy-on-write, so "writes are
+local" means the write does not reach the parent LAYER — a nested body
+still sees, and can shadow, everything above it. And the bytecode compiler
+does not yet honour every boundary above: a `case` clause body and an
+auto-evaluated list are boundaries when interpreted but not when compiled
+(the compiler inlines them into the caller's code, so there is no body to
+bracket). The interpreter's answer is the intended one; see
+`design/verse-report-defects-investigation.0.md` §B.
 
 
 ## Module system

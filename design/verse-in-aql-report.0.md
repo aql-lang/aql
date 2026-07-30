@@ -850,6 +850,23 @@ here so they are not lost. All seven reproduce on `main` @ `ab0e1e0`.
 > carries the root causes, the current status of each, and the
 > corrections — read it before acting on anything here.
 
+Status at the latest revision of that note, so this section can be read
+without cross-referencing it first:
+
+| | defect | status |
+|---|---|---|
+| **(a)** | compiled `do`/`each` leak `context set` | **partial.** Every closure-unit body is fixed (`do`, `each`, `fold`, `filter`, `outer`, `scan`, and those nested in a fn) at the VM's single body-entry seam. An island apply no longer OVER-contains. The three INLINED forms — `case` arms, `otherwise`'s list argument, list auto-evaluation — still diverge and are pinned as such; the design for their fix is in §B |
+| **(b)** | `do […] error […]` + a trailing expression underflows | **fixed.** `errorReturnsFn` refuses instead of widening a known arity |
+| **(c)** | shorthand `fn` loses a union's `case` exhaustiveness | **fixed**, return side included — the declared union RETURN was accepted but never enforced, which the negative tests exposed |
+| **(d)** | `aql check` executes imported module bodies | **fixed.** A body run during a pure check pass gets substituted effect backends, so check no longer writes or prints through one. Reads stay real. A network send and stdin do not, by design |
+| **(e)** | REFERENCE.md documents unproducible error codes | **fixed**, plus the engine defect inside it (code-less runtime errors), policy refusals now coded, and an engine-owned code enumeration with a four-way gate |
+| **(f)** | `await` branches share mutable payloads — a data race | **fixed**, including a compiled-path hole this report did not see. All four shapes now refuse at the branch boundary in both engines |
+| **(g)** | un-separated forward calls evaluate right-to-left | **diagnosis only** — a pre-existing recorded issue |
+
+One defect found by the follow-up work rather than by this report is also
+fixed: dynamic help *executed* the examples it synthesised, so registering
+`interval` started a real ticker nobody owned — 26 race reports on `main`.
+
 (a)–(d) and (f) are behavioural, (e) is documentation, and (g) is an
 already-recorded issue whose worst manifestation is not recorded. **(f)
 is the one to read first** — it is a data race, confirmed with the Go race
