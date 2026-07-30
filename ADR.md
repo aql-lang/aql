@@ -304,6 +304,21 @@ are stack-only").
   semantics; the investment goes into `check`-mode advisories
   (`forward_strands_operand`, `uncalled_function`) that catch the
   stranded shapes.
+
+  > **Amendment (2026-07-30) — `uncalled_function` is an error in both
+  > surfaces, not a check-mode advisory.** A call on a function VALUE (a
+  > module export reached through `dot`, a `usurp`ed value, a `def`ed fn)
+  > whose arguments match no signature now RAISES at the call site at
+  > runtime, exactly as a plain word's `no_signature` does; check mode
+  > reports the identical finding at the identical place. The previous
+  > design left the value on the stack and judged it as end-of-run
+  > residue, which made the stranded shape *silent* whenever anything
+  > consumed it — `print (IO.read "/nonexistent")` printed the function
+  > and exited 0. Passing a function as data is now said explicitly
+  > (`name/r`). This narrows the bullet above rather than reversing it:
+  > `forward_strands_operand` remains an advisory, and no word's
+  > collection default changed. See `design/FN-VALUE-DISPATCH.0.md`,
+  > which supersedes `design/ERRORS.8.md` §5 option 2.
 - **Module wrappers must keep `BarrierPos: -1`** (already a hard rule —
   see lang/go/CLAUDE.md "Module FnDef Wrappers"). A stack-only inner
   sig silently breaks the swap form, which is a forward-culture

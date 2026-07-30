@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,5 +330,60 @@ def two (IO.read-line f)
 	got := res[len(res)-1]
 	if got != `["alpha", "alpha"]` && got != "[alpha, alpha]" && got != "['alpha' 'alpha']" {
 		t.Errorf("after a seek back to 0, lines = %#v, want both alpha", got)
+	}
+}
+
+// recordingProbe answers false for everything and records the Go type of the
+// endpoint it was handed per stream. What a StreamProbe RECEIVES is the whole
+// contract between the runtime and the operating system here: OSStreamProbe
+// stats an *os.File, so any wrapper the runtime slips in front of a stream and
+// forgets to make peelable silently turns "is this a terminal" into "no".
+type recordingProbe struct{ seen map[string]string }
+
+func (p recordingProbe) IsTerminal(stream string, endpoint any) bool {
+	p.seen[stream] = fmt.Sprintf("%T", endpoint)
+	return false
+}
+
+// COMPILED mode must hand the probe the same endpoint the interpreter does.
+// It did not: compiled entry points arm the effect fence (Registry.ArmEffectFence
+// — the ledger that decides whether an interpreter fallback is still safe),
+// which wraps Output/ErrOutput, and the wrapper was not peelable. So
+// `IO.is-tty (IO.stdout)` answered FALSE on a real terminal in the DEFAULT
+// execution mode while the interpreter answered true — the colour decision
+// inverted by an instrument that is supposed to be invisible.
+func TestStreamProbeEndpointIsModeIndependent(t *testing.T) {
+	const src = `import "aql:io"  IO.is-tty (IO.stdout)  IO.is-tty (IO.stderr)  IO.is-tty (IO.stdin)`
+	seen := map[string]map[string]string{}
+	for _, mode := range []string{"interp", "compiled"} {
+		p := recordingProbe{seen: map[string]string{}}
+		a, err := lang.New(lang.Options{Streams: p})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode == "interp" {
+			if _, err := a.RunInterp(src); err != nil {
+				t.Fatalf("%s: %v", mode, err)
+			}
+		} else {
+			_, ran, err := a.RunCompiled(src)
+			if err != nil {
+				t.Fatalf("%s: %v", mode, err)
+			}
+			if !ran {
+				t.Fatalf("%s: the program did not run compiled, so this test proves nothing", mode)
+			}
+		}
+		seen[mode] = p.seen
+	}
+	for _, stream := range []string{"stdout", "stderr", "stdin"} {
+		if seen["interp"][stream] != seen["compiled"][stream] {
+			t.Errorf("%s endpoint: interp saw %s, compiled saw %s — the two modes must agree",
+				stream, seen["interp"][stream], seen["compiled"][stream])
+		}
+		if seen["compiled"][stream] != "*os.File" {
+			t.Errorf("%s endpoint in compiled mode = %s, want *os.File (the OS probe stats it)",
+				stream, seen["compiled"][stream])
+		}
 	}
 }
