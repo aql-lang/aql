@@ -41,20 +41,28 @@ because in every case the mistake is more instructive than the fix.
   enforced) is now closed too: `FnSig.ReturnPatterns` carries the
   constraint `ParseFnReturns` used to discard, enforced at both the
   runtime and check-mode return boundaries.
-- **D is reported, not repaired.** Check-time module-body execution now
-  emits an info diagnostic per execution and `CLI.md` documents the
-  exception; the split-mode repair is untouched.
+- **D is fixed, split mode included.** The advisory landed first; the real
+  repair is now in too. `eng.CheckState.ModelEffects` is the third mode —
+  concrete values, substituted effect BACKENDS — so `aql check` no longer
+  writes, creates, removes or prints through a module body, while a body's
+  reads stay real so nothing that loads today starts failing. §D also
+  records the correction that mattered most: gating on "the parent is
+  checking" DELETES a module body's effect from a default run, because on
+  the compiled path the compile pass is the body's only execution.
+  `!Check.Compiling` is what separates a preview from the run.
 - **B's** fix was implemented, validated and reverted; read §B before
   attempting another. The fourth adversarial lens landed after the revert
   and widened the defect further — see §B.
 - **E is fixed for everything it documents.** The code-less runtime
   errors the table names now carry the code their own check-time mirror
   emits; the table names only codes that exist; and a gate re-derives the
-  truth set from the source so it cannot drift again. Two things are
-  deliberately *not* done and are written up in §E: the registry-side
-  enumeration (still worth doing, still a bigger commitment than it
-  looks), and policy refusals, which stay code-less because the local fix
-  also changes compiled-mode fallback semantics.
+  truth set from the source so it cannot drift again. **Both halves that
+  were once deferred are now closed too**: every gated capability's
+  refusal carries a dispatchable code (via a `policy.Denied` adapter, not
+  an `Unwrap` — the reason is in §E), and the engine owns a registered
+  enumeration of every error code, checked four ways. The gate's own blind
+  spot — it could only see WELL-FORMED codes, so the one malformed code in
+  the tree was invisible to it — is recorded in §E with the defect it hid.
 - **G** is still diagnosis only — a pre-existing recorded issue.
 
 Two defects found *by* this work rather than by the report are recorded
@@ -1424,16 +1432,126 @@ promising "type-check without running", including the 2N figure and the
 pin the count, the severity, and — the negative that keeps the advisory
 from becoming noise — that a program importing nothing draws no entry.
 
-The split-mode repair (a third mode: substitute effectful handlers, keep
-values concrete) is still the real fix and is untouched by this.
+### THE SPLIT MODE IS DONE — and it is at the capability layer, not dispatch
 
-### Test gap
+`eng.CheckState.ModelEffects` is the third mode. Values stay CONCRETE
+(`Mode` is false, so dispatch, matching and every handler run exactly as
+at runtime) while the effect BACKENDS are substituted. `runModuleBodyCover`
+derives it from the parent, so it propagates transitively and no import
+path can forget it.
 
-No spec row imports a module whose body has an observable effect, so
-nothing distinguishes "imported and typed" from "imported, typed, and
-executed twice". `Registry.Effects` (`eng/go/effects.go`) already counts
-observable effects for the compiled-fallback fence and is the natural
-oracle for such a row.
+Two things about the shape of the fix are worth more than the fix itself.
+
+**Substituting a HANDLER does not compose; substituting a BACKEND does.**
+The section above proposed running `ReturnsFn` instead of the handler for
+effectful signatures. That cannot work: a `ReturnsFn` yields a CARRIER,
+and outside check mode the rest of the body is not carrier-aware, so the
+first downstream consumer raises "expects a concrete map, got a type
+literal" — aborting the import and losing the exports, which is the exact
+failure mode that disqualified the deny-all option. A concrete *stub*
+return fares no better for reads (`parse (IO.read cfg)` on `""`).
+
+So the substitution happens one layer down, where the seam already exists
+and is already universal:
+
+- **filesystem** — `EffectiveFileOps`/`hostOrModelled` returns a
+  mem-over-host OVERLAY (`capabilities.NewOverlay`, the substrate the
+  shipped `__sys.fs overlay` mode already uses). Every fs mutation in the
+  tree routes through `EffectiveFileOps` — `write`, `folder`, `remove`,
+  `open`, `lock`, `mmap`, `temp`, positioned binary writes; verified by
+  grep, there is no `os.WriteFile`/`os.Create`/`os.MkdirAll` bypass in
+  `lang/go/native` or `lang/go/modules` — so ONE substitution covers the
+  whole class with no call-site changes.
+- **output** — `io.Discard` in place of the writers the sub-registry
+  copies from its parent.
+
+**The line is WRITES, and that is what makes it safe.** Reads are
+untouched, so no module body that loads today can start failing under
+check: a body that reads a config still reads the real one, and a body
+that writes a file and reads it back still sees its own bytes (the
+overlay is a real filesystem — it just doesn't persist). This is the
+property no refusal-based option could offer.
+
+One detail the overlay needed: its path authority is `Upper.ResolvePath`,
+and a fresh `MemFileOps` resolves relative paths against `""`, which
+collapses `resolveBareModule`'s upward walk (`filepath.Dir(".") == "."`)
+and would break a bare `import "foo"` inside a modelled body. The upper's
+`Cwd` is seeded from the host's own resolution of `"."`.
+
+### The `!Compiling` gate — the correction that mattered most
+
+Gating on "the parent is in check mode" is WRONG, and not visibly so.
+Measured: `import module [ print 'loading' … ]` under a default
+`lang.AQL.Run` went from one line of output to **none**.
+
+The cause is that §D's own model of the doubling was incomplete. On the
+compiled path the module body runs ONLY in the compile pass — `import` is
+`RunInCheck`, the exports are baked, and the VM program never re-imports.
+That single execution is therefore the RUN's, not a preview of it, so
+modelling it does not deduplicate the effect, it deletes it.
+
+`CheckState.Compiling` separates the two exactly:
+
+| pass | entry | body runs | effects |
+|---|---|---|---|
+| pure check | `Check.Begin` — `aql check`, the CLI's quiet pre-flight, `lang.AQL.Check` | yes | **modelled** |
+| compile | `Check.BeginCompilePass` — `RunCompiled` / `CompileCheck` | yes | real |
+| interpreter | no check pass | yes | real |
+
+So under the CLI's default check-then-run the body still executes twice,
+but exactly ONE of those executions has real effects — which is what a run
+should have had all along. Measured on the built binary: one importer
+prints `MODBODY` once (was twice), two importers twice (was four), `aql
+check` prints nothing.
+
+`TestDefaultRunEmitsModuleBodyEffectExactlyOnce` pins all three outcomes
+(0 = the effect was deleted, 2 = the original doubling, 1 = correct) with
+the diagnosis in the failure message; it and two others were verified to
+fail when the `!Compiling` gate is removed.
+
+### What is deliberately NOT modelled
+
+- **A network send.** `fetch` builds its own `http.Client` — there is no
+  backend to substitute, and no synthetic response is safe to invent for a
+  body that reads one (a fake status takes a wrong branch; a fake body
+  fails a real parse). Left real, and named in the advisory text.
+- **A `stdin` read.** A read, so out of scope by the rule above. Modelling
+  it as EOF would make a body that reads input at load report a *check
+  error* for a program that runs fine — trading a silent effect for a
+  false verdict.
+- **The effect ledger** (`eng/go/effects.go`) still counts modelled
+  writes. Deliberate and conservative: over-counting only forgoes a safe
+  interpreter fallback, while under-counting a real network send would
+  duplicate it. Discarded OUTPUT does stop counting, which is strictly
+  correct — nothing escaped, so nothing should block a fallback.
+- **`aql check --emit`** (the disassembly surface) runs a compile pass, so
+  its module-body effects are real. Consistent with the table above, and
+  unchanged from before.
+- **A nested body draws no advisory entry.** The advisory lands on
+  `parent.Check`, and a module sub-registry owns its own `CheckState` by
+  design (`design/module-fn-checkstate-ownership.1.md` §3.2), so a nested
+  entry would be recorded where nothing reads it. The nested body IS
+  modelled — verified by `TestModelledEffectsPropagateThroughNestedImports`
+  — only its report is missing. Fixing it means routing diagnostics to a
+  sink the top registry reads, which is a larger change than the count's
+  honesty warrants.
+
+Option (1), caching the check-pass module instance, stays blocked on
+MODULE-CACHE.0 and is now also unnecessary for the effect problem: the
+doubling of *effects* is gone. What remains doubled is the *work* — the
+body is still parsed and executed twice under a default run — which is a
+performance question, not a correctness one.
+
+### Test gap — closed
+
+The gap was that no test imported a module whose body had an observable
+effect, so nothing distinguished "imported and typed" from "imported,
+typed, and executed twice". `lang/go/test/module_check_effects_test.go`
+now covers: the write not landing under check and landing under a run,
+the write being readable back inside the same body, a real read still
+resolving, output discarded under check and printed by a run, transitive
+propagation through a nested import, no leak outside check, and the
+exactly-once default run.
 
 
 ## E. REFERENCE.md documents error codes the engine cannot produce

@@ -3,6 +3,7 @@ package native
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 )
@@ -34,15 +35,26 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 // under `Test.cover` passes the import string + file text; every other caller
 // passes "" (no tagging, no cost).
 func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc string) (ModuleDesc, error) {
-	// `aql check` runs this for real (see the CheckMode note below and
-	// eng's "module_body_executed_in_check" severity entry), so say so.
-	// The command is documented as "type-check without running", and a
-	// module body's effects — file writes, network calls, prints — happen
-	// here with full ambient authority. Emitted per execution and not
-	// deduped: file modules are never cached, so N importers under the
-	// default pre-flight check means 2N executions, and the repeated entry
-	// is what makes that visible.
-	if parent != nil && parent.Check.IsActive() {
+	// `aql check` runs this for real (see the CheckMode note below and eng's
+	// "module_body_executed_in_check" severity entry), so say so. The command
+	// is documented as "type-check without running", and the body's non-effect
+	// work — every def, every computation — happens here. Emitted per
+	// execution and not deduped: file modules are never cached, so the count
+	// IS the finding, and the residual effect classes multiply with it.
+	//
+	// Scoped to a PURE check pass. A compile pass also runs the body, but
+	// there that execution is the program's own (the VM does not re-import),
+	// so it is not a finding and its effects stay real — the same split
+	// modelEffects turns on below.
+	//
+	// KNOWN UNDERCOUNT, deliberate: a module imported from inside a module
+	// body draws no entry. The advisory lands on parent.Check, and a module
+	// sub-registry owns its own CheckState by design
+	// (design/module-fn-checkstate-ownership.1.md §3.2), so a nested body's
+	// entry would be recorded where nothing reads it. The nested body IS
+	// modelled — only its report is missing.
+	inPureCheck := parent != nil && parent.Check.IsActive() && !parent.Check.Compiling
+	if inPureCheck {
 		ref := coverID
 		if ref == "" {
 			ref = "an inline module body"
@@ -50,8 +62,12 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 		parent.Check.AddDiagnostic(CheckDiagnostic{
 			Code: "module_body_executed_in_check",
 			Detail: "check executed " + ref + " for real: `import` runs during " +
-				"check so the module's exports can be typed, and module bodies " +
-				"do not run in check mode, so any effects in the body happened",
+				"check so the module's exports can be typed, and check mode is " +
+				"not propagated into a module body (carrier-stripping would " +
+				"destroy the concrete export names). Its filesystem writes and " +
+				"its output were MODELLED — a mem-over-host overlay and a " +
+				"discarded writer — so neither escaped; a network send and a " +
+				"stdin read are not modelled and still do",
 			Word: "import",
 		})
 	}
@@ -165,6 +181,62 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	// import; the user sees a clear single-error diagnostic and can
 	// fix the body before re-running. Top-level / if / do / for / fn
 	// bodies all stay in CheckMode and collect every typo as usual.
+	//
+	// What IS propagated is the other half of what check mode does. Check
+	// mode strips values to carriers AND substitutes handlers; only the
+	// first breaks module bodies, so ModelEffects carries the second across
+	// on its own: values stay concrete, effect BACKENDS are substituted.
+	// That is what makes `aql check` honest about "type-check without
+	// running" — the body still runs, and still produces the exports the
+	// checker needs to type `Mod.v`, but its writes go nowhere.
+	//
+	// Propagated transitively (a module body's own imports inherit it) and
+	// derived from the PARENT's state rather than set by the caller, so
+	// there is no import path that can forget it.
+	//
+	// The two substitutions:
+	//
+	//   - filesystem — a mem-over-host overlay, installed lazily by
+	//     EffectiveFileOps/hostOrModelled once ModelEffects is on. Every fs
+	//     mutation in the tree already routes through EffectiveFileOps
+	//     (write, folder, remove, open, lock, mmap, temp, positioned
+	//     writes), so one substitution covers the whole class, and reads
+	//     still resolve — a write-then-read-back body sees its own bytes.
+	//   - output — io.Discard in place of the writers copied above, so a
+	//     body that prints at load draws nothing during check. Discarding
+	//     rather than counting is also what keeps the compiled effect fence
+	//     (eng effects.go) honest in the safe direction: nothing escaped, so
+	//     nothing should block a later interpreter fallback.
+	//
+	// Input is NOT substituted, and that is the rule not an omission: the
+	// mode models WRITES. Reads stay real so no body that loads today can
+	// start failing under check — an EOF stdin would make a body that reads
+	// input at load report a check error for a program that runs fine.
+	// Network sends stay real too (fetch owns its http.Client; there is no
+	// backend to swap and no synthetic response that is safe to invent).
+	// Both residuals are recorded in
+	// design/verse-report-defects-investigation.0.md §D.
+	//
+	// !Compiling IS THE WHOLE CORRECTNESS ARGUMENT, and it is not obvious:
+	// on the compiled path a module body runs ONLY in the compile pass. The
+	// compile pass runs `import` for real (RunInCheck) and bakes the
+	// exports, and the VM program does not re-import — so that single
+	// execution is the RUN's, not a preview of it. Gating on IsActive alone
+	// therefore does not merely suppress a duplicate: it deletes a module
+	// body's load-time print/write from a default run entirely (measured —
+	// `import module [ print 'loading' … ]` went from one line to none).
+	//
+	// Compiling splits the two passes exactly. A pure check pass
+	// (Check.Begin — the `check` subcommand, the CLI's quiet pre-flight,
+	// lang.AQL.Check) is nobody's execution and is modelled; a compile pass
+	// (Check.BeginCompilePass — RunCompiled/CompileCheck) is the execution
+	// and stays real. Under the CLI's default `check-then-run` that turns
+	// the §D doubling into exactly ONE real execution per importer, which is
+	// what a run should have had all along.
+	if inPureCheck || parent.Check.ModelsEffects() {
+		modReg.Check.ModelEffects = true
+		modReg.Output, modReg.ErrOutput = io.Discard, io.Discard
+	}
 
 	// Inherit the module CONFIG (InitFunc + Resolver) as a unit, then
 	// run InitFunc to seed the child sub-registry with native words.

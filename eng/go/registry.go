@@ -631,6 +631,51 @@ type CheckState struct {
 	Mode        bool
 	Diagnostics []CheckDiagnostic
 
+	// ModelEffects is the THIRD MODE, and it is deliberately NOT `Mode`.
+	//
+	// Check mode does two separable things: it strips concrete values down
+	// to type carriers, AND it substitutes a signature's ReturnsFn for its
+	// handler. A module body needs the second and cannot survive the first —
+	// its export names and map keys are concrete string literals that
+	// carrier-stripping destroys — which is why `Mode` is deliberately not
+	// propagated into a module sub-registry (see the note in
+	// native_module_module.go::runModuleBodyCover). The consequence was
+	// that `aql check`, documented as "type-check without running", ran
+	// every imported module body's effects with full ambient authority.
+	//
+	// ModelEffects splits the two: values stay CONCRETE (Mode is false, so
+	// dispatch, matching and every handler run exactly as at runtime) while
+	// the effect BACKENDS are substituted, so a body still produces real
+	// export names while its writes go nowhere.
+	//
+	// The line it draws is WRITES, and that is what makes it safe: reads are
+	// untouched, so no module body that loads today can start failing under
+	// check. Concretely — a filesystem mutation lands in a mem-over-host
+	// OVERLAY (native.EffectiveFileOps), so a body that writes a file and
+	// then reads it back still sees its own bytes; output writes go to
+	// io.Discard, which returns the same byte count the real writer would.
+	// A modelled effect is invisible to the program, not merely suppressed.
+	//
+	// Not per-pass state: this is a property of the registry's ROLE (a
+	// module sub-registry created while its parent was running a PURE check
+	// pass), not of a check pass, so Begin() does not reset it. It propagates
+	// transitively — a module imported from a module body inherits it.
+	//
+	// A COMPILE pass (Compiling) is deliberately excluded at the propagation
+	// site: on the compiled path the compile pass's module-body execution is
+	// the run's only one, so modelling there would delete the effect rather
+	// than deduplicate it.
+	//
+	// Two classes stay REAL and are known residuals, recorded in
+	// design/verse-report-defects-investigation.0.md §D: a network send
+	// (fetch builds its own http.Client — no backend to substitute, and no
+	// synthetic response is safe to invent for a body that reads one), and
+	// stdin (a read, so out of scope by the rule above). The effect ledger
+	// (effects.go) is therefore left counting modelled writes too: over-
+	// counting only forgoes a safe interpreter fallback, while under-
+	// counting a real network send would duplicate it.
+	ModelEffects bool
+
 	// FnSummaries caches carrier return-stacks for user-defined fn
 	// bodies keyed by (name + "#" + argTypesJoined). Populated by
 	// analyseFnBody; re-entrant calls (recursion) consult this

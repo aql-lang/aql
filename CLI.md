@@ -234,19 +234,34 @@ engine in carrier mode — so checking stays in lockstep with runtime
 dispatch — reports diagnostics to stderr, and exits non-zero when any
 Error-severity diagnostic is found (exit 0 with `--soft`).
 
-**One exception: imported module bodies do run.** The checker cannot
-type `Mod.value` without the module's real exports, so `import` executes
-during the check pass — and module bodies deliberately do not run in
-check mode (carrier-stripping would destroy the string literals a body
-uses as export names). Any effect in a module body — a print, a file
-write, a network call — therefore happens while you are "only checking",
-with the same authority a run would have. Each execution is reported as
-an info diagnostic (`module_body_executed_in_check`) naming the module.
+**One exception: imported module bodies do run** — with their effects
+modelled. The checker cannot type `Mod.value` without the module's real
+exports, so `import` executes during the check pass, and module bodies
+deliberately do not run in check mode (carrier-stripping would destroy
+the string literals a body uses as export names). What the body does NOT
+get is the ambient authority to change anything:
 
-File modules are not cached, so a plain `aql script.aql` — which
-pre-flight checks before running — executes each imported body **twice**,
-and 2N times for a module imported from N places. Use `--no-check` to run
-without the pre-flight pass.
+* **filesystem writes are modelled.** The body runs against a
+  mem-over-real overlay, so a `write` / `folder` / `remove` / `open` in a
+  module body leaves the real filesystem untouched. Reads still resolve —
+  a body that loads a config file at import time works exactly as it
+  does at runtime, and one that writes a file and reads it back still
+  sees its own bytes.
+* **output is discarded.** A module that prints at load draws nothing
+  during a check.
+* **a network send and a `stdin` read are not modelled** and still
+  happen. `fetch` owns its HTTP client, and no invented response is safe
+  for a body that reads one; stdin is a read, and the rule above is that
+  reads stay real so nothing that loads today starts failing.
+
+Each execution is reported as an info diagnostic
+(`module_body_executed_in_check`) naming the module.
+
+File modules are not cached, so the body runs once per importer per pass.
+A plain `aql script.aql` pre-flight checks and then runs, so an imported
+body executes twice — but only the second execution's effects are real,
+because the compile pass is the one the program's own module load happens
+in. Use `--no-check` to skip the pre-flight pass entirely.
 
 ```bash
 aql check script.aql
