@@ -314,7 +314,15 @@ func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int 
 		a.SetFileOps(lang.NewOverlayFileOps(a.HostFileOps(), mem))
 	}
 
-	if err := runAndPrint(stdout, stderr, a, cfg.Source, cfg.Compile, lang.ResolveColor(a.NativeRegistry(), stderr, "auto")); err != nil {
+	// warn is nil DELIBERATELY: a built binary must not editorialise about its
+	// own execution engine. `aql run` warns when the whole program refused to
+	// compile and fell back to the interpreter — that is developer-facing
+	// performance advice, and its test pins it — but a shipped tool writing
+	// "warning: bytecode compilation refused…" to stderr on every invocation is
+	// noise in someone else's pipeline, and the refusals are easy to hit (two
+	// statement-form `if (cond) [body]` statements are enough). The user of a
+	// tool cannot act on it; the author, running `aql run`, can.
+	if err := runAndPrint(stdout, nil, a, cfg.Source, cfg.Compile, lang.ResolveColor(a.NativeRegistry(), stderr, "auto")); err != nil {
 		if code, isExit := lang.ExitCode(err); isExit {
 			return code
 		}

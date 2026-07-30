@@ -318,3 +318,27 @@ func TestMainExitSuppressesResidualAndRefusesRange(t *testing.T) {
 		t.Errorf("stderr does not explain the range: %q", stderr.String())
 	}
 }
+
+// A BUILT BINARY says nothing about its own execution engine. `aql run` warns
+// when a whole-program compile refusal drops it onto the interpreter — that is
+// developer-facing performance advice, pinned by
+// run.TestExecuteCompileRefusalWarning — but the same line from a shipped tool
+// is noise in someone else's pipeline, and the user of the tool cannot act on
+// it. The refusing fixture is the same one the run-side test uses.
+func TestMainIsSilentAboutCompileRefusal(t *testing.T) {
+	const refuses = `def m {n: 3} def xs (for (m get "n") [1]) xs`
+	var stdout, stderr bytes.Buffer
+	code := Main(Config{Source: refuses}, nil, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit=%d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "bytecode compilation refused") {
+		t.Errorf("a built binary warned about its own compile refusal: %q", stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr=%q, want empty — a working program writes nothing there", stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "1 1 1" {
+		t.Errorf("stdout=%q, want the program's own result", got)
+	}
+}
