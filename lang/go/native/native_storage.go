@@ -1432,7 +1432,14 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	key := getKey(args[0])
 	val, ok := store.Get(key)
 	if !ok {
-		return nil, r.AqlError("unknown key_error", fmt.Sprintf("unknown key: %s", key), "unknown key")
+		// `key_error` — the historical code the getr twin's comment names. It
+		// was spelled "unknown key_error" (the message's leading word glued to
+		// the code) with "unknown key" passed as the WORD, and both halves of
+		// that typo were user-visible: a code containing a SPACE cannot be
+		// matched by any `case` arm, and the compiled path renders the caret
+		// span at len(Word) — 11 carets for "unknown key" against the
+		// interpreter's 3 for the real token.
+		return nil, r.AqlError("key_error", fmt.Sprintf("unknown key: %s", key), "get")
 	}
 	return []Value{val}, nil
 }

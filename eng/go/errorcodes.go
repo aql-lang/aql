@@ -65,11 +65,24 @@ type ErrorCode struct {
 	Owner string
 }
 
-// errorCodeNamePattern is the naming rule, enforced at registration: lower
-// snake_case, starting with a letter. All 232 codes that existed when this
-// file was written already conform — the rule is written down so the next
-// one has to, rather than being inferred from the majority.
-var errorCodeNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+// errorCodeNamePattern is the naming rule, enforced at registration. What it
+// enforces is DISPATCHABILITY, not house style: a code has to be spellable as
+// a `case` arm, so lower-case, starting with a letter, and no whitespace.
+//
+// A hyphen is allowed because AQL word names use them freely (`for-each`,
+// `with-decimal`) and four codes follow suit — `expected-byte`,
+// `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`. Snake_case
+// is the overwhelming convention (233 of 237) and the right choice for a new
+// code, but the four hyphenated ones are matchable and renaming a code is a
+// silent break for every handler that names it, so the rule admits them.
+//
+// An earlier draft of this comment claimed every existing code was
+// snake_case. That was an artefact of how the doc gate FOUND codes: its
+// extraction pattern only matched snake_case, so the hyphenated four — and a
+// `"unknown key_error"` typo with a SPACE in it, which no `case` arm could
+// ever match — were invisible to it. The gate now scans every string literal
+// handed to an error constructor, which is what surfaced them.
+var errorCodeNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
 var (
 	errorCodeRegistry = map[string]ErrorCode{}

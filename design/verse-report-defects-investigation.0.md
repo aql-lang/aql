@@ -473,9 +473,36 @@ narrow: the trailing token must resolve to a **type literal**, and
 engines fine, so it is not "a type literal in the token stream" on its
 own.
 
-Not chased — it is a dispatch divergence, not an error-code or a
-concurrency question, and it deserves its own investigation rather than
-a guess appended to this one. Recorded here because it is exactly the
+**Sharpened, still not fixed.** The trigger is narrower than described
+above: it is a bound WORD whose value is a type literal, not a type
+literal in the token stream. Measured, with `def t (typeof h)`:
+
+| form | compiled | interpreted |
+|---|---|---|
+| `TimeUtil.cancel h t` | `Timeout` | `signature_error` |
+| `TimeUtil.cancel h Integer` | `Integer` | `Integer` |
+| `TimeUtil.cancel h 7` | `7` | `7` |
+| `TimeUtil.cancel h end t` | `Timeout` | `Timeout` |
+
+So a type literal written LITERALLY is fine; only one reached through a
+binding diverges, and an explicit `end` suppresses it.
+
+The interpreted error names the cause: *"the argument was Timeout (a
+Timeout)"*. The argument the matcher received is `t`'s VALUE, not the
+handle `h` — so `cancel` was dispatched a SECOND time, with the trailing
+token as its argument, and failed because neither of its two 1-arg sigs
+(Timeout, Interval) admits a bare type literal. With `7` the second
+dispatch is never attempted and the value simply stays on the stack; a
+type literal is evidently viable enough for forward collection to commit
+to it and then hard-fail the real match.
+
+That puts the defect in `resolveForwardArgs` / `matchSignature` — the two
+coordinated collection phases `eng/go/CLAUDE.md` explicitly says to read
+`design/FORWARD-COLLECTION-PHASES.10.md` before touching, because their
+stop conditions drift apart. Not attempted here for that reason: it is a
+one-line-looking change in the least forgiving code in the kernel, and it
+deserves the phase document in front of it rather than a guess appended to
+an unrelated batch. Recorded here because it is exactly the
 class this note keeps finding: the compiled path and the interpreter
 disagreeing on a shape no spec row covered. Worked around in the rows
 with an explicit `end` (`TimeUtil.cancel h end t`), which both engines
@@ -983,12 +1010,71 @@ Not caused by it, reproduced on the unpatched binary, all
   where the interpreter uses 3 — harmless today, but it will break any
   future gate that compares stderr byte-for-byte, and defect B's fix
   routes *more* programs onto exactly this error.
+
+  **FIXED, and it was one typo causing two user-visible defects.** The
+  Store `get` handler raised
+  `r.AqlError("unknown key_error", "unknown key: …", "unknown key")` — the
+  message's leading word glued onto the code, and passed as the WORD too.
+  So the code contained a SPACE, which no `case` arm can match (the failure
+  was undispatchable), and the compiled path renders the caret span at
+  `len(Word)` — 11 for "unknown key" against the interpreter's 3 for the
+  real token. Corrected to `key_error` (the code the getr twin's own comment
+  names as the historical one) with `get` as the word; both engines now
+  render an identical 3-caret span and a dispatchable code.
+
+  **And it exposed a blind spot in §E's gate, now closed.** The
+  extraction pattern only matched well-formed codes, so a malformed one was
+  invisible to every check — not reported, not counted as mintable, not
+  required to be in the enumeration. `TestEveryAttachedCodeLiteralIsWellFormed`
+  now scans EVERY string literal handed to an error constructor. It found
+  four more codes the enumeration was missing (`expected-byte`,
+  `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`), which
+  settled the naming rule on the property that actually broke: a code must
+  be SPELLABLE as a `case` arm, so a hyphen is fine (AQL word names use
+  them) and a space or a capital is not. The enumeration went from 233 to
+  241 codes, and `errorcodes.go`'s claim that every existing code was
+  snake_case is corrected — that was an artefact of how the gate found
+  them.
 - `[1 2 3] each [ do [ 9 drop ] ]` → compiled raises `[aql/each_error]:
   element 0: body produced no result`; the interpreter returns `[1 2 3]`.
   **Default mode**, no fallback rescue. A nested body that leaves no
   residual is a value the two engines disagree about, unrelated to
   context; the fn-shaped twin (`def run fn [[b:List] [Any] [ do b ]]` over
   `[ 9 drop ]`) fails the same way as a return-arity error.
+
+  **Root-caused, five fixes rejected, NOT fixed** — pinned as a
+  `wantDiverge` row in `lang/go/do_empty_residual_test.go`, whose comment
+  carries the detail. The cause is in `doListReturnsFn`: a non-empty body
+  with an empty residual is modelled as `[Error]` on the reasoning that
+  "that is exactly the shape a raising body leaves", discriminated from
+  `do []` by token count. But an empty residual has TWO causes — the body
+  RAISED (one caught Error) or it COMPLETED net-zero (nothing) — and token
+  count separates neither. For the second the model over-reports by one, so
+  the enclosing each-body unit is analysed at `[element, Error]` and emits a
+  unit returning neither.
+
+  What was tried, so the next attempt starts past it: modelling it empty in
+  the compile pass (every net-zero `do` becomes UNLOWERABLE — a `do`
+  dispatch with zero modelled outputs cannot be seated, so
+  `def b (quote [break]) for 5 [do b i]` stops compiling); modelling it
+  empty everywhere (also breaks `do [raise "x"] dot code`, which then
+  compiles and raises `signature_error` instead of falling back);
+  `MarkUncompilable` (refuses the whole `do […] error […]` family — ten
+  tests pin those paths by name); `SetCatchVariadic`, the mechanism built
+  for a runtime-variable count (the latch IS consumed — verified by
+  instrumenting `catchVariadicFor` — but marking the `do` event variadic
+  does not stop the ENCLOSING closure being seated at the over-reported
+  count); and a gradual `dynamic(Any)` result (one output so still
+  lowerable, variable so the consumer should decline — it does not).
+
+  Discrimination is not the blocker: `doBodyMayRaise` is too conservative
+  to serve (any registered word is fallible, so `drop` qualifies), a
+  diagnostic delta around the body analysis is zero for BOTH shapes
+  (measured), but a `CompileDiverges`-keyed token scan does separate them.
+  Every model it then selects still hits one of the five. So the fix is not
+  in the model — the mismatch between an analysed residual and what the
+  unit actually RETs is a closure-body SEATING question in the emitter, and
+  that is where the next attempt belongs.
 - A lambda in a **map slot**, called as a method, loses its context write
   compiled but keeps it interpreted (`def m {f: ([a:Integer] => [context
   set zz 9 end a])}`) — the *opposite* direction to defect B, and

@@ -93,12 +93,91 @@ var codeSourceRoots = []string{"eng/go", "lang/go"}
 var codeMintPatterns = []*regexp.Regexp{
 	// r.AqlError("x", …) / r.AqlErrorHint("x", …) / MakeAqlError("x", …)
 	// / MakeAqlErrorAt / makeAqlError / makeAqlErrorAt.
-	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([a-z][a-z0-9_]*)"`),
-	regexp.MustCompile(`\.AqlError(?:Hint)?\(\s*"([a-z][a-z0-9_]*)"`),
+	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
+	regexp.MustCompile(`\.AqlError(?:Hint)?\(\s*"([a-z][a-z0-9_-]*)"`),
 	// AqlError / Diagnostic struct literals: Code: "x".
-	regexp.MustCompile(`\bCode:\s*"(?:aql/)?([a-z][a-z0-9_]*)"`),
+	regexp.MustCompile(`\bCode:\s*"(?:aql/)?([a-z][a-z0-9_-]*)"`),
 	// Check-mode diagnostics: CheckAddUniqueDiagnostic(r, "x", …).
-	regexp.MustCompile(`\bCheckAdd\w*Diagnostic\([^,)]*,\s*"([a-z][a-z0-9_]*)"`),
+	regexp.MustCompile(`\bCheckAdd\w*Diagnostic\([^,)]*,\s*"([a-z][a-z0-9_-]*)"`),
+}
+
+// codeLiteralPatterns match the same attaching calls as codeMintPatterns but
+// capture ANY string literal, not just a well-formed code. They exist because
+// the strict patterns have a blind spot that cost real user-visible breakage:
+// a code that does not match the naming rule simply does not match the regex,
+// so it is INVISIBLE to every check here — not reported as malformed, not
+// counted as mintable, and not required to be in the enumeration.
+//
+// A live example was `r.AqlError("unknown key_error", …)` in the Store `get`
+// handler: the message's leading word glued onto the code. A code containing a
+// SPACE cannot be matched by any `case` arm, so the failure was undispatchable,
+// and the same call passed "unknown key" as the WORD, which the compiled path
+// renders as an 11-caret span against the interpreter's 3. One typo, two
+// user-visible defects, and every gate silent.
+var codeLiteralPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([^"]*)"`),
+	regexp.MustCompile(`\.AqlError(?:Hint)?\(\s*"([^"]*)"`),
+}
+
+// TestEveryAttachedCodeLiteralIsWellFormed is the blind-spot check: every
+// string literal handed to an error constructor as its CODE must satisfy the
+// naming rule the enumeration enforces at registration
+// (eng/go/errorcodes.go's errorCodeNamePattern). Without it the rule only
+// binds codes that already conform, which is the set that never needed it.
+func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
+	// The rule is DISPATCHABILITY, not house style. A code has to be
+	// spellable as a `case` arm, so a hyphen is fine — AQL word names use
+	// them freely (`for-each`, `with-decimal`) and four codes follow suit
+	// (`expected-byte`, `bad-encoding`, `cancel-timeout_error`,
+	// `cancel-interval_error`). A SPACE or a capital is not spellable, and
+	// that is what this catches.
+	wellFormed := regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	seen := 0
+	for _, root := range codeSourceRoots {
+		dir := filepath.Join("..", "..", "..", root)
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") ||
+				strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, line := range strings.Split(string(src), "\n") {
+				// Skip comment lines: this file's own prose quotes example
+				// calls (`r.AqlError("…", …)`), and a doc comment is not a
+				// construction site.
+				if strings.HasPrefix(strings.TrimSpace(line), "//") {
+					continue
+				}
+				for _, re := range codeLiteralPatterns {
+					for _, m := range re.FindAllStringSubmatch(line, -1) {
+						seen++
+						if code := m[1]; !wellFormed.MatchString(code) {
+							t.Errorf("%s attaches the code %q, which no `case` arm can "+
+								"match — a code is a dispatch contract, and a name with a "+
+								"space or a capital is not spellable as an arm, so the "+
+								"failure is undispatchable.", path, code)
+						}
+					}
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walking %s: %v", root, err)
+		}
+	}
+	// A floor, so a regex that stops matching fails as a broken gate rather
+	// than as a clean bill of health.
+	if seen < 200 {
+		t.Fatalf("only %d code literals found across %v — codeLiteralPatterns "+
+			"have stopped matching", seen, codeSourceRoots)
+	}
 }
 
 // mintableCodes walks the source roots and returns every code any site
