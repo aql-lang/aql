@@ -94,7 +94,13 @@ var codeMintPatterns = []*regexp.Regexp{
 	// r.AqlError("x", …) / r.AqlErrorHint("x", …) / MakeAqlError("x", …)
 	// / MakeAqlErrorAt / makeAqlError / makeAqlErrorAt.
 	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
-	regexp.MustCompile(`\.AqlError(?:Hint)?\(\s*"([a-z][a-z0-9_-]*)"`),
+	// …and the POSITIONED constructors r.AqlErrorAt / r.AqlErrorHintAt. They
+	// arrived with the aql:io positionless-error pilot, after this gate was
+	// written, and without them every code minted only through a positioned
+	// site was invisible here — neither counted as mintable nor required to
+	// be in the enumeration, which is precisely the drift the gate exists to
+	// catch. `exit_error` was the first such code.
+	regexp.MustCompile(`\.AqlError(?:Hint)?(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
 	// AqlError / Diagnostic struct literals: Code: "x".
 	regexp.MustCompile(`\bCode:\s*"(?:aql/)?([a-z][a-z0-9_-]*)"`),
 	// Check-mode diagnostics: CheckAddUniqueDiagnostic(r, "x", …).
@@ -116,7 +122,7 @@ var codeMintPatterns = []*regexp.Regexp{
 // user-visible defects, and every gate silent.
 var codeLiteralPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([^"]*)"`),
-	regexp.MustCompile(`\.AqlError(?:Hint)?\(\s*"([^"]*)"`),
+	regexp.MustCompile(`\.AqlError(?:Hint)?(?:At)?\(\s*"([^"]*)"`),
 }
 
 // TestEveryAttachedCodeLiteralIsWellFormed is the blind-spot check: every

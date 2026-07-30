@@ -2708,7 +2708,13 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
 | `read_error` | A read failed — a missing path, an unreadable stream, undecodable content. |
 | `write_error` | A write failed — an unwritable path, a refused exclusive create, a failed atomic rename. |
-| `stat_error`, `list_error`, `remove_error`, `move_error`, `copy_error`, `link_error`, `touch_error` | The corresponding `aql:io` operation failed. The module reports per-word codes, one per operation — there is no single `io_error`. |
+| `stat_error` | `IO.stat` failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
+| `list_error` | `IO.list` failed. |
+| `remove_error` | `IO.remove` failed. |
+| `move_error` | `IO.move` failed. |
+| `copy_error` | `IO.copy` failed. |
+| `link_error` | `IO.link` failed. |
+| `touch_error` | `IO.touch` failed. |
 | `exit` | **Not a failure.** The reserved control error `IO.exit` raises, carrying `{code}`. A driver that recognises it exits with that status printing nothing; a sub-engine converts it so a sandbox cannot exit its host. Hosts read it with `lang.ExitCode(err)`. |
 | `exit_error` | `IO.exit` was given a non-Integer code, or one outside `0..125` (126/127 and 128+n are the shell's own). |
 | `permission_denied` | The policy refused the operation by RULE — widen the rule. Carried by every gated capability: fileops, network, process, vault, terminal. |

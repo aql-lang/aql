@@ -34,7 +34,12 @@ const ExitCodeKey = "code"
 // prints errors) still renders as a located diagnostic rather than a bare
 // string.
 func NewExitError(code int64, src string, pos SrcPos) *AqlError {
-	e := makeAqlErrorAt(ExitErrorCode, "exit requested with code "+
+	// The literal, not ExitErrorCode: the errorcodes gate reads MINTS from the
+	// construction sites and deliberately ignores constants that merely NAME a
+	// code, so a mint through the constant alone is invisible to it. The two
+	// cannot silently diverge — change either and the gate reports `exit` as
+	// registered-but-unminted or minted-but-unregistered.
+	e := makeAqlErrorAt("exit", "exit requested with code "+
 		strconv.FormatInt(code, 10), "exit", src, "", pos)
 	data := NewOrderedMap()
 	data.Set(ExitCodeKey, NewInteger(code))
