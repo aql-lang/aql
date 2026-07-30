@@ -521,3 +521,70 @@ func TestUtilsBakedPermissionsPair(t *testing.T) {
 		}
 	})
 }
+
+// --- a built binary runs the sources it was built from ---
+//
+// bundledFirst decides which LAYER answers a read; it does not decide which
+// PATH is asked for. Both halves are needed, and only an end-to-end build
+// shows that: the unit tests in internal/buildrt passed while a real binary
+// still loaded a stranger, because the import was still being resolved
+// relative to the run-time cwd. This test is the one that would have caught
+// it, so it belongs here rather than beside the layer.
+func TestUtilsBuiltBinaryIgnoresSameNamedHostFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping utils end-to-end build in -short mode")
+	}
+	self := buildAqlBinary(t)
+
+	proj := t.TempDir()
+	elsewhere := t.TempDir()
+	write := func(dir, name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	lib := write(proj, "lib.aql", `export "Lib" { who: "BUNDLED" }`+"\n")
+	src := write(proj, "main.aql", "import \"./lib.aql\"\nprint (Lib.who)\n")
+	write(elsewhere, "lib.aql", `export "Lib" { who: "STRANGER" }`+"\n")
+
+	out := filepath.Join(proj, "tool")
+	orig := osExecutable
+	osExecutable = func() (string, error) { return self, nil }
+	t.Cleanup(func() { osExecutable = orig })
+	var so, se bytes.Buffer
+	if rc := New().Run([]string{src, "-o", out}, nil, &so, &se); rc != 0 {
+		t.Fatalf("aql build: rc=%d stderr=%s", rc, se.String())
+	}
+
+	run := func(cwd string) string {
+		cmd := exec.Command(out)
+		cmd.Dir = cwd
+		b, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("running the built tool in %s: %v\n%s", cwd, err, b)
+		}
+		return strings.TrimSpace(string(b))
+	}
+
+	if got := run(proj); got != "BUNDLED" {
+		t.Fatalf("baseline: got %q, want BUNDLED", got)
+	}
+
+	// Editing the imported source after the build must not change the tool.
+	if err := os.WriteFile(lib, []byte(`export "Lib" { who: "EDITED" }`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := run(proj); got != "BUNDLED" {
+		t.Errorf("after editing the imported file the tool printed %q — a built "+
+			"binary must run the sources it was built from, not the live ones", got)
+	}
+
+	// And a same-named file in the directory the tool is STARTED from must
+	// never be loaded in place of the bundled module.
+	if got := run(elsewhere); got != "BUNDLED" {
+		t.Errorf("run from a directory holding its own lib.aql the tool printed %q "+
+			"— a stranger's file was executed in place of the bundled module", got)
+	}
+}

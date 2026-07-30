@@ -246,6 +246,49 @@ type Config struct {
 	Profile *policy.Profile `json:"profile,omitempty"`
 }
 
+// bundledFirst resolves READS from the bundled sources before the host
+// filesystem, and passes everything else — writes, mutations, temp files,
+// locks, watches, directory ops — straight through to the host by embedding
+// it. That split is the point: a built program must not re-read a live file
+// in place of the copy it was built from, and must still be able to write to
+// the real filesystem (buildrt_test.go's
+// TestMainBundledFilesDoNotHideTheHostFilesystem pins the second half).
+//
+// Only the three read entry points are overridden. Anything the bundle does
+// not have falls through unchanged, so a program reading real data files
+// behaves exactly as before.
+type bundledFirst struct {
+	capabilities.FileOps                      // the host
+	mem                  capabilities.FileOps // the bundled sources
+}
+
+func (b bundledFirst) ReadFile(path string) ([]byte, error) {
+	if data, err := b.mem.ReadFile(path); err == nil {
+		return data, nil
+	}
+	return b.FileOps.ReadFile(path)
+}
+
+func (b bundledFirst) Stat(path string, follow bool) (capabilities.FileInfo, error) {
+	if fi, err := b.mem.Stat(path, follow); err == nil {
+		return fi, nil
+	}
+	return b.FileOps.Stat(path, follow)
+}
+
+// Open consults the bundle only for a READ-ONLY open. Any write intent is the
+// host's, since the bundle is an immutable snapshot and a write that landed
+// there would be discarded at exit — the silent data loss that made the
+// original replace-the-filesystem approach untenable.
+func (b bundledFirst) Open(path string, opts capabilities.OpenOpts) (capabilities.FileHandle, error) {
+	if !opts.Write && !opts.Append && !opts.Create && !opts.Truncate {
+		if h, err := b.mem.Open(path, opts); err == nil {
+			return h, nil
+		}
+	}
+	return b.FileOps.Open(path, opts)
+}
+
 // Main is the entrypoint a standalone executable runs: build lang.Options from
 // the baked Config, overlay any bundled files over the host filesystem, run the
 // entry source, and map errors to a process exit code.
@@ -303,15 +346,33 @@ func Main(cfg Config, args []string, _ io.Reader, stdout, stderr io.Writer) int 
 		// there is more than the entry), so the failure was invisible until
 		// a program grew a second file.
 		//
-		// Ordering is HOST over MEM, not the other way around. NewOverlay's
-		// upper layer is the writable one AND the one reads consult first,
-		// so mem-over-host would keep the program's writes in RAM — the
-		// very bug being fixed. With host upper: writes reach the real
-		// filesystem, and a bundled source still resolves because the read
-		// falls through to mem. The bundled keys are the BUILD machine's
-		// absolute paths, so a same-path real file on the user's machine is
-		// not a practical collision.
-		a.SetFileOps(lang.NewOverlayFileOps(a.HostFileOps(), mem))
+		// Reads resolve from the BUNDLE first; everything else goes to the
+		// host. An overlay cannot express that — its upper layer is both the
+		// write target and the first read consulted — so host-upper (writes
+		// work, bundle only wins where the host has nothing) and mem-upper
+		// (bundle wins, writes trapped in RAM) are both wrong, in opposite
+		// directions. bundledFirst splits the two.
+		//
+		// Host-upper was not merely "not self-contained". Because a relative
+		// `import "./lib.aql"` resolves through the file layer against the
+		// RUN-TIME process cwd, a built tool started in any directory holding
+		// a file of that name loaded and executed THAT file instead of its
+		// bundled module. A baked -perms profile constrains what such code
+		// may do; it does not stop it running. Both cases are pinned below.
+		a.SetFileOps(bundledFirst{FileOps: a.HostFileOps(), mem: mem})
+		// Anchor relative imports to the BUILD-TIME entry directory. Without
+		// this, resolveImportPath leaves `./lib.aql` relative (it only joins
+		// when BaseDir is set), the file layer resolves it against the RUN-TIME
+		// process cwd, and the bundle — keyed by build-machine absolute paths —
+		// is never consulted at all. bundledFirst alone does not fix that: it
+		// decides which layer answers a path, not which path is asked for.
+		//
+		// With BaseDir set, `./lib.aql` becomes exactly the key the bundle was
+		// written under, so the bundled module answers and a same-named file in
+		// whatever directory the tool was started from never gets a look in.
+		if cfg.EntryDir != "" {
+			a.NativeRegistry().BaseDir = cfg.EntryDir
+		}
 	}
 
 	// warn is nil DELIBERATELY: a built binary must not editorialise about its
