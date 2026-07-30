@@ -346,12 +346,41 @@ sqlite + output), `aql:net` (network), `aql:time-util` (clock + real timers),
 
 | Governor | Value | Where / error |
 |---|---|---|
-| Interpreter step limit | `DefaultStepLimit = 10_000_000` | `engine.go` Run loop → `evaluation_limit` |
-| Paren-group step cap | `maxParenGroupSteps = 10_000_000` | `evalParenGroupAt` → `evaluation_limit` |
+| Interpreter step limit | `DefaultStepLimit = 10_000_000`, host-overridable via `Options.Steps` | `engine.go` Run loop → `evaluation_limit` |
+| Paren-group step cap | per-group, = the engine's step limit | `evalParenGroupAt` → `evaluation_limit` — **does not compose, see below** |
 | **Tape growth ceiling** | ≈ `1024·2.7⁶` ≈ **397k entries ≈ 64 MB** | `tape.go` gap-buffer; `Exhausted()` → `tape_exhausted` |
 | VM operand-stack + frame depth | `vmStackCeiling` (= tape ceiling) | `vm.go` → `tape_exhausted` |
 | Parser nesting depth | `maxParseNestingDepth = 10000` | `parser/parse.go` → `evaluation_limit` |
 | Check-mode step budget | `DefaultCheckStepBudget = 500_000` | `engine.go` check loop → `step_budget_exceeded` |
+
+> **FOLLOW-UP (2026-07-30) — the step budget is per-group, not aggregate, so
+> `Options.Steps` does not bound a program.** Raised in review of PR #319,
+> confirmed twice by independent verification against the code and by running
+> the built CLI.
+>
+> `evalParenGroupAt` drives its own loop with a FRESH counter that runs to the
+> full `e.stepLimit`, while the outer `Run` loop charges the entire group as a
+> SINGLE step. A program made of many — or nested — parenthesised forward
+> arguments therefore executes without effective limit, and `evaluation_limit`
+> never fires. The two counters do not share a budget, so the governor above
+> bounds one group at a time rather than the program.
+>
+> This matters most to exactly the reader this note is written for: a host
+> setting a low `Options.Steps` to bound code it did not write. The table above
+> presents that governor as "enforced"; for paren-heavy input it is not.
+>
+> **Shape of the fix:** one budget CONSUMED by every evaluator — thread a
+> shared remaining-steps counter (on the engine, decremented by the outer loop,
+> by `evalParenGroupAt`, and by nested sub-evaluations) rather than handing each
+> its own ceiling. The VM path needs the same treatment; `stepLimitFor` is
+> already the single resolution boundary, so the plumbing exists. The
+> acceptance test is a program with deeply nested parens under a small
+> `--options steps:N` that MUST raise `evaluation_limit`, plus its negative
+> twin — a program that legitimately fits the budget and must not.
+>
+> Recorded rather than fixed in that PR because it is engine work with its own
+> ratchets (`pinnedCheckRunDivergent`, the spec corpus), not part of the CLI
+> arc that surfaced it.
 
 The **tape growth ceiling** is the "tape length limitation" the brief names: the
 engine runs on a bounded-growth gap buffer (see
@@ -886,7 +915,9 @@ limit, tape ceiling), so a runaway body is bounded — but `MaxSubEngineDepth` i
 unenforced (§3.6) and `newSubEngineRegistry` does not read `pol.Limits()`, so
 **nested `Vm.run` is unbounded** (a Go-stack DoS vector) and a
 `Vm.run-with {limits:…}` declares budgets that do not bite. Closing this is the
-depth-counter + limits-wiring work of §6.1/§8.2. And, per §9.2, this is
+depth-counter + limits-wiring work of §6.1/§8.2. The per-group step budget
+recorded above is a third instance of the same shape — a declared bound that
+does not compose — and should be closed with them. And, per §9.2, this is
 in-process attenuation, not OS isolation against truly hostile code.
 
 **The synthesis.** `Vm.run` is not merely a hatch to worry about — it is the

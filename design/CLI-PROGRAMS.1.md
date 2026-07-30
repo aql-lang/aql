@@ -131,3 +131,75 @@ round (no local alias fns and no recursion in the parse machinery; native
 hypotheses to re-verify against the current engine rather than as standing
 constraints — several sharp edges named there have since been fixed, and
 `design/AQL-SHARP-EDGES.0.md` is the live list.
+
+## 5. Follow-ups from the PR #319 review
+
+An automated review of the branch raised eleven points. Two were stale (fixed
+by later commits), one was a false positive (the ADR amendment was explicitly
+instructed by the maintainer), and seven were technical claims — **every one of
+which was confirmed** by independent verification that ran the code rather than
+read it, several coming back stronger than stated. Five were fixed in the same
+PR. What is recorded here is what was deliberately NOT fixed there, and why.
+
+The one engine-level item — the paren-group step budget failing to compose, so
+`Options.Steps` does not bound a program — is recorded in
+[MODULE-SECURITY.0](MODULE-SECURITY.0.md) beside the governor table it
+contradicts, not here.
+
+### 5.1 `Cli.parse` raises on a malformed spec instead of returning data
+
+**Status: open, and the recommendation is to leave it.**
+
+`cli.aql`'s header says a spec is read defensively and that parse errors come
+back as data (`{ok:false err usage}`). That is true of the ARGUMENT VECTOR,
+which is genuinely untrusted input, and it is not true of the SPEC: a
+non-convertible numeric field (`args:{min:"many"}`) or a non-Map element in
+`flags` raises out of `Cli.parse` / `Cli.usage` / `Cli.dispatch`.
+
+The reviewer is factually right and the severity is low. A spec is not user
+input — it is the tool author's own source, written as a literal `def spec {…}`
+in every caller in this repository, so a malformed one is a bug in the program
+being written, discovered the first time it runs. A raise at that point is a
+better report than a `{ok:false}` the author has to remember to check.
+
+Two things would change that assessment, and are the trigger for revisiting:
+a program that BUILDS a spec at runtime from configuration, or an `aql:cli`
+caller that accepts a spec across a trust boundary. Neither exists today.
+
+If it is fixed, the shape is a `Cli.check-spec (spec)` returning
+`{ok, err}` — validation as a separate, callable word — rather than making
+every entry point defensive, so the cost falls on the author who wants the
+check and not on every parse.
+
+### 5.2 Two defects in the end-to-end test itself
+
+Found by an adversarial audit of `cmd/go/internal/build/utils_e2e_test.go`,
+both reproduced by execution. **Both are open.** They matter more than their
+size suggests, because this file is the tripwire that keeps `utils/` from
+rotting the way `kg/` did — a tripwire that fails for the wrong reason, or
+passes for the wrong reason, is worse than none.
+
+1. **A hidden ordering dependency between sibling subtests.** In
+   `TestUtilsCatEndToEnd`, the subtest *"a flag in argv is a flag, not an
+   operand"* derives `dir/in.txt` but never writes it: it consumes the file the
+   PREVIOUS subtest wrote, and works only because Go runs non-parallel subtests
+   in registration order. Run alone — which is how anyone iterates on a
+   ten-second test — it fails with `stdout="", want -n to number the lines`,
+   blaming `-n` for a missing operand. (`-shuffle` does NOT trigger it: it
+   reorders top-level tests only.) Fix: give the subtest its own `t.TempDir()`
+   and write its own input, and assert `got.code == 0` alongside the stdout
+   check so a missing operand can never again masquerade as a flag defect.
+
+2. **The build inherits an ambient `AQL_POLICY`.** `buildUtil` calls the real
+   subcommand, and `permsflags.Resolve` falls back to `AQL_POLICY_FILE` /
+   `AQL_POLICY` when no `-perms` flag is given. Five of the six tests build
+   without `-perms`, so whatever policy the environment names is silently baked
+   into those binaries: `AQL_POLICY=read-only go test -run TestUtilsCatEndToEnd`
+   fails with empty stdout and exit 1. The failure direction is the less
+   dangerous one — a PERMISSIVE ambient policy would instead mask a real
+   regression. `permsflags_test.go` already pins both variables with
+   `t.Setenv`, so this is a deviation from the repo's own convention rather
+   than a novel hazard. Fix: pin them empty in the test's setup.
+
+The baked-permissions pair is immune to both: it passes `-perms` explicitly,
+and `buildrt` reads only `cfg.Profile` at run time, never the environment.
