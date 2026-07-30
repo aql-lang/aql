@@ -943,12 +943,41 @@ has to cover module sub-registries, not just container payloads.
    can reach them. Each is a `wantDiverge` row in the differential test
    rather than an omission.
 
-   One residual sharpened while pinning it: the map-slot-lambda divergence
-   the note recorded is **source-shape-dependent**. `(m.f 1) drop`
-   diverges (compiled contains, interpreted leaks); the bare `m.f 1` and
-   `m.f 1 drop` agree. So the trigger is the paren group taking a
-   different compiled path, not method dispatch as such. Both spellings
-   are pinned, as a pair, because the pair is the finding.
+   One residual sharpened while pinning it, then **root-caused** on a
+   later pass. The map-slot-lambda divergence the note recorded is
+   source-shape-dependent — `(m.f 1) drop` diverges (compiled contains,
+   interpreted leaks) while the bare `m.f 1 drop` agrees — and the
+   disassembly says why:
+
+   ```
+   (m.f 1) drop → CALL_DYN_METHOD  ; (paren apply)/1 -> 1
+   m.f 1 drop   → uncompilable: member fn value auto-applies mid-expression
+                  (fn-value-call boundary, Stage 3)
+   ```
+
+   `callDynMethod` **islands** the apply: `islandRun` builds a sub-engine
+   and calls `eng.Run`, and `Engine.Run` is exactly where the interpreter
+   pushes its per-body context layer. So the compiled path is *more*
+   isolated than the interpreter here — it delegates the call to an
+   interpreter island, and the island's `Run` pushes a frame the
+   interpreter's own inline dispatch of the same tokens never pushes. The
+   fix therefore belongs at the ISLAND ENTRY (an island continuing an
+   in-progress expression is not a body), not at the VM's body seam.
+
+   Two corrections fall out, both worth more than the row itself:
+
+   - It is **not** `enterBodyUnit`'s frame. A hypothesis that §B's own fix
+     had created this row was tested by disabling that frame outright —
+     `Push` and `Pop` both removed and counted — and the row still
+     diverges. An earlier probe that removed only the `Push` suggested
+     otherwise and was **unsound**: it left a `Pop` running against the
+     parent's layer. Same failure mode as the `UpdateChain` repro recorded
+     above, and the same lesson — verify the probe removed what it claims.
+   - The ungrouped twin agrees **trivially**. That form does not compile at
+     all, so the program falls back to the interpreter and both sides of
+     the comparison ARE the interpreter. The pair is still the finding, but
+     the difference between the two rows is that one compiles and the other
+     is refused — and the refusal is what looks like agreement.
 3. Gate the frame on a static "this body may touch context" flag so the
    allocation is paid only where it is observable, and add an
    each/fold/filter row to the alloc guard.
@@ -997,6 +1026,25 @@ has to cover module sub-registries, not just container payloads.
    a paren-grouped map-slot method call is a boundary compiled but not
    interpreted. Writing the list requires DECIDING which of those is
    correct, which is a language-semantics call, not a documentation edit.
+
+   **The call has since been made, and it settles the list.** The
+   INTERPRETER is canonical in every remaining case, with one stated rule
+   for the shape that looked like a counter-example: *a paren form is never
+   a boundary — the value is resolved and then made available to the
+   signature matcher.* So the remaining work is not "decide", it is
+   "conform", in two opposite directions:
+
+   - `case` clause bodies, `otherwise`'s list argument and list
+     auto-evaluation must BECOME boundaries when compiled. All three are
+     inlined into the caller's unit, so this needs an emitted context-frame
+     opcode pair (plus a context-depth restore at unit entry/exit, so a
+     mis-emitted pair cannot silently leave the stack unbalanced) — there
+     is no call to wrap.
+   - The paren-grouped map-slot method call must STOP being one, at the
+     island entry per the root cause above.
+
+   Only after both does EXPLANATION.md's list become writable, and it will
+   then also need `for` removed and `for-each` added.
 
 ### Pre-existing defects found while validating the patch
 

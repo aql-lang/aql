@@ -120,23 +120,42 @@ run [ context set y 1 5 ]
 context has y`,
 			wantDiverge: true,
 			why:         "same inline list auto-evaluation, reached as a call argument"},
-		// PAREN-GROUPED on purpose. Measured, the divergence is
-		// source-shape-dependent: `(m.f 1) drop` diverges, while the bare
-		// `m.f 1` and `m.f 1 drop` agree (both leak). So the trigger is the
-		// paren group taking a different compiled path, not method dispatch as
-		// such — a sharper statement than the design note's, which recorded
-		// only "a lambda in a map slot".
+		// PAREN-GROUPED on purpose, and the mechanism is now measured rather
+		// than guessed. The disassembly is the whole finding:
+		//
+		//	(m.f 1) drop → CALL_DYN_METHOD  ; (paren apply)/1 -> 1
+		//	m.f 1 drop   → uncompilable: member fn value auto-applies
+		//	               mid-expression (fn-value-call boundary, Stage 3)
+		//
+		// callDynMethod ISLANDS the apply — islandRun builds a sub-engine and
+		// calls eng.Run — and Engine.Run is exactly where the interpreter
+		// pushes its per-body context layer (engine.go, the Contexts Push/Pop
+		// pair). So the compiled path is MORE isolated than the interpreter
+		// here: it delegates the call to an interpreter island, and the
+		// island's Run pushes a frame that the interpreter's own inline
+		// dispatch of the same tokens never pushes.
+		//
+		// It is NOT the VM's enterBodyUnit frame. Verified by disabling that
+		// frame outright (Push and Pop both removed, counted) and re-running:
+		// this row still diverges. An earlier probe that removed only the Push
+		// suggested otherwise and was unsound — it left a Pop running against
+		// the parent's layer.
 		{name: "paren-grouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 (m.f 1) drop
 context has y`,
 			wantDiverge: true,
-			why: "diverges in the OPPOSITE direction — compiled CONTAINS the write, " +
-				"interpreted leaks it. Pre-existing, and evidence the INTERPRETER is " +
-				"itself inconsistent about which call forms are boundaries, which is " +
-				"why there is no single true boundary list to document yet"},
-		// The ungrouped twin of the row above, kept as its own row because the
-		// pair IS the finding: same call, same lambda, different answer
-		// depending on whether it is wrapped in parens.
+			why: "diverges in the OPPOSITE direction — compiled CONTAINS the write " +
+				"(false), interpreted leaks it (true). Pre-existing, and caused by " +
+				"the compiled apply islanding into a sub-engine whose Engine.Run " +
+				"pushes a body frame; the fix belongs at the island entry, not at " +
+				"the VM's body seam"},
+		// The ungrouped twin, kept as its own row — but read it carefully: it
+		// agrees TRIVIALLY, not by the same mechanism. The form does not
+		// compile at all, so the whole program falls back to the interpreter
+		// and both sides of the comparison ARE the interpreter. The pair is
+		// still the finding, but the difference between the two rows is that
+		// one form compiles and the other is refused; the refusal is what
+		// looks like agreement.
 		{name: "ungrouped map-slot lambda method", src: `def m {f: ([a:Integer] => [ context set y 1 a ])}
 m.f 1 drop
 context has y`},
