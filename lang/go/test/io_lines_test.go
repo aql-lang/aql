@@ -345,6 +345,33 @@ func (p recordingProbe) IsTerminal(stream string, endpoint any) bool {
 	return false
 }
 
+// A MODULE BODY gets the terminal probe too, alongside the environment and the
+// argument vector (modules/io.go, ModuleInheritedCaps). aql:cli is the library
+// that needs it: its help rendering colours only when stdout is a terminal, and
+// without the inheritance that decision read "never a terminal" one import deep
+// while the importing program read the truth.
+func TestStreamProbeReachesModuleBodies(t *testing.T) {
+	a, err := lang.New(lang.Options{Streams: capabilities.FixedStreamProbe{
+		Terminal: map[string]bool{"stdout": true},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	a.SetOutput(&out)
+	if _, err := a.Run(`import module [
+  import "aql:io"
+  def m-tty fn [[] [Boolean] [ IO.is-tty (IO.stdout) ]]
+  export "M" {tty: m-tty/r}
+] end
+print (M.tty)`); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "true" {
+		t.Errorf("module body IO.is-tty printed %q, want true — the host installed a probe saying stdout IS a terminal", out.String())
+	}
+}
+
 // COMPILED mode must hand the probe the same endpoint the interpreter does.
 // It did not: compiled entry points arm the effect fence (Registry.ArmEffectFence
 // — the ledger that decides whether an interpreter fallback is still safe),

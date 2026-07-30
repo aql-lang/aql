@@ -217,15 +217,45 @@ def cli-index fn [[spec:Map] [Map] [
 # ----------------------------------------------------------------------------
 def cli-init fn [[ix:Map] [Map] [
   def df ix.defaults
-  {ok:true err:"" seen:{} args:[] pend:"" pendtok:"" nomore:false command:none}
+  {ok:true err:"" seen:{} args:[] pend:"" pendtok:"" nomore:false command:none
+   cmd0:none cmd0i:0 unknown:false}
     set (quote flags) df set (quote idx) ix
 ]]
 
 def cli-fail fn [[st:Map msg:String] [Map] [ st set (quote ok) false set (quote err) msg ]]
 
+# An unknown flag is failure of a different KIND: `prog --bogus --help` must
+# not print help and exit 0, because that turns a typo in a script into a
+# success. (GNU's tools agree: `ls --bogus --help` exits 2.) Every other
+# failure — a missing value, an arity violation — still yields to a --help
+# the user also typed, which is what makes `prog --help` work under a spec
+# whose min-arity the empty argv cannot satisfy.
+def cli-fail-unknown fn [[st:Map msg:String] [Map] [
+  def s2 (cli-fail st msg)
+  s2 set (quote unknown) true
+]]
+
+# A positional. The FIRST one is also the subcommand candidate — but only if it
+# arrived before any `--` and is not the lone `-`: a file the user explicitly
+# escaped, or named as stdin, must not be swallowed as a verb.
 def cli-arg fn [[st:Map tok:String] [Map] [
   def ag st.args
-  st set (quote args) (push tok ag)
+  def cand ((((st.cmd0) is None) and ((st.nomore) not)) and (tok neq "-"))
+  def s2 (if cand [ st set (quote cmd0) tok set (quote cmd0i) (size ag) ] [st])
+  s2 set (quote args) (push tok ag)
+]]
+
+# drop the element at index i, keeping the rest in order.
+def cli-drop-at-step fn [[e:Any acc:Map] [Map] [
+  def n acc.n
+  def keep (if (n eq acc.i) [acc.out] [(push e acc.out)])
+  acc set (quote out) keep set (quote n) (n add 1)
+]]
+
+def cli-drop-at fn [[xs:List i:Integer] [List] [
+  def a0 ({out:[] n:0} set (quote i) i)
+  def rr (fold [cli-drop-at-step] xs a0)
+  rr.out
 ]]
 
 # set a flag, marking it seen.
@@ -277,9 +307,9 @@ def cli-long-neg fn [[st:Map nm:String haseq:Boolean] [Map] [
   def lo ix.long
   def bse (if (cli-starts "no-" nm) [(slice 3 (size nm) nm)] [""])
   def g (if (bse eq "") [none] [(lo get bse)])
-  if (g is None) [ def r (cli-fail st (join "" ["unknown flag: --" nm]))  r ] [
+  if (g is None) [ def r (cli-fail-unknown st (join "" ["unknown flag: --" nm]))  r ] [
     def kd g.kind
-    if (kd neq "bool") [ def r (cli-fail st (join "" ["unknown flag: --" nm]))  r ] [
+    if (kd neq "bool") [ def r (cli-fail-unknown st (join "" ["unknown flag: --" nm]))  r ] [
       if haseq [ def r (cli-fail st (join "" ["flag --" nm " takes no value"]))  r ]
                [ def r (cli-put st bse false)  r ]
     ]
@@ -309,7 +339,7 @@ def cli-short-walk fn [[st:Map tok:String i:Integer] [Map] [
     def ix st.idx
     def so ix.short
     def f (so get c)
-    if (f is None) [ def r (cli-fail st (join "" ["unknown flag: -" c]))  r ] [
+    if (f is None) [ def r (cli-fail-unknown st (join "" ["unknown flag: -" c]))  r ] [
       def nm f.name
       def kd f.kind
       if (kd eq "string") [
@@ -368,14 +398,14 @@ def cli-pick-command fn [[st:Map] [Map] [
     def ix st.idx
     def co ix.corder
     if ((size co) eq 0) [st] [
-      def ag st.args
-      if ((size ag) eq 0)
+      def c0 st.cmd0
+      if (c0 is None)
         [ def r (cli-fail st (join "" ["a command is required (one of: " (join ", " co) ")"]))  r ] [
-        def nm (convert String (ag get 0))
+        def nm (convert String c0)
         def cs ix.cmds
         if ((cs get nm) is None)
           [ def r (cli-fail st (join "" ["unknown command: " nm]))  r ]
-          [ st set (quote command) nm set (quote args) (shed 1 ag) ]
+          [ st set (quote command) nm set (quote args) (cli-drop-at (st.args) (st.cmd0i)) ]
       ]
     ]
   ]
@@ -406,7 +436,7 @@ def cli-result fn [[st:Map] [Map] [
   if ((st.ok) not) [
     def er st.err
     def ix st.idx
-    {ok:false} set (quote err) er set (quote usage) (cli-usage-of ix)
+    {ok:false} set (quote err) er set (quote usage) (cli-usage-of ix 0)
   ] [
     def fl st.flags
     def ag st.args
@@ -415,17 +445,26 @@ def cli-result fn [[st:Map] [Map] [
   ]
 ]]
 
-def cli-finish fn [[st:Map] [Map] [
+def cli-finish-st fn [[st:Map] [Map] [
   def a (cli-close-pending st)
   def b (cli-pick-command a)
   def c (cli-check-arity b)
-  def r (cli-result c)
+  c
+]]
+
+# The raw end-of-walk STATE. Dispatch needs one bit the public result map
+# deliberately does not carry — whether the failure was an unknown flag, which
+# decides whether a --help elsewhere in argv is honoured — so the state is
+# threaded internally and only `cli-result` shapes the public map.
+def cli-parse-st fn [[ix:Map argv:List] [Map] [
+  def w (fold [cli-step] argv (cli-init ix))
+  def r (cli-finish-st w)
   r
 ]]
 
 def cli-parse-ix fn [[ix:Map argv:List] [Map] [
-  def w (fold [cli-step] argv (cli-init ix))
-  def r (cli-finish w)
+  def st (cli-parse-st ix argv)
+  def r (cli-result st)
   r
 ]]
 
@@ -513,8 +552,8 @@ def cli-opt-row-step fn [[f:Map acc:Map] [Map] [
   def ls acc.lines
   def lb (cli-opt-label f)
   def tl (join "" [hp (cli-def-note f)])
-  def ln (if (tl eq "") [lb] [(join "" [(cli-pad lb w) tl])])
-  acc set (quote lines) (push ln ls)
+  def rows (if (tl eq "") [(push lb [])] [(cli-col-rows (cli-pad lb w) tl w acc.width)])
+  acc set (quote lines) (cli-cat ls rows)
 ]]
 
 def cli-cmd-row-step fn [[s:String acc:Map] [Map] [
@@ -523,16 +562,16 @@ def cli-cmd-row-step fn [[s:String acc:Map] [Map] [
   def ls acc.lines
   def sm (convert String (cs get s))
   def lb (join "" ["  " s])
-  def ln (if (sm eq "") [lb] [(join "" [(cli-pad lb w) sm])])
-  acc set (quote lines) (push ln ls)
+  def rows (if (sm eq "") [(push lb [])] [(cli-col-rows (cli-pad lb w) sm w acc.width)])
+  acc set (quote lines) (cli-cat ls rows)
 ]]
 
-def cli-cmd-block fn [[ix:Map] [String] [
+def cli-cmd-block fn [[ix:Map width:Integer] [String] [
   def co ix.corder
   if ((size co) eq 0) [""] [
     def cs ix.cmds
     def w (fold [cli-name-width-step] co 0)
-    def a0 ({lines:[]} set (quote w) (w add 5) set (quote cmds) cs)
+    def a0 ({lines:[]} set (quote w) (w add 5) set (quote cmds) cs set (quote width) width)
     def rr (fold [cli-cmd-row-step] co a0)
     def ls rr.lines
     def r (join "\n" (cli-cat (push "commands:" []) ls))
@@ -540,10 +579,10 @@ def cli-cmd-block fn [[ix:Map] [String] [
   ]
 ]]
 
-def cli-opt-block fn [[ix:Map] [String] [
+def cli-opt-block fn [[ix:Map width:Integer] [String] [
   def od ix.order
   def w (fold [cli-label-width-step] od 0)
-  def a0 ({lines:[]} set (quote w) (w add 2))
+  def a0 ({lines:[]} set (quote w) (w add 2) set (quote width) width)
   def rr (fold [cli-opt-row-step] od a0)
   def ls rr.lines
   def r (join "\n" (cli-cat (push "options:" []) ls))
@@ -556,11 +595,11 @@ def cli-opt-block fn [[ix:Map] [String] [
 # fails static analysis, where a bound list is inferred correctly.)
 def cli-sect-step fn [[s:String acc:List] [List] [ if (s eq "") [acc] [(push s acc)] ]]
 
-def cli-usage-of fn [[ix:Map] [String] [
+def cli-usage-of fn [[ix:Map width:Integer] [String] [
   def hd (cli-head-line ix)
   def ul (cli-usage-line ix)
-  def cb (cli-cmd-block ix)
-  def ob (cli-opt-block ix)
+  def cb (cli-cmd-block ix width)
+  def ob (cli-opt-block ix width)
   def secs (push ob (push cb (push ul (push hd []))))
   def ss (fold [cli-sect-step] secs [])
   join "\n\n" ss
@@ -576,8 +615,8 @@ def cli-decide fn [[act:String code:Integer out:String err:String] [Map] [
     set (quote out) out set (quote err) err
 ]]
 
-def cli-help fn [[ix:Map] [Map] [
-  def r (cli-decide "help" 0 (join "" [(cli-usage-of ix) "\n"]) "")
+def cli-help fn [[ix:Map opts:Map] [Map] [
+  def r (cli-decide "help" 0 (join "" [(cli-render ix opts) "\n"]) "")
   r
 ]]
 
@@ -594,9 +633,9 @@ def cli-flag-true fn [[m:Map k:String] [Boolean] [
   if (v is Boolean) [v] [false]
 ]]
 
-def cli-dispatch-ok fn [[ix:Map r:Map] [Map] [
+def cli-dispatch-ok fn [[ix:Map r:Map opts:Map] [Map] [
   def fl r.flags
-  if (cli-flag-true fl "help") [ def x (cli-help ix)  x ] [
+  if (cli-flag-true fl "help") [ def x (cli-help ix opts)  x ] [
     if (cli-flag-true fl "version") [ def x (cli-version ix)  x ] [
       def ag r.args
       def cd r.command
@@ -624,21 +663,26 @@ def cli-prescan fn [[argv:List] [String] [
   a.hit
 ]]
 
-def cli-dispatch-bad fn [[ix:Map argv:List r:Map] [Map] [
-  def pre (cli-prescan argv)
-  if (pre eq "help") [ def x (cli-help ix)  x ] [
+def cli-dispatch-bad fn [[ix:Map argv:List r:Map opts:Map unk:Boolean] [Map] [
+  def pre (if unk [""] [(cli-prescan argv)])
+  if (pre eq "help") [ def x (cli-help ix opts)  x ] [
     if (pre eq "version") [ def x (cli-version ix)  x ] [
       def nm ix.name
       def er r.err
-      def x (cli-decide "error" 2 "" (join "" [nm ": " er "\n\n" (cli-usage-of ix) "\n"]))
+      def x (cli-decide "error" 2 "" (join "" [nm ": " er "\n\n" (cli-render ix opts) "\n"]))
       x
     ]
   ]
 ]]
 
-def cli-dispatch-ix fn [[ix:Map argv:List] [Map] [
-  def r (cli-parse-ix ix argv)
-  if (r.ok) [ def x (cli-dispatch-ok ix r)  x ] [ def x (cli-dispatch-bad ix argv r)  x ]
+# opts is the TERMINAL, handed in: {width color}. Dispatch stays pure — the map
+# is data like any other — and Cli.main is the only caller that knows what the
+# terminal is (design/CLI-PROGRAMS.1.md §3). Cli.dispatch passes {}, so a driver
+# that renders the text itself gets it unwrapped and uncoloured.
+def cli-dispatch-ix fn [[ix:Map argv:List opts:Map] [Map] [
+  def st (cli-parse-st ix argv)
+  def r (cli-result st)
+  if (r.ok) [ def x (cli-dispatch-ok ix r opts)  x ] [ def x (cli-dispatch-bad ix argv r opts (st.unknown))  x ]
 ]]
 
 # ----------------------------------------------------------------------------
@@ -650,14 +694,102 @@ def cli-w-parse fn [[spec:Map argv:List] [Map] [
 ]]
 
 def cli-w-dispatch fn [[spec:Map argv:List] [Map] [
-  def r (cli-dispatch-ix (cli-index spec) argv)
+  def r (cli-dispatch-ix (cli-index spec) argv {})
   r
 ]]
 
-def cli-w-usage fn [[spec:Map] [String] [
-  def r (cli-usage-of (cli-index spec))
-  r
+# ----------------------------------------------------------------------------
+# Usage OPTIONS — the terminal comes IN, it is never read (CLI-PROGRAMS.1.md §3).
+#
+#   Cli.usage (spec)                          the plain rendering
+#   Cli.usage (spec) {width: 72 color: true}  the caller's terminal, decided
+#
+# The RFC asks for help wrapped to `IO.env "COLUMNS"` and coloured when stdout
+# is a terminal and NO_COLOR is unset. A function that READ those would not be
+# pure, would not run under the spec runner, and would answer differently
+# depending on the terminal that happened to be attached — which is the same
+# thing as being untestable. So Cli.main reads them and passes them here.
+# ----------------------------------------------------------------------------
+def cli-opt-int fn [[m:Map k:String d:Integer] [Integer] [
+  def v (m get k)
+  if (v is Integer) [v] [d]
 ]]
+
+def cli-opt-bool fn [[m:Map k:String] [Boolean] [
+  def v (m get k)
+  if (v is Boolean) [v] [false]
+]]
+
+# Split "<label padded to col><text>" into rows no wider than width, with every
+# continuation indented to col so the help text stays under its own option. A
+# width of 0 (the default) means no wrapping at all, which is what a caller
+# that does not know the terminal should get.
+# Greedy word wrap of PLAIN text to a column budget: no prefixes, no padding,
+# just rows of words. The caller owns the layout — cli-col-rows puts the label
+# on the first row and the indent on the rest — which keeps this fn honest
+# about spacing (a fold that also handled the prefix collapsed the label's
+# padding into a single space, and the help column lost its alignment).
+def cli-wrap-step fn [[tok:String acc:Map] [Map] [
+  def cur acc.cur
+  def w acc.w
+  def cand (if (cur eq "") [tok] [(join " " [cur tok])])
+  if ((size cand) lte w) [ acc set (quote cur) cand ] [
+    if (cur eq "") [ acc set (quote out) (push tok acc.out) ] [
+      acc set (quote out) (push cur acc.out) set (quote cur) tok
+    ]
+  ]
+]]
+
+def cli-wrap-words fn [[text:String w:Integer] [List] [
+  def a0 ({out:[] cur:""} set (quote w) w)
+  def rr (fold [cli-wrap-step] (StringUtil.split " " text) a0)
+  def res (if (rr.cur eq "") [rr.out] [(push rr.cur rr.out)])
+  res
+]]
+
+def cli-row-step fn [[row:String acc:Map] [Map] [
+  def pre (if ((size acc.out) eq 0) [acc.lead] [acc.ind])
+  acc set (quote out) (push (join "" [pre row]) acc.out)
+]]
+
+# "<label padded to col><help>", wrapped to width with every continuation
+# indented to col. width 0 (the default) means no wrapping at all, which is
+# what a caller that does not know the terminal should get.
+def cli-col-rows fn [[lead:String text:String col:Integer width:Integer] [List] [
+  def first (join "" [lead text])
+  if (width lte 0) [(push first [])] [
+    if ((size first) lte width) [(push first [])] [
+      def budget (if ((width sub col) lt 8) [8] [(width sub col)])
+      def rows (cli-wrap-words text budget)
+      def a0 ({out:[]} set (quote lead) lead set (quote ind) (cli-pad "" col))
+      def rr (fold [cli-row-step] rows a0)
+      rr.out
+    ]
+  ]
+]]
+
+# ANSI, applied to the two section headers and nothing else: a help screen that
+# highlights every flag is harder to read than one that highlights nothing.
+def cli-colorize-step fn [[line:String acc:List] [List] [
+  def hd (if ((line eq "options:") or (line eq "commands:"))
+            [(join "" ["\u001b[1m" line "\u001b[0m"])] [line])
+  push hd acc
+]]
+
+def cli-render fn [[ix:Map opts:Map] [String] [
+  def w (cli-opt-int opts "width" 0)
+  def txt (cli-usage-of ix w)
+  if ((cli-opt-bool opts "color") not) [txt] [
+    def lines (StringUtil.split "\n" txt {keepEmpty:true})
+    def r (join "\n" (fold [cli-colorize-step] lines []))
+    r
+  ]
+]]
+
+def cli-w-usage fn [
+  [spec:Map] [String] [ def r (cli-usage-of (cli-index spec) 0)  r ]
+  [spec:Map opts:Map] [String] [ def r (cli-render (cli-index spec) opts)  r ]
+]
 
 # The imperative shell, and the ONLY part of this module that touches the world.
 # Print, then either exit with dispatch's code or hand off to the handler (whose
@@ -669,8 +801,27 @@ def cli-w-usage fn [[spec:Map] [String] [
 # before the second. That unreachability is exactly why the decision logic lives
 # in Cli.dispatch, where every arm is a pure map comparison. Verify this word by
 # reading it — and by the driver runs recorded in the report.
+# The terminal, as DATA — exported as Cli.term-opts. Pure and therefore
+# testable: main reads the three values (COLUMNS, NO_COLOR, is-tty) and hands
+# them here, rather than this deciding anything by reaching for the world
+# itself. A driver that renders usage itself wants the same rule, which is why
+# it is exported rather than private. A COLUMNS that is not a number is ignored
+# rather than fatal — a bad environment variable must not stop a tool printing
+# its own help.
+def cli-digits-step fn [[c:String acc:Boolean] [Boolean] [
+  if (acc not) [false] [ (StringUtil.indexof c "0123456789") gte 0 ]
+]]
+
+def cli-opts-from fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
+  def cs (if (cols is None) [""] [(convert String cols)])
+  def ok ((cs neq "") and (fold [cli-digits-step] (StringUtil.split "" cs) true))
+  def w (if ok [(convert Integer cs)] [0])
+  {} set (quote width) w set (quote color) (tty and (nocolor is None))
+]]
+
 def cli-main-do fn [[spec:Map argv:List h:Function] [Any] [
-  def d (cli-dispatch-ix (cli-index spec) argv)
+  def opts (cli-opts-from (IO.env "COLUMNS") (IO.env "NO_COLOR") (IO.is-tty (IO.stdout)))
+  def d (cli-dispatch-ix (cli-index spec) argv opts)
   def _o (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
   def _e (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
   if ((d.action) neq "run") [ IO.exit (d.code) ] [
@@ -685,9 +836,15 @@ def cli-w-main fn [
   [spec:Map argv:List h:Function] [Any] [ def r (cli-main-do spec argv (h/r))  r ]
 ]
 
+def cli-w-term-opts fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
+  def r (cli-opts-from cols nocolor tty)
+  r
+]]
+
 export "Cli" {
-  parse:    cli-w-parse/r
-  dispatch: cli-w-dispatch/r
-  usage:    cli-w-usage/r
-  main:     cli-w-main/r
+  parse:     cli-w-parse/r
+  dispatch:  cli-w-dispatch/r
+  usage:     cli-w-usage/r
+  term-opts: cli-w-term-opts/r
+  main:      cli-w-main/r
 }

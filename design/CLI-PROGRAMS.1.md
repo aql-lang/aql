@@ -44,17 +44,15 @@ which parses `IO.args`, prints usage or version and exits 0 for
 `--help`/`--version`, prints the error plus a usage hint to stderr and
 exits 2 on a usage error, and otherwise calls the handler.
 
-**That cannot reach the coverage bar an AQL-authored module inherits.** A
-module written in AQL is gated by the `sift_coverage_test.go` pattern:
-every executable row of `cli.aql` must be covered by `cli_test.aql`, with a
-small allowlist whose entries are each *asserted to be genuinely
-uncovered*. But `Cli.main` ends in `IO.exit`, and `aql test`'s runner
-treats a raised error — which is what `IO.exit` is — as a file-level
-failure that ends the file (`cmd/go/internal/test`). So a test that
-exercised `Cli.main`'s `--help` arm would kill its own suite at the first
-arm and never reach the second. The arms are unreachable *from a test*, and
-an allowlist entry per arm would be a lie: they are reachable in principle,
-just not from a runner that dies when they fire.
+**The decision logic must be reachable without running the program.** A
+module written in AQL is gated by the `sift_coverage_test.go` pattern —
+every executable row of `cli.aql` covered by `cli_test.aql`, with a small
+allowlist whose entries are each *asserted to be genuinely uncovered* — and
+`Cli.main` ends in `IO.exit`, which ends whatever is running it. More
+importantly, a spec ROW cannot survive an exit at all, so a surface that
+only exists behind `Cli.main` could not be pinned by `lang/spec` either.
+The flag grammar is the part worth pinning, so it must be callable without
+exiting.
 
 So the module exposes two things:
 
@@ -72,11 +70,21 @@ Cli.main (spec) handler/r    →  the three-line shell
   `--flag=value`, `--no-X`, `--`, arity, unknown-flag errors, usage
   rendering — lives here.
 - **`Cli.main` is the shell**: call `Cli.dispatch`, print `out` to stdout or
-  `err` to stderr, then either `IO.exit code` or call the handler. It is
-  the only part that touches the world, and it is small enough that
-  reviewing it by eye is the honest verification. Its rows are the
-  allowlist entries, and the allowlist comment says why: an exiting arm
-  cannot be exercised by a runner that treats an exit as a file failure.
+  `err` to stderr, then either `IO.exit code` or call the handler. It is the
+  only part that touches the world, and it is small enough that reviewing it
+  by eye is honest verification.
+
+  **Correction (2026-07-30):** the first cut of this note assumed the shell's
+  rows would have to be allowlisted, because an exiting arm cannot be
+  exercised by a runner that treats an exit as a file failure. That is wrong.
+  `IO.exit` RAISES the reserved `aql/exit`, and `Assert.throws` observes a
+  raise — so the arms are reachable from the module's own suite after all,
+  and `cli.aql` ships at **100% AQL-line coverage with an empty allowlist**.
+  (A plain `do […] error […]` genuinely does not catch an exit — deliberately,
+  so a program cannot swallow its own termination — which is what made the
+  wrong conclusion plausible.) The split still stands on its own merits: the
+  decision logic is pure, spec-pinnable, and reusable by any driver that wants
+  to act on it itself. It just is not forced by the coverage gate.
 
 This is the same shape the RFC itself recommends elsewhere — a pure core
 with an imperative rind — and it is what makes "written in AQL, gated like

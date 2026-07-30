@@ -20,6 +20,14 @@
 # ============================================================================
 
 import "aql:test"
+
+# Handlers for the Cli.main cases below. They MUST be at module scope: a
+# fn-local `def … fn` used as a higher-order value resolves under the
+# interpreter and is undefined under the bytecode compiler (NUR037).
+def t-ok fn [[ctx:Map] [Integer] [ 0 ]]
+def t-code fn [[ctx:Map] [Integer] [ 7 ]]
+def t-nonint fn [[ctx:Map] [Any] [ "not an integer" ]]
+
 Test.cover [
   import "aql:cli"
   import "aql:string-util"   # split, for addressing one line of a usage block
@@ -65,6 +73,15 @@ Test.cover [
     name:"vc" version:"3.1" summary:"a multi-verb tool"
     flags: [{name:"force" short:"f" kind:"bool" help:"do it anyway"}]
     commands: [{name:"build" summary:"build the thing"} {name:"list"}]
+  }
+
+  # a spec whose one help string is long enough to wrap at a narrow width —
+  # the fixture the Cli.usage {width} cases below measure.
+  def wide {
+    name:"tool" version:"1" summary:"s"
+    flags: [{name:"kind" short:"k" kind:"string" value:"KIND"
+             help:"force a particular parser kind for the input files"}]
+    args: {name:"f" min:0}
   }
 
   # a spec that claims --help/-h and --version itself, so the implicit flags are
@@ -482,11 +499,25 @@ Test.cover [
     Test.test "a usage error writes nothing to out" [
       Assert.equal "" ((Cli.dispatch (spec) ["--wach"]) dot out)
     ]
-    Test.test "--help is honoured even when the rest of argv does not parse" [
-      Assert.equal "help" ((Cli.dispatch (spec) ["--bogus" "--help"]) dot action)          # branch: cli-dispatch-bad prescan help
+    # An UNKNOWN FLAG is a different kind of failure: `prog --bogus --help`
+    # must not print help and exit 0, because that turns a typo in a script
+    # into a success. GNU's tools agree (`ls --bogus --help` exits 2).
+    Test.test "a typo is not rescued by a --help elsewhere in argv" [
+      Assert.equal "error" ((Cli.dispatch (spec) ["--bogus" "--help"]) dot action)         # branch: cli-dispatch-bad unknown short-circuit
     ]
-    Test.test "--version is honoured even when the rest of argv does not parse" [
-      Assert.equal "version" ((Cli.dispatch (spec) ["--bogus" "--version"]) dot action)    # branch: cli-dispatch-bad prescan version
+    Test.test "…nor by a --version" [
+      Assert.equal "error" ((Cli.dispatch (spec) ["--bogus" "--version"]) dot action)
+    ]
+    Test.test "…and it exits 2, not 0" [
+      Assert.equal 2 ((Cli.dispatch (spec) ["--bogus" "--help"]) dot code)
+    ]
+    # A failure that is NOT a typo still yields to the help the user asked for:
+    # `alt` demands one positional, and `alt --version` supplies none.
+    Test.test "an arity failure still yields to a --version the user typed" [
+      Assert.equal "version" ((Cli.dispatch (alt) ["--version"]) dot action)               # branch: cli-dispatch-bad prescan version
+    ]
+    Test.test "…and a value-taking flag swallows the next token, --help included" [
+      Assert.equal "run" ((Cli.dispatch (spec) ["--kind" "--help"]) dot action)            # conv: --long value takes the FOLLOWING token
     ]
     Test.test "-h is honoured when a min-arity spec rejects the empty tail" [
       Assert.equal "help" ((Cli.dispatch (alt) ["-h"]) dot action)                         # branch: prescan -h on an arity failure
@@ -508,6 +539,115 @@ Test.cover [
     ]
     Test.test "a chosen command rides through dispatch" [
       Assert.equal "build" ((Cli.dispatch (multi) ["build" "x"]) dot command)
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Cli.usage {width color} — the terminal comes IN (CLI-PROGRAMS.1.md §3).
+  # The module never reads COLUMNS or NO_COLOR; Cli.main does, and passes them.
+  # --------------------------------------------------------------------------
+  Test.describe "usage options" [
+    Test.test "the one-argument form is unwrapped and uncoloured" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {})                       # branch: cli-render with neither option
+    ]
+    Test.test "a width of 0 means no wrapping" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {width: 0})               # branch: cli-col-rows width lte 0
+    ]
+    Test.test "a generous width leaves every line alone" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {width: 200})             # branch: cli-col-rows first fits
+    ]
+    Test.test "a narrow width splits the long help line" [
+      Assert.equal 10 (size (StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}))
+    ]
+    Test.test "…and every continuation is indented to the help column" [
+      Assert.equal "                   kind for the input files"
+        ((StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}) get 6)
+    ]
+    Test.test "…while the first row keeps its label padding" [
+      Assert.equal "  -k, --kind KIND  force a particular parser"
+        ((StringUtil.split "\n" (Cli.usage (wide) {width: 44}) {keepEmpty:true}) get 5)
+    ]
+    Test.test "a width narrower than the label column still leaves 8 columns of text" [
+      Assert.equal true ((size (Cli.usage (wide) {width: 12})) gt 0)              # branch: cli-col-rows budget floor
+    ]
+    Test.test "a word longer than the budget is emitted whole rather than cut" [
+      Assert.equal true (StringUtil.contains "supercalifragilisticexpialidocious"
+        (Cli.usage {name:"t" flags:[{name:"x" short:"x" kind:"bool" help:"supercalifragilisticexpialidocious yes"}] args:{name:"f" min:0}} {width: 20}))
+    ]
+    Test.test "colour bolds the section header and nothing else" [
+      Assert.equal true (StringUtil.contains "\u001b[1moptions:\u001b[0m" (Cli.usage (wide) {color: true}))
+    ]
+    Test.test "a command block is bolded too" [
+      Assert.equal true (StringUtil.contains "\u001b[1mcommands:\u001b[0m" (Cli.usage (multi) {color: true}))
+    ]
+    Test.test "colour off is byte-identical to the plain rendering" [
+      Assert.equal (Cli.usage (wide)) (Cli.usage (wide) {color: false})
+    ]
+    Test.test "width and colour compose" [
+      Assert.equal true (StringUtil.contains "\u001b[1moptions:\u001b[0m" (Cli.usage (wide) {width: 44 color: true}))
+    ]
+    Test.test "term-opts turns a numeric COLUMNS into a width" [
+      Assert.equal 80 ((Cli.term-opts "80" none true) get "width")
+    ]
+    Test.test "term-opts ignores a COLUMNS that is not a number" [
+      Assert.equal 0 ((Cli.term-opts "eighty" none true) get "width")      # branch: cli-digits-step reject
+    ]
+    Test.test "term-opts treats an absent COLUMNS as unset" [
+      Assert.equal 0 ((Cli.term-opts none none true) get "width")          # branch: cols is None
+    ]
+    Test.test "term-opts treats an empty COLUMNS as unset" [
+      Assert.equal 0 ((Cli.term-opts "" none true) get "width")            # branch: cs eq ""
+    ]
+    Test.test "term-opts colours a terminal with NO_COLOR unset" [
+      Assert.equal true ((Cli.term-opts none none true) get "color")
+    ]
+    Test.test "term-opts does not colour when NO_COLOR is set" [
+      Assert.equal false ((Cli.term-opts none "1" true) get "color")
+    ]
+    Test.test "term-opts does not colour a stream that is not a terminal" [
+      Assert.equal false ((Cli.term-opts none none false) get "color")
+    ]
+    Test.test "a mixed COLUMNS is rejected as a whole, not partially read" [
+      Assert.equal 0 ((Cli.term-opts "80x" none true) get "width")
+    ]
+    Test.test "a command row wraps at the command column" [
+      Assert.equal true ((size (StringUtil.split "\n" (Cli.usage (multi) {width: 30}) {keepEmpty:true})) gt
+                         (size (StringUtil.split "\n" (Cli.usage (multi)) {keepEmpty:true})))
+    ]
+  ]
+
+  # --------------------------------------------------------------------------
+  # Cli.main — the shell. Every arm ends in IO.exit, which is a RAISE of the
+  # reserved aql/exit, so `Assert.throws` observes it: the arms are reachable
+  # after all, and the module ships with no coverage allowlist. (A plain
+  # `do […] error […]` does NOT catch an exit — that is deliberate, so a
+  # program cannot swallow its own termination — which is why the first
+  # attempt at this suite concluded they were unreachable.)
+  #
+  # What these pin is that each arm EXITS, not what it exits with: the exit
+  # code and the printed text are the pure Cli.dispatch's business, pinned
+  # exhaustively above.
+  Test.describe "main" [
+    Test.test "the run arm exits when the handler returns 0" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-ok/r) ]
+    ]
+    Test.test "the run arm exits with the handler's own code" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-code/r) ]
+    ]
+    Test.test "a handler returning a non-Integer still exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} [] (t-nonint/r) ]
+    ]
+    Test.test "the help arm exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--help"] (t-ok/r) ]
+    ]
+    Test.test "the version arm exits" [
+      Assert.throws [ Cli.main {name:"t" version:"1" args:{name:"f" min:0}} ["--version"] (t-ok/r) ]
+    ]
+    Test.test "the usage-error arm exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} ["--nope"] (t-ok/r) ]
+    ]
+    Test.test "the argv-less signature reads IO.args (empty here) and exits" [
+      Assert.throws [ Cli.main {name:"t" args:{name:"f" min:0}} (t-ok/r) ]
     ]
   ]
 ]
